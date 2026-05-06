@@ -2337,6 +2337,101 @@ void SurfaceAnimator::cancel(PhosphorLayer::Surface* surface)
     d->cancelAllForSurface(surface);
 }
 
+void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* rootItem,
+                                const PhosphorLayer::Role& configRole, CompletionCallback onComplete)
+{
+    // Same contract as the no-arg beginShow but the config is resolved
+    // from `configRole` instead of `surface->config().role`. Used by
+    // the unified PassiveOverlayShell pattern where the surface's role
+    // is the shell's (PassiveShell) and per-content motion/shader
+    // configs would otherwise homogenise across content types.
+    if (!surface) {
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
+    if (!d->m_enabled) {
+        if (!rootItem) {
+            qCWarning(lcSurfaceAnimator)
+                << "beginShow on null rootItem with gate off; surface visibility unchanged but onComplete will fire";
+        }
+        if (const auto it = d->m_tracks.find(Private::TrackKey{surface, rootItem}); it != d->m_tracks.end()) {
+            if (auto prevOnComplete = std::move(it->second.onComplete)) {
+                auto cb = std::move(prevOnComplete);
+                d->cancelTrackingFor(surface, rootItem);
+                cb();
+            } else {
+                d->cancelTrackingFor(surface, rootItem);
+            }
+        } else {
+            d->cancelTrackingFor(surface, rootItem);
+        }
+        if (rootItem) {
+            rootItem->setOpacity(1.0);
+            rootItem->setScale(1.0);
+        }
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
+    const Config cfg = d->configFor(configRole);
+    const qreal fromOpacity = 0.0;
+    const qreal toScale = 1.0;
+    qreal fromScale = 1.0;
+    if (!cfg.showScaleProfile.isEmpty()) {
+        const qreal liveScale = rootItem ? rootItem->scale() : 1.0;
+        fromScale = (liveScale < toScale) ? liveScale : cfg.showScaleFrom;
+    }
+    d->runLeg(surface, rootItem, fromOpacity, /*toOpacity=*/1.0, cfg.showProfile, fromScale, toScale,
+              cfg.showScaleProfile, cfg.showShaderEffectId, cfg.showShaderProfile, cfg.showShaderParameters,
+              std::move(onComplete));
+}
+
+void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* rootItem,
+                                const PhosphorLayer::Role& configRole, CompletionCallback onComplete)
+{
+    if (!surface) {
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
+    if (!d->m_enabled) {
+        if (!rootItem) {
+            qCWarning(lcSurfaceAnimator)
+                << "beginHide on null rootItem with gate off; surface visibility unchanged but onComplete will fire";
+        }
+        if (const auto it = d->m_tracks.find(Private::TrackKey{surface, rootItem}); it != d->m_tracks.end()) {
+            if (auto prevOnComplete = std::move(it->second.onComplete)) {
+                auto cb = std::move(prevOnComplete);
+                d->cancelTrackingFor(surface, rootItem);
+                cb();
+            } else {
+                d->cancelTrackingFor(surface, rootItem);
+            }
+        } else {
+            d->cancelTrackingFor(surface, rootItem);
+        }
+        if (rootItem) {
+            rootItem->setOpacity(0.0);
+            rootItem->setScale(1.0);
+        }
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
+    const Config cfg = d->configFor(configRole);
+    const qreal fromOpacity = rootItem ? rootItem->opacity() : 1.0;
+    const qreal fromScale = (cfg.hideScaleProfile.isEmpty() || !rootItem) ? 1.0 : rootItem->scale();
+    const qreal toScale = cfg.hideScaleProfile.isEmpty() ? 1.0 : cfg.hideScaleTo;
+    d->runLeg(surface, rootItem, fromOpacity, /*toOpacity=*/0.0, cfg.hideProfile, fromScale, toScale,
+              cfg.hideScaleProfile, cfg.hideShaderEffectId, cfg.hideShaderProfile, cfg.hideShaderParameters,
+              std::move(onComplete));
+}
+
 void SurfaceAnimator::setEnabled(bool enabled)
 {
     // Skip the assignment when the gate value hasn't changed — settings

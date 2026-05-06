@@ -69,15 +69,16 @@ void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
     if (state.zoneSelectorSurface) {
         state.zoneSelectorSurface->deleteLater();
     }
-    if (state.notificationSurface) {
-        state.notificationSurface->deleteLater();
+    if (state.passiveShellSurface) {
+        state.passiveShellSurface->deleteLater();
     }
     state.overlaySurface = nullptr;
     state.zoneSelectorSurface = nullptr;
-    state.notificationSurface = nullptr;
+    state.passiveShellSurface = nullptr;
+    state.passiveShellWindow = nullptr;
+    state.passiveShellOsdSlot = nullptr;
     state.overlayWindow = nullptr;
     state.zoneSelectorWindow = nullptr;
-    state.notificationWindow = nullptr;
     state.overlayPhysScreen = nullptr;
     state.zoneSelectorPhysScreen = nullptr;
     state.notificationPhysScreen = nullptr;
@@ -893,7 +894,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             // cleanupVirtualScreenStates semantics: the state entry is
             // meaningless without at least one live window.
             auto& s = m_screenStates[id];
-            if (!s.overlaySurface && !s.zoneSelectorSurface && !s.notificationSurface) {
+            if (!s.overlaySurface && !s.zoneSelectorSurface && !s.passiveShellSurface) {
                 m_screenStates.remove(id);
             }
         }

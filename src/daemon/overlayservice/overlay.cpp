@@ -753,7 +753,7 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     // too, the entry is an empty husk that accumulates under hide()+show()
     // cycles. destroyAllWindowsForPhysicalScreen already erases, but hide()
     // used to leave husks behind — drop them here symmetrically.
-    if (!it->overlaySurface && !it->zoneSelectorSurface && !it->notificationSurface) {
+    if (!it->overlaySurface && !it->zoneSelectorSurface && !it->passiveShellSurface) {
         m_screenStates.erase(it);
     }
 }

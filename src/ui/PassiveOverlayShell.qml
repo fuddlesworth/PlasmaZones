@@ -1,0 +1,227 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import QtQuick
+import QtQuick.Window
+import org.kde.kirigami as Kirigami
+
+/**
+ * Passive overlay shell — single per-screen wlr-layer-shell host that
+ * groups every kbd-None overlay role into one wl_surface / QQuickWindow
+ * / QSGRenderThread / Vulkan swapchain. Each per-content slot is a
+ * sibling QQuickItem inside the shell that exposes a `shaderAnchor` for
+ * SurfaceAnimator's per-(Surface, target) keying.
+ *
+ * Why one shell instead of one Surface per content:
+ *   - polishAndSync runs sequentially on the GUI thread across all
+ *     QQuickWindows in a process. Two windows that animate concurrently
+ *     contend for the GUI thread; the slower window's polishAndSync
+ *     blocks the faster one's. With every passive overlay riding the
+ *     shell's single window, all per-content animations share one
+ *     polishAndSync — no inter-content contention.
+ *   - The shell wl_surface is permanently mapped after first show, so
+ *     the Vulkan swapchain + RHI pipelines warm once and stay hot for
+ *     every subsequent per-content show. No per-show wl_surface
+ *     map/unmap and the cold-pipeline first-paint cost is paid once at
+ *     daemon start.
+ *
+ * This shell is the kbd-None grouping. Modal kbd-Exclusive overlays
+ * (snap-assist, layout picker) historically lived in their own per-show
+ * wl_surfaces because layer-shell binds keyboard interactivity at first
+ * commit and KWin doesn't re-evaluate it on already-mapped surfaces.
+ * The unified-shell migration pulls them into THIS same shell with kbd
+ * routed via global accelerators (KGlobalAccel) instead — see the
+ * matching `snap-assist` / `layout-picker` slots below (added in
+ * subsequent migration steps).
+ *
+ * C++ side accesses each slot Item via the `osdSlotItem` (etc.) alias
+ * exposed on this Window root; property writes target the slot Item
+ * directly and SurfaceAnimator targets the slot Item for show/hide.
+ */
+Window {
+    // ── OSD slot ──────────────────────────────────────────────────────────
+    // Host for LayoutOsd + NavigationOsd content. Inner card (loaded via
+    // the per-mode Component below) carries `property bool shaderAnchor:
+    // true` so vertex shaders bind to the visible OSD body rather than
+    // the fullscreen slot Item.
+    // Future slots (subsequent migration steps): zoneSelector,
+    // mainOverlay, snapAssist, layoutPicker. Each is a sibling Item with
+    // its own properties + Loader, animated independently via the
+    // SurfaceAnimator's per-(Surface, target) keying.
+
+    id: root
+
+    /// OSD slot Item — SurfaceAnimator target for OSD show/hide. C++
+    /// writes `mode` / data properties on this Item directly (matching
+    /// the previous standalone NotificationOverlay's root property
+    /// surface), then invokes SurfaceAnimator::beginShow with this Item
+    /// as the rootItem argument.
+    readonly property alias osdSlotItem: osdSlot
+
+    /// Forwarded from the loaded OSD content. C++ side connects this to
+    /// the slot-hide animation start (not Surface::hide() — the shell
+    /// stays mapped permanently, only the slot's opacity animates).
+    signal osdDismissRequested()
+
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
+    color: "transparent"
+    // Initial size — the C++ side resizes to per-screen geometry on
+    // creation. The shell wl_surface is screen-sized so vertex-shader
+    // transitions have geometry runway equal to the screen.
+    width: Kirigami.Units.gridUnit * 15
+    height: Kirigami.Units.gridUnit * 4
+    // Start hidden; first per-content show flips visible=true. The
+    // surface stays mapped (keepMappedOnHide=true) for the daemon's
+    // lifetime so swapchain + RHI pipelines stay warm across show
+    // cycles.
+    visible: false
+
+    Item {
+        // OSD properties — bindings inside the per-mode Components below
+        // reach for these via QML lexical scope. C++ side writes these
+        // directly on this Item before each show.
+
+        id: osdSlot
+
+        // "layout-osd"      → LayoutOsdContent (zone preview + name + badge toast)
+        // "navigation-osd"  → NavigationOsdContent (text-label keyboard-nav toast)
+        // ""                → no content (Loader unloaded)
+        property string mode: ""
+        property var zones: []
+        property color backgroundColor: Kirigami.Theme.backgroundColor
+        property color textColor: Kirigami.Theme.textColor
+        property color highlightColor: Kirigami.Theme.highlightColor
+        property string layoutId: ""
+        property string layoutName: ""
+        property int category: 0
+        property bool autoAssign: false
+        property bool globalAutoAssign: false
+        property bool showMasterDot: false
+        property int masterCount: 1
+        property bool producesOverlappingZones: false
+        property string zoneNumberDisplay: "all"
+        property real screenAspectRatio: 16 / 9
+        property string aspectRatioClass: "any"
+        property string fontFamily: ""
+        property real fontSizeScale: 1
+        property int fontWeight: Font.Bold
+        property bool fontItalic: false
+        property bool fontUnderline: false
+        property bool fontStrikeout: false
+        property bool locked: false
+        property bool disabled: false
+        property string disabledReason: ""
+        property bool success: true
+        property string action: ""
+        property string reason: ""
+        property var highlightedZoneIds: []
+        property string sourceZoneId: ""
+        property int windowCount: 1
+        property color errorColor: Kirigami.Theme.negativeTextColor
+        property real shaderBoundsPadding: 0
+
+        /// Restart the loaded OSD content's auto-dismiss timer. C++
+        /// invokes this after every OSD show via QMetaObject::invokeMethod.
+        function restartDismissTimer() {
+            if (osdLoader.item)
+                osdLoader.item.restartDismissTimer();
+            else
+                console.warn("PassiveOverlayShell.osdSlot.restartDismissTimer: no OSD content loaded (mode =", JSON.stringify(osdSlot.mode), ") — auto-dismiss will not run");
+        }
+
+        anchors.fill: parent
+        // SurfaceAnimator drives this Item's opacity. Start at 0 so the
+        // first paint pre-show doesn't flash the OSD at full opacity.
+        opacity: 0
+        // Toggled true on first show by C++ side. Stays true thereafter
+        // (animator drives the visible fade via opacity). A QPointer<Item>
+        // referencing this slot survives across show cycles.
+        visible: false
+        // Catch typos in C++ mode writes ("layout-OSD" / "navigation_osd" / …)
+        // before they degrade silently to "no content shown".
+        onModeChanged: {
+            if (mode !== "" && mode !== "layout-osd" && mode !== "navigation-osd")
+                console.warn("PassiveOverlayShell osdSlot: unknown mode =", mode);
+
+        }
+
+        Loader {
+            id: osdLoader
+
+            anchors.fill: parent
+            sourceComponent: {
+                switch (osdSlot.mode) {
+                case "layout-osd":
+                    return layoutOsdComp;
+                case "navigation-osd":
+                    return navigationOsdComp;
+                default:
+                    return null;
+                }
+            }
+            // Forward dismissRequested from whichever content is loaded.
+            // Mode flip destroys the previous item, severing this connect
+            // automatically; fresh onLoaded re-wires.
+            onLoaded: {
+                if (osdLoader.item)
+                    osdLoader.item.dismissRequested.connect(root.osdDismissRequested);
+
+            }
+        }
+
+        Component {
+            id: layoutOsdComp
+
+            LayoutOsdContent {
+                zones: osdSlot.zones
+                backgroundColor: osdSlot.backgroundColor
+                textColor: osdSlot.textColor
+                highlightColor: osdSlot.highlightColor
+                shaderBoundsPadding: osdSlot.shaderBoundsPadding
+                layoutId: osdSlot.layoutId
+                layoutName: osdSlot.layoutName
+                category: osdSlot.category
+                autoAssign: osdSlot.autoAssign
+                globalAutoAssign: osdSlot.globalAutoAssign
+                showMasterDot: osdSlot.showMasterDot
+                masterCount: osdSlot.masterCount
+                producesOverlappingZones: osdSlot.producesOverlappingZones
+                zoneNumberDisplay: osdSlot.zoneNumberDisplay
+                screenAspectRatio: osdSlot.screenAspectRatio
+                aspectRatioClass: osdSlot.aspectRatioClass
+                fontFamily: osdSlot.fontFamily
+                fontSizeScale: osdSlot.fontSizeScale
+                fontWeight: osdSlot.fontWeight
+                fontItalic: osdSlot.fontItalic
+                fontUnderline: osdSlot.fontUnderline
+                fontStrikeout: osdSlot.fontStrikeout
+                locked: osdSlot.locked
+                disabled: osdSlot.disabled
+                disabledReason: osdSlot.disabledReason
+            }
+
+        }
+
+        Component {
+            id: navigationOsdComp
+
+            NavigationOsdContent {
+                zones: osdSlot.zones
+                backgroundColor: osdSlot.backgroundColor
+                textColor: osdSlot.textColor
+                highlightColor: osdSlot.highlightColor
+                shaderBoundsPadding: osdSlot.shaderBoundsPadding
+                success: osdSlot.success
+                action: osdSlot.action
+                reason: osdSlot.reason
+                highlightedZoneIds: osdSlot.highlightedZoneIds
+                sourceZoneId: osdSlot.sourceZoneId
+                windowCount: osdSlot.windowCount
+                errorColor: osdSlot.errorColor
+            }
+
+        }
+
+    }
+
+}

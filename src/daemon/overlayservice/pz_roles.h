@@ -68,6 +68,26 @@ inline const PhosphorLayer::Role OsdBase = PhosphorLayer::Roles::FullscreenOverl
 /// derived prefixes.
 inline const PhosphorLayer::Role Notification = OsdBase.withScopePrefix(QStringLiteral("plasmazones-notification"));
 
+/// Passive overlay shell — single per-screen wlr-layer-shell host that
+/// groups every kbd-None overlay (OSD, zone-selector, main zone overlay,
+/// and post-migration snap-assist + layout picker) onto one wl_surface
+/// per screen. FullscreenOverlay primitive (AnchorAll, no keyboard,
+/// click-through). Permanently mapped after first show — keepMappedOnHide
+/// is moot since per-content slots toggle visibility within the shared
+/// scene graph rather than the wl_surface itself unmapping.
+///
+/// Each per-content slot is animated by the SurfaceAnimator keyed on
+/// (PassiveShell surface, slot QQuickItem). Per-content motion / shader
+/// configs are resolved via the role-override `beginShow`/`beginHide`
+/// overloads — the surface's own role is PassiveShell but the animation
+/// config role is the per-content role (Notification, ZoneSelector, …)
+/// so per-content profiles still drive each slot's transitions.
+///
+/// See `PassiveOverlayShell.qml` for the QML side and the unified-shell
+/// migration commits for the per-consumer rewrite.
+inline const PhosphorLayer::Role PassiveShell =
+    PhosphorLayer::Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("plasmazones-passive-shell"));
+
 /// Snap assist (post-snap window picker). Top layer, exclusive keyboard
 /// so Escape reliably dismisses. Singleton — one instance, re-targeted
 /// to whichever screen the snap happened on.
