@@ -24,7 +24,7 @@
 namespace PlasmaZones {
 
 void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens,
-                                                              const QSet<QString>& includeScreens)
+                                                              const QSet<QString>& includeScreens, int desktopFilter)
 {
     if (!m_snapState || !m_layoutManager)
         return;
@@ -74,6 +74,15 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         // When include-filter is set, only process windows on the specified screens
         if (!includeScreens.isEmpty() && !includeScreens.contains(screenId))
             continue;
+
+        // Desktop filter: a per-desktop layout change should resnap only the
+        // windows on that desktop. virtualDesktop==0 means sticky / unknown
+        // (visible on every desktop) so include those regardless of the filter.
+        if (desktopFilter > 0) {
+            const int windowDesktop = snapDesktops.value(windowId, 0);
+            if (windowDesktop != 0 && windowDesktop != desktopFilter)
+                continue;
+        }
 
         if (addedIds.contains(windowId))
             continue;
