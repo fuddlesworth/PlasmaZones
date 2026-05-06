@@ -1429,13 +1429,33 @@ public:
                     // any leg-specific state so the SG sync that
                     // follows runLeg picks them up live.
                     if (reusedShaderSource) {
-                        // setHideSource(true) re-installs the anchor's
-                        // QQuickItemLayer so the FBO captures the anchor
-                        // content (and the anchor is suppressed from
-                        // direct scene render — the shader effect is
-                        // the sole renderer for the leg's duration).
-                        reusedShaderSource->setHideSource(true);
+                        // Wake the source FBO + re-hide the anchor from
+                        // direct scene render. The park step in
+                        // `teardownShaderLeg` calls
+                        // `setHideSource(false)` to restore the anchor's
+                        // normal rendering during the idle phase, and
+                        // that toggle tears down the source item's
+                        // internal `QQuickItemLayer`. A bare
+                        // `setHideSource(true)` here doesn't reliably
+                        // rebuild that layer — the FBO comes back live
+                        // but empty, so the shader samples a
+                        // transparent uTexture0 throughout the leg and
+                        // the user sees a "pop in" at completion when
+                        // the post-leg `setOpacity(1.0)` restores the
+                        // anchor's direct render.
+                        //
+                        // Force a clean layer reattach by clearing the
+                        // source item first, then re-pointing it at
+                        // the anchor. Qt rebuilds the layer + FBO from
+                        // scratch, mirroring the fresh-attach setup at
+                        // `attachShaderToAnchor`. The matching order
+                        // (setLive, setHideSource, setSourceItem) keeps
+                        // a single code-path's worth of state machine
+                        // for the source.
+                        reusedShaderSource->setSourceItem(nullptr);
                         reusedShaderSource->setLive(true);
+                        reusedShaderSource->setHideSource(true);
+                        reusedShaderSource->setSourceItem(reusedShaderAnchor.data());
                     }
                     reusedShaderItem->setVisible(true);
                     // Re-apply per-effect static config so a metadata.json
