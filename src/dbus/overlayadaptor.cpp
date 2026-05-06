@@ -242,27 +242,7 @@ bool OverlayAdaptor::showSnapAssist(const QString& screenId, const EmptyZoneList
     // Defer actual work so we return immediately — the KWin effect blocks on this D-Bus
     // call; returning quickly prevents compositor freeze during overlay creation.
     // Note: Return value means "request accepted for deferred processing", not "overlay shown".
-    //
-    // The deferred delay (kSnapAssistDeferMs) also serves as an animation
-    // stagger: when a layout-switch shortcut fires both the layout-OSD and
-    // a snap-assist (because the new layout left empty zones), the OSD's
-    // surface->show() runs synchronously in the daemon's shortcut handler,
-    // while snap-assist arrives via this D-Bus path some time later. With a
-    // 0 ms defer the OSD and snap-assist animations overlap on the GUI
-    // thread; SurfaceAnimator's 60Hz tick timer (also on the GUI thread)
-    // ends up sharing event-loop time with snap-assist's per-frame render
-    // and QML scene-graph sync, and the OSD's iTime updates stall mid-
-    // flight. The user observes the OSD fly-in pausing partway through
-    // until snap-assist's animation completes.
-    //
-    // Staggering by ~325 ms keeps snap-assist hidden until the OSD's
-    // typical fly-in (~300 ms `osd.show` + a small margin) has finished.
-    // Both surfaces still feel responsive — the OSD plays its full
-    // animation, then snap-assist appears with a brief gap that reads as
-    // intentional UI sequencing rather than a stutter. The tradeoff is
-    // ~325 ms of extra latency before snap-assist is visible.
-    constexpr int kSnapAssistDeferMs = 325;
-    QTimer::singleShot(kSnapAssistDeferMs, m_overlayService, [this, resolvedScreen, emptyZones, candidates]() {
+    QTimer::singleShot(0, m_overlayService, [this, resolvedScreen, emptyZones, candidates]() {
         m_overlayService->showSnapAssist(resolvedScreen, emptyZones, candidates);
     });
     return true;
