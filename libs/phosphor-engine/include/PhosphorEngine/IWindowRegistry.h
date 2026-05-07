@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include <phosphorengineapi_export.h>
+#include <phosphorengine_export.h>
 #include <QString>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
-class PHOSPHORENGINEAPI_EXPORT IWindowRegistry
+class PHOSPHORENGINE_EXPORT IWindowRegistry
 {
 public:
     virtual ~IWindowRegistry() = default;
@@ -18,4 +18,4 @@ public:
     virtual QString appIdFor(const QString& instanceId) const = 0;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

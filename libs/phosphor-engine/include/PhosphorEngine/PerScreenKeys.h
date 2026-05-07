@@ -5,7 +5,7 @@
 
 #include <QLatin1String>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 namespace PerScreenKeys {
 
 inline constexpr QLatin1String SplitRatio{"SplitRatio"};
@@ -27,4 +27,4 @@ inline constexpr QLatin1String AnimationDuration{"AnimationDuration"};
 inline constexpr QLatin1String AnimationEasingCurve{"AnimationEasingCurve"};
 
 } // namespace PerScreenKeys
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

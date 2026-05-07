@@ -27,7 +27,7 @@
 #include "../../dbus/windowdragadaptor.h"
 #include "../../dbus/autotileadaptor.h"
 #include "../../dbus/snapadaptor.h"
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>

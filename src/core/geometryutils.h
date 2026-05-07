@@ -6,7 +6,7 @@
 #include "constants.h"
 #include "plasmazones_export.h"
 #include "types.h"
-#include <PhosphorEngineApi/GeometryUtils.h>
+#include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QRectF>
@@ -146,7 +146,7 @@ PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenMan
 using ::PhosphorGeometry::enforceWindowMinSizes;
 using ::PhosphorGeometry::removeZoneOverlaps;
 
-using ::PhosphorEngineApi::GeometryUtils::serializeZoneAssignments;
+using ::PhosphorEngine::GeometryUtils::serializeZoneAssignments;
 using ::PhosphorGeometry::rectToJson;
 
 } // namespace GeometryUtils

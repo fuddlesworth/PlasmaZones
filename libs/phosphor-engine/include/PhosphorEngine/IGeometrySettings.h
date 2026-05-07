@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include <phosphorengineapi_export.h>
+#include <phosphorengine_export.h>
 #include <QLatin1String>
 #include <QString>
 #include <QVariantMap>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 namespace PerScreenSnappingKey {
 inline constexpr QLatin1String ZonePadding{"ZonePadding"};
@@ -25,7 +25,7 @@ inline constexpr int ZonePadding = 8;
 inline constexpr int OuterGap = 8;
 } // namespace GeometryDefaults
 
-class PHOSPHORENGINEAPI_EXPORT IGeometrySettings
+class PHOSPHORENGINE_EXPORT IGeometrySettings
 {
 public:
     virtual ~IGeometrySettings() = default;
@@ -40,4 +40,4 @@ public:
     virtual QVariantMap getPerScreenSnappingSettings(const QString& screenId) const = 0;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

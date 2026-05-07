@@ -9,8 +9,8 @@
 
 namespace PhosphorSnapEngine {
 
-using PhosphorEngineApi::SnapIntent;
-using PhosphorEngineApi::UnfloatResult;
+using PhosphorEngine::SnapIntent;
+using PhosphorEngine::UnfloatResult;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Float toggle / set

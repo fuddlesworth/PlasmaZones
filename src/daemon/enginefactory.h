@@ -28,7 +28,7 @@ namespace PhosphorSnapEngine {
 class SnapEngine;
 }
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 class WindowRegistry;
 }
 
@@ -75,6 +75,6 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager, WindowTrac
                         Phosphor::Screens::ScreenManager* screenManager,
                         PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
-                        PhosphorEngineApi::WindowRegistry* windowRegistry, QObject* parent);
+                        PhosphorEngine::WindowRegistry* windowRegistry, QObject* parent);
 
 } // namespace PlasmaZones

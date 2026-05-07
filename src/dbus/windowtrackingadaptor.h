@@ -6,7 +6,7 @@
 #include "plasmazones_export.h"
 #include "../core/windowregistry.h"
 #include "../core/windowtrackingservice.h"
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
@@ -150,8 +150,8 @@ public:
      * @param snapEngine PlacementEngineBase for snap mode (not owned, must outlive adaptor)
      * @param autotileEngine PlacementEngineBase for autotile mode (not owned, must outlive adaptor)
      */
-    void setEngines(PhosphorEngineApi::PlacementEngineBase* snapEngine,
-                    PhosphorEngineApi::PlacementEngineBase* autotileEngine);
+    void setEngines(PhosphorEngine::PlacementEngineBase* snapEngine,
+                    PhosphorEngine::PlacementEngineBase* autotileEngine);
 
     PhosphorSnapEngine::SnapEngine* snapEngine() const;
 
@@ -820,8 +820,8 @@ private:
 
     // Engine references for per-screen routing (set via setEngines())
     // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls
-    QPointer<PhosphorEngineApi::PlacementEngineBase> m_snapEngine;
-    QPointer<PhosphorEngineApi::PlacementEngineBase> m_autotileEngine;
+    QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
+    QPointer<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     QPointer<PhosphorSnapEngine::SnapEngine> m_cachedSnapEngine;
 
     // Central dispatcher: adaptor methods route lifecycle / resnap /

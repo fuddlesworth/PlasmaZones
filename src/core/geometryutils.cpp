@@ -7,16 +7,16 @@
 #include "layoutworker/layoutcomputeservice.h"
 #include "interfaces.h"
 #include "constants.h"
-#include <PhosphorEngineApi/IGeometrySettings.h>
+#include <PhosphorEngine/IGeometrySettings.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/ZoneDefaults.h>
 #include <QScreen>
 
-static_assert(PhosphorEngineApi::GeometryDefaults::ZonePadding == PlasmaZones::Defaults::ZonePadding,
+static_assert(PhosphorEngine::GeometryDefaults::ZonePadding == PlasmaZones::Defaults::ZonePadding,
               "Library and daemon ZonePadding defaults out of sync");
-static_assert(PhosphorEngineApi::GeometryDefaults::OuterGap == PlasmaZones::Defaults::OuterGap,
+static_assert(PhosphorEngine::GeometryDefaults::OuterGap == PlasmaZones::Defaults::OuterGap,
               "Library and daemon OuterGap defaults out of sync");
 
 namespace PlasmaZones {
@@ -38,7 +38,7 @@ ScreenGeometries resolveScreenGeometries(Phosphor::Screens::ScreenManager* mgr, 
     return {mgr->screenGeometry(screenId), mgr->screenAvailableGeometry(screenId)};
 }
 
-QVariantMap getPerScreenSnappingWithFallback(PhosphorEngineApi::IGeometrySettings* settings, const QString& screenId)
+QVariantMap getPerScreenSnappingWithFallback(PhosphorEngine::IGeometrySettings* settings, const QString& screenId)
 {
     QVariantMap result = settings->getPerScreenSnappingSettings(screenId);
     if (result.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
@@ -50,7 +50,7 @@ QVariantMap getPerScreenSnappingWithFallback(PhosphorEngineApi::IGeometrySetting
 
 int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings, const QString& screenId)
 {
-    namespace PSK = PhosphorEngineApi::PerScreenSnappingKey;
+    namespace PSK = PhosphorEngine::PerScreenSnappingKey;
     if (!screenId.isEmpty() && settings) {
         QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
         auto it = perScreen.constFind(PSK::ZonePadding);
@@ -64,14 +64,14 @@ int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings, 
     if (settings) {
         return settings->zonePadding();
     }
-    return PhosphorEngineApi::GeometryDefaults::ZonePadding;
+    return PhosphorEngine::GeometryDefaults::ZonePadding;
 }
 
 ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZones::Layout* layout, ISettings* settings,
                                                  const QString& screenId)
 {
-    namespace PSK = PhosphorEngineApi::PerScreenSnappingKey;
-    namespace GD = PhosphorEngineApi::GeometryDefaults;
+    namespace PSK = PhosphorEngine::PerScreenSnappingKey;
+    namespace GD = PhosphorEngine::GeometryDefaults;
     if (!screenId.isEmpty() && settings) {
         QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
         if (!perScreen.isEmpty()) {

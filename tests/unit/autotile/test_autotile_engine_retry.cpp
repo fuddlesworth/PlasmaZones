@@ -49,7 +49,7 @@ private Q_SLOTS:
         engine.setAutotileScreens(screens);
         QCoreApplication::processEvents(); // drain queued retile from setAutotileScreens
 
-        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         engine.retile(QString());
 
         // Empty string retiles all autotile screens — placementChanged fires once
@@ -80,7 +80,7 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         // Unfloat — should clear cached min-size
-        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         engine.unfloatWindow(windowId);
         QCoreApplication::processEvents();
 
@@ -111,7 +111,7 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         // Report same min-size — should be a no-op (cache still has 200x100)
-        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         engine.windowMinSizeUpdated(windowId, 200, 100);
         QCoreApplication::processEvents();
 
@@ -160,7 +160,7 @@ private Q_SLOTS:
         engine.setAutotileScreens(screens);
         QCoreApplication::processEvents(); // drain queued retile from setAutotileScreens
 
-        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         engine.retile(screenName);
 
         // No windows → recalculateLayout returns true (empty layout) →
@@ -181,7 +181,7 @@ private Q_SLOTS:
         engine.setAutotileScreens(screens);
         QCoreApplication::processEvents(); // drain queued retile from setAutotileScreens
 
-        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         engine.retile(QStringLiteral("UnknownScreen"));
 
         QCOMPARE(tilingSpy.count(), 0);

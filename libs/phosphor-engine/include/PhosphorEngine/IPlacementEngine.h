@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <PhosphorEngineApi/IPlacementState.h>
-#include <PhosphorEngineApi/NavigationContext.h>
+#include <PhosphorEngine/IPlacementState.h>
+#include <PhosphorEngine/NavigationContext.h>
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -19,7 +19,7 @@
 
 class QObject;
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 /// Unified placement engine interface.
 ///
@@ -568,4 +568,4 @@ public:
     virtual const IPlacementState* stateForScreen(const QString& screenId) const = 0;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

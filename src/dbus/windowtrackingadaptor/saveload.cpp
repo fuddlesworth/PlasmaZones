@@ -532,7 +532,7 @@ void WindowTrackingAdaptor::loadState()
     m_service->setPendingRestoreQueues(pendingQueues);
 
     // Load pre-tile geometries into the engine's unmanaged-geometry store.
-    using UnmanagedEntry = PhosphorEngineApi::PlacementEngineBase::UnmanagedEntry;
+    using UnmanagedEntry = PhosphorEngine::PlacementEngineBase::UnmanagedEntry;
     QHash<QString, UnmanagedEntry> unmanagedGeometries;
     auto loadGeometries = [](const QString& json, QHash<QString, UnmanagedEntry>& out) {
         if (json.isEmpty()) {

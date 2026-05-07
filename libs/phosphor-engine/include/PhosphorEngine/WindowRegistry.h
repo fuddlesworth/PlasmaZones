@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <PhosphorEngineApi/IWindowRegistry.h>
-#include <phosphorengineapi_export.h>
+#include <PhosphorEngine/IWindowRegistry.h>
+#include <phosphorengine_export.h>
 #include <QHash>
 #include <QMultiHash>
 #include <QObject>
@@ -12,7 +12,7 @@
 #include <QStringList>
 #include <optional>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 struct WindowMetadata
 {
@@ -30,7 +30,7 @@ struct WindowMetadata
     }
 };
 
-class PHOSPHORENGINEAPI_EXPORT WindowRegistry : public QObject, public IWindowRegistry
+class PHOSPHORENGINE_EXPORT WindowRegistry : public QObject, public IWindowRegistry
 {
     Q_OBJECT
 
@@ -68,4 +68,4 @@ private:
     void indexRemove(const QString& instanceId, const QString& appId);
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

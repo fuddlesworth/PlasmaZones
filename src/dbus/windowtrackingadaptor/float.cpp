@@ -13,8 +13,8 @@
 #include "../../core/interfaces.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include <PhosphorEngineApi/IPlacementEngine.h>
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 
 namespace PlasmaZones {
 
@@ -160,8 +160,8 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     // Route to the correct engine based on screen mode. Both directions go
     // through the explicit cross-engine handoff contract when the window
     // isn't yet tracked by the destination engine.
-    PhosphorEngineApi::PlacementEngineBase* dest = nullptr;
-    PhosphorEngineApi::PlacementEngineBase* source = nullptr;
+    PhosphorEngine::PlacementEngineBase* dest = nullptr;
+    PhosphorEngine::PlacementEngineBase* source = nullptr;
     if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
         dest = m_autotileEngine.data();
         source = m_snapEngine.data();
@@ -175,7 +175,7 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         // window — fromEngineId stays empty when neither side tracks it (e.g.
         // a brand-new floating dialog), so receive-side reasoning that depends
         // on the source mode correctly degrades.
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = screenId;
         ctx.wasFloating = true;

@@ -5,7 +5,7 @@
 
 #include <QString>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 /// Target window + screen for a navigation or lifecycle operation.
 ///
@@ -20,4 +20,4 @@ struct NavigationContext
     QString screenId;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

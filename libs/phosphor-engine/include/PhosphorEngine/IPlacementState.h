@@ -8,7 +8,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 /// Per-screen placement state contract.
 ///
@@ -65,4 +65,4 @@ public:
     virtual QJsonObject toJson() const = 0;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

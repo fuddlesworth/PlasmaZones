@@ -5,7 +5,7 @@
 #include <QCoreApplication>
 #include <QSignalSpy>
 
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingState.h>
 
@@ -54,7 +54,7 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen});
 
         const QString windowId = QStringLiteral("win-floating");
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = screen;
         ctx.fromEngineId = QStringLiteral("snap");
@@ -76,7 +76,7 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen});
 
         const QString windowId = QStringLiteral("win-tiled");
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = screen;
         ctx.fromEngineId = QStringLiteral("autotile");
@@ -96,7 +96,7 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setAutotileScreens({QLatin1String(Screen1)});
 
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = QStringLiteral("win-x");
         ctx.toScreenId = QLatin1String(Screen2); // not an autotile screen
         ctx.wasFloating = true;
@@ -110,7 +110,7 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setAutotileScreens({QLatin1String(Screen1)});
 
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = QString();
         ctx.toScreenId = QLatin1String(Screen1);
         engine.handoffReceive(ctx);
@@ -138,7 +138,7 @@ private Q_SLOTS:
 
         // Idempotent receive: floating disposition shouldn't overwrite the
         // existing tiled state.
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = screen;
         ctx.wasFloating = true;
@@ -167,7 +167,7 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         // Hand off to the OTHER autotile screen.
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = s2;
         ctx.wasFloating = false;

@@ -4,7 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include <PhosphorEngineApi/IVirtualDesktopManager.h>
+#include <PhosphorEngine/IVirtualDesktopManager.h>
 #include <QObject>
 #include <QStringList>
 
@@ -23,7 +23,7 @@ namespace PlasmaZones {
  * Handles virtual desktop changes and automatically switches layouts
  * based on assignments.
  */
-class PLASMAZONES_EXPORT VirtualDesktopManager : public QObject, public PhosphorEngineApi::IVirtualDesktopManager
+class PLASMAZONES_EXPORT VirtualDesktopManager : public QObject, public PhosphorEngine::IVirtualDesktopManager
 {
     Q_OBJECT
 

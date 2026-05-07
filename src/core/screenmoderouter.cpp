@@ -8,8 +8,8 @@
 namespace PlasmaZones {
 
 ScreenModeRouter::ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager,
-                                   PhosphorEngineApi::IPlacementEngine* snapEngine,
-                                   PhosphorEngineApi::IPlacementEngine* autotileEngine)
+                                   PhosphorEngine::IPlacementEngine* snapEngine,
+                                   PhosphorEngine::IPlacementEngine* autotileEngine)
     : m_layoutManager(layoutManager)
     , m_snapEngine(snapEngine)
     , m_autotileEngine(autotileEngine)
@@ -42,7 +42,7 @@ PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& sc
     return mode;
 }
 
-PhosphorEngineApi::IPlacementEngine* ScreenModeRouter::engineFor(const QString& screenId) const
+PhosphorEngine::IPlacementEngine* ScreenModeRouter::engineFor(const QString& screenId) const
 {
     switch (modeFor(screenId)) {
     case PhosphorZones::AssignmentEntry::Autotile:

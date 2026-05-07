@@ -5,7 +5,7 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/TilingState.h>
-#include <PhosphorEngineApi/PerScreenKeys.h>
+#include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include "tileenginelogging.h"
 #include <PhosphorScreens/Manager.h>
@@ -16,7 +16,7 @@
 
 namespace PhosphorTileEngine {
 
-namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
+namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;
 
 NavigationController::NavigationController(AutotileEngine* engine)
     : m_engine(engine)

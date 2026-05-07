@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <PhosphorEngineApi/EngineTypes.h>
-#include <phosphorengineapi_export.h>
+#include <PhosphorEngine/EngineTypes.h>
+#include <phosphorengine_export.h>
 
 #include <QHash>
 #include <QList>
@@ -27,9 +27,9 @@ namespace Phosphor::Screens {
 class ScreenManager;
 }
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
-class PHOSPHORENGINEAPI_EXPORT IWindowTrackingService
+class PHOSPHORENGINE_EXPORT IWindowTrackingService
 {
 public:
     virtual ~IWindowTrackingService() = default;
@@ -133,4 +133,4 @@ public:
     virtual QVector<ResnapEntry> takeResnapBuffer() = 0;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

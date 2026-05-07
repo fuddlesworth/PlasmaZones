@@ -7,7 +7,7 @@
 
 #include <QLatin1String>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 namespace JsonKeys {
 
 using PhosphorGeometry::JsonKeys::Height;
@@ -21,4 +21,4 @@ inline constexpr QLatin1String TargetZoneId{"targetZoneId"};
 inline constexpr QLatin1String TargetZoneIds{"targetZoneIds"};
 
 } // namespace JsonKeys
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

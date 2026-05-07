@@ -17,7 +17,7 @@
 #include "../core/types.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmPreviewParams.h>
 
 namespace Phosphor::Screens {
@@ -38,7 +38,7 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 class WindowRegistry;
 }
 
@@ -154,7 +154,7 @@ public:
     {
         return m_shortcutManager.get();
     }
-    PhosphorEngineApi::WindowRegistry* windowRegistry() const
+    PhosphorEngine::WindowRegistry* windowRegistry() const
     {
         return m_windowRegistry.get();
     }
@@ -229,7 +229,7 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /** @brief Return the active IPlacementEngine for a screen (autotile or snap) */
-    PhosphorEngineApi::IPlacementEngine* engineForScreen(const QString& screenId) const;
+    PhosphorEngine::IPlacementEngine* engineForScreen(const QString& screenId) const;
 
     /**
      * @brief Convenience mode check: routed through m_screenModeRouter.
@@ -504,7 +504,7 @@ private:
     // Single source of truth for live-window instance identity + metadata.
     // Populated by the kwin-effect bridge. Consumers query appIdFor() etc.
     // instead of parsing composite windowId strings.
-    std::unique_ptr<PhosphorEngineApi::WindowRegistry> m_windowRegistry;
+    std::unique_ptr<PhosphorEngine::WindowRegistry> m_windowRegistry;
     /// Plasma D-Bus panel-offset source. Declared before m_screenManager
     /// because the manager holds a non-owning IPanelSource* into it.
     std::unique_ptr<Phosphor::Screens::PlasmaPanelSource> m_panelSource;
@@ -561,8 +561,8 @@ private:
     std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
 
     // Window engines (held as base class; concrete types known only in daemon.cpp/enginefactory.cpp)
-    std::unique_ptr<PhosphorEngineApi::PlacementEngineBase> m_autotileEngine;
-    std::unique_ptr<PhosphorEngineApi::PlacementEngineBase> m_snapEngine;
+    std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
+    std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     /// Single source of truth for "which engine owns screen X". Used by
     /// WindowTrackingAdaptor and (via @ref engineForScreen) daemon-internal
     /// dispatch paths. Owns no state of its own — just delegates to the

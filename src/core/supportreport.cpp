@@ -9,7 +9,7 @@
 #include <PhosphorZones/Zone.h>
 #include "version.h"
 #include "../config/configdefaults.h"
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 
 #include <QCoreApplication>
 #include <QDir>
@@ -51,7 +51,7 @@ QString SupportReport::redactHomePath(const QString& input)
 
 SupportReport::Snapshot SupportReport::collectSnapshot(Phosphor::Screens::ScreenManager* screenManager,
                                                        PhosphorZones::LayoutRegistry* layoutManager,
-                                                       PhosphorEngineApi::IPlacementEngine* autotileEngine)
+                                                       PhosphorEngine::IPlacementEngine* autotileEngine)
 {
     Snapshot snap;
 
@@ -327,7 +327,7 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
 
 QString SupportReport::generate(Phosphor::Screens::ScreenManager* screenManager,
                                 PhosphorZones::LayoutRegistry* layoutManager,
-                                PhosphorEngineApi::IPlacementEngine* autotileEngine, int sinceMinutes)
+                                PhosphorEngine::IPlacementEngine* autotileEngine, int sinceMinutes)
 {
     return generateFromSnapshot(collectSnapshot(screenManager, layoutManager, autotileEngine), sinceMinutes);
 }

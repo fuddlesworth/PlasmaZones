@@ -7,6 +7,6 @@ include(CMakeFindDependencyMacro)
 
 find_dependency(Qt6 6.6 COMPONENTS Core)
 
-include("${CMAKE_CURRENT_LIST_DIR}/PhosphorEngineApiTargets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorEngineTargets.cmake")
 
-check_required_components(PhosphorEngineApi)
+check_required_components(PhosphorEngine)

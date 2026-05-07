@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include <phosphorengineapi_export.h>
+#include <phosphorengine_export.h>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
-class PHOSPHORENGINEAPI_EXPORT IVirtualDesktopManager
+class PHOSPHORENGINE_EXPORT IVirtualDesktopManager
 {
 public:
     virtual ~IVirtualDesktopManager() = default;
@@ -15,4 +15,4 @@ public:
     virtual int currentDesktop() const = 0;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

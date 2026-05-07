@@ -17,8 +17,8 @@
 #include "../../core/windowtrackingservice.h"
 #include "../config/settings.h"
 #include "../../dbus/windowtrackingadaptor.h"
-#include <PhosphorEngineApi/PlacementEngineBase.h>
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <QGuiApplication>

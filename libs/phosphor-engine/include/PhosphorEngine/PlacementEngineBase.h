@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <PhosphorEngineApi/IPlacementEngine.h>
-#include <phosphorengineapi_export.h>
+#include <PhosphorEngine/IPlacementEngine.h>
+#include <phosphorengine_export.h>
 
 #include <QHash>
 #include <QJsonObject>
@@ -15,7 +15,7 @@
 #include <QString>
 #include <QVariantMap>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 enum class WindowState {
     Unmanaged,
@@ -33,7 +33,7 @@ enum class WindowState {
 /// hooks: where to put a window, how to remember placement for
 /// unfloat, etc. The base class ensures consistent state transitions
 /// regardless of engine type.
-class PHOSPHORENGINEAPI_EXPORT PlacementEngineBase : public QObject, public IPlacementEngine
+class PHOSPHORENGINE_EXPORT PlacementEngineBase : public QObject, public IPlacementEngine
 {
     Q_OBJECT
 
@@ -131,4 +131,4 @@ private:
     QPointer<QObject> m_engineSettings;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

@@ -31,7 +31,7 @@ class Zone;
 class LayoutRegistry;
 }
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 class IPlacementEngine;
 }
 
@@ -77,7 +77,7 @@ public:
      * prepareHandlerContext() skips overlay display on them.
      * Pass nullptr during shutdown to prevent dangling pointer access.
      */
-    void setAutotileEngine(PhosphorEngineApi::IPlacementEngine* engine)
+    void setAutotileEngine(PhosphorEngine::IPlacementEngine* engine)
     {
         m_autotileEngine = engine;
     }
@@ -331,7 +331,7 @@ public:
      * @param curActivity Current activity (for context-disabled check)
      */
     static PlasmaZones::DragPolicy computeDragPolicy(const ISettings* settings,
-                                                     const PhosphorEngineApi::IPlacementEngine* autotileEngine,
+                                                     const PhosphorEngine::IPlacementEngine* autotileEngine,
                                                      const QString& windowId, const QString& screenId, int curDesktop,
                                                      const QString& curActivity);
 
@@ -373,7 +373,7 @@ private:
     Phosphor::Screens::ScreenManager* m_screenManager;
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
-    PhosphorEngineApi::IPlacementEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
+    PhosphorEngine::IPlacementEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
     Phosphor::Shortcuts::Integration::IAdhocRegistrar* m_shortcutRegistrar =
         nullptr; // Non-owning: owned by Daemon (ShortcutManager)
 

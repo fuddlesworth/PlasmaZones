@@ -4,12 +4,12 @@
 #pragma once
 
 #include <phosphortileengine_export.h>
-#include <PhosphorEngineApi/PerScreenKeys.h>
-#include <PhosphorEngineApi/EngineTypes.h>
+#include <PhosphorEngine/PerScreenKeys.h>
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
-#include <PhosphorEngineApi/IWindowRegistry.h>
-#include <PhosphorEngineApi/IWindowTrackingService.h>
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/IWindowRegistry.h>
+#include <PhosphorEngine/IWindowTrackingService.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <QHash>
 #include <QJsonArray>
@@ -43,7 +43,7 @@ namespace PhosphorTileEngine {
 struct PendingAutotileRestore
 {
     PendingAutotileRestore() = default;
-    PendingAutotileRestore(int pos, PhosphorEngineApi::TilingStateKey ctx, bool floating)
+    PendingAutotileRestore(int pos, PhosphorEngine::TilingStateKey ctx, bool floating)
         : position(pos)
         , context(std::move(ctx))
         , wasFloating(floating)
@@ -51,7 +51,7 @@ struct PendingAutotileRestore
     }
 
     int position = -1; ///< Index in window order at time of removal
-    PhosphorEngineApi::TilingStateKey context; ///< Screen/desktop/activity where the window was tiled
+    PhosphorEngine::TilingStateKey context; ///< Screen/desktop/activity where the window was tiled
     bool wasFloating = false; ///< Whether the window was floating when removed
 };
 
@@ -85,7 +85,7 @@ namespace PhosphorTileEngine {
  *
  * @see PhosphorTiles::TilingAlgorithm, PhosphorTiles::TilingState, PhosphorTiles::AlgorithmRegistry
  */
-class PHOSPHORTILEENGINE_EXPORT AutotileEngine : public PhosphorEngineApi::PlacementEngineBase
+class PHOSPHORTILEENGINE_EXPORT AutotileEngine : public PhosphorEngine::PlacementEngineBase
 {
     Q_OBJECT
     Q_PROPERTY(bool enabled READ isEnabled NOTIFY enabledChanged)
@@ -96,7 +96,7 @@ class PHOSPHORTILEENGINE_EXPORT AutotileEngine : public PhosphorEngineApi::Place
 
 public:
     explicit AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
-                            PhosphorEngineApi::IWindowTrackingService* windowTracker,
+                            PhosphorEngine::IWindowTrackingService* windowTracker,
                             Phosphor::Screens::ScreenManager* screenManager,
                             PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent = nullptr);
     ~AutotileEngine() override;
@@ -365,8 +365,8 @@ public:
      */
     PhosphorTiles::TilingState* tilingStateForScreen(const QString& screenId);
 
-    PhosphorEngineApi::IPlacementState* stateForScreen(const QString& screenId) override;
-    const PhosphorEngineApi::IPlacementState* stateForScreen(const QString& screenId) const override;
+    PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) override;
+    const PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) const override;
 
     /**
      * @brief Get the autotile configuration
@@ -426,7 +426,7 @@ public:
         m_isWindowFloatingFn = std::move(fn);
     }
 
-    // Cross-engine handoff (see PhosphorEngineApi/IPlacementEngine.h for contract)
+    // Cross-engine handoff (see PhosphorEngine/IPlacementEngine.h for contract)
     QString engineId() const override
     {
         return QStringLiteral("autotile");
@@ -474,7 +474,7 @@ public:
     // Settings synchronization
     // ═══════════════════════════════════════════════════════════════════════════
 
-    PhosphorEngineApi::IAutotileSettings* autotileSettings() const;
+    PhosphorEngine::IAutotileSettings* autotileSettings() const;
     void writeBackTuning();
     void refreshConfigFromSettings() override;
 
@@ -730,17 +730,17 @@ public:
     // concrete AutotileEngine method with the right parameters.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void focusInDirection(const QString& direction, const PhosphorEngineApi::NavigationContext& ctx) override;
-    void moveFocusedInDirection(const QString& direction, const PhosphorEngineApi::NavigationContext& ctx) override;
-    void swapFocusedInDirection(const QString& direction, const PhosphorEngineApi::NavigationContext& ctx) override;
-    void moveFocusedToPosition(int position, const PhosphorEngineApi::NavigationContext& ctx) override;
-    void rotateWindows(bool clockwise, const PhosphorEngineApi::NavigationContext& ctx) override;
-    void reapplyLayout(const PhosphorEngineApi::NavigationContext& ctx) override;
-    void snapAllWindows(const PhosphorEngineApi::NavigationContext& ctx) override;
-    void toggleFocusedFloat(const PhosphorEngineApi::NavigationContext& ctx) override;
-    void cycleFocus(bool forward, const PhosphorEngineApi::NavigationContext& ctx) override;
-    void pushToEmptyZone(const PhosphorEngineApi::NavigationContext& ctx) override;
-    void restoreFocusedWindow(const PhosphorEngineApi::NavigationContext& ctx) override;
+    void focusInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
+    void moveFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
+    void swapFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
+    void moveFocusedToPosition(int position, const PhosphorEngine::NavigationContext& ctx) override;
+    void rotateWindows(bool clockwise, const PhosphorEngine::NavigationContext& ctx) override;
+    void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
+    void snapAllWindows(const PhosphorEngine::NavigationContext& ctx) override;
+    void toggleFocusedFloat(const PhosphorEngine::NavigationContext& ctx) override;
+    void cycleFocus(bool forward, const PhosphorEngine::NavigationContext& ctx) override;
+    void pushToEmptyZone(const PhosphorEngine::NavigationContext& ctx) override;
+    void restoreFocusedWindow(const PhosphorEngine::NavigationContext& ctx) override;
 
     // Autotile-specific navigation. Callable directly on the concrete
     // AutotileEngine pointer from internal callers.
@@ -1073,11 +1073,11 @@ private:
      * from creating orphan TilingStates when the KWin script
      * "virtualdesktopsonlyonprimary" pins secondary-screen windows.
      */
-    PhosphorEngineApi::TilingStateKey currentKeyForScreen(const QString& screenId) const
+    PhosphorEngine::TilingStateKey currentKeyForScreen(const QString& screenId) const
     {
         auto it = m_screenDesktopOverride.constFind(screenId);
         int desktop = (it != m_screenDesktopOverride.constEnd()) ? it.value() : m_currentDesktop;
-        return PhosphorEngineApi::TilingStateKey{screenId, desktop, m_currentActivity};
+        return PhosphorEngine::TilingStateKey{screenId, desktop, m_currentActivity};
     }
 
     /**
@@ -1087,7 +1087,7 @@ private:
      * for arbitrary desktop/activity combinations without temporarily mutating
      * m_currentDesktop/m_currentActivity.
      */
-    PhosphorTiles::TilingState* stateForKey(const PhosphorEngineApi::TilingStateKey& key);
+    PhosphorTiles::TilingState* stateForKey(const PhosphorEngine::TilingStateKey& key);
 
     /**
      * @brief Reset maxWindows when switching algorithms (DRY helper)
@@ -1273,9 +1273,9 @@ private:
     QSet<QString> m_autotileFloatedWindows;
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    PhosphorEngineApi::IWindowTrackingService* m_windowTracker = nullptr;
+    PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
-    PhosphorEngineApi::IWindowRegistry* m_windowRegistry = nullptr;
+    PhosphorEngine::IWindowRegistry* m_windowRegistry = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives engine
     std::unique_ptr<AutotileConfig> m_config;
     std::unique_ptr<PerScreenConfigResolver> m_configResolver;
@@ -1292,9 +1292,9 @@ private:
     QString m_algorithmId;
     bool m_algorithmEverSet = false; ///< True after first successful setAlgorithm() call
     QString m_activeScreen; // Last-focused screen (updated by onWindowFocused)
-    QHash<PhosphorEngineApi::TilingStateKey, PhosphorTiles::TilingState*> m_screenStates; // Owned via Qt parent (this)
+    QHash<PhosphorEngine::TilingStateKey, PhosphorTiles::TilingState*> m_screenStates; // Owned via Qt parent (this)
 
-    QHash<QString, PhosphorEngineApi::TilingStateKey> m_windowToStateKey; // windowId -> owning state key
+    QHash<QString, PhosphorEngine::TilingStateKey> m_windowToStateKey; // windowId -> owning state key
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
 
     // Instance id → first-seen canonical windowId.
@@ -1327,7 +1327,7 @@ private:
     // Floating window IDs preserved across mode switches, per desktop/activity.
     // When autotile is deactivated, floated windows are saved here so that
     // re-enabling autotile restores them as floating regardless of screen.
-    QHash<PhosphorEngineApi::TilingStateKey, QSet<QString>> m_savedFloatingWindows;
+    QHash<PhosphorEngine::TilingStateKey, QSet<QString>> m_savedFloatingWindows;
 
     // Pre-seeded window order for snapping → autotile transitions.
     // Keyed by stable EDID-based screen ID (Phosphor::Screens::ScreenIdentity::identifierFor).
@@ -1351,7 +1351,7 @@ private:
     // On desktop/activity switch, orders for the new context are promoted into
     // m_pendingInitialOrders so windows arriving on the new desktop get their
     // saved ordering. Consumed once per context (removed after promotion).
-    QHash<PhosphorEngineApi::TilingStateKey, QStringList> m_savedWindowOrders;
+    QHash<PhosphorEngine::TilingStateKey, QStringList> m_savedWindowOrders;
 
     // Pending restore queue for windows removed from autotile (close/reopen).
     // Keyed by appId (stable across KWin restarts). Multiple entries per appId
@@ -1408,7 +1408,7 @@ private:
 
         // Prior-state restoration info (used on cancel)
         bool hadPriorState = false; // True if m_windowToStateKey contained windowId at begin
-        PhosphorEngineApi::TilingStateKey
+        PhosphorEngine::TilingStateKey
             priorKey; // Key of the prior PhosphorTiles::TilingState (meaningful iff hadPriorState)
         int priorRawIndex = -1; // Raw index in priorState->windowOrder() at begin
         bool priorFloating = false; // Prior floating flag in priorState

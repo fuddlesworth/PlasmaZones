@@ -4,10 +4,10 @@
 #include <QTest>
 #include <QSignalSpy>
 
-#include <PhosphorEngineApi/PlacementEngineBase.h>
-#include <PhosphorEngineApi/IPlacementState.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorEngine/IPlacementState.h>
 
-using namespace PhosphorEngineApi;
+using namespace PhosphorEngine;
 
 class ConcreteEngine : public PlacementEngineBase
 {

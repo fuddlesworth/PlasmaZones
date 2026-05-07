@@ -12,8 +12,8 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include <PhosphorZones/ZoneDetector.h>
-#include <PhosphorEngineApi/IPlacementEngine.h>
-#include <PhosphorEngineApi/IPlacementState.h>
+#include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/IPlacementState.h>
 #include "../../dbus/windowtrackingadaptor.h"
 #include "helpers.h"
 #include <PhosphorLayoutApi/LayoutPreview.h>

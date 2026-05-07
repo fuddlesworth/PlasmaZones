@@ -5,7 +5,7 @@
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 #include "windowtrackingadaptor/persistenceworker.h"
 #include "zonedetectionadaptor.h"
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "../config/configbackends.h"
@@ -177,12 +177,12 @@ PhosphorSnapEngine::SnapEngine* WindowTrackingAdaptor::snapEngine() const
 // This method only wires cross-engine references and the shared OSD path.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingAdaptor::setEngines(PhosphorEngineApi::PlacementEngineBase* snapEngine,
-                                       PhosphorEngineApi::PlacementEngineBase* autotileEngine)
+void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snapEngine,
+                                       PhosphorEngine::PlacementEngineBase* autotileEngine)
 {
     // Disconnect previous autotile engine nav feedback (the only signal connected here)
     if (m_autotileEngine) {
-        disconnect(m_autotileEngine, &PhosphorEngineApi::PlacementEngineBase::navigationFeedback, this, nullptr);
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);
     }
 
     m_snapEngine = snapEngine;
@@ -234,7 +234,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngineApi::PlacementEngineBase* s
     // geometry application). See ADR docs/adr-snapengine-migration.md.
     // ═══════════════════════════════════════════════════════════════════════════
     if (m_autotileEngine) {
-        connect(m_autotileEngine, &PhosphorEngineApi::PlacementEngineBase::navigationFeedback, this,
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this,
                 &WindowTrackingAdaptor::navigationFeedback);
     }
 }
@@ -326,9 +326,9 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         if (trackedScreen.isEmpty() || Phosphor::Screens::ScreenIdentity::screensMatch(trackedScreen, newScreenId)) {
             return;
         }
-        PhosphorEngineApi::PlacementEngineBase* source =
+        PhosphorEngine::PlacementEngineBase* source =
             !trackedSnap.isEmpty() ? m_snapEngine.data() : m_autotileEngine.data();
-        PhosphorEngineApi::PlacementEngineBase* dest = nullptr;
+        PhosphorEngine::PlacementEngineBase* dest = nullptr;
         if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(newScreenId)) {
             dest = m_autotileEngine.data();
         } else if (m_snapEngine) {
@@ -337,7 +337,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         if (!dest) {
             return;
         }
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = newScreenId;
         ctx.fromEngineId = source ? source->engineId() : QString();

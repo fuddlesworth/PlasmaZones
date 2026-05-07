@@ -4,7 +4,7 @@
 #pragma once
 
 #include <phosphortileengine_export.h>
-#include <PhosphorEngineApi/PerScreenKeys.h>
+#include <PhosphorEngine/PerScreenKeys.h>
 #include <QHash>
 #include <QString>
 #include <QVariantMap>
@@ -16,7 +16,7 @@ class TilingAlgorithm;
 
 namespace PhosphorTileEngine {
 
-namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
+namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;
 
 class AutotileConfig;
 class AutotileEngine;

@@ -864,7 +864,7 @@ bool Daemon::init()
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
 
-    connect(autotileEngine, &PhosphorEngineApi::PlacementEngineBase::settingsPersistRequested, this, [this]() {
+    connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::settingsPersistRequested, this, [this]() {
         if (m_settings) {
             m_settings->save();
         }
@@ -977,13 +977,12 @@ bool Daemon::init()
     // that connection is what actually kicks the debounced save timer. If the
     // stateChanged hookup ever gets severed, autotile state will silently
     // stop persisting; add an explicit scheduleSaveState() call here if so.
-    connect(autotileEngine, &PhosphorEngineApi::PlacementEngineBase::placementChanged, m_windowTrackingAdaptor,
-            [this]() {
-                if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
-                    m_windowTrackingAdaptor->service()->markDirty(WindowTrackingService::DirtyAutotileOrders
-                                                                  | WindowTrackingService::DirtyAutotilePending);
-                }
-            });
+    connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, m_windowTrackingAdaptor, [this]() {
+        if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+            m_windowTrackingAdaptor->service()->markDirty(WindowTrackingService::DirtyAutotileOrders
+                                                          | WindowTrackingService::DirtyAutotilePending);
+        }
+    });
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)

@@ -10,7 +10,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 struct TilingStateKey
 {
@@ -97,4 +97,4 @@ enum class StickyWindowHandling {
 
 inline constexpr QLatin1StringView RestoreSentinel("__restore__");
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

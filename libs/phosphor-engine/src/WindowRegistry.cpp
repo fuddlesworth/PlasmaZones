@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorEngineApi/WindowRegistry.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 WindowRegistry::WindowRegistry(QObject* parent)
     : QObject(parent)
@@ -160,4 +160,4 @@ void WindowRegistry::indexRemove(const QString& instanceId, const QString& appId
     }
 }
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

@@ -662,7 +662,7 @@ private Q_SLOTS:
         const QString windowId = QStringLiteral("app|uuid-recv-float");
         const QString screen = QStringLiteral("DP-1");
 
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = screen;
         ctx.fromEngineId = QStringLiteral("autotile");
@@ -680,7 +680,7 @@ private Q_SLOTS:
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
         m_wts->setSnapState(engine.snapState());
 
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = QString();
         ctx.toScreenId = QStringLiteral("DP-1");
         engine.handoffReceive(ctx);

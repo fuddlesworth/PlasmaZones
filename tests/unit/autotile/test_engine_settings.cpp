@@ -82,7 +82,7 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setAutotileScreens({QStringLiteral("eDP-1")});
 
-        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
 
         engine.refreshConfigFromSettings();
 
@@ -556,7 +556,7 @@ private Q_SLOTS:
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
 
-        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
 
         engine.config()->innerGap = 5;
         engine.config()->outerGap = 10;

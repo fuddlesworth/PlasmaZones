@@ -23,7 +23,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include "../../dbus/windowdragadaptor.h"
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -32,7 +32,7 @@
 #include <QScreen>
 #include <QTimer>
 
-using PlacementEngineBase = PhosphorEngineApi::PlacementEngineBase;
+using PlacementEngineBase = PhosphorEngine::PlacementEngineBase;
 
 namespace PlasmaZones {
 
@@ -78,7 +78,7 @@ void Daemon::initializeAutotile()
                 });
 
         // Sync autotile float state and show OSD when a window is floated/unfloated
-        connect(m_autotileEngine.get(), &PhosphorEngineApi::PlacementEngineBase::windowFloatingChanged, this,
+        connect(m_autotileEngine.get(), &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, this,
                 &Daemon::syncAutotileFloatState);
 
         // Passive float state sync for engine-internal state divergence (e.g. a
@@ -86,14 +86,14 @@ void Daemon::initializeAutotile()
         // a handler that updates WTS bookkeeping without calling
         // applyGeometryForFloat — the window already has a valid position and
         // must not be teleported to a stored pre-tile rect.
-        connect(m_autotileEngine.get(), &PhosphorEngineApi::PlacementEngineBase::windowFloatingStateSynced, this,
+        connect(m_autotileEngine.get(), &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced, this,
                 &Daemon::syncAutotileFloatStatePassive);
 
         // Batch overflow float handler: overflow windows are included in the
         // windowsTileRequested D-Bus signal with "floating" flag, so the effect
         // handles geometry restore directly. Here we only update daemon-side
         // WTS state without emitting per-window D-Bus signals.
-        connect(m_autotileEngine.get(), &PhosphorEngineApi::PlacementEngineBase::windowsBatchFloated, this,
+        connect(m_autotileEngine.get(), &PhosphorEngine::PlacementEngineBase::windowsBatchFloated, this,
                 &Daemon::syncAutotileBatchFloatState);
 
         // Per-mode float state: when autotile releases windows back to snap mode:

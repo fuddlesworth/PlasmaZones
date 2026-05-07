@@ -3,14 +3,14 @@
 
 #pragma once
 
-#include <PhosphorEngineApi/EngineTypes.h>
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorGeometry/GeometryUtils.h>
-#include <phosphorengineapi_export.h>
+#include <phosphorengine_export.h>
 
 #include <QString>
 #include <QVector>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 namespace GeometryUtils {
 
 using PhosphorGeometry::availableAreaToOverlayCoordinates;
@@ -20,7 +20,7 @@ using PhosphorGeometry::rectToJson;
 using PhosphorGeometry::removeZoneOverlaps;
 using PhosphorGeometry::snapToRect;
 
-PHOSPHORENGINEAPI_EXPORT QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries);
+PHOSPHORENGINE_EXPORT QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries);
 
 } // namespace GeometryUtils
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

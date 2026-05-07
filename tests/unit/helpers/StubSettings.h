@@ -16,14 +16,14 @@ namespace PlasmaZones {
  * Provides sensible defaults for all ISettings pure virtual methods.
  * The defaultLayoutId can be overridden via setTestDefaultLayoutId().
  *
- * Also inherits PhosphorEngineApi::ISnapSettings so SnapEngine's
+ * Also inherits PhosphorEngine::ISnapSettings so SnapEngine's
  * dynamic_cast<ISnapSettings*>(engineSettings()) succeeds when a stub is wired
  * via setEngineSettings(). The ISnapSettings methods (excludedApplications,
  * stickyWindowHandling, moveNewWindowsToLastZone, restoreWindowsToZonesOnLogin,
  * autoAssignAllLayouts) are already implemented for ISettings — the multiple
  * inheritance just registers the second base so the cast resolves.
  */
-class StubSettings : public ISettings, public PhosphorEngineApi::ISnapSettings
+class StubSettings : public ISettings, public PhosphorEngine::ISnapSettings
 {
     // No Q_OBJECT — this stub has no signals/slots of its own.
     // ISettings::Q_OBJECT provides the meta-object system integration.

@@ -23,7 +23,7 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on PhosphorTiles::TilingAlgorithm
 #include <PhosphorTiles/TilingState.h>
-#include <PhosphorEngineApi/PerScreenKeys.h>
+#include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -36,9 +36,9 @@
 
 namespace PhosphorTileEngine {
 
-using NavigationContext = PhosphorEngineApi::NavigationContext;
-using TilingStateKey = PhosphorEngineApi::TilingStateKey;
-namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
+using NavigationContext = PhosphorEngine::NavigationContext;
+using TilingStateKey = PhosphorEngine::TilingStateKey;
+namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;
 
 namespace {
 // Safety timeout for pending initial window orders that never arrive via D-Bus.
@@ -61,7 +61,7 @@ T* checkedCast(QObject* obj, const char* context)
 } // namespace
 
 AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
-                               PhosphorEngineApi::IWindowTrackingService* windowTracker,
+                               PhosphorEngine::IWindowTrackingService* windowTracker,
                                Phosphor::Screens::ScreenManager* screenManager,
                                PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
     : PlacementEngineBase(parent)
@@ -1128,9 +1128,9 @@ QStringList AutotileEngine::tiledWindowOrder(const QString& screenId) const
 // Settings synchronization
 // ═══════════════════════════════════════════════════════════════════════════════
 
-PhosphorEngineApi::IAutotileSettings* AutotileEngine::autotileSettings() const
+PhosphorEngine::IAutotileSettings* AutotileEngine::autotileSettings() const
 {
-    return qobject_cast<PhosphorEngineApi::IAutotileSettings*>(engineSettings());
+    return qobject_cast<PhosphorEngine::IAutotileSettings*>(engineSettings());
 }
 
 void AutotileEngine::writeBackTuning()
@@ -3371,8 +3371,8 @@ bool AutotileEngine::shouldTileWindow(const QString& rawWindowId) const
         auto* s = autotileSettings();
         if (s) {
             const auto handling = s->autotileStickyWindowHandling();
-            if (handling == PhosphorEngineApi::StickyWindowHandling::IgnoreAll
-                || handling == PhosphorEngineApi::StickyWindowHandling::RestoreOnly) {
+            if (handling == PhosphorEngine::StickyWindowHandling::IgnoreAll
+                || handling == PhosphorEngine::StickyWindowHandling::RestoreOnly) {
                 qCDebug(PhosphorTileEngine::lcTileEngine)
                     << "Window" << windowId << "is sticky, handling=" << static_cast<int>(handling)
                     << ", skipping tile";
@@ -3641,7 +3641,7 @@ bool AutotileEngine::warnIfEmptyWindowId(const QString& windowId, const char* op
 
 void AutotileEngine::setWindowRegistry(QObject* registry)
 {
-    m_windowRegistry = dynamic_cast<PhosphorEngineApi::IWindowRegistry*>(registry);
+    m_windowRegistry = dynamic_cast<PhosphorEngine::IWindowRegistry*>(registry);
     if (!m_windowRegistry) {
         return;
     }
@@ -3959,12 +3959,12 @@ void AutotileEngine::restoreFocusedWindow(const NavigationContext& ctx)
 // IPlacementEngine — state access
 // ═══════════════════════════════════════════════════════════════════════════════
 
-PhosphorEngineApi::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId)
+PhosphorEngine::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId)
 {
     return tilingStateForScreen(screenId);
 }
 
-const PhosphorEngineApi::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId) const
+const PhosphorEngine::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId) const
 {
     if (screenId.isEmpty()) {
         return nullptr;

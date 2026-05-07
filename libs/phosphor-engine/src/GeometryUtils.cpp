@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorEngineApi/GeometryUtils.h>
-#include <PhosphorEngineApi/JsonKeys.h>
-#include <PhosphorEngineApi/EngineTypes.h>
+#include <PhosphorEngine/GeometryUtils.h>
+#include <PhosphorEngine/JsonKeys.h>
+#include <PhosphorEngine/EngineTypes.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 namespace GeometryUtils {
 
 QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries)
@@ -39,4 +39,4 @@ QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries)
 }
 
 } // namespace GeometryUtils
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine

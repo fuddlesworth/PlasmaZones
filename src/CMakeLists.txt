@@ -203,7 +203,7 @@ target_link_libraries(plasmazones_core
         # return type (Phase 4 sub-commit 6).
         PhosphorAnimation::PhosphorAnimation
         PhosphorConfig::PhosphorConfig
-        PhosphorEngineApi::PhosphorEngineApi
+        PhosphorEngine::PhosphorEngine
         PhosphorTileEngine::PhosphorTileEngine
         PhosphorSnapEngine::PhosphorSnapEngine
         PhosphorIdentity::PhosphorIdentity

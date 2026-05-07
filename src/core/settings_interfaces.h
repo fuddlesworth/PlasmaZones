@@ -5,7 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "enums.h"
-#include <PhosphorEngineApi/IGeometrySettings.h>
+#include <PhosphorEngine/IGeometrySettings.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <QString>
 #include <QStringList>
@@ -86,13 +86,13 @@ inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
 
 namespace PerScreenSnappingKey {
 
-using PhosphorEngineApi::PerScreenSnappingKey::OuterGap;
-using PhosphorEngineApi::PerScreenSnappingKey::OuterGapBottom;
-using PhosphorEngineApi::PerScreenSnappingKey::OuterGapLeft;
-using PhosphorEngineApi::PerScreenSnappingKey::OuterGapRight;
-using PhosphorEngineApi::PerScreenSnappingKey::OuterGapTop;
-using PhosphorEngineApi::PerScreenSnappingKey::UsePerSideOuterGap;
-using PhosphorEngineApi::PerScreenSnappingKey::ZonePadding;
+using PhosphorEngine::PerScreenSnappingKey::OuterGap;
+using PhosphorEngine::PerScreenSnappingKey::OuterGapBottom;
+using PhosphorEngine::PerScreenSnappingKey::OuterGapLeft;
+using PhosphorEngine::PerScreenSnappingKey::OuterGapRight;
+using PhosphorEngine::PerScreenSnappingKey::OuterGapTop;
+using PhosphorEngine::PerScreenSnappingKey::UsePerSideOuterGap;
+using PhosphorEngine::PerScreenSnappingKey::ZonePadding;
 
 inline constexpr QLatin1String SnapAssistEnabled{"SnapAssistEnabled"};
 inline constexpr QLatin1String ZoneSelectorEnabled{"ZoneSelectorEnabled"};
@@ -239,7 +239,7 @@ public:
  * - Settings: values are clamped to [0, INT_MAX]; -1 is not valid (global config always has a value)
  * - PhosphorZones::Layout: -1 sentinel means "use global setting"; >= 0 is a per-layout override
  */
-class PLASMAZONES_EXPORT IZoneGeometrySettings : public PhosphorEngineApi::IGeometrySettings
+class PLASMAZONES_EXPORT IZoneGeometrySettings : public PhosphorEngine::IGeometrySettings
 {
 public:
     ~IZoneGeometrySettings() override = default;

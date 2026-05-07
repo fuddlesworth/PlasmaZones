@@ -5,7 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "types.h"
-#include <PhosphorEngineApi/IWindowTrackingService.h>
+#include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QString>
@@ -18,7 +18,7 @@
 #include <utility>
 #include <QPointer>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 
 namespace PhosphorZones {
 class IZoneDetector;
@@ -31,7 +31,7 @@ namespace PhosphorSnapEngine {
 class SnapState;
 }
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 class WindowRegistry;
 }
 
@@ -46,7 +46,7 @@ using PhosphorProtocol::WindowGeometryEntry;
 using PhosphorProtocol::WindowGeometryList;
 using PhosphorProtocol::WindowStateEntry;
 
-using WindowRegistry = PhosphorEngineApi::WindowRegistry;
+using WindowRegistry = PhosphorEngine::WindowRegistry;
 
 class ISettings;
 class VirtualDesktopManager;
@@ -74,7 +74,7 @@ class VirtualDesktopManager;
  * - Maintainable: Clear separation of concerns
  * - Debuggable: Easier to trace logic flow
  */
-class PLASMAZONES_EXPORT WindowTrackingService : public QObject, public PhosphorEngineApi::IWindowTrackingService
+class PLASMAZONES_EXPORT WindowTrackingService : public QObject, public PhosphorEngine::IWindowTrackingService
 {
     Q_OBJECT
 
@@ -118,12 +118,12 @@ public:
      *
      * Must be set after construction. Not owned.
      */
-    void setSnapEngine(PhosphorEngineApi::PlacementEngineBase* engine)
+    void setSnapEngine(PhosphorEngine::PlacementEngineBase* engine)
     {
         m_snapEngine = engine;
     }
 
-    PhosphorEngineApi::PlacementEngineBase* snapEngine() const
+    PhosphorEngine::PlacementEngineBase* snapEngine() const
     {
         return m_snapEngine.data();
     }
@@ -852,7 +852,7 @@ private:
     // Not owned. Null in unit tests.
     WindowRegistry* m_windowRegistry = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
-    QPointer<PhosphorEngineApi::PlacementEngineBase> m_snapEngine;
+    QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
     // Converted from windowId to appId on window close for persistence

@@ -11,9 +11,9 @@
 
 namespace PhosphorSnapEngine {
 
-using PhosphorEngineApi::PendingRestore;
-using PhosphorEngineApi::SnapIntent;
-using PhosphorEngineApi::SnapResult;
+using PhosphorEngine::PendingRestore;
+using PhosphorEngine::SnapIntent;
+using PhosphorEngine::SnapResult;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // windowOpened — delegates to resolveWindowRestore() and applies the result

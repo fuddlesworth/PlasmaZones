@@ -61,7 +61,7 @@ target_link_libraries(PhosphorSnapEngine
     PUBLIC
         Qt6::Core
         Qt6::Gui
-        PhosphorEngineApi::PhosphorEngineApi
+        PhosphorEngine::PhosphorEngine
         PhosphorZones::PhosphorZones
         PhosphorProtocol::PhosphorProtocol
     PRIVATE

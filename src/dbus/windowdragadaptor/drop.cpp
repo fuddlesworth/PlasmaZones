@@ -5,7 +5,7 @@
 #include "../windowtrackingadaptor.h"
 #include "../snapadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include "../../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/AssignmentEntry.h>
@@ -15,7 +15,7 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QTimer>
@@ -122,7 +122,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         const QString snapScreen = snapEngine ? snapEngine->screenForTrackedWindow(windowId) : QString();
         const QString autotileScreen =
             m_autotileEngine ? m_autotileEngine->screenForTrackedWindow(windowId) : QString();
-        PhosphorEngineApi::IPlacementEngine* sourceEngine = nullptr;
+        PhosphorEngine::IPlacementEngine* sourceEngine = nullptr;
         QString sourceScreen;
         if (!snapScreen.isEmpty() && snapScreen != releaseScreenId) {
             sourceEngine = snapEngine;
@@ -133,7 +133,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         }
         if (sourceEngine) {
             const bool destIsAutotile = m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId);
-            PhosphorEngineApi::IPlacementEngine* destEngine = destIsAutotile ? m_autotileEngine : snapEngine;
+            PhosphorEngine::IPlacementEngine* destEngine = destIsAutotile ? m_autotileEngine : snapEngine;
             const bool engineTypeChanged = destEngine && destEngine != sourceEngine;
 
             sourceEngine->handoffRelease(windowId);
@@ -145,7 +145,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             // still finalize the placement — handoffReceive only sets up
             // tracking with the right floating disposition.
             if (engineTypeChanged) {
-                PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+                PhosphorEngine::IPlacementEngine::HandoffContext ctx;
                 ctx.windowId = windowId;
                 ctx.toScreenId = releaseScreenId;
                 ctx.fromEngineId = sourceEngine->engineId();

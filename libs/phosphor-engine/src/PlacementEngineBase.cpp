@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 
 #include <QJsonObject>
 #include <QLatin1String>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 PlacementEngineBase::PlacementEngineBase(QObject* parent)
     : QObject(parent)
@@ -231,4 +231,4 @@ void PlacementEngineBase::setEngineSettings(QObject* settings)
     m_engineSettings = settings;
 }
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine
