@@ -153,8 +153,14 @@ void OverlayService::hide()
     // out cleanly and the next show() can fade-in. dismissOverlayWindow
     // also clears the per-screen "main overlay active" sentinel
     // (overlayPhysScreen) via setVisible(false) + syncPassiveShellSurfaceState.
+    // Gate on overlayPhysScreen — the shell may be alive for OSD-only
+    // screens that never had main overlay attached, and dismissing
+    // those would queue 0→0 opacity noise on idle slots.
     const QStringList screenIds = m_screenStates.keys();
     for (const QString& screenId : screenIds) {
+        if (!m_screenStates.value(screenId).overlayPhysScreen) {
+            continue;
+        }
         dismissOverlayWindow(screenId);
     }
 
@@ -193,23 +199,22 @@ void OverlayService::setIdleForDragPause()
         if (!it.value().overlayPhysScreen) {
             continue;
         }
-        QQuickWindow* window = it.value().passiveShellWindow;
-        if (!window) {
+        // _idled and the zone-data properties live on
+        // passiveShellMainOverlaySlot (PassiveOverlayShell.qml lines
+        // 633, 652, 661-662, etc.), not on the shell window root.
+        // Writing on the window root creates dynamic properties that
+        // QML never observes — the slot's content keeps rendering live
+        // zones while the user expects an idle blank.
+        QQuickItem* slot = it.value().passiveShellMainOverlaySlot;
+        if (!slot) {
             continue;
         }
-        // _idled gates content.visible and toggles Qt.WindowTransparentForInput
-        // in the overlay QML (RenderNodeOverlay.qml / ZoneOverlay.qml). That
-        // makes the wl_surface effectively invisible and non-input-absorbing
-        // in place, without destroying the QQuickWindow. Blanking only the
-        // zones properties below is not sufficient — on some shaders the
-        // base pass still renders visible output when zoneCount==0, and the
-        // input region stays active until the flag change lands.
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::Idled), true);
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::Zones), QVariantList());
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::ZoneCount), 0);
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::HighlightedCount), 0);
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::HighlightedZoneId), QString());
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Idled), true);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), QVariantList());
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::ZoneCount), 0);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedCount), 0);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneId), QString());
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
         // NOTE: labelsTextureHash is intentionally NOT cleared here. The QML
         // side's labelsTexture property still holds the previously-built image
         // (setProperty was never called with a new one); it just isn't sampled
@@ -273,13 +278,13 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
         if (!it.value().overlayPhysScreen) {
             continue;
         }
-        QQuickWindow* window = it.value().passiveShellWindow;
-        if (!window) {
+        QQuickItem* slot = it.value().passiveShellMainOverlaySlot;
+        if (!slot) {
             continue;
         }
         const bool shouldBeActive =
             showOnAllMonitors || (it.key() == activeEffectiveId && !activeEffectiveId.isEmpty());
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::Idled), !shouldBeActive);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Idled), !shouldBeActive);
     }
 }
 

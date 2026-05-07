@@ -892,14 +892,9 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             destroyOverlayWindow(id);
             destroyZoneSelectorWindow(id);
             destroyPassiveShell(id);
-            // If every window for this screen-id was already released (or
-            // this state entry never actually held any — e.g. an OSD
-            // creation failed earlier), drop the empty shell so screen
-            // hot-plug cycles don't slowly accumulate dead keys. Matches
-            // cleanupVirtualScreenStates semantics: the state entry is
-            // meaningless without at least one live window.
-            // overlaySurface is an alias of passiveShellSurface — checking
-            // both is redundant. Erase when the shell itself is gone.
+            // Drop the empty state entry once the shell surface is
+            // gone — matches cleanupVirtualScreenStates semantics so
+            // screen hot-plug cycles don't slowly accumulate dead keys.
             auto& s = m_screenStates[id];
             if (!s.passiveShellSurface) {
                 m_screenStates.remove(id);

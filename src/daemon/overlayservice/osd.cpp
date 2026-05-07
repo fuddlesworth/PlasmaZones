@@ -558,6 +558,16 @@ void OverlayService::destroyPassiveShell(const QString& screenId)
     it->passiveShellLayoutPickerSlot = nullptr;
     it->passiveShellZoneSelectorSlot = nullptr;
     it->passiveShellMainOverlaySlot = nullptr;
+    // Per-content sentinels: tearing the shell down ends every
+    // slot's lifecycle on this screen, so the "context active"
+    // flags must follow.
+    QObject::disconnect(it->overlayGeomConnection);
+    it->overlayGeomConnection = {};
+    it->overlayPhysScreen = nullptr;
+    it->overlayGeometry = QRect();
+    it->labelsTextureHash = 0;
+    it->zoneSelectorPhysScreen = nullptr;
+    it->zoneSelectorGeometry = QRect();
     it->notificationPhysScreen = nullptr;
 }
 

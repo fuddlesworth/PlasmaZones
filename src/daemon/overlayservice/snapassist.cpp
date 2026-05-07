@@ -315,15 +315,14 @@ void OverlayService::hideSnapAssist()
     // unregisterCancelOverlayShortcut() (windowdragadaptor.cpp:82).
     Q_EMIT snapAssistDismissed();
 
-    // Re-show the zone selector slot for the VS that was hidden in
-    // showSnapAssist (symmetric — drag is still active so the selector
-    // is logically visible).
-    if (m_zoneSelectorVisible && !screenId.isEmpty()) {
-        const auto& state = m_screenStates.value(screenId);
-        if (state.zoneSelectorPhysScreen && state.zoneSelectorGeometry.isValid()) {
-            showZoneSelectorSlotOnScreen(screenId, state.zoneSelectorPhysScreen, state.zoneSelectorGeometry);
-        }
-    }
+    // Zone-selector restore is owned by onSnapAssistSlotHideCompleted —
+    // it fires when the snap-assist slot has finished its hide
+    // animation, so the selector fades back in cleanly after the
+    // snap-assist has visually cleared. A synchronous restore here
+    // would race the in-flight beginHide and rely on the
+    // showZoneSelectorSlotOnScreen short-circuit (which checks
+    // slot->isVisible() — true mid-animation), risking visible
+    // overlap or missed re-shows.
 }
 
 bool OverlayService::isSnapAssistVisible() const
@@ -489,14 +488,9 @@ void OverlayService::hideLayoutPicker()
                                      });
     }
 
-    // Re-show the zone selector slot for the VS that was hidden in
-    // show (symmetric — drag is still active).
-    if (m_zoneSelectorVisible && !screenId.isEmpty()) {
-        const auto& state = m_screenStates.value(screenId);
-        if (state.zoneSelectorPhysScreen && state.zoneSelectorGeometry.isValid()) {
-            showZoneSelectorSlotOnScreen(screenId, state.zoneSelectorPhysScreen, state.zoneSelectorGeometry);
-        }
-    }
+    // Zone-selector restore is owned by onLayoutPickerSlotHideCompleted —
+    // mirror of the snap-assist + OSD ownership pattern. The synchronous
+    // fast-path raced the in-flight beginHide.
 
     Q_EMIT layoutPickerDismissed();
 }
@@ -514,6 +508,13 @@ void OverlayService::onLayoutPickerSlotHideCompleted(const QString& effectiveId)
     }
     it->passiveShellLayoutPickerSlot->setVisible(false);
     writeQmlProperty(it->passiveShellLayoutPickerSlot, QStringLiteral("loaded"), false);
+    // Symmetric restore — see onSnapAssistSlotHideCompleted /
+    // onOsdSlotHideCompleted. The picker hid the zone-selector slot
+    // on show; restore it once the picker has finished its hide
+    // animation (drag may still be active).
+    if (m_zoneSelectorVisible && it->zoneSelectorPhysScreen && it->zoneSelectorGeometry.isValid()) {
+        showZoneSelectorSlotOnScreen(effectiveId, it->zoneSelectorPhysScreen, it->zoneSelectorGeometry);
+    }
     syncPassiveShellSurfaceState(effectiveId);
 }
 

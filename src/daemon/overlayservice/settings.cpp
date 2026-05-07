@@ -314,9 +314,9 @@ void OverlayService::syncCavaState()
                 if (!it_.value().overlayPhysScreen) {
                     continue;
                 }
-                auto* window = it_.value().passiveShellWindow;
-                if (window) {
-                    writeQmlProperty(window, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+                auto* slot = it_.value().passiveShellMainOverlaySlot;
+                if (slot) {
+                    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
                 }
             }
             if (m_shaderPreviewWindow) {

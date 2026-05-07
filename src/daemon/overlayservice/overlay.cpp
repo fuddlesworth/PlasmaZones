@@ -517,7 +517,13 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
             sit->overlayGeomConnection = {};
             sit->overlayPhysScreen = nullptr;
             sit->overlayGeometry = QRect();
-            sit->labelsTextureHash = 0;
+            // labelsTextureHash is intentionally NOT cleared — the
+            // QML labelsTexture property still holds the previously-
+            // built image, and updateLabelsTextureForWindow's hash
+            // compare on the next show() will detect any genuine
+            // input change and rebuild only then. Zeroing the hash
+            // would force a redundant 23 MB QImage rebuild on every
+            // hide/show cycle even for unchanged zone inputs.
             writeQmlProperty(sit->passiveShellMainOverlaySlot, QStringLiteral("loaded"), false);
             sit->passiveShellMainOverlaySlot->setVisible(false);
             syncPassiveShellSurfaceState(screenIdCopy);
@@ -530,7 +536,6 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
         it->overlayGeomConnection = {};
         it->overlayPhysScreen = nullptr;
         it->overlayGeometry = QRect();
-        it->labelsTextureHash = 0;
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
         slot->setVisible(false);
         syncPassiveShellSurfaceState(screenId);

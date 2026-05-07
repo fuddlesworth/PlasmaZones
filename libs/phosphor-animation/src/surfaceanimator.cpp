@@ -1443,7 +1443,8 @@ public:
                     // (OSD, zone-selector, etc.) keep their parked
                     // shaders intact; per-(Surface, target) keying is
                     // the whole point of TrackKey.
-                    destroyPendingReuseForKey(TrackKey{surface, target});
+                    destroyPendingReuseEntry(pending);
+                    m_pendingReuse.erase(pendIt);
                 }
             }
         } else {
