@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <floating_cache.h>
+#include <PhosphorCompositor/FloatingCache.h>
 
 #include <QObject>
 #include <QString>

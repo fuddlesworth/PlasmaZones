@@ -4,7 +4,7 @@
 #include "kwin_compositor_bridge.h"
 #include "plasmazoneseffect.h"
 
-#include "geometry_helpers.h"
+#include <PhosphorCompositor/GeometryHelpers.h>
 #include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>

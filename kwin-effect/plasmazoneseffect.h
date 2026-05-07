@@ -5,9 +5,9 @@
 
 #include <cstdint>
 
-#include <compositor_bridge.h>
+#include <PhosphorCompositor/ICompositorBridge.h>
 #include <PhosphorProtocol/WireTypes.h>
-#include <trigger_parser.h>
+#include <PhosphorCompositor/TriggerParser.h>
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>

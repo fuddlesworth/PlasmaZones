@@ -9,7 +9,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/WireTypes.h>
-#include <snap_assist_filter.h>
+#include <PhosphorCompositor/SnapAssistFilter.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>

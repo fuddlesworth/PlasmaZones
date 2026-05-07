@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
-#include "compositor_bridge.h"
+#include <phosphorcompositor_export.h>
+
+#include <PhosphorCompositor/ICompositorBridge.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/WireTypes.h>
 
@@ -39,8 +41,10 @@ namespace SnapAssistFilter {
  * @param snappedWindowIds  Set of window IDs that are already snapped
  * @return Typed list of candidates (windowId, icon, caption; compositorHandle left empty — compositor fills it)
  */
-SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge, const QString& excludeWindowId,
-                                        const QString& screenId, const QSet<QString>& snappedWindowIds);
+PHOSPHORCOMPOSITOR_EXPORT SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge,
+                                                                  const QString& excludeWindowId,
+                                                                  const QString& screenId,
+                                                                  const QSet<QString>& snappedWindowIds);
 
 } // namespace SnapAssistFilter
 } // namespace PlasmaZones

@@ -11,10 +11,10 @@
 
 #include <QTest>
 
-#include "compositor-common/autotile_state.h"
+#include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/WireTypes.h>
-#include "compositor-common/floating_cache.h"
-#include "compositor-common/trigger_parser.h"
+#include <PhosphorCompositor/FloatingCache.h>
+#include <PhosphorCompositor/TriggerParser.h>
 #include <PhosphorIdentity/WindowId.h>
 
 // Easing curves, AnimationMath, and WindowMotion have their own tests

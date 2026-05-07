@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "snap_assist_filter.h"
+#include <PhosphorCompositor/SnapAssistFilter.h>
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
