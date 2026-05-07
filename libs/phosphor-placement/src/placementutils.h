@@ -4,9 +4,11 @@
 #pragma once
 
 #include <QGuiApplication>
+#include <QLatin1String>
 #include <QScreen>
 #include <QString>
 #include <QUuid>
+#include <climits>
 #include <optional>
 
 namespace PhosphorPlacement {
