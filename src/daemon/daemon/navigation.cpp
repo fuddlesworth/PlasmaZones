@@ -298,7 +298,14 @@ void Daemon::resnapIfManualMode()
             const auto parts = m_screenModeRouter->partitionByMode(m_screenManager->effectiveScreenIds());
             autotileScreens = QSet<QString>(parts.autotile.begin(), parts.autotile.end());
         }
-        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens);
+        // Restrict the resnap to the current virtual desktop. Cycle/picker /
+        // zone-selector all change a single (screen, desktop, activity)
+        // assignment — without the desktop filter the resnap would also
+        // physically reposition windows on other desktops to the
+        // just-cycled layout's zones, which the user perceives as
+        // "every desktop got the same layout".
+        const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, {}, currentDesktop);
     }
     m_suppressResnapOsd = 1;
     if (m_snapAdaptor) {

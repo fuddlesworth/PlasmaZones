@@ -13,6 +13,8 @@
 
 #include <private/qquickitem_p.h>
 
+#include <QDir>
+#include <QFile>
 #include <QGuiApplication>
 #include <QImage>
 #include <QPainter>
@@ -283,15 +285,52 @@ void seedShaderEffect(PhosphorRendering::ShaderEffect& effect, const ShaderMetad
 
 QStringList shaderIncludePaths()
 {
+    // Mirrors ZoneShaderItem's constructor (src/daemon/rendering/zoneshaderitem.cpp:75-85):
+    // for each shader root, push <root>/shared FIRST then <root>. The /shared
+    // entry is where common.glsl / audio.glsl / zone.vert live in the source
+    // tree; without it `#include <common.glsl>` only resolves accidentally via
+    // an installed copy at /usr/share/plasmazones/shaders/common.glsl, and the
+    // shared zone.vert fallback (see resolveZoneVertexShader) wouldn't find
+    // anything either.
     QStringList paths;
+    const auto pushRoot = [&paths](const QString& root) {
+        const QString sharedDir = root + QStringLiteral("/shared");
+        if (QDir(sharedDir).exists()) {
+            paths.append(sharedDir);
+        }
+        paths.append(root);
+    };
     const QStringList xdg = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
     for (const QString& dir : xdg) {
-        paths.append(dir + QStringLiteral("/shaders"));
+        pushRoot(dir + QStringLiteral("/shaders"));
     }
-    paths.append(QStringLiteral("/usr/share/plasmazones/shaders"));
-    paths.append(QStringLiteral("data/shaders"));
+    pushRoot(QStringLiteral("/usr/share/plasmazones/shaders"));
+    pushRoot(QStringLiteral("data/shaders"));
     paths.append(QStringLiteral("libs/phosphor-rendering/shaders"));
     return paths;
+}
+
+// Resolve which vertex shader to pass to RenderEffect. metadata.json declares
+// vertexShader explicitly only for packs that ship a non-standard one
+// (currently magnetic-field). The other 25 zone shaders rely on the runtime's
+// fallback to the shared zone.vert that lives at
+// data/shaders/shared/zone.vert. Without this the base ShaderEffect's default
+// vertex shader (kDefaultVertexShaderSource — emits only vTexCoord) is used,
+// every zone fragment shader fails to link with `vFragCoord not declared as
+// input from previous stage`, and every preview comes out as the clear colour.
+// Replicates ZoneShaderItem's resolution at src/daemon/rendering/zoneshaderitem.cpp:358-373.
+QString resolveZoneVertexShader(const QString& metadataVertexPath, const QStringList& includePaths)
+{
+    if (!metadataVertexPath.isEmpty()) {
+        return metadataVertexPath;
+    }
+    for (const QString& incDir : includePaths) {
+        const QString candidate = incDir + QStringLiteral("/zone.vert");
+        if (QFile::exists(candidate)) {
+            return candidate;
+        }
+    }
+    return QString();
 }
 
 // Flip a QImage vertically.  RHI texture readback delivers rows
@@ -529,10 +568,16 @@ int Renderer::render(const RenderOptions& opts)
     // the scene graph culls them.
     window->contentItem()->setSize(QSizeF(size));
 
-    auto* effect = new RenderEffect(window->contentItem(), opts.metadata.vertexShader);
+    const QStringList includePaths = shaderIncludePaths();
+    const QString vertexShaderPath = resolveZoneVertexShader(opts.metadata.vertexShader, includePaths);
+    if (vertexShaderPath.isEmpty()) {
+        qCWarning(lcRenderer) << "no zone.vert found for shader" << opts.metadata.id
+                              << "— neither in the pack dir nor in any include path; previews will fail to link";
+    }
+    auto* effect = new RenderEffect(window->contentItem(), vertexShaderPath);
     effect->setSize(QSizeF(size));
     effect->setVisible(true);
-    effect->setShaderIncludePaths(shaderIncludePaths());
+    effect->setShaderIncludePaths(includePaths);
 
     // The QML wrapper enables layer.enabled on ZoneShaderItem so the shader
     // renders to a private FBO. Without this, the scene graph's batch

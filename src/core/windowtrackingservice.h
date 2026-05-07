@@ -467,9 +467,13 @@ public:
      * @param excludeScreens Screens to skip (e.g. autotile screens handled separately)
      * @param includeScreens When non-empty, only process windows on these screens.
      *        Restricts resnap to screens whose layout actually changed.
+     * @param desktopFilter When > 0, only include windows whose virtualDesktop
+     *        matches this value (or are sticky/unknown with virtualDesktop==0).
+     *        Restricts resnap to a single virtual desktop so per-desktop
+     *        layout changes don't reposition windows on other desktops.
      */
     void populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens = {},
-                                           const QSet<QString>& includeScreens = {});
+                                           const QSet<QString>& includeScreens = {}, int desktopFilter = 0);
 
     /**
      * @brief Clear the resnap buffer
