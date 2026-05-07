@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
+#include "../core/daemongeometryresolver.h"
+#include <PhosphorPlacement/PlacementConfig.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 #include "windowtrackingadaptor/persistenceworker.h"
 #include "zonedetectionadaptor.h"
@@ -43,9 +45,13 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     Q_ASSERT(zoneDetector);
     Q_ASSERT(settings);
 
+    // Create geometry resolver (bridges ISettings to the library's IGeometryResolver)
+    m_geometryResolver = new PlasmaZones::DaemonGeometryResolver(settings);
+
     // Create business logic service
-    m_service =
-        new WindowTrackingService(layoutManager, zoneDetector, screenManager, settings, virtualDesktopManager, this);
+    m_service = new PhosphorPlacement::WindowTrackingService(
+        layoutManager, zoneDetector, screenManager, virtualDesktopManager, m_geometryResolver,
+        PhosphorPlacement::PlacementConfig{settings->keepWindowsInZonesOnResolutionChange()}, this);
 
     // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
     // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on
@@ -54,14 +60,16 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // still reaches the resolver.
 
     // Forward service signals to D-Bus
-    connect(m_service, &WindowTrackingService::windowZoneChanged, this, &WindowTrackingAdaptor::windowZoneChanged);
+    connect(m_service, &PhosphorPlacement::WindowTrackingService::windowZoneChanged, this,
+            &WindowTrackingAdaptor::windowZoneChanged);
 
     // Snap-commit signal wiring is deferred to setEngines() where m_snapEngine
     // is available — commitSnap/commitMultiZoneSnap/uncommitSnap live on
     // SnapEngine, not WTS.
 
     // Connect service state changes to persistence
-    connect(m_service, &WindowTrackingService::stateChanged, this, &WindowTrackingAdaptor::scheduleSaveState);
+    connect(m_service, &PhosphorPlacement::WindowTrackingService::stateChanged, this,
+            &WindowTrackingAdaptor::scheduleSaveState);
 
     // Setup debounced save timer (500ms delay to batch rapid state changes)
     m_saveTimer = new QTimer(this);
@@ -90,11 +98,11 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
                 if (m_pendingWriteMasks.isEmpty()) {
                     return;
                 }
-                const WindowTrackingService::DirtyMask committed = m_pendingWriteMasks.dequeue();
+                const PhosphorPlacement::WindowTrackingService::DirtyMask committed = m_pendingWriteMasks.dequeue();
                 if (!success) {
                     qCWarning(lcDbusWindow) << "session state write failed for" << filePath
                                             << "— restoring dirty mask and retrying on next tick";
-                    if (m_service && committed != WindowTrackingService::DirtyNone) {
+                    if (m_service && committed != PhosphorPlacement::WindowTrackingService::DirtyNone) {
                         // markDirty emits stateChanged, which is wired to
                         // scheduleSaveState() above — the retry lands on
                         // the next debounce tick automatically.
@@ -120,7 +128,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // without needing an unrelated DirtyAll path to drag it along.
     connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this, [this]() {
         if (m_service) {
-            m_service->markDirty(WindowTrackingService::DirtyActiveLayoutId);
+            m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyActiveLayoutId);
         }
         onLayoutChanged();
     });

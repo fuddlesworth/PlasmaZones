@@ -18,7 +18,7 @@
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
@@ -29,6 +29,7 @@
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using PhosphorEngine::ZoneAssignmentEntry;
 using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
@@ -108,8 +109,8 @@ private Q_SLOTS:
             PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts")));
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
-        QScopedPointer<WindowTrackingService> service(new WindowTrackingService(
-            layoutManager.data(), detector.data(), nullptr, settings.data(), nullptr, nullptr));
+        QScopedPointer<PhosphorPlacement::WindowTrackingService> service(
+            new PhosphorPlacement::WindowTrackingService(layoutManager.data(), detector.data(), nullptr, nullptr));
 
         auto* layout = new PhosphorZones::Layout(QStringLiteral("Test"), layoutManager.data());
         auto* z1 = new PhosphorZones::Zone(layout);
@@ -141,8 +142,8 @@ private Q_SLOTS:
             PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts")));
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
-        QScopedPointer<WindowTrackingService> service(new WindowTrackingService(
-            layoutManager.data(), detector.data(), nullptr, settings.data(), nullptr, nullptr));
+        QScopedPointer<PhosphorPlacement::WindowTrackingService> service(
+            new PhosphorPlacement::WindowTrackingService(layoutManager.data(), detector.data(), nullptr, nullptr));
         QScopedPointer<SnapEngine> engine(
             new SnapEngine(layoutManager.data(), service.data(), detector.data(), nullptr, nullptr));
         engine->setEngineSettings(settings.data());

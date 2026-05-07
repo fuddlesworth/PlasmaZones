@@ -26,7 +26,7 @@
 #include <QRectF>
 #include <memory>
 
-#include "core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
@@ -39,6 +39,7 @@
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using PhosphorEngine::ZoneAssignmentEntry;
 using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
@@ -138,7 +139,7 @@ private Q_SLOTS:
                                                             QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsQueries(nullptr);
         m_zoneDetector = new StubZoneDetectorQueries(nullptr);
-        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
         m_engine->setEngineSettings(m_settings);
         m_service->setSnapState(m_engine->snapState());
@@ -201,7 +202,7 @@ private Q_SLOTS:
         QString windowId = QStringLiteral("app:window:12345");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
 
-        QSignalSpy spy(m_service, &WindowTrackingService::windowZoneChanged);
+        QSignalSpy spy(m_service, &PhosphorPlacement::WindowTrackingService::windowZoneChanged);
         m_service->unassignWindow(windowId);
 
         QCOMPARE(spy.count(), 1);
@@ -327,7 +328,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsQueries* m_settings = nullptr;
     StubZoneDetectorQueries* m_zoneDetector = nullptr;
-    WindowTrackingService* m_service = nullptr;
+    PhosphorPlacement::WindowTrackingService* m_service = nullptr;
     SnapEngine* m_engine = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;

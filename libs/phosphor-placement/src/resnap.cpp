@@ -1,19 +1,20 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Resnap, snap-all, and resolution change geometry calculations.
 // Part of WindowTrackingService — split from windowtrackingservice.cpp for SRP.
 
-#include "../windowtrackingservice.h"
-#include "../geometryutils.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
+#include "placementutils.h"
+#include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../utils.h"
-#include "../logging.h"
+#include <PhosphorIdentity/WindowId.h>
+#include "placementlogging.h"
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
@@ -21,7 +22,7 @@
 #include <tuple>
 #include <PhosphorScreens/ScreenIdentity.h>
 
-namespace PlasmaZones {
+namespace PhosphorPlacement {
 
 void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens,
                                                               const QSet<QString>& includeScreens, int desktopFilter)
@@ -114,7 +115,7 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
 
     if (!newBuffer.isEmpty()) {
         m_resnapBuffer = std::move(newBuffer);
-        qCInfo(lcCore) << "Resnap buffer (all screens):" << m_resnapBuffer.size() << "windows";
+        qCInfo(lcPlacement) << "Resnap buffer (all screens):" << m_resnapBuffer.size() << "windows";
     }
 }
 
@@ -165,8 +166,8 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
         if (numIt != zoneNumberMap.constEnd()) {
             windowsByZone.append({numIt.value(), insertionIdx++, windowId});
         } else {
-            qCWarning(lcCore) << "buildZoneOrderedWindowList: zone UUID" << zoneIds.first() << "for window" << windowId
-                              << "not found in layout - skipping";
+            qCWarning(lcPlacement) << "buildZoneOrderedWindowList: zone UUID" << zoneIds.first() << "for window"
+                                   << windowId << "not found in layout - skipping";
         }
     }
 
@@ -183,7 +184,7 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
         result.append(std::get<2>(entry));
     }
 
-    qCDebug(lcCore) << "buildZoneOrderedWindowList for" << screenId << ":" << result;
+    qCDebug(lcPlacement) << "buildZoneOrderedWindowList for" << screenId << ":" << result;
     return result;
 }
 
@@ -197,7 +198,7 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
 {
     QHash<QString, QRect> result;
 
-    if (!m_settings || !m_settings->keepWindowsInZonesOnResolutionChange()) {
+    if (!m_config.keepWindowsInZonesOnResolutionChange) {
         return result;
     }
 
@@ -285,4 +286,4 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
     return result;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorPlacement

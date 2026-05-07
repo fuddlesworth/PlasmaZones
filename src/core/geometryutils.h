@@ -125,7 +125,7 @@ using ::PhosphorZones::GeometryUtils::setZoneGeometry;
  * @param isZoneEmpty Predicate: returns true if zone has no windows
  * @return EmptyZoneList of empty zone entries with overlay-local geometry
  *
- * Used by WindowTrackingService::getEmptyZones and WindowDragAdaptor::dragStopped
+ * Used by PhosphorPlacement::WindowTrackingService::getEmptyZones and WindowDragAdaptor::dragStopped
  * to avoid duplicating the empty-zones building logic.
  */
 PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr,

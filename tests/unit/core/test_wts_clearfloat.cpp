@@ -3,7 +3,7 @@
 
 /**
  * @file test_wts_clearfloat.cpp
- * @brief Unit tests for WindowTrackingService::clearFloatingForSnap() and resolveUnfloatGeometry()
+ * @brief Unit tests for PhosphorPlacement::WindowTrackingService::clearFloatingForSnap() and resolveUnfloatGeometry()
  *
  * Tests cover:
  * 1. clearFloatingForSnap: returns false for non-floating, true for floating,
@@ -22,7 +22,7 @@
 #include <QRectF>
 #include <memory>
 
-#include "core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
@@ -35,6 +35,7 @@
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using PhosphorEngine::UnfloatResult;
 using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
@@ -134,7 +135,7 @@ private Q_SLOTS:
                                                             QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsClearFloat(nullptr);
         m_zoneDetector = new StubZoneDetectorClearFloat(nullptr);
-        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
         m_engine->setEngineSettings(m_settings);
         m_service->setSnapState(m_engine->snapState());
@@ -289,7 +290,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsClearFloat* m_settings = nullptr;
     StubZoneDetectorClearFloat* m_zoneDetector = nullptr;
-    WindowTrackingService* m_service = nullptr;
+    PhosphorPlacement::WindowTrackingService* m_service = nullptr;
     SnapEngine* m_engine = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;

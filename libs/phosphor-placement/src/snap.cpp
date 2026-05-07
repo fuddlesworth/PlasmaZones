@@ -1,27 +1,28 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Auto-snap logic and snap tracking helpers.
 // Part of WindowTrackingService — split from windowtrackingservice.cpp for SRP.
 
-#include "../windowtrackingservice.h"
-#include "../interfaces.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
+#include "placementutils.h"
+
 #include <PhosphorZones/Layout.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../utils.h"
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
-#include "../logging.h"
+#include "placementlogging.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
 #include <PhosphorScreens/ScreenIdentity.h>
 
-namespace PlasmaZones {
+namespace PhosphorPlacement {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Auto-Snap Logic
@@ -94,10 +95,10 @@ bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
     if (it->isEmpty()) {
         m_pendingRestoreQueues.erase(it);
     }
-    qCDebug(lcCore) << "Consumed pending assignment for" << appId
-                    << "remaining:" << m_pendingRestoreQueues.value(appId).size();
+    qCDebug(lcPlacement) << "Consumed pending assignment for" << appId
+                         << "remaining:" << m_pendingRestoreQueues.value(appId).size();
     markDirty(DirtyPendingRestores);
     return true;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorPlacement

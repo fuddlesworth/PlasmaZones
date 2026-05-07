@@ -355,7 +355,7 @@ void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows, 
     if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
         return;
     }
-    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     if (!wts) {
         return;
     }
@@ -383,7 +383,7 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
     if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
         return entries;
     }
-    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     if (!wts) {
         return entries;
     }
@@ -430,7 +430,7 @@ void Daemon::presaveSnapFloats(const QString& screenId)
     if (!m_windowTrackingAdaptor) {
         return;
     }
-    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     const QStringList floatingIds = wts->floatingWindows();
     for (const QString& fid : floatingIds) {
         if (m_autotileEngine->isModeSpecificFloated(fid)) {
@@ -462,7 +462,7 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
     TilingStateKey orderKey{screenId, currentDesktop(), currentActivity()};
     QStringList order = m_lastAutotileOrders.value(orderKey);
     if (order.isEmpty()) {
-        WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+        PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
         if (wts) {
             order = wts->buildZoneOrderedWindowList(screenId);
         }

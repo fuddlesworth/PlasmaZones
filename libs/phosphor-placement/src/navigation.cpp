@@ -1,28 +1,29 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
-//
-// Navigation helpers: zone queries, geometry calculations, rotation.
-// Part of WindowTrackingService — split from windowtrackingservice.cpp for SRP.
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "../windowtrackingservice.h"
-#include "../constants.h"
-#include "../geometryutils.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
+#include "placementutils.h"
+
+#include <PhosphorEngine/IGeometrySettings.h>
+#include <PhosphorGeometry/GeometryUtils.h>
+#include <PhosphorLayoutApi/EdgeGaps.h>
+#include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../virtualdesktopmanager.h"
-#include "../utils.h"
-#include "../logging.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include <PhosphorIdentity/WindowId.h>
+#include "placementlogging.h"
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
 #include <algorithm>
 #include <PhosphorScreens/ScreenIdentity.h>
 
-namespace PlasmaZones {
+namespace PhosphorPlacement {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation Helpers
@@ -59,10 +60,10 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
             }
         }
         for (const QString& zoneId : it.value()) {
-            if (zoneId.startsWith(ZoneSelectorIdPrefix)) {
+            if (zoneId.startsWith(kZoneSelectorIdPrefix)) {
                 continue;
             }
-            auto uuid = Utils::parseUuid(zoneId);
+            auto uuid = parseUuid(zoneId);
             if (uuid) {
                 occupiedZoneIds.insert(*uuid);
             }
@@ -108,7 +109,7 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
 
     // Resolve physical screen for fallback (virtual screen IDs resolve to their backing QScreen*)
     QScreen* screen =
-        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
+        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : QGuiApplication::primaryScreen());
     if (!screen) {
         return {};
     }
@@ -120,15 +121,47 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
     // blocking snap assist (discussion #323).
     const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     QSet<QUuid> occupied = buildOccupiedZoneSet(screenId, desktopFilter);
-    return GeometryUtils::buildEmptyZoneList(m_screenManager, layout, screenId, screen, m_settings,
-                                             [&occupied](const PhosphorZones::Zone* z) {
-                                                 return !occupied.contains(z->id());
-                                             });
+    int zp = m_geometryResolver ? m_geometryResolver->resolveZonePadding(layout, screenId)
+                                : PhosphorEngine::GeometryDefaults::ZonePadding;
+    auto og = m_geometryResolver ? m_geometryResolver->resolveOuterGaps(layout, screenId)
+                                 : PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
+    int defaultBw = m_geometryResolver ? m_geometryResolver->defaultBorderWidth() : 2;
+    int defaultBr = m_geometryResolver ? m_geometryResolver->defaultBorderRadius() : 0;
+
+    EmptyZoneList result;
+    for (PhosphorZones::Zone* zone : layout->zones()) {
+        if (occupied.contains(zone->id())) {
+            continue;
+        }
+        QRectF geom = PhosphorZones::GeometryUtils::getZoneGeometryWithGaps(m_screenManager, zone, screen, zp, og,
+                                                                            !layout->useFullScreenGeometry(), screenId);
+        QRect overlayGeom =
+            PhosphorGeometry::snapToRect(PhosphorGeometry::availableAreaToOverlayCoordinates(geom, screen->geometry()));
+
+        PhosphorProtocol::EmptyZoneEntry entry;
+        entry.zoneId = zone->id().toString();
+        entry.x = overlayGeom.x();
+        entry.y = overlayGeom.y();
+        entry.width = overlayGeom.width();
+        entry.height = overlayGeom.height();
+        entry.borderWidth = zone->useCustomColors() ? zone->borderWidth() : defaultBw;
+        entry.borderRadius = zone->useCustomColors() ? zone->borderRadius() : defaultBr;
+        entry.useCustomColors = zone->useCustomColors();
+        if (zone->useCustomColors()) {
+            entry.highlightColor = zone->highlightColor().name(QColor::HexArgb);
+            entry.inactiveColor = zone->inactiveColor().name(QColor::HexArgb);
+            entry.borderColor = zone->borderColor().name(QColor::HexArgb);
+            entry.activeOpacity = zone->activeOpacity();
+            entry.inactiveOpacity = zone->inactiveOpacity();
+        }
+        result.append(entry);
+    }
+    return result;
 }
 
 QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& screenId) const
 {
-    auto uuidOpt = Utils::parseUuid(zoneId);
+    auto uuidOpt = parseUuid(zoneId);
     if (!uuidOpt) {
         return QRect();
     }
@@ -140,12 +173,17 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
 
     // Resolve physical screen (virtual IDs resolve to backing QScreen*)
     QScreen* screen =
-        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
+        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : QGuiApplication::primaryScreen());
     if (!screen) {
         return QRect();
     }
 
-    return GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId, layout, m_settings);
+    int zp = m_geometryResolver ? m_geometryResolver->resolveZonePadding(layout, screenId)
+                                : PhosphorEngine::GeometryDefaults::ZonePadding;
+    auto og = m_geometryResolver ? m_geometryResolver->resolveOuterGaps(layout, screenId)
+                                 : PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
+    return PhosphorZones::GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId, layout, zp,
+                                                                  og);
 }
 
 QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
@@ -155,12 +193,12 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
     // scaling factors (e.g. 1.2x on ultrawides).
     QRectF combined;
     QScreen* screen =
-        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
+        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : QGuiApplication::primaryScreen());
     if (!screen) {
         return combined.toAlignedRect();
     }
     for (const QString& zoneId : zoneIds) {
-        auto uuidOpt = Utils::parseUuid(zoneId);
+        auto uuidOpt = parseUuid(zoneId);
         if (!uuidOpt) {
             continue;
         }
@@ -170,8 +208,12 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
             continue;
         }
 
-        QRectF geoF =
-            GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zone, screen, screenId, layout, m_settings);
+        QRectF geoF = PhosphorZones::GeometryUtils::getZoneGeometryForScreenF(
+            m_screenManager, zone, screen, screenId, layout,
+            m_geometryResolver ? m_geometryResolver->resolveZonePadding(layout, screenId)
+                               : PhosphorEngine::GeometryDefaults::ZonePadding,
+            m_geometryResolver ? m_geometryResolver->resolveOuterGaps(layout, screenId)
+                               : PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap));
         if (geoF.isValid()) {
             if (combined.isValid()) {
                 combined = combined.united(geoF);
@@ -183,4 +225,4 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
     return combined.toAlignedRect();
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorPlacement

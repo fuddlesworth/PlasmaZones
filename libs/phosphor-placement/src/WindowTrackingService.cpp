@@ -1,41 +1,43 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "windowtrackingservice.h"
-#include "constants.h"
-#include "interfaces.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
+#include "placementutils.h"
+
 #include <PhosphorZones/Layout.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "virtualdesktopmanager.h"
-#include "utils.h"
-#include "logging.h"
-#include "windowregistry.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include <PhosphorIdentity/WindowId.h>
+#include "placementlogging.h"
+#include <PhosphorEngine/WindowRegistry.h>
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
 #include <algorithm>
 #include <PhosphorScreens/ScreenIdentity.h>
 
-namespace PlasmaZones {
+namespace PhosphorPlacement {
 
 WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutRegistry* layoutManager,
                                              PhosphorZones::IZoneDetector* zoneDetector,
-                                             Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
-                                             PhosphorWorkspaces::VirtualDesktopManager* vdm, QObject* parent)
+                                             Phosphor::Screens::ScreenManager* screenManager,
+                                             PhosphorWorkspaces::VirtualDesktopManager* vdm,
+                                             IGeometryResolver* geometryResolver, PlacementConfig config,
+                                             QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_zoneDetector(zoneDetector)
-    , m_settings(settings)
+    , m_geometryResolver(geometryResolver)
+    , m_config(config)
     , m_virtualDesktopManager(vdm)
     , m_screenManager(screenManager)
 {
     Q_ASSERT(layoutManager);
     Q_ASSERT(zoneDetector);
-    Q_ASSERT(settings);
 
     // Note: No save timer needed - persistence handled by WindowTrackingAdaptor via KConfig
     // Service just emits stateChanged() signal when state changes
@@ -256,8 +258,8 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
             int x = available.x() + (available.width() - w) / 2;
             int y = available.y() + (available.height() - h) / 2;
             QRect adjusted(x, y, w, h);
-            qCDebug(lcCore) << "validateGeometryForScreen: cross-screen adjustment from" << savedScreen << "to"
-                            << currentScreenName << ":" << geo << "->" << adjusted;
+            qCDebug(lcPlacement) << "validateGeometryForScreen: cross-screen adjustment from" << savedScreen << "to"
+                                 << currentScreenName << ":" << geo << "->" << adjusted;
             return adjusted;
         }
     }
@@ -354,7 +356,7 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
             m_snapState->addPreFloatScreen(appId, screenId);
         }
     }
-    qCInfo(lcCore) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
+    qCInfo(lcPlacement) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
 
     markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
 
@@ -504,7 +506,7 @@ const QSet<QString>& WindowTrackingService::userSnappedClasses() const
 void WindowTrackingService::setUserSnappedClasses(const QSet<QString>& classes)
 {
     if (!m_snapState) {
-        qCWarning(lcCore) << "setUserSnappedClasses: no SnapState — dropping" << classes.size() << "classes";
+        qCWarning(lcPlacement) << "setUserSnappedClasses: no SnapState — dropping" << classes.size() << "classes";
         return;
     }
     m_snapState->setUserSnappedClasses(classes);
@@ -531,7 +533,8 @@ const QHash<QString, QString>& WindowTrackingService::preFloatScreenAssignments(
 void WindowTrackingService::setPreFloatZoneAssignments(const QHash<QString, QStringList>& assignments)
 {
     if (!m_snapState) {
-        qCWarning(lcCore) << "setPreFloatZoneAssignments: no SnapState — dropping" << assignments.size() << "entries";
+        qCWarning(lcPlacement) << "setPreFloatZoneAssignments: no SnapState — dropping" << assignments.size()
+                               << "entries";
         return;
     }
     m_snapState->setPreFloatZoneAssignments(assignments);
@@ -540,7 +543,8 @@ void WindowTrackingService::setPreFloatZoneAssignments(const QHash<QString, QStr
 void WindowTrackingService::setPreFloatScreenAssignments(const QHash<QString, QString>& assignments)
 {
     if (!m_snapState) {
-        qCWarning(lcCore) << "setPreFloatScreenAssignments: no SnapState — dropping" << assignments.size() << "entries";
+        qCWarning(lcPlacement) << "setPreFloatScreenAssignments: no SnapState — dropping" << assignments.size()
+                               << "entries";
         return;
     }
     m_snapState->setPreFloatScreenAssignments(assignments);
@@ -551,7 +555,7 @@ void WindowTrackingService::setActiveAssignments(const QHash<QString, QStringLis
                                                  const QHash<QString, int>& desktops)
 {
     if (!m_snapState) {
-        qCWarning(lcCore) << "setActiveAssignments: no SnapState — dropping" << zones.size() << "assignments";
+        qCWarning(lcPlacement) << "setActiveAssignments: no SnapState — dropping" << zones.size() << "assignments";
         return;
     }
     m_snapState->setZoneAssignments(zones);
@@ -567,4 +571,4 @@ QRect WindowTrackingService::resolveZoneGeometry(const QStringList& zoneIds, con
     return (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenId) : zoneGeometry(zoneIds.first(), screenId);
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorPlacement

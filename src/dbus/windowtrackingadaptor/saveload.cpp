@@ -52,7 +52,7 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
 
 void WindowTrackingAdaptor::saveState()
 {
-    using D = WindowTrackingService;
+    using D = PhosphorPlacement::WindowTrackingService;
     // Snapshot the dirty mask — after this call the service is clean
     // from our perspective. If the write fails, the persistence worker's
     // writeCompleted(success=false) handler re-marks the same bits on

@@ -136,7 +136,7 @@ public:
      *
      * Must be set before start. Not owned.
      *
-     * Also forwards the pointer to the underlying WindowTrackingService and
+     * Also forwards the pointer to the underlying PhosphorPlacement::WindowTrackingService and
      * subscribes to metadataChanged so we can refresh tracking that mirrors
      * the app class (e.g. last-used-zone class tag).
      */
@@ -174,12 +174,12 @@ public:
     void setScreenModeRouter(ScreenModeRouter* router);
 
     /**
-     * @brief Access the underlying WindowTrackingService
+     * @brief Access the underlying PhosphorPlacement::WindowTrackingService
      *
      * Used by the daemon to share the single WTS instance with other components
      * (e.g., AutotileEngine) instead of creating duplicate services.
      */
-    WindowTrackingService* service() const
+    PhosphorPlacement::WindowTrackingService* service() const
     {
         return m_service;
     }
@@ -796,7 +796,7 @@ private:
     QJsonObject buildStateObject(const QString& windowId, const QString& zoneId, const QJsonArray& zoneIds,
                                  const QString& screenId, bool isFloating, const QString& changeType) const;
 
-    // clearFloatingStateForSnap was removed — WindowTrackingService::commitSnap
+    // clearFloatingStateForSnap was removed — PhosphorPlacement::WindowTrackingService::commitSnap
     // now handles floating-state clearing internally (and emits
     // windowFloatingClearedForSnap which the adaptor relays to its own
     // windowFloatingChanged D-Bus signal).
@@ -846,7 +846,8 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service
     // ═══════════════════════════════════════════════════════════════════════════════
-    WindowTrackingService* m_service = nullptr;
+    PhosphorPlacement::IGeometryResolver* m_geometryResolver = nullptr;
+    PhosphorPlacement::WindowTrackingService* m_service = nullptr;
 
     // Shared registry: compositor-supplied instance id → current metadata.
     // Not owned (daemon root owns it). Populated via setWindowMetadata D-Bus calls
@@ -868,7 +869,7 @@ private:
     // is dropped; on failure the head bits are OR'd back into the
     // service's dirty mask so the retry picks them up without stomping
     // on any newer mutations.
-    QQueue<WindowTrackingService::DirtyMask> m_pendingWriteMasks;
+    QQueue<PhosphorPlacement::WindowTrackingService::DirtyMask> m_pendingWriteMasks;
 
     // One-shot warning latch for the test-only synchronous fallback path
     // in saveState(). Production always uses PhosphorConfig::JsonBackend + the

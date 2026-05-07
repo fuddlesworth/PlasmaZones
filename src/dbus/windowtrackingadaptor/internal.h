@@ -39,7 +39,7 @@ inline QJsonObject rectToJsonObject(const QRect& rect)
 }
 
 inline QString serializeGeometryMap(const QHash<QString, PhosphorEngine::PlacementEngineBase::UnmanagedEntry>& map,
-                                    const WindowTrackingService* service)
+                                    const PhosphorPlacement::WindowTrackingService* service)
 {
     // Runtime map keys are either bare appIds (stable cross-session keys) or
     // full "appId|uuid" instance keys (per-runtime data). The output format is

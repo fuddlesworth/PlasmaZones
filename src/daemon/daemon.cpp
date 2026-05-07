@@ -904,7 +904,7 @@ bool Daemon::init()
     // resolver, the last-active window/screen shadow, and the snap-
     // bookkeeping helpers (windowSnapped, windowUnsnapped, recordSnapIntent,
     // clearPreTileGeometry). A future refactor should move that state onto
-    // SnapEngine or WindowTrackingService and retire the back-reference.
+    // SnapEngine or PhosphorPlacement::WindowTrackingService and retire the back-reference.
     snapEngine->setNavigationStateProvider(m_windowTrackingAdaptor);
 
     // Clear stale autotile-floated flag when a window is snapped. A window
@@ -972,15 +972,16 @@ bool Daemon::init()
     // fields can change as a result of a placementChanged signal, so the next save
     // rewrites just those keys rather than the whole window-tracking blob.
     //
-    // markDirty() emits WindowTrackingService::stateChanged, which is wired to
+    // markDirty() emits PhosphorPlacement::WindowTrackingService::stateChanged, which is wired to
     // WindowTrackingAdaptor::scheduleSaveState in the adaptor's constructor —
     // that connection is what actually kicks the debounced save timer. If the
     // stateChanged hookup ever gets severed, autotile state will silently
     // stop persisting; add an explicit scheduleSaveState() call here if so.
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, m_windowTrackingAdaptor, [this]() {
         if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
-            m_windowTrackingAdaptor->service()->markDirty(WindowTrackingService::DirtyAutotileOrders
-                                                          | WindowTrackingService::DirtyAutotilePending);
+            m_windowTrackingAdaptor->service()->markDirty(
+                PhosphorPlacement::WindowTrackingService::DirtyAutotileOrders
+                | PhosphorPlacement::WindowTrackingService::DirtyAutotilePending);
         }
     });
 

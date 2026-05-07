@@ -1,26 +1,27 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Window lifecycle, layout change handling, state management, and private helpers.
 // Part of WindowTrackingService — split from windowtrackingservice.cpp for SRP.
 
-#include "../windowtrackingservice.h"
-#include "../constants.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
+#include "placementutils.h"
+
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
-#include "../virtualdesktopmanager.h"
-#include "../utils.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../logging.h"
+#include "placementlogging.h"
 #include <QScreen>
 #include <QUuid>
 #include <climits>
 
-namespace PlasmaZones {
+namespace PhosphorPlacement {
 
 namespace {
 
@@ -54,7 +55,7 @@ static bool anyZoneExistsInLayout(const QStringList& zoneIds, PhosphorZones::Lay
     if (!layout)
         return false;
     for (const QString& zid : zoneIds) {
-        auto uuid = Utils::parseUuid(zid);
+        auto uuid = parseUuid(zid);
         if (uuid && layout->zoneById(*uuid))
             return true;
     }
@@ -67,7 +68,7 @@ static bool allZonesExistInLayout(const QStringList& zoneIds, PhosphorZones::Lay
     if (!layout)
         return false;
     for (const QString& zid : zoneIds) {
-        auto uuid = Utils::parseUuid(zid);
+        auto uuid = parseUuid(zid);
         if (!uuid || !layout->zoneById(*uuid))
             return false;
     }
@@ -129,7 +130,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
 
         const QString& primaryZoneId = zoneIds.first();
-        auto uuidOpt = Utils::parseUuid(primaryZoneId);
+        auto uuidOpt = parseUuid(primaryZoneId);
         if (!uuidOpt) {
             return virtualScreenIds.first();
         }
@@ -284,7 +285,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             for (const QString& vsId : virtualScreenIds) {
                 PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(vsId);
                 if (vsLayout) {
-                    auto uuidOpt = Utils::parseUuid(lastZoneId);
+                    auto uuidOpt = parseUuid(lastZoneId);
                     if (uuidOpt && vsLayout->zoneById(*uuidOpt)) {
                         targetVs = vsId;
                         break;
@@ -320,8 +321,8 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     }
 
     if (migrated > 0 || anyStateMigrated) {
-        qCInfo(lcCore) << "Migrated" << migrated << "window screen assignments"
-                       << "(plus auxiliary state)" << "from" << physicalScreenId << "to virtual screens";
+        qCInfo(lcPlacement) << "Migrated" << migrated << "window screen assignments"
+                            << "(plus auxiliary state)" << "from" << physicalScreenId << "to virtual screens";
         scheduleSaveState();
     }
 }
@@ -447,8 +448,8 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     }
 
     if (migrated > 0 || anyStateMigrated) {
-        qCInfo(lcCore) << "Migrated" << migrated << "window screen assignments from virtual screens back to"
-                       << physicalScreenId;
+        qCInfo(lcPlacement) << "Migrated" << migrated << "window screen assignments from virtual screens back to"
+                            << physicalScreenId;
         scheduleSaveState();
     }
 }
@@ -475,7 +476,7 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     QString zoneId = zoneIds.isEmpty() ? QString() : zoneIds.first();
     // Check floating with full windowId first, fallback to appId
     bool isFloating = isWindowFloating(windowId);
-    if (!zoneId.isEmpty() && !zoneId.startsWith(ZoneSelectorIdPrefix) && !isFloating) {
+    if (!zoneId.isEmpty() && !zoneId.startsWith(kZoneSelectorIdPrefix) && !isFloating) {
         if (!appId.isEmpty()) {
             PendingRestore entry;
             entry.zoneIds = zoneIds;
@@ -508,10 +509,10 @@ void WindowTrackingService::windowClosed(const QString& windowId)
 
             m_pendingRestoreQueues[appId].append(entry);
 
-            qCInfo(lcCore) << "Persisted zone" << zoneId << "for closed window" << appId << "screen:" << screenId
-                           << "desktop:" << desktop
-                           << "layout:" << (contextLayout ? contextLayout->id().toString() : QStringLiteral("none"))
-                           << "zoneNumbers:" << zoneNumbers;
+            qCInfo(lcPlacement) << "Persisted zone" << zoneId << "for closed window" << appId << "screen:" << screenId
+                                << "desktop:" << desktop << "layout:"
+                                << (contextLayout ? contextLayout->id().toString() : QStringLiteral("none"))
+                                << "zoneNumbers:" << zoneNumbers;
         }
     }
 
@@ -573,13 +574,13 @@ void WindowTrackingService::onLayoutChanged()
     // on A, B has no windows), prev=B yields nothing - we keep the buffer from A->B so resnap on C works.
     PhosphorZones::Layout* prevLayout = m_layoutManager->previousLayout();
     if (!prevLayout) {
-        qCInfo(lcCore) << "onLayoutChanged: no previous layout (first launch), skipping resnap buffer";
+        qCInfo(lcPlacement) << "onLayoutChanged: no previous layout (first launch), skipping resnap buffer";
         return;
     }
     const bool layoutSwitched = (prevLayout != newLayout);
-    qCDebug(lcCore) << "onLayoutChanged: newLayout=" << (newLayout ? newLayout->name() : QStringLiteral("null"))
-                    << "prevLayout=" << prevLayout->name() << "switched=" << layoutSwitched
-                    << "windowAssignments=" << m_snapState->zoneAssignments().size();
+    qCDebug(lcPlacement) << "onLayoutChanged: newLayout=" << (newLayout ? newLayout->name() : QStringLiteral("null"))
+                         << "prevLayout=" << prevLayout->name() << "switched=" << layoutSwitched
+                         << "windowAssignments=" << m_snapState->zoneAssignments().size();
     {
         QVector<ResnapEntry> newBuffer;
 
@@ -628,7 +629,7 @@ void WindowTrackingService::onLayoutChanged()
             int pos = posMap->value(zoneId, 0);
             if (pos <= 0) {
                 // Handle zoneselector synthetic IDs: "zoneselector-{layoutId}-{index}"
-                if (zoneId.startsWith(ZoneSelectorIdPrefix)) {
+                if (zoneId.startsWith(kZoneSelectorIdPrefix)) {
                     int lastDash = zoneId.lastIndexOf(QLatin1Char('-'));
                     if (lastDash > 0) {
                         bool ok = false;
@@ -705,7 +706,7 @@ void WindowTrackingService::onLayoutChanged()
                         continue;
                     }
                     if (!entry.layoutId.isEmpty()) {
-                        auto savedUuid = Utils::parseUuid(entry.layoutId);
+                        auto savedUuid = parseUuid(entry.layoutId);
                         if (!savedUuid || *savedUuid != prevLayoutId) {
                             continue; // pending is for a different layout
                         }
@@ -735,7 +736,7 @@ void WindowTrackingService::onLayoutChanged()
                         continue;
                     }
                     if (!entry.layoutId.isEmpty()) {
-                        auto savedUuid = Utils::parseUuid(entry.layoutId);
+                        auto savedUuid = parseUuid(entry.layoutId);
                         if (!savedUuid || *savedUuid != prevLayoutId) {
                             continue;
                         }
@@ -747,9 +748,9 @@ void WindowTrackingService::onLayoutChanged()
 
         if (!newBuffer.isEmpty()) {
             m_resnapBuffer = std::move(newBuffer);
-            qCInfo(lcCore) << "Resnap buffer:" << m_resnapBuffer.size() << "windows (zone position -> window)";
+            qCInfo(lcPlacement) << "Resnap buffer:" << m_resnapBuffer.size() << "windows (zone position -> window)";
             for (const ResnapEntry& e : m_resnapBuffer) {
-                qCDebug(lcCore) << "Zone" << e.zonePosition << "<-" << e.windowId;
+                qCDebug(lcPlacement) << "Zone" << e.zonePosition << "<-" << e.windowId;
             }
         }
     }
@@ -886,7 +887,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
     }
 
     // Fallback: physical screens only (no Phosphor::Screens::ScreenManager available)
-    for (QScreen* screen : Utils::allScreens()) {
+    for (QScreen* screen : QGuiApplication::screens()) {
         QRect intersection = geometry.intersected(screen->geometry());
         if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
             return true;
@@ -925,7 +926,7 @@ QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
     }
 
     // Fallback: physical screens only
-    QScreen* nearest = Utils::findNearestScreen(geometry.center());
+    QScreen* nearest = findNearestScreen(geometry.center());
     if (!nearest) {
         return geometry;
     }
@@ -941,7 +942,7 @@ void WindowTrackingService::validateLastUsedZone(const QString& targetScreen)
     }
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(targetScreen);
     if (layout) {
-        auto uuidOpt = Utils::parseUuid(lastZoneId);
+        auto uuidOpt = parseUuid(lastZoneId);
         if (uuidOpt && layout->zoneById(*uuidOpt)) {
             return;
         }
@@ -975,18 +976,19 @@ QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId)
         // so windows migrate to the geometrically closest region rather
         // than always landing on the first virtual screen.
         QString nearest = findNearestVirtualScreen(vsIds, PhosphorIdentity::VirtualScreenId::extractIndex(screenId));
-        qCInfo(lcCore) << "Virtual screen" << screenId << "no longer exists, falling back to" << nearest
-                       << "on same physical monitor" << physId;
+        qCInfo(lcPlacement) << "Virtual screen" << screenId << "no longer exists, falling back to" << nearest
+                            << "on same physical monitor" << physId;
         return nearest;
     }
 
-    qCWarning(lcCore) << "Virtual screen" << screenId << "no longer exists, falling back to physical screen" << physId;
+    qCWarning(lcPlacement) << "Virtual screen" << screenId << "no longer exists, falling back to physical screen"
+                           << physId;
     return physId;
 }
 
 PhosphorZones::Zone* WindowTrackingService::findZoneById(const QString& zoneId) const
 {
-    auto uuidOpt = Utils::parseUuid(zoneId);
+    auto uuidOpt = parseUuid(zoneId);
     if (!uuidOpt) {
         return nullptr;
     }
@@ -1006,4 +1008,4 @@ WindowTrackingService::ZoneLookupResult WindowTrackingService::findZoneInAllLayo
     return {};
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorPlacement

@@ -3,7 +3,7 @@
 
 /**
  * @file test_wts_dirty_mask.cpp
- * @brief WindowTrackingService::DirtyMask invariants (Phase 3).
+ * @brief PhosphorPlacement::WindowTrackingService::DirtyMask invariants (Phase 3).
  *
  * Pins the contract between WTS mutators and the delta-persistence path
  * in WindowTrackingAdaptor::saveState():
@@ -36,7 +36,7 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/StubSettings.h"
@@ -71,8 +71,9 @@ private Q_SLOTS:
         m_layoutManager->addLayout(m_layout);
         m_zone1Id = zone1->id().toString();
 
-        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings,
-                                              m_virtualDesktopManager, m_parent);
+        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr,
+                                                                 m_virtualDesktopManager, nullptr,
+                                                                 PhosphorPlacement::PlacementConfig{}, m_parent);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
         m_service->setSnapState(m_snapState);
         // Construction leaves mask = DirtyAll; clear so subsequent mutator
@@ -114,33 +115,41 @@ private Q_SLOTS:
         auto* freshSettings = new StubSettings(&freshParent);
         auto* freshZoneDetector = new StubZoneDetector(&freshParent);
 
-        WindowTrackingService fresh(freshLayoutManager, freshZoneDetector, nullptr, freshSettings,
-                                    freshVirtualDesktopManager, &freshParent);
+        PhosphorPlacement::WindowTrackingService fresh(freshLayoutManager, freshZoneDetector, nullptr,
+                                                       freshVirtualDesktopManager, nullptr,
+                                                       PhosphorPlacement::PlacementConfig{}, &freshParent);
         PhosphorSnapEngine::SnapState freshSnapState(QString(), nullptr);
         fresh.setSnapState(&freshSnapState);
-        QCOMPARE(fresh.peekDirty(), static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyAll));
+        QCOMPARE(fresh.peekDirty(),
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyAll));
         fresh.setSnapState(nullptr);
     }
 
     void testMarkDirty_orsBits()
     {
-        m_service->markDirty(WindowTrackingService::DirtyZoneAssignments);
+        m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments);
         QCOMPARE(m_service->peekDirty(),
-                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyZoneAssignments));
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments));
 
-        m_service->markDirty(WindowTrackingService::DirtyPreTileGeometries);
+        m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyPreTileGeometries);
         QCOMPARE(m_service->peekDirty(),
-                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyZoneAssignments
-                                                               | WindowTrackingService::DirtyPreTileGeometries));
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments
+                     | PhosphorPlacement::WindowTrackingService::DirtyPreTileGeometries));
     }
 
     void testTakeDirty_returnsAndResets()
     {
-        m_service->markDirty(WindowTrackingService::DirtyLastUsedZone);
+        m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyLastUsedZone);
         const auto snapshot = m_service->takeDirty();
-        QCOMPARE(snapshot, static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyLastUsedZone));
+        QCOMPARE(snapshot,
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyLastUsedZone));
         QCOMPARE(m_service->peekDirty(),
-                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyNone));
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyNone));
     }
 
     void testMarkDirty_emitsStateChanged()
@@ -151,10 +160,11 @@ private Q_SLOTS:
         // calls markDirty() and expects the stateChanged → scheduleSaveState
         // chain to schedule the next tick without an explicit call.
         m_service->clearDirty();
-        QSignalSpy spy(m_service, &WindowTrackingService::stateChanged);
-        m_service->markDirty(WindowTrackingService::DirtyPendingRestores);
+        QSignalSpy spy(m_service, &PhosphorPlacement::WindowTrackingService::stateChanged);
+        m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyPendingRestores);
         QCOMPARE(m_service->peekDirty(),
-                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyPendingRestores));
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyPendingRestores));
         QCOMPARE(spy.count(), 1);
     }
 
@@ -166,11 +176,14 @@ private Q_SLOTS:
         // bits, which must OR-merge with any newer mutations without
         // losing either side.
         m_service->clearDirty();
-        m_service->markDirty(WindowTrackingService::DirtyZoneAssignments); // new mutation during in-flight write
-        m_service->markDirty(WindowTrackingService::DirtyPendingRestores); // committed-snapshot retry
+        m_service->markDirty(
+            PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments); // new mutation during in-flight write
+        m_service->markDirty(
+            PhosphorPlacement::WindowTrackingService::DirtyPendingRestores); // committed-snapshot retry
         QCOMPARE(m_service->peekDirty(),
-                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyZoneAssignments
-                                                               | WindowTrackingService::DirtyPendingRestores));
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments
+                     | PhosphorPlacement::WindowTrackingService::DirtyPendingRestores));
     }
 
     void testAssignWindowToZone_marksZoneAssignmentsOnly()
@@ -178,31 +191,37 @@ private Q_SLOTS:
         m_service->assignWindowToZone(QStringLiteral("app|abc"), m_zone1Id, QStringLiteral("DP-1"), 1);
         const auto mask = m_service->peekDirty();
         // Must include DirtyZoneAssignments.
-        QVERIFY((mask & WindowTrackingService::DirtyZoneAssignments) != 0);
+        QVERIFY((mask & PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments) != 0);
         // Must NOT include unrelated bits (PreTileGeometries, etc).
-        QCOMPARE((mask & ~WindowTrackingService::DirtyZoneAssignments),
-                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyNone));
+        QCOMPARE((mask & ~PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments),
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyNone));
     }
 
     void testUpdateLastUsedZone_marksLastUsedZoneOnly()
     {
         m_service->updateLastUsedZone(m_zone1Id, QStringLiteral("DP-1"), QStringLiteral("app"), 1);
         const auto mask = m_service->peekDirty();
-        QCOMPARE(mask, static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyLastUsedZone));
+        QCOMPARE(mask,
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyLastUsedZone));
     }
 
     void testRecordSnapIntent_userInitiated_marksUserSnappedOnly()
     {
         m_service->recordSnapIntent(QStringLiteral("app|abc"), /*wasUserInitiated=*/true);
         const auto mask = m_service->peekDirty();
-        QCOMPARE(mask, static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyUserSnapped));
+        QCOMPARE(mask,
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyUserSnapped));
     }
 
     void testRecordSnapIntent_autoSnapped_doesNotMarkDirty()
     {
         m_service->recordSnapIntent(QStringLiteral("app|abc"), /*wasUserInitiated=*/false);
         QCOMPARE(m_service->peekDirty(),
-                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyNone));
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyNone));
     }
 
     void testUnassignWindow_clearingLastUsed_marksBoth()
@@ -215,11 +234,14 @@ private Q_SLOTS:
         // Unassign: should clear last-used-zone tracking AND touch zone map.
         m_service->unassignWindow(QStringLiteral("app|abc"));
         const auto mask = m_service->peekDirty();
-        QVERIFY((mask & WindowTrackingService::DirtyZoneAssignments) != 0);
-        QVERIFY((mask & WindowTrackingService::DirtyLastUsedZone) != 0);
+        QVERIFY((mask & PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments) != 0);
+        QVERIFY((mask & PhosphorPlacement::WindowTrackingService::DirtyLastUsedZone) != 0);
         // And only those two.
-        QCOMPARE((mask & ~(WindowTrackingService::DirtyZoneAssignments | WindowTrackingService::DirtyLastUsedZone)),
-                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyNone));
+        QCOMPARE((mask
+                  & ~(PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments
+                      | PhosphorPlacement::WindowTrackingService::DirtyLastUsedZone)),
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyNone));
     }
 
     void testPruneStaleAssignments_marksPersistedFieldsDirty()
@@ -236,7 +258,7 @@ private Q_SLOTS:
         QVERIFY(pruned >= 1);
 
         const auto mask = m_service->peekDirty();
-        QVERIFY((mask & WindowTrackingService::DirtyZoneAssignments) != 0);
+        QVERIFY((mask & PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments) != 0);
     }
 
     void testPruneStaleAssignments_noop_leavesDirtyMaskClean()
@@ -250,7 +272,8 @@ private Q_SLOTS:
         const int pruned = m_service->pruneStaleAssignments(QSet<QString>{QStringLiteral("app|abc")});
         QCOMPARE(pruned, 0);
         QCOMPARE(m_service->peekDirty(),
-                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyNone));
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyNone));
     }
 
     void testUnsnapForFloat_marksPreFloatDirty()
@@ -266,8 +289,8 @@ private Q_SLOTS:
         m_service->unsnapForFloat(QStringLiteral("app|abc"));
 
         const auto mask = m_service->peekDirty();
-        QVERIFY((mask & WindowTrackingService::DirtyPreFloatZones) != 0);
-        QVERIFY((mask & WindowTrackingService::DirtyPreFloatScreens) != 0);
+        QVERIFY((mask & PhosphorPlacement::WindowTrackingService::DirtyPreFloatZones) != 0);
+        QVERIFY((mask & PhosphorPlacement::WindowTrackingService::DirtyPreFloatScreens) != 0);
         // unassignWindow inside unsnapForFloat also touches DirtyZoneAssignments;
         // last-used may or may not clear. The critical thing is both pre-float
         // bits are set — the zone bit is best-effort.
@@ -282,17 +305,23 @@ private Q_SLOTS:
         // that invariant: DirtyAll must be a strict superset of every
         // individual bit. scheduleSaveState itself is private and
         // exercised indirectly — the wrapper just delegates to markDirty.
-        m_service->markDirty(WindowTrackingService::DirtyAll);
+        m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyAll);
         const auto mask = m_service->peekDirty();
-        QCOMPARE(mask, static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyAll));
+        QCOMPARE(mask,
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyAll));
         // Every individual field bit must be included in DirtyAll so
         // adding a new field without extending DirtyAll fails the test.
-        for (const auto bit :
-             {WindowTrackingService::DirtyActiveLayoutId, WindowTrackingService::DirtyZoneAssignments,
-              WindowTrackingService::DirtyPendingRestores, WindowTrackingService::DirtyPreTileGeometries,
-              WindowTrackingService::DirtyLastUsedZone, WindowTrackingService::DirtyPreFloatZones,
-              WindowTrackingService::DirtyPreFloatScreens, WindowTrackingService::DirtyUserSnapped,
-              WindowTrackingService::DirtyAutotileOrders, WindowTrackingService::DirtyAutotilePending}) {
+        for (const auto bit : {PhosphorPlacement::WindowTrackingService::DirtyActiveLayoutId,
+                               PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments,
+                               PhosphorPlacement::WindowTrackingService::DirtyPendingRestores,
+                               PhosphorPlacement::WindowTrackingService::DirtyPreTileGeometries,
+                               PhosphorPlacement::WindowTrackingService::DirtyLastUsedZone,
+                               PhosphorPlacement::WindowTrackingService::DirtyPreFloatZones,
+                               PhosphorPlacement::WindowTrackingService::DirtyPreFloatScreens,
+                               PhosphorPlacement::WindowTrackingService::DirtyUserSnapped,
+                               PhosphorPlacement::WindowTrackingService::DirtyAutotileOrders,
+                               PhosphorPlacement::WindowTrackingService::DirtyAutotilePending}) {
             QVERIFY2((mask & bit) != 0, "DirtyAll is missing a DirtyField bit — extend DirtyAll in the header");
         }
     }
@@ -306,7 +335,7 @@ private:
     StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_layout = nullptr;
-    WindowTrackingService* m_service = nullptr;
+    PhosphorPlacement::WindowTrackingService* m_service = nullptr;
     QString m_zone1Id;
 };
 

@@ -614,7 +614,7 @@ private:
     /**
      * @brief Sync daemon-side float state when autotile floats/unfloats a window
      *
-     * Propagates floating state to WindowTrackingService and KWin effect,
+     * Propagates floating state to PhosphorPlacement::WindowTrackingService and KWin effect,
      * manages autotile-originated vs snap-mode float bookkeeping, restores
      * pre-tile geometry on float, and shows navigation OSD.
      */

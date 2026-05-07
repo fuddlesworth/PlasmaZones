@@ -42,12 +42,9 @@ set(plasmazones_core_SRCS
     core/utils.cpp
     core/layoutfactory.h
     core/windowtrackingservice.h
-    core/windowtrackingservice.cpp
-    core/windowtrackingservice/snap.cpp
-    core/windowtrackingservice/navigation.cpp
-    core/windowtrackingservice/resnap.cpp
-    core/windowtrackingservice/lifecycle.cpp
     core/windowregistry.h
+    core/daemongeometryresolver.h
+    core/daemongeometryresolver.cpp
     core/platform.cpp
     core/platform.h
     core/geometryutils.cpp
@@ -204,6 +201,7 @@ target_link_libraries(plasmazones_core
         PhosphorConfig::PhosphorConfig
         PhosphorEngine::PhosphorEngine
         PhosphorWorkspaces::PhosphorWorkspaces
+        PhosphorPlacement::PhosphorPlacement
         PhosphorTileEngine::PhosphorTileEngine
         PhosphorSnapEngine::PhosphorSnapEngine
         PhosphorIdentity::PhosphorIdentity

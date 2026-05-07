@@ -10,7 +10,8 @@
 
 namespace PlasmaZones {
 
-EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
+EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
+                        PhosphorPlacement::WindowTrackingService* windowTracker,
                         Phosphor::Screens::ScreenManager* screenManager,
                         PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,

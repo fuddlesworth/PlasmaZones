@@ -143,7 +143,7 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
 }
 
 // WindowTrackingAdaptor::clearFloatingStateForSnap was removed — all
-// snap-commit paths now route through WindowTrackingService::commitSnap
+// snap-commit paths now route through PhosphorPlacement::WindowTrackingService::commitSnap
 // which handles clearing the floating state internally and emits
 // windowFloatingClearedForSnap, which this adaptor relays to its own
 // windowFloatingChanged D-Bus signal in the constructor wiring.
