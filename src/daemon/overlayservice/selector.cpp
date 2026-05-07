@@ -285,7 +285,9 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                     + (layout.totalRows - 1) * layout.indicatorSpacing
                                << ")";
 
-            QQuickItem* contentRoot = slot;
+            // contentRoot is the same value resolved at line 251 above.
+            // Re-using that binding inside the debug block keeps the cell-
+            // dump traversal rooted at the slot Item.
             if (auto* gridItem = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorContentGrid"))) {
                 const auto kids = gridItem->childItems();
                 const int dumped = std::min<int>(kids.size(), 8);

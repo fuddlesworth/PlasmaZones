@@ -1397,17 +1397,23 @@ public:
             if (pendIt != m_pendingReuse.end()) {
                 PendingReuseShader& pending = pendIt->second;
                 // Re-validate anchor against the current QML scene.
-                // NotificationOverlay's per-mode Loader unloads + loads
-                // its content on `mode` flip (e.g. layout-osd ↔ navigation-
-                // osd), destroying the previously-found shaderAnchor
-                // descendant. The cached QPointer auto-nulls in that
-                // case, but during the deleteLater window it's still
-                // truthy — and even when truthy, it points at the
-                // previous Loader generation's anchor, not the freshly-
-                // loaded one. findShaderAnchorRecursive on the current
-                // target reflects the live scene; only reuse when the
-                // cache still resolves to the same QQuickItem the
-                // attach found (or both fall back to target itself).
+                // The shell's per-mode Loader unloads + loads its content
+                // on `mode` / `loaded` flips (e.g. layout-osd ↔ navigation-
+                // osd, snap-assist re-instantiate), destroying the
+                // previously-found shaderAnchor descendant. The cached
+                // QPointer auto-nulls when the underlying QObject has
+                // been destroyed — `pending.shaderAnchor.data() == nullptr`
+                // in that case, so the equality compare against
+                // `currentAnchor` (which is the live anchor or null)
+                // correctly rejects reuse and forces a fresh attach. Even
+                // when QPointer hasn't yet cleared (immediately after
+                // deleteLater queues but before the event loop runs), the
+                // pointer would refer to the previous Loader generation's
+                // anchor, not the freshly-loaded one — also a mismatch
+                // against `currentAnchor` (which is the *new* anchor) and
+                // also correctly rejected. Reuse only when the cache
+                // resolves to the same QQuickItem that the live tree's
+                // shaderAnchor walk finds (or both fall back to target).
                 QQuickItem* currentAnchor = findShaderAnchorRecursive(target);
                 const bool anchorMatches = pending.foundExplicitAnchor
                     ? (currentAnchor != nullptr && currentAnchor == pending.shaderAnchor.data())

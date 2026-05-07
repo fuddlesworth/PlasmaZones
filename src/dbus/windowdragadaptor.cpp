@@ -682,6 +682,24 @@ void WindowDragAdaptor::onLayoutChanged()
 
 void WindowDragAdaptor::onSnapAssistDismissed()
 {
+    // The Escape grab (kCancelOverlayId) is shared with two other consumers
+    // that piggy-back on the same id (so KGlobalAccel routes to a single
+    // action — see registerCancelOverlayShortcut's docstring): the layout
+    // picker (registered by start.cpp on layoutPickerRequested) and any
+    // active drag (registered by registerCancelOverlayShortcut on dragStarted).
+    // Releasing here unconditionally tears the grab out from under those
+    // consumers — picker-still-up after a snap-assist auto-dismiss would
+    // become un-Escape-able, and the same applies if the daemon thinks a
+    // drag is in flight (defence-in-depth, snap-assist normally appears
+    // post-drop). cancelSnap() already orchestrates precedence between
+    // overlays at Escape time, so the only safe thing this slot can do is
+    // release WHEN no other consumer still needs the grab.
+    if (m_overlayService && m_overlayService->isLayoutPickerVisible()) {
+        return;
+    }
+    if (isDragActive()) {
+        return;
+    }
     unregisterCancelOverlayShortcut();
 }
 

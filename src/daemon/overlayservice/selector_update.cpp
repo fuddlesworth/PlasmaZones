@@ -94,25 +94,19 @@ void applyZoneSelectorLayout(QObject* window, const ZoneSelectorLayout& layout)
     writeQmlProperty(window, QStringLiteral("barHeight"), layout.barHeight);
 }
 
-// Size the zone selector window to fill the entire (virtual) screen.
-// With AnchorAll the compositor sizes the surface to the full output;
-// the QML root uses internal anchors (selectorPosition state) to position
-// the visible bar in the chosen corner of the transparent window.
-void applyZoneSelectorGeometry(QObject* window, const QRect& screenGeom, const ZoneSelectorLayout& /*layout*/,
+// Size the zone selector slot to fill the entire (virtual) screen.
+// Post-shell-migration the slot is a QQuickItem (anchors.fill on the shell
+// QQuickWindow). The QML root uses internal anchors (selectorPosition
+// state) to position the visible bar in the chosen corner of the
+// transparent slot.
+void applyZoneSelectorGeometry(QQuickItem* slot, const QRect& screenGeom, const ZoneSelectorLayout& /*layout*/,
                                ZoneSelectorPosition /*pos*/)
 {
-    if (!window || !screenGeom.isValid()) {
+    if (!slot || !screenGeom.isValid()) {
         return;
     }
-    // Post-shell-migration `window` is the zone-selector slot Item;
-    // QQuickItem has setWidth/setHeight, just like QQuickWindow did.
-    if (auto* item = qobject_cast<QQuickItem*>(window)) {
-        item->setWidth(screenGeom.width());
-        item->setHeight(screenGeom.height());
-    } else if (auto* win = qobject_cast<QQuickWindow*>(window)) {
-        win->setWidth(screenGeom.width());
-        win->setHeight(screenGeom.height());
-    }
+    slot->setWidth(screenGeom.width());
+    slot->setHeight(screenGeom.height());
 }
 
 } // namespace

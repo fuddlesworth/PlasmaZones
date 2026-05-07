@@ -455,19 +455,17 @@ void Daemon::connectLayoutSignals()
     if (m_overlayService) {
         QTimer::singleShot(0, this, [this]() {
             m_overlayService->warmUpNotifications();
-            // Snap-assist post-shell-migration: it's an Item slot inside
-            // the per-screen passive shell. The shell's QML compile +
-            // pipeline build is already paid by warmUpNotifications;
-            // SnapAssistContent itself is async-loaded at first show.
-            //
-            // Layout Picker is intentionally NOT pre-warmed: it keeps
-            // its own kbd-Exclusive layer-shell surface (not yet
-            // migrated). KWin's wlr-layer-shell doesn't re-evaluate
-            // keyboard focus when interactivity is mutated to Exclusive
-            // on a still-mapped surface, so a pre-warmed mapped picker
-            // surface would never receive KeyPress on user-show.
-            // Creating fresh per-show makes the surface map with
-            // Exclusive from the start.
+            // Post-shell-migration every kbd-None overlay (OSD,
+            // snap-assist, layout picker, zone-selector, main overlay)
+            // lives as an Item slot inside the per-screen passive shell.
+            // warmUpNotifications builds the shell wl_surface +
+            // QQuickWindow + QML compile + first-paint pipeline once per
+            // screen, which covers QML compile cost for every slot. Each
+            // slot's content body (SnapAssistContent / LayoutPickerContent
+            // / ZoneSelectorContent) is async-loaded on its first show
+            // via the slot's `loaded` toggle, so per-content classes only
+            // pay their construction cost when the user actually summons
+            // them rather than at daemon start.
         });
     }
 

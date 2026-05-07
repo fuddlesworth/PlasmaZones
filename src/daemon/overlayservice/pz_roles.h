@@ -71,15 +71,28 @@ inline const PhosphorLayer::Role Notification =
 inline const PhosphorLayer::Role PassiveShell =
     PhosphorLayer::Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("plasmazones-passive-shell"));
 
-/// Snap assist (post-snap window picker). Top layer, exclusive keyboard
-/// so Escape reliably dismisses. Singleton — one instance, re-targeted
-/// to whichever screen the snap happened on.
+/// Snap-assist config-only role. The wl_surface lifetime moved to the
+/// unified PassiveShell post-shell-migration; this role is preserved
+/// purely for SurfaceAnimator config-lookup (registerConfigForRole keys
+/// on the scope prefix, and the role-override beginShow/beginHide
+/// overloads resolve per-content motion + shader profiles via this
+/// role's prefix even though the shell's actual surface uses
+/// PassiveShell). Escape-to-dismiss is wired via the daemon's
+/// `cancel_overlay_during_drag` global accelerator (see start.cpp's
+/// snapAssistShown handler) since the shell is kbd-None.
+///
+/// Singleton at the daemon level — m_snapAssistScreenId tracks which
+/// screen's slot is active and re-targets across screens.
 inline const PhosphorLayer::Role SnapAssist =
     PhosphorLayer::Roles::CenteredModal.withScopePrefix(QStringLiteral("plasmazones-snap-assist"));
 
-/// PhosphorZones::Layout picker (interactive layout browser). Singleton modal with
-/// exclusive keyboard. Shape matches SnapAssist but distinct scope so
-/// the compositor keeps them independent.
+/// Layout-picker config-only role. Same migration story as SnapAssist —
+/// the picker now lives as an Item slot inside the per-screen passive
+/// shell, and this role exists purely as the SurfaceAnimator config
+/// lookup key. Picker keyboard navigation (arrow keys + Return/Enter
+/// + Escape) is routed via KGlobalAccel ad-hoc shortcuts registered
+/// by `WindowDragAdaptor::ensureLayoutPickerNavShortcutsRegistered`
+/// on show and released on dismiss.
 inline const PhosphorLayer::Role LayoutPicker =
     PhosphorLayer::Roles::CenteredModal.withScopePrefix(QStringLiteral("plasmazones-layout-picker"));
 

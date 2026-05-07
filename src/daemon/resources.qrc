@@ -3,6 +3,7 @@
     <qresource prefix="/ui">
         <file alias="ZoneOverlayContent.qml">../ui/ZoneOverlayContent.qml</file>
         <file alias="RenderNodeOverlayContent.qml">../ui/RenderNodeOverlayContent.qml</file>
+        <file alias="RenderNodeOverlay.qml">../ui/RenderNodeOverlay.qml</file>
         <file alias="ZoneItem.qml">../ui/ZoneItem.qml</file>
         <file alias="ZoneLabel.qml">../ui/ZoneLabel.qml</file>
         <file alias="ZoneSelector.qml">../ui/ZoneSelector.qml</file>
