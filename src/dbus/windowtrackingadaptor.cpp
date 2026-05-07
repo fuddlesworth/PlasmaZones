@@ -31,7 +31,8 @@ namespace PlasmaZones {
 WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layoutManager,
                                              PhosphorZones::IZoneDetector* zoneDetector,
                                              Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
-                                             VirtualDesktopManager* virtualDesktopManager, QObject* parent)
+                                             PhosphorWorkspaces::VirtualDesktopManager* virtualDesktopManager,
+                                             QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)

@@ -34,7 +34,7 @@
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
 

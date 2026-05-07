@@ -32,11 +32,15 @@ namespace PhosphorEngine {
 class WindowRegistry;
 }
 
+namespace PhosphorWorkspaces {
+class VirtualDesktopManager;
+}
+
 namespace PlasmaZones {
 
 class ISettings;
 class ScreenModeRouter;
-class VirtualDesktopManager;
+
 class WindowTrackingService;
 
 struct EngineSet
@@ -74,7 +78,8 @@ struct EngineSet
 EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
                         Phosphor::Screens::ScreenManager* screenManager,
                         PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
-                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
-                        PhosphorEngine::WindowRegistry* windowRegistry, QObject* parent);
+                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
+                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry,
+                        QObject* parent);
 
 } // namespace PlasmaZones

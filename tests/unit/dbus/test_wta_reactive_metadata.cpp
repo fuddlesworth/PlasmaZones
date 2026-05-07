@@ -28,7 +28,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
-#include "core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "core/windowregistry.h"
 #include "core/windowtrackingservice.h"
 #include <PhosphorSnapEngine/SnapEngine.h>

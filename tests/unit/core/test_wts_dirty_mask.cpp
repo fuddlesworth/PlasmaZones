@@ -35,7 +35,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
-#include "core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "core/windowtrackingservice.h"
 #include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
@@ -57,7 +57,7 @@ private Q_SLOTS:
         m_parent = new QObject(nullptr);
         m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
                                                             QStringLiteral("plasmazones/layouts"), m_parent);
-        m_virtualDesktopManager = new VirtualDesktopManager(m_layoutManager, m_parent);
+        m_virtualDesktopManager = new PhosphorWorkspaces::VirtualDesktopManager(m_parent);
         m_settings = new StubSettings(m_parent);
         m_zoneDetector = new StubZoneDetector(m_parent);
 
@@ -110,7 +110,7 @@ private Q_SLOTS:
         QObject freshParent;
         auto* freshLayoutManager = new PhosphorZones::LayoutRegistry(
             PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts"), &freshParent);
-        auto* freshVirtualDesktopManager = new VirtualDesktopManager(freshLayoutManager, &freshParent);
+        auto* freshVirtualDesktopManager = new PhosphorWorkspaces::VirtualDesktopManager(&freshParent);
         auto* freshSettings = new StubSettings(&freshParent);
         auto* freshZoneDetector = new StubZoneDetector(&freshParent);
 
@@ -301,7 +301,7 @@ private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     QObject* m_parent = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    VirtualDesktopManager* m_virtualDesktopManager = nullptr;
+    PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     StubSettings* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;

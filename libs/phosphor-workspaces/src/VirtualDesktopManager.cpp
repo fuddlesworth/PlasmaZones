@@ -1,10 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "virtualdesktopmanager.h"
-#include <PhosphorZones/LayoutRegistry.h>
-#include "logging.h"
-#include "utils.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
+
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -13,51 +11,36 @@
 #include <QDBusVariant>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
-#include <QGuiApplication>
-#include <QScreen>
 
-namespace PlasmaZones {
+namespace PhosphorWorkspaces {
 
-VirtualDesktopManager::VirtualDesktopManager(PhosphorZones::LayoutRegistry* layoutManager, QObject* parent)
+VirtualDesktopManager::VirtualDesktopManager(QObject* parent)
     : QObject(parent)
-    , m_layoutManager(layoutManager)
 {
 }
 
 VirtualDesktopManager::~VirtualDesktopManager()
 {
     stop();
-    // m_kwinVDInterface is auto-deleted via Qt parent-child ownership
 }
 
 bool VirtualDesktopManager::init()
 {
-    // Initialize KWin D-Bus interface for virtual desktop management
     initKWinDBus();
-
-    if (!m_useKWinDBus) {
-        qCWarning(lcCore) << "KWin D-Bus unavailable, virtual desktop support limited";
-    }
-
     return true;
 }
 
 void VirtualDesktopManager::initKWinDBus()
 {
-    // Connect to KWin's VirtualDesktopManager D-Bus interface
     m_kwinVDInterface =
         new QDBusInterface(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                            QStringLiteral("org.kde.KWin.VirtualDesktopManager"), QDBusConnection::sessionBus(), this);
 
     if (m_kwinVDInterface->isValid()) {
         m_useKWinDBus = true;
-        qCInfo(lcCore) << "Using KWin D-Bus interface for virtual desktops";
 
-        // Get initial state
         refreshFromKWin();
 
-        // Connect to KWin D-Bus signals for changes
-        // currentChanged emits QString (desktop UUID), not int
         QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                                               QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
                                               QStringLiteral("currentChanged"), this,
@@ -68,7 +51,6 @@ void VirtualDesktopManager::initKWinDBus()
                                               QStringLiteral("countChanged"), this,
                                               SLOT(onNumberOfDesktopsChanged(int)));
 
-        // Connect to desktop changes for name updates
         QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                                               QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
                                               QStringLiteral("desktopCreated"), this, SLOT(onKWinDesktopCreated()));
@@ -77,7 +59,6 @@ void VirtualDesktopManager::initKWinDBus()
                                               QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
                                               QStringLiteral("desktopRemoved"), this, SLOT(onKWinDesktopRemoved()));
     } else {
-        qCWarning(lcCore) << "KWin D-Bus interface not available";
         delete m_kwinVDInterface;
         m_kwinVDInterface = nullptr;
     }
@@ -125,11 +106,8 @@ void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply, con
                     name = QStringLiteral("Desktop %1").arg(desktop.position + 1);
                 }
                 m_desktopNames.append(name);
-                qCDebug(lcCore) << "Desktop" << (desktop.position + 1) << "id=" << desktop.id << "name=" << name;
             }
         }
-    } else {
-        qCWarning(lcCore) << "Failed to get virtual desktops:" << reply.errorMessage();
     }
 
     if (!m_desktopIds.isEmpty() && m_desktopIds.size() != m_desktopCount) {
@@ -140,7 +118,6 @@ void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply, con
         int idx = m_desktopIds.indexOf(currentId);
         if (idx >= 0) {
             m_currentDesktop = idx + 1;
-            qCDebug(lcCore) << "Current desktop=" << m_currentDesktop << "id=" << currentId;
         }
     }
 
@@ -155,40 +132,28 @@ void VirtualDesktopManager::refreshFromKWin()
         return;
     }
 
-    // Read properties using QDBusInterface::property()
-    // count property (uint)
     QVariant countVar = m_kwinVDInterface->property("count");
     if (countVar.isValid()) {
-        int newCount = countVar.toInt();
-        if (newCount != m_desktopCount) {
-            m_desktopCount = newCount;
-            qCDebug(lcCore) << "Desktop count=" << m_desktopCount;
-        }
+        m_desktopCount = countVar.toInt();
     }
 
-    // current property (QString - desktop UUID)
     QVariant currentVar = m_kwinVDInterface->property("current");
     QString currentId;
     if (currentVar.isValid()) {
         currentId = currentVar.toString();
     }
 
-    // desktops property - array of structs (position, id, name)
     QDBusMessage getDesktopsMsg =
         QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     getDesktopsMsg << QStringLiteral("org.kde.KWin.VirtualDesktopManager") << QStringLiteral("desktops");
 
-    // On first call (during init), use synchronous D-Bus so m_currentDesktop is
-    // set before any downstream code reads it. Subsequent calls (signal-triggered
-    // desktop add/remove) use async to avoid blocking the main thread.
     if (!m_running) {
         QDBusMessage reply = QDBusConnection::sessionBus().call(getDesktopsMsg, QDBus::Block, 1000);
         applyDesktopListReply(reply, currentId);
         return;
     }
 
-    // Increment generation to invalidate any pending callbacks from previous refreshFromKWin() calls
     ++m_refreshGeneration;
     const uint thisGeneration = m_refreshGeneration;
 
@@ -198,7 +163,6 @@ void VirtualDesktopManager::refreshFromKWin()
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, currentId, thisGeneration](QDBusPendingCallWatcher* w) {
                 if (thisGeneration != m_refreshGeneration) {
-                    qCDebug(lcCore) << "Ignoring stale virtual desktop refresh callback";
                     w->deleteLater();
                     return;
                 }
@@ -212,7 +176,6 @@ void VirtualDesktopManager::refreshFromKWin()
 
 void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
 {
-    // Convert UUID to 1-based desktop number
     int idx = m_desktopIds.indexOf(desktopId);
     int newDesktop = (idx >= 0) ? idx + 1 : 1;
 
@@ -221,21 +184,17 @@ void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
     }
 
     m_currentDesktop = newDesktop;
-    qCInfo(lcCore) << "Virtual desktop changed desktop=" << m_currentDesktop << "id=" << desktopId;
-
     Q_EMIT currentDesktopChanged(m_currentDesktop);
 }
 
 void VirtualDesktopManager::onKWinDesktopCreated()
 {
-    qCInfo(lcCore) << "Desktop created, refreshing";
     refreshFromKWin();
     Q_EMIT desktopCountChanged(m_desktopCount);
 }
 
 void VirtualDesktopManager::onKWinDesktopRemoved()
 {
-    qCInfo(lcCore) << "Desktop removed, refreshing";
     refreshFromKWin();
     Q_EMIT desktopCountChanged(m_desktopCount);
 }
@@ -250,55 +209,31 @@ void VirtualDesktopManager::start()
 
     if (m_useKWinDBus) {
         refreshFromKWin();
-    } else {
-        m_currentDesktop = currentDesktop();
     }
-    // PhosphorZones::Layout resolution is handled by the daemon's syncModeFromAssignments()
-    // via the currentDesktopChanged signal — no direct layout switching here.
 }
 
 void VirtualDesktopManager::stop()
 {
-    if (!m_running) {
-        return;
-    }
-
     m_running = false;
-    // Note: KWin D-Bus signals stay connected for lifetime
 }
 
 int VirtualDesktopManager::currentDesktop() const
 {
-    if (m_useKWinDBus) {
-        // Use cached value from KWin D-Bus (updated by signals)
-        return m_currentDesktop;
-    }
-
-    return 1;
+    return m_useKWinDBus ? m_currentDesktop : 1;
 }
 
 void VirtualDesktopManager::setCurrentDesktop(int desktop)
 {
-    if (desktop < 1) {
-        qCWarning(lcCore) << "Invalid desktop number:" << desktop;
+    if (desktop < 1 || desktop > m_desktopCount) {
         return;
     }
 
     if (m_useKWinDBus && m_kwinVDInterface) {
-        // Use KWin D-Bus to switch desktops
-        if (desktop > m_desktopCount) {
-            qCWarning(lcCore) << "Desktop number" << desktop << "exceeds maximum" << m_desktopCount;
-            return;
-        }
-        // Convert 1-based number to UUID
         int idx = desktop - 1;
         if (idx >= 0 && idx < m_desktopIds.size()) {
             m_kwinVDInterface->setProperty("current", m_desktopIds.at(idx));
         }
-        return;
     }
-
-    qCWarning(lcCore) << "setCurrentDesktop: KWin D-Bus unavailable";
 }
 
 void VirtualDesktopManager::onCurrentDesktopChanged(int desktop)
@@ -308,8 +243,6 @@ void VirtualDesktopManager::onCurrentDesktopChanged(int desktop)
     }
 
     m_currentDesktop = desktop;
-    qCInfo(lcCore) << "Virtual desktop changed to:" << desktop;
-
     Q_EMIT currentDesktopChanged(desktop);
 }
 
@@ -319,18 +252,14 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
         return;
     }
 
-    qCInfo(lcCore) << "Number of virtual desktops changed to:" << count;
     m_desktopCount = count;
 
-    // Refresh names when count changes
     if (m_useKWinDBus) {
         refreshFromKWin();
     }
 
-    // Ensure current desktop is still valid
     if (m_currentDesktop > count) {
         m_currentDesktop = count;
-        // PhosphorZones::Layout resolution happens via currentDesktopChanged signal to daemon
         Q_EMIT currentDesktopChanged(m_currentDesktop);
     }
 
@@ -339,11 +268,7 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
 
 int VirtualDesktopManager::desktopCount() const
 {
-    if (m_useKWinDBus) {
-        return m_desktopCount;
-    }
-
-    return 1;
+    return m_useKWinDBus ? m_desktopCount : 1;
 }
 
 QStringList VirtualDesktopManager::desktopNames() const
@@ -352,28 +277,12 @@ QStringList VirtualDesktopManager::desktopNames() const
         return m_desktopNames;
     }
 
-    // Generate defaults
     QStringList names;
     int count = desktopCount();
     for (int i = 1; i <= count; ++i) {
         names.append(QStringLiteral("Desktop %1").arg(i));
     }
-
     return names;
 }
 
-void VirtualDesktopManager::connectSignals()
-{
-    // KWin D-Bus signals are connected in initKWinDBus()
-}
-
-void VirtualDesktopManager::disconnectSignals()
-{
-    // Note: KWin D-Bus signals stay connected for lifetime
-}
-
-// NOTE: updateActiveLayout() was removed — layout resolution is handled exclusively
-// by the daemon's syncModeFromAssignments() which understands autotile vs snapping mode.
-// VirtualDesktopManager only tracks desktop state and emits signals.
-
-} // namespace PlasmaZones
+} // namespace PhosphorWorkspaces

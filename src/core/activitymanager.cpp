@@ -43,7 +43,7 @@ ActivityManager::~ActivityManager()
     stop();
 }
 
-void ActivityManager::setVirtualDesktopManager(VirtualDesktopManager* vdm)
+void ActivityManager::setVirtualDesktopManager(PhosphorWorkspaces::VirtualDesktopManager* vdm)
 {
     m_virtualDesktopManager = vdm;
 }

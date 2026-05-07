@@ -83,7 +83,6 @@ set(plasmazones_core_SRCS
     # lifted to libs/phosphor-screens. Daemon consumers take
     # Phosphor::Screens::ScreenManager* via constructor injection —
     # no service-locator intermediary.
-    core/virtualdesktopmanager.cpp
     core/virtualdesktopmanager.h
     core/activitymanager.cpp
     core/activitymanager.h
@@ -204,6 +203,7 @@ target_link_libraries(plasmazones_core
         PhosphorAnimation::PhosphorAnimation
         PhosphorConfig::PhosphorConfig
         PhosphorEngine::PhosphorEngine
+        PhosphorWorkspaces::PhosphorWorkspaces
         PhosphorTileEngine::PhosphorTileEngine
         PhosphorSnapEngine::PhosphorSnapEngine
         PhosphorIdentity::PhosphorIdentity

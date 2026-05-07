@@ -35,6 +35,10 @@ namespace PhosphorEngine {
 class WindowRegistry;
 }
 
+namespace PhosphorWorkspaces {
+class VirtualDesktopManager;
+}
+
 namespace Phosphor::Screens {
 class ScreenManager;
 }
@@ -49,7 +53,6 @@ using PhosphorProtocol::WindowStateEntry;
 using WindowRegistry = PhosphorEngine::WindowRegistry;
 
 class ISettings;
-class VirtualDesktopManager;
 
 /**
  * @brief Window-zone tracking service (business logic layer)
@@ -82,7 +85,7 @@ public:
     explicit WindowTrackingService(PhosphorZones::LayoutRegistry* layoutManager,
                                    PhosphorZones::IZoneDetector* zoneDetector,
                                    Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
-                                   VirtualDesktopManager* vdm, QObject* parent = nullptr);
+                                   PhosphorWorkspaces::VirtualDesktopManager* vdm, QObject* parent = nullptr);
 
     QObject* asQObject() override
     {
@@ -847,7 +850,7 @@ private:
     PhosphorZones::IZoneDetector* m_zoneDetector;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
     ISettings* m_settings;
-    VirtualDesktopManager* m_virtualDesktopManager;
+    PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     // Shared registry for current-class queries and canonical key translation.
     // Not owned. Null in unit tests.
     WindowRegistry* m_windowRegistry = nullptr;

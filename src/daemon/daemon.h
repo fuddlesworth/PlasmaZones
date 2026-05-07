@@ -42,6 +42,10 @@ namespace PhosphorEngine {
 class WindowRegistry;
 }
 
+namespace PhosphorWorkspaces {
+class VirtualDesktopManager;
+}
+
 namespace PhosphorZones {
 class Layout;
 class LayoutComputeService;
@@ -54,7 +58,7 @@ namespace PlasmaZones {
 enum class DisabledReason;
 class Settings;
 class OverlayService;
-class VirtualDesktopManager;
+
 class ActivityManager;
 class ShortcutManager;
 class LayoutAdaptor;
@@ -142,7 +146,7 @@ public:
     {
         return m_screenManager.get();
     }
-    VirtualDesktopManager* virtualDesktopManager() const
+    PhosphorWorkspaces::VirtualDesktopManager* virtualDesktopManager() const
     {
         return m_virtualDesktopManager.get();
     }
@@ -527,7 +531,7 @@ private:
     /// be declared AFTER m_screenManager so the initializer-list construction
     /// order matches.
     std::unique_ptr<OverlayService> m_overlayService;
-    std::unique_ptr<VirtualDesktopManager> m_virtualDesktopManager;
+    std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;
 

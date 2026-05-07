@@ -34,8 +34,12 @@ namespace PhosphorZones {
 class LayoutRegistry;
 }
 
-namespace PlasmaZones {
+namespace PhosphorWorkspaces {
 class VirtualDesktopManager;
+}
+
+namespace PlasmaZones {
+
 class ActivityManager;
 class ISettings;
 
@@ -52,11 +56,11 @@ class PLASMAZONES_EXPORT LayoutAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, QObject* parent = nullptr);
-    explicit LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, VirtualDesktopManager* vdm,
+    explicit LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, PhosphorWorkspaces::VirtualDesktopManager* vdm,
                            Phosphor::Screens::ScreenManager* screenManager = nullptr, QObject* parent = nullptr);
     ~LayoutAdaptor() override = default;
 
-    void setVirtualDesktopManager(VirtualDesktopManager* vdm);
+    void setVirtualDesktopManager(PhosphorWorkspaces::VirtualDesktopManager* vdm);
     void setActivityManager(ActivityManager* am);
     void setSettings(ISettings* settings);
 
@@ -478,7 +482,7 @@ private:
     void invalidateLayoutJsonCacheFor(const QUuid& uuid);
 
     PhosphorZones::LayoutRegistry* m_layoutManager; // Concrete type for signal connections
-    VirtualDesktopManager* m_virtualDesktopManager = nullptr;
+    PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     ActivityManager* m_activityManager = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     ISettings* m_settings = nullptr;

@@ -23,7 +23,7 @@ using namespace PhosphorSnapEngine;
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"

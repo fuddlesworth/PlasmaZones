@@ -25,7 +25,7 @@ namespace PlasmaZones {
 WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutRegistry* layoutManager,
                                              PhosphorZones::IZoneDetector* zoneDetector,
                                              Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
-                                             VirtualDesktopManager* vdm, QObject* parent)
+                                             PhosphorWorkspaces::VirtualDesktopManager* vdm, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_zoneDetector(zoneDetector)

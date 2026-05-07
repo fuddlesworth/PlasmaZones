@@ -346,6 +346,7 @@ add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA back
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts (INTERFACE)
+add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 

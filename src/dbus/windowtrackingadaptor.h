@@ -40,6 +40,10 @@ class SnapEngine;
 class SnapNavigationTargetResolver;
 }
 
+namespace PhosphorWorkspaces {
+class VirtualDesktopManager;
+}
+
 namespace PlasmaZones {
 
 using PhosphorProtocol::EmptyZoneList;
@@ -55,7 +59,7 @@ class ScreenModeRouter;
 
 class PersistenceWorker;
 class ISettings;
-class VirtualDesktopManager;
+
 class ZoneDetectionAdaptor;
 
 /**
@@ -74,7 +78,8 @@ public:
     explicit WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layoutManager,
                                    PhosphorZones::IZoneDetector* zoneDetector,
                                    Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
-                                   VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
+                                   PhosphorWorkspaces::VirtualDesktopManager* virtualDesktopManager,
+                                   QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override;
 
     /**
@@ -815,7 +820,7 @@ private:
     ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager;
     ISettings* m_settings;
-    VirtualDesktopManager* m_virtualDesktopManager;
+    PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)
 
     // Engine references for per-screen routing (set via setEngines())
