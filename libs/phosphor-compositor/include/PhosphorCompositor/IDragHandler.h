@@ -18,6 +18,7 @@ public:
     virtual void onDragMoved(const QString& windowId, int cursorX, int cursorY) = 0;
     virtual void onDragEnded(const QString& windowId, bool cancelled) = 0;
     virtual void onDragPolicyChanged(const QString& windowId, int newPolicy) = 0;
+    virtual void onRestoreSizeDuringDrag(const QString& windowId, int width, int height) = 0;
 };
 
 } // namespace PhosphorCompositor

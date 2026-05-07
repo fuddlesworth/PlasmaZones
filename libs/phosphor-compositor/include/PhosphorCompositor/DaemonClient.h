@@ -67,7 +67,11 @@ public:
     void querySnappedWindows();
     void queryPendingRestoreGeometries();
     void queryVirtualScreens(const QString& screenId);
+    void querySetting(const QString& key);
     void pruneStaleWindows(const QStringList& liveWindowIds);
+
+    // Daemon availability probe (async — emits daemonReady if responsive)
+    void probeDaemonAvailable(int timeoutMs = 3000);
 
 Q_SIGNALS:
     void daemonReady();
@@ -79,6 +83,10 @@ Q_SIGNALS:
     void snappedWindowsReceived(const QStringList& windowIds);
     void pendingRestoreGeometriesReceived(const QString& json);
     void virtualScreensReceived(const QString& screenId, const PhosphorProtocol::WindowGeometryList& geometries);
+
+    void settingReceived(const QString& key, const QVariant& value);
+    void settingsChanged();
+    void virtualScreensChanged(const QString& screenId);
 
     void snapAssistReady(const QString& windowId, const QString& screenId,
                          const PhosphorProtocol::EmptyZoneList& zones);
@@ -104,6 +112,8 @@ private:
     void handleDragPolicyChanged(const QString& windowId, int newPolicy);
     void handleWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
     void handleRestoreSizeDuringDrag(const QString& windowId, int width, int height);
+    void handleMoveWindowToZone(const QString& windowId, const QString& screenId, int x, int y, int w, int h);
+    void handleSnapAllWindows(const QString& screenId);
     void handleSnapAssistReady(const QString& windowId, const QString& screenId,
                                const PhosphorProtocol::EmptyZoneList& zones);
 

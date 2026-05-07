@@ -306,6 +306,23 @@ void DaemonClient::connectDaemonSignals()
     bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowDrag, QStringLiteral("snapAssistReady"),
                 this, SLOT(handleSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
 
+    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowDrag,
+                QStringLiteral("restoreSizeDuringDragChanged"), this,
+                SLOT(handleRestoreSizeDuringDrag(QString, int, int)));
+
+    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
+                QStringLiteral("moveSpecificWindowToZoneRequested"), this,
+                SLOT(handleMoveWindowToZone(QString, QString, int, int, int, int)));
+
+    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
+                QStringLiteral("snapAllWindowsRequested"), this, SLOT(handleSnapAllWindows(QString)));
+
+    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::Settings,
+                QStringLiteral("settingsChanged"), this, SIGNAL(settingsChanged()));
+
+    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::Screen,
+                QStringLiteral("virtualScreensChanged"), this, SIGNAL(virtualScreensChanged(QString)));
+
     bus.connect(Service::Name, Service::ObjectPath, Service::Interface::Settings,
                 QStringLiteral("runningWindowsRequested"), this, SIGNAL(runningWindowsRequested()));
 }
@@ -397,15 +414,61 @@ void DaemonClient::handleWindowFloatingChanged(const QString& windowId, bool isF
 
 void DaemonClient::handleRestoreSizeDuringDrag(const QString& windowId, int width, int height)
 {
-    Q_UNUSED(windowId)
-    Q_UNUSED(width)
-    Q_UNUSED(height)
+    if (m_dragHandler) {
+        m_dragHandler->onRestoreSizeDuringDrag(windowId, width, height);
+    }
+}
+
+void DaemonClient::handleMoveWindowToZone(const QString& windowId, const QString& screenId, int x, int y, int w, int h)
+{
+    if (m_geometryHandler) {
+        m_geometryHandler->onMoveWindowToZone(windowId, screenId, x, y, w, h);
+    }
+}
+
+void DaemonClient::handleSnapAllWindows(const QString& screenId)
+{
+    if (m_geometryHandler) {
+        m_geometryHandler->onSnapAllWindows(screenId);
+    }
 }
 
 void DaemonClient::handleSnapAssistReady(const QString& windowId, const QString& screenId,
                                          const PhosphorProtocol::EmptyZoneList& zones)
 {
     Q_EMIT snapAssistReady(windowId, screenId, zones);
+}
+
+void DaemonClient::querySetting(const QString& key)
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, Service::Interface::Settings,
+                                                      QStringLiteral("getSetting"));
+    msg << key;
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, key](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (w->isError())
+            return;
+        QDBusPendingReply<QVariant> reply = *w;
+        if (reply.isValid()) {
+            Q_EMIT settingReceived(key, reply.value());
+        }
+    });
+}
+
+void DaemonClient::probeDaemonAvailable(int timeoutMs)
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath,
+                                                      QStringLiteral("org.freedesktop.DBus.Introspectable"),
+                                                      QStringLiteral("Introspect"));
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg, timeoutMs), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QString> reply = *w;
+        if (reply.isValid() && !m_daemonReady) {
+            Q_EMIT daemonReady();
+        }
+    });
 }
 
 } // namespace PhosphorCompositor
