@@ -229,19 +229,19 @@ private Q_SLOTS:
 
     void test_sizesMismatch_earlyReturn()
     {
+        // Tolerant-vector contract: minSizes shorter than zones enforces the
+        // prefix entries that exist. Missing entries are treated as no minimum.
         QVector<QRect> zones = {
             QRect(0, 0, 300, 900),
             QRect(300, 0, 300, 900),
         };
-        const QVector<QRect> original = zones;
         QVector<QSize> minSizes = {QSize(400, 1)};
 
         GeometryUtils::enforceWindowMinSizes(zones, minSizes, 5);
 
         QCOMPARE(zones.size(), 2);
-        for (int i = 0; i < zones.size(); ++i) {
-            QCOMPARE(zones[i], original[i]);
-        }
+        QVERIFY(zones[0].width() >= 400);
+        QCOMPARE(zones[0].width() + zones[1].width(), 600);
     }
 
     void test_gapThreshold_adjacencyDetection()

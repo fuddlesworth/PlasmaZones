@@ -32,6 +32,8 @@ add_library(PhosphorEngineApi SHARED
     include/PhosphorEngineApi/PlacementEngineBase.h
     src/PlacementEngineBase.cpp
     src/GeometryUtils.cpp
+    src/WindowRegistry.cpp
+    include/PhosphorEngineApi/WindowRegistry.h
 )
 add_library(PhosphorEngineApi::PhosphorEngineApi ALIAS PhosphorEngineApi)
 
@@ -54,6 +56,8 @@ target_link_libraries(PhosphorEngineApi
         Qt6::Core
         Qt6::Gui
         PhosphorGeometry::PhosphorGeometry
+    PRIVATE
+        PhosphorIdentity::PhosphorIdentity
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

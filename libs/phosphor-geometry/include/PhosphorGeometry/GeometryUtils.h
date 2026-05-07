@@ -13,6 +13,10 @@
 
 namespace PhosphorGeometry {
 
+namespace GeometryDefaults {
+inline constexpr int MinZoneSizePx = 50;
+} // namespace GeometryDefaults
+
 PHOSPHORGEOMETRY_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, const QRect& overlayGeometry);
 
 PHOSPHORGEOMETRY_EXPORT QRect snapToRect(const QRectF& rf);

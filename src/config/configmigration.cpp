@@ -7,6 +7,8 @@
 #include "configdefaults.h"
 #include "perscreenresolver.h"
 
+#include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorConfig/MigrationRunner.h>
 #include <PhosphorConfig/Schema.h>
 

@@ -38,8 +38,13 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
+namespace PhosphorEngineApi {
+class WindowRegistry;
+}
+
 namespace PhosphorZones {
 class Layout;
+class LayoutComputeService;
 class LayoutRegistry;
 class ZoneDetector;
 }
@@ -47,7 +52,6 @@ class ZoneDetector;
 namespace PlasmaZones {
 
 enum class DisabledReason;
-class LayoutComputeService;
 class Settings;
 class OverlayService;
 class VirtualDesktopManager;
@@ -69,7 +73,6 @@ class AutotileAdaptor;
 class ScreenModeRouter;
 class SettingsConfigStore;
 class SnapAdaptor;
-class WindowRegistry;
 class ShaderRegistry;
 } // namespace PlasmaZones
 
@@ -151,7 +154,7 @@ public:
     {
         return m_shortcutManager.get();
     }
-    WindowRegistry* windowRegistry() const
+    PhosphorEngineApi::WindowRegistry* windowRegistry() const
     {
         return m_windowRegistry.get();
     }
@@ -459,7 +462,7 @@ private:
     /// "DECLARATION ORDER INVARIANT" comment above.
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
     // ─── End of layout-source declaration block ─────────────────────────
-    std::unique_ptr<LayoutComputeService> m_layoutComputeService;
+    std::unique_ptr<PhosphorZones::LayoutComputeService> m_layoutComputeService;
     /// Per-daemon curve registry. Replaces the prior per-process
     /// `CurveRegistry::instance()` singleton — composition roots own
     /// their own.
@@ -501,7 +504,7 @@ private:
     // Single source of truth for live-window instance identity + metadata.
     // Populated by the kwin-effect bridge. Consumers query appIdFor() etc.
     // instead of parsing composite windowId strings.
-    std::unique_ptr<WindowRegistry> m_windowRegistry;
+    std::unique_ptr<PhosphorEngineApi::WindowRegistry> m_windowRegistry;
     /// Plasma D-Bus panel-offset source. Declared before m_screenManager
     /// because the manager holds a non-owning IPanelSource* into it.
     std::unique_ptr<Phosphor::Screens::PlasmaPanelSource> m_panelSource;

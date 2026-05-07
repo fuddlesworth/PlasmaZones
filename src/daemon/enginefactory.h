@@ -28,12 +28,15 @@ namespace PhosphorSnapEngine {
 class SnapEngine;
 }
 
+namespace PhosphorEngineApi {
+class WindowRegistry;
+}
+
 namespace PlasmaZones {
 
 class ISettings;
 class ScreenModeRouter;
 class VirtualDesktopManager;
-class WindowRegistry;
 class WindowTrackingService;
 
 struct EngineSet
@@ -72,6 +75,6 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager, WindowTrac
                         Phosphor::Screens::ScreenManager* screenManager,
                         PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
-                        WindowRegistry* windowRegistry, QObject* parent);
+                        PhosphorEngineApi::WindowRegistry* windowRegistry, QObject* parent);
 
 } // namespace PlasmaZones

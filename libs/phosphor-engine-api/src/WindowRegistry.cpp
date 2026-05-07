@@ -1,11 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "windowregistry.h"
-#include "logging.h"
-#include "utils.h"
+#include <PhosphorEngineApi/WindowRegistry.h>
+#include <PhosphorIdentity/WindowId.h>
 
-namespace PlasmaZones {
+namespace PhosphorEngineApi {
 
 WindowRegistry::WindowRegistry(QObject* parent)
     : QObject(parent)
@@ -17,7 +16,7 @@ WindowRegistry::~WindowRegistry() = default;
 void WindowRegistry::upsert(const QString& instanceId, const WindowMetadata& metadata)
 {
     if (instanceId.isEmpty()) {
-        qCWarning(lcCore) << "WindowRegistry::upsert: rejecting empty instance id";
+        qWarning("WindowRegistry::upsert: rejecting empty instance id");
         return;
     }
 
@@ -30,7 +29,7 @@ void WindowRegistry::upsert(const QString& instanceId, const WindowMetadata& met
     }
 
     if (it.value() == metadata) {
-        return; // No change — bridges call this unconditionally
+        return;
     }
 
     const WindowMetadata oldMeta = it.value();
@@ -96,7 +95,6 @@ void WindowRegistry::clear()
     if (m_records.isEmpty() && m_canonicalByInstance.isEmpty()) {
         return;
     }
-    // Emit windowDisappeared for each so consumers can clean up.
     const QStringList ids = m_records.keys();
     m_records.clear();
     m_appIdIndex.clear();
@@ -142,7 +140,7 @@ void WindowRegistry::releaseCanonical(const QString& anyWindowId)
 void WindowRegistry::indexInsert(const QString& instanceId, const QString& appId)
 {
     if (appId.isEmpty()) {
-        return; // Don't index empty classes — they're transient
+        return;
     }
     m_appIdIndex.insert(appId, instanceId);
 }
@@ -162,4 +160,4 @@ void WindowRegistry::indexRemove(const QString& instanceId, const QString& appId
     }
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorEngineApi

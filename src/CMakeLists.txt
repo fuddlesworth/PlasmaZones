@@ -41,7 +41,6 @@ set(plasmazones_core_SRCS
     core/utils.h
     core/utils.cpp
     core/layoutfactory.h
-    core/layoutfactory.cpp
     core/windowtrackingservice.h
     core/windowtrackingservice.cpp
     core/windowtrackingservice/snap.cpp
@@ -49,12 +48,9 @@ set(plasmazones_core_SRCS
     core/windowtrackingservice/resnap.cpp
     core/windowtrackingservice/lifecycle.cpp
     core/windowregistry.h
-    core/windowregistry.cpp
     core/platform.cpp
     core/platform.h
     core/geometryutils.cpp
-    core/geometryutils/constraints.cpp
-    core/geometryutils/overlaps.cpp
     core/geometryutils.h
     core/spatialadjacency.h
     # virtualscreenswapper.{h,cpp} lifted to libs/phosphor-screens/Swapper.h —
@@ -67,9 +63,7 @@ set(plasmazones_core_SRCS
     # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ —
     # consumers include <PhosphorZones/...> directly and construct the registry
     # with createAssignmentsBackend() + the "plasmazones/layouts" subdir inline.
-    core/layoutworker/layoutworker.cpp
     core/layoutworker/layoutworker.h
-    core/layoutworker/layoutcomputeservice.cpp
     core/layoutworker/layoutcomputeservice.h
     core/layoutworker/types.h
     core/unifiedlayoutlist.cpp

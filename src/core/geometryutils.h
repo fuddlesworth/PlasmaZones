@@ -143,11 +143,8 @@ PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenMan
                                                     QScreen* physScreen, ISettings* settings,
                                                     const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
 
-PLASMAZONES_EXPORT void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes, int gapThreshold,
-                                              int innerGap = 0);
-
-PLASMAZONES_EXPORT void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes = {},
-                                           int innerGap = 0);
+using ::PhosphorGeometry::enforceWindowMinSizes;
+using ::PhosphorGeometry::removeZoneOverlaps;
 
 using ::PhosphorEngineApi::GeometryUtils::serializeZoneAssignments;
 using ::PhosphorGeometry::rectToJson;

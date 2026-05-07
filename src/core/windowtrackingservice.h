@@ -31,6 +31,10 @@ namespace PhosphorSnapEngine {
 class SnapState;
 }
 
+namespace PhosphorEngineApi {
+class WindowRegistry;
+}
+
 namespace Phosphor::Screens {
 class ScreenManager;
 }
@@ -42,9 +46,10 @@ using PhosphorProtocol::WindowGeometryEntry;
 using PhosphorProtocol::WindowGeometryList;
 using PhosphorProtocol::WindowStateEntry;
 
+using WindowRegistry = PhosphorEngineApi::WindowRegistry;
+
 class ISettings;
 class VirtualDesktopManager;
-class WindowRegistry;
 
 /**
  * @brief Window-zone tracking service (business logic layer)
