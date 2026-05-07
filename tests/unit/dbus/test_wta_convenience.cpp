@@ -15,14 +15,14 @@
 #include <QRectF>
 #include <memory>
 
-#include "core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "dbus/snapadaptor.h"
 #include "dbus/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>

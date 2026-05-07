@@ -6,7 +6,7 @@
 #include "constants.h"
 #include "plasmazones_export.h"
 #include "types.h"
-#include <PhosphorEngineApi/GeometryUtils.h>
+#include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QRectF>
@@ -125,7 +125,7 @@ using ::PhosphorZones::GeometryUtils::setZoneGeometry;
  * @param isZoneEmpty Predicate: returns true if zone has no windows
  * @return EmptyZoneList of empty zone entries with overlay-local geometry
  *
- * Used by WindowTrackingService::getEmptyZones and WindowDragAdaptor::dragStopped
+ * Used by PhosphorPlacement::WindowTrackingService::getEmptyZones and WindowDragAdaptor::dragStopped
  * to avoid duplicating the empty-zones building logic.
  */
 PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr,
@@ -143,13 +143,10 @@ PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenMan
                                                     QScreen* physScreen, ISettings* settings,
                                                     const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
 
-PLASMAZONES_EXPORT void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes, int gapThreshold,
-                                              int innerGap = 0);
+using ::PhosphorGeometry::enforceMinSizes;
+using ::PhosphorGeometry::removeRectOverlaps;
 
-PLASMAZONES_EXPORT void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes = {},
-                                           int innerGap = 0);
-
-using ::PhosphorEngineApi::GeometryUtils::serializeZoneAssignments;
+using ::PhosphorEngine::GeometryUtils::serializeZoneAssignments;
 using ::PhosphorGeometry::rectToJson;
 
 } // namespace GeometryUtils

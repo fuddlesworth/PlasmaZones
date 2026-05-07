@@ -5,7 +5,7 @@
 #include "dbushelpers.h"
 #include "../core/interfaces.h"
 #include <PhosphorZones/Layout.h>
-#include "../core/layoutfactory.h"
+#include <PhosphorZones/LayoutFactory.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/constants.h"
 #include <PhosphorZones/LayoutUtils.h>
@@ -15,7 +15,7 @@
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include "../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../core/activitymanager.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../core/logging.h"
@@ -57,7 +57,7 @@ LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, QObject* pa
     initCoalesceTimer();
 }
 
-LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, VirtualDesktopManager* vdm,
+LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, PhosphorWorkspaces::VirtualDesktopManager* vdm,
                              Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(manager)
@@ -144,7 +144,7 @@ void LayoutAdaptor::onLayoutAssigned(const QString& screen, int virtualDesktop, 
     }
 }
 
-void LayoutAdaptor::setVirtualDesktopManager(VirtualDesktopManager* vdm)
+void LayoutAdaptor::setVirtualDesktopManager(PhosphorWorkspaces::VirtualDesktopManager* vdm)
 {
     if (m_virtualDesktopManager) {
         disconnect(m_virtualDesktopManager, nullptr, this, nullptr);
@@ -157,7 +157,7 @@ void LayoutAdaptor::setVirtualDesktopManager(VirtualDesktopManager* vdm)
 void LayoutAdaptor::connectVirtualDesktopSignals()
 {
     if (m_virtualDesktopManager) {
-        connect(m_virtualDesktopManager, &VirtualDesktopManager::desktopCountChanged, this,
+        connect(m_virtualDesktopManager, &PhosphorWorkspaces::VirtualDesktopManager::desktopCountChanged, this,
                 &LayoutAdaptor::virtualDesktopCountChanged);
     }
 }
@@ -448,7 +448,7 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
         return QString();
     }
 
-    PhosphorZones::Layout* layout = LayoutFactory::create(type, m_layoutManager);
+    PhosphorZones::Layout* layout = PhosphorZones::LayoutFactory::create(type, m_layoutManager);
     if (!layout) {
         qCWarning(lcDbusLayout) << "Failed to create layout of type:" << type;
         return QString();

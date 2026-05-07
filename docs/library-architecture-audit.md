@@ -43,14 +43,14 @@ Mid-tier:
                              PhosphorGeometry, PhosphorConfig
                          ..> PhosphorIdentity, PhosphorScreens
 
-  PhosphorEngineApi      --> Qt6::Core, Qt6::Gui, PhosphorEngineTypes, PhosphorGeometry
+  PhosphorEngine      --> Qt6::Core, Qt6::Gui, PhosphorEngineTypes, PhosphorGeometry
 
 Engine libraries:
-  PhosphorTileEngine     --> Qt6::Core, PhosphorEngineApi, PhosphorEngineTypes,
+  PhosphorTileEngine     --> Qt6::Core, PhosphorEngine, PhosphorEngineTypes,
                              PhosphorTiles, PhosphorGeometry, PhosphorLayoutApi
                          ..> PhosphorScreens, PhosphorIdentity, PhosphorZones
 
-  PhosphorSnapEngine     --> Qt6::Core, Qt6::Gui, PhosphorEngineApi, PhosphorEngineTypes,
+  PhosphorSnapEngine     --> Qt6::Core, Qt6::Gui, PhosphorEngine, PhosphorEngineTypes,
                              PhosphorZones, PhosphorGeometry, PhosphorLayoutApi,
                              PhosphorProtocol
                          ..> PhosphorScreens, PhosphorIdentity, PhosphorTiles
@@ -68,7 +68,7 @@ Engine libraries:
               PhosphorScreens     |    PhosphorEngineTypes
                    |              |    (INTERFACE)
                    |              |       /    \
-                   |    PhosphorLayoutApi  PhosphorEngineApi
+                   |    PhosphorLayoutApi  PhosphorEngine
                    |        |    |    \       /      \
                    |  PhosphorConfig  |   PhosphorTiles
                    |        |         |       |
@@ -94,8 +94,8 @@ depend on Qt alone. No back-edges exist.
 
 **Severity: MEDIUM**
 
-PhosphorTileEngine declares PUBLIC links to both `PhosphorEngineApi` and
-`PhosphorEngineTypes`. However, PhosphorEngineApi already has a PUBLIC
+PhosphorTileEngine declares PUBLIC links to both `PhosphorEngine` and
+`PhosphorEngineTypes`. However, PhosphorEngine already has a PUBLIC
 link to PhosphorEngineTypes. The explicit PhosphorEngineTypes link in
 PhosphorTileEngine is redundant.
 
@@ -103,7 +103,7 @@ Same issue exists in PhosphorSnapEngine.
 
 Both engine libraries' CMakeLists.txt line 61/62 and 60/61 respectively:
 ```cmake
-PhosphorEngineApi::PhosphorEngineApi
+PhosphorEngine::PhosphorEngine
 PhosphorEngineTypes::PhosphorEngineTypes   # <-- redundant
 ```
 
@@ -114,14 +114,14 @@ correctness issue.
 
 **Fix:** Remove the explicit `PhosphorEngineTypes::PhosphorEngineTypes`
 PUBLIC link from both PhosphorTileEngine and PhosphorSnapEngine. The
-dependency is already satisfied transitively through PhosphorEngineApi.
+dependency is already satisfied transitively through PhosphorEngine.
 
 ### 2.2 PhosphorGeometry redundancy in engine libraries
 
 **Severity: LOW**
 
 Both engine libraries declare PUBLIC links to `PhosphorGeometry`, which
-PhosphorEngineApi already provides transitively via its PUBLIC link to
+PhosphorEngine already provides transitively via its PUBLIC link to
 PhosphorGeometry.
 
 **Fix:** Remove `PhosphorGeometry::PhosphorGeometry` from engine library
@@ -149,7 +149,7 @@ redundant. Safe to remove since transitive propagation covers it.
 
 The daemon's `plasmazones_core` target links both engine libraries, plus
 PhosphorZones, PhosphorTiles, PhosphorScreens, PhosphorIdentity,
-PhosphorLayoutApi, PhosphorConfig, PhosphorEngineApi, and PhosphorProtocol
+PhosphorLayoutApi, PhosphorConfig, PhosphorEngine, and PhosphorProtocol
 as direct PUBLIC deps. Most of these arrive transitively through the engine
 libraries. The daemon is the final application target, so bloated link lines
 are cosmetic rather than harmful, but they obscure the real dependency
@@ -178,7 +178,7 @@ Both engine libraries place all their code in `namespace PlasmaZones`:
   and all .cpp files -- ALL in `namespace PlasmaZones`.
 
 `PlasmaZones` is the daemon/application namespace. Library code should
-use its own namespace. PhosphorEngineApi uses `PhosphorEngineApi::`,
+use its own namespace. PhosphorEngine uses `PhosphorEngine::`,
 PhosphorZones uses `PhosphorZones::`, PhosphorTiles uses `PhosphorTiles::`,
 etc. The engines are the ONLY libraries that use `PlasmaZones`.
 
@@ -211,8 +211,8 @@ SnapEngine.h (lines 30-48) contains 17 `using` declarations at namespace
 scope inside `namespace PlasmaZones`:
 
 ```cpp
-using NavigationContext = PhosphorEngineApi::NavigationContext;
-using SnapResult = PhosphorEngineApi::SnapResult;
+using NavigationContext = PhosphorEngine::NavigationContext;
+using SnapResult = PhosphorEngine::SnapResult;
 // ... 15 more
 using PhosphorProtocol::CycleTargetResult;
 using PhosphorProtocol::FocusTargetResult;
@@ -221,9 +221,9 @@ using PhosphorProtocol::FocusTargetResult;
 
 AutotileEngine.h (lines 37-39) contains 3:
 ```cpp
-using NavigationContext = PhosphorEngineApi::NavigationContext;
-using TilingStateKey = PhosphorEngineApi::TilingStateKey;
-namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
+using NavigationContext = PhosphorEngine::NavigationContext;
+using TilingStateKey = PhosphorEngine::TilingStateKey;
+namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;
 ```
 
 Any translation unit that includes these headers gets all these aliases
@@ -249,7 +249,7 @@ Every public class in each library uses the correct per-library export macro:
 | phosphor-tile-engine | `PHOSPHORTILEENGINE_EXPORT` | AutotileEngine, AutotileConfig, NavigationController, OverflowManager, PerScreenConfigResolver |
 | phosphor-snap-engine | `PHOSPHORSNAPENGINE_EXPORT` | SnapEngine, SnapState |
 | phosphor-zones | `PHOSPHORZONES_EXPORT` | Zone, Layout, ZoneDetector, ZoneHighlighter, LayoutRegistry, IZoneDetector, IZoneLayoutRegistry, ZonesLayoutSource, ZonesLayoutSourceFactory |
-| phosphor-engine-api | `PHOSPHORENGINEAPI_EXPORT` | PlacementEngineBase, IWindowTrackingService, IVirtualDesktopManager |
+| phosphor-engine | `PHOSPHORENGINEAPI_EXPORT` | PlacementEngineBase, IWindowTrackingService, IVirtualDesktopManager |
 | phosphor-config | `PHOSPHORCONFIG_EXPORT` | IBackend, IGroup, JsonBackend, JsonGroup, QSettingsBackend, QSettingsGroup, Store, Schema, MigrationRunner |
 | phosphor-screens | `PHOSPHORSCREENS_EXPORT` | ScreenManager, ScreenResolver, DBusScreenAdaptor, PlasmaPanelSource, NoOpPanelSource, VirtualScreenSwapper, IConfigStore, InMemoryConfigStore, IPanelSource |
 
@@ -286,7 +286,7 @@ returned zero results. No library code includes daemon-internal headers.
 
 No `"../"` relative includes found in any library header file. All
 inter-library includes use angle-bracket paths
-(`<PhosphorEngineApi/PlacementEngineBase.h>`, etc.).
+(`<PhosphorEngine/PlacementEngineBase.h>`, etc.).
 
 ### 6.3 PhosphorScreens in PhosphorTileEngine PUBLIC header
 
@@ -337,7 +337,7 @@ because the engine doesn't have a typed interface for the WindowRegistry.
 The `setWindowRegistry(QObject*)` pattern on IPlacementEngine takes an
 opaque QObject*, then the engine calls methods by name string.
 
-**Fix:** Extract an `IWindowRegistry` interface in phosphor-engine-api:
+**Fix:** Extract an `IWindowRegistry` interface in phosphor-engine:
 ```cpp
 class IWindowRegistry {
 public:
@@ -405,10 +405,10 @@ restoreWindowsToZonesOnLogin.
 
 SnapEngine also casts to `IGeometrySettings` (line 39 of SnapEngine.cpp):
 ```cpp
-auto* gs = dynamic_cast<PhosphorEngineApi::IGeometrySettings*>(engineSettings());
+auto* gs = dynamic_cast<PhosphorEngine::IGeometrySettings*>(engineSettings());
 ```
 
-IGeometrySettings is in phosphor-engine-api and provides zonePadding and
+IGeometrySettings is in phosphor-engine and provides zonePadding and
 outerGaps. This is correct -- the interface lives in the right library.
 
 **Note:** SnapEngine uses `dynamic_cast` while AutotileEngine uses
@@ -558,12 +558,12 @@ This is dead code left over from a refactor.
 | 3.1 | Namespace | **HIGH** | Engine libraries use `namespace PlasmaZones` instead of their own namespace |
 | 3.2 | Namespace | **HIGH** | 20 using-aliases in public engine headers pollute consumer TUs |
 | 10.2 | File size | **HIGH** | AutotileEngine.h (1427 lines) and .cpp (3802 lines) exceed 800-line limit |
-| 2.1 | Diamond dep | MEDIUM | PhosphorEngineTypes explicitly linked when already transitive via PhosphorEngineApi |
+| 2.1 | Diamond dep | MEDIUM | PhosphorEngineTypes explicitly linked when already transitive via PhosphorEngine |
 | 6.3 | Include path | MEDIUM | AutotileEngine.h includes PhosphorScreens header but PhosphorScreens is PRIVATE dep |
 | 7.1 | invokeMethod | MEDIUM | 3 string-based invokeMethod calls for WindowRegistry in AutotileEngine |
 | 7.2 | invokeMethod | MEDIUM | 4 string-based invokeMethod calls for WTA/ZoneDetector in SnapEngine |
 | 9.1 | Base bloat | MEDIUM | PlacementEngineBase has 10 signals; settingsWriteBackRequested is autotile-only |
-| 2.2 | Diamond dep | LOW | PhosphorGeometry explicitly linked when transitive via PhosphorEngineApi |
+| 2.2 | Diamond dep | LOW | PhosphorGeometry explicitly linked when transitive via PhosphorEngine |
 | 2.3 | Diamond dep | LOW | PhosphorLayoutApi explicitly linked when transitive via PhosphorTiles |
 | 2.4 | Daemon deps | LOW | Daemon links libs it gets transitively through engine libraries |
 | 8.2 | Settings | LOW | SnapEngine uses dynamic_cast instead of qobject_cast for ISnapSettings |

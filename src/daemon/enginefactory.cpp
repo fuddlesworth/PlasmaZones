@@ -10,11 +10,13 @@
 
 namespace PlasmaZones {
 
-EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
+EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
+                        PhosphorPlacement::WindowTrackingService* windowTracker,
                         Phosphor::Screens::ScreenManager* screenManager,
                         PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
-                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
-                        WindowRegistry* windowRegistry, QObject* parent)
+                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
+                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry,
+                        QObject* parent)
 {
     Q_UNUSED(parent)
     // --- AutotileEngine ---

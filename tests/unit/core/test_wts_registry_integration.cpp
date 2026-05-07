@@ -31,8 +31,8 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
-#include "core/windowregistry.h"
-#include "core/windowtrackingservice.h"
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/Zone.h>
 
 #include "../helpers/IsolatedConfigGuard.h"
@@ -118,8 +118,8 @@ private Q_SLOTS:
                                                             QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettings(nullptr);
         m_zoneDetector = new StubZoneDetectorRegIntegration(nullptr);
-        m_registry = new WindowRegistry(nullptr);
-        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_registry = new PhosphorEngine::WindowRegistry(nullptr);
+        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
         m_service->setSnapState(m_snapState);
         m_service->setWindowRegistry(m_registry);
@@ -249,8 +249,8 @@ private:
     StubSettings* m_settings = nullptr;
     StubZoneDetectorRegIntegration* m_zoneDetector = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
-    WindowRegistry* m_registry = nullptr;
-    WindowTrackingService* m_service = nullptr;
+    PhosphorEngine::WindowRegistry* m_registry = nullptr;
+    PhosphorPlacement::WindowTrackingService* m_service = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
     QString m_screenId;

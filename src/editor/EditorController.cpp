@@ -21,7 +21,7 @@
 #include "../core/constants.h"
 #include "../core/geometryutils.h"
 #include <PhosphorProtocol/ServiceConstants.h>
-#include "../core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/LayoutComputeService.h>
 #include "../core/logging.h"
 #include "../core/utils.h"
 
@@ -305,7 +305,8 @@ void EditorController::recalcLocalLayouts()
         }
         // Editor is a separate process without a daemon ScreenManager — pass
         // nullptr and accept the Qt-availableGeometry fallback for previews.
-        LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary));
+        PhosphorZones::LayoutComputeService::recalculateSync(
+            layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary));
     }
 }
 QString EditorController::selectedZoneId() const

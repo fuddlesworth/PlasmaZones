@@ -4,7 +4,7 @@
 #pragma once
 
 #include <phosphorsnapengine_export.h>
-#include <PhosphorEngineApi/IWindowTrackingService.h>
+#include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorProtocol/WireTypes.h>
 
 #include <QString>
@@ -75,7 +75,7 @@ public:
      * @param zoneAdjacency      typed adjacency resolver (non-owning; may be nullptr)
      * @param feedback           OSD feedback callback; may be empty (suppresses feedback)
      */
-    SnapNavigationTargetResolver(PhosphorEngineApi::IWindowTrackingService* service,
+    SnapNavigationTargetResolver(PhosphorEngine::IWindowTrackingService* service,
                                  PhosphorZones::LayoutRegistry* layoutManager, IZoneAdjacencyResolver* zoneAdjacency,
                                  FeedbackFn feedback);
 
@@ -112,7 +112,7 @@ private:
         }
     }
 
-    PhosphorEngineApi::IWindowTrackingService* m_service = nullptr;
+    PhosphorEngine::IWindowTrackingService* m_service = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     IZoneAdjacencyResolver* m_zoneAdjacency = nullptr;
     FeedbackFn m_feedback;

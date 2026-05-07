@@ -10,7 +10,7 @@
  * saves survive KWin restarts where instance ids regenerate) — that part
  * hasn't changed. Only the in-memory primary key changed from composite to
  * instance id. Production persistence now uses
- * WindowTrackingService::currentAppIdFor() to derive the disk key from the
+ * PhosphorPlacement::WindowTrackingService::currentAppIdFor() to derive the disk key from the
  * live instance; see src/dbus/windowtrackingadaptor/saveload.cpp.
  */
 

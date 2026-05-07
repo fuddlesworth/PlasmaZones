@@ -17,7 +17,7 @@
 #include "../core/types.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmPreviewParams.h>
 
 namespace Phosphor::Screens {
@@ -38,8 +38,17 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
+namespace PhosphorEngine {
+class WindowRegistry;
+}
+
+namespace PhosphorWorkspaces {
+class VirtualDesktopManager;
+}
+
 namespace PhosphorZones {
 class Layout;
+class LayoutComputeService;
 class LayoutRegistry;
 class ZoneDetector;
 }
@@ -47,10 +56,9 @@ class ZoneDetector;
 namespace PlasmaZones {
 
 enum class DisabledReason;
-class LayoutComputeService;
 class Settings;
 class OverlayService;
-class VirtualDesktopManager;
+
 class ActivityManager;
 class ShortcutManager;
 class LayoutAdaptor;
@@ -69,7 +77,6 @@ class AutotileAdaptor;
 class ScreenModeRouter;
 class SettingsConfigStore;
 class SnapAdaptor;
-class WindowRegistry;
 class ShaderRegistry;
 } // namespace PlasmaZones
 
@@ -139,7 +146,7 @@ public:
     {
         return m_screenManager.get();
     }
-    VirtualDesktopManager* virtualDesktopManager() const
+    PhosphorWorkspaces::VirtualDesktopManager* virtualDesktopManager() const
     {
         return m_virtualDesktopManager.get();
     }
@@ -151,7 +158,7 @@ public:
     {
         return m_shortcutManager.get();
     }
-    WindowRegistry* windowRegistry() const
+    PhosphorEngine::WindowRegistry* windowRegistry() const
     {
         return m_windowRegistry.get();
     }
@@ -226,7 +233,7 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /** @brief Return the active IPlacementEngine for a screen (autotile or snap) */
-    PhosphorEngineApi::IPlacementEngine* engineForScreen(const QString& screenId) const;
+    PhosphorEngine::IPlacementEngine* engineForScreen(const QString& screenId) const;
 
     /**
      * @brief Convenience mode check: routed through m_screenModeRouter.
@@ -459,7 +466,7 @@ private:
     /// "DECLARATION ORDER INVARIANT" comment above.
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
     // ─── End of layout-source declaration block ─────────────────────────
-    std::unique_ptr<LayoutComputeService> m_layoutComputeService;
+    std::unique_ptr<PhosphorZones::LayoutComputeService> m_layoutComputeService;
     /// Per-daemon curve registry. Replaces the prior per-process
     /// `CurveRegistry::instance()` singleton — composition roots own
     /// their own.
@@ -501,7 +508,7 @@ private:
     // Single source of truth for live-window instance identity + metadata.
     // Populated by the kwin-effect bridge. Consumers query appIdFor() etc.
     // instead of parsing composite windowId strings.
-    std::unique_ptr<WindowRegistry> m_windowRegistry;
+    std::unique_ptr<PhosphorEngine::WindowRegistry> m_windowRegistry;
     /// Plasma D-Bus panel-offset source. Declared before m_screenManager
     /// because the manager holds a non-owning IPanelSource* into it.
     std::unique_ptr<Phosphor::Screens::PlasmaPanelSource> m_panelSource;
@@ -524,7 +531,7 @@ private:
     /// be declared AFTER m_screenManager so the initializer-list construction
     /// order matches.
     std::unique_ptr<OverlayService> m_overlayService;
-    std::unique_ptr<VirtualDesktopManager> m_virtualDesktopManager;
+    std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;
 
@@ -558,8 +565,8 @@ private:
     std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
 
     // Window engines (held as base class; concrete types known only in daemon.cpp/enginefactory.cpp)
-    std::unique_ptr<PhosphorEngineApi::PlacementEngineBase> m_autotileEngine;
-    std::unique_ptr<PhosphorEngineApi::PlacementEngineBase> m_snapEngine;
+    std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
+    std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     /// Single source of truth for "which engine owns screen X". Used by
     /// WindowTrackingAdaptor and (via @ref engineForScreen) daemon-internal
     /// dispatch paths. Owns no state of its own — just delegates to the
@@ -607,7 +614,7 @@ private:
     /**
      * @brief Sync daemon-side float state when autotile floats/unfloats a window
      *
-     * Propagates floating state to WindowTrackingService and KWin effect,
+     * Propagates floating state to PhosphorPlacement::WindowTrackingService and KWin effect,
      * manages autotile-originated vs snap-mode float bookkeeping, restores
      * pre-tile geometry on float, and shows navigation OSD.
      */

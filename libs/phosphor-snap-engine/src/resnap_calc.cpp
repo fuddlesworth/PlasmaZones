@@ -14,7 +14,7 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include <PhosphorEngineApi/PerScreenKeys.h>
+#include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include "snapenginelogging.h"
@@ -26,8 +26,8 @@
 
 namespace PhosphorSnapEngine {
 
-using PhosphorEngineApi::ResnapEntry;
-using PhosphorEngineApi::ZoneAssignmentEntry;
+using PhosphorEngine::ResnapEntry;
+using PhosphorEngine::ZoneAssignmentEntry;
 
 QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
 {
@@ -49,7 +49,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
             ZoneAssignmentEntry restoreEntry;
             restoreEntry.windowId = entry->windowId;
             restoreEntry.sourceZoneId = QString();
-            restoreEntry.targetZoneId = PhosphorEngineApi::RestoreSentinel;
+            restoreEntry.targetZoneId = PhosphorEngine::RestoreSentinel;
             restoreEntry.targetGeometry = *preTile;
             result.append(restoreEntry);
         } else {

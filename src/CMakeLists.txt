@@ -40,21 +40,11 @@ set(plasmazones_core_SRCS
     core/types.h
     core/utils.h
     core/utils.cpp
-    core/layoutfactory.h
-    core/layoutfactory.cpp
-    core/windowtrackingservice.h
-    core/windowtrackingservice.cpp
-    core/windowtrackingservice/snap.cpp
-    core/windowtrackingservice/navigation.cpp
-    core/windowtrackingservice/resnap.cpp
-    core/windowtrackingservice/lifecycle.cpp
-    core/windowregistry.h
-    core/windowregistry.cpp
+    core/daemongeometryresolver.h
+    core/daemongeometryresolver.cpp
     core/platform.cpp
     core/platform.h
     core/geometryutils.cpp
-    core/geometryutils/constraints.cpp
-    core/geometryutils/overlaps.cpp
     core/geometryutils.h
     core/spatialadjacency.h
     # virtualscreenswapper.{h,cpp} lifted to libs/phosphor-screens/Swapper.h —
@@ -67,11 +57,6 @@ set(plasmazones_core_SRCS
     # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ —
     # consumers include <PhosphorZones/...> directly and construct the registry
     # with createAssignmentsBackend() + the "plasmazones/layouts" subdir inline.
-    core/layoutworker/layoutworker.cpp
-    core/layoutworker/layoutworker.h
-    core/layoutworker/layoutcomputeservice.cpp
-    core/layoutworker/layoutcomputeservice.h
-    core/layoutworker/types.h
     core/unifiedlayoutlist.cpp
     core/unifiedlayoutlist.h
     common/layoutpreviewserialize.cpp
@@ -89,8 +74,6 @@ set(plasmazones_core_SRCS
     # lifted to libs/phosphor-screens. Daemon consumers take
     # Phosphor::Screens::ScreenManager* via constructor injection —
     # no service-locator intermediary.
-    core/virtualdesktopmanager.cpp
-    core/virtualdesktopmanager.h
     core/activitymanager.cpp
     core/activitymanager.h
     core/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
@@ -209,7 +192,9 @@ target_link_libraries(plasmazones_core
         # return type (Phase 4 sub-commit 6).
         PhosphorAnimation::PhosphorAnimation
         PhosphorConfig::PhosphorConfig
-        PhosphorEngineApi::PhosphorEngineApi
+        PhosphorEngine::PhosphorEngine
+        PhosphorWorkspaces::PhosphorWorkspaces
+        PhosphorPlacement::PhosphorPlacement
         PhosphorTileEngine::PhosphorTileEngine
         PhosphorSnapEngine::PhosphorSnapEngine
         PhosphorIdentity::PhosphorIdentity

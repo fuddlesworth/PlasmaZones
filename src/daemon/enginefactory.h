@@ -28,13 +28,20 @@ namespace PhosphorSnapEngine {
 class SnapEngine;
 }
 
+namespace PhosphorEngine {
+class WindowRegistry;
+}
+
+namespace PhosphorWorkspaces {
+class VirtualDesktopManager;
+}
+
 namespace PlasmaZones {
 
 class ISettings;
 class ScreenModeRouter;
-class VirtualDesktopManager;
-class WindowRegistry;
-class WindowTrackingService;
+
+class PhosphorPlacement::WindowTrackingService;
 
 struct EngineSet
 {
@@ -68,10 +75,12 @@ struct EngineSet
  * @param parent          Unused (engines use unique_ptr ownership)
  * @return EngineSet with all three objects constructed
  */
-EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
+EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
+                        PhosphorPlacement::WindowTrackingService* windowTracker,
                         Phosphor::Screens::ScreenManager* screenManager,
                         PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
-                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
-                        WindowRegistry* windowRegistry, QObject* parent);
+                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
+                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry,
+                        QObject* parent);
 
 } // namespace PlasmaZones

@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <PhosphorEngineApi/JsonKeys.h>
-#include <PhosphorEngineApi/PerScreenKeys.h>
-#include <PhosphorEngineApi/EngineTypes.h>
+#include <PhosphorEngine/JsonKeys.h>
+#include <PhosphorEngine/PerScreenKeys.h>
+#include <PhosphorEngine/EngineTypes.h>
 
 #include <QColor>
 #include <QLatin1String>
@@ -156,11 +156,11 @@ inline constexpr QLatin1String RefreshRate{"refreshRate"};
 inline constexpr QLatin1String Colors{"colors"};
 
 // PhosphorZones::Zone assignment serialization keys — authoritative definitions
-// live in PhosphorEngineApi::JsonKeys (LGPL); imported here for daemon callers.
-using PhosphorEngineApi::JsonKeys::SourceZoneId;
-using PhosphorEngineApi::JsonKeys::TargetZoneId;
-using PhosphorEngineApi::JsonKeys::TargetZoneIds;
-using PhosphorEngineApi::JsonKeys::WindowId;
+// live in PhosphorEngine::JsonKeys (LGPL); imported here for daemon callers.
+using PhosphorEngine::JsonKeys::SourceZoneId;
+using PhosphorEngine::JsonKeys::TargetZoneId;
+using PhosphorEngine::JsonKeys::TargetZoneIds;
+using PhosphorEngine::JsonKeys::WindowId;
 
 // Virtual screen keys
 inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};
@@ -173,7 +173,7 @@ inline constexpr QLatin1String Region{"region"};
 inline constexpr QLatin1String Screens{"screens"};
 }
 
-namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
+namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;
 
 /**
  * @brief Synthetic zone ID prefix used by the zone selector overlay
@@ -191,7 +191,7 @@ inline constexpr QLatin1String ZoneSelectorIdPrefix{"zoneselector-"};
  * sentinel instead of a real zone UUID to signal that the window should be
  * restored to its original (pre-tiling) geometry rather than snapped to a zone.
  */
-inline constexpr auto& RestoreSentinel = PhosphorEngineApi::RestoreSentinel;
+inline constexpr auto& RestoreSentinel = PhosphorEngine::RestoreSentinel;
 
 /**
  * @brief D-Bus identity constants for PlasmaZones sub-applications

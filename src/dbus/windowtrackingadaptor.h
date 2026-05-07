@@ -4,9 +4,9 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include "../core/windowregistry.h"
-#include "../core/windowtrackingservice.h"
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
@@ -40,6 +40,10 @@ class SnapEngine;
 class SnapNavigationTargetResolver;
 }
 
+namespace PhosphorWorkspaces {
+class VirtualDesktopManager;
+}
+
 namespace PlasmaZones {
 
 using PhosphorProtocol::EmptyZoneList;
@@ -55,7 +59,7 @@ class ScreenModeRouter;
 
 class PersistenceWorker;
 class ISettings;
-class VirtualDesktopManager;
+
 class ZoneDetectionAdaptor;
 
 /**
@@ -74,7 +78,8 @@ public:
     explicit WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layoutManager,
                                    PhosphorZones::IZoneDetector* zoneDetector,
                                    Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
-                                   VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
+                                   PhosphorWorkspaces::VirtualDesktopManager* virtualDesktopManager,
+                                   QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override;
 
     /**
@@ -131,11 +136,11 @@ public:
      *
      * Must be set before start. Not owned.
      *
-     * Also forwards the pointer to the underlying WindowTrackingService and
+     * Also forwards the pointer to the underlying PhosphorPlacement::WindowTrackingService and
      * subscribes to metadataChanged so we can refresh tracking that mirrors
      * the app class (e.g. last-used-zone class tag).
      */
-    void setWindowRegistry(WindowRegistry* registry);
+    void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
 
     /**
      * @brief Set engine references for routing operations per-screen
@@ -150,8 +155,8 @@ public:
      * @param snapEngine PlacementEngineBase for snap mode (not owned, must outlive adaptor)
      * @param autotileEngine PlacementEngineBase for autotile mode (not owned, must outlive adaptor)
      */
-    void setEngines(PhosphorEngineApi::PlacementEngineBase* snapEngine,
-                    PhosphorEngineApi::PlacementEngineBase* autotileEngine);
+    void setEngines(PhosphorEngine::PlacementEngineBase* snapEngine,
+                    PhosphorEngine::PlacementEngineBase* autotileEngine);
 
     PhosphorSnapEngine::SnapEngine* snapEngine() const;
 
@@ -169,12 +174,12 @@ public:
     void setScreenModeRouter(ScreenModeRouter* router);
 
     /**
-     * @brief Access the underlying WindowTrackingService
+     * @brief Access the underlying PhosphorPlacement::WindowTrackingService
      *
      * Used by the daemon to share the single WTS instance with other components
      * (e.g., AutotileEngine) instead of creating duplicate services.
      */
-    WindowTrackingService* service() const
+    PhosphorPlacement::WindowTrackingService* service() const
     {
         return m_service;
     }
@@ -791,7 +796,7 @@ private:
     QJsonObject buildStateObject(const QString& windowId, const QString& zoneId, const QJsonArray& zoneIds,
                                  const QString& screenId, bool isFloating, const QString& changeType) const;
 
-    // clearFloatingStateForSnap was removed — WindowTrackingService::commitSnap
+    // clearFloatingStateForSnap was removed — PhosphorPlacement::WindowTrackingService::commitSnap
     // now handles floating-state clearing internally (and emits
     // windowFloatingClearedForSnap which the adaptor relays to its own
     // windowFloatingChanged D-Bus signal).
@@ -815,13 +820,13 @@ private:
     ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager;
     ISettings* m_settings;
-    VirtualDesktopManager* m_virtualDesktopManager;
+    PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)
 
     // Engine references for per-screen routing (set via setEngines())
     // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls
-    QPointer<PhosphorEngineApi::PlacementEngineBase> m_snapEngine;
-    QPointer<PhosphorEngineApi::PlacementEngineBase> m_autotileEngine;
+    QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
+    QPointer<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     QPointer<PhosphorSnapEngine::SnapEngine> m_cachedSnapEngine;
 
     // Central dispatcher: adaptor methods route lifecycle / resnap /
@@ -841,12 +846,13 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service
     // ═══════════════════════════════════════════════════════════════════════════════
-    WindowTrackingService* m_service = nullptr;
+    PhosphorPlacement::IGeometryResolver* m_geometryResolver = nullptr;
+    PhosphorPlacement::WindowTrackingService* m_service = nullptr;
 
     // Shared registry: compositor-supplied instance id → current metadata.
     // Not owned (daemon root owns it). Populated via setWindowMetadata D-Bus calls
     // and cleared from the windowClosed path.
-    QPointer<WindowRegistry> m_windowRegistry;
+    QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Persistence (adaptor responsibility: session.json save/load)
@@ -863,7 +869,7 @@ private:
     // is dropped; on failure the head bits are OR'd back into the
     // service's dirty mask so the retry picks them up without stomping
     // on any newer mutations.
-    QQueue<WindowTrackingService::DirtyMask> m_pendingWriteMasks;
+    QQueue<PhosphorPlacement::WindowTrackingService::DirtyMask> m_pendingWriteMasks;
 
     // One-shot warning latch for the test-only synchronous fallback path
     // in saveState(). Production always uses PhosphorConfig::JsonBackend + the

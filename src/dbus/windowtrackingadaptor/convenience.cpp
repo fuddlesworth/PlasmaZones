@@ -9,7 +9,7 @@
 
 #include "../windowtrackingadaptor.h"
 #include "../../core/logging.h"
-#include "../../core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 
 namespace PlasmaZones {
 

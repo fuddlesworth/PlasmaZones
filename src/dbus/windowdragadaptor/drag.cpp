@@ -11,7 +11,7 @@
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../../core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../../core/geometryutils.h"
@@ -21,7 +21,7 @@
 #include "../../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/constants.h"
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -122,7 +122,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
                 screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
             auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
-                LayoutComputeService::recalculateSync(
+                PhosphorZones::LayoutComputeService::recalculateSync(
                     layout, GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, screenId));
 
                 for (auto* zone : layout->zones()) {
@@ -218,7 +218,7 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
     if (!effectiveGeom.isValid()) {
         effectiveGeom = GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, outScreen);
     }
-    LayoutComputeService::recalculateSync(layout, effectiveGeom);
+    PhosphorZones::LayoutComputeService::recalculateSync(layout, effectiveGeom);
     return layout;
 }
 

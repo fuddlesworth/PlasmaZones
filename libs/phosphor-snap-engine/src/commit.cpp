@@ -11,8 +11,8 @@
 
 namespace PhosphorSnapEngine {
 
-using PhosphorEngineApi::SnapIntent;
-using PhosphorEngineApi::ZoneAssignmentEntry;
+using PhosphorEngine::SnapIntent;
+using PhosphorEngine::ZoneAssignmentEntry;
 using PhosphorProtocol::WindowGeometryEntry;
 using PhosphorProtocol::WindowGeometryList;
 using PhosphorProtocol::WindowStateEntry;
@@ -124,7 +124,7 @@ WindowGeometryList SnapEngine::applyBatchAssignments(const QVector<ZoneAssignmen
     resolvedScreens.reserve(entries.size());
 
     for (const auto& entry : entries) {
-        if (entry.targetZoneId == PhosphorEngineApi::RestoreSentinel) {
+        if (entry.targetZoneId == PhosphorEngine::RestoreSentinel) {
             uncommitSnap(entry.windowId);
             clearUnmanagedGeometry(entry.windowId);
             resolvedScreens.append(QString());

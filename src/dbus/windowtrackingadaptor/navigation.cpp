@@ -16,7 +16,7 @@
 #include "../windowtrackingadaptor.h"
 #include "../../core/logging.h"
 #include "../../core/screenmoderouter.h"
-#include "../../core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 

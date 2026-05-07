@@ -5,7 +5,7 @@
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
 #include "../../core/logging.h"
-#include "../../core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include "../../core/isettings.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -28,7 +28,7 @@ namespace {
 // per session and return shouldSnap=false rather than handing back wrong coordinates.
 // The effect treats shouldSnap=false as "no snap" and leaves the window where KWin placed
 // it, which is the same fallback as if the slot had never been called.
-bool isSnapReadyOrWarn(WindowTrackingService* service, const char* method)
+bool isSnapReadyOrWarn(PhosphorPlacement::WindowTrackingService* service, const char* method)
 {
     auto* mgr = service ? service->screenManager() : nullptr;
     if (!mgr || mgr->isPanelGeometryReady()) {

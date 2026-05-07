@@ -4,7 +4,7 @@
 #pragma once
 
 #include <phosphorsnapengine_export.h>
-#include <PhosphorEngineApi/IPlacementState.h>
+#include <PhosphorEngine/IPlacementState.h>
 
 #include <QHash>
 #include <QJsonObject>
@@ -25,10 +25,10 @@ namespace PhosphorSnapEngine {
 /// restore, and pre-float zone memory for unfloat. Analogous to
 /// PhosphorTiles::TilingState for automatic tiling.
 ///
-/// Both SnapState and TilingState implement PhosphorEngineApi::IPlacementState
+/// Both SnapState and TilingState implement PhosphorEngine::IPlacementState
 /// so the daemon's persistence layer and D-Bus adaptor can serialize state
 /// uniformly without branching on mode.
-class PHOSPHORSNAPENGINE_EXPORT SnapState : public QObject, public PhosphorEngineApi::IPlacementState
+class PHOSPHORSNAPENGINE_EXPORT SnapState : public QObject, public PhosphorEngine::IPlacementState
 {
     Q_OBJECT
 

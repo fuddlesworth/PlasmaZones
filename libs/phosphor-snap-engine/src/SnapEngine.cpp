@@ -7,21 +7,21 @@
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
-#include <PhosphorEngineApi/IGeometrySettings.h>
+#include <PhosphorEngine/IGeometrySettings.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include "snapenginelogging.h"
 
 namespace PhosphorSnapEngine {
 
-using PhosphorEngineApi::NavigationContext;
+using PhosphorEngine::NavigationContext;
 
 // In production (Daemon::start) all dependencies are non-null. Headless unit
 // tests deliberately pass nullptr to construct an engine with minimal parents
 // for testing peripheral classes (adaptors, bridges) — every method that
 // dereferences a dependency guards it locally. Do not Q_ASSERT here.
 SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
-                       PhosphorEngineApi::IWindowTrackingService* windowTracker,
-                       PhosphorZones::IZoneDetector* zoneDetector, PhosphorEngineApi::IVirtualDesktopManager* vdm,
+                       PhosphorEngine::IWindowTrackingService* windowTracker,
+                       PhosphorZones::IZoneDetector* zoneDetector, PhosphorEngine::IVirtualDesktopManager* vdm,
                        QObject* parent)
     : PlacementEngineBase(parent)
     , m_layoutManager(layoutManager)
@@ -32,17 +32,17 @@ SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
 {
 }
 
-PhosphorEngineApi::ISnapSettings* SnapEngine::snapSettings() const
+PhosphorEngine::ISnapSettings* SnapEngine::snapSettings() const
 {
-    return dynamic_cast<PhosphorEngineApi::ISnapSettings*>(engineSettings());
+    return dynamic_cast<PhosphorEngine::ISnapSettings*>(engineSettings());
 }
 
 SnapEngine::GapParams SnapEngine::resolveGapParams() const
 {
-    auto* gs = dynamic_cast<PhosphorEngineApi::IGeometrySettings*>(engineSettings());
-    int zonePadding = gs ? gs->zonePadding() : PhosphorEngineApi::GeometryDefaults::ZonePadding;
+    auto* gs = dynamic_cast<PhosphorEngine::IGeometrySettings*>(engineSettings());
+    int zonePadding = gs ? gs->zonePadding() : PhosphorEngine::GeometryDefaults::ZonePadding;
     auto outerGaps = gs ? ::PhosphorLayout::EdgeGaps::uniform(gs->outerGap())
-                        : ::PhosphorLayout::EdgeGaps::uniform(PhosphorEngineApi::GeometryDefaults::OuterGap);
+                        : ::PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
     return {zonePadding, outerGaps};
 }
 
@@ -119,7 +119,7 @@ int SnapEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     return pruned;
 }
 
-void SnapEngine::setAutotileEngine(PhosphorEngineApi::IPlacementEngine* engine)
+void SnapEngine::setAutotileEngine(PhosphorEngine::IPlacementEngine* engine)
 {
     auto* obj = dynamic_cast<QObject*>(engine);
     Q_ASSERT(!engine || obj);
@@ -295,13 +295,13 @@ void SnapEngine::pushToEmptyZone(const NavigationContext& ctx)
 // SnapState.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& screenId)
+PhosphorEngine::IPlacementState* SnapEngine::stateForScreen(const QString& screenId)
 {
     Q_UNUSED(screenId)
     return m_snapState;
 }
 
-const PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& screenId) const
+const PhosphorEngine::IPlacementState* SnapEngine::stateForScreen(const QString& screenId) const
 {
     Q_UNUSED(screenId)
     return m_snapState;

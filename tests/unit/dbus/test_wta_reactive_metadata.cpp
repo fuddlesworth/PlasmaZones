@@ -28,9 +28,9 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
-#include "core/virtualdesktopmanager.h"
-#include "core/windowregistry.h"
-#include "core/windowtrackingservice.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/Zone.h>
@@ -127,7 +127,7 @@ private Q_SLOTS:
                                                             QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettings(nullptr);
         m_zoneDetector = new StubZoneDetectorReactive(nullptr);
-        m_registry = new WindowRegistry(nullptr);
+        m_registry = new PhosphorEngine::WindowRegistry(nullptr);
 
         m_parent = new QObject(nullptr);
         m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, m_parent);
@@ -180,7 +180,7 @@ private Q_SLOTS:
 
     void lastUsedZoneClass_retagsOnClassMutation()
     {
-        WindowTrackingService* service = m_wta->service();
+        PhosphorPlacement::WindowTrackingService* service = m_wta->service();
         QVERIFY(service);
 
         const QString instanceId = QStringLiteral("cef1ba31-3316-4f05-84f5-ef627674b504");
@@ -226,7 +226,7 @@ private Q_SLOTS:
 
     void lastUsedZoneClass_preservedWhenOtherInstancesOwnOldClass()
     {
-        WindowTrackingService* service = m_wta->service();
+        PhosphorPlacement::WindowTrackingService* service = m_wta->service();
 
         const QString instanceA = QStringLiteral("uuid-A");
         const QString instanceB = QStringLiteral("uuid-B");
@@ -256,7 +256,7 @@ private Q_SLOTS:
 
     void lastUsedZoneClass_unaffectedByUnrelatedRename()
     {
-        WindowTrackingService* service = m_wta->service();
+        PhosphorPlacement::WindowTrackingService* service = m_wta->service();
 
         m_registry->upsert(QStringLiteral("uuid-firefox"), {QStringLiteral("firefox"), QString(), QString()});
         m_registry->upsert(QStringLiteral("uuid-kate"), {QStringLiteral("kate"), QString(), QString()});
@@ -275,7 +275,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettings* m_settings = nullptr;
     StubZoneDetectorReactive* m_zoneDetector = nullptr;
-    WindowRegistry* m_registry = nullptr;
+    PhosphorEngine::WindowRegistry* m_registry = nullptr;
     QObject* m_parent = nullptr;
     WindowTrackingAdaptor* m_wta = nullptr;
     SnapEngine* m_snapEngine = nullptr;

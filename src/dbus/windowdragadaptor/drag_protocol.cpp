@@ -16,14 +16,14 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../../core/settings_interfaces.h"
 #include "../../core/logging.h"
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <QGuiApplication>
 #include <QTimer>
 
 namespace PlasmaZones {
 
 DragPolicy WindowDragAdaptor::computeDragPolicy(const ISettings* settings,
-                                                const PhosphorEngineApi::IPlacementEngine* autotileEngine,
+                                                const PhosphorEngine::IPlacementEngine* autotileEngine,
                                                 const QString& windowId, const QString& screenId, int curDesktop,
                                                 const QString& curActivity)
 {

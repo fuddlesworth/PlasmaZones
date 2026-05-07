@@ -12,7 +12,7 @@
 #include "../core/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
 #include "../core/supportreport.h"
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 
 #include <QDBusConnection>
 #include <QFutureWatcher>
@@ -25,7 +25,7 @@ namespace PlasmaZones {
 
 ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor, LayoutAdaptor* layoutAdaptor,
                                PhosphorZones::LayoutRegistry* layoutManager,
-                               PhosphorEngineApi::IPlacementEngine* autotileEngine,
+                               PhosphorEngine::IPlacementEngine* autotileEngine,
                                Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_wta(wta)

@@ -9,7 +9,7 @@
  * first observation). Every daemon map keys off that composite. Services
  * that need the first-seen app class parse it with PhosphorIdentity::WindowId::extractAppId();
  * services that need the LIVE app class (Electron/CEF apps that mutate
- * their WM_CLASS mid-session) query WindowTrackingService::currentAppIdFor
+ * their WM_CLASS mid-session) query PhosphorPlacement::WindowTrackingService::currentAppIdFor
  * or AutotileEngine::currentAppIdFor, both of which hit WindowRegistry.
  *
  * The two semantics coexist intentionally: the stable composite lets
@@ -19,7 +19,7 @@
  *
  * This file pins extractAppId()'s behavior on composites (split before the
  * first '|') and on bare strings (passthrough) so the fallback stays
- * well-defined for the WindowTrackingService::currentAppIdFor() and
+ * well-defined for the PhosphorPlacement::WindowTrackingService::currentAppIdFor() and
  * AutotileEngine::currentAppIdFor() call paths that walk this helper when
  * no registry is attached.
  */
