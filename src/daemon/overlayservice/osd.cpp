@@ -640,18 +640,67 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     auto isVisible = [](QQuickItem* item) {
         return item != nullptr && item->isVisible();
     };
+    // Main overlay slot stays setVisible(true) across drag-pause idles
+    // (setIdleForDragPause / applyIdleStateForCursor) so the warm RHI
+    // pipeline survives mid-drag trigger thrashing. During those idles
+    // the slot's `_idled` property is true and the inner content's
+    // `visible: !root._idled` binding makes the rendered subtree invisible
+    // — but the slot Item itself stays Qt-visible. Treat _idled main
+    // overlay slots as "not blocking input" so the shell surface releases
+    // its input region when the user has released the activation trigger
+    // and clicks should pass through to the underlying windows. The other
+    // slots (OSD, snap-assist, picker, zone-selector) gate their own
+    // visibility via setVisible(false) on hide-completion and have no
+    // analogous idle state, so a plain isVisible() check is correct for
+    // them.
+    auto isMainOverlayLive = [](QQuickItem* slot) {
+        if (!slot || !slot->isVisible()) {
+            return false;
+        }
+        return !slot->property("_idled").toBool();
+    };
     const bool anyVisible = isVisible(s.passiveShellOsdSlot) || isVisible(s.passiveShellSnapAssistSlot)
         || isVisible(s.passiveShellLayoutPickerSlot) || isVisible(s.passiveShellZoneSelectorSlot)
-        || isVisible(s.passiveShellMainOverlaySlot);
+        || isMainOverlayLive(s.passiveShellMainOverlaySlot);
+    // Bring the surface up on the first transition from never-shown →
+    // any-slot-live. Subsequent transitions toggle Qt::WindowTransparentForInput
+    // directly on the shell QQuickWindow rather than routing through
+    // Surface::show()/hide().
+    //
+    // The `keepMappedOnHide=true` Surface::hide() path looks tempting but
+    // has two cascading side effects we don't want during a click-through
+    // toggle:
+    //   1. It calls `animator().cancel(surface)` which wipes every
+    //      per-(surface, slot) tracking entry on the shell. The
+    //      unified-shell pattern hosts multiple slots animating
+    //      independently; cancelling the entire surface kills the
+    //      in-flight beginShow on slots OTHER than the one whose idle
+    //      state triggered the sync. Symptom: the inactive VS's main
+    //      overlay slot loses its show animation mid-flight, the slot
+    //      stays invisible, the ZoneShaderItem's QSGRenderNode never
+    //      receives paint events, prepare() never reaches its INIT
+    //      block, and the Vulkan shader pipeline never compiles —
+    //      shader stays dark forever on every VS after the first
+    //      activated one.
+    //   2. It calls `beginHide(surface, animatorTarget())` which animates
+    //      the shell ROOT's opacity to 0. That hides every child
+    //      regardless of slot.setVisible(true), compounding (1).
+    //
+    // The first show()/animator-attach is still required to map the
+    // wl_surface and warm the RHI; flipping the QPA flag from a never-
+    // mapped state is a no-op.
+    if (!s.passiveShellWindow) {
+        return;
+    }
     if (anyVisible) {
         if (!s.passiveShellSurface->isLogicallyShown()) {
             s.passiveShellSurface->show();
+        } else if (s.passiveShellWindow->flags().testFlag(Qt::WindowTransparentForInput)) {
+            s.passiveShellWindow->setFlag(Qt::WindowTransparentForInput, false);
         }
-    } else if (s.passiveShellSurface->isLogicallyShown()) {
-        // keepMappedOnHide=true → wl_surface stays mapped, but
-        // Qt::WindowTransparentForInput flips on, so the shell stops
-        // eating clicks until the next slot becomes visible.
-        s.passiveShellSurface->hide();
+    } else if (s.passiveShellSurface->isLogicallyShown()
+               && !s.passiveShellWindow->flags().testFlag(Qt::WindowTransparentForInput)) {
+        s.passiveShellWindow->setFlag(Qt::WindowTransparentForInput, true);
     }
 }
 

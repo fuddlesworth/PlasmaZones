@@ -215,6 +215,17 @@ void OverlayService::setIdleForDragPause()
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedCount), 0);
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneId), QString());
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
+        // Re-evaluate the shell surface's input region now that this
+        // screen's main overlay slot is idled. The slot Item stays
+        // setVisible(true) (warm RHI pipeline) but
+        // `syncPassiveShellSurfaceState`'s isMainOverlayLive predicate
+        // treats `_idled` slots as not-blocking-input, so the shell
+        // releases its input region for click-through if no other slot
+        // (OSD, snap-assist, picker, zone-selector) is up. Without this
+        // call the previous show()'s input grab persists for the
+        // surface's lifetime even though the user has released the
+        // activation trigger.
+        syncPassiveShellSurfaceState(it.key());
         // NOTE: labelsTextureHash is intentionally NOT cleared here. The QML
         // side's labelsTexture property still holds the previously-built image
         // (setProperty was never called with a new one); it just isn't sampled
@@ -285,6 +296,15 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
         const bool shouldBeActive =
             showOnAllMonitors || (it.key() == activeEffectiveId && !activeEffectiveId.isEmpty());
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Idled), !shouldBeActive);
+        // Re-evaluate the shell surface's input region after every
+        // _idled flip. In single-monitor mode, the cursor's VS gets
+        // _idled=false (live, grabs input) and every other VS gets
+        // _idled=true (idled, releases input via the
+        // isMainOverlayLive predicate in syncPassiveShellSurfaceState).
+        // Cross-VS cursor moves during a drag flow through this path,
+        // so without the per-flip resync the inactive VS's shell would
+        // keep grabbing clicks even though it should be transparent.
+        syncPassiveShellSurfaceState(it.key());
     }
 }
 
