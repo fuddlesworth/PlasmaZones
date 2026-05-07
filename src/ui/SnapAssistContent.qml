@@ -154,28 +154,20 @@ Item {
                         height: cardContent.height + Kirigami.Units.smallSpacing * 2
 
                         Rectangle {
+                            // Behaviors on color / border.color were
+                            // running PhosphorMotionAnimation against
+                            // the initial QColor (transparent) when the
+                            // async Loader instantiated this delegate;
+                            // QQuickPropertyAnimation latched the start
+                            // value on the first frame and the card
+                            // ended up effectively transparent. Setting
+                            // colors directly (no Behavior) lands the
+                            // target value immediately on first paint.
                             anchors.fill: parent
                             radius: Math.max(2, candidateFlow.zoneSize * 0.01)
-                            color: candidateCard.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
-                            border.color: candidateCard.hovered ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                            color: candidateCard.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.35) : Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.75)
+                            border.color: candidateCard.hovered ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
                             border.width: candidateCard.hovered ? Kirigami.Units.smallSpacing : Math.max(1, Math.round(Kirigami.Units.smallSpacing / 2))
-
-                            Behavior on color {
-                                PhosphorMotionAnimation {
-                                    profile: "zone.snapIn"
-                                    durationOverride: 150
-                                }
-
-                            }
-
-                            Behavior on border.color {
-                                PhosphorMotionAnimation {
-                                    profile: "zone.snapIn"
-                                    durationOverride: 150
-                                }
-
-                            }
-
                         }
 
                         Row {
