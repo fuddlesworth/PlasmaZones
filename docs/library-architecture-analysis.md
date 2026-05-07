@@ -15,7 +15,7 @@ Status: Planning document for library extraction and restructuring
 | phosphor-identity | INTERFACE | Core | -- | -- |
 | phosphor-config | SHARED | Core, Gui | -- | -- |
 | phosphor-layout-api | SHARED | Core | -- | -- |
-| phosphor-engine-api | SHARED | Core, Gui | -- | -- |
+| phosphor-engine | SHARED | Core, Gui | -- | -- |
 | phosphor-protocol | SHARED | Core, DBus | -- | -- |
 | phosphor-animation | SHARED | Core, Gui | -- | -- |
 | phosphor-audio | SHARED | Core | -- | -- |
@@ -25,8 +25,8 @@ Status: Planning document for library extraction and restructuring
 | phosphor-screens | SHARED | Core, Gui, DBus | phosphor-identity | phosphor-shell |
 | phosphor-layer | SHARED | Core, Gui, Qml, Quick | phosphor-shell (conditional) | -- |
 | phosphor-surfaces | SHARED | Core, Quick | phosphor-layer | -- |
-| phosphor-tiles | SHARED | Core, Qml | phosphor-layout-api, phosphor-engine-api | -- |
-| phosphor-zones | SHARED | Core, Gui | phosphor-layout-api, phosphor-engine-api, phosphor-config | phosphor-identity, phosphor-screens |
+| phosphor-tiles | SHARED | Core, Qml | phosphor-layout-api, phosphor-engine | -- |
+| phosphor-zones | SHARED | Core, Gui | phosphor-layout-api, phosphor-engine, phosphor-config | phosphor-identity, phosphor-screens |
 
 ### 1.2 Dependency Diagram (Current)
 
@@ -88,7 +88,7 @@ The daemon (`plasmazones_core`) links ALL 15 libraries publicly:
 ```
 plasmazones_core (GPL, SHARED)
   PUBLIC:
-    PhosphorConfig, PhosphorEngineApi, PhosphorIdentity,
+    PhosphorConfig, PhosphorEngine, PhosphorIdentity,
     PhosphorLayoutApi, PhosphorProtocol, PhosphorScreens,
     PhosphorShell, PhosphorTiles, PhosphorZones,
     plasmazones_compositor_common
@@ -119,9 +119,9 @@ transitively inherit all 15 libraries. The editor additionally links `plasmazone
 
 ## 2. Problems
 
-### 2.1 phosphor-engine-api Is a Grab-Bag
+### 2.1 phosphor-engine Is a Grab-Bag
 
-phosphor-engine-api currently contains **four distinct concerns** that have accumulated
+phosphor-engine currently contains **four distinct concerns** that have accumulated
 over the PR 5-7 extraction sequence:
 
 1. **Engine contract**: IPlacementEngine, IPlacementState, PlacementEngineBase,
@@ -139,12 +139,12 @@ over the PR 5-7 extraction sequence:
 
 This is a problem because:
 - A third-party engine developer who wants to implement IPlacementEngine must link
-  phosphor-engine-api, which carries IWindowTrackingService -- a 135-line interface
+  phosphor-engine, which carries IWindowTrackingService -- a 135-line interface
   that forward-declares `PhosphorZones::Layout*` and `Phosphor::Screens::ScreenManager*`.
   Those are daemon internals that an out-of-tree engine should never see.
 - GeometryUtils and EngineTypes are duplicated: phosphor-zones has its own
   `PhosphorZones::GeometryUtils` namespace that `using`-imports from
-  `PhosphorEngineApi::GeometryUtils` and adds zone-specific functions. This
+  `PhosphorEngine::GeometryUtils` and adds zone-specific functions. This
   dual-namespace approach creates confusion about where to add new geometry functions.
 - IGeometrySettings carries per-screen snapping keys that are snap-mode-specific,
   yet it lives in the "universal" engine API.
@@ -163,7 +163,7 @@ virtual QString findEmptyZoneInLayout(PhosphorZones::Layout* layout, ...) const 
 virtual Phosphor::Screens::ScreenManager* screenManager() const = 0;
 ```
 
-This means phosphor-engine-api conceptually depends on phosphor-zones and
+This means phosphor-engine conceptually depends on phosphor-zones and
 phosphor-screens even though no CMake link exists. Any third-party engine that
 receives an `IWindowTrackingService*` would see `PhosphorZones::Layout*` in the
 interface. This is snap-mode-specific leakage into the universal engine contract.
@@ -184,7 +184,7 @@ carry SnapState in its link closure.
 
 ### 2.4 Both Domain Libraries Depend on engine-api (Upward Coupling)
 
-phosphor-zones and phosphor-tiles both have PUBLIC dependencies on phosphor-engine-api:
+phosphor-zones and phosphor-tiles both have PUBLIC dependencies on phosphor-engine:
 - phosphor-zones: because SnapState implements IPlacementState, and
   GeometryUtils.h includes IGeometrySettings
 - phosphor-tiles: because TilingState presumably also interacts with engine-api types
@@ -198,7 +198,7 @@ implement it.
 ### 2.5 The Third-Party Engine Link Surface Is Too Large
 
 Today, a developer building a new placement engine needs:
-1. phosphor-engine-api (the contract) -- brings Qt6::Core, Qt6::Gui
+1. phosphor-engine (the contract) -- brings Qt6::Core, Qt6::Gui
 2. ...which exposes IWindowTrackingService -- which forward-declares PhosphorZones::Layout*
 3. ...and EngineTypes.h carries TilingStateKey, SnapResult, etc. -- concepts from
    both existing engines that a third engine may not need
@@ -209,7 +209,7 @@ type requirements.
 ### 2.6 GeometryUtils Scattered Across Three Locations
 
 Geometry utility functions live in:
-1. `PhosphorEngineApi::GeometryUtils` (libs/phosphor-engine-api) -- coordinate transforms,
+1. `PhosphorEngine::GeometryUtils` (libs/phosphor-engine) -- coordinate transforms,
    overlap removal, serialization
 2. `PhosphorZones::GeometryUtils` (libs/phosphor-zones) -- zone gap calculations,
    screen geometry resolution, re-exports engine-api functions via `using`
@@ -281,12 +281,12 @@ TIER 1 — Domain Models (depend on Tier 0 only)
 └── phosphor-animation       (SHARED, unchanged)
 
 TIER 2 — Engine Contracts (the "SDK" layer)
-├── phosphor-engine-types    [NEW: split from phosphor-engine-api]
+├── phosphor-engine-types    [NEW: split from phosphor-engine]
 │   NavigationContext, WindowState enum
 │   INTERFACE library (header-only, like identity)
 │   PUBLIC deps: Qt6::Core only
 │
-├── phosphor-engine-api      [SLIMMED: only the engine interface]
+├── phosphor-engine      [SLIMMED: only the engine interface]
 │   IPlacementEngine, IPlacementState, PlacementEngineBase
 │   PUBLIC deps: engine-types
 │   (NO IWindowTrackingService, NO IGeometrySettings,
@@ -332,7 +332,7 @@ TIER 5 — Application (GPL)
 | phosphor-identity | **Keep as-is** | Perfect: INTERFACE, zero deps, stable |
 | phosphor-config | **Keep as-is** (investigate Qt::Gui) | Solid, may be able to drop Gui |
 | phosphor-layout-api | **Keep as-is** | Clean contract, stable |
-| phosphor-engine-api | **Slim down dramatically** | Remove IWindowTrackingService, IGeometrySettings, GeometryUtils, EngineTypes.h; keep only IPlacementEngine, IPlacementState, PlacementEngineBase |
+| phosphor-engine | **Slim down dramatically** | Remove IWindowTrackingService, IGeometrySettings, GeometryUtils, EngineTypes.h; keep only IPlacementEngine, IPlacementState, PlacementEngineBase |
 | phosphor-protocol | **Keep as-is** | Clean D-Bus wire types |
 | phosphor-animation | **Keep as-is** | Self-contained, well-designed |
 | phosphor-audio | **Keep as-is** | Self-contained |
@@ -381,7 +381,7 @@ To build a new placement engine (e.g., a tabbed/stacking engine), a developer li
 ```cmake
 target_link_libraries(MyEngine
     PUBLIC
-        PhosphorEngineApi::PhosphorEngineApi   # IPlacementEngine, PlacementEngineBase
+        PhosphorEngine::PhosphorEngine   # IPlacementEngine, PlacementEngineBase
         PhosphorGeometry::PhosphorGeometry     # snapToRect, overlap removal (optional)
 )
 ```
@@ -393,7 +393,7 @@ That is **two libraries**, bringing:
 
 ### 4.2 Headers the Engine Developer Includes
 
-**From phosphor-engine-api (mandatory):**
+**From phosphor-engine (mandatory):**
 
 | Header | Purpose |
 |--------|---------|
@@ -418,7 +418,7 @@ That is **two libraries**, bringing:
 ### 4.3 What the Engine Implements
 
 ```cpp
-class MyEngine : public PhosphorEngineApi::PlacementEngineBase
+class MyEngine : public PhosphorEngine::PlacementEngineBase
 {
     Q_OBJECT
 public:
@@ -514,13 +514,13 @@ migration plan, not GitHub PR numbers. Map to actual PRs as work is merged.
 
 ### Phase A: Prepare the Ground (2 PRs, sequential)
 
-#### PR 8: Extract phosphor-geometry from phosphor-engine-api
+#### PR 8: Extract phosphor-geometry from phosphor-engine
 
 **Goal**: Move stateless geometry math out of engine-api into its own library.
 
 **What moves**:
-- `PhosphorEngineApi::GeometryUtils` (GeometryUtils.h, GeometryUtils.cpp) -> `PhosphorGeometry::GeometryUtils`
-- `PhosphorEngineApi::JsonKeys` (JsonKeys.h) -> `PhosphorGeometry::JsonKeys`
+- `PhosphorEngine::GeometryUtils` (GeometryUtils.h, GeometryUtils.cpp) -> `PhosphorGeometry::GeometryUtils`
+- `PhosphorEngine::JsonKeys` (JsonKeys.h) -> `PhosphorGeometry::JsonKeys`
   (these are geometry JSON serialization keys, not engine-specific)
 
 **What stays in engine-api**:
@@ -538,7 +538,7 @@ is to make the library exist; severing the transitive link comes in a later PR.
 
 **Risk**: Low. Purely mechanical file move + CMake additions.
 
-#### PR 9: Extract phosphor-engine-types from phosphor-engine-api
+#### PR 9: Extract phosphor-engine-types from phosphor-engine
 
 **Goal**: Move value types and service interfaces out of engine-api.
 
@@ -570,7 +570,7 @@ without reducing coupling.
 
 #### PR 10: Remove engine-api dependency from phosphor-zones
 
-**Goal**: phosphor-zones should not depend on phosphor-engine-api.
+**Goal**: phosphor-zones should not depend on phosphor-engine.
 
 **What changes**:
 - **SnapState** moves from phosphor-zones to a new location. Two options:
@@ -584,7 +584,7 @@ without reducing coupling.
     SnapState would be premature.
 
 - **GeometryUtils bridge**: `PhosphorZones::GeometryUtils` currently does two things:
-  1. Re-exports `PhosphorEngineApi::GeometryUtils::*` via `using` declarations
+  1. Re-exports `PhosphorEngine::GeometryUtils::*` via `using` declarations
   2. Adds zone-specific functions (getZoneGeometryWithGaps, etc.)
 
   After PR 8 created phosphor-geometry, the `using` declarations should point at
@@ -602,7 +602,7 @@ without reducing coupling.
   This completely decouples zone geometry calculations from the settings interface.
 
 **CMake changes**:
-- phosphor-zones: remove PUBLIC dep on PhosphorEngineApi; add PUBLIC dep on
+- phosphor-zones: remove PUBLIC dep on PhosphorEngine; add PUBLIC dep on
   PhosphorGeometry; remove SnapState sources
 - SnapState.h/cpp move to src/snap/
 
@@ -612,7 +612,7 @@ All such callers are in the daemon (src/), so this is localized.
 
 #### PR 11: Remove engine-api dependency from phosphor-tiles
 
-**Goal**: phosphor-tiles should not depend on phosphor-engine-api.
+**Goal**: phosphor-tiles should not depend on phosphor-engine.
 
 **What changes**:
 - TilingState's IPlacementState implementation: same pattern as SnapState.
@@ -631,7 +631,7 @@ All such callers are in the daemon (src/), so this is localized.
   wraps TilingState and implements IPlacementState.
 
 **CMake changes**:
-- phosphor-tiles: remove PUBLIC dep on PhosphorEngineApi
+- phosphor-tiles: remove PUBLIC dep on PhosphorEngine
 - Add adapter code in daemon
 
 **Risk**: Medium. Same pattern as PR 10.
@@ -654,7 +654,7 @@ These two PRs are independent and can be developed in parallel.
 add_library(PhosphorSnapEngine SHARED ...)
 target_link_libraries(PhosphorSnapEngine
     PUBLIC
-        PhosphorEngineApi::PhosphorEngineApi
+        PhosphorEngine::PhosphorEngine
         PhosphorZones::PhosphorZones  # Zone, Layout for zone geometry
         PhosphorGeometry::PhosphorGeometry
     PRIVATE
@@ -692,7 +692,7 @@ to become constructor-injected.
 add_library(PhosphorTileEngine SHARED ...)
 target_link_libraries(PhosphorTileEngine
     PUBLIC
-        PhosphorEngineApi::PhosphorEngineApi
+        PhosphorEngine::PhosphorEngine
         PhosphorTiles::PhosphorTiles
         PhosphorGeometry::PhosphorGeometry
     PRIVATE
@@ -762,16 +762,16 @@ third-party engine development.
 ### 6.1 Engine Developer (e.g., tabbed-engine)
 
 ```cmake
-find_package(PhosphorEngineApi REQUIRED)  # IPlacementEngine, PlacementEngineBase
+find_package(PhosphorEngine REQUIRED)  # IPlacementEngine, PlacementEngineBase
 find_package(PhosphorGeometry)            # Optional: geometry utilities
 
 target_link_libraries(MyTabbedEngine
-    PUBLIC PhosphorEngineApi::PhosphorEngineApi
+    PUBLIC PhosphorEngine::PhosphorEngine
     PRIVATE PhosphorGeometry::PhosphorGeometry
 )
 ```
 
-**Link closure**: Qt6::Core, Qt6::Gui, PhosphorEngineApi, PhosphorGeometry
+**Link closure**: Qt6::Core, Qt6::Gui, PhosphorEngine, PhosphorGeometry
 **Count**: 2 phosphor libraries + 2 Qt modules
 
 ### 6.2 Compositor Plugin (KWin effect, Wayfire plugin)
@@ -843,11 +843,11 @@ target_link_libraries(MyOverlay PRIVATE
 
 After the full migration, verify:
 
-- [ ] `phosphor-zones` has zero dependency on `phosphor-engine-api`
-- [ ] `phosphor-tiles` has zero dependency on `phosphor-engine-api`
-- [ ] `phosphor-engine-api` contains only: IPlacementEngine, IPlacementState,
+- [ ] `phosphor-zones` has zero dependency on `phosphor-engine`
+- [ ] `phosphor-tiles` has zero dependency on `phosphor-engine`
+- [ ] `phosphor-engine` contains only: IPlacementEngine, IPlacementState,
       PlacementEngineBase, NavigationContext, WindowState
-- [ ] A new engine can be built linking only phosphor-engine-api + phosphor-geometry
+- [ ] A new engine can be built linking only phosphor-engine + phosphor-geometry
 - [ ] `IWindowTrackingService` does not forward-declare `PhosphorZones::Layout*`
 - [ ] All tests pass in Docker (`docker run --rm -v "$PWD":/src plasmazones-build ctest --output-on-failure`)
 - [ ] No circular dependencies in the CMake graph

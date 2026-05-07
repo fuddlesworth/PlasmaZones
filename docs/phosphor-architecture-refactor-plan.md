@@ -72,7 +72,7 @@ Adopted from Quickshell's `<Brand>.<Capability>` discipline:
 | Domain | `phosphor-animation`, `phosphor-shaders`, `phosphor-screens`, `phosphor-tiles`, `phosphor-zones` | `Phosphor.Animation`, `Phosphor.Shaders`, `Phosphor.Screens`, `Phosphor.Tiles`, `Phosphor.Zones` | typed registries, runtime APIs |
 | Services *(future)* | `phosphor-services-mpris`, `…-notifd`, `…-pam` | `Phosphor.Services.Mpris`, `Phosphor.Services.Notifications`, `Phosphor.Services.Pam` | system-service bindings |
 | UI primitives *(future)* | `phosphor-widgets` | `Phosphor.Widgets` | shared QML widgets |
-| Internal | `phosphor-fsloader`, `phosphor-engine-api`, `phosphor-layout-api` | (no QML facade) | C++-only contracts |
+| Internal | `phosphor-fsloader`, `phosphor-engine`, `phosphor-layout-api` | (no QML facade) | C++-only contracts |
 
 **Rules:**
 1. **One QML URI per CMake target.** No more `*-layer` + `*-qml` arbitrary splits unless they truly export distinct QML modules.
@@ -94,7 +94,7 @@ Adopted from Quickshell's `<Brand>.<Capability>` discipline:
 | **phosphor-animation-qml** *(new — promoted from `phosphor-animation/qml/`)* | Qt Quick wrappers for the motion runtime; QML module `Phosphor.Animation` | `PhosphorMotionAnimation`, `Animated*` QML types | C++ motion primitives |
 | **phosphor-animation-shaders** | Animation-transition effect schema + `ShaderProfile`/`ShaderProfileTree` (consumes `phosphor-shaders`) | `AnimationShaderEffect`, `ShaderProfile(Tree)`, parser glue supplying `AnimationShaderEffect` payload | Registry plumbing (gone) |
 | **phosphor-animation-layer** | ISurfaceAnimator bridging `phosphor-layer` + `phosphor-animation` | `SurfaceAnimator` | — |
-| **phosphor-engine-api** | Engine contracts + base + value types (incl. former `engine-types` headers) | `IPlacementEngine`, `PlacementEngineBase`, `IPlacementState`, `NavigationContext` | — |
+| **phosphor-engine** | Engine contracts + base + value types (incl. former `engine-types` headers) | `IPlacementEngine`, `PlacementEngineBase`, `IPlacementState`, `NavigationContext` | — |
 | **phosphor-layout-api** | Layout-preview contract + factory registry | unchanged | — |
 | **phosphor-zones** | Manual-zone layout primitives | unchanged | Snap runtime |
 | **phosphor-snap-engine** | Snap placement engine | unchanged | Layout schema |
@@ -110,9 +110,9 @@ Adopted from Quickshell's `<Brand>.<Capability>` discipline:
 | **phosphor-geometry** | Pure geometry math | unchanged | — |
 | **phosphor-shortcuts** | Pluggable global-shortcut backends | unchanged | — |
 | **phosphor-audio** | Audio spectrum provider | unchanged | — |
-| ~~phosphor-engine-types~~ | Folded into `phosphor-engine-api` | — | — |
+| ~~phosphor-engine-types~~ | Folded into `phosphor-engine` | — | — |
 
-**Removed:** `phosphor-engine-types` (folded into `phosphor-engine-api` to fix the namespace mismatch — its namespace was already `PhosphorEngineApi`).
+**Removed:** `phosphor-engine-types` (folded into `phosphor-engine` to fix the namespace mismatch — its namespace was already `PhosphorEngine`).
 
 **Renamed:** `phosphor-shell` → `phosphor-wayland`.
 
@@ -134,11 +134,11 @@ Six PRs across four phases. Each PR is atomic per the no-shims rule — no compa
 **Blast radius:** Small.
 **Blocks:** nothing.
 
-#### A2: Fold `phosphor-engine-types` headers → `phosphor-engine-api`
+#### A2: Fold `phosphor-engine-types` headers → `phosphor-engine`
 
-**Scope:** Header relocation; namespace already correct (`PhosphorEngineApi`); lib `phosphor-engine-types` deleted.
-**Files moved:** `libs/phosphor-engine-types/include/PhosphorEngineApi/{IPlacementState.h, NavigationContext.h}` → `libs/phosphor-engine-api/include/PhosphorEngineApi/`.
-**Call sites:** consumers that linked `PhosphorEngineTypes::PhosphorEngineTypes` switch to `PhosphorEngineApi::PhosphorEngineApi`. `find` and grep for the explicit target name.
+**Scope:** Header relocation; namespace already correct (`PhosphorEngine`); lib `phosphor-engine-types` deleted.
+**Files moved:** `libs/phosphor-engine-types/include/PhosphorEngine/{IPlacementState.h, NavigationContext.h}` → `libs/phosphor-engine/include/PhosphorEngine/`.
+**Call sites:** consumers that linked `PhosphorEngineTypes::PhosphorEngineTypes` switch to `PhosphorEngine::PhosphorEngine`. `find` and grep for the explicit target name.
 **Blast radius:** Small (no namespace churn — only the link target changes).
 **Blocks:** nothing.
 
@@ -282,7 +282,7 @@ grep -rn 'PhosphorShell::\(BaseUniforms\|IUniformExtension\|ShaderIncludeResolve
 | 1 | Should `AnimationShaderRegistry` survive Phase C as a thin specialisation, or collapse into `phosphor-shaders` entirely? | **Survive** | `ShaderProfile`/`ShaderProfileTree` are unambiguously animation-domain — they fan out per `MotionEvent`. The lib retains its identity even after the registry plumbing lifts out. |
 | 2 | `phosphor-shaders` C++-only, or expose QML facade `Phosphor.Shaders`? | **QML facade** | Mirrors Quickshell's `Quickshell.Services.*` pattern: registry-style libs that QML consumes get a thin QML facade. `Phosphor.Shaders.ShaderRegistry` becomes importable from QML. |
 | 3 | Adopt Quickshell's Reloadable + Generation pattern? | **Phase E (deferred)** | Today's per-registry atomic-swap model is sufficient for the loose cross-registry coupling that exists. Generation pattern becomes load-bearing once user-authored QML or scripted layouts cross-reference fsloader-discovered IDs. |
-| 4 | Where does `phosphor-engine-types` merge? | **Into `phosphor-engine-api`** | The namespace mismatch (`PhosphorEngineApi` namespace inside a `phosphor-engine-types` lib) was always going to be a rebrand trap. Headers move into `engine-api/`; the artificial split disappears. |
+| 4 | Where does `phosphor-engine-types` merge? | **Into `phosphor-engine`** | The namespace mismatch (`PhosphorEngine` namespace inside a `phosphor-engine-types` lib) was always going to be a rebrand trap. Headers move into `engine-api/`; the artificial split disappears. |
 
 ---
 
