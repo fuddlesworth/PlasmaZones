@@ -222,6 +222,11 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
                 }
                 slot->setVisible(true);
                 m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::Overlay, []() { });
+                // Main overlay during drag is purely visual (KWin owns
+                // the drag, daemon receives cursor pushes via D-Bus).
+                // Sync to keep the surface click-through unless a
+                // sibling modal slot is also up.
+                syncPassiveShellSurfaceState(screenId);
             }
             window->update();
         }

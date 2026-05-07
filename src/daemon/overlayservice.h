@@ -793,6 +793,17 @@ private:
     /// predicate guards the hide.
     void syncPassiveShellSurfaceState(const QString& effectiveId);
 
+    /// Run `syncPassiveShellSurfaceState` for every per-screen state that
+    /// owns @p surface — used after a slot setVisible(true) + beginShow
+    /// pair when the call site doesn't already have the matching effective
+    /// screen id in scope. The body lookup walks the small state map (≤ a
+    /// handful of screens in practice) and forwards the per-screen sync.
+    /// Without this, slot-show paths leave the input region in whatever
+    /// state Surface::show() set it to (cleared = grabbing) until the
+    /// matching slot-hide-completion handler eventually flips it back —
+    /// reading as "OSD eats clicks for its full lifetime" to the user.
+    void syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surface* surface);
+
     /**
      * @brief Construct the SurfaceAnimator and register per-Role configs.
      *

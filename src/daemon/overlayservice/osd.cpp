@@ -206,6 +206,13 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     }
     osdSlot->setVisible(true);
     m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Notification, []() { });
+    // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
+    // OSD slots don't grab input (they auto-dismiss; keeping the input
+    // region active for the OSD's lifetime would block clicks on every
+    // background window for several seconds). Re-evaluate the input
+    // region now that the OSD slot is visible — `syncPassiveShellSurfaceState`
+    // counts only modal slots toward `anyInputGrabbing`.
+    syncPassiveShellSurfaceStateForSurface(surface);
     QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
     qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
 }
@@ -294,6 +301,13 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     }
     osdSlot->setVisible(true);
     m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Notification, []() { });
+    // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
+    // OSD slots don't grab input (they auto-dismiss; keeping the input
+    // region active for the OSD's lifetime would block clicks on every
+    // background window for several seconds). Re-evaluate the input
+    // region now that the OSD slot is visible — `syncPassiveShellSurfaceState`
+    // counts only modal slots toward `anyInputGrabbing`.
+    syncPassiveShellSurfaceStateForSurface(surface);
     QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
     qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
 }
@@ -384,6 +398,13 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     }
     osdSlot->setVisible(true);
     m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Notification, []() { });
+    // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
+    // OSD slots don't grab input (they auto-dismiss; keeping the input
+    // region active for the OSD's lifetime would block clicks on every
+    // background window for several seconds). Re-evaluate the input
+    // region now that the OSD slot is visible — `syncPassiveShellSurfaceState`
+    // counts only modal slots toward `anyInputGrabbing`.
+    syncPassiveShellSurfaceStateForSurface(surface);
     QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
     qCInfo(lcOverlay) << "Disabled OSD: reason=" << reason << "screen=" << screenId;
 }
@@ -645,14 +666,8 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // pipeline survives mid-drag trigger thrashing. During those idles
     // the slot's `_idled` property is true and the inner content's
     // `visible: !root._idled` binding makes the rendered subtree invisible
-    // — but the slot Item itself stays Qt-visible. Treat _idled main
-    // overlay slots as "not blocking input" so the shell surface releases
-    // its input region when the user has released the activation trigger
-    // and clicks should pass through to the underlying windows. The other
-    // slots (OSD, snap-assist, picker, zone-selector) gate their own
-    // visibility via setVisible(false) on hide-completion and have no
-    // analogous idle state, so a plain isVisible() check is correct for
-    // them.
+    // — but the slot Item itself stays Qt-visible. Treat `_idled` slots
+    // as not visible for the surface-show predicate.
     auto isMainOverlayLive = [](QQuickItem* slot) {
         if (!slot || !slot->isVisible()) {
             return false;
@@ -662,6 +677,30 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     const bool anyVisible = isVisible(s.passiveShellOsdSlot) || isVisible(s.passiveShellSnapAssistSlot)
         || isVisible(s.passiveShellLayoutPickerSlot) || isVisible(s.passiveShellZoneSelectorSlot)
         || isMainOverlayLive(s.passiveShellMainOverlaySlot);
+    // Input region (Qt::WindowTransparentForInput) is governed separately
+    // from the surface-show decision. Pre-shell-migration each overlay
+    // had its own wl_surface sized to its visible content, so clicks
+    // outside the toast / card naturally fell through to underlying
+    // windows. Post-shell every kbd-None overlay shares the screen-sized
+    // shell surface — there's no per-slot input region the daemon can
+    // hand to the compositor. The pragmatic split: only MODAL slots
+    // (snap-assist, layout picker) grab input. OSD / main overlay /
+    // zone-selector are purely visual:
+    //   - OSDs auto-dismiss on a timer; a click-to-dismiss MouseArea
+    //     inside LayoutOsdContent / NavigationOsdContent is the
+    //     accepted casualty — the alternative is the daemon eating
+    //     every click on the screen for the OSD's full lifetime,
+    //     which the user reported as worse than losing click-dismiss.
+    //   - Main overlay during drag is driven by KWin's drag stream
+    //     (cursor pushes via `OverlayService::updateMousePosition`);
+    //     it never needs Qt-level input on its own.
+    //   - Zone selector during drag is the same — D-Bus
+    //     `updateSelectorPosition` pushes cursor coords; the zone is
+    //     committed via drag-end-on-hovered-zone, not a Qt click.
+    //     A lock-overlay `cursorShape: Qt.ForbiddenCursor` hover hint
+    //     stops working under this rule, but it's a minor cosmetic
+    //     loss versus the global click-eating regression.
+    const bool anyInputGrabbing = isVisible(s.passiveShellSnapAssistSlot) || isVisible(s.passiveShellLayoutPickerSlot);
     // Bring the surface up on the first transition from never-shown →
     // any-slot-live. Subsequent transitions toggle Qt::WindowTransparentForInput
     // directly on the shell QQuickWindow rather than routing through
@@ -692,15 +731,40 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     if (!s.passiveShellWindow) {
         return;
     }
-    if (anyVisible) {
-        if (!s.passiveShellSurface->isLogicallyShown()) {
-            s.passiveShellSurface->show();
-        } else if (s.passiveShellWindow->flags().testFlag(Qt::WindowTransparentForInput)) {
-            s.passiveShellWindow->setFlag(Qt::WindowTransparentForInput, false);
+    // Bring the surface up on the first transition from never-shown →
+    // any-slot-visible. The first show() call goes through the Surface
+    // state machine (maps the wl_surface, warms the RHI, fires animator
+    // attach callbacks); subsequent input-region toggles flip
+    // Qt::WindowTransparentForInput directly without re-entering the
+    // Surface::show()/hide() path — that path's `animator().cancel(...)`
+    // would wipe per-slot tracking and `beginHide(animatorTarget())`
+    // would animate the shell root opacity, both of which we want to
+    // avoid for a pure click-through toggle.
+    if (anyVisible && !s.passiveShellSurface->isLogicallyShown()) {
+        s.passiveShellSurface->show();
+    }
+    // Drive the Qt input flag based purely on whether a modal slot is
+    // up. A non-modal slot (OSD / main overlay / zone selector) being
+    // visible keeps the surface mapped for rendering but leaves the
+    // shell click-through, so background windows stay interactable
+    // for the OSD's auto-dismiss lifetime instead of eating every
+    // click on every screen for several seconds.
+    const bool wantTransparent = !anyInputGrabbing;
+    if (s.passiveShellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
+        s.passiveShellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
+    }
+}
+
+void OverlayService::syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surface* surface)
+{
+    if (!surface) {
+        return;
+    }
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        if (it.value().passiveShellSurface == surface) {
+            syncPassiveShellSurfaceState(it.key());
+            return;
         }
-    } else if (s.passiveShellSurface->isLogicallyShown()
-               && !s.passiveShellWindow->flags().testFlag(Qt::WindowTransparentForInput)) {
-        s.passiveShellWindow->setFlag(Qt::WindowTransparentForInput, true);
     }
 }
 
@@ -864,6 +928,9 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
     osdSlot->setVisible(true);
     m_surfaceAnimator->beginShow(navSurface, osdSlot, PzRoles::Notification, []() { });
+    // OSDs don't grab input — see the matching syncPassiveShellSurfaceStateForSurface
+    // call in showLayoutOsdImpl for the rationale.
+    syncPassiveShellSurfaceStateForSurface(navSurface);
     QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
 
     // Update dedup state AFTER the Surface::show() + restartDismissTimer

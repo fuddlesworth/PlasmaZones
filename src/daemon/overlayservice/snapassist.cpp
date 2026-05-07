@@ -205,6 +205,10 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     }
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::SnapAssist, []() { });
+    // Snap-assist is modal — needs input for click-to-select. The
+    // sync re-evaluates the input region now that the modal slot is
+    // visible so `Qt::WindowTransparentForInput` flips off.
+    syncPassiveShellSurfaceStateForSurface(shellSurface);
 
     qCInfo(lcOverlay) << "showSnapAssist: screen=" << screenId << "zones=" << emptyZones.size()
                       << "candidates=" << candidates.size();
@@ -457,6 +461,8 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::LayoutPicker, []() { });
+    // Layout picker is modal — needs input for click-to-select.
+    syncPassiveShellSurfaceStateForSurface(shellSurface);
 
     m_layoutPickerScreenId = resolvedId;
     m_layoutPickerVisible = true;

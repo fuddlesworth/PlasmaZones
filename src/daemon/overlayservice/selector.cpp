@@ -77,6 +77,11 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         }
         slot->setVisible(true);
         m_surfaceAnimator->beginShow(state->passiveShellSurface, slot, PzRoles::ZoneSelector, []() { });
+        // Zone selector is purely visual during a drag (KWin owns the
+        // drag stream and pushes cursor coords via D-Bus
+        // updateSelectorPosition). Sync the input region so a stale
+        // shell grab from a prior modal-up state can't bleed across.
+        syncPassiveShellSurfaceStateForSurface(state->passiveShellSurface);
     };
 
     if (mgr && !effectiveIds.isEmpty()) {
