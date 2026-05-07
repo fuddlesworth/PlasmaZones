@@ -65,9 +65,6 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     Q_PROPERTY(QSizeF iResolution READ iResolution WRITE setIResolution NOTIFY iResolutionChanged FINAL)
     Q_PROPERTY(QPointF iMouse READ iMouse WRITE setIMouse NOTIFY iMouseChanged FINAL)
     Q_PROPERTY(bool isReversed READ isReversed WRITE setIsReversed NOTIFY isReversedChanged FINAL)
-    Q_PROPERTY(QVector4D iSurfaceScreenPos READ iSurfaceScreenPos WRITE setISurfaceScreenPos NOTIFY
-                   iSurfaceScreenPosChanged FINAL)
-    Q_PROPERTY(QSizeF iAnchorSize READ iAnchorSize WRITE setIAnchorSize NOTIFY iAnchorSizeChanged FINAL)
 
     // ── Shader source ────────────────────────────────────────────────
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
@@ -201,29 +198,6 @@ public:
     /// for hide). Symmetric shaders ignore the value; asymmetric shaders
     /// branch on it (see canonical animation_uniforms.glsl docs).
     void setIsReversed(bool reverse);
-
-    QVector4D iSurfaceScreenPos() const
-    {
-        return m_iSurfaceScreenPos;
-    }
-    /// Surface-in-screen rect for spatial vert / frag effects.
-    /// `.xy` = surface origin in logical-screen pixels, `.zw` = host
-    /// screen dimensions in the same units. Forwarded to ShaderNodeRhi
-    /// → BaseUniforms::iSurfaceScreenPos at offset 672. SurfaceAnimator
-    /// pushes this at attach time and on every anchor geometry change.
-    void setISurfaceScreenPos(const QVector4D& pos);
-
-    QSizeF iAnchorSize() const
-    {
-        return m_iAnchorSize;
-    }
-    /// Anchor (card) pixel size in logical pixels. Decoupled from
-    /// `iResolution` (which Qt auto-resets to the shader item's
-    /// bounds on every geometry event) so vertex shaders rendering a
-    /// card-sized region inside a parent-sized FBO can read a stable
-    /// "size of the visible thing" value. Forwards to ShaderNodeRhi →
-    /// BaseUniforms::iAnchorSize at offset 688.
-    void setIAnchorSize(const QSizeF& size);
 
     QSizeF iResolution() const
     {
@@ -621,8 +595,6 @@ Q_SIGNALS:
     void iResolutionChanged();
     void iMouseChanged();
     void isReversedChanged();
-    void iSurfaceScreenPosChanged();
-    void iAnchorSizeChanged();
     void shaderSourceChanged();
     void vertexShaderUrlChanged();
     void shaderParamsChanged();
@@ -701,8 +673,6 @@ private:
     QPointF m_iMouse;
     int m_iFrame = 0;
     bool m_isReversed = false;
-    QVector4D m_iSurfaceScreenPos;
-    QSizeF m_iAnchorSize;
 
     // ── Shader source ────────────────────────────────────────────────
     QUrl m_shaderSource;

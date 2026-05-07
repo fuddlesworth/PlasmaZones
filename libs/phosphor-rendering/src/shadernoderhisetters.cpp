@@ -109,26 +109,6 @@ void ShaderNodeRhi::setIsReversed(bool reverse)
     m_sceneDataDirty = true;
 }
 
-void ShaderNodeRhi::setSurfaceScreenPos(const QVector4D& pos)
-{
-    if (m_surfaceScreenPos == pos) {
-        return;
-    }
-    m_surfaceScreenPos = pos;
-    m_uniformsDirty = true;
-    m_sceneDataDirty = true;
-}
-
-void ShaderNodeRhi::setAnchorSize(const QSizeF& size)
-{
-    if (m_anchorSize == size) {
-        return;
-    }
-    m_anchorSize = size;
-    m_uniformsDirty = true;
-    m_sceneDataDirty = true;
-}
-
 // ============================================================================
 // Custom Params (indexed API)
 // ============================================================================
@@ -514,7 +494,8 @@ bool ShaderNodeRhi::loadVertexShader(const QString& path)
     // content in the bake cache.
     const qint64 mtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
     QString err;
-    m_vertexShaderSource = loadAndExpandShader(path, &err);
+    QStringList includedPaths;
+    m_vertexShaderSource = loadAndExpandShaderTracked(path, &includedPaths, &err);
     if (m_vertexShaderSource.isEmpty()) {
         m_shaderError = err.startsWith(QStringLiteral("Failed to open:"))
             ? QString(QStringLiteral("Failed to open vertex shader: ") + path)
@@ -523,6 +504,7 @@ bool ShaderNodeRhi::loadVertexShader(const QString& path)
     }
     m_vertexPath = path;
     m_vertexMtime = mtime;
+    m_vertexIncludedPaths = std::move(includedPaths);
     m_shaderDirty = true;
     return true;
 }
@@ -532,7 +514,8 @@ bool ShaderNodeRhi::loadFragmentShader(const QString& path)
     // Capture mtime BEFORE the read (TOCTOU-safe cache key); see loadVertexShader.
     const qint64 mtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
     QString err;
-    m_fragmentShaderSource = loadAndExpandShader(path, &err);
+    QStringList includedPaths;
+    m_fragmentShaderSource = loadAndExpandShaderTracked(path, &includedPaths, &err);
     if (m_fragmentShaderSource.isEmpty()) {
         m_shaderError = err.startsWith(QStringLiteral("Failed to open:"))
             ? QString(QStringLiteral("Failed to open fragment shader: ") + path)
@@ -541,6 +524,7 @@ bool ShaderNodeRhi::loadFragmentShader(const QString& path)
     }
     m_fragmentPath = path;
     m_fragmentMtime = mtime;
+    m_fragmentIncludedPaths = std::move(includedPaths);
     m_shaderDirty = true;
     return true;
 }
@@ -552,6 +536,13 @@ void ShaderNodeRhi::setVertexShaderSource(const QString& source)
         if (source.isEmpty()) {
             m_vertexPath.clear();
             m_vertexMtime = 0;
+            m_vertexIncludedPaths.clear();
+        } else {
+            // Inline source — no file backing, so no transitively-
+            // included headers to fingerprint. Clear any leftover list
+            // from a prior loadVertexShader so the cache key matches the
+            // post-source-set state.
+            m_vertexIncludedPaths.clear();
         }
         m_shaderDirty = true;
     }
@@ -564,6 +555,9 @@ void ShaderNodeRhi::setFragmentShaderSource(const QString& source)
         if (source.isEmpty()) {
             m_fragmentPath.clear();
             m_fragmentMtime = 0;
+            m_fragmentIncludedPaths.clear();
+        } else {
+            m_fragmentIncludedPaths.clear();
         }
         m_shaderDirty = true;
     }

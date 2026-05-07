@@ -12,6 +12,7 @@
 
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/AnimationUniformExtension.h>
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 
@@ -44,6 +45,22 @@ namespace PhosphorAnimationLayer {
 
 namespace {
 Q_LOGGING_CATEGORY(lcSurfaceAnimator, "phosphoranimationlayer.surfaceanimator")
+
+/// Pull the `AnimationUniformExtension` out of a shader item the
+/// SurfaceAnimator owns, returning nullptr if the shader item somehow
+/// has a different (or no) extension. Used by `syncShaderGeometryNow`
+/// to push iSurfaceScreenPos / iAnchorSize into the right extension
+/// instance — the per-leg attach installs the extension via
+/// `ShaderEffect::setUniformExtension`, so a `dynamic_pointer_cast`
+/// here pulls back the typed pointer for setter calls.
+inline PhosphorAnimation::AnimationUniformExtension* animExtensionFor(PhosphorRendering::ShaderEffect* shaderItem)
+{
+    if (!shaderItem) {
+        return nullptr;
+    }
+    return std::dynamic_pointer_cast<PhosphorAnimation::AnimationUniformExtension>(shaderItem->uniformExtension())
+        .get();
+}
 
 /// Driver tick interval. SteadyClock::refreshRate MUST agree so
 /// velocity-based curves (Spring) sample at the timer's cadence.
@@ -143,15 +160,21 @@ inline qreal sanitiseBoundsPadding(qreal requested)
 ///   - Anchor (default): item covers `anchor + 2 · pad · anchor`,
 ///     positioned at anchor's scene rect minus pad. iResolution = FBO
 ///     size. vTexCoord 0..1 maps the captured anchor texture 1:1 over
-///     the FBO. Existing fragment-only shaders use this.
+///     the FBO. Existing fragment-only shaders use this. Vertex-shader
+///     effects that translate the quad (fly-in / slide) opt in to a
+///     `boundsPadding` value > 0 in their metadata — the resulting
+///     padded FBO gives them clip-space room to translate the rendered
+///     card off the anchor's natural bounds without escaping the FBO.
 ///   - Parent: item fills the anchor's parent item (the QML scene root
 ///     in the screen-sized OSD / popup configurations). iResolution =
 ///     anchor pixel size — NOT the FBO. The shader's vertex stage is
-///     responsible for positioning the card-sized quad within the
-///     parent-sized FBO using `iSurfaceScreenPos`. Used by vert-shader
-///     effects that translate the surface across the screen (fly-in,
-///     slide), which need an FBO sized larger than the anchor for the
-///     translation to read as real screen-scale travel.
+///     responsible for remapping the standard (-1..1) clip-space quad
+///     onto the card's region within the parent-sized FBO. Pre-revert
+///     this was used by fly-in to get screen-scale travel via the now-
+///     removed iSurfaceScreenPos / iAnchorSize uniforms; kept for any
+///     consumer that wants the parent-sized FBO without depending on
+///     those uniforms (they'd have to thread their own positioning via
+///     customParams).
 inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderEffect* shaderItem,
                                   QQuickShaderEffectSource* shaderSource, qreal requestedPad,
                                   PhosphorAnimationShaders::AnimationShaderEffect::BoundsExtent extent)
@@ -171,19 +194,12 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
         // Fill the anchor's parent item. The shader item is already
         // parented to anchor->parentItem() (see attachShaderToAnchor),
         // so (0, 0) puts the FBO origin at the parent's origin and the
-        // parent's full bounds become the rendering canvas. Authors
-        // running shaders here use `iAnchorSize` (the captured card's
-        // pixel size, pushed below) and `iSurfaceScreenPos` (card's
-        // screen origin + host screen dims) to remap the standard
-        // (-1..1) clip-space quad onto the card's region within the
-        // parent-sized FBO via their vertex stage. iResolution naturally
-        // tracks the FBO size — Qt's QQuickItem::geometryChange auto-
-        // resets it to the shader item's bounds on every geometry event,
-        // so we DO NOT try to override it to anchor size here; that
-        // override would silently get clobbered mid-leg whenever the
-        // animation fires update() (which causes the rendered card to
-        // briefly appear at parent size = the entire screen, the bug
-        // that motivated the iAnchorSize uniform).
+        // parent's full bounds become the rendering canvas. iResolution
+        // naturally tracks the FBO size — Qt's
+        // QQuickItem::geometryChange auto-resets it to the shader
+        // item's bounds on every geometry event, so we DO NOT try to
+        // override it to anchor size here; that override would silently
+        // get clobbered mid-leg.
         // Parent-less anchors (rare — see the warning at attach time)
         // fall through to the Anchor branch.
         if (QQuickItem* parent = anchor->parentItem()) {
@@ -218,44 +234,46 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
     // independent of iResolution which Qt auto-resets to the shader
     // item's bounds. Vertex shaders read this for the visible card's
     // size in pixels regardless of boundsExtent.
-    shaderItem->setIAnchorSize(QSizeF(w, h));
+    if (auto* ext = animExtensionFor(shaderItem)) {
+        ext->setIAnchorSize(QSizeF(w, h));
 
-    // iSurfaceScreenPos describes where the card sits within its
-    // *playing field* and how big that field is. The "playing field"
-    // on the daemon path is the wl_surface (= the window's logical
-    // size = the anchor's parent for Parent-extent shaders): for a
-    // virtual-screen popup the wl_surface IS the VS rect, so a
-    // fly-in from "the nearest edge" naturally reads as flying in
-    // from the VS's edge — which is what the user sees.
-    //
-    // CRITICAL: do NOT add `window->position()` to the card's
-    // surface-local position. For a popup on a VS at screen offset
-    // (X, Y), `window->position()` reports the VS offset but the
-    // shader's FBO is the wl_surface (sized to the VS, NOT to the
-    // physical screen). Adding the offset would produce absolute-
-    // screen coords that overflow the FBO clip-space mapping —
-    // VS-1's centred card would land at clip-x = 2.0 and never
-    // render. xy MUST stay surface-local.
-    //
-    // Likewise zw is the wl_surface size, not the physical screen
-    // size, because the shader's clip-space (-1..1) maps to the
-    // FBO (= wl_surface) bounds. Closest-edge math computed against
-    // the surface size correctly fires the VS edges as the "screen
-    // edges" the user perceives.
-    if (QQuickItem* parent = anchor->parentItem()) {
-        const QPointF anchorScene = anchor->mapToScene(QPointF(0.0, 0.0));
-        const qreal fieldW = parent->width();
-        const qreal fieldH = parent->height();
-        shaderItem->setISurfaceScreenPos(QVector4D(static_cast<float>(anchorScene.x()),
-                                                   static_cast<float>(anchorScene.y()), static_cast<float>(fieldW),
-                                                   static_cast<float>(fieldH)));
-    } else if (QQuickWindow* window = anchor->window()) {
-        // Parent-less anchor (rare — see attachShaderToAnchor's
-        // warning). Fall back to the window's logical size.
-        const QPointF anchorScene = anchor->mapToScene(QPointF(0.0, 0.0));
-        shaderItem->setISurfaceScreenPos(
-            QVector4D(static_cast<float>(anchorScene.x()), static_cast<float>(anchorScene.y()),
-                      static_cast<float>(window->width()), static_cast<float>(window->height())));
+        // iSurfaceScreenPos describes where the card sits within its
+        // *playing field* and how big that field is. The "playing field"
+        // on the daemon path is the wl_surface (= the window's logical
+        // size = the anchor's parent for Parent-extent shaders): for a
+        // virtual-screen popup the wl_surface IS the VS rect, so a
+        // fly-in from "the nearest edge" naturally reads as flying in
+        // from the VS's edge — which is what the user sees.
+        //
+        // CRITICAL: do NOT add `window->position()` to the card's
+        // surface-local position. For a popup on a VS at screen offset
+        // (X, Y), `window->position()` reports the VS offset but the
+        // shader's FBO is the wl_surface (sized to the VS, NOT to the
+        // physical screen). Adding the offset would produce absolute-
+        // screen coords that overflow the FBO clip-space mapping —
+        // VS-1's centred card would land at clip-x = 2.0 and never
+        // render. xy MUST stay surface-local.
+        //
+        // Likewise zw is the wl_surface size, not the physical screen
+        // size, because the shader's clip-space (-1..1) maps to the
+        // FBO (= wl_surface) bounds. Closest-edge math computed against
+        // the surface size correctly fires the VS edges as the "screen
+        // edges" the user perceives.
+        if (QQuickItem* parent = anchor->parentItem()) {
+            const QPointF anchorScene = anchor->mapToScene(QPointF(0.0, 0.0));
+            const qreal fieldW = parent->width();
+            const qreal fieldH = parent->height();
+            ext->setISurfaceScreenPos(QVector4D(static_cast<float>(anchorScene.x()),
+                                                static_cast<float>(anchorScene.y()), static_cast<float>(fieldW),
+                                                static_cast<float>(fieldH)));
+        } else if (QQuickWindow* window = anchor->window()) {
+            // Parent-less anchor (rare — see attachShaderToAnchor's
+            // warning). Fall back to the window's logical size.
+            const QPointF anchorScene = anchor->mapToScene(QPointF(0.0, 0.0));
+            ext->setISurfaceScreenPos(
+                QVector4D(static_cast<float>(anchorScene.x()), static_cast<float>(anchorScene.y()),
+                          static_cast<float>(window->width()), static_cast<float>(window->height())));
+        }
     }
 }
 } // namespace
@@ -620,6 +638,19 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // live layer — no same-pass conflict.
     auto* shaderItem =
         new PhosphorRendering::ShaderEffect(shaderAnchor->parentItem() ? shaderAnchor->parentItem() : shaderAnchor);
+    // Install the animation-only UBO extension BEFORE applyEffectStaticConfig.
+    // applyEffectStaticConfig may end up calling node-side load paths whose
+    // SPIR-V expects the extension to land at offset sizeof(BaseUniforms);
+    // installing later would cause the first prepare() to allocate the UBO
+    // without the extension's 32 trailing bytes and the shader would read
+    // garbage at offsets 672/688 until the next allocation cycle.
+    //
+    // Lifetime: the shared_ptr is captured by `ShaderEffect::m_uniformExtension`
+    // and lives for the shaderItem's lifetime. `syncShaderGeometryNow` pulls
+    // the typed pointer back via `animExtensionFor()`'s dynamic_pointer_cast
+    // and writes through the extension's setters; the render-thread `write()`
+    // serializes via the extension's own QMutex.
+    shaderItem->setUniformExtension(std::make_shared<PhosphorAnimation::AnimationUniformExtension>());
     applyEffectStaticConfig(shaderItem, effect, shaderIncludePaths);
 
     // iMouse wiring — mirrors the overlay-shader pattern (RenderNodeOverlay's
@@ -785,24 +816,14 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     QObject::connect(shaderAnchor, &QQuickItem::xChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::yChanged, shaderItem, syncGeometry);
 
-    // Seed the runtime-only uniforms (iAnchorSize, iSurfaceScreenPos,
-    // and the boundsExtent-dependent shader item geometry) once
+    // Seed the boundsExtent-dependent shader item geometry once
     // unconditionally. The signal-driven lambda above only fires on
     // subsequent anchor geometry changes; for surfaces where the anchor
     // is persistent across show/hide cycles (zone selector / snap-assist /
     // layout picker — pre-warmed PopupFrames with constant width/height),
-    // the lambda would never fire post-attach and the uniforms would
-    // stay at their default-constructed zeros. Result on a Parent-extent
-    // shader: iAnchorSize = (0, 0) → cardSize → (1, 1) via the shader's
-    // own max guard → cardHalfClip ≈ 0 → geometry collapses to a point
-    // and the surface vanishes for the entire leg.
-    //
-    // OSDs hid this because their loaded content is freshly instantiated
-    // by NotificationOverlay's Loader on each show, which fires a fresh
-    // round of widthChanged/heightChanged on the inner card during the
-    // first layout pass and incidentally seeds the uniforms. Popups
-    // don't go through that re-instantiation, so they need an explicit
-    // first call.
+    // the lambda would never fire post-attach and the shader item's
+    // size would stay at its default-constructed zero, collapsing the
+    // rendered surface to a point for the leg's duration.
     syncGeometry();
 
     // Hide visible decorator siblings — see `hideAnchorSiblings` for the

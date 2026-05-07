@@ -119,6 +119,7 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/AnimationShaderContract.h
     include/PhosphorAnimation/AnimationShaderEffect.h
     include/PhosphorAnimation/AnimationShaderRegistry.h
+    include/PhosphorAnimation/AnimationUniformExtension.h
     include/PhosphorAnimation/ShaderProfile.h
     include/PhosphorAnimation/ShaderProfileTree.h
 

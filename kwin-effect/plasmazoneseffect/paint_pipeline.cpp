@@ -352,14 +352,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 }
                 if (cached->iSurfaceScreenPosLoc >= 0) {
                     // (surfaceX, surfaceY, screenW, screenH) in logical pixels.
-                    // Window position is the redirected surface origin on screen;
-                    // screen size is the logical output's geometry (matches
-                    // daemon parity through QScreen::geometry()). geo is already
-                    // captured as `frameGeometry()` above. Read screen
-                    // dimensions from `w->screen()->geometry()` — KWin's
-                    // LogicalOutput exposes the same logical-pixel geometry
-                    // QScreen does on the daemon side, so a fly-in shader sees
-                    // the same numerical values either runtime delivers.
+                    // Window position is the redirected surface origin on
+                    // screen; screen size is the logical output's geometry.
+                    // Kept in classic-GL setUniform form here — the UBO-
+                    // extension isolation that protects the daemon's zone
+                    // shaders from BaseUniforms growth doesn't apply on this
+                    // runtime (kwin uses default-block uniforms, no UBO).
                     QVector4D surfaceScreenPos(static_cast<float>(geo.x()), static_cast<float>(geo.y()), 0.0f, 0.0f);
                     if (const auto* output = w->screen()) {
                         const QRect screenGeo = output->geometry();
@@ -369,12 +367,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     shader->setUniform(cached->iSurfaceScreenPosLoc, surfaceScreenPos);
                 }
                 if (cached->iAnchorSizeLoc >= 0) {
-                    // The window's frameGeometry IS the visible "card" on the
-                    // kwin path — there's no separate anchor-vs-FBO distinction
-                    // here, so iAnchorSize matches iResolution. Pushed for
-                    // contract parity with the daemon path so shaders can
-                    // reach for the captured surface's pixel size via one
-                    // uniform name regardless of runtime.
+                    // The window's frameGeometry IS the visible "card" on
+                    // the kwin path — there's no separate anchor-vs-FBO
+                    // distinction here, so iAnchorSize matches iResolution.
                     shader->setUniform(cached->iAnchorSizeLoc,
                                        QVector2D(static_cast<float>(geo.width()), static_cast<float>(geo.height())));
                 }

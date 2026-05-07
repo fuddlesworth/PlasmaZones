@@ -220,12 +220,20 @@ inline constexpr const char* kIIsReversed = "iIsReversed";
 ///         relative to the screen origin
 ///   .zw = (screenWidth, screenHeight) of the host screen
 ///
-/// Both runtimes populate this once per leg attach and re-push on every
-/// anchor / window geometry signal so vertex shaders can compute spatial
-/// effects (fly-in from closest edge, edge-relative noise) without
-/// needing per-effect customParam wiring. Symmetric across kwin and
-/// daemon — the values are the same logical-pixel rect either side
-/// would observe for the same on-screen surface.
+/// Daemon: written to the appended `AnimationUniformExtension` (UBO
+/// offset 672 = sizeof(BaseUniforms)). The extension is installed by
+/// `SurfaceAnimator::attachShaderToAnchor` so this field is animation-
+/// only — it never lands in zone-shader UBOs (those use
+/// `ZoneUniformExtension` instead).
+///
+/// kwin-effect: pushed via classic-GL `setUniform` keyed on this exact
+/// name. Independent of the UBO mechanism — the UBO contract isolation
+/// only matters on the daemon path.
+///
+/// Vertex / fragment shaders that need to know where the surface sits
+/// on its host screen (fly-in from closest edge, screen-relative noise)
+/// read this. Both runtimes populate it once per leg attach + on every
+/// anchor or window geometry signal.
 inline constexpr const char* kISurfaceScreenPos = "iSurfaceScreenPos";
 
 /// `vec2 iAnchorSize` — captured anchor (card) pixel size in logical
@@ -233,6 +241,8 @@ inline constexpr const char* kISurfaceScreenPos = "iSurfaceScreenPos";
 /// it under any boundsExtent; `iResolution` is auto-reset by Qt to the
 /// shader item's bounds on every geometry event and would otherwise
 /// clobber any anchor-size override on a `boundsExtent: parent` item.
+/// Daemon-side written via `AnimationUniformExtension`; kwin-effect
+/// uses classic-GL `setUniform`.
 inline constexpr const char* kIAnchorSize = "iAnchorSize";
 
 /// Maximum number of user-declared textures per animation effect.

@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // PhosphorShaders shared shader helpers (GLSL #version 450).
-// Declares the base uniform block (sized to PhosphorShaders::BaseUniforms,
-// currently 688 bytes; pinned by BaseUniforms.h's static_asserts) and
-// generic utilities. Consumer-specific extensions (e.g. zone arrays) are
-// declared in the consumer's own common.glsl which #includes this file or
-// redeclares a larger UBO block.
+// Declares the base uniform block (672 bytes) and generic utilities.
+// Consumer-specific extensions (e.g. zone arrays) are declared in the
+// consumer's own common.glsl which #includes this file or redeclares
+// a larger UBO block.
 //
 // Include from effect.frag or vertex shader with:
 //   #include <common.glsl>
@@ -17,9 +16,7 @@
 #define PHOSPHORSHADERS_COMMON_GLSL
 
 layout(std140, binding = 0) uniform ShaderUniforms {
-    // ── PhosphorShaders::BaseUniforms ──────────────────────────────────
-    // Mirror of the C struct in <PhosphorShaders/BaseUniforms.h>; layout
-    // pinned by per-field static_asserts on the C side.
+    // ── PhosphorShaders::BaseUniforms (672 bytes) ──────────────────────
     mat4 qt_Matrix;
     float qt_Opacity;
     float iTime;            // wrapped lo part, always in [0, kShaderTimeWrap). Safe to use directly.

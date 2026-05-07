@@ -154,20 +154,6 @@ public:
     /// on the kwin path.
     void setIsReversed(bool reverse);
 
-    /// Surface-in-screen rect for spatial vert / frag effects. Forwards
-    /// to BaseUniforms::iSurfaceScreenPos at offset 672. `.xy` = surface
-    /// origin in logical-screen pixels, `.zw` = host screen dimensions
-    /// in the same units. SurfaceAnimator pushes this on every leg
-    /// attach + on each anchor geometry signal. kwin-effect handles its
-    /// parity directly via setUniform on its path.
-    void setSurfaceScreenPos(const QVector4D& pos);
-
-    /// Anchor (card) pixel size in logical pixels — companion to
-    /// iSurfaceScreenPos. Forwards to BaseUniforms::iAnchorSize at
-    /// offset 688. SurfaceAnimator pushes the anchor's logical
-    /// width/height on every geometry signal.
-    void setAnchorSize(const QSizeF& size);
-
     // ── Custom Parameters (indexed API) ────────────────────────────────
     void setCustomParams(int index, const QVector4D& params);
     void setCustomColor(int index, const QColor& color);
@@ -308,6 +294,12 @@ private:
     void resetAllBindingsAndPipelines();
     void bakeBufferShaders();
     QString loadAndExpandShader(const QString& path, QString* outError);
+    /// Variant that also collects the canonical paths of every
+    /// transitively-included header into @p outIncludedPaths. Used by
+    /// `loadVertexShader` / `loadFragmentShader` to fingerprint includes
+    /// for the bake-cache key — see `shaderCacheKey` in
+    /// shadernoderhicore.cpp for the policy.
+    QString loadAndExpandShaderTracked(const QString& path, QStringList* outIncludedPaths, QString* outError);
 
     QQuickItem* m_item = nullptr;
     std::atomic<bool> m_itemValid{true};
@@ -403,6 +395,16 @@ private:
     QString m_fragmentPath;
     qint64 m_vertexMtime = 0;
     qint64 m_fragmentMtime = 0;
+    /// Canonical absolute paths of every transitively-`#include`d header
+    /// the resolver visited during the most recent `loadVertexShader` /
+    /// `loadFragmentShader`. Folded into the bake-cache key by
+    /// `shaderCacheKey` so an edit to a shared header (e.g.
+    /// `data/shaders/shared/common.glsl`) invalidates downstream cache
+    /// entries even when the consuming shader's own mtime is unchanged.
+    /// Without this, an in-memory cache hit could keep serving SPIR-V
+    /// baked against an older include-content view.
+    QStringList m_vertexIncludedPaths;
+    QStringList m_fragmentIncludedPaths;
     QString m_shaderError;
     bool m_initialized = false;
     bool m_vboUploaded = false;
@@ -428,8 +430,6 @@ private:
     float m_timeDelta = 0.0f;
     int m_frame = 0;
     bool m_isReversed = false;
-    QVector4D m_surfaceScreenPos;
-    QSizeF m_anchorSize;
     float m_timeHi = 0.0f; // Cached iTimeHi for wrap-offset change detection
     float m_width = 0.0f;
     float m_height = 0.0f;

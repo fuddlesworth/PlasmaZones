@@ -34,7 +34,7 @@ using PhosphorShaders::kShaderTimeWrap;
  *
  * This matches the GLSL UBO declaration in common.glsl exactly:
  *   BaseUniforms fields → zone arrays → total layout. The exact base size
- *   is `sizeof(PhosphorShaders::BaseUniforms)` (currently 688 bytes; pinned
+ *   is `sizeof(PhosphorShaders::BaseUniforms)` (currently 672 bytes; pinned
  *   by the static_asserts in BaseUniforms.h — common.glsl tracks this).
  */
 struct alignas(16) ZoneShaderUniforms

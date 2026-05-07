@@ -30,7 +30,8 @@ QString tryReadFile(const QString& path, QString* outError)
 }
 
 QString expandIncludesRecursive(const QString& source, const QString& currentFileDir, const QStringList& includePaths,
-                                int depth, QSet<QString>& seenCanonical, QString* outError)
+                                int depth, QSet<QString>& seenCanonical, QString* outError,
+                                QStringList* outIncludedPaths)
 {
     if (depth > ShaderIncludeResolver::MaxIncludeDepth) {
         if (outError) {
@@ -88,14 +89,22 @@ QString expandIncludesRecursive(const QString& source, const QString& currentFil
             continue;
         }
         seenCanonical.insert(resolvedPath);
+        if (outIncludedPaths) {
+            // Record the resolved canonical path even if the file
+            // turns out to be unreadable below — caller fingerprinting
+            // needs to track every path the resolver attempted, so a
+            // deleted-include-file doesn't quietly produce the same
+            // fingerprint as an unchanged build.
+            outIncludedPaths->append(resolvedPath);
+        }
 
         QString included = tryReadFile(resolvedPath, outError);
         if (outError && !outError->isEmpty())
             return QString();
 
         QString newCurrentDir = QFileInfo(resolvedPath).absolutePath();
-        QString expanded =
-            expandIncludesRecursive(included, newCurrentDir, includePaths, depth + 1, seenCanonical, outError);
+        QString expanded = expandIncludesRecursive(included, newCurrentDir, includePaths, depth + 1, seenCanonical,
+                                                   outError, outIncludedPaths);
         if (expanded.isNull())
             return QString();
         seenCanonical.remove(resolvedPath);
@@ -111,12 +120,13 @@ QString expandIncludesRecursive(const QString& source, const QString& currentFil
 } // namespace
 
 QString ShaderIncludeResolver::expandIncludes(const QString& source, const QString& currentFileDir,
-                                              const QStringList& includePaths, QString* outError)
+                                              const QStringList& includePaths, QString* outError,
+                                              QStringList* outIncludedPaths)
 {
     if (outError)
         outError->clear();
     QSet<QString> seenCanonical;
-    return expandIncludesRecursive(source, currentFileDir, includePaths, 0, seenCanonical, outError);
+    return expandIncludesRecursive(source, currentFileDir, includePaths, 0, seenCanonical, outError, outIncludedPaths);
 }
 
 } // namespace PhosphorShaders

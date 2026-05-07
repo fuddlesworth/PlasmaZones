@@ -152,15 +152,12 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     ///
     ///   • `Parent`: FBO covers the anchor's parent item (the QML scene
     ///     root for OSDs and popups, both screen-sized post-Phase-6
-    ///     fullscreen surface migration). iResolution equals the captured
-    ///     anchor's pixel size — NOT the FBO. The shader is responsible
-    ///     for using `iSurfaceScreenPos` + `iResolution` to position the
-    ///     card-sized quad within the parent-sized FBO via its vertex
-    ///     stage. This unlocks vertex-shader effects that translate the
-    ///     surface across the screen (fly-in from edge, slide, lift) —
-    ///     they're constrained to the FBO bounds by definition, so the
-    ///     FBO has to span the screen for the motion to read as real
-    ///     screen-scale travel.
+    ///     fullscreen surface migration). iResolution naturally tracks
+    ///     the FBO bounds. Pre-revert this was paired with the now-
+    ///     removed `iSurfaceScreenPos` / `iAnchorSize` uniforms to give
+    ///     vertex-shader effects screen-scale travel runway; consumers
+    ///     that still want the parent-sized FBO must thread their own
+    ///     positioning data via customParams.
     ///
     /// Authors who pick `Parent` MUST ship a custom vertex shader that
     /// remaps `position` to the card's region within the FBO; the

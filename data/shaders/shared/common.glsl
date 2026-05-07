@@ -12,17 +12,7 @@
 #define PLASMAZONES_COMMON_GLSL
 
 layout(std140, binding = 0) uniform ZoneUniforms {
-    // ── Base uniforms (PhosphorShaders::BaseUniforms) ──────────────────
-    // Layout pinned by BaseUniforms.h's per-field static_asserts. Total
-    // base size is currently 688 bytes (mat4 qt_Matrix [0..64] through
-    // vec4 iSurfaceScreenPos [672..688]); zoneRects below STARTS at 688
-    // because std140 vec4 alignment lifts it past iSurfaceScreenPos's
-    // tail. Fields the zone shaders don't read are still declared so the
-    // GLSL-side offset of zoneRects matches the C-side
-    // `sizeof(PhosphorShaders::BaseUniforms)` exactly — adding any new
-    // field to BaseUniforms WITHOUT mirroring it here would shift
-    // zoneRects up by the new field's size and produce a silent
-    // miscompile (zoneRects[0] would read the new field's bytes).
+    // ── Base uniforms (PhosphorShaders::BaseUniforms, 672 bytes) ───────
     mat4 qt_Matrix;
     float qt_Opacity;
     float iTime;            // wrapped lo part, always in [0, kShaderTimeWrap). Safe to use directly.
@@ -41,14 +31,7 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     // std140: 8 bytes implicit padding here (int+int=8 → next vec2 array aligned to 16)
     vec2 iTextureResolution[4]; // user texture sizes (bindings 7-10); std140 pads each vec2 to 16 bytes
     float iTimeHi;       // integer wrap offset (changes once per kShaderTimeWrap seconds)
-    int iIsReversed;     // direction signal (animation contract); zone shaders ignore it
-    // std140: 8 bytes implicit padding here (int + 4 trailing pad bytes)
-    // before the vec4 below aligns to a 16-byte boundary at offset 672.
-    vec4 iSurfaceScreenPos; // .xy = surface origin in screen pixels; .zw = (screenW, screenH)
-    vec2 iAnchorSize;    // anchor (card) pixel size; zone shaders ignore it
-    // std140: 8 bytes implicit trailing pad (struct alignment to 16 bytes)
-    // before the vec4 below aligns to a 16-byte boundary at offset 704.
-    // ── Zone extension (after BaseUniforms; starts at offset 704) ────
+    // ── Zone extension (after BaseUniforms) ──────────────────────────
     vec4 zoneRects[64];
     vec4 zoneFillColors[64];
     vec4 zoneBorderColors[64];

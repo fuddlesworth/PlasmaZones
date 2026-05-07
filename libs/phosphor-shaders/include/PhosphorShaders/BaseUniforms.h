@@ -95,43 +95,16 @@ struct alignas(16) BaseUniforms
     // rely on the runtime's iTime flip to auto-mirror; asymmetric
     // shaders (matrix's directional rain, rain windowAlpha trajectory,
     // anything where open and close differ in more than time direction)
-    // branch on it.
+    // branch on it. Carved out of the trailing std140 pad so total
+    // struct size stays 672 bytes.
     int iIsReversed; // offset 660
-
-    // Surface-in-screen rect for spatial vertex / fragment effects.
-    //   .xy = surface origin in logical-screen pixels (top-left of the
-    //         shader surface relative to the screen the surface lives on)
-    //   .zw = (screenWidth, screenHeight) in logical-screen pixels
-    // Vertex shaders use this to compute "closest edge" / fly-in offsets;
-    // fragment shaders that want screen-relative noise or edge fades read
-    // it for the same reason. Lands at offset 664 (right after iIsReversed
-    // at 660); std140 vec4 alignment auto-pads from 664 to a 16-byte
-    // boundary at offset 672, which the C struct mirrors with
-    // `_pad_before_iSurfaceScreenPos[2]`. Both runtimes populate it once
-    // per leg attach + on every anchor/window geometry signal — see
-    // SurfaceAnimator (daemon) and paint_pipeline.cpp (kwin-effect).
-    int _pad_before_iSurfaceScreenPos[2]; // offset 664 — std140 vec4 alignment for the next field
-    float iSurfaceScreenPos[4]; // offset 672 (16 bytes) — (surfaceX, surfaceY, screenW, screenH)
-
-    // Anchor (card) pixel size in logical pixels. Decoupled from
-    // `iResolution` because Qt's QQuickItem geometryChange handler
-    // auto-resets `iResolution` to the shader item's bounds whenever
-    // the item's geometry changes — for `boundsExtent: parent` shaders
-    // the item is parent-sized and that auto-reset sweeps any explicit
-    // setIResolution(anchor.size) override back to (parent.w, parent.h).
-    // Vertex shaders that need to know the rendered card's size in pixels
-    // (fly-in mapping the captured texture onto a small region within a
-    // parent-sized FBO) read this directly. Daemon writes it on every
-    // anchor geometry signal; kwin-effect writes it from frameGeometry.
-    // .xy = (anchorWidth, anchorHeight); .zw reserved (zero today).
-    // std140: vec2 alignment is 8 bytes — lands at offset 688 directly
-    // after iSurfaceScreenPos with no implicit pad. Trailing 8 bytes
-    // make up the std140 16-byte struct alignment; total size 696.
-    float iAnchorSize[2]; // offset 688 (8 bytes)
-    int _pad_after_iAnchorSize[2]; // offset 696 — std140 16-byte struct alignment, total 704
+    // Ditto: trailing pad zeroed by value-init (`m_baseUniforms = {}`) and
+    // covered by K_SCENE_HEADER. See the expanded `_pad_after_audioSpectrum`
+    // comment above for the full std140 / upload-region rationale.
+    int _pad_after_iIsReversed[2]; // std140 struct alignment, total 672 bytes
 };
 
-static_assert(sizeof(BaseUniforms) == 704, "BaseUniforms must be exactly 704 bytes");
+static_assert(sizeof(BaseUniforms) == 672, "BaseUniforms must be exactly 672 bytes");
 
 // Per-field std140 offset asserts. These pin the layout the
 // `data/animations/shared/animation_uniforms.glsl` canonical UBO branch
@@ -188,10 +161,6 @@ static_assert(offsetof(BaseUniforms, iTimeHi) == 656,
               "BaseUniforms::iTimeHi must remain at std140 offset 656 (animation UBO contract)");
 static_assert(offsetof(BaseUniforms, iIsReversed) == 660,
               "BaseUniforms::iIsReversed must remain at std140 offset 660 (animation UBO contract)");
-static_assert(offsetof(BaseUniforms, iSurfaceScreenPos) == 672,
-              "BaseUniforms::iSurfaceScreenPos must remain at std140 offset 672 (animation UBO contract)");
-static_assert(offsetof(BaseUniforms, iAnchorSize) == 688,
-              "BaseUniforms::iAnchorSize must remain at std140 offset 688 (animation UBO contract)");
 
 /// UBO region offsets and sizes for partial updates (reduces GPU bandwidth).
 namespace UboRegions {
@@ -214,10 +183,10 @@ constexpr size_t K_APP_FIELDS_SIZE = sizeof(int) * 2;
 // Scene header: iResolution through end of struct.
 // Covers iResolution, appFields, iMouse, iDate, customParams, customColors,
 // iChannelResolution, iAudioSpectrumSize, iFlipBufferY, iTextureResolution,
-// iTimeHi, iIsReversed, iSurfaceScreenPos, and any trailing std140 pad.
-// Sized to the remainder of BaseUniforms so any field added at or after
-// offset 80 (iResolution) is automatically covered by m_sceneDataDirty's
-// upload path without needing a per-field dirty flag.
+// iTimeHi, iIsReversed, and the trailing std140 pad. Sized to the
+// remainder of BaseUniforms so any field added at or after offset 80
+// (iResolution) is automatically covered by m_sceneDataDirty's upload
+// path without needing a per-field dirty flag.
 //
 // History: an earlier revision capped K_SCENE_HEADER_SIZE at offsetof(iTimeHi),
 // leaving the gap from offsetof(iTimeHi) + sizeof(iTimeHi) (660) to
@@ -253,10 +222,10 @@ constexpr size_t K_TIME_HI_SIZE = sizeof(float);
 // `sizeof(BaseUniforms) - K_SCENE_HEADER_OFFSET` — the assert reduced
 // to `sizeof == sizeof` and could not catch the regression it claimed
 // to defend.
-static_assert(offsetof(BaseUniforms, iAnchorSize) + sizeof(BaseUniforms::iAnchorSize)
+static_assert(offsetof(BaseUniforms, _pad_after_iIsReversed) + sizeof(BaseUniforms::_pad_after_iIsReversed)
                   <= K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE,
-              "K_SCENE_HEADER must cover iAnchorSize — "
-              "narrowing K_SCENE_HEADER_SIZE leaves a trailing-field gap unmapped");
+              "K_SCENE_HEADER must cover the trailing _pad_after_iIsReversed bytes — "
+              "narrowing K_SCENE_HEADER_SIZE leaves the iIsReversed gap unmapped");
 static_assert(K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE == sizeof(BaseUniforms),
               "K_SCENE_HEADER must reach end-of-BaseUniforms — defensive companion to "
               "the trailing-field assert above");
