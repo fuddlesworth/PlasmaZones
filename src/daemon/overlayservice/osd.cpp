@@ -538,20 +538,26 @@ void OverlayService::warmUpNotifications()
 
 void OverlayService::destroyPassiveShell(const QString& screenId)
 {
-    // Tear down the per-screen passive shell (formerly the per-screen
-    // NotificationOverlay surface). Kept under the legacy name so the
-    // hot-plug `destroyAllWindowsForPhysicalScreen` callers don't churn
-    // — a future cleanup can rename to `destroyPassiveShell`.
+    // Tear down the per-screen passive shell. The shell's QQuickWindow
+    // owns every slot QQuickItem as a scene-graph descendant, so the
+    // deleteLater on passiveShellSurface tears them all down too —
+    // null all slot pointers defensively so any signal handler that
+    // runs before the screen-state entry is purged from m_screenStates
+    // doesn't dereference a dangling QQuickItem*.
     auto it = m_screenStates.find(screenId);
     if (it == m_screenStates.end()) {
         return;
     }
     if (it->passiveShellSurface) {
         it->passiveShellSurface->deleteLater();
-        it->passiveShellSurface = nullptr;
-        it->passiveShellWindow = nullptr;
-        it->passiveShellOsdSlot = nullptr;
     }
+    it->passiveShellSurface = nullptr;
+    it->passiveShellWindow = nullptr;
+    it->passiveShellOsdSlot = nullptr;
+    it->passiveShellSnapAssistSlot = nullptr;
+    it->passiveShellLayoutPickerSlot = nullptr;
+    it->passiveShellZoneSelectorSlot = nullptr;
+    it->passiveShellMainOverlaySlot = nullptr;
     it->notificationPhysScreen = nullptr;
 }
 
@@ -600,6 +606,17 @@ void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
     // small between shows and forces a fresh per-show shaderAnchor on
     // the next mode write.
     writeQmlProperty(it->passiveShellOsdSlot, QStringLiteral("mode"), QString());
+    // Symmetric restore: layout/disabled/navigation OSD show paths
+    // hid the zone-selector slot to keep it from peeking through the
+    // OSD card. The drag may still be active, so re-show the selector
+    // for the captured (physScreen, geometry) if those are still
+    // valid. snap-assist's onSnapAssistSlotHideCompleted does the
+    // analogous restore — keeping the symmetry in lock-step here
+    // prevents a stuck-hidden selector after an OSD auto-dismiss
+    // that fires mid-drag.
+    if (m_zoneSelectorVisible && it->zoneSelectorPhysScreen && it->zoneSelectorGeometry.isValid()) {
+        showZoneSelectorSlotOnScreen(effectiveId, it->zoneSelectorPhysScreen, it->zoneSelectorGeometry);
+    }
     syncPassiveShellSurfaceState(effectiveId);
 }
 

@@ -347,6 +347,16 @@ void OverlayService::onSnapAssistSlotHideCompleted(const QString& effectiveId)
     }
     it->passiveShellSnapAssistSlot->setVisible(false);
     writeQmlProperty(it->passiveShellSnapAssistSlot, QStringLiteral("loaded"), false);
+    // Symmetric restore: showSnapAssist hid the zone-selector slot on
+    // this screen via hideZoneSelectorSlotOnScreen. Whether the hide
+    // we just completed was the user-dismiss path (handled also by
+    // hideSnapAssist's restore at line 322) or the cross-screen
+    // singleton-dismiss in showSnapAssist (which has no other
+    // restore path), the selector should come back if the drag is
+    // still logically active.
+    if (m_zoneSelectorVisible && it->zoneSelectorPhysScreen && it->zoneSelectorGeometry.isValid()) {
+        showZoneSelectorSlotOnScreen(effectiveId, it->zoneSelectorPhysScreen, it->zoneSelectorGeometry);
+    }
     syncPassiveShellSurfaceState(effectiveId);
 }
 

@@ -95,21 +95,14 @@ public:
      */
     struct PerScreenOverlayState
     {
-        // PhosphorLayer-backed lifecycle handles. Own the QQuickWindow via their
-        // internal transport. The parallel QQuickWindow* fields below are convenience
-        // accessors cached from surface->window() at create time and preserved so the
-        // hundreds of `window->setProperty(...)` call sites in overlayservice/*.cpp
-        // don't each need to reach through a surface pointer.
-        PhosphorLayer::Surface* overlaySurface = nullptr;
         // Unified per-screen passive overlay shell — single wl_surface
-        // hosting kbd-None overlay slots (currently OSD; subsequent
-        // migration steps fold zone-selector / main overlay /
-        // snap-assist / picker into here). See PassiveOverlayShell.qml
+        // hosting kbd-None overlay slots (OSD, zone-selector, main
+        // overlay, snap-assist, picker). See PassiveOverlayShell.qml
         // and PzRoles::PassiveShell for the architectural rationale.
-        // Replaces the previous per-content `notificationSurface`
-        // (PzRoles::Notification) member that hosted only OSD content;
-        // the OSD slot QQuickItem inside the shell is now the
-        // SurfaceAnimator target for OSD show/hide.
+        // The shell QQuickWindow is reached via passiveShellSurface->window()
+        // and cached in passiveShellWindow at create-time. Per-content
+        // "is this slot wired up?" sentinels live as separate fields
+        // below (overlayPhysScreen / zoneSelectorPhysScreen / ...).
         PhosphorLayer::Surface* passiveShellSurface = nullptr;
         QQuickWindow* passiveShellWindow = nullptr;
         QQuickItem* passiveShellOsdSlot = nullptr;
@@ -118,7 +111,9 @@ public:
         QQuickItem* passiveShellZoneSelectorSlot = nullptr;
         QQuickItem* passiveShellMainOverlaySlot = nullptr;
 
-        QQuickWindow* overlayWindow = nullptr;
+        // overlayPhysScreen != nullptr is the sentinel for "main overlay
+        // mode is active on this screen" — set in createOverlayWindow,
+        // cleared in destroyOverlayWindow / releaseSurfacesInState.
         QScreen* overlayPhysScreen = nullptr;
         QRect overlayGeometry;
         QMetaObject::Connection overlayGeomConnection; ///< geometryChanged connection for overlay
@@ -694,12 +689,10 @@ private:
     void destroyZoneSelectorWindow(const QString& screenId);
     void updateZoneSelectorWindow(const QString& screenId);
     void showLayoutOsdImpl(PhosphorZones::Layout* layout, const QString& screenId, bool locked);
-    /// Tear down the per-screen passive overlay shell (formerly the
-    /// per-content notification surface — unified-shell migration
-    /// collapsed it onto PzRoles::PassiveShell). Kept under the legacy
-    /// name so the existing hot-plug
-    /// `destroyAllWindowsForPhysicalScreen` callers don't churn — a
-    /// future cleanup can rename to `destroyPassiveShell`.
+    /// Tear down the per-screen passive overlay shell. Deletes the
+    /// shell PhosphorLayer::Surface (and its QQuickWindow + every slot
+    /// QQuickItem owned by it). Called from
+    /// `destroyAllWindowsForPhysicalScreen` on screen hot-plug cleanup.
     void destroyPassiveShell(const QString& screenId);
 
     /// Lazily create the per-screen NotificationOverlay window if missing,

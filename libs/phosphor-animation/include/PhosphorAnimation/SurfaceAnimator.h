@@ -7,7 +7,6 @@
 
 #include <PhosphorLayer/ISurfaceAnimator.h>
 
-#include <QHash>
 #include <QObject>
 #include <QPointer>
 #include <QString>

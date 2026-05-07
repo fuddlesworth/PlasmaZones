@@ -121,9 +121,12 @@ void OverlayService::setSettings(ISettings* settings)
                     qCInfo(lcOverlay) << "Shader files changed on disk, triggering hot-reload";
                     PhosphorRendering::ShaderCompiler::clearCache();
                     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-                        auto* window = it_.value().overlayWindow;
-                        if (window && window->property(OverlayQmlPropertyNames::IsShaderOverlay.data()).toBool()) {
-                            QMetaObject::invokeMethod(window, "reloadShader");
+                        if (!it_.value().overlayPhysScreen) {
+                            continue;
+                        }
+                        auto* slot = it_.value().passiveShellMainOverlaySlot;
+                        if (slot && slot->property("useShader").toBool()) {
+                            QMetaObject::invokeMethod(slot, "reloadShader");
                         }
                     }
                     if (m_shaderPreviewWindow
@@ -308,7 +311,10 @@ void OverlayService::syncCavaState()
         if (m_audioProvider->isRunning()) {
             m_audioProvider->stop();
             for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-                auto* window = it_.value().overlayWindow;
+                if (!it_.value().overlayPhysScreen) {
+                    continue;
+                }
+                auto* window = it_.value().passiveShellWindow;
                 if (window) {
                     writeQmlProperty(window, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
                 }

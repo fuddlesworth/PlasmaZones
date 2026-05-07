@@ -532,15 +532,16 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
         return;
     }
     // Short-circuit before ensurePassiveShellFor: if the slot is
-    // already visible we have nothing to do, and ensurePassiveShellFor
-    // would otherwise pay createWarmedOsdSurface +
-    // primeSurfaceRenderPipeline cost on the existing-shell path's
-    // first idempotent check (it does early-return there, but we
-    // skip the lookup-by-string cost too).
+    // already visible AND the cached (physScreen, geom) match the
+    // request, we have nothing to do. If the cached values differ
+    // (mid-flight monitor hot-plug, geometry update), fall through
+    // to refresh — silently dropping the new args would leave the
+    // slot painted with stale geometry.
     {
         auto existing = m_screenStates.find(effectiveId);
         if (existing != m_screenStates.end() && existing->passiveShellZoneSelectorSlot
-            && existing->passiveShellZoneSelectorSlot->isVisible()) {
+            && existing->passiveShellZoneSelectorSlot->isVisible() && existing->zoneSelectorPhysScreen == physScreen
+            && existing->zoneSelectorGeometry == targetGeom) {
             return;
         }
     }

@@ -118,7 +118,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         // finds nothing to flip and the overlay never becomes visible until
         // the next hide()/show() cycle.
         const bool cursorVsHasWindow = m_screenStates.contains(cursorEffectiveId)
-            && m_screenStates.value(cursorEffectiveId).overlayWindow != nullptr;
+            && m_screenStates.value(cursorEffectiveId).overlayPhysScreen != nullptr;
         if (cursorVsHasWindow || m_excludedScreens.contains(cursorEffectiveId)) {
             m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
             applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
@@ -146,16 +146,16 @@ void OverlayService::hide()
     // Do NOT invalidate m_shaderTimer - keeps iTime continuous across show/hide
     // so animations feel less predictable and don't restart
 
-    // Destroy overlay windows instead of hiding them. On Vulkan with Wayland
-    // layer-shell, window->hide() destroys the wl_surface but the Qt Vulkan
-    // backend doesn't properly reinitialize the VkSwapchainKHR when the window
-    // is re-shown, causing the scene graph render loop to stall. Destroying the
-    // window entirely and creating a fresh one on the next show() avoids this.
-    // initializeOverlay() will call createOverlayWindow() since overlay windows
-    // are now destroyed.
+    // Post-shell-migration: the shell wl_surface stays mapped across
+    // hide/show cycles (its lifecycle is managed by destroyPassiveShell,
+    // not per-overlay-toggle). Drive the main-overlay slot's
+    // configured hide leg via the SurfaceAnimator so the slot fades
+    // out cleanly and the next show() can fade-in. dismissOverlayWindow
+    // also clears the per-screen "main overlay active" sentinel
+    // (overlayPhysScreen) via setVisible(false) + syncPassiveShellSurfaceState.
     const QStringList screenIds = m_screenStates.keys();
     for (const QString& screenId : screenIds) {
-        destroyOverlayWindow(screenId);
+        dismissOverlayWindow(screenId);
     }
 
     m_pendingShaderError.clear();
@@ -190,7 +190,10 @@ void OverlayService::setIdleForDragPause()
         return;
     }
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        QQuickWindow* window = it.value().overlayWindow;
+        if (!it.value().overlayPhysScreen) {
+            continue;
+        }
+        QQuickWindow* window = it.value().passiveShellWindow;
         if (!window) {
             continue;
         }
@@ -267,7 +270,10 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
     // when the value actually changes, so flipping _idled on a window
     // that's already in the target state is free.
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        QQuickWindow* window = it.value().overlayWindow;
+        if (!it.value().overlayPhysScreen) {
+            continue;
+        }
+        QQuickWindow* window = it.value().passiveShellWindow;
         if (!window) {
             continue;
         }

@@ -32,16 +32,16 @@ namespace PlasmaZones {
 void OverlayService::destroyIfTypeMismatch(const QString& screenId)
 {
     auto it = m_screenStates.find(screenId);
-    if (it == m_screenStates.end()) {
+    if (it == m_screenStates.end() || !it->overlayPhysScreen) {
         return;
     }
-    auto* existing = it->overlayWindow;
-    if (!existing) {
+    auto* slot = it->passiveShellMainOverlaySlot;
+    if (!slot) {
         return;
     }
-    const bool windowIsShader = existing->property(OverlayQmlPropertyNames::IsShaderOverlay.data()).toBool();
+    const bool slotIsShader = slot->property("useShader").toBool();
     const bool shouldUseShader = useShaderForScreen(screenId);
-    if (windowIsShader != shouldUseShader) {
+    if (slotIsShader != shouldUseShader) {
         destroyOverlayWindow(screenId);
     }
 }
@@ -144,8 +144,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // manifest as the runaway overlay-create loop this refactor is fixing.
     for (const QString& targetId : targetIds) {
         auto it = m_screenStates.constFind(targetId);
-        if (it != m_screenStates.constEnd() && it->overlayWindow) {
-            continue; // Already correctly keyed with a live window.
+        if (it != m_screenStates.constEnd() && it->overlayPhysScreen) {
+            continue; // Already correctly keyed with a live overlay context.
         }
         const QString targetPhys = PhosphorIdentity::VirtualScreenId::extractPhysicalId(targetId);
         QString donorKey;
@@ -153,7 +153,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             if (targetSet.contains(sit.key())) {
                 continue; // Another target's entry, leave it alone.
             }
-            if (!sit.value().overlayWindow) {
+            if (!sit.value().overlayPhysScreen) {
                 continue;
             }
             if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(sit.key()) != targetPhys) {
@@ -193,14 +193,14 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         }
 
         destroyIfTypeMismatch(screenId);
-        if (!m_screenStates.contains(screenId) || !m_screenStates[screenId].overlayWindow) {
+        if (!m_screenStates.contains(screenId) || !m_screenStates[screenId].overlayPhysScreen) {
             if (haveEffective) {
                 createOverlayWindow(screenId, physScreen, geom);
             } else {
                 createOverlayWindow(physScreen);
             }
         }
-        if (auto* window = m_screenStates.value(screenId).overlayWindow) {
+        if (auto* window = m_screenStates.value(screenId).passiveShellWindow) {
             m_screenStates[screenId].overlayPhysScreen = physScreen;
             if (geom.isValid()) {
                 m_screenStates[screenId].overlayGeometry = geom;
@@ -253,9 +253,12 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
         // Flash zones to indicate layout change if enabled
         if (m_settings && m_settings->flashZonesOnSwitch()) {
             for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-                auto* window = it_.value().overlayWindow;
-                if (window) {
-                    QMetaObject::invokeMethod(window, "flash");
+                if (!it_.value().overlayPhysScreen) {
+                    continue;
+                }
+                auto* slot = it_.value().passiveShellMainOverlaySlot;
+                if (slot) {
+                    QMetaObject::invokeMethod(slot, "flash");
                 }
             }
         }
@@ -384,10 +387,6 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     auto* slot = state->passiveShellMainOverlaySlot;
     auto* window = state->passiveShellWindow;
 
-    // Mirror the shell handles onto the legacy overlay* fields so
-    // existing per-frame property pumps keep working unchanged.
-    state->overlaySurface = state->passiveShellSurface;
-    state->overlayWindow = window;
     state->overlayPhysScreen = physScreen;
     state->overlayGeometry = geometry;
 
@@ -514,6 +513,11 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
             if (sit == m_screenStates.end() || !sit->passiveShellMainOverlaySlot) {
                 return;
             }
+            QObject::disconnect(sit->overlayGeomConnection);
+            sit->overlayGeomConnection = {};
+            sit->overlayPhysScreen = nullptr;
+            sit->overlayGeometry = QRect();
+            sit->labelsTextureHash = 0;
             writeQmlProperty(sit->passiveShellMainOverlaySlot, QStringLiteral("loaded"), false);
             sit->passiveShellMainOverlaySlot->setVisible(false);
             syncPassiveShellSurfaceState(screenIdCopy);
@@ -522,6 +526,11 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
         // No shell surface — fall back to the immediate-toggle path so
         // the slot at least lands in the right state. Should not
         // normally happen post-ensurePassiveShellFor.
+        QObject::disconnect(it->overlayGeomConnection);
+        it->overlayGeomConnection = {};
+        it->overlayPhysScreen = nullptr;
+        it->overlayGeometry = QRect();
+        it->labelsTextureHash = 0;
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
         slot->setVisible(false);
         syncPassiveShellSurfaceState(screenId);
@@ -534,7 +543,7 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         return false;
     }
     auto donor = m_screenStates.find(oldKey);
-    if (donor == m_screenStates.end() || !donor->overlayWindow) {
+    if (donor == m_screenStates.end() || !donor->overlayPhysScreen) {
         return false;
     }
 
@@ -561,7 +570,7 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     // should not have selected this donor.
     auto existing = m_screenStates.find(newKey);
     if (existing != m_screenStates.end()) {
-        if (existing->overlayWindow) {
+        if (existing->overlayPhysScreen) {
             qCWarning(lcOverlay) << "rekeyOverlayState: refusing to clobber live entry under" << newKey << "with donor"
                                  << oldKey;
             return false;
@@ -593,15 +602,15 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         // rendering across the full monitor. wlr-layer-shell v2+ allows
         // set_anchor / set_margin post-attach; push the corrected placement
         // through the mutable transport handle.
-        if (rekeyed.overlaySurface) {
-            if (auto* handle = rekeyed.overlaySurface->transport()) {
+        if (rekeyed.passiveShellSurface) {
+            if (auto* handle = rekeyed.passiveShellSurface->transport()) {
                 const QRect targetVsGeom = resolveScreenGeometry(m_screenManager, newKey);
                 const auto placement = layerPlacementForVs(isVS ? targetVsGeom : QRect(), physScreen->geometry());
                 handle->setAnchors(placement.anchors);
                 handle->setMargins(placement.margins);
                 if (isVS && targetVsGeom.isValid()) {
                     rekeyed.overlayGeometry = targetVsGeom;
-                    if (auto* w = rekeyed.overlayWindow) {
+                    if (auto* w = rekeyed.passiveShellWindow) {
                         w->setWidth(targetVsGeom.width());
                         w->setHeight(targetVsGeom.height());
                     }
@@ -630,7 +639,7 @@ void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) 
     // point of the one-per-VS refactor.
     const QSet<QString> targetSet(targetIds.cbegin(), targetIds.cend());
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (!it.value().overlayWindow) {
+        if (!it.value().overlayPhysScreen) {
             continue;
         }
         if (!targetSet.contains(it.key())) {
@@ -661,15 +670,18 @@ QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* p
             return; // State was cleaned up, ignore stale geometry signal
         }
         auto& st = stateIt.value();
-        if (auto* w = st.overlayWindow) {
+        if (!st.overlayPhysScreen) {
+            return; // Main overlay context not active for this entry
+        }
+        if (auto* w = st.passiveShellWindow) {
             if (isVS) {
                 // Virtual screen: recompute sub-region geometry from Phosphor::Screens::ScreenManager
                 // (virtual proportions are relative to the physical screen) and
                 // push new margins via the PhosphorLayer transport handle.
                 // Anchors (Top|Left) are fixed at attach and can't change.
                 const QRect vsGeom = resolveScreenGeometry(m_screenManager, sid);
-                if (vsGeom.isValid() && st.overlaySurface) {
-                    if (auto* handle = st.overlaySurface->transport()) {
+                if (vsGeom.isValid() && st.passiveShellSurface) {
+                    if (auto* handle = st.passiveShellSurface->transport()) {
                         handle->setMargins(layerPlacementForVs(vsGeom, newGeom).margins);
                     }
                     w->setWidth(vsGeom.width());
@@ -703,18 +715,11 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
         return;
     }
     QObject::disconnect(it->overlayGeomConnection);
-    // overlaySurface / overlayWindow are aliases of the shell pair;
-    // clearing them here is just a sentinel reset — the actual
-    // wl_surface stays alive (via passiveShellSurface) until
-    // destroyPassiveShell runs. Do NOT auto-erase the screen-state
-    // entry from this path: the entry is still live (the shell hosts
-    // OSD / snap-assist / picker / zone-selector slots independently
-    // of the main overlay's lifetime), and erasing here would orphan
-    // the passiveShellSurface against destroyAllWindowsForPhysicalScreen's
-    // expectation that the entry survives until destroyPassiveShell
-    // is called too.
-    it->overlaySurface = nullptr;
-    it->overlayWindow = nullptr;
+    // Reset the main-overlay context sentinel + cached geom for this
+    // screen. The shell wl_surface stays alive (via passiveShellSurface)
+    // until destroyPassiveShell runs, hosting any other slots
+    // (OSD / snap-assist / picker / zone-selector) independently of
+    // the main overlay's lifetime.
     it->overlayPhysScreen = nullptr;
     it->overlayGeometry = QRect();
     it->overlayGeomConnection = {};

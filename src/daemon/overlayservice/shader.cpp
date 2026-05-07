@@ -191,7 +191,10 @@ void OverlayService::stopShaderAnimation()
     // Don't stop CAVA here — it stays warm for instant audio data on next show().
     // Just clear the spectrum from overlay windows so they don't render stale data.
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-        auto* window = it_.value().overlayWindow;
+        if (!it_.value().overlayPhysScreen) {
+            continue;
+        }
+        auto* window = it_.value().passiveShellWindow;
         if (window) {
             writeQmlProperty(window, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
         }
@@ -218,7 +221,10 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
     // ZoneShaderItem::setAudioSpectrum() detects and unwraps QVector<float> directly.
     const QVariant wrapped = QVariant::fromValue(spectrum);
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
-        auto* window = it.value().overlayWindow;
+        if (!it.value().overlayPhysScreen) {
+            continue;
+        }
+        auto* window = it.value().passiveShellWindow;
         if (window && useShaderForScreen(it.key())) {
             writeQmlProperty(window, QString(OverlayQmlPropertyNames::AudioSpectrum), wrapped);
         }
@@ -289,7 +295,10 @@ void OverlayService::updateShaderUniforms()
     // they don't have iTime/iFrame properties and writing to hidden windows
     // is wasted work (60Hz property writes silently dropped by QML).
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
-        auto* window = it.value().overlayWindow;
+        if (!it.value().overlayPhysScreen) {
+            continue;
+        }
+        auto* window = it.value().passiveShellWindow;
         if (window && window->isVisible()) {
             writeQmlProperty(window, QStringLiteral("iTime"), static_cast<qreal>(iTime));
             writeQmlProperty(window, QStringLiteral("iTimeDelta"), static_cast<qreal>(iTimeDelta));

@@ -588,6 +588,12 @@ void WindowDragAdaptor::clearForCompositorReconnect()
     // snapAssistReady would never be emitted.
     m_snapAssistPendingWindowId.clear();
     m_snapAssistPendingScreenId.clear();
+    // Drop any picker-nav lambda registrations: their captures
+    // include OverlayService* which the compositor-reconnect path
+    // may tear down before the next picker-show re-registers.
+    // Leaving stale registrations alive would route an arrow keypress
+    // into a freed pointer.
+    releaseLayoutPickerNavShortcuts();
 }
 
 void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)

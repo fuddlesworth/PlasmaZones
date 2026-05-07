@@ -1051,6 +1051,28 @@ public:
             return;
         }
 
+        // If track.target's QPointer auto-nulled because the
+        // QQuickItem was destroyed mid-flight, parking under
+        // {surface, nullptr} keys the entry under a sentinel that
+        // runLeg never queries (it always passes a non-null target).
+        // Skip the park step: nothing useful to reuse, and burning
+        // an unreclaimable slot in m_pendingReuse just leaks until
+        // surface destruction. Tear the pieces down inline.
+        if (!track.target) {
+            PendingReuseShader transient;
+            transient.shaderItem = std::move(track.shaderItem);
+            transient.shaderSource = std::move(track.shaderSource);
+            transient.shaderAnchor = track.shaderAnchor;
+            destroyPendingReuseEntry(transient);
+            track.shaderItem = nullptr;
+            track.shaderSource = nullptr;
+            track.shaderAnchor.clear();
+            track.foundExplicitAnchor = false;
+            track.shaderEffectId.clear();
+            track.requestedPadPtr.reset();
+            track.boundsExtentPtr.reset();
+            return;
+        }
         // Park to m_pendingReuse[{surface, target}]. If a previous
         // pending entry exists for this (surface, target) pair (rare —
         // should only happen if a shader was parked but never
@@ -1333,9 +1355,14 @@ public:
         if (!target) {
             cancelAllForSurface(surface);
             qCWarning(lcSurfaceAnimator) << "runLeg called with null target — onComplete fires synchronously";
-            // Surface won't re-attach without a target; drop every
-            // stashed shader piece for this surface.
-            destroyPendingReuseFor(surface);
+            // Null-target dispatch is malformed and won't drive any
+            // specific (surface, target) pair. The tickAll sweep will
+            // GC stale pending entries that outlive their target's
+            // QPointer; do NOT cascade-destroy every sibling slot's
+            // parked shader on this surface. The unified-overlay-shell
+            // pattern hosts multiple sibling slots per Surface, so
+            // surface-wide destruction violates the per-(Surface, target)
+            // keying contract.
             // Synchronous onComplete: same forbidden-ops contract as a
             // legCompleted-fired callback (SurfaceAnimator.h:79-90).
             if (onComplete) {
@@ -1409,18 +1436,22 @@ public:
                     }
                     m_pendingReuse.erase(pendIt);
                 } else {
-                    // Mismatch (different effect, different target,
-                    // QML scene rebuild swapped the anchor, or stale
-                    // QPointers from item destruction) — drop the
-                    // stash now rather than letting it sit with dead
-                    // pointers indefinitely.
-                    destroyPendingReuseFor(surface);
+                    // Mismatch (different effect, QML scene rebuild
+                    // swapped the anchor, or stale QPointers from item
+                    // destruction) — drop ONLY this {surface, target}
+                    // entry. Sibling slots on the same shell surface
+                    // (OSD, zone-selector, etc.) keep their parked
+                    // shaders intact; per-(Surface, target) keying is
+                    // the whole point of TrackKey.
+                    destroyPendingReuseForKey(TrackKey{surface, target});
                 }
             }
         } else {
-            // Non-shader leg following a shader leg — no chance of
-            // reuse. Drop any stashed shader for this surface.
-            destroyPendingReuseFor(surface);
+            // Non-shader leg following a shader leg on THIS target —
+            // drop ONLY this target's stash. Other slots on the same
+            // surface may have valid parked shaders that should
+            // survive (per-(Surface, target) keying contract).
+            destroyPendingReuseForKey(TrackKey{surface, target});
         }
 
         PhosphorAnimation::IMotionClock* clock = &m_clock;

@@ -63,16 +63,9 @@ void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
 {
     QObject::disconnect(state.overlayGeomConnection);
     state.overlayGeomConnection = {};
-    // overlaySurface and overlayWindow are aliases pointing at the
-    // SAME Surface/QQuickWindow as passiveShellSurface/passiveShellWindow
-    // (set in createOverlayWindow). deleteLater on both queues two
-    // DeferredDelete events — the second fires on a freed object, UAF.
-    // Delete only via the passiveShell* handle.
     if (state.passiveShellSurface) {
         state.passiveShellSurface->deleteLater();
     }
-    state.overlaySurface = nullptr;
-    state.overlayWindow = nullptr;
     state.passiveShellSurface = nullptr;
     state.passiveShellWindow = nullptr;
     // Slot Items are children of the shell QQuickWindow; deleting the
@@ -742,8 +735,12 @@ PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screen
 
 void OverlayService::hideDisabledAndRefresh()
 {
-    // Destroy windows on screens where the current context is disabled.
-    // Destroy (not hide) to free GPU resources for permanently inactive contexts.
+    // Hide overlay + zone-selector slots on screens where the current
+    // context is disabled. Post-shell-migration the wl_surface stays
+    // mapped (managed by destroyPassiveShell on hot-plug, not per
+    // context-toggle); each per-content slot fades out via its
+    // configured hide leg. dismissOverlayWindow / hideZoneSelectorSlotOnScreen
+    // both clear the per-screen sentinel on completion.
     if (m_settings) {
         const QStringList screenIds = m_screenStates.keys();
         for (const QString& screenId : screenIds) {
@@ -751,7 +748,7 @@ void OverlayService::hideDisabledAndRefresh()
                                   m_currentVirtualDesktop, m_currentActivity)) {
                 destroyZoneSelectorWindow(screenId);
                 if (m_visible) {
-                    destroyOverlayWindow(screenId);
+                    dismissOverlayWindow(screenId);
                 }
             }
         }
@@ -767,7 +764,7 @@ void OverlayService::hideDisabledAndRefresh()
         if (it.value().passiveShellZoneSelectorSlot) {
             updateZoneSelectorWindow(screenId);
         }
-        if (m_visible && it.value().overlayWindow && it.value().overlayPhysScreen) {
+        if (m_visible && it.value().overlayPhysScreen) {
             updateOverlayWindow(screenId, it.value().overlayPhysScreen);
         }
     }
@@ -798,7 +795,7 @@ void OverlayService::setupForScreen(QScreen* screen)
     const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     if (mgr && mgr->hasVirtualScreens(physId)) {
         for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
-            if (!m_screenStates.contains(vsId) || !m_screenStates[vsId].overlayWindow) {
+            if (!m_screenStates.contains(vsId) || !m_screenStates[vsId].overlayPhysScreen) {
                 QRect vsGeom = mgr->screenGeometry(vsId);
                 if (!vsGeom.isValid()) {
                     qCWarning(lcOverlay) << "setupForScreen: invalid geometry for virtual screen" << vsId
@@ -809,7 +806,7 @@ void OverlayService::setupForScreen(QScreen* screen)
             }
         }
     } else {
-        if (!m_screenStates.contains(physId) || !m_screenStates[physId].overlayWindow) {
+        if (!m_screenStates.contains(physId) || !m_screenStates[physId].overlayPhysScreen) {
             createOverlayWindow(screen);
         }
     }
@@ -857,18 +854,28 @@ void OverlayService::handleScreenAdded(QScreen* screen)
             if (vsGeom.isValid()) {
                 createOverlayWindow(vsId, screen, vsGeom);
                 updateOverlayWindow(vsId, screen);
-                if (auto* window = m_screenStates.value(vsId).overlayWindow) {
-                    assertWindowOnScreen(window, screen, vsGeom);
-                    window->show();
+                const auto& vsState = m_screenStates.value(vsId);
+                if (vsState.overlayPhysScreen) {
+                    if (auto* window = vsState.passiveShellWindow) {
+                        assertWindowOnScreen(window, screen, vsGeom);
+                        if (vsState.passiveShellSurface && !vsState.passiveShellSurface->isLogicallyShown()) {
+                            vsState.passiveShellSurface->show();
+                        }
+                    }
                 }
             }
         }
     } else {
         createOverlayWindow(screen);
         updateOverlayWindow(screen);
-        if (auto* window = m_screenStates.value(physScreenId).overlayWindow) {
-            assertWindowOnScreen(window, screen);
-            window->show();
+        const auto& pState = m_screenStates.value(physScreenId);
+        if (pState.overlayPhysScreen) {
+            if (auto* window = pState.passiveShellWindow) {
+                assertWindowOnScreen(window, screen);
+                if (pState.passiveShellSurface && !pState.passiveShellSurface->isLogicallyShown()) {
+                    pState.passiveShellSurface->show();
+                }
+            }
         }
     }
 }
