@@ -22,7 +22,7 @@
 #include "../common/layoutbundlebuilder.h"
 #include "../core/constants.h"
 #include "../core/geometryutils.h"
-#include "../core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/LayoutComputeService.h>
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../pz_i18n.h"
@@ -961,7 +961,8 @@ void SettingsController::recalcLocalLayouts()
         // Settings app is a separate process without a daemon ScreenManager — pass
         // nullptr and accept the Qt-availableGeometry fallback (this preview code
         // path doesn't need VS-aware sub-regions).
-        LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary));
+        PhosphorZones::LayoutComputeService::recalculateSync(
+            layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary));
     }
 }
 

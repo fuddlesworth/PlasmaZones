@@ -10,12 +10,12 @@
 #include "../shortcutmanager.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
-#include "../../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../../core/activitymanager.h"
 #include "../../core/logging.h"
 #include "../../core/constants.h"
 #include "../../core/utils.h"
-#include "../../core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include "../../dbus/layoutadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../dbus/zonedetectionadaptor.h"

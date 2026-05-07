@@ -7,9 +7,9 @@
 #include "../unifiedlayoutcontroller.h"
 #include "../shortcutmanager.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../../core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorScreens/Manager.h>
-#include "../../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../../core/activitymanager.h"
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
@@ -125,7 +125,7 @@ void Daemon::connectScreenSignals()
         for (const QString& sid : vsIds) {
             PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
             if (screenLayout) {
-                LayoutComputeService::recalculateSync(
+                PhosphorZones::LayoutComputeService::recalculateSync(
                     screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
             }
         }
@@ -724,7 +724,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     for (const QString& sid : affectedScreenIds) {
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
-            LayoutComputeService::recalculateSync(
+            PhosphorZones::LayoutComputeService::recalculateSync(
                 screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
         }
     }
@@ -796,7 +796,7 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     for (const QString& sid : affectedScreenIds) {
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
-            LayoutComputeService::recalculateSync(
+            PhosphorZones::LayoutComputeService::recalculateSync(
                 screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
         }
     }

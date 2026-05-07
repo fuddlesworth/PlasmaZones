@@ -5,7 +5,7 @@
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
 #include "../../core/logging.h"
-#include "../../core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include "../../core/isettings.h"
 #include <PhosphorSnapEngine/SnapEngine.h>

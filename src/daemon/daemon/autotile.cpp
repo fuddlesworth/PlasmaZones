@@ -6,15 +6,15 @@
 #include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../../core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorScreens/Manager.h>
-#include "../../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../../core/activitymanager.h"
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
 #include "../../core/constants.h"
 #include "../../core/utils.h"
-#include "../../core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include "../config/settings.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
@@ -552,7 +552,7 @@ void Daemon::processPendingGeometryUpdates()
     // emits with layout==nullptr in that case.
     auto conn = std::make_shared<QMetaObject::Connection>();
     *conn = connect(
-        m_layoutComputeService.get(), &LayoutComputeService::geometriesComputed, this,
+        m_layoutComputeService.get(), &PhosphorZones::LayoutComputeService::geometriesComputed, this,
         [this, pending, conn](const QString& screenId, const QUuid& layoutId, PhosphorZones::Layout* /*layout*/) {
             const PendingKey key{screenId, layoutId};
             if (!pending->remove(key)) {

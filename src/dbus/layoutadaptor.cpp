@@ -5,7 +5,7 @@
 #include "dbushelpers.h"
 #include "../core/interfaces.h"
 #include <PhosphorZones/Layout.h>
-#include "../core/layoutfactory.h"
+#include <PhosphorZones/LayoutFactory.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/constants.h"
 #include <PhosphorZones/LayoutUtils.h>
@@ -15,7 +15,7 @@
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include "../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../core/activitymanager.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../core/logging.h"
@@ -448,7 +448,7 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
         return QString();
     }
 
-    PhosphorZones::Layout* layout = LayoutFactory::create(type, m_layoutManager);
+    PhosphorZones::Layout* layout = PhosphorZones::LayoutFactory::create(type, m_layoutManager);
     if (!layout) {
         qCWarning(lcDbusLayout) << "Failed to create layout of type:" << type;
         return QString();

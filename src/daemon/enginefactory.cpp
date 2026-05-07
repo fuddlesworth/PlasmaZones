@@ -15,7 +15,8 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
                         Phosphor::Screens::ScreenManager* screenManager,
                         PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
-                        PhosphorWorkspaces::VirtualDesktopManager* vdm, WindowRegistry* windowRegistry, QObject* parent)
+                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry,
+                        QObject* parent)
 {
     Q_UNUSED(parent)
     // --- AutotileEngine ---

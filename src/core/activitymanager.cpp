@@ -3,7 +3,7 @@
 
 #include "activitymanager.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include "virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "logging.h"
 #include "utils.h"
 #include <QGuiApplication>

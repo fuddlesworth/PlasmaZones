@@ -41,10 +41,10 @@
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
-#include "../core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/ZoneDetector.h>
-#include "../core/windowregistry.h"
-#include "../core/virtualdesktopmanager.h"
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../core/activitymanager.h"
 #include "../core/constants.h"
 #include "../core/geometryutils.h"
@@ -98,7 +98,7 @@ Daemon::Daemon(QObject* parent)
     , m_configBackend(createDefaultConfigBackend())
     , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
                                                                       QStringLiteral("plasmazones/layouts")))
-    , m_layoutComputeService(std::make_unique<LayoutComputeService>(nullptr))
+    , m_layoutComputeService(std::make_unique<PhosphorZones::LayoutComputeService>(nullptr))
     // m_curveRegistry / m_profileRegistry are default-constructed (no
     // init-list entries) — daemon.h declares them between m_layoutComputeService
     // and m_clockManager, so the in-class default initialisation runs before
@@ -113,7 +113,7 @@ Daemon::Daemon(QObject* parent)
     // see the DECLARATION ORDER INVARIANT comment there.
     , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, nullptr))
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
-    , m_windowRegistry(std::make_unique<WindowRegistry>(nullptr))
+    , m_windowRegistry(std::make_unique<PhosphorEngine::WindowRegistry>(nullptr))
     , m_panelSource(std::make_unique<Phosphor::Screens::PlasmaPanelSource>())
     , m_virtualScreenStore(std::make_unique<SettingsConfigStore>(m_settings.get()))
     , m_screenManager(std::make_unique<Phosphor::Screens::ScreenManager>(
@@ -599,7 +599,7 @@ bool Daemon::init()
     // have correct normalized coordinates for preview rendering (KCM, OSD, selector).
     if (QScreen* primary = Utils::primaryScreen()) {
         for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
-            LayoutComputeService::recalculateSync(
+            PhosphorZones::LayoutComputeService::recalculateSync(
                 layout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
         }
     }
@@ -794,9 +794,10 @@ bool Daemon::init()
     // Drop closed windows from m_lastAutotileOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would
     // then tile N+1 windows for N actual windows).
-    connect(m_windowRegistry.get(), &WindowRegistry::windowDisappeared, this, [this](const QString& instanceId) {
-        pruneAutotileOrdersForWindow(instanceId);
-    });
+    connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowDisappeared, this,
+            [this](const QString& instanceId) {
+                pruneAutotileOrdersForWindow(instanceId);
+            });
 
     // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).
     // When the delayed panel requery completes it emits availableGeometryChanged, which triggers

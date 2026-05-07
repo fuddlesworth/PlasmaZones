@@ -4,7 +4,7 @@
 #include "geometryutils.h"
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/Layout.h>
-#include "layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/LayoutComputeService.h>
 #include "interfaces.h"
 #include "constants.h"
 #include <PhosphorEngine/IGeometrySettings.h>
@@ -219,7 +219,7 @@ EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, Phosphor
     }
 
     bool useAvail = !layout->useFullScreenGeometry();
-    LayoutComputeService::recalculateSync(layout, effectiveScreenGeometry(mgr, layout, screen));
+    PhosphorZones::LayoutComputeService::recalculateSync(layout, effectiveScreenGeometry(mgr, layout, screen));
 
     QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
@@ -242,7 +242,7 @@ EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, Phosphor
     if (vsGeom.isValid()) {
         bool useAvail = !layout->useFullScreenGeometry();
         QRectF effectiveGeom = useAvail && vsAvailGeom.isValid() ? QRectF(vsAvailGeom) : QRectF(vsGeom);
-        LayoutComputeService::recalculateSync(layout, effectiveGeom);
+        PhosphorZones::LayoutComputeService::recalculateSync(layout, effectiveGeom);
 
         int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
         ::PhosphorLayout::EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);

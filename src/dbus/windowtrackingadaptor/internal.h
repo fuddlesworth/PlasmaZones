@@ -12,7 +12,7 @@
 #include "../../core/constants.h"
 #include "../../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../../core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 

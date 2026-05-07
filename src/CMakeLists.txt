@@ -40,9 +40,6 @@ set(plasmazones_core_SRCS
     core/types.h
     core/utils.h
     core/utils.cpp
-    core/layoutfactory.h
-    core/windowtrackingservice.h
-    core/windowregistry.h
     core/daemongeometryresolver.h
     core/daemongeometryresolver.cpp
     core/platform.cpp
@@ -60,9 +57,6 @@ set(plasmazones_core_SRCS
     # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ —
     # consumers include <PhosphorZones/...> directly and construct the registry
     # with createAssignmentsBackend() + the "plasmazones/layouts" subdir inline.
-    core/layoutworker/layoutworker.h
-    core/layoutworker/layoutcomputeservice.h
-    core/layoutworker/types.h
     core/unifiedlayoutlist.cpp
     core/unifiedlayoutlist.h
     common/layoutpreviewserialize.cpp
@@ -80,7 +74,6 @@ set(plasmazones_core_SRCS
     # lifted to libs/phosphor-screens. Daemon consumers take
     # Phosphor::Screens::ScreenManager* via constructor injection —
     # no service-locator intermediary.
-    core/virtualdesktopmanager.h
     core/activitymanager.cpp
     core/activitymanager.h
     core/shaderregistry.h  # PlasmaZones subclass (singleton + paths)

@@ -4,8 +4,8 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include "../core/windowregistry.h"
-#include "../core/windowtrackingservice.h"
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorProtocol/WireTypes.h>
@@ -140,7 +140,7 @@ public:
      * subscribes to metadataChanged so we can refresh tracking that mirrors
      * the app class (e.g. last-used-zone class tag).
      */
-    void setWindowRegistry(WindowRegistry* registry);
+    void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
 
     /**
      * @brief Set engine references for routing operations per-screen
@@ -852,7 +852,7 @@ private:
     // Shared registry: compositor-supplied instance id → current metadata.
     // Not owned (daemon root owns it). Populated via setWindowMetadata D-Bus calls
     // and cleared from the windowClosed path.
-    QPointer<WindowRegistry> m_windowRegistry;
+    QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Persistence (adaptor responsibility: session.json save/load)

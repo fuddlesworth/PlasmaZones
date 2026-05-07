@@ -29,7 +29,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "core/windowregistry.h"
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
@@ -127,7 +127,7 @@ private Q_SLOTS:
                                                             QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettings(nullptr);
         m_zoneDetector = new StubZoneDetectorReactive(nullptr);
-        m_registry = new WindowRegistry(nullptr);
+        m_registry = new PhosphorEngine::WindowRegistry(nullptr);
 
         m_parent = new QObject(nullptr);
         m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, m_parent);
@@ -275,7 +275,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettings* m_settings = nullptr;
     StubZoneDetectorReactive* m_zoneDetector = nullptr;
-    WindowRegistry* m_registry = nullptr;
+    PhosphorEngine::WindowRegistry* m_registry = nullptr;
     QObject* m_parent = nullptr;
     WindowTrackingAdaptor* m_wta = nullptr;
     SnapEngine* m_snapEngine = nullptr;

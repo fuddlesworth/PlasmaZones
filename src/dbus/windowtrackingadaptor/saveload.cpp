@@ -12,7 +12,7 @@
 #include <PhosphorZones/Layout.h>
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>

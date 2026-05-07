@@ -7,7 +7,7 @@
 #include "../modetracker.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
-#include "../../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../../core/activitymanager.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"

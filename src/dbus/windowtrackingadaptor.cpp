@@ -15,13 +15,13 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorScreens/Manager.h>
-#include "../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../core/logging.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../core/types.h"
-#include "../core/windowregistry.h"
+#include <PhosphorEngine/WindowRegistry.h>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -462,7 +462,7 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
     qCDebug(lcDbusWindow) << "Cleaned up tracking data for closed window" << windowId;
 }
 
-void WindowTrackingAdaptor::setWindowRegistry(WindowRegistry* registry)
+void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* registry)
 {
     m_windowRegistry = registry;
     if (m_service) {
@@ -476,8 +476,9 @@ void WindowTrackingAdaptor::setWindowRegistry(WindowRegistry* registry)
     // stays put even if the new class would have behaved differently at open.
     // The only safe reactive update is refreshing tracking fields that mirror
     // the app class, so future lookups don't compare against a stale string.
-    QObject::connect(registry, &WindowRegistry::metadataChanged, this,
-                     [this](const QString& instanceId, const WindowMetadata& oldMeta, const WindowMetadata& newMeta) {
+    QObject::connect(registry, &PhosphorEngine::WindowRegistry::metadataChanged, this,
+                     [this](const QString& instanceId, const PhosphorEngine::WindowMetadata& oldMeta,
+                            const PhosphorEngine::WindowMetadata& newMeta) {
                          if (oldMeta.appId == newMeta.appId || !m_service) {
                              return;
                          }
@@ -511,7 +512,7 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
         return;
     }
 
-    WindowMetadata meta;
+    PhosphorEngine::WindowMetadata meta;
     meta.appId = appId;
     meta.desktopFile = desktopFile;
     meta.title = title;
