@@ -24,12 +24,17 @@ set(CMAKE_AUTOMOC ON)
 
 add_library(PhosphorCompositor SHARED
     include/PhosphorCompositor/ICompositorBridge.h
+    include/PhosphorCompositor/IDragHandler.h
+    include/PhosphorCompositor/IGeometryHandler.h
+    include/PhosphorCompositor/ILifecycleHandler.h
+    include/PhosphorCompositor/DaemonClient.h
     include/PhosphorCompositor/AutotileState.h
     include/PhosphorCompositor/FloatingCache.h
     include/PhosphorCompositor/DebouncedAction.h
     include/PhosphorCompositor/GeometryHelpers.h
     include/PhosphorCompositor/SnapAssistFilter.h
     include/PhosphorCompositor/TriggerParser.h
+    src/DaemonClient.cpp
     src/SnapAssistFilter.cpp
     src/TriggerParser.cpp
 )
@@ -53,6 +58,7 @@ target_link_libraries(PhosphorCompositor
     PUBLIC
         Qt6::Core
         Qt6::Gui
+        Qt6::DBus
         PhosphorProtocol::PhosphorProtocol
         PhosphorIdentity::PhosphorIdentity
         PhosphorAnimation::PhosphorAnimation
