@@ -29,7 +29,7 @@ QRect snapToRect(const QRectF& rf)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Boundary-based constraint solver for enforceWindowMinSizes
+// Boundary-based constraint solver for enforceMinSizes
 // ═══════════════════════════════════════════════════════════════════════════════
 
 static bool solveAxisBoundaries(QVector<QRect>& zones, const QVector<int>& minDims, bool horizontal, int gapThreshold)
@@ -90,7 +90,7 @@ static bool solveAxisBoundaries(QVector<QRect>& zones, const QVector<int>& minDi
             }
             colMinDim[c] = gapWidth;
         } else if (colHasConstraint[c]) {
-            colMinDim[c] = qMax(colMinDim[c], GeometryDefaults::MinZoneSizePx);
+            colMinDim[c] = qMax(colMinDim[c], GeometryDefaults::MinRectSizePx);
         } else {
             colMinDim[c] = qMax(colMinDim[c], 1);
         }
@@ -221,7 +221,7 @@ static void pairwiseFallback(QVector<QRect>& zones, const QVector<int>& minDims,
     };
 
     auto getMinDim = [&](int i) -> int {
-        return qMax(minDims[i], GeometryDefaults::MinZoneSizePx);
+        return qMax(minDims[i], GeometryDefaults::MinRectSizePx);
     };
 
     auto applySteal = [&](int reqIdx, int donIdx, int delta, bool donorOnHighSide) {
@@ -392,7 +392,7 @@ static void pairwiseFallback(QVector<QRect>& zones, const QVector<int>& minDims,
     }
 }
 
-void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes, int gapThreshold, int innerGap)
+void enforceMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes, int gapThreshold, int innerGap)
 {
     if (zones.isEmpty() || minSizes.isEmpty()) {
         return;
@@ -425,7 +425,7 @@ void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes
     } else {
         bool widthDeficit = false;
         for (int i = 0; i < n; ++i) {
-            if (minWidths[i] > 0 && zones[i].width() < qMax(minWidths[i], GeometryDefaults::MinZoneSizePx)) {
+            if (minWidths[i] > 0 && zones[i].width() < qMax(minWidths[i], GeometryDefaults::MinRectSizePx)) {
                 widthDeficit = true;
                 break;
             }
@@ -441,7 +441,7 @@ void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes
     } else {
         bool heightDeficit = false;
         for (int i = 0; i < n; ++i) {
-            if (minHeights[i] > 0 && zones[i].height() < qMax(minHeights[i], GeometryDefaults::MinZoneSizePx)) {
+            if (minHeights[i] > 0 && zones[i].height() < qMax(minHeights[i], GeometryDefaults::MinRectSizePx)) {
                 heightDeficit = true;
                 break;
             }
@@ -451,14 +451,14 @@ void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes
         }
     }
 
-    removeZoneOverlaps(zones, minSizes, innerGap);
+    removeRectOverlaps(zones, minSizes, innerGap);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Min-size-aware overlap removal (multi-pass convergence)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, int innerGap)
+void removeRectOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, int innerGap)
 {
     if (zones.size() < 2) {
         return;
@@ -487,8 +487,8 @@ void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, i
                 int leftIdx = (zones[i].left() <= zones[j].left()) ? i : j;
                 int rightIdx = (leftIdx == i) ? j : i;
 
-                int leftMinW = GeometryDefaults::MinZoneSizePx;
-                int rightMinW = GeometryDefaults::MinZoneSizePx;
+                int leftMinW = GeometryDefaults::MinRectSizePx;
+                int rightMinW = GeometryDefaults::MinRectSizePx;
                 if (hasMinSizes) {
                     if (minSizes[leftIdx].width() > 0) {
                         leftMinW = qMax(leftMinW, minSizes[leftIdx].width());
@@ -558,8 +558,8 @@ void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, i
                 int topIdx = (zones[i].top() <= zones[j].top()) ? i : j;
                 int bottomIdx = (topIdx == i) ? j : i;
 
-                int topMinH = GeometryDefaults::MinZoneSizePx;
-                int bottomMinH = GeometryDefaults::MinZoneSizePx;
+                int topMinH = GeometryDefaults::MinRectSizePx;
+                int bottomMinH = GeometryDefaults::MinRectSizePx;
                 if (hasMinSizes) {
                     if (minSizes[topIdx].height() > 0) {
                         topMinH = qMax(topMinH, minSizes[topIdx].height());

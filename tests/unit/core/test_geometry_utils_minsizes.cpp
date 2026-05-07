@@ -3,7 +3,7 @@
 
 /**
  * @file test_geometry_utils_minsizes.cpp
- * @brief Unit tests for GeometryUtils::enforceWindowMinSizes()
+ * @brief Unit tests for GeometryUtils::enforceMinSizes()
  *
  * Tests cover:
  * - No-op when minimums are empty or already satisfied
@@ -53,7 +53,7 @@ private Q_SLOTS:
         const QVector<QRect> original = zones;
         QVector<QSize> minSizes = {QSize(), QSize(), QSize()};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, 5);
+        GeometryUtils::enforceMinSizes(zones, minSizes, 5);
 
         QCOMPARE(zones.size(), 3);
         for (int i = 0; i < zones.size(); ++i) {
@@ -69,7 +69,7 @@ private Q_SLOTS:
         };
         QVector<QSize> minSizes = {QSize(400, 1), QSize()};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, 5);
+        GeometryUtils::enforceMinSizes(zones, minSizes, 5);
 
         QVERIFY2(zones[0].width() >= 400,
                  qPrintable(QStringLiteral("Zone[0] width %1 should be >= 400").arg(zones[0].width())));
@@ -87,7 +87,7 @@ private Q_SLOTS:
         };
         QVector<QSize> minSizes = {QSize(400, 1), QSize(350, 1), QSize()};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, 5);
+        GeometryUtils::enforceMinSizes(zones, minSizes, 5);
 
         QVERIFY2(allPositiveDimensions(zones), "All zones must have positive dimensions");
 
@@ -127,7 +127,7 @@ private Q_SLOTS:
         };
         QVector<QSize> minSizes = {QSize(350, 1), QSize(300, 1), QSize(250, 1), QSize()};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, 5);
+        GeometryUtils::enforceMinSizes(zones, minSizes, 5);
 
         QVERIFY2(allPositiveDimensions(zones), "All zones must have positive dimensions");
 
@@ -150,7 +150,7 @@ private Q_SLOTS:
         };
         QVector<QSize> minSizes = {QSize(1, 400), QSize(1, 350), QSize()};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, 5);
+        GeometryUtils::enforceMinSizes(zones, minSizes, 5);
 
         QVERIFY2(allPositiveDimensions(zones), "All zones must have positive dimensions");
 
@@ -177,7 +177,7 @@ private Q_SLOTS:
         };
         QVector<QSize> minSizes = {QSize(700, 1), QSize(), QSize()};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, 5);
+        GeometryUtils::enforceMinSizes(zones, minSizes, 5);
 
         QVERIFY2(zones[0].width() >= 700,
                  qPrintable(QStringLiteral("Master width = %1, expected >= 700").arg(zones[0].width())));
@@ -200,7 +200,7 @@ private Q_SLOTS:
         };
         QVector<QSize> minSizes = {QSize(500, 1), QSize(500, 1), QSize(500, 1)};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, 5);
+        GeometryUtils::enforceMinSizes(zones, minSizes, 5);
 
         QVERIFY2(allPositiveDimensions(zones),
                  "All zones must have positive dimensions even with unsatisfiable constraints");
@@ -220,7 +220,7 @@ private Q_SLOTS:
         const QVector<QRect> original = zones;
         QVector<QSize> minSizes = {QSize(400, 1), QSize(300, 1)};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, 5);
+        GeometryUtils::enforceMinSizes(zones, minSizes, 5);
 
         for (int i = 0; i < zones.size(); ++i) {
             QCOMPARE(zones[i], original[i]);
@@ -237,7 +237,7 @@ private Q_SLOTS:
         };
         QVector<QSize> minSizes = {QSize(400, 1)};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, 5);
+        GeometryUtils::enforceMinSizes(zones, minSizes, 5);
 
         QCOMPARE(zones.size(), 2);
         QVERIFY(zones[0].width() >= 400);
@@ -252,7 +252,7 @@ private Q_SLOTS:
         };
         QVector<QSize> minSizes = {QSize(400, 1), QSize()};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, 10);
+        GeometryUtils::enforceMinSizes(zones, minSizes, 10);
 
         QVERIFY2(zones[0].width() >= 400,
                  qPrintable(QStringLiteral("Zone[0] width = %1, expected >= 400 (gap threshold should allow stealing)")
@@ -268,7 +268,7 @@ private Q_SLOTS:
         const QVector<QRect> original = zones;
         QVector<QSize> minSizes = {QSize(400, 1), QSize()};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, 10);
+        GeometryUtils::enforceMinSizes(zones, minSizes, 10);
 
         for (int i = 0; i < zones.size(); ++i) {
             QCOMPARE(zones[i], original[i]);
@@ -285,7 +285,7 @@ private Q_SLOTS:
         };
         QVector<QSize> minSizes = {QSize(500, 1), QSize(500, 1), QSize(), QSize()};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, 5);
+        GeometryUtils::enforceMinSizes(zones, minSizes, 5);
 
         QVERIFY2(zones[0].width() >= 500,
                  qPrintable(QStringLiteral("Master top width = %1, expected >= 500").arg(zones[0].width())));

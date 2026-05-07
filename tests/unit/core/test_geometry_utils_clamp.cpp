@@ -13,7 +13,7 @@
  * ejects the window from the layout.
  *
  * The clamp is a position-only shift — sizes are never changed (size changes
- * are owned by enforceWindowMinSizes, which is unsafe for any algorithm
+ * are owned by enforceMinSizes, which is unsafe for any algorithm
  * where producesOverlappingZones() returns true).
  */
 
@@ -276,8 +276,8 @@ private Q_SLOTS:
         }
     }
 
-    // ─── enforceWindowMinSizes shares the tolerant-vector contract ────────
-    // PR #388 aligned enforceWindowMinSizes' behavior on mismatched vector
+    // ─── enforceMinSizes shares the tolerant-vector contract ────────
+    // PR #388 aligned enforceMinSizes' behavior on mismatched vector
     // sizes with clampZonesToScreen's: both tolerate minSizes shorter than
     // zones (treating missing entries as no minimum). These tests lock in
     // that shared contract so the two functions don't drift apart again.
@@ -304,7 +304,7 @@ private Q_SLOTS:
         // single-axis constraint must use a 1px sentinel on the unused axis.
         // Matches the convention in tests/unit/core/test_geometry_utils_minsizes.cpp.
         const QVector<QSize> minSizes = {QSize(400, 1)}; // only one entry
-        PhosphorGeometry::enforceWindowMinSizes(zones, minSizes, /*gapThreshold=*/5);
+        PhosphorGeometry::enforceMinSizes(zones, minSizes, /*gapThreshold=*/5);
         // First zone grew toward its 400 min by stealing from the donor.
         QVERIFY2(zones[0].width() >= 400,
                  qPrintable(QStringLiteral("zone[0].width() %1 should be >= 400").arg(zones[0].width())));
@@ -326,7 +326,7 @@ private Q_SLOTS:
             QSize(0, 0), //
             QSize(99999, 99999), // extra entry past zones.size() — must be ignored
         };
-        PhosphorGeometry::enforceWindowMinSizes(zones, minSizes, /*gapThreshold=*/5);
+        PhosphorGeometry::enforceMinSizes(zones, minSizes, /*gapThreshold=*/5);
         // No constraint active on either real zone → nothing should change.
         QCOMPARE(zones, originalZones);
     }
@@ -337,7 +337,7 @@ private Q_SLOTS:
         // Distinct from clampZonesToScreen, which would still clamp by zone size.
         QVector<QRect> zones = {QRect(0, 0, 100, 100), QRect(2000, 0, 100, 100)};
         const QVector<QRect> originalZones = zones;
-        PhosphorGeometry::enforceWindowMinSizes(zones, {}, /*gapThreshold=*/5);
+        PhosphorGeometry::enforceMinSizes(zones, {}, /*gapThreshold=*/5);
         QCOMPARE(zones, originalZones);
     }
 
@@ -345,7 +345,7 @@ private Q_SLOTS:
     {
         QVector<QRect> zones;
         const QVector<QSize> minSizes = {QSize(400, 400)};
-        PhosphorGeometry::enforceWindowMinSizes(zones, minSizes, /*gapThreshold=*/5);
+        PhosphorGeometry::enforceMinSizes(zones, minSizes, /*gapThreshold=*/5);
         QVERIFY(zones.isEmpty());
     }
 };

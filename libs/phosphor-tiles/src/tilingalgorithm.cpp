@@ -373,8 +373,8 @@ TilingAlgorithm::ThreeColumnWidths TilingAlgorithm::solveThreeColumnWidths(int a
     // Clamp center ratio so side columns satisfy their individual minimums.
     // Use per-side minimums (left + right) instead of 2 * max(left, right)
     // to avoid over-constraining the center when only one side is constrained.
-    const int effMinLeft = std::max(static_cast<int>(MinZoneSizePx), minLeftWidth);
-    const int effMinRight = std::max(static_cast<int>(MinZoneSizePx), minRightWidth);
+    const int effMinLeft = std::max(static_cast<int>(MinRectSizePx), minLeftWidth);
+    const int effMinRight = std::max(static_cast<int>(MinRectSizePx), minRightWidth);
     const qreal maxCenter =
         std::min(static_cast<double>(MaxSplitRatio),
                  1.0 - (static_cast<double>(effMinLeft + effMinRight) / static_cast<double>(contentWidth)));
@@ -503,7 +503,7 @@ void TilingAlgorithm::appendGracefulDegradation(QVector<QRect>& zones, const QRe
         return;
     }
     if (remaining.width() >= remaining.height()) {
-        const int maxFit = std::max(1, remaining.width() / MinZoneSizePx);
+        const int maxFit = std::max(1, remaining.width() / MinRectSizePx);
         const int fitCount = std::min(leftover + 1, maxFit);
         QVector<int> widths = distributeWithGaps(remaining.width(), fitCount, innerGap);
         zones.last() = QRect(remaining.x(), remaining.y(), widths[0], remaining.height());
@@ -516,7 +516,7 @@ void TilingAlgorithm::appendGracefulDegradation(QVector<QRect>& zones, const QRe
             zones.append(zones.last());
         }
     } else {
-        const int maxFit = std::max(1, remaining.height() / MinZoneSizePx);
+        const int maxFit = std::max(1, remaining.height() / MinRectSizePx);
         const int fitCount = std::min(leftover + 1, maxFit);
         QVector<int> heights = distributeWithGaps(remaining.height(), fitCount, innerGap);
         zones.last() = QRect(remaining.x(), remaining.y(), remaining.width(), heights[0]);

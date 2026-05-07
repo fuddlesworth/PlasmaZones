@@ -15,9 +15,9 @@ namespace GeometryUtils {
 
 using PhosphorGeometry::availableAreaToOverlayCoordinates;
 using PhosphorGeometry::clampZonesToScreen;
-using PhosphorGeometry::enforceWindowMinSizes;
+using PhosphorGeometry::enforceMinSizes;
 using PhosphorGeometry::rectToJson;
-using PhosphorGeometry::removeZoneOverlaps;
+using PhosphorGeometry::removeRectOverlaps;
 using PhosphorGeometry::snapToRect;
 
 PHOSPHORENGINE_EXPORT QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries);

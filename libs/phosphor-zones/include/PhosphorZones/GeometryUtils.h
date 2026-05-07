@@ -29,9 +29,9 @@ namespace GeometryUtils {
 
 using PhosphorGeometry::availableAreaToOverlayCoordinates;
 using PhosphorGeometry::clampZonesToScreen;
-using PhosphorGeometry::enforceWindowMinSizes;
+using PhosphorGeometry::enforceMinSizes;
 using PhosphorGeometry::rectToJson;
-using PhosphorGeometry::removeZoneOverlaps;
+using PhosphorGeometry::removeRectOverlaps;
 using PhosphorGeometry::snapToRect;
 
 PHOSPHORZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen);

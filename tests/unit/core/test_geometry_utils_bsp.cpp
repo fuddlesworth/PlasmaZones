@@ -43,7 +43,7 @@ private Q_SLOTS:
             QSize(), // Kate: no constraint
         };
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, /*gapThreshold=*/22, /*innerGap=*/10);
+        GeometryUtils::enforceMinSizes(zones, minSizes, /*gapThreshold=*/22, /*innerGap=*/10);
 
         // Steam should satisfy its minimum
         QVERIFY2(zones[1].width() >= 500,
@@ -91,7 +91,7 @@ private Q_SLOTS:
             QSize(), // Settings: no constraint
         };
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, /*gapThreshold=*/20, /*innerGap=*/8);
+        GeometryUtils::enforceMinSizes(zones, minSizes, /*gapThreshold=*/20, /*innerGap=*/8);
 
         // Steam can steal directly from Kate (adjacent, Kate has surplus)
         QVERIFY2(zones[1].width() >= 800,
