@@ -333,6 +333,56 @@ void WindowDragAdaptor::unregisterCancelOverlayShortcut()
     m_shortcutRegistrar->unregisterAdhocShortcut(kCancelOverlayId);
 }
 
+namespace {
+constexpr auto kLayoutPickerLeftId = QLatin1String("layout_picker_nav_left");
+constexpr auto kLayoutPickerRightId = QLatin1String("layout_picker_nav_right");
+constexpr auto kLayoutPickerUpId = QLatin1String("layout_picker_nav_up");
+constexpr auto kLayoutPickerDownId = QLatin1String("layout_picker_nav_down");
+constexpr auto kLayoutPickerReturnId = QLatin1String("layout_picker_confirm_return");
+constexpr auto kLayoutPickerEnterId = QLatin1String("layout_picker_confirm_enter");
+} // namespace
+
+void WindowDragAdaptor::ensureLayoutPickerNavShortcutsRegistered(std::function<void(int, int)> moveCb,
+                                                                 std::function<void()> confirmCb)
+{
+    if (!m_shortcutRegistrar || !moveCb || !confirmCb) {
+        return;
+    }
+    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerLeftId, QKeySequence(Qt::Key_Left),
+                                               PzI18n::tr("Layout Picker: Move Left"), [moveCb] {
+                                                   moveCb(-1, 0);
+                                               });
+    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerRightId, QKeySequence(Qt::Key_Right),
+                                               PzI18n::tr("Layout Picker: Move Right"), [moveCb] {
+                                                   moveCb(1, 0);
+                                               });
+    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerUpId, QKeySequence(Qt::Key_Up),
+                                               PzI18n::tr("Layout Picker: Move Up"), [moveCb] {
+                                                   moveCb(0, -1);
+                                               });
+    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerDownId, QKeySequence(Qt::Key_Down),
+                                               PzI18n::tr("Layout Picker: Move Down"), [moveCb] {
+                                                   moveCb(0, 1);
+                                               });
+    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerReturnId, QKeySequence(Qt::Key_Return),
+                                               PzI18n::tr("Layout Picker: Confirm"), confirmCb);
+    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerEnterId, QKeySequence(Qt::Key_Enter),
+                                               PzI18n::tr("Layout Picker: Confirm"), confirmCb);
+}
+
+void WindowDragAdaptor::releaseLayoutPickerNavShortcuts()
+{
+    if (!m_shortcutRegistrar) {
+        return;
+    }
+    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerLeftId);
+    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerRightId);
+    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerUpId);
+    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerDownId);
+    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerReturnId);
+    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerEnterId);
+}
+
 void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
 {
     // Check if zone selector feature is enabled
@@ -538,6 +588,12 @@ void WindowDragAdaptor::clearForCompositorReconnect()
     // snapAssistReady would never be emitted.
     m_snapAssistPendingWindowId.clear();
     m_snapAssistPendingScreenId.clear();
+    // Drop any picker-nav lambda registrations: their captures
+    // include OverlayService* which the compositor-reconnect path
+    // may tear down before the next picker-show re-registers.
+    // Leaving stale registrations alive would route an arrow keypress
+    // into a freed pointer.
+    releaseLayoutPickerNavShortcuts();
 }
 
 void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
@@ -626,6 +682,24 @@ void WindowDragAdaptor::onLayoutChanged()
 
 void WindowDragAdaptor::onSnapAssistDismissed()
 {
+    // The Escape grab (kCancelOverlayId) is shared with two other consumers
+    // that piggy-back on the same id (so KGlobalAccel routes to a single
+    // action — see registerCancelOverlayShortcut's docstring): the layout
+    // picker (registered by start.cpp on layoutPickerRequested) and any
+    // active drag (registered by registerCancelOverlayShortcut on dragStarted).
+    // Releasing here unconditionally tears the grab out from under those
+    // consumers — picker-still-up after a snap-assist auto-dismiss would
+    // become un-Escape-able, and the same applies if the daemon thinks a
+    // drag is in flight (defence-in-depth, snap-assist normally appears
+    // post-drop). cancelSnap() already orchestrates precedence between
+    // overlays at Escape time, so the only safe thing this slot can do is
+    // release WHEN no other consumer still needs the grab.
+    if (m_overlayService && m_overlayService->isLayoutPickerVisible()) {
+        return;
+    }
+    if (isDragActive()) {
+        return;
+    }
     unregisterCancelOverlayShortcut();
 }
 

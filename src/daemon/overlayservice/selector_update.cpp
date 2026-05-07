@@ -22,7 +22,7 @@ namespace PlasmaZones {
 
 namespace {
 
-void updateZoneSelectorComputedProperties(Phosphor::Screens::ScreenManager* mgr, QQuickWindow* window, QScreen* screen,
+void updateZoneSelectorComputedProperties(Phosphor::Screens::ScreenManager* mgr, QObject* window, QScreen* screen,
                                           const QString& virtualScreenId, const ZoneSelectorConfig& config,
                                           ISettings* settings, const ZoneSelectorLayout& layout)
 {
@@ -60,7 +60,7 @@ void updateZoneSelectorComputedProperties(Phosphor::Screens::ScreenManager* mgr,
     }
 }
 
-void applyZoneSelectorLayout(QQuickWindow* window, const ZoneSelectorLayout& layout)
+void applyZoneSelectorLayout(QObject* window, const ZoneSelectorLayout& layout)
 {
     if (!window) {
         return;
@@ -94,18 +94,19 @@ void applyZoneSelectorLayout(QQuickWindow* window, const ZoneSelectorLayout& lay
     writeQmlProperty(window, QStringLiteral("barHeight"), layout.barHeight);
 }
 
-// Size the zone selector window to fill the entire (virtual) screen.
-// With AnchorAll the compositor sizes the surface to the full output;
-// the QML root uses internal anchors (selectorPosition state) to position
-// the visible bar in the chosen corner of the transparent window.
-void applyZoneSelectorGeometry(QQuickWindow* window, const QRect& screenGeom, const ZoneSelectorLayout& /*layout*/,
+// Size the zone selector slot to fill the entire (virtual) screen.
+// Post-shell-migration the slot is a QQuickItem (anchors.fill on the shell
+// QQuickWindow). The QML root uses internal anchors (selectorPosition
+// state) to position the visible bar in the chosen corner of the
+// transparent slot.
+void applyZoneSelectorGeometry(QQuickItem* slot, const QRect& screenGeom, const ZoneSelectorLayout& /*layout*/,
                                ZoneSelectorPosition /*pos*/)
 {
-    if (!window || !screenGeom.isValid()) {
+    if (!slot || !screenGeom.isValid()) {
         return;
     }
-    window->setWidth(screenGeom.width());
-    window->setHeight(screenGeom.height());
+    slot->setWidth(screenGeom.width());
+    slot->setHeight(screenGeom.height());
 }
 
 } // namespace
@@ -116,7 +117,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         return;
     }
 
-    auto* window = m_screenStates.value(screenId).zoneSelectorWindow;
+    auto* window = m_screenStates.value(screenId).passiveShellZoneSelectorSlot;
     if (!window) {
         return;
     }
@@ -209,26 +210,17 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // Keep stored geometry in sync so hit-testing uses the current value
     m_screenStates[screenId].zoneSelectorGeometry = screenGeom;
 
-    if (auto* contentRoot = window->contentItem()) {
-        // Ensure the root item matches the window size after geometry changes.
-        // This avoids anchors evaluating against a 0x0 root during rapid updates.
-        contentRoot->setWidth(window->width());
-        contentRoot->setHeight(window->height());
-
-        // Schedule polish for next render frame (NO processEvents — see #152)
+    // Slot is the QQuickItem hosting ZoneSelectorContent; root traversal
+    // starts directly from it (no contentItem() — that's QQuickWindow-only).
+    if (auto* contentRoot = window) {
         contentRoot->polish();
     }
 
-    // Schedule QML items for layout recalculation on the next frame
-    if (auto* contentRoot = window->contentItem()) {
+    if (auto* contentRoot = window) {
         if (auto* gridItem = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorContentGrid"))) {
             gridItem->polish();
             gridItem->update();
         }
-        // Was `zoneSelectorContainer`; renamed to `shaderAnchor` so
-        // SurfaceAnimator's shader leg can scope the transition effect to
-        // the visible selector card instead of the fullscreen wayland
-        // surface. The rename is matched in `ZoneSelectorWindow.qml`.
         if (auto* containerItem = findQmlItemByName(contentRoot, QStringLiteral("shaderAnchor"))) {
             containerItem->polish();
             containerItem->update();

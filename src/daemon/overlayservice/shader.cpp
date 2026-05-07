@@ -190,10 +190,18 @@ void OverlayService::stopShaderAnimation()
 {
     // Don't stop CAVA here — it stays warm for instant audio data on next show().
     // Just clear the spectrum from overlay windows so they don't render stale data.
+    // audioSpectrum lives on passiveShellMainOverlaySlot (the slot
+    // Item that hosts the shader content), not on the shell window
+    // root. PassiveOverlayShell.qml's mainOverlaySlot declares
+    // `property var audioSpectrum: []` and the inner shader content
+    // binds to mainOverlaySlot.audioSpectrum.
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-        auto* window = it_.value().overlayWindow;
-        if (window) {
-            writeQmlProperty(window, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+        if (!it_.value().overlayPhysScreen) {
+            continue;
+        }
+        auto* slot = it_.value().passiveShellMainOverlaySlot;
+        if (slot) {
+            writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
         }
     }
     if (m_shaderPreviewWindow) {
@@ -218,9 +226,12 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
     // ZoneShaderItem::setAudioSpectrum() detects and unwraps QVector<float> directly.
     const QVariant wrapped = QVariant::fromValue(spectrum);
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
-        auto* window = it.value().overlayWindow;
-        if (window && useShaderForScreen(it.key())) {
-            writeQmlProperty(window, QString(OverlayQmlPropertyNames::AudioSpectrum), wrapped);
+        if (!it.value().overlayPhysScreen) {
+            continue;
+        }
+        auto* slot = it.value().passiveShellMainOverlaySlot;
+        if (slot && useShaderForScreen(it.key())) {
+            writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), wrapped);
         }
     }
     // Shader preview (editor dialog) when visible and audio viz enabled
@@ -284,16 +295,22 @@ void OverlayService::updateShaderUniforms()
         updateZonesForAllWindows();
     }
 
-    // Update visible shader overlay windows with synchronized time.
-    // Skip hidden non-shader windows kept alive across hide/show cycles —
-    // they don't have iTime/iFrame properties and writing to hidden windows
-    // is wasted work (60Hz property writes silently dropped by QML).
+    // Update per-frame shader uniforms on the main-overlay slot Item
+    // for every screen with main overlay active. iTime/iTimeDelta/
+    // iFrame are properties on mainOverlaySlot in PassiveOverlayShell.qml
+    // (lines 666-668), not on the shell window root — RenderNodeOverlayContent
+    // binds to mainOverlaySlot.iTime, so writes to the window root would
+    // create dynamic properties that QML never observes.
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
-        auto* window = it.value().overlayWindow;
-        if (window && window->isVisible()) {
-            writeQmlProperty(window, QStringLiteral("iTime"), static_cast<qreal>(iTime));
-            writeQmlProperty(window, QStringLiteral("iTimeDelta"), static_cast<qreal>(iTimeDelta));
-            writeQmlProperty(window, QStringLiteral("iFrame"), frame);
+        if (!it.value().overlayPhysScreen) {
+            continue;
+        }
+        auto* slot = it.value().passiveShellMainOverlaySlot;
+        auto* window = it.value().passiveShellWindow;
+        if (slot && window && window->isVisible()) {
+            writeQmlProperty(slot, QStringLiteral("iTime"), static_cast<qreal>(iTime));
+            writeQmlProperty(slot, QStringLiteral("iTimeDelta"), static_cast<qreal>(iTimeDelta));
+            writeQmlProperty(slot, QStringLiteral("iFrame"), frame);
         }
     }
     // Update shader preview overlay (editor dialog) when visible

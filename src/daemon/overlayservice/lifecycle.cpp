@@ -118,7 +118,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         // finds nothing to flip and the overlay never becomes visible until
         // the next hide()/show() cycle.
         const bool cursorVsHasWindow = m_screenStates.contains(cursorEffectiveId)
-            && m_screenStates.value(cursorEffectiveId).overlayWindow != nullptr;
+            && m_screenStates.value(cursorEffectiveId).overlayPhysScreen != nullptr;
         if (cursorVsHasWindow || m_excludedScreens.contains(cursorEffectiveId)) {
             m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
             applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
@@ -146,16 +146,22 @@ void OverlayService::hide()
     // Do NOT invalidate m_shaderTimer - keeps iTime continuous across show/hide
     // so animations feel less predictable and don't restart
 
-    // Destroy overlay windows instead of hiding them. On Vulkan with Wayland
-    // layer-shell, window->hide() destroys the wl_surface but the Qt Vulkan
-    // backend doesn't properly reinitialize the VkSwapchainKHR when the window
-    // is re-shown, causing the scene graph render loop to stall. Destroying the
-    // window entirely and creating a fresh one on the next show() avoids this.
-    // initializeOverlay() will call createOverlayWindow() since overlay windows
-    // are now destroyed.
+    // Post-shell-migration: the shell wl_surface stays mapped across
+    // hide/show cycles (its lifecycle is managed by destroyPassiveShell,
+    // not per-overlay-toggle). Drive the main-overlay slot's
+    // configured hide leg via the SurfaceAnimator so the slot fades
+    // out cleanly and the next show() can fade-in. dismissOverlayWindow
+    // also clears the per-screen "main overlay active" sentinel
+    // (overlayPhysScreen) via setVisible(false) + syncPassiveShellSurfaceState.
+    // Gate on overlayPhysScreen — the shell may be alive for OSD-only
+    // screens that never had main overlay attached, and dismissing
+    // those would queue 0→0 opacity noise on idle slots.
     const QStringList screenIds = m_screenStates.keys();
     for (const QString& screenId : screenIds) {
-        destroyOverlayWindow(screenId);
+        if (!m_screenStates.value(screenId).overlayPhysScreen) {
+            continue;
+        }
+        dismissOverlayWindow(screenId);
     }
 
     m_pendingShaderError.clear();
@@ -190,23 +196,25 @@ void OverlayService::setIdleForDragPause()
         return;
     }
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        QQuickWindow* window = it.value().overlayWindow;
-        if (!window) {
+        if (!it.value().overlayPhysScreen) {
             continue;
         }
-        // _idled gates content.visible and toggles Qt.WindowTransparentForInput
-        // in the overlay QML (RenderNodeOverlay.qml / ZoneOverlay.qml). That
-        // makes the wl_surface effectively invisible and non-input-absorbing
-        // in place, without destroying the QQuickWindow. Blanking only the
-        // zones properties below is not sufficient — on some shaders the
-        // base pass still renders visible output when zoneCount==0, and the
-        // input region stays active until the flag change lands.
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::Idled), true);
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::Zones), QVariantList());
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::ZoneCount), 0);
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::HighlightedCount), 0);
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::HighlightedZoneId), QString());
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
+        // _idled and the zone-data properties live on
+        // passiveShellMainOverlaySlot (PassiveOverlayShell.qml lines
+        // 633, 652, 661-662, etc.), not on the shell window root.
+        // Writing on the window root creates dynamic properties that
+        // QML never observes — the slot's content keeps rendering live
+        // zones while the user expects an idle blank.
+        QQuickItem* slot = it.value().passiveShellMainOverlaySlot;
+        if (!slot) {
+            continue;
+        }
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Idled), true);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), QVariantList());
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::ZoneCount), 0);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedCount), 0);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneId), QString());
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
         // NOTE: labelsTextureHash is intentionally NOT cleared here. The QML
         // side's labelsTexture property still holds the previously-built image
         // (setProperty was never called with a new one); it just isn't sampled
@@ -214,11 +222,11 @@ void OverlayService::setIdleForDragPause()
         // unchanged zones hits the cache and costs one hash compute instead
         // of rebuilding 23 MB of pixels.
     }
-    // CRITICAL: mark zone data CLEAN, not dirty. The shader animation tick
-    // (shader.cpp:245) re-runs updateZonesForAllWindows() whenever dirty is
-    // set, which would rebuild the real zones and undo the blank. The idle
-    // state is "what we just wrote, do not re-derive from layout data until
-    // refreshFromIdle() is called."
+    // CRITICAL: mark zone data CLEAN, not dirty. updateShaderUniforms
+    // re-runs updateZonesForAllWindows() whenever m_zoneDataDirty is
+    // set, which would rebuild the real zones and undo the blank. The
+    // idle state is "what we just wrote, do not re-derive from layout
+    // data until refreshFromIdle() is called."
     m_zoneDataDirty = false;
     // NOTE: we deliberately do NOT call stopShaderAnimation() here. The
     // shader timer keeps ticking at ~60 Hz while idled, but with zoneCount
@@ -267,13 +275,16 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
     // when the value actually changes, so flipping _idled on a window
     // that's already in the target state is free.
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        QQuickWindow* window = it.value().overlayWindow;
-        if (!window) {
+        if (!it.value().overlayPhysScreen) {
+            continue;
+        }
+        QQuickItem* slot = it.value().passiveShellMainOverlaySlot;
+        if (!slot) {
             continue;
         }
         const bool shouldBeActive =
             showOnAllMonitors || (it.key() == activeEffectiveId && !activeEffectiveId.isEmpty());
-        writeQmlProperty(window, QString(OverlayQmlPropertyNames::Idled), !shouldBeActive);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Idled), !shouldBeActive);
     }
 }
 
