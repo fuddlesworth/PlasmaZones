@@ -222,11 +222,11 @@ void OverlayService::setIdleForDragPause()
         // unchanged zones hits the cache and costs one hash compute instead
         // of rebuilding 23 MB of pixels.
     }
-    // CRITICAL: mark zone data CLEAN, not dirty. The shader animation tick
-    // (shader.cpp:245) re-runs updateZonesForAllWindows() whenever dirty is
-    // set, which would rebuild the real zones and undo the blank. The idle
-    // state is "what we just wrote, do not re-derive from layout data until
-    // refreshFromIdle() is called."
+    // CRITICAL: mark zone data CLEAN, not dirty. updateShaderUniforms
+    // re-runs updateZonesForAllWindows() whenever m_zoneDataDirty is
+    // set, which would rebuild the real zones and undo the blank. The
+    // idle state is "what we just wrote, do not re-derive from layout
+    // data until refreshFromIdle() is called."
     m_zoneDataDirty = false;
     // NOTE: we deliberately do NOT call stopShaderAnimation() here. The
     // shader timer keeps ticking at ~60 Hz while idled, but with zoneCount
