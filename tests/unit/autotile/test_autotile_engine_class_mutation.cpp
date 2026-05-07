@@ -25,7 +25,7 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
 #include <PhosphorTiles/TilingState.h>
-#include "core/windowregistry.h"
+#include <PhosphorEngine/WindowRegistry.h>
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
@@ -55,7 +55,7 @@ private Q_SLOTS:
     void embyScenario_toggleFloatSurvivesClassMutation()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        WindowRegistry registry;
+        PhosphorEngine::WindowRegistry registry;
         engine.setWindowRegistry(&registry);
 
         const QString screen = QStringLiteral("HKC OVERSEAS LIMITED:34E6UC");
@@ -112,7 +112,7 @@ private Q_SLOTS:
     void multipleClassMutations_stayConvergent()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        WindowRegistry registry;
+        PhosphorEngine::WindowRegistry registry;
         engine.setWindowRegistry(&registry);
 
         const QString screen = QStringLiteral("DP-1");
@@ -188,7 +188,7 @@ private Q_SLOTS:
     void bareInstanceId_wireFormat_worksEndToEnd()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        WindowRegistry registry;
+        PhosphorEngine::WindowRegistry registry;
         engine.setWindowRegistry(&registry);
 
         const QString screen = QStringLiteral("HKC OVERSEAS LIMITED:34E6UC");

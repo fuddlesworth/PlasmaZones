@@ -4,7 +4,7 @@
 #pragma once
 
 #include "AutotileConstants.h"
-#include <PhosphorEngineApi/IPlacementState.h>
+#include <PhosphorEngine/IPlacementState.h>
 #include <phosphortiles_export.h>
 #include <QObject>
 #include <QJsonObject>
@@ -36,7 +36,7 @@ struct SplitNode;
  *
  * Note: Window IDs are KWin's internal resource names (QString).
  */
-class PHOSPHORTILES_EXPORT TilingState : public QObject, public PhosphorEngineApi::IPlacementState
+class PHOSPHORTILES_EXPORT TilingState : public QObject, public PhosphorEngine::IPlacementState
 {
     Q_OBJECT
 

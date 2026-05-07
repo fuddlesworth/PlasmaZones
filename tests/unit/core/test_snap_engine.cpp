@@ -8,7 +8,7 @@
 #include <memory>
 
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include "core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
@@ -23,7 +23,7 @@ using namespace PhosphorSnapEngine;
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
@@ -97,7 +97,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsSnap* m_settings = nullptr;
     StubZoneDetectorSnap* m_zoneDetector = nullptr;
-    WindowTrackingService* m_wts = nullptr;
+    PhosphorPlacement::WindowTrackingService* m_wts = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
 
 private Q_SLOTS:
@@ -109,7 +109,7 @@ private Q_SLOTS:
                                                             QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsSnap(nullptr);
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
-        m_wts = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_wts = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
         m_wts->setSnapState(m_snapState);
     }
@@ -167,10 +167,10 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // WindowTrackingService::clearFloatingForSnap tests
+    // PhosphorPlacement::WindowTrackingService::clearFloatingForSnap tests
     //
     // (The former SnapEngine::clearFloatingStateForSnap wrapper was removed —
-    // all snap-commit paths now go through WindowTrackingService::commitSnap
+    // all snap-commit paths now go through PhosphorPlacement::WindowTrackingService::commitSnap
     // which handles floating-state clearing internally via clearFloatingForSnap.)
     // =========================================================================
 
@@ -622,7 +622,7 @@ private Q_SLOTS:
         const QString windowId = QStringLiteral("app|uuid-release-no-signal");
         engine.snapState()->assignWindowToZone(windowId, QStringLiteral("zone-1"), QStringLiteral("DP-1"), 0);
 
-        QSignalSpy zoneSpy(m_wts, &WindowTrackingService::windowZoneChanged);
+        QSignalSpy zoneSpy(m_wts, &PhosphorPlacement::WindowTrackingService::windowZoneChanged);
 
         engine.handoffRelease(windowId);
 
@@ -662,7 +662,7 @@ private Q_SLOTS:
         const QString windowId = QStringLiteral("app|uuid-recv-float");
         const QString screen = QStringLiteral("DP-1");
 
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = screen;
         ctx.fromEngineId = QStringLiteral("autotile");
@@ -680,7 +680,7 @@ private Q_SLOTS:
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
         m_wts->setSnapState(engine.snapState());
 
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = QString();
         ctx.toScreenId = QStringLiteral("DP-1");
         engine.handoffReceive(ctx);

@@ -4,7 +4,7 @@
 # PhosphorTileEngine — Autotile placement engine.
 #
 # Provides AutotileEngine + supporting classes (config, navigation,
-# overflow, per-screen resolver). Depends on phosphor-engine-api for
+# overflow, per-screen resolver). Depends on phosphor-engine for
 # the IPlacementEngine contract and phosphor-tiles for tiling algorithms.
 
 cmake_minimum_required(VERSION 3.16)
@@ -68,7 +68,7 @@ endif()
 target_link_libraries(PhosphorTileEngine
     PUBLIC
         Qt6::Core
-        PhosphorEngineApi::PhosphorEngineApi
+        PhosphorEngine::PhosphorEngine
         PhosphorTiles::PhosphorTiles
     PRIVATE
         PhosphorScreens::PhosphorScreens

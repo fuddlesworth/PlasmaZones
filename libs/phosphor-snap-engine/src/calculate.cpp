@@ -21,9 +21,9 @@
 
 namespace PhosphorSnapEngine {
 
-using PhosphorEngineApi::PendingRestore;
-using PhosphorEngineApi::SnapResult;
-using PhosphorEngineApi::StickyWindowHandling;
+using PhosphorEngine::PendingRestore;
+using PhosphorEngine::SnapResult;
+using PhosphorEngine::StickyWindowHandling;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Auto-Snap Logic
@@ -40,7 +40,7 @@ SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QSt
     // Check sticky window handling
     if (auto* s = snapSettings(); isSticky && s) {
         auto handling = s->stickyWindowHandling();
-        if (handling == PhosphorEngineApi::StickyWindowHandling::IgnoreAll) {
+        if (handling == PhosphorEngine::StickyWindowHandling::IgnoreAll) {
             return SnapResult::noSnap();
         }
     }
@@ -183,8 +183,8 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
     // Check sticky window handling
     if (isSticky) {
         auto handling = s->stickyWindowHandling();
-        if (handling == PhosphorEngineApi::StickyWindowHandling::IgnoreAll
-            || handling == PhosphorEngineApi::StickyWindowHandling::RestoreOnly) {
+        if (handling == PhosphorEngine::StickyWindowHandling::IgnoreAll
+            || handling == PhosphorEngine::StickyWindowHandling::RestoreOnly) {
             return SnapResult::noSnap();
         }
     }
@@ -247,8 +247,8 @@ SnapResult SnapEngine::calculateSnapToEmptyZone(const QString& windowId, const Q
     // Check sticky window handling (auto-assign is an auto-snap, not a restore)
     if (auto* s = snapSettings(); isSticky && s) {
         auto handling = s->stickyWindowHandling();
-        if (handling == PhosphorEngineApi::StickyWindowHandling::IgnoreAll
-            || handling == PhosphorEngineApi::StickyWindowHandling::RestoreOnly) {
+        if (handling == PhosphorEngine::StickyWindowHandling::IgnoreAll
+            || handling == PhosphorEngine::StickyWindowHandling::RestoreOnly) {
             qCDebug(PhosphorSnapEngine::lcSnapEngine)
                 << "snapToEmptyZone: window" << m_windowTracker->currentAppIdFor(windowId) << "sticky handling"
                 << static_cast<int>(handling);
@@ -309,7 +309,7 @@ SnapResult SnapEngine::calculateRestoreFromSession(const QString& windowId, cons
     // Check sticky window handling
     if (auto* s = snapSettings(); isSticky && s) {
         auto handling = s->stickyWindowHandling();
-        if (handling == PhosphorEngineApi::StickyWindowHandling::IgnoreAll) {
+        if (handling == PhosphorEngine::StickyWindowHandling::IgnoreAll) {
             return SnapResult::noSnap();
         }
     }

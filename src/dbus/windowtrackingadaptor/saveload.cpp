@@ -12,7 +12,7 @@
 #include <PhosphorZones/Layout.h>
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -52,7 +52,7 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
 
 void WindowTrackingAdaptor::saveState()
 {
-    using D = WindowTrackingService;
+    using D = PhosphorPlacement::WindowTrackingService;
     // Snapshot the dirty mask — after this call the service is clean
     // from our perspective. If the write fails, the persistence worker's
     // writeCompleted(success=false) handler re-marks the same bits on
@@ -532,7 +532,7 @@ void WindowTrackingAdaptor::loadState()
     m_service->setPendingRestoreQueues(pendingQueues);
 
     // Load pre-tile geometries into the engine's unmanaged-geometry store.
-    using UnmanagedEntry = PhosphorEngineApi::PlacementEngineBase::UnmanagedEntry;
+    using UnmanagedEntry = PhosphorEngine::PlacementEngineBase::UnmanagedEntry;
     QHash<QString, UnmanagedEntry> unmanagedGeometries;
     auto loadGeometries = [](const QString& json, QHash<QString, UnmanagedEntry>& out) {
         if (json.isEmpty()) {

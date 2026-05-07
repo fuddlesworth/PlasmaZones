@@ -52,7 +52,7 @@ private Q_SLOTS:
                                                             QStringLiteral("plasmazones/layouts"));
 
         // SnapEngine with all-nullptr dependencies is a valid construction:
-        // the router only invokes it via the PhosphorEngineApi::IPlacementEngine interface
+        // the router only invokes it via the PhosphorEngine::IPlacementEngine interface
         // (which ScreenModeRouter doesn't actually call — it returns the
         // pointer so callers can dispatch). Matches test_snap_engine.cpp's
         // headless stub pattern.
@@ -117,17 +117,17 @@ private Q_SLOTS:
 
     void engineFor_snapScreen_returnsSnapEngine()
     {
-        PhosphorEngineApi::IPlacementEngine* engine = m_router->engineFor(QStringLiteral("DP-1"));
+        PhosphorEngine::IPlacementEngine* engine = m_router->engineFor(QStringLiteral("DP-1"));
         QVERIFY(engine != nullptr);
-        QCOMPARE(static_cast<PhosphorEngineApi::IPlacementEngine*>(m_snapEngine), engine);
+        QCOMPARE(static_cast<PhosphorEngine::IPlacementEngine*>(m_snapEngine), engine);
     }
 
     void engineFor_autotileScreen_returnsAutotileEngine()
     {
         m_autotileEngine->setAutotileScreens({QStringLiteral("DP-1")});
-        PhosphorEngineApi::IPlacementEngine* engine = m_router->engineFor(QStringLiteral("DP-1"));
+        PhosphorEngine::IPlacementEngine* engine = m_router->engineFor(QStringLiteral("DP-1"));
         QVERIFY(engine != nullptr);
-        QCOMPARE(static_cast<PhosphorEngineApi::IPlacementEngine*>(m_autotileEngine), engine);
+        QCOMPARE(static_cast<PhosphorEngine::IPlacementEngine*>(m_autotileEngine), engine);
     }
 
     void engineFor_respectsLiveAssignmentUpdates()
@@ -136,15 +136,15 @@ private Q_SLOTS:
         // tracks the engine's live state — not a stale snapshot from the
         // first call.
         QCOMPARE(m_router->engineFor(QStringLiteral("DP-1")),
-                 static_cast<PhosphorEngineApi::IPlacementEngine*>(m_snapEngine));
+                 static_cast<PhosphorEngine::IPlacementEngine*>(m_snapEngine));
 
         m_autotileEngine->setAutotileScreens({QStringLiteral("DP-1")});
         QCOMPARE(m_router->engineFor(QStringLiteral("DP-1")),
-                 static_cast<PhosphorEngineApi::IPlacementEngine*>(m_autotileEngine));
+                 static_cast<PhosphorEngine::IPlacementEngine*>(m_autotileEngine));
 
         m_autotileEngine->setAutotileScreens({});
         QCOMPARE(m_router->engineFor(QStringLiteral("DP-1")),
-                 static_cast<PhosphorEngineApi::IPlacementEngine*>(m_snapEngine));
+                 static_cast<PhosphorEngine::IPlacementEngine*>(m_snapEngine));
     }
 
     // ─── isSnapMode / isAutotileMode ──────────────────────────────────────

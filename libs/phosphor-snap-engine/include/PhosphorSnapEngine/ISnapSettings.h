@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include <PhosphorEngineApi/EngineTypes.h>
+#include <PhosphorEngine/EngineTypes.h>
 #include <QObject>
 #include <QStringList>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 class ISnapSettings
 {
@@ -31,6 +31,6 @@ public:
     virtual bool autoAssignAllLayouts() const = 0;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine
 
-Q_DECLARE_INTERFACE(PhosphorEngineApi::ISnapSettings, "org.plasmazones.ISnapSettings")
+Q_DECLARE_INTERFACE(PhosphorEngine::ISnapSettings, "org.plasmazones.ISnapSettings")

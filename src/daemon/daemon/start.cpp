@@ -7,9 +7,9 @@
 #include "../unifiedlayoutcontroller.h"
 #include "../shortcutmanager.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../../core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorScreens/Manager.h>
-#include "../../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../../core/activitymanager.h"
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
@@ -27,7 +27,7 @@
 #include "../../dbus/windowdragadaptor.h"
 #include "../../dbus/autotileadaptor.h"
 #include "../../dbus/snapadaptor.h"
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
@@ -125,7 +125,7 @@ void Daemon::connectScreenSignals()
         for (const QString& sid : vsIds) {
             PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
             if (screenLayout) {
-                LayoutComputeService::recalculateSync(
+                PhosphorZones::LayoutComputeService::recalculateSync(
                     screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
             }
         }
@@ -183,91 +183,93 @@ void Daemon::connectDesktopActivity()
     m_virtualDesktopManager->start();
 
     // Connect virtual desktop changes to layout switching
-    connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::currentDesktopChanged, this, [this](int desktop) {
-        // Update all components with current desktop for per-desktop layout lookup
-        // NOTE: PhosphorZones::LayoutRegistry is the single source of truth for desktop/activity.
-        // WindowDragAdaptor reads from PhosphorZones::LayoutRegistry directly via resolveLayoutForScreen().
-        m_overlayService->setCurrentVirtualDesktop(desktop);
-        m_layoutManager->setCurrentVirtualDesktop(desktop);
-        if (m_unifiedLayoutController) {
-            m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
-        }
-        // Desktop switch invalidates the TilingStateKey context — cancel any
-        // active drag-insert preview before the engine's desktop changes,
-        // otherwise cancel/commit would operate on the wrong PhosphorTiles::TilingState.
-        if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-            m_autotileEngine->cancelDragInsertPreview();
-        }
-        // Pin screens where all autotiled windows are sticky (on all desktops)
-        // BEFORE changing the desktop context. This ensures currentKeyForScreen()
-        // continues to resolve existing TilingStates for screens managed by the
-        // KWin "virtualdesktopsonlyonprimary" script.
-        if (m_autotileEngine && m_windowTrackingAdaptor) {
-            auto* service = m_windowTrackingAdaptor->service();
-            m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
-                return service->isWindowSticky(windowId);
-            });
-        }
-        // Set engine's desktop context BEFORE updateAutotileScreens() so it
-        // resolves TilingStates for the correct desktop. Without this, the
-        // engine would look up/create states under the OLD desktop's key.
-        if (m_autotileEngine) {
-            m_autotileEngine->setCurrentDesktop(desktop);
-        }
-        // Per-desktop assignments may differ — recompute autotile screens
-        updateAutotileScreens();
-        // Sync mode, layout filter, and controller state from per-desktop assignments.
-        // This ensures ModeTracker, layout filter, and cycling index reflect the
-        // new desktop — not the old one's global state.
-        syncModeFromAssignments();
-        if (m_overlayService->isVisible()) {
-            m_overlayService->updateGeometries();
-        }
+    connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::currentDesktopChanged, this,
+            [this](int desktop) {
+                // Update all components with current desktop for per-desktop layout lookup
+                // NOTE: PhosphorZones::LayoutRegistry is the single source of truth for desktop/activity.
+                // WindowDragAdaptor reads from PhosphorZones::LayoutRegistry directly via resolveLayoutForScreen().
+                m_overlayService->setCurrentVirtualDesktop(desktop);
+                m_layoutManager->setCurrentVirtualDesktop(desktop);
+                if (m_unifiedLayoutController) {
+                    m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
+                }
+                // Desktop switch invalidates the TilingStateKey context — cancel any
+                // active drag-insert preview before the engine's desktop changes,
+                // otherwise cancel/commit would operate on the wrong PhosphorTiles::TilingState.
+                if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
+                    m_autotileEngine->cancelDragInsertPreview();
+                }
+                // Pin screens where all autotiled windows are sticky (on all desktops)
+                // BEFORE changing the desktop context. This ensures currentKeyForScreen()
+                // continues to resolve existing TilingStates for screens managed by the
+                // KWin "virtualdesktopsonlyonprimary" script.
+                if (m_autotileEngine && m_windowTrackingAdaptor) {
+                    auto* service = m_windowTrackingAdaptor->service();
+                    m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
+                        return service->isWindowSticky(windowId);
+                    });
+                }
+                // Set engine's desktop context BEFORE updateAutotileScreens() so it
+                // resolves TilingStates for the correct desktop. Without this, the
+                // engine would look up/create states under the OLD desktop's key.
+                if (m_autotileEngine) {
+                    m_autotileEngine->setCurrentDesktop(desktop);
+                }
+                // Per-desktop assignments may differ — recompute autotile screens
+                updateAutotileScreens();
+                // Sync mode, layout filter, and controller state from per-desktop assignments.
+                // This ensures ModeTracker, layout filter, and cycling index reflect the
+                // new desktop — not the old one's global state.
+                syncModeFromAssignments();
+                if (m_overlayService->isVisible()) {
+                    m_overlayService->updateGeometries();
+                }
 
-        showDesktopSwitchOsd(desktop, currentActivity());
-    });
+                showDesktopSwitchOsd(desktop, currentActivity());
+            });
 
     // Prune stale PhosphorTiles::TilingState entries and disabled-desktop numbers when desktops are removed
-    connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::desktopCountChanged, this, [this](int newCount) {
-        // Prune stale disabled-desktop entries (desktop numbers > newCount no longer exist).
-        // NOTE: KDE Plasma renumbers desktops when one in the middle is removed (e.g.
-        // removing desktop 2 of 4 shifts 3→2 and 4→3). We only prune out-of-range
-        // entries here; mid-range renumbering would require tracking which desktop was
-        // removed (not available from desktopCountChanged). A future improvement could
-        // use KDE's desktop UUIDs instead of 1-based numbers.
-        if (m_settings) {
-            // Prune both per-mode lists — a stale entry in either side leaks
-            // gates on now-deleted desktops just as effectively.
-            bool changed = false;
-            for (const auto mode :
-                 {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
-                QStringList disabled = m_settings->disabledDesktops(mode);
-                if (pruneDisabledDesktopEntries(disabled, newCount)) {
-                    m_settings->setDisabledDesktops(mode, disabled);
-                    changed = true;
+    connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopCountChanged, this,
+            [this](int newCount) {
+                // Prune stale disabled-desktop entries (desktop numbers > newCount no longer exist).
+                // NOTE: KDE Plasma renumbers desktops when one in the middle is removed (e.g.
+                // removing desktop 2 of 4 shifts 3→2 and 4→3). We only prune out-of-range
+                // entries here; mid-range renumbering would require tracking which desktop was
+                // removed (not available from desktopCountChanged). A future improvement could
+                // use KDE's desktop UUIDs instead of 1-based numbers.
+                if (m_settings) {
+                    // Prune both per-mode lists — a stale entry in either side leaks
+                    // gates on now-deleted desktops just as effectively.
+                    bool changed = false;
+                    for (const auto mode :
+                         {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+                        QStringList disabled = m_settings->disabledDesktops(mode);
+                        if (pruneDisabledDesktopEntries(disabled, newCount)) {
+                            m_settings->setDisabledDesktops(mode, disabled);
+                            changed = true;
+                        }
+                    }
+                    if (changed) {
+                        m_settings->save();
+                    }
                 }
-            }
-            if (changed) {
-                m_settings->save();
-            }
-        }
 
-        if (m_autotileEngine) {
-            // Desktop numbers are 1-based. Any state with desktop > newCount
-            // is stale. desktopsWithActiveState() returns the set of desktops
-            // currently holding tiling state — we filter that for anything
-            // past the new count and prune, avoiding the arbitrary upper
-            // bound of the old newCount+20 sweep.
-            const QSet<int> active = m_autotileEngine->desktopsWithActiveState();
-            for (int d : active) {
-                if (d > newCount) {
-                    m_autotileEngine->pruneStatesForDesktop(d);
+                if (m_autotileEngine) {
+                    // Desktop numbers are 1-based. Any state with desktop > newCount
+                    // is stale. desktopsWithActiveState() returns the set of desktops
+                    // currently holding tiling state — we filter that for anything
+                    // past the new count and prune, avoiding the arbitrary upper
+                    // bound of the old newCount+20 sweep.
+                    const QSet<int> active = m_autotileEngine->desktopsWithActiveState();
+                    for (int d : active) {
+                        if (d > newCount) {
+                            m_autotileEngine->pruneStatesForDesktop(d);
+                        }
+                    }
                 }
-            }
-        }
-        // Prune fallback assignment maps
-        pruneContextMapsForDesktop(newCount);
-    });
+                // Prune fallback assignment maps
+                pruneContextMapsForDesktop(newCount);
+            });
 
     // Set initial virtual desktop on components that maintain their own copy
     // (WindowDragAdaptor reads from PhosphorZones::LayoutRegistry directly via resolveLayoutForScreen())
@@ -279,7 +281,7 @@ void Daemon::connectDesktopActivity()
     }
 
     // Initialize and start activity manager
-    // Connect to VirtualDesktopManager for desktop+activity coordinate lookup
+    // Connect to PhosphorWorkspaces::VirtualDesktopManager for desktop+activity coordinate lookup
     m_activityManager->setVirtualDesktopManager(m_virtualDesktopManager.get());
     m_activityManager->init();
     if (ActivityManager::isAvailable()) {
@@ -722,7 +724,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     for (const QString& sid : affectedScreenIds) {
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
-            LayoutComputeService::recalculateSync(
+            PhosphorZones::LayoutComputeService::recalculateSync(
                 screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
         }
     }
@@ -794,7 +796,7 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     for (const QString& sid : affectedScreenIds) {
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
-            LayoutComputeService::recalculateSync(
+            PhosphorZones::LayoutComputeService::recalculateSync(
                 screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
         }
     }

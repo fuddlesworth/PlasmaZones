@@ -27,25 +27,25 @@ geometry tests can link the lib without any GUI infrastructure.
 |------|---------|
 | `PhosphorGeometry::availableAreaToOverlayCoordinates` | Project an "available-area" rect into an overlay window's coords |
 | `PhosphorGeometry::snapToRect`                        | `QRectF` → `QRect` with consistent rounding |
-| `PhosphorGeometry::enforceWindowMinSizes`             | Grow zones to fit per-window minimum sizes by stealing surplus from neighbours, then resolve overlap |
+| `PhosphorGeometry::enforceMinSizes`                   | Grow zones to fit per-window minimum sizes by stealing surplus from neighbours, then resolve overlap |
 | `PhosphorGeometry::clampZonesToScreen`                | Position-only clamp; shifts zones so each window's effective rect stays on screen, sizes preserved |
-| `PhosphorGeometry::removeZoneOverlaps`                | Resolve residual overlap between zones (used after min-size growth) |
+| `PhosphorGeometry::removeRectOverlaps`                | Resolve residual overlap between zones (used after min-size growth) |
 | `PhosphorGeometry::rectToJson`                        | Canonical rect-string format for D-Bus + JSON roundtrip |
 | `PhosphorGeometry::JsonKeys`                          | Key constants for the rect-JSON encoder |
 
 ## Design notes
 
 - **Position-only vs growth.** `clampZonesToScreen` only shifts; it
-  never resizes. `enforceWindowMinSizes` is the one path allowed to
+  never resizes. `enforceMinSizes` is the one path allowed to
   grow or shrink. They run in that order: first grow to fit minimums,
   then position-clamp anything still off-screen. For overlap-tolerant
   algorithms (Deck, Stair, Cascade, Monocle, Paper, Spread,
-  horizontal-deck) `enforceWindowMinSizes` is skipped — neighbour
+  horizontal-deck) `enforceMinSizes` is skipped — neighbour
   stealing would destroy intentional overlap — and the position clamp
   is the only safe correction.
-- **Vector-tolerant.** `enforceWindowMinSizes` and `clampZonesToScreen`
+- **Vector-tolerant.** `enforceMinSizes` and `clampZonesToScreen`
   both accept a `minSizes` vector that may be shorter than `zones` (or
-  empty for `enforceWindowMinSizes`). Missing entries are treated as
+  empty for `enforceMinSizes`). Missing entries are treated as
   no-minimum; extras are ignored.
 - **Pure functions.** No Qt objects, no signals, no allocation other
   than the result vector. Engines call these directly inside their

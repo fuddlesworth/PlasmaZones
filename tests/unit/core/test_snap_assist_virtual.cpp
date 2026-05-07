@@ -26,14 +26,14 @@
 #include <QJsonObject>
 #include <memory>
 
-#include "core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -65,7 +65,7 @@ private Q_SLOTS:
         m_settings->setSnapAssistFeatureEnabled(true);
         m_settings->setSnapAssistEnabled(true);
         m_zoneDetector = new StubZoneDetector(nullptr);
-        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
         m_service->setSnapState(m_snapState);
 
@@ -487,7 +487,7 @@ private:
     StubSettingsSnapAssist* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
-    WindowTrackingService* m_service = nullptr;
+    PhosphorPlacement::WindowTrackingService* m_service = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };

@@ -10,12 +10,12 @@
 #include "../shortcutmanager.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
-#include "../../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../../core/activitymanager.h"
 #include "../../core/logging.h"
 #include "../../core/constants.h"
 #include "../../core/utils.h"
-#include "../../core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include "../../dbus/layoutadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../dbus/zonedetectionadaptor.h"
@@ -23,7 +23,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include "../../dbus/windowdragadaptor.h"
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -32,7 +32,7 @@
 #include <QScreen>
 #include <QTimer>
 
-using PlacementEngineBase = PhosphorEngineApi::PlacementEngineBase;
+using PlacementEngineBase = PhosphorEngine::PlacementEngineBase;
 
 namespace PlasmaZones {
 
@@ -78,7 +78,7 @@ void Daemon::initializeAutotile()
                 });
 
         // Sync autotile float state and show OSD when a window is floated/unfloated
-        connect(m_autotileEngine.get(), &PhosphorEngineApi::PlacementEngineBase::windowFloatingChanged, this,
+        connect(m_autotileEngine.get(), &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, this,
                 &Daemon::syncAutotileFloatState);
 
         // Passive float state sync for engine-internal state divergence (e.g. a
@@ -86,14 +86,14 @@ void Daemon::initializeAutotile()
         // a handler that updates WTS bookkeeping without calling
         // applyGeometryForFloat — the window already has a valid position and
         // must not be teleported to a stored pre-tile rect.
-        connect(m_autotileEngine.get(), &PhosphorEngineApi::PlacementEngineBase::windowFloatingStateSynced, this,
+        connect(m_autotileEngine.get(), &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced, this,
                 &Daemon::syncAutotileFloatStatePassive);
 
         // Batch overflow float handler: overflow windows are included in the
         // windowsTileRequested D-Bus signal with "floating" flag, so the effect
         // handles geometry restore directly. Here we only update daemon-side
         // WTS state without emitting per-window D-Bus signals.
-        connect(m_autotileEngine.get(), &PhosphorEngineApi::PlacementEngineBase::windowsBatchFloated, this,
+        connect(m_autotileEngine.get(), &PhosphorEngine::PlacementEngineBase::windowsBatchFloated, this,
                 &Daemon::syncAutotileBatchFloatState);
 
         // Per-mode float state: when autotile releases windows back to snap mode:
@@ -106,7 +106,7 @@ void Daemon::initializeAutotile()
         connect(m_autotileEngine.get(), &PlacementEngineBase::windowsReleased, this,
                 [this](const QStringList& windowIds, const QSet<QString>& releasedScreenIds) {
                     if (m_windowTrackingAdaptor) {
-                        WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+                        PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
                         m_pendingSnapFloatRestores.clear();
                         for (const QString& windowId : windowIds) {
                             // Only process windows whose current WTS screen is one of the
@@ -329,7 +329,8 @@ void Daemon::initializeAutotile()
                 // Batch all resnap entries into ONE signal to eliminate the race condition
                 // where multiple per-screen signals cause the effect to restore geometries
                 // and resnap in parallel.
-                WindowTrackingService* wts = m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr;
+                PhosphorPlacement::WindowTrackingService* wts =
+                    m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr;
                 QSet<QString> resnappedWindows;
                 QVector<ZoneAssignmentEntry> allResnapEntries;
                 for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
@@ -784,12 +785,12 @@ void Daemon::finalizeStartup()
 
 void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, const QString& screenId)
 {
-    // Sync floating state to WindowTrackingService and propagate
+    // Sync floating state to PhosphorPlacement::WindowTrackingService and propagate
     // to KWin effect's NavigationHandler::m_floatingWindows via D-Bus signal.
     // Also track autotile origin so mode transitions can distinguish
     // autotile-originated floats from manual snapping-mode floats.
     if (m_windowTrackingAdaptor) {
-        WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+        PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
         if (floating) {
             m_windowTrackingAdaptor->setWindowFloating(windowId, true);
             m_autotileEngine->markModeSpecificFloated(windowId);
@@ -849,7 +850,7 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
     if (!m_windowTrackingAdaptor) {
         return;
     }
-    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     // Cross-engine handoff: this signal fires when autotile has just taken
     // ownership of a window that may still be tracked by snap. handoffRelease
     // is a no-op when the engine doesn't track the window, so we can call it
@@ -889,7 +890,7 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
     if (!m_windowTrackingAdaptor) {
         return;
     }
-    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     for (const QString& windowId : windowIds) {
         // Update WTS state directly — don't call setWindowFloating()
         // on the adaptor since that emits a D-Bus windowFloatingChanged

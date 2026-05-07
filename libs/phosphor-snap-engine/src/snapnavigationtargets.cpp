@@ -95,7 +95,7 @@ bool checkDirection(const QString& direction)
 // Construction
 // ═══════════════════════════════════════════════════════════════════════════
 
-SnapNavigationTargetResolver::SnapNavigationTargetResolver(PhosphorEngineApi::IWindowTrackingService* service,
+SnapNavigationTargetResolver::SnapNavigationTargetResolver(PhosphorEngine::IWindowTrackingService* service,
                                                            PhosphorZones::LayoutRegistry* layoutManager,
                                                            IZoneAdjacencyResolver* zoneAdjacency, FeedbackFn feedback)
     : m_service(service)

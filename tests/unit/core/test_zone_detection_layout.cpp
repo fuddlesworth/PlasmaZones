@@ -15,10 +15,8 @@
 #include <QScopedPointer>
 
 #include <PhosphorZones/Layout.h>
-#include "core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/Zone.h>
-
-using namespace PlasmaZones;
 
 class TestZoneDetectionLayout : public QObject
 {
@@ -52,7 +50,7 @@ private Q_SLOTS:
         smallZone->setZoneNumber(2);
         m_layout->addZone(smallZone);
 
-        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
+        PhosphorZones::LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
 
         QPointF point(350, 350);
         PhosphorZones::Zone* detected = m_layout->zoneAtPoint(point);
@@ -73,7 +71,7 @@ private Q_SLOTS:
         zone2->setZoneNumber(2);
         m_layout->addZone(zone2);
 
-        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
+        PhosphorZones::LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
 
         QPointF point(350, 350);
         PhosphorZones::Zone* detected = m_layout->zoneAtPoint(point);
@@ -89,7 +87,7 @@ private Q_SLOTS:
         zone->setZoneNumber(1);
         m_layout->addZone(zone);
 
-        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
+        PhosphorZones::LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
 
         QPointF point(800, 800);
         PhosphorZones::Zone* detected = m_layout->zoneAtPoint(point);
@@ -108,7 +106,7 @@ private Q_SLOTS:
         zone->setZoneNumber(1);
         m_layout->addZone(zone);
 
-        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
+        PhosphorZones::LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
 
         QPointF farPoint(900, 900);
         PhosphorZones::Zone* nearest = m_layout->nearestZone(farPoint, 50.0);
@@ -132,7 +130,7 @@ private Q_SLOTS:
         zone2->setZoneNumber(2);
         m_layout->addZone(zone2);
 
-        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
+        PhosphorZones::LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
 
         QRectF queryRect(400, 100, 200, 200);
         QVector<PhosphorZones::Zone*> result = m_layout->zonesInRect(queryRect);
@@ -200,7 +198,7 @@ private Q_SLOTS:
         z3->setZoneNumber(3);
         m_layout->addZone(z3);
 
-        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 900, 900));
+        PhosphorZones::LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 900, 900));
 
         // Rect covering only zone 1 and zone 2 boundary (not zone 3).
         // With 900px width and zone boundaries at 0.33/0.67, zone edges are

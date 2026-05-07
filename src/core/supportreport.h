@@ -17,7 +17,7 @@ namespace PhosphorZones {
 class LayoutRegistry;
 }
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 class IPlacementEngine;
 }
 
@@ -77,7 +77,7 @@ public:
      */
     static Snapshot collectSnapshot(Phosphor::Screens::ScreenManager* screenManager,
                                     PhosphorZones::LayoutRegistry* layoutManager,
-                                    PhosphorEngineApi::IPlacementEngine* autotileEngine);
+                                    PhosphorEngine::IPlacementEngine* autotileEngine);
 
     /**
      * @brief Generate a report from a pre-collected snapshot (thread-safe)
@@ -104,7 +104,7 @@ public:
      */
     static QString generate(Phosphor::Screens::ScreenManager* screenManager,
                             PhosphorZones::LayoutRegistry* layoutManager,
-                            PhosphorEngineApi::IPlacementEngine* autotileEngine, int sinceMinutes = 30);
+                            PhosphorEngine::IPlacementEngine* autotileEngine, int sinceMinutes = 30);
 
     /**
      * @brief Redact home directory paths from a string

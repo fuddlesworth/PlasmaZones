@@ -4,11 +4,11 @@
 #pragma once
 
 #include <phosphorsnapengine_export.h>
-#include <PhosphorEngineApi/EngineTypes.h>
-#include <PhosphorEngineApi/IVirtualDesktopManager.h>
+#include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorEngine/IVirtualDesktopManager.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
-#include <PhosphorEngineApi/IWindowTrackingService.h>
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/IWindowTrackingService.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
@@ -43,16 +43,16 @@ class SnapState;
  * on top: auto-snap fallback chains, directional navigation via zone
  * adjacency, and layout-change resnapping.
  *
- * @see PhosphorEngineApi::IPlacementEngine, AutotileEngine, WindowTrackingService
+ * @see PhosphorEngine::IPlacementEngine, AutotileEngine, WindowTrackingService
  */
-class PHOSPHORSNAPENGINE_EXPORT SnapEngine : public PhosphorEngineApi::PlacementEngineBase
+class PHOSPHORSNAPENGINE_EXPORT SnapEngine : public PhosphorEngine::PlacementEngineBase
 {
     Q_OBJECT
 
 public:
     explicit SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
-                        PhosphorEngineApi::IWindowTrackingService* windowTracker,
-                        PhosphorZones::IZoneDetector* zoneDetector, PhosphorEngineApi::IVirtualDesktopManager* vdm,
+                        PhosphorEngine::IWindowTrackingService* windowTracker,
+                        PhosphorZones::IZoneDetector* zoneDetector, PhosphorEngine::IVirtualDesktopManager* vdm,
                         QObject* parent = nullptr);
     ~SnapEngine() override;
 
@@ -109,15 +109,15 @@ public:
     /**
      * @brief Calculate resnap entries from autotile order WITHOUT emitting signal
      *
-     * Returns the computed PhosphorEngineApi::ZoneAssignmentEntry vector so the caller can batch entries
+     * Returns the computed PhosphorEngine::ZoneAssignmentEntry vector so the caller can batch entries
      * from multiple screens into a single resnapToNewLayoutRequested emission.
      * Falls back to current-assignment entries if autotile order yields nothing.
      *
      * @param autotileWindowOrder Ordered list of window IDs from autotile engine
      * @param screenId Screen to resnap on
-     * @return Vector of PhosphorEngineApi::ZoneAssignmentEntry (may be empty)
+     * @return Vector of PhosphorEngine::ZoneAssignmentEntry (may be empty)
      */
-    QVector<PhosphorEngineApi::ZoneAssignmentEntry>
+    QVector<PhosphorEngine::ZoneAssignmentEntry>
     calculateResnapEntriesFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId);
 
     /**
@@ -135,9 +135,9 @@ public:
      * Used by the daemon to combine entries from multiple screens into
      * one signal, eliminating the per-screen race condition.
      *
-     * @param entries Combined PhosphorEngineApi::ZoneAssignmentEntry vector from all screens
+     * @param entries Combined PhosphorEngine::ZoneAssignmentEntry vector from all screens
      */
-    void emitBatchedResnap(const QVector<PhosphorEngineApi::ZoneAssignmentEntry>& entries);
+    void emitBatchedResnap(const QVector<PhosphorEngine::ZoneAssignmentEntry>& entries);
 
     /**
      * @brief Request the KWin effect to collect and snap all unsnapped windows
@@ -158,15 +158,15 @@ public:
      *   3. Auto-assign to empty zone
      *   4. Snap to last zone (final fallback)
      *
-     * Returns a PhosphorEngineApi::SnapResult so the D-Bus adaptor can unpack geometry for the
+     * Returns a PhosphorEngine::SnapResult so the D-Bus adaptor can unpack geometry for the
      * KWin effect. Also handles floating windows (skips snap, emits feedback).
      *
      * @param windowId Window identifier
      * @param screenId Screen where the window appeared
      * @param sticky Whether the window is on all desktops
-     * @return PhosphorEngineApi::SnapResult with geometry and zone info, or PhosphorEngineApi::SnapResult::noSnap()
+     * @return PhosphorEngine::SnapResult with geometry and zone info, or PhosphorEngine::SnapResult::noSnap()
      */
-    PhosphorEngineApi::SnapResult resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky);
+    PhosphorEngine::SnapResult resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotile engine reference (for isActiveOnScreen routing)
@@ -180,7 +180,7 @@ public:
      *
      * @param engine AutotileEngine instance (not owned, must outlive SnapEngine)
      */
-    void setAutotileEngine(PhosphorEngineApi::IPlacementEngine* engine);
+    void setAutotileEngine(PhosphorEngine::IPlacementEngine* engine);
 
     SnapState* snapState() const
     {
@@ -222,7 +222,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation (moved out of WindowTrackingAdaptor)
     //
-    // Every method takes a PhosphorEngineApi::NavigationContext populated by the daemon's
+    // Every method takes a PhosphorEngine::NavigationContext populated by the daemon's
     // shortcut handler. The engine uses ctx.windowId directly rather than
     // re-reading it from the WTA shadow, which is a step toward retiring
     // the SnapEngine -> WTA back-reference entirely. When ctx.windowId is
@@ -237,46 +237,46 @@ public:
 
     /// Walk to the adjacent window in @p direction and transfer keyboard focus.
     /// Empty direction is a no-op with feedback.
-    void focusInDirection(const QString& direction, const PhosphorEngineApi::NavigationContext& ctx) override;
+    void focusInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Move the focused window into the adjacent zone in @p direction
     /// (displacing or filling the target). Empty direction is a no-op.
-    void moveFocusedInDirection(const QString& direction, const PhosphorEngineApi::NavigationContext& ctx) override;
+    void moveFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Swap the focused window with whatever's in the adjacent zone in
     /// @p direction. Empty direction is a no-op.
-    void swapFocusedInDirection(const QString& direction, const PhosphorEngineApi::NavigationContext& ctx) override;
+    void swapFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Move the focused window to the layout zone with @p zoneNumber
     /// (1-based) on ctx.screenId. PhosphorZones::Zone numbers outside [1,9] are rejected.
-    void moveFocusedToPosition(int zoneNumber, const PhosphorEngineApi::NavigationContext& ctx) override;
+    void moveFocusedToPosition(int zoneNumber, const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Rotate snapped windows through the layout's zone order, dispatched
     /// via IPlacementEngine. Forwards to rotateWindowsInLayout().
-    void rotateWindows(bool clockwise, const PhosphorEngineApi::NavigationContext& ctx) override;
+    void rotateWindows(bool clockwise, const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Re-apply the current layout to all managed windows. Forwards to
     /// resnapToNewLayout().
-    void reapplyLayout(const PhosphorEngineApi::NavigationContext& ctx) override;
+    void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Snap every unmanaged window on the screen. The IPlacementEngine
-    /// override takes PhosphorEngineApi::NavigationContext; coexists with the existing
+    /// override takes PhosphorEngine::NavigationContext; coexists with the existing
     /// snapAllWindows(const QString&) method which it delegates to.
-    void snapAllWindows(const PhosphorEngineApi::NavigationContext& ctx) override;
+    void snapAllWindows(const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Move the focused window to the first empty zone on ctx.screenId.
-    void pushToEmptyZone(const PhosphorEngineApi::NavigationContext& ctx) override;
+    void pushToEmptyZone(const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Restore the focused window to its captured pre-snap size and unsnap.
-    void restoreFocusedWindow(const PhosphorEngineApi::NavigationContext& ctx) override;
+    void restoreFocusedWindow(const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Toggle the focused window between snapped and floating.
-    void toggleFocusedFloat(const PhosphorEngineApi::NavigationContext& ctx) override;
+    void toggleFocusedFloat(const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Cycle keyboard focus forward/backward through managed windows in
     /// the active zone (or the layout cycle order if single-window per
     /// zone).
-    void cycleFocus(bool forward, const PhosphorEngineApi::NavigationContext& ctx) override;
+    void cycleFocus(bool forward, const PhosphorEngine::NavigationContext& ctx) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Snap commit orchestration
@@ -287,47 +287,46 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     void commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId,
-                    PhosphorEngineApi::SnapIntent intent = PhosphorEngineApi::SnapIntent::UserInitiated);
+                    PhosphorEngine::SnapIntent intent = PhosphorEngine::SnapIntent::UserInitiated);
 
     void commitMultiZoneSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                             PhosphorEngineApi::SnapIntent intent = PhosphorEngineApi::SnapIntent::UserInitiated);
+                             PhosphorEngine::SnapIntent intent = PhosphorEngine::SnapIntent::UserInitiated);
 
     void uncommitSnap(const QString& windowId);
 
-    PhosphorEngineApi::UnfloatResult resolveUnfloatGeometry(const QString& windowId,
-                                                            const QString& fallbackScreen) const;
+    PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;
 
     PhosphorProtocol::WindowGeometryList
-    applyBatchAssignments(const QVector<PhosphorEngineApi::ZoneAssignmentEntry>& entries,
-                          PhosphorEngineApi::SnapIntent intent = PhosphorEngineApi::SnapIntent::UserInitiated,
+    applyBatchAssignments(const QVector<PhosphorEngine::ZoneAssignmentEntry>& entries,
+                          PhosphorEngine::SnapIntent intent = PhosphorEngine::SnapIntent::UserInitiated,
                           std::function<QString()> fallbackScreenResolver = {});
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Auto-snap calculations (moved from WTS)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    PhosphorEngineApi::SnapResult calculateSnapToAppRule(const QString& windowId, const QString& windowScreenName,
-                                                         bool isSticky) const;
-    PhosphorEngineApi::SnapResult calculateSnapToLastZone(const QString& windowId, const QString& windowScreenId,
-                                                          bool isSticky) const;
-    PhosphorEngineApi::SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenId,
+    PhosphorEngine::SnapResult calculateSnapToAppRule(const QString& windowId, const QString& windowScreenName,
+                                                      bool isSticky) const;
+    PhosphorEngine::SnapResult calculateSnapToLastZone(const QString& windowId, const QString& windowScreenId,
+                                                       bool isSticky) const;
+    PhosphorEngine::SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenId,
+                                                        bool isSticky) const;
+    PhosphorEngine::SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenId,
                                                            bool isSticky) const;
-    PhosphorEngineApi::SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenId,
-                                                              bool isSticky) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Resnap / rotation calculations (moved from WTS)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    QVector<PhosphorEngineApi::ZoneAssignmentEntry> calculateResnapFromPreviousLayout();
-    QVector<PhosphorEngineApi::ZoneAssignmentEntry>
+    QVector<PhosphorEngine::ZoneAssignmentEntry> calculateResnapFromPreviousLayout();
+    QVector<PhosphorEngine::ZoneAssignmentEntry>
     calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
-    QVector<PhosphorEngineApi::ZoneAssignmentEntry>
+    QVector<PhosphorEngine::ZoneAssignmentEntry>
     calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId) const;
-    QVector<PhosphorEngineApi::ZoneAssignmentEntry> calculateSnapAllWindowEntries(const QStringList& windowIds,
-                                                                                  const QString& screenId) const;
-    QVector<PhosphorEngineApi::ZoneAssignmentEntry> calculateRotation(bool clockwise,
-                                                                      const QString& screenFilter = QString()) const;
+    QVector<PhosphorEngine::ZoneAssignmentEntry> calculateSnapAllWindowEntries(const QStringList& windowIds,
+                                                                               const QString& screenId) const;
+    QVector<PhosphorEngine::ZoneAssignmentEntry> calculateRotation(bool clockwise,
+                                                                   const QString& screenFilter = QString()) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Saved snap-floating windows (mode-transition bookkeeping)
@@ -378,8 +377,8 @@ public:
     // SnapState.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    PhosphorEngineApi::IPlacementState* stateForScreen(const QString& screenId) override;
-    const PhosphorEngineApi::IPlacementState* stateForScreen(const QString& screenId) const override;
+    PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) override;
+    const PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) const override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Internal navigation helpers (concrete SnapEngine methods that the
@@ -388,7 +387,7 @@ public:
 
     /// Move the focused window to the first empty zone on ctx.screenId.
     /// The IPlacementEngine override pushToEmptyZone() delegates here.
-    void pushFocusedToEmptyZone(const PhosphorEngineApi::NavigationContext& ctx);
+    void pushFocusedToEmptyZone(const PhosphorEngine::NavigationContext& ctx);
 
     /// Rotate snapped windows through the layout's zone order on @p screenId.
     void rotateWindowsInLayout(bool clockwise, const QString& screenId);
@@ -456,7 +455,7 @@ protected:
     void onWindowUnfloated(const QString& windowId) override;
 
 private:
-    PhosphorEngineApi::ISnapSettings* snapSettings() const;
+    PhosphorEngine::ISnapSettings* snapSettings() const;
 
     struct GapParams
     {
@@ -466,15 +465,15 @@ private:
     GapParams resolveGapParams() const;
 
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                        PhosphorEngineApi::SnapIntent intent);
+                        PhosphorEngine::SnapIntent intent);
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    PhosphorEngineApi::IWindowTrackingService* m_windowTracker = nullptr;
+    PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     SnapState* m_snapState = nullptr;
     PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
-    PhosphorEngineApi::IVirtualDesktopManager* m_virtualDesktopManager = nullptr;
+    PhosphorEngine::IVirtualDesktopManager* m_virtualDesktopManager = nullptr;
     QPointer<QObject> m_autotileEngineObj;
-    PhosphorEngineApi::IPlacementEngine* m_autotileEngineTyped = nullptr;
+    PhosphorEngine::IPlacementEngine* m_autotileEngineTyped = nullptr;
     IZoneAdjacencyResolver* m_zoneAdjacencyResolver = nullptr;
     // Typed navigation-state provider — replaces the opaque QObject* m_wta
     // back-reference. Provides read-only access to compositor-layer shadows

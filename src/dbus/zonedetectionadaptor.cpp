@@ -5,7 +5,7 @@
 #include "dbushelpers.h"
 #include "../core/interfaces.h"
 #include <PhosphorZones/Layout.h>
-#include "../core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/geometryutils.h"
 #include "../core/logging.h"
@@ -63,7 +63,7 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
     }
 
     // Recalculate zone geometries so detectZone operates on absolute coords
-    LayoutComputeService::recalculateSync(layout, refGeom);
+    PhosphorZones::LayoutComputeService::recalculateSync(layout, refGeom);
     m_zoneDetector->setLayout(layout);
 
     // Use PhosphorZones::ZoneDetector::detectZone which resolves overlapping zones via
@@ -170,7 +170,7 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
         return zoneIds;
     }
 
-    LayoutComputeService::recalculateSync(layout, refGeom);
+    PhosphorZones::LayoutComputeService::recalculateSync(layout, refGeom);
     m_zoneDetector->setLayout(layout);
 
     // Convert cursor position to QPointF for detection

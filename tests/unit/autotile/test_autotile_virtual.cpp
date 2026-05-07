@@ -187,7 +187,7 @@ private Q_SLOTS:
         // Enable autotile on both virtual screens
         engine.setAutotileScreens({vs0, vs1});
 
-        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         QVERIFY2(tilingSpy.isValid(), "Signal spy should be valid");
 
         // Emit virtualScreensChanged — the signal handler should not crash
@@ -240,7 +240,7 @@ private Q_SLOTS:
         QVERIFY(!engine.isAutotileScreen(physId));
 
         // Removing the VS from autotile screens releases the window
-        QSignalSpy releaseSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::windowsReleased);
+        QSignalSpy releaseSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowsReleased);
         engine.setAutotileScreens({});
         QVERIFY(releaseSpy.count() >= 1);
         QStringList released = releaseSpy.first().first().toStringList();
@@ -277,7 +277,7 @@ private Q_SLOTS:
         // the new screen ID. AutotileEngine::windowFocused detects the
         // cross-screen move, removes from old state, and re-adds via
         // onWindowAdded to the new state.
-        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         engine.windowFocused(QStringLiteral("win-move"), vs1);
         QCoreApplication::processEvents();
 
@@ -316,7 +316,7 @@ private Q_SLOTS:
         QVERIFY(state0->containsWindow(QStringLiteral("win1")));
 
         // Now remove vs0 from autotile screens (keep vs1)
-        QSignalSpy releaseSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::windowsReleased);
+        QSignalSpy releaseSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowsReleased);
         engine.setAutotileScreens({vs1});
 
         // State for vs0 should have been cleaned up
@@ -527,7 +527,7 @@ private Q_SLOTS:
         engine.setAutotileScreens({vs0, vs1});
         QVERIFY(engine.isEnabled());
 
-        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
 
         // Open windows on different virtual screens
         engine.windowOpened(QStringLiteral("win1"), vs0);

@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include <PhosphorEngineApi/GeometryUtils.h>
+#include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "snapenginelogging.h"
-#include <PhosphorEngineApi/EngineTypes.h>
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorZones/Zone.h>
 
 namespace PhosphorSnapEngine {
 
-using PhosphorEngineApi::ZoneAssignmentEntry;
+using PhosphorEngine::ZoneAssignmentEntry;
 using PhosphorProtocol::SnapAllResultEntry;
 using PhosphorProtocol::SnapAllResultList;
 
@@ -55,7 +55,7 @@ void SnapEngine::resnapToNewLayout()
         return;
     }
 
-    QString resnapData = PhosphorEngineApi::GeometryUtils::serializeZoneAssignments(resnapEntries);
+    QString resnapData = PhosphorEngine::GeometryUtils::serializeZoneAssignments(resnapEntries);
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "Resnapping" << resnapEntries.size() << "windows to new layout";
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }
@@ -71,7 +71,7 @@ void SnapEngine::resnapCurrentAssignments(const QString& screenFilter)
         return;
     }
 
-    QString resnapData = PhosphorEngineApi::GeometryUtils::serializeZoneAssignments(entries);
+    QString resnapData = PhosphorEngine::GeometryUtils::serializeZoneAssignments(entries);
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "Resnapping" << entries.size() << "windows to current zone assignments";
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }
@@ -84,7 +84,7 @@ void SnapEngine::resnapFromAutotileOrder(const QStringList& autotileWindowOrder,
         return; // calculateResnapEntriesFromAutotileOrder already tried fallback
     }
 
-    QString resnapData = PhosphorEngineApi::GeometryUtils::serializeZoneAssignments(entries);
+    QString resnapData = PhosphorEngine::GeometryUtils::serializeZoneAssignments(entries);
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "Resnapping" << entries.size() << "windows from autotile order";
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }
@@ -109,7 +109,7 @@ void SnapEngine::emitBatchedResnap(const QVector<ZoneAssignmentEntry>& entries)
     if (entries.isEmpty()) {
         return;
     }
-    QString resnapData = PhosphorEngineApi::GeometryUtils::serializeZoneAssignments(entries);
+    QString resnapData = PhosphorEngine::GeometryUtils::serializeZoneAssignments(entries);
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "Emitting batched resnap for" << entries.size() << "windows";
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }

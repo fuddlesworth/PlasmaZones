@@ -31,7 +31,7 @@
 #include <QRectF>
 #include <memory>
 
-#include "core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
@@ -39,7 +39,7 @@
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
@@ -47,6 +47,7 @@
 #include "../helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
+using PhosphorEngine::ZoneAssignmentEntry;
 using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
@@ -69,7 +70,7 @@ private Q_SLOTS:
                                                             QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsLifecycle(nullptr);
         m_zoneDetector = new StubZoneDetector(nullptr);
-        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
         m_engine->setEngineSettings(m_settings);
         m_service->setSnapState(m_engine->snapState());
@@ -176,7 +177,7 @@ private Q_SLOTS:
         QString windowId = QStringLiteral("app|12345");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
 
-        QSignalSpy spy(m_service, &WindowTrackingService::stateChanged);
+        QSignalSpy spy(m_service, &PhosphorPlacement::WindowTrackingService::stateChanged);
         m_service->windowClosed(windowId);
 
         QVERIFY(spy.count() >= 1);
@@ -273,7 +274,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsLifecycle* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
-    WindowTrackingService* m_service = nullptr;
+    PhosphorPlacement::WindowTrackingService* m_service = nullptr;
     SnapEngine* m_engine = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;

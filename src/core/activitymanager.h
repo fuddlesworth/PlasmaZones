@@ -12,8 +12,11 @@ namespace PhosphorZones {
 class LayoutRegistry;
 }
 
-namespace PlasmaZones {
+namespace PhosphorWorkspaces {
 class VirtualDesktopManager;
+}
+
+namespace PlasmaZones {
 
 /**
  * @brief Manages KDE Activities integration for activity-based layouts
@@ -33,10 +36,10 @@ public:
     ~ActivityManager() override;
 
     /**
-     * @brief Set the VirtualDesktopManager for desktop coordination
-     * @param vdm Pointer to VirtualDesktopManager (not owned)
+     * @brief Set the PhosphorWorkspaces::VirtualDesktopManager for desktop coordination
+     * @param vdm Pointer to PhosphorWorkspaces::VirtualDesktopManager (not owned)
      */
-    void setVirtualDesktopManager(VirtualDesktopManager* vdm);
+    void setVirtualDesktopManager(PhosphorWorkspaces::VirtualDesktopManager* vdm);
 
     /**
      * @brief Initialize activity monitoring
@@ -108,7 +111,7 @@ private:
     void disconnectSignals();
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    VirtualDesktopManager* m_virtualDesktopManager = nullptr;
+    PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     QObject* m_controller = nullptr; // KActivities::Controller*, stored as QObject* for optional dependency
     bool m_running = false;
     QString m_currentActivity;

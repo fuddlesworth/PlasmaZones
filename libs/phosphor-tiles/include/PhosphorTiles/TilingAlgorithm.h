@@ -214,8 +214,8 @@ public:
      * @brief Whether this algorithm intentionally produces overlapping zones
      *
      * Algorithms like Cascade, Stair, and Monocle overlap zones by design.
-     * When true, the post-layout enforceWindowMinSizes pass is skipped to
-     * avoid removeZoneOverlaps destroying the intended layout.
+     * When true, the post-layout enforceMinSizes pass is skipped to
+     * avoid removeRectOverlaps destroying the intended layout.
      *
      * @return true if zones intentionally overlap (default: false)
      */
@@ -511,7 +511,7 @@ protected:
      * @brief Solve three-column width distribution with ratio and min-size constraints
      *
      * Shared by ThreeColumnAlgorithm and CenteredMasterAlgorithm. Computes
-     * left/center/right widths from a center split ratio, applying MinZoneSizePx
+     * left/center/right widths from a center split ratio, applying MinRectSizePx
      * floor, min-width clamping, and joint min-width proportional fallback.
      *
      * @param areaX Left edge X coordinate

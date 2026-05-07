@@ -253,7 +253,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         QJSValue value;
     };
     const Constant constants[] = {
-        {QLatin1String("PZ_MIN_ZONE_SIZE"), QJSValue(static_cast<int>(MinZoneSizePx))},
+        {QLatin1String("PZ_MIN_ZONE_SIZE"), QJSValue(static_cast<int>(MinRectSizePx))},
         {QLatin1String("PZ_MIN_SPLIT"), QJSValue(static_cast<double>(MinSplitRatio))},
         {QLatin1String("PZ_MAX_SPLIT"), QJSValue(static_cast<double>(MaxSplitRatio))},
         {QLatin1String("MAX_TREE_DEPTH"), QJSValue(static_cast<int>(MaxRuntimeTreeDepth))},
@@ -536,7 +536,7 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     }
 
     // Degenerate screen: area too small for meaningful tiling — fill with stacked zones
-    if (area.width() < MinZoneSizePx || area.height() < MinZoneSizePx) {
+    if (area.width() < MinRectSizePx || area.height() < MinRectSizePx) {
         QVector<QRect> zones;
         zones.reserve(params.windowCount);
         for (int i = 0; i < params.windowCount; ++i) {

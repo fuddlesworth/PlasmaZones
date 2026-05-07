@@ -41,10 +41,10 @@
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
-#include "../core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/ZoneDetector.h>
-#include "../core/windowregistry.h"
-#include "../core/virtualdesktopmanager.h"
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../core/activitymanager.h"
 #include "../core/constants.h"
 #include "../core/geometryutils.h"
@@ -98,7 +98,7 @@ Daemon::Daemon(QObject* parent)
     , m_configBackend(createDefaultConfigBackend())
     , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
                                                                       QStringLiteral("plasmazones/layouts")))
-    , m_layoutComputeService(std::make_unique<LayoutComputeService>(nullptr))
+    , m_layoutComputeService(std::make_unique<PhosphorZones::LayoutComputeService>(nullptr))
     // m_curveRegistry / m_profileRegistry are default-constructed (no
     // init-list entries) — daemon.h declares them between m_layoutComputeService
     // and m_clockManager, so the in-class default initialisation runs before
@@ -113,7 +113,7 @@ Daemon::Daemon(QObject* parent)
     // see the DECLARATION ORDER INVARIANT comment there.
     , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, nullptr))
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
-    , m_windowRegistry(std::make_unique<WindowRegistry>(nullptr))
+    , m_windowRegistry(std::make_unique<PhosphorEngine::WindowRegistry>(nullptr))
     , m_panelSource(std::make_unique<Phosphor::Screens::PlasmaPanelSource>())
     , m_virtualScreenStore(std::make_unique<SettingsConfigStore>(m_settings.get()))
     , m_screenManager(std::make_unique<Phosphor::Screens::ScreenManager>(
@@ -132,7 +132,7 @@ Daemon::Daemon(QObject* parent)
     , m_shaderRegistry(std::make_unique<ShaderRegistry>(nullptr))
     , m_overlayService(
           std::make_unique<OverlayService>(m_screenManager.get(), m_shaderRegistry.get(), &m_profileRegistry, nullptr))
-    , m_virtualDesktopManager(std::make_unique<VirtualDesktopManager>(m_layoutManager.get(), nullptr))
+    , m_virtualDesktopManager(std::make_unique<PhosphorWorkspaces::VirtualDesktopManager>(nullptr))
     , m_activityManager(std::make_unique<ActivityManager>(m_layoutManager.get(), nullptr))
     , m_shortcutManager(std::make_unique<ShortcutManager>(m_settings.get(), m_layoutManager.get(), nullptr))
 {
@@ -599,7 +599,7 @@ bool Daemon::init()
     // have correct normalized coordinates for preview rendering (KCM, OSD, selector).
     if (QScreen* primary = Utils::primaryScreen()) {
         for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
-            LayoutComputeService::recalculateSync(
+            PhosphorZones::LayoutComputeService::recalculateSync(
                 layout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
         }
     }
@@ -794,9 +794,10 @@ bool Daemon::init()
     // Drop closed windows from m_lastAutotileOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would
     // then tile N+1 windows for N actual windows).
-    connect(m_windowRegistry.get(), &WindowRegistry::windowDisappeared, this, [this](const QString& instanceId) {
-        pruneAutotileOrdersForWindow(instanceId);
-    });
+    connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowDisappeared, this,
+            [this](const QString& instanceId) {
+                pruneAutotileOrdersForWindow(instanceId);
+            });
 
     // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).
     // When the delayed panel requery completes it emits availableGeometryChanged, which triggers
@@ -864,7 +865,7 @@ bool Daemon::init()
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
 
-    connect(autotileEngine, &PhosphorEngineApi::PlacementEngineBase::settingsPersistRequested, this, [this]() {
+    connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::settingsPersistRequested, this, [this]() {
         if (m_settings) {
             m_settings->save();
         }
@@ -904,7 +905,7 @@ bool Daemon::init()
     // resolver, the last-active window/screen shadow, and the snap-
     // bookkeeping helpers (windowSnapped, windowUnsnapped, recordSnapIntent,
     // clearPreTileGeometry). A future refactor should move that state onto
-    // SnapEngine or WindowTrackingService and retire the back-reference.
+    // SnapEngine or PhosphorPlacement::WindowTrackingService and retire the back-reference.
     snapEngine->setNavigationStateProvider(m_windowTrackingAdaptor);
 
     // Clear stale autotile-floated flag when a window is snapped. A window
@@ -972,18 +973,18 @@ bool Daemon::init()
     // fields can change as a result of a placementChanged signal, so the next save
     // rewrites just those keys rather than the whole window-tracking blob.
     //
-    // markDirty() emits WindowTrackingService::stateChanged, which is wired to
+    // markDirty() emits PhosphorPlacement::WindowTrackingService::stateChanged, which is wired to
     // WindowTrackingAdaptor::scheduleSaveState in the adaptor's constructor —
     // that connection is what actually kicks the debounced save timer. If the
     // stateChanged hookup ever gets severed, autotile state will silently
     // stop persisting; add an explicit scheduleSaveState() call here if so.
-    connect(autotileEngine, &PhosphorEngineApi::PlacementEngineBase::placementChanged, m_windowTrackingAdaptor,
-            [this]() {
-                if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
-                    m_windowTrackingAdaptor->service()->markDirty(WindowTrackingService::DirtyAutotileOrders
-                                                                  | WindowTrackingService::DirtyAutotilePending);
-                }
-            });
+    connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, m_windowTrackingAdaptor, [this]() {
+        if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+            m_windowTrackingAdaptor->service()->markDirty(
+                PhosphorPlacement::WindowTrackingService::DirtyAutotileOrders
+                | PhosphorPlacement::WindowTrackingService::DirtyAutotilePending);
+        }
+    });
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
@@ -1166,7 +1167,7 @@ void Daemon::start()
     // Initial layout resolution: set the active layout from per-desktop assignments.
     // Must run after connectLayoutSignals() (which sets up autotile screens and filter)
     // and after connectDesktopActivity() (which sets current desktop/activity).
-    // VirtualDesktopManager and ActivityManager no longer resolve layouts — this is
+    // PhosphorWorkspaces::VirtualDesktopManager and ActivityManager no longer resolve layouts — this is
     // the single code path that understands autotile vs snapping mode.
     syncModeFromAssignments();
 

@@ -8,13 +8,13 @@
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
-#include <PhosphorEngineApi/PerScreenKeys.h>
+#include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include "tileenginelogging.h"
 
 namespace PhosphorTileEngine {
 
-namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
+namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;
 
 PerScreenConfigResolver::PerScreenConfigResolver(AutotileEngine* engine)
     : m_engine(engine)

@@ -34,11 +34,11 @@ namespace PlasmaZones {
  * where needed and pass via dependency injection.
  */
 class PLASMAZONES_EXPORT Settings : public ISettings,
-                                    public PhosphorEngineApi::IAutotileSettings,
-                                    public PhosphorEngineApi::ISnapSettings
+                                    public PhosphorEngine::IAutotileSettings,
+                                    public PhosphorEngine::ISnapSettings
 {
     Q_OBJECT
-    Q_INTERFACES(PhosphorEngineApi::IAutotileSettings PhosphorEngineApi::ISnapSettings)
+    Q_INTERFACES(PhosphorEngine::IAutotileSettings PhosphorEngine::ISnapSettings)
 
 public:
     /** Maximum number of activation triggers per action (drag, multi-zone, zone span).

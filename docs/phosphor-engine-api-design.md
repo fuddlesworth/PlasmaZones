@@ -22,19 +22,19 @@
 
 ---
 
-## Design: `phosphor-engine-api` + symmetric state ownership
+## Design: `phosphor-engine` + symmetric state ownership
 
-### New library: `libs/phosphor-engine-api/`
+### New library: `libs/phosphor-engine/`
 
 Header-only (or INTERFACE) library. Depends only on Qt6::Core. Defines the polymorphic contracts that both placement engines implement.
 
 ```
-libs/phosphor-engine-api/
-  include/PhosphorEngineApi/
+libs/phosphor-engine/
+  include/PhosphorEngine/
     IPlacementEngine.h     — unified lifecycle + navigation
     IPlacementState.h      — per-screen state contract
     NavigationContext.h     — target window + screen
-    PhosphorEngineApi.h    — umbrella include
+    PhosphorEngine.h    — umbrella include
   CMakeLists.txt
 ```
 
@@ -45,7 +45,7 @@ libs/phosphor-engine-api/
 Merges `IEngineLifecycle` + `INavigationActions` into a single contract. The daemon dispatches everything through this — zero mode branches.
 
 ```cpp
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 class IPlacementEngine
 {
@@ -86,7 +86,7 @@ public:
     virtual const IPlacementState* stateForScreen(const QString& screenId) const = 0;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine
 ```
 
 ### `IPlacementState` — per-screen state contract
@@ -94,7 +94,7 @@ public:
 Both `TilingState` and the new `SnapState` implement this. The daemon's persistence layer, D-Bus adaptor, and compositor plugin all consume it uniformly.
 
 ```cpp
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 class IPlacementState
 {
@@ -121,7 +121,7 @@ public:
     virtual QJsonObject toJson() const = 0;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine
 ```
 
 ---
@@ -151,7 +151,7 @@ Extracts the snap-specific state from `WindowTrackingService` into phosphor-zone
 ```cpp
 namespace PhosphorZones {
 
-class PHOSPHORZONES_EXPORT SnapState : public QObject, public PhosphorEngineApi::IPlacementState
+class PHOSPHORZONES_EXPORT SnapState : public QObject, public PhosphorEngine::IPlacementState
 {
     Q_OBJECT
 public:
@@ -199,7 +199,7 @@ Q_SIGNALS:
 
 ```cpp
 class PHOSPHORTILES_EXPORT TilingState : public QObject,
-                                         public PhosphorEngineApi::IPlacementState
+                                         public PhosphorEngine::IPlacementState
 {
     // Existing API unchanged.
     // New overrides:
@@ -228,7 +228,7 @@ class PHOSPHORTILES_EXPORT TilingState : public QObject,
 
 **Total: ~1,700 LOC moves from WTS → phosphor-zones**
 
-### Into phosphor-engine-api (new)
+### Into phosphor-engine (new)
 
 | What | LOC est. |
 |---|---|
@@ -269,7 +269,7 @@ public:
 ## Dependency graph after migration
 
 ```
-phosphor-engine-api (INTERFACE, LGPL)
+phosphor-engine (INTERFACE, LGPL)
   IPlacementEngine, IPlacementState, NavigationContext
        │                    │
        ▼                    ▼
@@ -299,10 +299,10 @@ phosphor-zones           phosphor-tiles
 ```
 
 **Key properties:**
-- phosphor-zones and phosphor-tiles depend on phosphor-engine-api (INTERFACE, no binary)
+- phosphor-zones and phosphor-tiles depend on phosphor-engine (INTERFACE, no binary)
 - phosphor-zones and phosphor-tiles have zero cross-references (unchanged)
 - Daemon sees only `IPlacementEngine*` — never branches on mode
-- Wayfire plugin links phosphor-zones + phosphor-engine-api and gets full snap functionality
+- Wayfire plugin links phosphor-zones + phosphor-engine and gets full snap functionality
 - `IPlacementState` lets persistence and D-Bus adaptor serialize uniformly
 
 **Interface width note:** `IPlacementEngine` has 22 pure virtual methods (lifecycle + navigation + persistence + state access). With only two implementors this is a pragmatic trade-off: the merged interface eliminates the adapter indirection that was the old `IEngineLifecycle` + `INavigationActions` split. If a third engine type is added (e.g., floating-only mode), consider splitting the navigation methods into a separate mixin.
@@ -313,7 +313,7 @@ phosphor-zones           phosphor-tiles
 
 ### PR 1: Interface layer + symmetric state (THIS PR) — DONE
 
-1. Created `libs/phosphor-engine-api/` with `IPlacementEngine`, `IPlacementState`, `NavigationContext`
+1. Created `libs/phosphor-engine/` with `IPlacementEngine`, `IPlacementState`, `NavigationContext`
 2. `TilingState` implements `IPlacementState` (2 new methods + 6 overrides)
 3. Created `SnapState` in phosphor-zones implementing `IPlacementState`
 4. Both engines implement `IPlacementEngine` directly
@@ -431,7 +431,7 @@ should not reimplement geometry save/restore — only placement logic.
 #### PlacementEngineBase implementation
 
 ```cpp
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 enum class WindowState { Unmanaged, EngineOwned, Floated };
 
@@ -505,7 +505,7 @@ private:
     QHash<QString, WindowState> m_windowStates;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine
 ```
 
 #### What a third-party engine implements
@@ -513,7 +513,7 @@ private:
 A new engine (e.g., PaperWM-style horizontal scroll):
 
 ```cpp
-class ScrollEngine : public PhosphorEngineApi::PlacementEngineBase
+class ScrollEngine : public PhosphorEngine::PlacementEngineBase
 {
 protected:
     void onWindowClaimed(const QString& windowId) override
@@ -628,7 +628,7 @@ returns the right `IPlacementEngine*` and every call goes through the base class
 ### Migration sequence
 
 Phase 1: Create PlacementEngineBase
-1. Create `libs/phosphor-engine-api/PlacementEngineBase.h` with universal mechanics
+1. Create `libs/phosphor-engine/PlacementEngineBase.h` with universal mechanics
 2. SnapEngine + AutotileEngine inherit from `PlacementEngineBase` instead of raw `IPlacementEngine`
 3. Move unmanaged geometry cache from WTS `m_preTileGeometries` → base class `m_unmanagedGeometries`
 

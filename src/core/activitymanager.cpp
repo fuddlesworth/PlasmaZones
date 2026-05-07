@@ -3,7 +3,7 @@
 
 #include "activitymanager.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include "virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "logging.h"
 #include "utils.h"
 #include <QGuiApplication>
@@ -43,7 +43,7 @@ ActivityManager::~ActivityManager()
     stop();
 }
 
-void ActivityManager::setVirtualDesktopManager(VirtualDesktopManager* vdm)
+void ActivityManager::setVirtualDesktopManager(PhosphorWorkspaces::VirtualDesktopManager* vdm)
 {
     m_virtualDesktopManager = vdm;
 }

@@ -86,6 +86,10 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/ZonesLayoutSourceFactory.h
     include/PhosphorZones/AssignmentEntry.h
     include/PhosphorZones/LayoutRegistry.h
+    include/PhosphorZones/LayoutFactory.h
+    include/PhosphorZones/LayoutComputeTypes.h
+    include/PhosphorZones/LayoutWorker.h
+    include/PhosphorZones/LayoutComputeService.h
 )
 
 set(phosphorzones_SRCS
@@ -105,6 +109,9 @@ set(phosphorzones_SRCS
     src/layoutregistry_assignments.cpp
     src/layoutregistry_persistence.cpp
     src/geometryutils.cpp
+    src/layoutfactory.cpp
+    src/layoutworker.cpp
+    src/layoutcomputeservice.cpp
 )
 
 add_library(PhosphorZones SHARED

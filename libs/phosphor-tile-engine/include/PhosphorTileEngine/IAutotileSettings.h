@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include <PhosphorEngineApi/EngineTypes.h>
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <QObject>
 #include <QString>
 #include <QVariantMap>
 
-namespace PhosphorEngineApi {
+namespace PhosphorEngine {
 
 class IAutotileSettings
 {
@@ -41,7 +41,7 @@ public:
 
     virtual PhosphorTiles::AutotileInsertPosition autotileInsertPosition() const = 0;
     virtual PhosphorTiles::AutotileOverflowBehavior autotileOverflowBehavior() const = 0;
-    virtual PhosphorEngineApi::StickyWindowHandling autotileStickyWindowHandling() const = 0;
+    virtual PhosphorEngine::StickyWindowHandling autotileStickyWindowHandling() const = 0;
 
     virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
 
@@ -53,6 +53,6 @@ public:
     virtual void clearPerScreenAutotileSettings(const QString& screenId) = 0;
 };
 
-} // namespace PhosphorEngineApi
+} // namespace PhosphorEngine
 
-Q_DECLARE_INTERFACE(PhosphorEngineApi::IAutotileSettings, "org.plasmazones.IAutotileSettings")
+Q_DECLARE_INTERFACE(PhosphorEngine::IAutotileSettings, "org.plasmazones.IAutotileSettings")

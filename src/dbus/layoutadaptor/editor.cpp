@@ -4,7 +4,7 @@
 #include "../layoutadaptor.h"
 #include "../../core/interfaces.h"
 #include <PhosphorZones/Layout.h>
-#include "../../core/layoutfactory.h"
+#include <PhosphorZones/LayoutFactory.h>
 #include <PhosphorZones/Zone.h>
 #include "../../core/constants.h"
 #include <PhosphorZones/LayoutUtils.h>

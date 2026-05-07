@@ -40,22 +40,21 @@ AutotileAdaptor::AutotileAdaptor(PhosphorTileEngine::AutotileEngine* engine,
     connect(m_engine, &PhosphorTileEngine::AutotileEngine::enabledChanged, this, &AutotileAdaptor::enabledChanged);
     connect(m_engine, &PhosphorTileEngine::AutotileEngine::autotileScreensChanged, this,
             &AutotileAdaptor::autotileScreensChanged);
-    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::algorithmChanged, this,
-            &AutotileAdaptor::algorithmChanged);
+    connect(m_engine, &PhosphorEngine::PlacementEngineBase::algorithmChanged, this, &AutotileAdaptor::algorithmChanged);
     // Internal signal is placementChanged (engine-generic); D-Bus name stays tilingChanged
     // for backward compatibility with existing KWin effect / third-party consumers.
-    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged, this, &AutotileAdaptor::tilingChanged);
+    connect(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, &AutotileAdaptor::tilingChanged);
     connect(m_engine, &PhosphorTileEngine::AutotileEngine::windowsTiled, this, &AutotileAdaptor::onWindowsTiled);
-    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::activateWindowRequested, this,
+    connect(m_engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, this,
             &AutotileAdaptor::focusWindowRequested);
     // The in-process engine signal has a 2nd QSet<QString> argument for
     // daemon-side bookkeeping; strip it before forwarding over D-Bus since
     // QSet is not a D-Bus-marshallable type.
-    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::windowsReleased, this,
+    connect(m_engine, &PhosphorEngine::PlacementEngineBase::windowsReleased, this,
             [this](const QStringList& windowIds, const QSet<QString>& /*releasedScreenIds*/) {
                 Q_EMIT windowsReleasedFromTiling(windowIds);
             });
-    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::windowFloatingChanged, this,
+    connect(m_engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, this,
             &AutotileAdaptor::windowFloatingChanged);
     qCDebug(lcDbusAutotile) << "AutotileAdaptor initialized";
 }

@@ -39,9 +39,9 @@
 
 namespace PhosphorSnapEngine {
 
-using PhosphorEngineApi::NavigationContext;
-using PhosphorEngineApi::SnapIntent;
-using PhosphorEngineApi::ZoneAssignmentEntry;
+using PhosphorEngine::NavigationContext;
+using PhosphorEngine::SnapIntent;
+using PhosphorEngine::ZoneAssignmentEntry;
 using PhosphorProtocol::CycleTargetResult;
 using PhosphorProtocol::FocusTargetResult;
 using PhosphorProtocol::MoveTargetResult;
@@ -64,7 +64,7 @@ namespace {
 ///   2. An explicit @p preferredScreen from the NavigationContext.
 ///   3. The INavigationStateProvider cursor / last-active screen values.
 QString resolveNavScreen(INavigationStateProvider* navState, const QString& windowId,
-                         PhosphorEngineApi::IWindowTrackingService* service, const QString& preferredScreen = QString())
+                         PhosphorEngine::IWindowTrackingService* service, const QString& preferredScreen = QString())
 {
     if (service && !windowId.isEmpty()) {
         const QString zoneId = service->zoneForWindow(windowId);

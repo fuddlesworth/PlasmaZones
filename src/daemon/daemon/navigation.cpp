@@ -7,7 +7,7 @@
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../../config/settings.h"
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include "../../core/logging.h"
 #include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"
@@ -16,7 +16,7 @@
 #include "../../dbus/snapadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
-#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../modetracker.h"
 #include <QScreen>
@@ -27,7 +27,7 @@ namespace PlasmaZones {
 // Engine routing
 // ═══════════════════════════════════════════════════════════════════════════════
 
-PhosphorEngineApi::IPlacementEngine* Daemon::engineForScreen(const QString& screenId) const
+PhosphorEngine::IPlacementEngine* Daemon::engineForScreen(const QString& screenId) const
 {
     // Single source of truth. Delegates to the central router so daemon
     // navigation handlers, adaptor D-Bus entry points, and resnap paths
@@ -72,9 +72,9 @@ bool Daemon::isAutotileScreen(const QString& screenId) const
 // router. Returns nullptr if either step fails. Centralises the "no screen
 // info" early return and the context population so individual handlers
 // stay short and all shortcut dispatches use the same resolution logic.
-static PhosphorEngineApi::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* router, WindowTrackingAdaptor* wta,
-                                                                 PhosphorEngineApi::NavigationContext& outCtx,
-                                                                 const char* shortcutName)
+static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* router, WindowTrackingAdaptor* wta,
+                                                              PhosphorEngine::NavigationContext& outCtx,
+                                                              const char* shortcutName)
 {
     outCtx.screenId = resolveShortcutScreenId(wta && wta->service() ? wta->service()->screenManager() : nullptr, wta);
     if (outCtx.screenId.isEmpty()) {

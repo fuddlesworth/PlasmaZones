@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include "plasmazones_export.h"
 
@@ -38,8 +38,8 @@ public:
     /// Construct with references to the engines (as IPlacementEngine*)
     /// and layout manager. None of the pointers are owned; they must
     /// outlive the router.
-    ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager, PhosphorEngineApi::IPlacementEngine* snapEngine,
-                     PhosphorEngineApi::IPlacementEngine* autotileEngine);
+    ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager, PhosphorEngine::IPlacementEngine* snapEngine,
+                     PhosphorEngine::IPlacementEngine* autotileEngine);
 
     /// Current mode for @p screenId. Consults the autotile engine's
     /// live set first (mode is derived from assignment + context) and
@@ -53,7 +53,7 @@ public:
     /// the returned pointer as the only legitimate route into per-window
     /// behaviour for that screen — they must not reach into a specific
     /// engine directly.
-    PhosphorEngineApi::IPlacementEngine* engineFor(const QString& screenId) const;
+    PhosphorEngine::IPlacementEngine* engineFor(const QString& screenId) const;
 
     /// Convenience predicates. @see modeFor for the fallback semantics.
     bool isSnapMode(const QString& screenId) const;
@@ -72,8 +72,8 @@ public:
 
 private:
     PhosphorZones::LayoutRegistry* m_layoutManager;
-    PhosphorEngineApi::IPlacementEngine* m_snapEngine;
-    PhosphorEngineApi::IPlacementEngine* m_autotileEngine;
+    PhosphorEngine::IPlacementEngine* m_snapEngine;
+    PhosphorEngine::IPlacementEngine* m_autotileEngine;
 };
 
 } // namespace PlasmaZones

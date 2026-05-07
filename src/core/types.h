@@ -4,8 +4,8 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include <PhosphorEngineApi/EngineTypes.h>
-#include <PhosphorEngineApi/NavigationContext.h>
+#include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorEngine/NavigationContext.h>
 #include <QHashFunctions>
 #include <QList>
 #include <QSet>
@@ -15,17 +15,17 @@
 
 namespace PlasmaZones {
 
-using NavigationContext = PhosphorEngineApi::NavigationContext;
+using NavigationContext = PhosphorEngine::NavigationContext;
 
-using TilingStateKey = PhosphorEngineApi::TilingStateKey;
-using PhosphorEngineApi::qHash;
+using TilingStateKey = PhosphorEngine::TilingStateKey;
+using PhosphorEngine::qHash;
 
-using SnapIntent = PhosphorEngineApi::SnapIntent;
-using ResnapEntry = PhosphorEngineApi::ResnapEntry;
-using PendingRestore = PhosphorEngineApi::PendingRestore;
-using SnapResult = PhosphorEngineApi::SnapResult;
-using UnfloatResult = PhosphorEngineApi::UnfloatResult;
-using ZoneAssignmentEntry = PhosphorEngineApi::ZoneAssignmentEntry;
+using SnapIntent = PhosphorEngine::SnapIntent;
+using ResnapEntry = PhosphorEngine::ResnapEntry;
+using PendingRestore = PhosphorEngine::PendingRestore;
+using SnapResult = PhosphorEngine::SnapResult;
+using UnfloatResult = PhosphorEngine::UnfloatResult;
+using ZoneAssignmentEntry = PhosphorEngine::ZoneAssignmentEntry;
 
 struct PLASMAZONES_EXPORT DragInfo
 {

@@ -23,7 +23,7 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on PhosphorTiles::TilingAlgorithm
 #include <PhosphorTiles/TilingState.h>
-#include <PhosphorEngineApi/PerScreenKeys.h>
+#include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -36,9 +36,9 @@
 
 namespace PhosphorTileEngine {
 
-using NavigationContext = PhosphorEngineApi::NavigationContext;
-using TilingStateKey = PhosphorEngineApi::TilingStateKey;
-namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
+using NavigationContext = PhosphorEngine::NavigationContext;
+using TilingStateKey = PhosphorEngine::TilingStateKey;
+namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;
 
 namespace {
 // Safety timeout for pending initial window orders that never arrive via D-Bus.
@@ -61,7 +61,7 @@ T* checkedCast(QObject* obj, const char* context)
 } // namespace
 
 AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
-                               PhosphorEngineApi::IWindowTrackingService* windowTracker,
+                               PhosphorEngine::IWindowTrackingService* windowTracker,
                                Phosphor::Screens::ScreenManager* screenManager,
                                PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
     : PlacementEngineBase(parent)
@@ -1128,9 +1128,9 @@ QStringList AutotileEngine::tiledWindowOrder(const QString& screenId) const
 // Settings synchronization
 // ═══════════════════════════════════════════════════════════════════════════════
 
-PhosphorEngineApi::IAutotileSettings* AutotileEngine::autotileSettings() const
+PhosphorEngine::IAutotileSettings* AutotileEngine::autotileSettings() const
 {
-    return qobject_cast<PhosphorEngineApi::IAutotileSettings*>(engineSettings());
+    return qobject_cast<PhosphorEngine::IAutotileSettings*>(engineSettings());
 }
 
 void AutotileEngine::writeBackTuning()
@@ -2052,7 +2052,7 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
     // Clear cached min-size when unfloating so the next retile starts fresh.
     // The window's minimum size may have changed while floating/minimized
     // (e.g. browser finished loading media, terminal resized). Stale min-sizes
-    // can override the user's split ratio by inflating enforceWindowMinSizes
+    // can override the user's split ratio by inflating enforceMinSizes
     // constraints. The centering code in the KWin effect will re-discover and
     // report the actual min-size if the window can't fill its assigned zone.
     if (!shouldFloat) {
@@ -2140,7 +2140,7 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
         m_windowToStateKey[windowId] = newKey;
     }
 
-    // Store window minimum size from KWin (used by enforceWindowMinSizes)
+    // Store window minimum size from KWin (used by enforceMinSizes)
     if (minWidth > 0 || minHeight > 0) {
         storeWindowMinSize(windowId, minWidth, minHeight);
     }
@@ -2776,7 +2776,7 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // Always populated regardless of effectiveRespectMinimumSize: KWin enforces
     // min sizes whether the user opted in or not, so the bounds clamp below
     // must run unconditionally. The flag only gates whether the *algorithm*
-    // sees them (and therefore whether enforceWindowMinSizes runs).
+    // sees them (and therefore whether enforceMinSizes runs).
     const QStringList tiled = state->tiledWindows();
     QVector<QSize> windowMinSizes(windowCount, QSize(0, 0));
     for (int i = 0; i < windowCount && i < tiled.size(); ++i) {
@@ -2873,12 +2873,12 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     }
 
     // Lightweight safety net: the algorithm handles min sizes directly, but
-    // enforceWindowMinSizes catches any residual deficits from rounding or
+    // enforceMinSizes catches any residual deficits from rounding or
     // edge cases the algorithm couldn't fully solve (e.g., unsatisfiable
     // constraints). Skip for any algorithm where producesOverlappingZones()
     // is true (Monocle, Cascade, Stair, Deck, Paper, Spread, horizontal-deck
     // and any future opt-in): zones intentionally overlap and the implicit
-    // removeZoneOverlaps inside enforceWindowMinSizes would destroy the
+    // removeRectOverlaps inside enforceMinSizes would destroy the
     // intended layout.
     // minSizes is populated iff respectMin (see above); windowCount > 0 is
     // already guaranteed by the early return at the top of this function.
@@ -2886,9 +2886,9 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
         const int threshold =
             effectiveInnerGap(screenId) + qMax(PhosphorTiles::AutotileDefaults::GapEdgeThresholdPx, 12);
         const QVector<QRect> preEnforceZones = zones;
-        PhosphorGeometry::enforceWindowMinSizes(zones, minSizes, threshold, innerGap);
+        PhosphorGeometry::enforceMinSizes(zones, minSizes, threshold, innerGap);
         if (Q_UNLIKELY(PhosphorTileEngine::lcTileEngine().isDebugEnabled()) && zones != preEnforceZones) {
-            qCDebug(PhosphorTileEngine::lcTileEngine) << "enforceWindowMinSizes: zones adjusted"
+            qCDebug(PhosphorTileEngine::lcTileEngine) << "enforceMinSizes: zones adjusted"
                                                       << "before=" << preEnforceZones << "after=" << zones;
         }
     }
@@ -2904,7 +2904,7 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // controls whether the algorithm reflows around min sizes, but it does
     // NOT change KWin's compositor-side enforcement, so we always need this
     // safety net. Position-only; never grows or shrinks zones (size changes
-    // are owned by enforceWindowMinSizes, which is unsafe for any algorithm
+    // are owned by enforceMinSizes, which is unsafe for any algorithm
     // where producesOverlappingZones() is true).
     //
     // Post-clamp zones may overlap. For overlap stacks (any algo with
@@ -2912,7 +2912,7 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // intentional and a shift just changes the visible offset slightly. For
     // non-overlapping algorithms it can also occur when a window's min-size
     // pressure shifts a zone leftward/upward into its neighbor; we
-    // deliberately do NOT re-run removeZoneOverlaps because it splits the
+    // deliberately do NOT re-run removeRectOverlaps because it splits the
     // overlap at the midpoint, moving the shifted zone back toward the edge
     // it was just clamped away from — exactly re-introducing the overflow we
     // just fixed.
@@ -3371,8 +3371,8 @@ bool AutotileEngine::shouldTileWindow(const QString& rawWindowId) const
         auto* s = autotileSettings();
         if (s) {
             const auto handling = s->autotileStickyWindowHandling();
-            if (handling == PhosphorEngineApi::StickyWindowHandling::IgnoreAll
-                || handling == PhosphorEngineApi::StickyWindowHandling::RestoreOnly) {
+            if (handling == PhosphorEngine::StickyWindowHandling::IgnoreAll
+                || handling == PhosphorEngine::StickyWindowHandling::RestoreOnly) {
                 qCDebug(PhosphorTileEngine::lcTileEngine)
                     << "Window" << windowId << "is sticky, handling=" << static_cast<int>(handling)
                     << ", skipping tile";
@@ -3641,7 +3641,7 @@ bool AutotileEngine::warnIfEmptyWindowId(const QString& windowId, const char* op
 
 void AutotileEngine::setWindowRegistry(QObject* registry)
 {
-    m_windowRegistry = dynamic_cast<PhosphorEngineApi::IWindowRegistry*>(registry);
+    m_windowRegistry = dynamic_cast<PhosphorEngine::IWindowRegistry*>(registry);
     if (!m_windowRegistry) {
         return;
     }
@@ -3959,12 +3959,12 @@ void AutotileEngine::restoreFocusedWindow(const NavigationContext& ctx)
 // IPlacementEngine — state access
 // ═══════════════════════════════════════════════════════════════════════════════
 
-PhosphorEngineApi::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId)
+PhosphorEngine::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId)
 {
     return tilingStateForScreen(screenId);
 }
 
-const PhosphorEngineApi::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId) const
+const PhosphorEngine::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId) const
 {
     if (screenId.isEmpty()) {
         return nullptr;

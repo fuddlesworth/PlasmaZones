@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorEngineApi/EngineTypes.h>
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorTiles/AutotileConstants.h>
 
 namespace PlasmaZones {
@@ -65,7 +65,7 @@ enum class ZoneSelectorSizeMode {
     Manual = 1 ///< Use explicit previewWidth/previewHeight settings
 };
 
-using StickyWindowHandling = PhosphorEngineApi::StickyWindowHandling;
+using StickyWindowHandling = PhosphorEngine::StickyWindowHandling;
 
 /**
  * @brief OSD style options for layout switch notifications

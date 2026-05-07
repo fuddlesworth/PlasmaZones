@@ -6,19 +6,19 @@
 #include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../../core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorScreens/Manager.h>
-#include "../../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../../core/activitymanager.h"
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
 #include "../../core/constants.h"
 #include "../../core/utils.h"
-#include "../../core/windowtrackingservice.h"
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include "../config/settings.h"
 #include "../../dbus/windowtrackingadaptor.h"
-#include <PhosphorEngineApi/PlacementEngineBase.h>
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <QGuiApplication>
@@ -355,7 +355,7 @@ void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows, 
     if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
         return;
     }
-    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     if (!wts) {
         return;
     }
@@ -383,7 +383,7 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
     if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
         return entries;
     }
-    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     if (!wts) {
         return entries;
     }
@@ -430,7 +430,7 @@ void Daemon::presaveSnapFloats(const QString& screenId)
     if (!m_windowTrackingAdaptor) {
         return;
     }
-    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     const QStringList floatingIds = wts->floatingWindows();
     for (const QString& fid : floatingIds) {
         if (m_autotileEngine->isModeSpecificFloated(fid)) {
@@ -462,7 +462,7 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
     TilingStateKey orderKey{screenId, currentDesktop(), currentActivity()};
     QStringList order = m_lastAutotileOrders.value(orderKey);
     if (order.isEmpty()) {
-        WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+        PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
         if (wts) {
             order = wts->buildZoneOrderedWindowList(screenId);
         }
@@ -552,7 +552,7 @@ void Daemon::processPendingGeometryUpdates()
     // emits with layout==nullptr in that case.
     auto conn = std::make_shared<QMetaObject::Connection>();
     *conn = connect(
-        m_layoutComputeService.get(), &LayoutComputeService::geometriesComputed, this,
+        m_layoutComputeService.get(), &PhosphorZones::LayoutComputeService::geometriesComputed, this,
         [this, pending, conn](const QString& screenId, const QUuid& layoutId, PhosphorZones::Layout* /*layout*/) {
             const PendingKey key{screenId, layoutId};
             if (!pending->remove(key)) {

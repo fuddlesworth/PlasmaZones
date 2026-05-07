@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
+#include "../core/daemongeometryresolver.h"
+#include <PhosphorPlacement/PlacementConfig.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 #include "windowtrackingadaptor/persistenceworker.h"
 #include "zonedetectionadaptor.h"
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "../config/configbackends.h"
@@ -13,13 +15,13 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorScreens/Manager.h>
-#include "../core/virtualdesktopmanager.h"
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../core/logging.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../core/types.h"
-#include "../core/windowregistry.h"
+#include <PhosphorEngine/WindowRegistry.h>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -31,7 +33,8 @@ namespace PlasmaZones {
 WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layoutManager,
                                              PhosphorZones::IZoneDetector* zoneDetector,
                                              Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
-                                             VirtualDesktopManager* virtualDesktopManager, QObject* parent)
+                                             PhosphorWorkspaces::VirtualDesktopManager* virtualDesktopManager,
+                                             QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)
@@ -42,9 +45,13 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     Q_ASSERT(zoneDetector);
     Q_ASSERT(settings);
 
+    // Create geometry resolver (bridges ISettings to the library's IGeometryResolver)
+    m_geometryResolver = new PlasmaZones::DaemonGeometryResolver(settings);
+
     // Create business logic service
-    m_service =
-        new WindowTrackingService(layoutManager, zoneDetector, screenManager, settings, virtualDesktopManager, this);
+    m_service = new PhosphorPlacement::WindowTrackingService(
+        layoutManager, zoneDetector, screenManager, virtualDesktopManager, m_geometryResolver,
+        PhosphorPlacement::PlacementConfig{settings->keepWindowsInZonesOnResolutionChange()}, this);
 
     // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
     // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on
@@ -53,14 +60,16 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // still reaches the resolver.
 
     // Forward service signals to D-Bus
-    connect(m_service, &WindowTrackingService::windowZoneChanged, this, &WindowTrackingAdaptor::windowZoneChanged);
+    connect(m_service, &PhosphorPlacement::WindowTrackingService::windowZoneChanged, this,
+            &WindowTrackingAdaptor::windowZoneChanged);
 
     // Snap-commit signal wiring is deferred to setEngines() where m_snapEngine
     // is available — commitSnap/commitMultiZoneSnap/uncommitSnap live on
     // SnapEngine, not WTS.
 
     // Connect service state changes to persistence
-    connect(m_service, &WindowTrackingService::stateChanged, this, &WindowTrackingAdaptor::scheduleSaveState);
+    connect(m_service, &PhosphorPlacement::WindowTrackingService::stateChanged, this,
+            &WindowTrackingAdaptor::scheduleSaveState);
 
     // Setup debounced save timer (500ms delay to batch rapid state changes)
     m_saveTimer = new QTimer(this);
@@ -89,11 +98,11 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
                 if (m_pendingWriteMasks.isEmpty()) {
                     return;
                 }
-                const WindowTrackingService::DirtyMask committed = m_pendingWriteMasks.dequeue();
+                const PhosphorPlacement::WindowTrackingService::DirtyMask committed = m_pendingWriteMasks.dequeue();
                 if (!success) {
                     qCWarning(lcDbusWindow) << "session state write failed for" << filePath
                                             << "— restoring dirty mask and retrying on next tick";
-                    if (m_service && committed != WindowTrackingService::DirtyNone) {
+                    if (m_service && committed != PhosphorPlacement::WindowTrackingService::DirtyNone) {
                         // markDirty emits stateChanged, which is wired to
                         // scheduleSaveState() above — the retry lands on
                         // the next debounce tick automatically.
@@ -119,7 +128,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // without needing an unrelated DirtyAll path to drag it along.
     connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this, [this]() {
         if (m_service) {
-            m_service->markDirty(WindowTrackingService::DirtyActiveLayoutId);
+            m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyActiveLayoutId);
         }
         onLayoutChanged();
     });
@@ -177,12 +186,12 @@ PhosphorSnapEngine::SnapEngine* WindowTrackingAdaptor::snapEngine() const
 // This method only wires cross-engine references and the shared OSD path.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingAdaptor::setEngines(PhosphorEngineApi::PlacementEngineBase* snapEngine,
-                                       PhosphorEngineApi::PlacementEngineBase* autotileEngine)
+void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snapEngine,
+                                       PhosphorEngine::PlacementEngineBase* autotileEngine)
 {
     // Disconnect previous autotile engine nav feedback (the only signal connected here)
     if (m_autotileEngine) {
-        disconnect(m_autotileEngine, &PhosphorEngineApi::PlacementEngineBase::navigationFeedback, this, nullptr);
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);
     }
 
     m_snapEngine = snapEngine;
@@ -234,7 +243,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngineApi::PlacementEngineBase* s
     // geometry application). See ADR docs/adr-snapengine-migration.md.
     // ═══════════════════════════════════════════════════════════════════════════
     if (m_autotileEngine) {
-        connect(m_autotileEngine, &PhosphorEngineApi::PlacementEngineBase::navigationFeedback, this,
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this,
                 &WindowTrackingAdaptor::navigationFeedback);
     }
 }
@@ -326,9 +335,9 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         if (trackedScreen.isEmpty() || Phosphor::Screens::ScreenIdentity::screensMatch(trackedScreen, newScreenId)) {
             return;
         }
-        PhosphorEngineApi::PlacementEngineBase* source =
+        PhosphorEngine::PlacementEngineBase* source =
             !trackedSnap.isEmpty() ? m_snapEngine.data() : m_autotileEngine.data();
-        PhosphorEngineApi::PlacementEngineBase* dest = nullptr;
+        PhosphorEngine::PlacementEngineBase* dest = nullptr;
         if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(newScreenId)) {
             dest = m_autotileEngine.data();
         } else if (m_snapEngine) {
@@ -337,7 +346,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         if (!dest) {
             return;
         }
-        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = newScreenId;
         ctx.fromEngineId = source ? source->engineId() : QString();
@@ -453,7 +462,7 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
     qCDebug(lcDbusWindow) << "Cleaned up tracking data for closed window" << windowId;
 }
 
-void WindowTrackingAdaptor::setWindowRegistry(WindowRegistry* registry)
+void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* registry)
 {
     m_windowRegistry = registry;
     if (m_service) {
@@ -467,8 +476,9 @@ void WindowTrackingAdaptor::setWindowRegistry(WindowRegistry* registry)
     // stays put even if the new class would have behaved differently at open.
     // The only safe reactive update is refreshing tracking fields that mirror
     // the app class, so future lookups don't compare against a stale string.
-    QObject::connect(registry, &WindowRegistry::metadataChanged, this,
-                     [this](const QString& instanceId, const WindowMetadata& oldMeta, const WindowMetadata& newMeta) {
+    QObject::connect(registry, &PhosphorEngine::WindowRegistry::metadataChanged, this,
+                     [this](const QString& instanceId, const PhosphorEngine::WindowMetadata& oldMeta,
+                            const PhosphorEngine::WindowMetadata& newMeta) {
                          if (oldMeta.appId == newMeta.appId || !m_service) {
                              return;
                          }
@@ -502,7 +512,7 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
         return;
     }
 
-    WindowMetadata meta;
+    PhosphorEngine::WindowMetadata meta;
     meta.appId = appId;
     meta.desktopFile = desktopFile;
     meta.title = title;
