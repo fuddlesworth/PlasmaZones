@@ -10,7 +10,7 @@
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../../core/activitymanager.h"
+#include <PhosphorWorkspaces/ActivityManager.h>
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
@@ -120,8 +120,9 @@ void Daemon::connectScreenSignals()
         const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
         const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
         const int desktop = m_virtualDesktopManager->currentDesktop();
-        const QString activity =
-            m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
+        const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
+            ? m_activityManager->currentActivity()
+            : QString();
         for (const QString& sid : vsIds) {
             PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
             if (screenLayout) {
@@ -282,13 +283,12 @@ void Daemon::connectDesktopActivity()
 
     // Initialize and start activity manager
     // Connect to PhosphorWorkspaces::VirtualDesktopManager for desktop+activity coordinate lookup
-    m_activityManager->setVirtualDesktopManager(m_virtualDesktopManager.get());
     m_activityManager->init();
-    if (ActivityManager::isAvailable()) {
+    if (PhosphorWorkspaces::ActivityManager::isAvailable()) {
         m_activityManager->start();
 
         // Prune stale PhosphorTiles::TilingState entries and disabled-activity IDs when activities are added/removed
-        connect(m_activityManager.get(), &ActivityManager::activitiesChanged, this, [this]() {
+        connect(m_activityManager.get(), &PhosphorWorkspaces::ActivityManager::activitiesChanged, this, [this]() {
             if (!m_activityManager) {
                 return;
             }
@@ -326,7 +326,7 @@ void Daemon::connectDesktopActivity()
         }
 
         // Connect activity changes: update all components
-        connect(m_activityManager.get(), &ActivityManager::currentActivityChanged, this,
+        connect(m_activityManager.get(), &PhosphorWorkspaces::ActivityManager::currentActivityChanged, this,
                 [this](const QString& activityId) {
                     m_overlayService->setCurrentActivity(activityId);
                     m_layoutManager->setCurrentActivity(activityId);
@@ -716,8 +716,9 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // call (and the resnap below) reads fresh zone bounds. The screenAdded
     // handler does the same inline recalc for newly-added physical screens.
     const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    const QString activity =
-        m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
+    const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
+        ? m_activityManager->currentActivity()
+        : QString();
     const QStringList affectedScreenIds = config.hasSubdivisions()
         ? m_screenManager->virtualScreenIdsFor(physicalScreenId)
         : QStringList{physicalScreenId};
@@ -790,8 +791,9 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     // retile" double-movement reported on VS swap/rotate.
 
     const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    const QString activity =
-        m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
+    const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
+        ? m_activityManager->currentActivity()
+        : QString();
     const QStringList affectedScreenIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
     for (const QString& sid : affectedScreenIds) {
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);

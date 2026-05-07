@@ -35,12 +35,12 @@ class LayoutRegistry;
 }
 
 namespace PhosphorWorkspaces {
+class ActivityManager;
 class VirtualDesktopManager;
 }
 
 namespace PlasmaZones {
 
-class ActivityManager;
 class ISettings;
 
 /**
@@ -61,7 +61,7 @@ public:
     ~LayoutAdaptor() override = default;
 
     void setVirtualDesktopManager(PhosphorWorkspaces::VirtualDesktopManager* vdm);
-    void setActivityManager(ActivityManager* am);
+    void setActivityManager(PhosphorWorkspaces::ActivityManager* am);
     void setSettings(ISettings* settings);
 
     /// Inject the daemon-owned tile-algorithm registry — required for
@@ -483,7 +483,7 @@ private:
 
     PhosphorZones::LayoutRegistry* m_layoutManager; // Concrete type for signal connections
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager = nullptr;
-    ActivityManager* m_activityManager = nullptr;
+    PhosphorWorkspaces::ActivityManager* m_activityManager = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     ISettings* m_settings = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives adaptor

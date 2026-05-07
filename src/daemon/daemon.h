@@ -43,6 +43,7 @@ class WindowRegistry;
 }
 
 namespace PhosphorWorkspaces {
+class ActivityManager;
 class VirtualDesktopManager;
 }
 
@@ -59,7 +60,7 @@ enum class DisabledReason;
 class Settings;
 class OverlayService;
 
-class ActivityManager;
+class PhosphorWorkspaces::ActivityManager;
 class ShortcutManager;
 class LayoutAdaptor;
 class SettingsAdaptor;
@@ -150,7 +151,7 @@ public:
     {
         return m_virtualDesktopManager.get();
     }
-    ActivityManager* activityManager() const
+    PhosphorWorkspaces::ActivityManager* activityManager() const
     {
         return m_activityManager.get();
     }
@@ -532,7 +533,7 @@ private:
     /// order matches.
     std::unique_ptr<OverlayService> m_overlayService;
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
-    std::unique_ptr<ActivityManager> m_activityManager;
+    std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;
 
     // Domain-specific D-Bus adaptors

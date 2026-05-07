@@ -9,7 +9,7 @@
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../../core/activitymanager.h"
+#include <PhosphorWorkspaces/ActivityManager.h>
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
 #include "../../core/constants.h"
@@ -492,8 +492,9 @@ void Daemon::processPendingGeometryUpdates()
     // geometriesComputed emissions (e.g. from an async layoutAssigned firing
     // mid-barrier) cannot drain it prematurely.
     const int desktop = m_virtualDesktopManager->currentDesktop();
-    const QString activity =
-        m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
+    const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
+        ? m_activityManager->currentActivity()
+        : QString();
     const QStringList screenIds = m_screenManager->effectiveScreenIds();
     QSet<QUuid> processedLayouts;
 
