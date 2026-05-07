@@ -8,7 +8,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../../core/activitymanager.h"
+#include <PhosphorWorkspaces/ActivityManager.h>
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include <PhosphorZones/ZoneDetector.h>
@@ -483,7 +483,9 @@ int Daemon::currentDesktop() const
 
 QString Daemon::currentActivity() const
 {
-    return (m_activityManager && ActivityManager::isAvailable()) ? m_activityManager->currentActivity() : QString();
+    return (m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable())
+        ? m_activityManager->currentActivity()
+        : QString();
 }
 
 bool Daemon::isCurrentContextLocked(const QString& screenId) const

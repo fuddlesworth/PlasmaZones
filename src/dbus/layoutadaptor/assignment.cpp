@@ -5,7 +5,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../../core/activitymanager.h"
+#include <PhosphorWorkspaces/ActivityManager.h>
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/constants.h"
@@ -410,7 +410,7 @@ QVariantMap LayoutAdaptor::getAllActivityAssignments()
 }
 
 // KDE Activities Support
-void LayoutAdaptor::setActivityManager(ActivityManager* am)
+void LayoutAdaptor::setActivityManager(PhosphorWorkspaces::ActivityManager* am)
 {
     if (m_activityManager) {
         disconnect(m_activityManager, nullptr, this, nullptr);
@@ -423,15 +423,16 @@ void LayoutAdaptor::setActivityManager(ActivityManager* am)
 void LayoutAdaptor::connectActivitySignals()
 {
     if (m_activityManager) {
-        connect(m_activityManager, &ActivityManager::currentActivityChanged, this,
+        connect(m_activityManager, &PhosphorWorkspaces::ActivityManager::currentActivityChanged, this,
                 &LayoutAdaptor::currentActivityChanged);
-        connect(m_activityManager, &ActivityManager::activitiesChanged, this, &LayoutAdaptor::activitiesChanged);
+        connect(m_activityManager, &PhosphorWorkspaces::ActivityManager::activitiesChanged, this,
+                &LayoutAdaptor::activitiesChanged);
     }
 }
 
 bool LayoutAdaptor::isActivitiesAvailable()
 {
-    return ActivityManager::isAvailable();
+    return PhosphorWorkspaces::ActivityManager::isAvailable();
 }
 
 QStringList LayoutAdaptor::getActivities()

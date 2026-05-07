@@ -16,7 +16,7 @@
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../core/activitymanager.h"
+#include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
