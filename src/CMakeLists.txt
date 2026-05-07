@@ -74,8 +74,6 @@ set(plasmazones_core_SRCS
     # lifted to libs/phosphor-screens. Daemon consumers take
     # Phosphor::Screens::ScreenManager* via constructor injection —
     # no service-locator intermediary.
-    core/activitymanager.cpp
-    core/activitymanager.h
     core/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
     # shaderregistry.cpp + shaderincluderesolver moved to PhosphorShaders
     core/modifierutils.cpp

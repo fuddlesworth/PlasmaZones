@@ -45,7 +45,7 @@
 #include <PhosphorZones/ZoneDetector.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../core/activitymanager.h"
+#include <PhosphorWorkspaces/ActivityManager.h>
 #include "../core/constants.h"
 #include "../core/geometryutils.h"
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -133,7 +133,7 @@ Daemon::Daemon(QObject* parent)
     , m_overlayService(
           std::make_unique<OverlayService>(m_screenManager.get(), m_shaderRegistry.get(), &m_profileRegistry, nullptr))
     , m_virtualDesktopManager(std::make_unique<PhosphorWorkspaces::VirtualDesktopManager>(nullptr))
-    , m_activityManager(std::make_unique<ActivityManager>(m_layoutManager.get(), nullptr))
+    , m_activityManager(std::make_unique<PhosphorWorkspaces::ActivityManager>(nullptr))
     , m_shortcutManager(std::make_unique<ShortcutManager>(m_settings.get(), m_layoutManager.get(), nullptr))
 {
     // Install the layout screen-id resolver before any Daemon-owned machinery
@@ -1167,8 +1167,8 @@ void Daemon::start()
     // Initial layout resolution: set the active layout from per-desktop assignments.
     // Must run after connectLayoutSignals() (which sets up autotile screens and filter)
     // and after connectDesktopActivity() (which sets current desktop/activity).
-    // PhosphorWorkspaces::VirtualDesktopManager and ActivityManager no longer resolve layouts — this is
-    // the single code path that understands autotile vs snapping mode.
+    // PhosphorWorkspaces::VirtualDesktopManager and PhosphorWorkspaces::ActivityManager no longer resolve layouts —
+    // this is the single code path that understands autotile vs snapping mode.
     syncModeFromAssignments();
 
     finalizeStartup();

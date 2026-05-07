@@ -1,18 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "activitymanager.h"
-#include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "logging.h"
-#include "utils.h"
-#include <QGuiApplication>
-#include <QScreen>
+#include <PhosphorWorkspaces/ActivityManager.h>
 
-// PlasmaActivities/KActivities is optional - check at compile time
-// Plasma 6 uses PlasmaActivities package but keeps KActivities namespace
 #ifdef HAVE_KACTIVITIES
-// Try Plasma 6 headers first (PlasmaActivities package)
 #if __has_include(<PlasmaActivities/plasmaactivities/controller.h>)
 #include <PlasmaActivities/plasmaactivities/controller.h>
 #include <PlasmaActivities/plasmaactivities/info.h>
@@ -22,20 +13,17 @@
 #include <plasmaactivities/info.h>
 #define PLASMA_ACTIVITIES_V6
 #else
-// Fall back to KActivities (KF5/KF6)
 #include <KActivities/Controller>
 #include <KActivities/Info>
 #endif
 #define KACTIVITIES_AVAILABLE
 #endif
 
-namespace PlasmaZones {
+namespace PhosphorWorkspaces {
 
-ActivityManager::ActivityManager(PhosphorZones::LayoutRegistry* layoutManager, QObject* parent)
+ActivityManager::ActivityManager(QObject* parent)
     : QObject(parent)
-    , m_layoutManager(layoutManager)
 {
-    Q_ASSERT(layoutManager);
 }
 
 ActivityManager::~ActivityManager()
@@ -43,17 +31,10 @@ ActivityManager::~ActivityManager()
     stop();
 }
 
-void ActivityManager::setVirtualDesktopManager(PhosphorWorkspaces::VirtualDesktopManager* vdm)
-{
-    m_virtualDesktopManager = vdm;
-}
-
 bool ActivityManager::isAvailable()
 {
 #ifdef KACTIVITIES_AVAILABLE
-    // Check if we have a running controller with Running status
-    // Note: This is a quick check; full availability requires async init
-    return true; // Compiled with support, actual status checked via D-Bus
+    return true;
 #else
     return false;
 #endif
@@ -62,76 +43,49 @@ bool ActivityManager::isAvailable()
 bool ActivityManager::init()
 {
 #ifdef KACTIVITIES_AVAILABLE
-    // Create our persistent controller instance
-    // Important: Controller needs to be long-lived to sync with the service
     auto* controller = new KActivities::Controller(this);
     m_controller = controller;
 
-    // Connect to serviceStatusChanged to handle async service availability
     connect(controller, &KActivities::Controller::serviceStatusChanged, this,
             [this, controller](KActivities::Controller::ServiceStatus status) {
                 bool wasAvailable = m_activitiesAvailable;
                 m_activitiesAvailable = (status == KActivities::Controller::Running);
 
                 if (m_activitiesAvailable && !wasAvailable) {
-                    // Service just became available - fetch current activity
                     m_currentActivity = controller->currentActivity();
-                    qCInfo(lcCore) << "KActivities service now running, current activity:" << m_currentActivity << "("
-                                   << activityName(m_currentActivity) << ")";
-
-                    // Emit signals so UI can update
                     Q_EMIT activitiesChanged();
                     if (!m_currentActivity.isEmpty()) {
                         Q_EMIT currentActivityChanged(m_currentActivity);
                     }
-
-                    // PhosphorZones::Layout resolution is handled by the daemon's
-                    // syncModeFromAssignments() via currentActivityChanged signal.
                 } else if (!m_activitiesAvailable && wasAvailable) {
-                    qCWarning(lcCore) << "KActivities service stopped";
                     m_currentActivity.clear();
                     Q_EMIT activitiesChanged();
                 }
             });
 
-    // Check initial status
     auto status = controller->serviceStatus();
     m_activitiesAvailable = (status == KActivities::Controller::Running);
 
     if (m_activitiesAvailable) {
         m_currentActivity = controller->currentActivity();
-        qCInfo(lcCore) << "KActivities available, current activity:" << m_currentActivity << "("
-                       << activityName(m_currentActivity) << ")";
-    } else if (status == KActivities::Controller::Unknown) {
-        // Service status unknown - it may become available later
-        qCInfo(lcCore) << "KActivities: service status unknown, waiting for connection";
-    } else {
-        qCInfo(lcCore) << "KActivities: service not running, activity support disabled";
     }
 
-    return true; // Always return true - activities are optional
+    return true;
 #else
-    qCInfo(lcCore) << "KActivities: not compiled in, activity support disabled";
     m_activitiesAvailable = false;
-    return true; // Return true since activities are optional
+    return true;
 #endif
 }
 
 void ActivityManager::start()
 {
-    if (m_running) {
-        return;
-    }
-
-    if (!m_activitiesAvailable) {
-        qCDebug(lcCore) << "ActivityManager: not available, skipping start";
+    if (m_running || !m_activitiesAvailable) {
         return;
     }
 
 #ifdef KACTIVITIES_AVAILABLE
     m_running = true;
     connectSignals();
-    // PhosphorZones::Layout resolution is handled by the daemon via currentActivityChanged signal.
 #endif
 }
 
@@ -200,20 +154,18 @@ void ActivityManager::onCurrentActivityChanged(const QString& activityId)
     }
 
     m_currentActivity = activityId;
-    qCInfo(lcCore) << "Activity changed activity=" << activityId << "name=" << activityName(activityId);
-
     Q_EMIT currentActivityChanged(activityId);
 }
 
 void ActivityManager::onActivityAdded(const QString& activityId)
 {
-    qCInfo(lcCore) << "Activity added activity=" << activityId << "name=" << activityName(activityId);
+    Q_UNUSED(activityId)
     Q_EMIT activitiesChanged();
 }
 
 void ActivityManager::onActivityRemoved(const QString& activityId)
 {
-    qCInfo(lcCore) << "Activity removed activity=" << activityId;
+    Q_UNUSED(activityId)
     Q_EMIT activitiesChanged();
 }
 
@@ -243,8 +195,4 @@ void ActivityManager::disconnectSignals()
 #endif
 }
 
-// NOTE: updateActiveLayout() was removed — layout resolution is handled exclusively
-// by the daemon's syncModeFromAssignments() which understands autotile vs snapping mode.
-// ActivityManager only tracks activity state and emits signals.
-
-} // namespace PlasmaZones
+} // namespace PhosphorWorkspaces

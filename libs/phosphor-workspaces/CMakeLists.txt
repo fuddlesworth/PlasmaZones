@@ -19,7 +19,9 @@ set(CMAKE_AUTOMOC ON)
 
 add_library(PhosphorWorkspaces SHARED
     include/PhosphorWorkspaces/VirtualDesktopManager.h
+    include/PhosphorWorkspaces/ActivityManager.h
     src/VirtualDesktopManager.cpp
+    src/ActivityManager.cpp
 )
 add_library(PhosphorWorkspaces::PhosphorWorkspaces ALIAS PhosphorWorkspaces)
 
@@ -44,6 +46,31 @@ target_link_libraries(PhosphorWorkspaces
     PRIVATE
         Qt6::DBus
 )
+
+# Optional KActivities/PlasmaActivities support for ActivityManager
+find_package(PlasmaActivities QUIET)
+if(NOT PlasmaActivities_FOUND)
+    find_package(KF6Activities QUIET NAMES KF6Activities KActivities)
+    if(KF6Activities_FOUND)
+        set(PlasmaActivities_FOUND TRUE)
+    endif()
+endif()
+if(NOT PlasmaActivities_FOUND)
+    find_package(KActivities QUIET)
+    if(KActivities_FOUND)
+        set(PlasmaActivities_FOUND TRUE)
+    endif()
+endif()
+if(PlasmaActivities_FOUND)
+    target_compile_definitions(PhosphorWorkspaces PRIVATE HAVE_KACTIVITIES)
+    if(TARGET Plasma::Activities)
+        target_link_libraries(PhosphorWorkspaces PRIVATE Plasma::Activities)
+    elseif(TARGET KF6::Activities)
+        target_link_libraries(PhosphorWorkspaces PRIVATE KF6::Activities)
+    elseif(TARGET KF5::Activities)
+        target_link_libraries(PhosphorWorkspaces PRIVATE KF5::Activities)
+    endif()
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Install

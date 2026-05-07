@@ -11,7 +11,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../../core/activitymanager.h"
+#include <PhosphorWorkspaces/ActivityManager.h>
 #include "../../core/logging.h"
 #include "../../core/constants.h"
 #include "../../core/utils.h"
@@ -428,7 +428,7 @@ void Daemon::initializeUnifiedController()
     // Set initial desktop/activity context for visibility-filtered cycling
     m_layoutManager->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
     m_unifiedLayoutController->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
-    if (m_activityManager && ActivityManager::isAvailable()) {
+    if (m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()) {
         m_layoutManager->setCurrentActivity(m_activityManager->currentActivity());
         m_unifiedLayoutController->setCurrentActivity(m_activityManager->currentActivity());
     }
@@ -726,7 +726,7 @@ void Daemon::finalizeStartup()
         const QString activity = currentActivity();
         // activityReady: either we already have a non-empty activity, or
         // KActivities is unavailable on this system (no point waiting).
-        const bool activityReady = !activity.isEmpty() || !ActivityManager::isAvailable();
+        const bool activityReady = !activity.isEmpty() || !PhosphorWorkspaces::ActivityManager::isAvailable();
         if (activityReady) {
             showOsdForAllScreens(currentDesktop(), activity);
         } else if (m_activityManager) {
@@ -752,7 +752,7 @@ void Daemon::finalizeStartup()
             // observed false-fallback regressions.
             auto conn = std::make_shared<QMetaObject::Connection>();
             auto fired = std::make_shared<bool>(false);
-            *conn = connect(m_activityManager.get(), &ActivityManager::currentActivityChanged, this,
+            *conn = connect(m_activityManager.get(), &PhosphorWorkspaces::ActivityManager::currentActivityChanged, this,
                             [this, conn, fired](const QString& a) {
                                 if (a.isEmpty() || *fired) {
                                     return;
@@ -777,7 +777,7 @@ void Daemon::finalizeStartup()
                 // lesser harm: the user gets no welcome banner, but never
                 // sees content keyed to the wrong activity.
                 const QString activity = currentActivity();
-                if (activity.isEmpty() && ActivityManager::isAvailable()) {
+                if (activity.isEmpty() && PhosphorWorkspaces::ActivityManager::isAvailable()) {
                     return;
                 }
                 showOsdForAllScreens(currentDesktop(), activity);
