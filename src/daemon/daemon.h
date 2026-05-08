@@ -60,7 +60,6 @@ enum class DisabledReason;
 class Settings;
 class OverlayService;
 
-class PhosphorWorkspaces::ActivityManager;
 class ShortcutManager;
 class LayoutAdaptor;
 class SettingsAdaptor;

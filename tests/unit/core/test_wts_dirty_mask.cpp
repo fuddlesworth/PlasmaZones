@@ -112,7 +112,6 @@ private Q_SLOTS:
         auto* freshLayoutManager = new PhosphorZones::LayoutRegistry(
             PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts"), &freshParent);
         auto* freshVirtualDesktopManager = new PhosphorWorkspaces::VirtualDesktopManager(&freshParent);
-        auto* freshSettings = new StubSettings(&freshParent);
         auto* freshZoneDetector = new StubZoneDetector(&freshParent);
 
         PhosphorPlacement::WindowTrackingService fresh(freshLayoutManager, freshZoneDetector, nullptr,
