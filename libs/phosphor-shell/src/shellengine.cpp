@@ -16,6 +16,7 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QScreen>
+#include <QSize>
 
 Q_LOGGING_CATEGORY(lcShellEngine, "phosphorshell.engine")
 
@@ -117,10 +118,21 @@ void ShellEngine::materializePanels()
             role = role.withExclusiveZone(panel->exclusiveZone());
         }
 
+        QScreen* targetScreen = panel->screen() ? panel->screen() : m_deps.screenProvider->primary();
+        const QSize screenSize = targetScreen ? targetScreen->size() : QSize(1920, 1080);
+
+        QSize panelSize;
+        if (panel->edge() == PanelWindow::Top || panel->edge() == PanelWindow::Bottom) {
+            panelSize = QSize(screenSize.width(), panel->thickness());
+        } else {
+            panelSize = QSize(panel->thickness(), screenSize.height());
+        }
+
         PhosphorLayer::SurfaceConfig cfg;
         cfg.role = role;
         cfg.contentItem = std::unique_ptr<QQuickItem>(panel);
-        cfg.screen = panel->screen() ? panel->screen() : m_deps.screenProvider->primary();
+        cfg.screen = targetScreen;
+        cfg.initialSize = panelSize;
         cfg.debugName = QStringLiteral("phosphor-shell-panel");
 
         auto* surface = m_deps.surfaceFactory->create(std::move(cfg), this);
