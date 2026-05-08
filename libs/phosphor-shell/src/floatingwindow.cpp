@@ -1,0 +1,109 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorShell/FloatingWindow.h>
+
+#include <QQuickWindow>
+
+namespace PhosphorShell {
+
+FloatingWindow::FloatingWindow(QQuickItem* parent)
+    : QQuickItem(parent)
+{
+}
+
+FloatingWindow::~FloatingWindow()
+{
+    delete m_window;
+}
+
+QString FloatingWindow::title() const
+{
+    return m_title;
+}
+
+void FloatingWindow::setTitle(const QString& title)
+{
+    if (m_title == title) {
+        return;
+    }
+    m_title = title;
+    if (m_window) {
+        m_window->setTitle(m_title);
+    }
+    Q_EMIT titleChanged();
+}
+
+int FloatingWindow::windowWidth() const
+{
+    return m_windowWidth;
+}
+
+void FloatingWindow::setWindowWidth(int width)
+{
+    if (m_windowWidth == width) {
+        return;
+    }
+    m_windowWidth = width;
+    if (m_window) {
+        m_window->setWidth(m_windowWidth);
+    }
+    Q_EMIT windowWidthChanged();
+}
+
+int FloatingWindow::windowHeight() const
+{
+    return m_windowHeight;
+}
+
+void FloatingWindow::setWindowHeight(int height)
+{
+    if (m_windowHeight == height) {
+        return;
+    }
+    m_windowHeight = height;
+    if (m_window) {
+        m_window->setHeight(m_windowHeight);
+    }
+    Q_EMIT windowHeightChanged();
+}
+
+bool FloatingWindow::isWindowVisible() const
+{
+    return m_windowVisible;
+}
+
+void FloatingWindow::setWindowVisible(bool visible)
+{
+    if (m_windowVisible == visible) {
+        return;
+    }
+    m_windowVisible = visible;
+
+    if (visible) {
+        ensureWindow();
+        m_window->show();
+    } else if (m_window) {
+        m_window->hide();
+    }
+
+    Q_EMIT windowVisibleChanged();
+}
+
+void FloatingWindow::ensureWindow()
+{
+    if (m_window) {
+        return;
+    }
+
+    m_window = new QQuickWindow();
+    m_window->setTitle(m_title);
+    m_window->resize(m_windowWidth, m_windowHeight);
+
+    const auto children = childItems();
+    for (QQuickItem* child : children) {
+        child->setParentItem(m_window->contentItem());
+    }
+}
+
+} // namespace PhosphorShell

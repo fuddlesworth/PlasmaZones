@@ -52,6 +52,8 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/PersistentProperties.h
     include/PhosphorShell/Environment.h
     include/PhosphorShell/FileView.h
+    include/PhosphorShell/FloatingWindow.h
+    include/PhosphorShell/LazyLoader.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -70,6 +72,8 @@ set(phosphorshell_SRCS
     src/persistentproperties.cpp
     src/environment.cpp
     src/fileview.cpp
+    src/floatingwindow.cpp
+    src/lazyloader.cpp
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -151,6 +155,10 @@ qt_add_qml_module(PhosphorShellQml
         include/PhosphorShell/Environment.h
         src/fileview.cpp
         include/PhosphorShell/FileView.h
+        src/floatingwindow.cpp
+        include/PhosphorShell/FloatingWindow.h
+        src/lazyloader.cpp
+        include/PhosphorShell/LazyLoader.h
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/PhosphorShell
 )
 
@@ -211,6 +219,10 @@ if(PHOSPHOR_SHELL_QML_INSTALL)
             include/PhosphorShell/Environment.h
             src/fileview.cpp
             include/PhosphorShell/FileView.h
+            src/floatingwindow.cpp
+            include/PhosphorShell/FloatingWindow.h
+            src/lazyloader.cpp
+            include/PhosphorShell/LazyLoader.h
         OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml_install/PhosphorShell
     )
 

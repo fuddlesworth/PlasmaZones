@@ -5,11 +5,14 @@
 
 #include <PhosphorShell/phosphorshell_export.h>
 
+#include <QHash>
 #include <QObject>
+#include <QString>
 #include <QtQml/qqmlregistration.h>
 
 namespace PhosphorShell {
 
+class PersistentProperties;
 class ScreenModel;
 
 class PHOSPHORSHELL_EXPORT ShellGlobal : public QObject
@@ -27,8 +30,13 @@ public:
     ScreenModel* screens() const;
     void setScreenModel(ScreenModel* model);
 
+    Q_INVOKABLE QObject* singleton(const QString& reloadId) const;
+    void registerSingleton(const QString& reloadId, PersistentProperties* props);
+    void clearSingletons();
+
 private:
     ScreenModel* m_screens = nullptr;
+    QHash<QString, PersistentProperties*> m_singletons;
 };
 
 } // namespace PhosphorShell

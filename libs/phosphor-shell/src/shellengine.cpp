@@ -300,6 +300,14 @@ void ShellEngine::materializePanels()
             qCWarning(lcShellEngine) << "Failed to create surface for PanelWindow";
         }
     }
+
+    m_shellGlobal->clearSingletons();
+    const auto persists = m_rootObject->findChildren<PersistentProperties*>();
+    for (auto* p : persists) {
+        if (!p->reloadId().isEmpty()) {
+            m_shellGlobal->registerSingleton(p->reloadId(), p);
+        }
+    }
 }
 
 void ShellEngine::savePersistentState()

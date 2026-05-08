@@ -5,6 +5,8 @@
 
 #include <PhosphorShell/Environment.h>
 #include <PhosphorShell/FileView.h>
+#include <PhosphorShell/FloatingWindow.h>
+#include <PhosphorShell/LazyLoader.h>
 #include <PhosphorShell/PanelWindow.h>
 #include <PhosphorShell/PersistentProperties.h>
 #include <PhosphorShell/PopupWindow.h>
