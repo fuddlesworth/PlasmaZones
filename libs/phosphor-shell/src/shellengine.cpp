@@ -165,6 +165,21 @@ void ShellEngine::onFileChanged()
     Q_EMIT reloaded();
 }
 
+static PhosphorLayer::Anchor edgeToAnchor(PanelWindow::Edge edge)
+{
+    switch (edge) {
+    case PanelWindow::Top:
+        return PhosphorLayer::Anchor::Top;
+    case PanelWindow::Bottom:
+        return PhosphorLayer::Anchor::Bottom;
+    case PanelWindow::Left:
+        return PhosphorLayer::Anchor::Left;
+    case PanelWindow::Right:
+        return PhosphorLayer::Anchor::Right;
+    }
+    return PhosphorLayer::Anchor::Top;
+}
+
 void ShellEngine::materializePanels()
 {
     QList<PanelWindow*> panels;
@@ -178,24 +193,68 @@ void ShellEngine::materializePanels()
     panels.append(children);
 
     for (PanelWindow* panel : panels) {
-        PhosphorLayer::Role role;
+        QScreen* targetScreen = panel->screen() ? panel->screen() : m_deps.screenProvider->primary();
+        const QSize screenSize = targetScreen ? targetScreen->size() : QSize(1920, 1080);
+        const bool horizontal = (panel->edge() == PanelWindow::Top || panel->edge() == PanelWindow::Bottom);
+        const PhosphorLayer::Anchor primaryAnchor = edgeToAnchor(panel->edge());
 
-        switch (panel->edge()) {
-        case PanelWindow::Top:
-            role = PhosphorLayer::Roles::TopPanel;
-            break;
-        case PanelWindow::Bottom:
-            role = PhosphorLayer::Roles::BottomPanel;
-            break;
-        case PanelWindow::Left:
-            role = PhosphorLayer::Roles::LeftDock;
-            break;
-        case PanelWindow::Right:
-            role = PhosphorLayer::Roles::RightDock;
-            break;
+        PhosphorLayer::Anchors anchors;
+        QMargins layerMargins = panel->margins();
+        QSize panelSize;
+
+        if (panel->alignment() == PanelWindow::Fill || panel->panelLength() < 0) {
+            if (horizontal) {
+                anchors = primaryAnchor | PhosphorLayer::Anchor::Left | PhosphorLayer::Anchor::Right;
+                panelSize = QSize(screenSize.width(), panel->thickness());
+            } else {
+                anchors = primaryAnchor | PhosphorLayer::Anchor::Top | PhosphorLayer::Anchor::Bottom;
+                panelSize = QSize(panel->thickness(), screenSize.height());
+            }
+        } else {
+            const int length = panel->panelLength();
+
+            switch (panel->alignment()) {
+            case PanelWindow::Start:
+                if (horizontal) {
+                    anchors = primaryAnchor | PhosphorLayer::Anchor::Left;
+                    panelSize = QSize(length, panel->thickness());
+                } else {
+                    anchors = primaryAnchor | PhosphorLayer::Anchor::Top;
+                    panelSize = QSize(panel->thickness(), length);
+                }
+                break;
+            case PanelWindow::End:
+                if (horizontal) {
+                    anchors = primaryAnchor | PhosphorLayer::Anchor::Right;
+                    panelSize = QSize(length, panel->thickness());
+                } else {
+                    anchors = primaryAnchor | PhosphorLayer::Anchor::Bottom;
+                    panelSize = QSize(panel->thickness(), length);
+                }
+                break;
+            case PanelWindow::Center:
+                if (horizontal) {
+                    anchors = primaryAnchor | PhosphorLayer::Anchor::Left | PhosphorLayer::Anchor::Right;
+                    const int margin = (screenSize.width() - length) / 2;
+                    layerMargins.setLeft(qMax(layerMargins.left(), margin));
+                    layerMargins.setRight(qMax(layerMargins.right(), margin));
+                    panelSize = QSize(length, panel->thickness());
+                } else {
+                    anchors = primaryAnchor | PhosphorLayer::Anchor::Top | PhosphorLayer::Anchor::Bottom;
+                    const int margin = (screenSize.height() - length) / 2;
+                    layerMargins.setTop(qMax(layerMargins.top(), margin));
+                    layerMargins.setBottom(qMax(layerMargins.bottom(), margin));
+                    panelSize = QSize(panel->thickness(), length);
+                }
+                break;
+            case PanelWindow::Fill:
+                break;
+            }
         }
 
-        role = role.withScopePrefix(QStringLiteral("phosphor-shell"));
+        PhosphorLayer::Role role;
+        role = role.withAnchors(anchors).withScopePrefix(QStringLiteral("phosphor-shell"));
+        role = role.withKeyboard(PhosphorLayer::KeyboardInteractivity::OnDemand);
 
         switch (panel->layer()) {
         case PanelWindow::LayerBackground:
@@ -212,20 +271,12 @@ void ShellEngine::materializePanels()
             break;
         }
 
-        if (panel->exclusiveZoneEnabled()) {
+        if (panel->alignment() == PanelWindow::Fill && panel->exclusiveZoneEnabled()) {
             role = role.withExclusiveZone(panel->thickness());
         } else if (panel->exclusiveZone() >= 0) {
             role = role.withExclusiveZone(panel->exclusiveZone());
-        }
-
-        QScreen* targetScreen = panel->screen() ? panel->screen() : m_deps.screenProvider->primary();
-        const QSize screenSize = targetScreen ? targetScreen->size() : QSize(1920, 1080);
-
-        QSize panelSize;
-        if (panel->edge() == PanelWindow::Top || panel->edge() == PanelWindow::Bottom) {
-            panelSize = QSize(screenSize.width(), panel->thickness());
         } else {
-            panelSize = QSize(panel->thickness(), screenSize.height());
+            role = role.withExclusiveZone(0);
         }
 
         PhosphorLayer::SurfaceConfig cfg;
@@ -233,13 +284,15 @@ void ShellEngine::materializePanels()
         cfg.contentItem = std::unique_ptr<QQuickItem>(panel);
         cfg.screen = targetScreen;
         cfg.initialSize = panelSize;
+        cfg.marginsOverride = layerMargins;
         cfg.debugName = QStringLiteral("phosphor-shell-panel");
 
         auto* surface = m_deps.surfaceFactory->create(std::move(cfg), this);
         if (surface) {
             surface->show();
             m_surfaces.push_back(surface);
-            qCDebug(lcShellEngine) << "Created panel surface on edge" << panel->edge();
+            qCDebug(lcShellEngine) << "Created panel surface on edge" << panel->edge() << "alignment"
+                                   << panel->alignment() << "size" << panelSize;
         } else {
             qCWarning(lcShellEngine) << "Failed to create surface for PanelWindow";
         }

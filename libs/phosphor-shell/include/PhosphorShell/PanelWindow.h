@@ -5,6 +5,7 @@
 
 #include <PhosphorShell/phosphorshell_export.h>
 
+#include <QMargins>
 #include <QQuickItem>
 #include <QtQml/qqmlregistration.h>
 
@@ -26,6 +27,9 @@ class PHOSPHORSHELL_EXPORT PanelWindow : public QQuickItem
     Q_PROPERTY(int exclusiveZone READ exclusiveZone WRITE setExclusiveZone NOTIFY exclusiveZoneChanged)
     Q_PROPERTY(bool exclusiveZoneEnabled READ exclusiveZoneEnabled WRITE setExclusiveZoneEnabled NOTIFY
                    exclusiveZoneEnabledChanged)
+    Q_PROPERTY(Alignment alignment READ alignment WRITE setAlignment NOTIFY alignmentChanged)
+    Q_PROPERTY(int panelLength READ panelLength WRITE setPanelLength NOTIFY panelLengthChanged)
+    Q_PROPERTY(QMargins margins READ margins WRITE setMargins NOTIFY marginsChanged)
 
 public:
     enum Edge {
@@ -43,6 +47,14 @@ public:
         LayerOverlay,
     };
     Q_ENUM(Layer)
+
+    enum Alignment {
+        Fill,
+        Start,
+        Center,
+        End,
+    };
+    Q_ENUM(Alignment)
 
     explicit PanelWindow(QQuickItem* parent = nullptr);
     ~PanelWindow() override;
@@ -65,6 +77,15 @@ public:
     bool exclusiveZoneEnabled() const;
     void setExclusiveZoneEnabled(bool enabled);
 
+    Alignment alignment() const;
+    void setAlignment(Alignment alignment);
+
+    int panelLength() const;
+    void setPanelLength(int length);
+
+    QMargins margins() const;
+    void setMargins(const QMargins& margins);
+
 Q_SIGNALS:
     void edgeChanged();
     void thicknessChanged();
@@ -72,6 +93,9 @@ Q_SIGNALS:
     void layerChanged();
     void exclusiveZoneChanged();
     void exclusiveZoneEnabledChanged();
+    void alignmentChanged();
+    void panelLengthChanged();
+    void marginsChanged();
 
 private:
     Edge m_edge = Top;
@@ -80,6 +104,9 @@ private:
     Layer m_layer = LayerTop;
     int m_exclusiveZone = -1;
     bool m_exclusiveZoneEnabled = true;
+    Alignment m_alignment = Fill;
+    int m_panelLength = -1;
+    QMargins m_margins;
 };
 
 } // namespace PhosphorShell

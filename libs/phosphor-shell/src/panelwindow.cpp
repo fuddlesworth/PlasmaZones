@@ -96,4 +96,46 @@ void PanelWindow::setExclusiveZoneEnabled(bool enabled)
     Q_EMIT exclusiveZoneEnabledChanged();
 }
 
+PanelWindow::Alignment PanelWindow::alignment() const
+{
+    return m_alignment;
+}
+
+void PanelWindow::setAlignment(Alignment alignment)
+{
+    if (m_alignment == alignment) {
+        return;
+    }
+    m_alignment = alignment;
+    Q_EMIT alignmentChanged();
+}
+
+int PanelWindow::panelLength() const
+{
+    return m_panelLength;
+}
+
+void PanelWindow::setPanelLength(int length)
+{
+    if (m_panelLength == length) {
+        return;
+    }
+    m_panelLength = length;
+    Q_EMIT panelLengthChanged();
+}
+
+QMargins PanelWindow::margins() const
+{
+    return m_margins;
+}
+
+void PanelWindow::setMargins(const QMargins& margins)
+{
+    if (m_margins == margins) {
+        return;
+    }
+    m_margins = margins;
+    Q_EMIT marginsChanged();
+}
+
 } // namespace PhosphorShell
