@@ -447,6 +447,27 @@ configure_file(
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Phosphor Shell
+# ═══════════════════════════════════════════════════════════════════════════════
+
+add_executable(phosphor-shell shell/main.cpp)
+
+target_link_libraries(phosphor-shell
+    PRIVATE
+        PhosphorShell::PhosphorShell
+        PhosphorShellQml              # STATIC QML module (PanelWindow type registration)
+        PhosphorShellQmlplugin        # Generated plugin target
+        PhosphorLayer::PhosphorLayer
+        PhosphorWayland::PhosphorWayland
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Quick
+        Qt6::Qml
+)
+
+install(TARGETS phosphor-shell DESTINATION ${KDE_INSTALL_BINDIR})
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Layout Editor
 # ═══════════════════════════════════════════════════════════════════════════════
 
