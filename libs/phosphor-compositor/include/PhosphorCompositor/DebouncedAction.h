@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <phosphorcompositor_export.h>
+
 #include <QObject>
 #include <QRect>
 #include <QTimer>
@@ -29,7 +31,7 @@ namespace PhosphorCompositor {
  * thread (typically the compositor's main thread). QTimer requires an event
  * loop on the owning thread. Do not call from worker threads.
  */
-class DebouncedScreenAction : public QObject
+class PHOSPHORCOMPOSITOR_EXPORT DebouncedScreenAction : public QObject
 {
     Q_OBJECT
 
@@ -117,6 +119,7 @@ public:
     void setLastGeometry(const QRect& geo)
     {
         m_lastGeometry = geo;
+        m_hasLastGeometry = true;
     }
 
 Q_SIGNALS:

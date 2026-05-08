@@ -98,12 +98,6 @@ private Q_SLOTS:
     void onDaemonReadySignal();
     void onServiceRegistered();
     void onServiceUnregistered();
-
-private:
-    void connectDaemonSignals();
-    void disconnectDaemonSignals();
-
-    // Daemon signal handlers (dispatch to handler interfaces)
     void handleApplyGeometry(const QString& windowId, int x, int y, int w, int h, const QString& zoneId,
                              const QString& screenId, bool sizeOnly);
     void handleApplyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
@@ -116,6 +110,10 @@ private:
     void handleSnapAllWindows(const QString& screenId);
     void handleSnapAssistReady(const QString& windowId, const QString& screenId,
                                const PhosphorProtocol::EmptyZoneList& zones);
+
+private:
+    void connectDaemonSignals();
+    void disconnectDaemonSignals();
 
     QDBusServiceWatcher* m_serviceWatcher = nullptr;
     IDragHandler* m_dragHandler = nullptr;
