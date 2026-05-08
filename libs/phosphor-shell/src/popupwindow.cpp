@@ -138,7 +138,12 @@ QPointF PopupWindow::computePosition() const
         return {0, 0};
     }
 
-    const QPointF anchorScreenPos = m_anchor->mapToGlobal(QPointF(0, 0));
+    // Layer-shell surfaces: use the window's geometry() which PhosphorWayland
+    // updates via updatePosition() after the compositor's configure event.
+    const QRect windowGeom = m_anchor->window()->geometry();
+    const QPointF scenePos = m_anchor->mapToScene(QPointF(0, 0));
+    const qreal anchorX = windowGeom.x() + scenePos.x();
+    const qreal anchorY = windowGeom.y() + scenePos.y();
     const qreal anchorW = m_anchor->width();
     const qreal anchorH = m_anchor->height();
 
@@ -147,20 +152,20 @@ QPointF PopupWindow::computePosition() const
 
     switch (m_popupEdge) {
     case Below:
-        x = anchorScreenPos.x() + (anchorW - m_popupWidth) / 2.0;
-        y = anchorScreenPos.y() + anchorH + m_gap;
+        x = anchorX + (anchorW - m_popupWidth) / 2.0;
+        y = anchorY + anchorH + m_gap;
         break;
     case Above:
-        x = anchorScreenPos.x() + (anchorW - m_popupWidth) / 2.0;
-        y = anchorScreenPos.y() - m_popupHeight - m_gap;
+        x = anchorX + (anchorW - m_popupWidth) / 2.0;
+        y = anchorY - m_popupHeight - m_gap;
         break;
     case LeftOf:
-        x = anchorScreenPos.x() - m_popupWidth - m_gap;
-        y = anchorScreenPos.y() + (anchorH - m_popupHeight) / 2.0;
+        x = anchorX - m_popupWidth - m_gap;
+        y = anchorY + (anchorH - m_popupHeight) / 2.0;
         break;
     case RightOf:
-        x = anchorScreenPos.x() + anchorW + m_gap;
-        y = anchorScreenPos.y() + (anchorH - m_popupHeight) / 2.0;
+        x = anchorX + anchorW + m_gap;
+        y = anchorY + (anchorH - m_popupHeight) / 2.0;
         break;
     }
 
