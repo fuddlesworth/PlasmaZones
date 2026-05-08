@@ -5,19 +5,21 @@ import PhosphorShell 1.0
 import QtQuick
 
 Item {
-    // ─── State that survives hot-reload ───────────────────────────────────
+    // ─── Global state (survives hot-reload, accessible via PhosphorShell.singleton) ─
     PersistentProperties {
         id: state
         reloadId: "main"
         property bool menuOpen: false
+        property bool settingsOpen: false
+        property int activeWorkspace: 0
     }
 
     // ─── System data sources ──────────────────────────────────────────────
     Process {
         id: clock
-        command: ["date", "+%H:%M"]
+        command: ["date", "+%H:%M · %a %b %d"]
         running: true
-        interval: 30000
+        interval: 10000
     }
 
     Process {
@@ -27,25 +29,37 @@ Item {
         interval: 2000
     }
 
+    Process {
+        id: memUsage
+        command: ["sh", "-c", "free | awk '/Mem:/ {printf \"%.0f\", $3/$2*100}'"]
+        running: true
+        interval: 5000
+    }
+
     FileView {
         id: battery
         path: "/sys/class/power_supply/BAT0/capacity"
-        interval: 10000
+        interval: 30000
+    }
+
+    FileView {
+        id: hostname
+        path: "/etc/hostname"
     }
 
     // ─── Left panel segment ──────────────────────────────────────────────
     PanelWindow {
         id: leftPanel
         edge: PanelWindow.Top
-        thickness: 36
+        thickness: 38
         alignment: PanelWindow.Start
-        panelLength: 220
+        panelLength: 240
         margins { left: 8; top: 6 }
 
         Rectangle {
             anchors.fill: parent
             color: "#1e1e2e"
-            radius: 10
+            radius: 12
             border.color: "#313244"
             border.width: 1
 
@@ -56,14 +70,14 @@ Item {
                 // Menu button
                 Rectangle {
                     id: menuButton
-                    width: 28; height: 28
-                    radius: 6
+                    width: 30; height: 30
+                    radius: 8
                     color: menuArea.containsMouse ? "#45475a" : "transparent"
 
                     Text {
                         anchors.centerIn: parent
-                        text: "☰"
-                        color: "#cdd6f4"
+                        text: state.menuOpen ? "✕" : "☰"
+                        color: state.menuOpen ? "#f38ba8" : "#cdd6f4"
                         font.pixelSize: 14
                     }
 
@@ -75,15 +89,24 @@ Item {
                     }
                 }
 
-                // Workspaces placeholder
+                // Workspaces
                 Row {
-                    spacing: 4
+                    spacing: 6
                     Repeater {
-                        model: 4
+                        model: 5
                         Rectangle {
-                            width: 8; height: 8
+                            required property int index
+                            width: index === state.activeWorkspace ? 20 : 8
+                            height: 8
                             radius: 4
-                            color: index === 0 ? "#89b4fa" : "#45475a"
+                            color: index === state.activeWorkspace ? "#89b4fa" : "#45475a"
+
+                            Behavior on width { NumberAnimation { duration: 150 } }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: state.activeWorkspace = parent.index
+                            }
                         }
                     }
                 }
@@ -95,15 +118,15 @@ Item {
     PanelWindow {
         id: centerPanel
         edge: PanelWindow.Top
-        thickness: 36
+        thickness: 38
         alignment: PanelWindow.Center
-        panelLength: 160
+        panelLength: 220
         margins { top: 6 }
 
         Rectangle {
             anchors.fill: parent
             color: "#1e1e2e"
-            radius: 10
+            radius: 12
             border.color: "#313244"
             border.width: 1
 
@@ -111,7 +134,7 @@ Item {
                 anchors.centerIn: parent
                 text: clock.stdout.trim() || "..."
                 color: "#cdd6f4"
-                font.pixelSize: 14
+                font.pixelSize: 13
                 font.weight: Font.Medium
             }
         }
@@ -121,93 +144,143 @@ Item {
     PanelWindow {
         id: rightPanel
         edge: PanelWindow.Top
-        thickness: 36
+        thickness: 38
         alignment: PanelWindow.End
-        panelLength: 240
+        panelLength: 280
         margins { right: 8; top: 6 }
 
         Rectangle {
             anchors.fill: parent
             color: "#1e1e2e"
-            radius: 10
+            radius: 12
             border.color: "#313244"
             border.width: 1
 
             Row {
                 anchors.centerIn: parent
-                spacing: 16
+                spacing: 14
 
                 // CPU
                 Row {
                     spacing: 4
-                    Text { text: "⚙"; color: "#a6e3a1"; font.pixelSize: 12 }
+                    Text { text: "CPU"; color: "#a6e3a1"; font.pixelSize: 11; font.weight: Font.Medium }
                     Text {
                         text: (cpuUsage.stdout.trim() || "0") + "%"
                         color: "#cdd6f4"
-                        font.pixelSize: 12
+                        font.pixelSize: 11
                     }
                 }
 
-                // Battery
+                // Memory
+                Row {
+                    spacing: 4
+                    Text { text: "MEM"; color: "#89dceb"; font.pixelSize: 11; font.weight: Font.Medium }
+                    Text {
+                        text: (memUsage.stdout.trim() || "0") + "%"
+                        color: "#cdd6f4"
+                        font.pixelSize: 11
+                    }
+                }
+
+                // Battery (only on laptops)
                 Row {
                     spacing: 4
                     visible: battery.exists
-                    Text { text: "⚡"; color: "#f9e2af"; font.pixelSize: 12 }
+                    Text { text: "BAT"; color: "#f9e2af"; font.pixelSize: 11; font.weight: Font.Medium }
                     Text {
                         text: battery.content.trim() + "%"
                         color: "#cdd6f4"
-                        font.pixelSize: 12
+                        font.pixelSize: 11
                     }
                 }
 
-                // User
-                Text {
-                    text: Environment.get("USER")
-                    color: "#89b4fa"
-                    font.pixelSize: 12
+                // Settings button
+                Rectangle {
+                    width: 26; height: 26
+                    radius: 6
+                    color: settingsArea.containsMouse ? "#45475a" : "transparent"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⚙"
+                        color: "#cdd6f4"
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        id: settingsArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: state.settingsOpen = !state.settingsOpen
+                    }
                 }
             }
         }
     }
 
-    // ─── Dropdown menu (popup) ───────────────────────────────────────────
+    // ─── App launcher popup ──────────────────────────────────────────────
     PopupWindow {
         id: menuPopup
         anchor: menuButton
         popupEdge: PopupWindow.Below
-        popupWidth: 200
-        popupHeight: 180
-        gap: 6
+        popupWidth: 220
+        popupHeight: 240
+        gap: 8
         popupVisible: state.menuOpen
 
         Rectangle {
             anchors.fill: parent
             color: "#1e1e2e"
-            radius: 10
+            radius: 12
             border.color: "#313244"
             border.width: 1
 
             Column {
                 anchors.fill: parent
                 anchors.margins: 8
-                spacing: 4
+                spacing: 2
+
+                Text {
+                    text: "Applications"
+                    color: "#6c7086"
+                    font.pixelSize: 11
+                    font.weight: Font.Medium
+                    leftPadding: 8
+                    bottomPadding: 4
+                }
 
                 Repeater {
-                    model: ["Terminal", "Files", "Browser", "Settings"]
+                    model: [
+                        { name: "Terminal", icon: ">" },
+                        { name: "Files", icon: "📁" },
+                        { name: "Browser", icon: "🌐" },
+                        { name: "Editor", icon: "✎" },
+                        { name: "Settings", icon: "⚙" }
+                    ]
 
                     Rectangle {
+                        required property var modelData
                         width: parent.width
-                        height: 32
-                        radius: 6
+                        height: 34
+                        radius: 8
                         color: itemMouse.containsMouse ? "#313244" : "transparent"
 
-                        Text {
+                        Row {
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.left: parent.left
-                            anchors.leftMargin: 12
-                            text: modelData
-                            color: "#cdd6f4"
-                            font.pixelSize: 13
+                            anchors.leftMargin: 10
+                            spacing: 10
+
+                            Text {
+                                text: modelData.icon
+                                color: "#89b4fa"
+                                font.pixelSize: 14
+                            }
+                            Text {
+                                text: modelData.name
+                                color: "#cdd6f4"
+                                font.pixelSize: 13
+                            }
                         }
 
                         MouseArea {
@@ -216,6 +289,72 @@ Item {
                             hoverEnabled: true
                             onClicked: state.menuOpen = false
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // ─── Floating settings window ────────────────────────────────────────
+    FloatingWindow {
+        title: "PhosphorShell Settings"
+        windowWidth: 400
+        windowHeight: 300
+        windowVisible: state.settingsOpen
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#1e1e2e"
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 16
+
+                Text {
+                    text: "PhosphorShell Settings"
+                    color: "#cdd6f4"
+                    font.pixelSize: 18
+                    font.weight: Font.Bold
+                }
+
+                Rectangle { width: parent.width; height: 1; color: "#313244" }
+
+                Column {
+                    spacing: 8
+                    Text { text: "Host: " + hostname.content.trim(); color: "#a6adc8"; font.pixelSize: 13 }
+                    Text { text: "User: " + Environment.get("USER"); color: "#a6adc8"; font.pixelSize: 13 }
+                    Text { text: "Shell: " + Environment.get("SHELL"); color: "#a6adc8"; font.pixelSize: 13 }
+                    Text { text: "Desktop: " + Environment.get("XDG_CURRENT_DESKTOP"); color: "#a6adc8"; font.pixelSize: 13 }
+                }
+
+                Rectangle { width: parent.width; height: 1; color: "#313244" }
+
+                Text {
+                    text: "Edit ~/.config/phosphor-shell/shell.qml to customize.\nChanges apply instantly via hot-reload."
+                    color: "#6c7086"
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                    width: parent.width
+                }
+
+                Rectangle {
+                    width: 80; height: 30
+                    radius: 6
+                    color: closeArea.containsMouse ? "#45475a" : "#313244"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Close"
+                        color: "#cdd6f4"
+                        font.pixelSize: 12
+                    }
+
+                    MouseArea {
+                        id: closeArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: state.settingsOpen = false
                     }
                 }
             }
