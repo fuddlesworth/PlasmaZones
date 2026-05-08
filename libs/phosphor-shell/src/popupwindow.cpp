@@ -118,9 +118,15 @@ void PopupWindow::setPopupVisible(bool visible)
     m_popupVisible = visible;
 
     if (visible) {
-        createSurface();
+        if (!m_surface) {
+            createSurface();
+        } else {
+            m_surface->show();
+        }
     } else {
-        destroySurface();
+        if (m_surface) {
+            m_surface->hide();
+        }
     }
 
     Q_EMIT popupVisibleChanged();
@@ -187,6 +193,15 @@ void PopupWindow::createSurface()
     const int marginLeft = qMax(0, static_cast<int>(pos.x()) - screenGeom.x());
     const int marginTop = qMax(0, static_cast<int>(pos.y()) - screenGeom.y());
 
+    auto* container = new QQuickItem;
+    container->setWidth(m_popupWidth);
+    container->setHeight(m_popupHeight);
+
+    const auto children = childItems();
+    for (QQuickItem* child : children) {
+        child->setParentItem(container);
+    }
+
     PhosphorLayer::Role role;
     role.layer = PhosphorLayer::Layer::Overlay;
     role.anchors = PhosphorLayer::Anchor::Top | PhosphorLayer::Anchor::Left;
@@ -196,6 +211,7 @@ void PopupWindow::createSurface()
 
     PhosphorLayer::SurfaceConfig cfg;
     cfg.role = role;
+    cfg.contentItem = std::unique_ptr<QQuickItem>(container);
     cfg.screen = screen;
     cfg.initialSize = QSize(m_popupWidth, m_popupHeight);
     cfg.marginsOverride = QMargins(marginLeft, marginTop, 0, 0);
@@ -219,7 +235,7 @@ void PopupWindow::destroySurface()
     m_surface->hide();
     delete m_surface;
     m_surface = nullptr;
-    qCDebug(lcPopup) << "Popup hidden";
+    qCDebug(lcPopup) << "Popup destroyed";
 }
 
 } // namespace PhosphorShell
