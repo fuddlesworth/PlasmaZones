@@ -23,6 +23,7 @@ class PHOSPHORSHELL_EXPORT ScreenModel : public QAbstractListModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(ScreenModel)
+    QML_UNCREATABLE("ScreenModel is accessed via PhosphorShell.screens")
 
 public:
     enum Role {
