@@ -44,6 +44,7 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/ShellLoader.h
     include/PhosphorShell/ShellEngine.h
     include/PhosphorShell/PanelWindow.h
+    include/PhosphorShell/PopupWindow.h
     include/PhosphorShell/ScreenModel.h
     include/PhosphorShell/ShellGlobal.h
     include/PhosphorShell/Variants.h
@@ -57,6 +58,7 @@ set(phosphorshell_SRCS
     src/shellloader.cpp
     src/shellengine.cpp
     src/panelwindow.cpp
+    src/popupwindow.cpp
     src/screenmodel.cpp
     src/shellglobal.cpp
     src/variants.cpp
@@ -125,6 +127,8 @@ qt_add_qml_module(PhosphorShellQml
     SOURCES
         src/panelwindow.cpp
         include/PhosphorShell/PanelWindow.h
+        src/popupwindow.cpp
+        include/PhosphorShell/PopupWindow.h
         src/screenmodel.cpp
         include/PhosphorShell/ScreenModel.h
         src/shellglobal.cpp
@@ -175,6 +179,8 @@ if(PHOSPHOR_SHELL_QML_INSTALL)
         SOURCES
             src/panelwindow.cpp
             include/PhosphorShell/PanelWindow.h
+            src/popupwindow.cpp
+            include/PhosphorShell/PopupWindow.h
             src/screenmodel.cpp
             include/PhosphorShell/ScreenModel.h
             src/shellglobal.cpp

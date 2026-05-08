@@ -3,6 +3,7 @@
 
 #include <PhosphorShell/ShellEngine.h>
 #include <PhosphorShell/PanelWindow.h>
+#include <PhosphorShell/PopupWindow.h>
 #include <PhosphorShell/ScreenModel.h>
 #include <PhosphorShell/ShellGlobal.h>
 
@@ -296,6 +297,11 @@ void ShellEngine::materializePanels()
         } else {
             qCWarning(lcShellEngine) << "Failed to create surface for PanelWindow";
         }
+    }
+
+    const auto popups = m_rootObject->findChildren<PopupWindow*>();
+    for (PopupWindow* popup : popups) {
+        popup->initialize(m_deps.surfaceFactory, m_deps.screenProvider);
     }
 }
 
