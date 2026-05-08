@@ -2,10 +2,17 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorShell/ShellEngine.h>
+#include <PhosphorShell/Environment.h>
+#include <PhosphorShell/FileView.h>
+#include <PhosphorShell/FloatingWindow.h>
+#include <PhosphorShell/LazyLoader.h>
 #include <PhosphorShell/PanelWindow.h>
 #include <PhosphorShell/PersistentProperties.h>
+#include <PhosphorShell/PopupWindow.h>
+#include <PhosphorShell/Process.h>
 #include <PhosphorShell/ScreenModel.h>
 #include <PhosphorShell/ShellGlobal.h>
+#include <PhosphorShell/Variants.h>
 
 #include <PhosphorLayer/IScreenProvider.h>
 #include <PhosphorLayer/Role.h>
@@ -63,6 +70,16 @@ bool ShellEngine::load(const QUrl& shellUrl)
 
     m_engine = std::make_unique<QQmlEngine>(this);
     m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
+
+    qmlRegisterType<PanelWindow>("PhosphorShell", 1, 0, "PanelWindow");
+    qmlRegisterType<PopupWindow>("PhosphorShell", 1, 0, "PopupWindow");
+    qmlRegisterType<FloatingWindow>("PhosphorShell", 1, 0, "FloatingWindow");
+    qmlRegisterType<Variants>("PhosphorShell", 1, 0, "Variants");
+    qmlRegisterType<LazyLoader>("PhosphorShell", 1, 0, "LazyLoader");
+    qmlRegisterType<Process>("PhosphorShell", 1, 0, "Process");
+    qmlRegisterType<FileView>("PhosphorShell", 1, 0, "FileView");
+    qmlRegisterType<PersistentProperties>("PhosphorShell", 1, 0, "PersistentProperties");
+    qmlRegisterType<Environment>("PhosphorShell", 1, 0, "Environment");
     qmlRegisterType<PhosphorRendering::ShaderEffect>("PhosphorShell", 1, 0, "ShaderBackground");
 
     QQmlComponent component(m_engine.get(), shellUrl, QQmlComponent::PreferSynchronous);

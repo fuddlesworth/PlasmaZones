@@ -455,11 +455,9 @@ add_executable(phosphor-shell shell/main.cpp)
 target_link_libraries(phosphor-shell
     PRIVATE
         PhosphorShell::PhosphorShell
-        PhosphorShellQml              # STATIC QML module (PanelWindow type registration)
-        PhosphorShellQmlplugin        # Generated plugin target
-        PhosphorShellQmlplugin_init   # Type registration initializer
         PhosphorLayer::PhosphorLayer
         PhosphorWayland::PhosphorWayland
+        PhosphorRendering::PhosphorRendering
         Qt6::Core
         Qt6::Gui
         Qt6::Quick
