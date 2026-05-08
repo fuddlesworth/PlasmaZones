@@ -56,9 +56,17 @@ Item {
         panelLength: 240
         margins { left: 8; top: 6 }
 
+        // GPU frosted glass background
+        ShaderBackground {
+            anchors.fill: parent
+            shaderSource: Qt.resolvedUrl("../../data/shell-shaders/frosted_glass.frag")
+            shaderParams: { "tintOpacity": 0.75, "noiseAmount": 0.025, "noiseScale": 45.0, "animSpeed": 0.2 }
+            customColor0: "#1e1e2e"
+        }
+
         Rectangle {
             anchors.fill: parent
-            color: "#1e1e2e"
+            color: "transparent"
             radius: 12
             border.color: "#313244"
             border.width: 1
@@ -123,9 +131,18 @@ Item {
         panelLength: 220
         margins { top: 6 }
 
+        // Animated gradient background
+        ShaderBackground {
+            anchors.fill: parent
+            shaderSource: Qt.resolvedUrl("../../data/shell-shaders/gradient.frag")
+            shaderParams: { "speed": 0.3 }
+            customColor0: "#1e1e2e"
+            customColor1: "#2e1e2e"
+        }
+
         Rectangle {
             anchors.fill: parent
-            color: "#1e1e2e"
+            color: "transparent"
             radius: 12
             border.color: "#313244"
             border.width: 1
@@ -149,9 +166,17 @@ Item {
         panelLength: 280
         margins { right: 8; top: 6 }
 
+        // GPU frosted glass background
+        ShaderBackground {
+            anchors.fill: parent
+            shaderSource: Qt.resolvedUrl("../../data/shell-shaders/frosted_glass.frag")
+            shaderParams: { "tintOpacity": 0.75, "noiseAmount": 0.02, "noiseScale": 50.0, "animSpeed": 0.15 }
+            customColor0: "#1e1e2e"
+        }
+
         Rectangle {
             anchors.fill: parent
-            color: "#1e1e2e"
+            color: "transparent"
             radius: 12
             border.color: "#313244"
             border.width: 1
