@@ -8,11 +8,9 @@
 #include <QQuickItem>
 #include <QtQml/qqmlregistration.h>
 
-namespace PhosphorLayer {
-class IScreenProvider;
-class Surface;
-class SurfaceFactory;
-} // namespace PhosphorLayer
+QT_BEGIN_NAMESPACE
+class QQuickWindow;
+QT_END_NAMESPACE
 
 namespace PhosphorShell {
 
@@ -39,8 +37,6 @@ public:
 
     explicit PopupWindow(QQuickItem* parent = nullptr);
     ~PopupWindow() override;
-
-    void initialize(PhosphorLayer::SurfaceFactory* factory, PhosphorLayer::IScreenProvider* screens);
 
     QQuickItem* anchor() const;
     void setAnchor(QQuickItem* anchor);
@@ -69,9 +65,9 @@ Q_SIGNALS:
     void popupVisibleChanged();
 
 private:
-    void createSurface();
-    void destroySurface();
-    QPointF computePosition() const;
+    void showPopup();
+    void hidePopup();
+    QRect computeAnchorRect() const;
 
     QQuickItem* m_anchor = nullptr;
     int m_popupWidth = 200;
@@ -79,10 +75,7 @@ private:
     PopupEdge m_popupEdge = Below;
     int m_gap = 4;
     bool m_popupVisible = false;
-
-    PhosphorLayer::SurfaceFactory* m_factory = nullptr;
-    PhosphorLayer::IScreenProvider* m_screenProvider = nullptr;
-    PhosphorLayer::Surface* m_surface = nullptr;
+    QQuickWindow* m_popupWindow = nullptr;
 };
 
 } // namespace PhosphorShell

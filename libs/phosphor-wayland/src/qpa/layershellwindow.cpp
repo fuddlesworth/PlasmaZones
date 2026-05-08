@@ -5,6 +5,8 @@
 #include "layershellintegration.h"
 #include <PhosphorWayland/LayerSurface.h>
 
+#include <any>
+
 #include <QLoggingCategory>
 #include <qpa/qwindowsysteminterface.h>
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
@@ -423,6 +425,19 @@ void LayerShellWindow::handleClosed(void* data, struct zwlr_layer_surface_v1* su
     // signal cascades from close() may reference m_waylandWindow after
     // the underlying object is deleted.
     self->m_waylandWindow = nullptr;
+}
+
+void LayerShellWindow::attachPopup(QtWaylandClient::QWaylandShellSurface* popup)
+{
+    if (!m_layerSurface || !popup) {
+        return;
+    }
+
+    auto role = popup->surfaceRole();
+    if (auto* xdgPopup = std::any_cast<::xdg_popup*>(&role)) {
+        zwlr_layer_surface_v1_get_popup(m_layerSurface, *xdgPopup);
+        qCDebug(lcLayerShellWindow) << "Attached xdg_popup to layer surface";
+    }
 }
 
 } // namespace PhosphorWayland
