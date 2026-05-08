@@ -55,6 +55,7 @@ Item {
 
                 // Menu button
                 Rectangle {
+                    id: menuButton
                     width: 28; height: 28
                     radius: 6
                     color: menuArea.containsMouse ? "#45475a" : "transparent"
@@ -172,7 +173,7 @@ Item {
     // ─── Dropdown menu (popup) ───────────────────────────────────────────
     PopupWindow {
         id: menuPopup
-        anchor: leftPanel
+        anchor: menuButton
         popupEdge: PopupWindow.Below
         popupWidth: 200
         popupHeight: 180

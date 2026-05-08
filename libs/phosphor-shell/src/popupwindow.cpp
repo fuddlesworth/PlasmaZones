@@ -138,8 +138,7 @@ QPointF PopupWindow::computePosition() const
         return {0, 0};
     }
 
-    const QPointF anchorScenePos = m_anchor->mapToScene(QPointF(0, 0));
-    const QPointF anchorScreenPos = m_anchor->window()->position() + anchorScenePos;
+    const QPointF anchorScreenPos = m_anchor->mapToGlobal(QPointF(0, 0));
     const qreal anchorW = m_anchor->width();
     const qreal anchorH = m_anchor->height();
 
