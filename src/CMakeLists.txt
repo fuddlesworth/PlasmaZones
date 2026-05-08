@@ -457,6 +457,7 @@ target_link_libraries(phosphor-shell
         PhosphorShell::PhosphorShell
         PhosphorShellQml              # STATIC QML module (PanelWindow type registration)
         PhosphorShellQmlplugin        # Generated plugin target
+        PhosphorShellQmlplugin_init   # Type registration initializer
         PhosphorLayer::PhosphorLayer
         PhosphorWayland::PhosphorWayland
         Qt6::Core
