@@ -3,6 +3,7 @@
 
 #include <PhosphorShell/ShellEngine.h>
 #include <PhosphorShell/PanelWindow.h>
+#include <PhosphorShell/PersistentProperties.h>
 #include <PhosphorShell/PopupWindow.h>
 #include <PhosphorShell/ScreenModel.h>
 #include <PhosphorShell/ShellGlobal.h>
@@ -135,6 +136,7 @@ void ShellEngine::onFileChanged()
 {
     qCInfo(lcShellEngine) << "Shell config changed, reloading...";
 
+    savePersistentState();
     teardown();
 
     m_engine = std::make_unique<QQmlEngine>(this);
@@ -155,6 +157,7 @@ void ShellEngine::onFileChanged()
     }
 
     materializePanels();
+    restorePersistentState();
 
     // Re-arm the file watch (editors that save via atomic rename invalidate the old watch)
     const QString filePath = m_shellUrl.toLocalFile();
@@ -303,6 +306,37 @@ void ShellEngine::materializePanels()
     for (PopupWindow* popup : popups) {
         popup->initialize(m_deps.surfaceFactory, m_deps.screenProvider);
     }
+}
+
+void ShellEngine::savePersistentState()
+{
+    if (!m_rootObject) {
+        return;
+    }
+
+    m_persistentState.clear();
+    const auto persists = m_rootObject->findChildren<PersistentProperties*>();
+    for (const auto* p : persists) {
+        if (!p->reloadId().isEmpty()) {
+            m_persistentState[p->reloadId()] = p->saveState();
+        }
+    }
+    qCDebug(lcShellEngine) << "Saved" << m_persistentState.size() << "persistent state(s)";
+}
+
+void ShellEngine::restorePersistentState()
+{
+    if (!m_rootObject || m_persistentState.isEmpty()) {
+        return;
+    }
+
+    const auto persists = m_rootObject->findChildren<PersistentProperties*>();
+    for (auto* p : persists) {
+        if (m_persistentState.contains(p->reloadId())) {
+            p->restoreState(m_persistentState[p->reloadId()]);
+        }
+    }
+    qCDebug(lcShellEngine) << "Restored persistent state(s)";
 }
 
 } // namespace PhosphorShell

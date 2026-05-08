@@ -3,8 +3,12 @@
 
 #pragma once
 
+#include <PhosphorShell/Environment.h>
+#include <PhosphorShell/FileView.h>
 #include <PhosphorShell/PanelWindow.h>
+#include <PhosphorShell/PersistentProperties.h>
 #include <PhosphorShell/PopupWindow.h>
+#include <PhosphorShell/Process.h>
 #include <PhosphorShell/ScreenModel.h>
 #include <PhosphorShell/ShellEngine.h>
 #include <PhosphorShell/ShellGlobal.h>

@@ -48,6 +48,10 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/ScreenModel.h
     include/PhosphorShell/ShellGlobal.h
     include/PhosphorShell/Variants.h
+    include/PhosphorShell/Process.h
+    include/PhosphorShell/PersistentProperties.h
+    include/PhosphorShell/Environment.h
+    include/PhosphorShell/FileView.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -62,6 +66,10 @@ set(phosphorshell_SRCS
     src/screenmodel.cpp
     src/shellglobal.cpp
     src/variants.cpp
+    src/process.cpp
+    src/persistentproperties.cpp
+    src/environment.cpp
+    src/fileview.cpp
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -135,6 +143,14 @@ qt_add_qml_module(PhosphorShellQml
         include/PhosphorShell/ShellGlobal.h
         src/variants.cpp
         include/PhosphorShell/Variants.h
+        src/process.cpp
+        include/PhosphorShell/Process.h
+        src/persistentproperties.cpp
+        include/PhosphorShell/PersistentProperties.h
+        src/environment.cpp
+        include/PhosphorShell/Environment.h
+        src/fileview.cpp
+        include/PhosphorShell/FileView.h
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/PhosphorShell
 )
 
@@ -187,6 +203,14 @@ if(PHOSPHOR_SHELL_QML_INSTALL)
             include/PhosphorShell/ShellGlobal.h
             src/variants.cpp
             include/PhosphorShell/Variants.h
+            src/process.cpp
+            include/PhosphorShell/Process.h
+            src/persistentproperties.cpp
+            include/PhosphorShell/PersistentProperties.h
+            src/environment.cpp
+            include/PhosphorShell/Environment.h
+            src/fileview.cpp
+            include/PhosphorShell/FileView.h
         OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml_install/PhosphorShell
     )
 

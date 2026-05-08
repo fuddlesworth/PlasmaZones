@@ -5,8 +5,10 @@
 
 #include <PhosphorShell/phosphorshell_export.h>
 
+#include <QHash>
 #include <QObject>
 #include <QUrl>
+#include <QVariantMap>
 
 #include <memory>
 #include <vector>
@@ -58,6 +60,8 @@ private:
     void materializePanels();
     void teardown();
     void setupWatcher();
+    void savePersistentState();
+    void restorePersistentState();
 
     QUrl m_shellUrl;
     std::unique_ptr<QQmlEngine> m_engine;
@@ -68,6 +72,7 @@ private:
     QTimer* m_reloadTimer = nullptr;
     ScreenModel* m_screenModel = nullptr;
     ShellGlobal* m_shellGlobal = nullptr;
+    QHash<QString, QVariantMap> m_persistentState;
 };
 
 } // namespace PhosphorShell
