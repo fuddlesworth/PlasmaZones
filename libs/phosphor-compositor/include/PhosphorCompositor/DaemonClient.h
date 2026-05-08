@@ -31,14 +31,17 @@ public:
         return m_daemonReady;
     }
 
+    /// @param handler Not owned; caller retains lifetime. Must outlive this client.
     void setDragHandler(IDragHandler* handler)
     {
         m_dragHandler = handler;
     }
+    /// @param handler Not owned; caller retains lifetime. Must outlive this client.
     void setGeometryHandler(IGeometryHandler* handler)
     {
         m_geometryHandler = handler;
     }
+    /// @param handler Not owned; caller retains lifetime. Must outlive this client.
     void setLifecycleHandler(ILifecycleHandler* handler)
     {
         m_lifecycleHandler = handler;
