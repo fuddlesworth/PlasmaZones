@@ -4,5 +4,8 @@
 #pragma once
 
 #include <PhosphorShell/PanelWindow.h>
+#include <PhosphorShell/ScreenModel.h>
 #include <PhosphorShell/ShellEngine.h>
+#include <PhosphorShell/ShellGlobal.h>
 #include <PhosphorShell/ShellLoader.h>
+#include <PhosphorShell/Variants.h>

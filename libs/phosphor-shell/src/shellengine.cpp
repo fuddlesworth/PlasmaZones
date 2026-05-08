@@ -3,6 +3,8 @@
 
 #include <PhosphorShell/ShellEngine.h>
 #include <PhosphorShell/PanelWindow.h>
+#include <PhosphorShell/ScreenModel.h>
+#include <PhosphorShell/ShellGlobal.h>
 
 #include <PhosphorLayer/IScreenProvider.h>
 #include <PhosphorLayer/Role.h>
@@ -50,7 +52,15 @@ bool ShellEngine::load(const QUrl& shellUrl)
 
     m_shellUrl = shellUrl;
 
+    m_screenModel = new ScreenModel(m_deps.screenProvider, this);
+    m_shellGlobal = new ShellGlobal(this);
+    m_shellGlobal->setScreenModel(m_screenModel);
+
+    connect(m_deps.screenProvider->notifier(), &PhosphorLayer::ScreenProviderNotifier::screensChanged, this,
+            &ShellEngine::onScreensChanged);
+
     m_engine = std::make_unique<QQmlEngine>(this);
+    m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
 
     QQmlComponent component(m_engine.get(), shellUrl, QQmlComponent::PreferSynchronous);
     if (component.isError()) {
@@ -114,6 +124,12 @@ void ShellEngine::setupWatcher()
     qCDebug(lcShellEngine) << "Watching for changes:" << filePath;
 }
 
+void ShellEngine::onScreensChanged()
+{
+    qCInfo(lcShellEngine) << "Screen topology changed, reloading shell...";
+    onFileChanged();
+}
+
 void ShellEngine::onFileChanged()
 {
     qCInfo(lcShellEngine) << "Shell config changed, reloading...";
@@ -121,6 +137,7 @@ void ShellEngine::onFileChanged()
     teardown();
 
     m_engine = std::make_unique<QQmlEngine>(this);
+    m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
 
     QQmlComponent component(m_engine.get(), m_shellUrl, QQmlComponent::PreferSynchronous);
     if (component.isError()) {

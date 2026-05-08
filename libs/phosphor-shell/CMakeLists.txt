@@ -44,6 +44,9 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/ShellLoader.h
     include/PhosphorShell/ShellEngine.h
     include/PhosphorShell/PanelWindow.h
+    include/PhosphorShell/ScreenModel.h
+    include/PhosphorShell/ShellGlobal.h
+    include/PhosphorShell/Variants.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -54,6 +57,9 @@ set(phosphorshell_SRCS
     src/shellloader.cpp
     src/shellengine.cpp
     src/panelwindow.cpp
+    src/screenmodel.cpp
+    src/shellglobal.cpp
+    src/variants.cpp
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -119,6 +125,12 @@ qt_add_qml_module(PhosphorShellQml
     SOURCES
         src/panelwindow.cpp
         include/PhosphorShell/PanelWindow.h
+        src/screenmodel.cpp
+        include/PhosphorShell/ScreenModel.h
+        src/shellglobal.cpp
+        include/PhosphorShell/ShellGlobal.h
+        src/variants.cpp
+        include/PhosphorShell/Variants.h
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/PhosphorShell
 )
 
@@ -163,6 +175,12 @@ if(PHOSPHOR_SHELL_QML_INSTALL)
         SOURCES
             src/panelwindow.cpp
             include/PhosphorShell/PanelWindow.h
+            src/screenmodel.cpp
+            include/PhosphorShell/ScreenModel.h
+            src/shellglobal.cpp
+            include/PhosphorShell/ShellGlobal.h
+            src/variants.cpp
+            include/PhosphorShell/Variants.h
         OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml_install/PhosphorShell
     )
 

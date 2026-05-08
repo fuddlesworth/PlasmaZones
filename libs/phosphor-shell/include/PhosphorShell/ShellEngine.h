@@ -26,6 +26,8 @@ class SurfaceFactory;
 namespace PhosphorShell {
 
 class PanelWindow;
+class ScreenModel;
+class ShellGlobal;
 
 class PHOSPHORSHELL_EXPORT ShellEngine : public QObject
 {
@@ -50,6 +52,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void onFileChanged();
+    void onScreensChanged();
 
 private:
     void materializePanels();
@@ -63,6 +66,8 @@ private:
     std::vector<PhosphorLayer::Surface*> m_surfaces;
     QFileSystemWatcher* m_watcher = nullptr;
     QTimer* m_reloadTimer = nullptr;
+    ScreenModel* m_screenModel = nullptr;
+    ShellGlobal* m_shellGlobal = nullptr;
 };
 
 } // namespace PhosphorShell
