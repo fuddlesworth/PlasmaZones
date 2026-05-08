@@ -68,9 +68,6 @@ bool ShellEngine::load(const QUrl& shellUrl)
     connect(m_deps.screenProvider->notifier(), &PhosphorLayer::ScreenProviderNotifier::screensChanged, this,
             &ShellEngine::onScreensChanged);
 
-    m_engine = std::make_unique<QQmlEngine>(this);
-    m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
-
     qmlRegisterType<PanelWindow>("PhosphorShell", 1, 0, "PanelWindow");
     qmlRegisterType<PopupWindow>("PhosphorShell", 1, 0, "PopupWindow");
     qmlRegisterType<FloatingWindow>("PhosphorShell", 1, 0, "FloatingWindow");
@@ -81,6 +78,9 @@ bool ShellEngine::load(const QUrl& shellUrl)
     qmlRegisterType<PersistentProperties>("PhosphorShell", 1, 0, "PersistentProperties");
     qmlRegisterType<Environment>("PhosphorShell", 1, 0, "Environment");
     qmlRegisterType<PhosphorRendering::ShaderEffect>("PhosphorShell", 1, 0, "ShaderBackground");
+
+    m_engine = std::make_unique<QQmlEngine>(this);
+    m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
 
     QQmlComponent component(m_engine.get(), shellUrl, QQmlComponent::PreferSynchronous);
     if (component.isError()) {
