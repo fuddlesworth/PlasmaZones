@@ -14,12 +14,12 @@ Environment::~Environment() = default;
 
 QString Environment::get(const QString& name) const
 {
-    return qEnvironmentVariable(name.toUtf8());
+    return qEnvironmentVariable(name.toUtf8().constData());
 }
 
 bool Environment::has(const QString& name) const
 {
-    return qEnvironmentVariableIsSet(name.toUtf8());
+    return qEnvironmentVariableIsSet(name.toUtf8().constData());
 }
 
 } // namespace PhosphorShell
