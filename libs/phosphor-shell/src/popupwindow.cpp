@@ -9,6 +9,8 @@
 #include <PhosphorLayer/SurfaceConfig.h>
 #include <PhosphorLayer/SurfaceFactory.h>
 
+#include <PhosphorWayland/LayerSurface.h>
+
 #include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QMargins>
@@ -138,14 +140,56 @@ QPointF PopupWindow::computePosition() const
         return {0, 0};
     }
 
-    // Layer-shell surfaces: use the window's geometry() which PhosphorWayland
-    // updates via updatePosition() after the compositor's configure event.
-    const QRect windowGeom = m_anchor->window()->geometry();
+    QWindow* win = m_anchor->window();
     const QPointF scenePos = m_anchor->mapToScene(QPointF(0, 0));
-    const qreal anchorX = windowGeom.x() + scenePos.x();
-    const qreal anchorY = windowGeom.y() + scenePos.y();
     const qreal anchorW = m_anchor->width();
     const qreal anchorH = m_anchor->height();
+
+    // For layer-shell surfaces, Qt's window geometry position is unreliable.
+    // Read the actual margins set on the surface — these define where the
+    // compositor placed it relative to the screen edge.
+    qreal winX = 0;
+    qreal winY = 0;
+
+    if (win->property(PhosphorWayland::LayerSurfaceProps::IsLayerShell).toBool()) {
+        QScreen* screen = win->screen();
+        const QRect screenGeom = screen ? screen->geometry() : QRect(0, 0, 1920, 1080);
+        const int mLeft = win->property(PhosphorWayland::LayerSurfaceProps::MarginsLeft).toInt();
+        const int mTop = win->property(PhosphorWayland::LayerSurfaceProps::MarginsTop).toInt();
+        const int anchors = win->property(PhosphorWayland::LayerSurfaceProps::Anchors).toInt();
+
+        constexpr int AnchorLeft = 1 << 2;
+        constexpr int AnchorRight = 1 << 3;
+        constexpr int AnchorTop = 1 << 0;
+        constexpr int AnchorBottom = 1 << 1;
+
+        if (anchors & AnchorLeft) {
+            winX = screenGeom.x() + mLeft;
+        } else if (anchors & AnchorRight) {
+            const int mRight = win->property(PhosphorWayland::LayerSurfaceProps::MarginsRight).toInt();
+            winX = screenGeom.x() + screenGeom.width() - win->width() - mRight;
+        } else {
+            winX = screenGeom.x() + (screenGeom.width() - win->width()) / 2;
+        }
+
+        if (anchors & AnchorTop) {
+            winY = screenGeom.y() + mTop;
+        } else if (anchors & AnchorBottom) {
+            const int mBottom = win->property(PhosphorWayland::LayerSurfaceProps::MarginsBottom).toInt();
+            winY = screenGeom.y() + screenGeom.height() - win->height() - mBottom;
+        } else {
+            winY = screenGeom.y() + (screenGeom.height() - win->height()) / 2;
+        }
+    } else {
+        winX = win->x();
+        winY = win->y();
+    }
+
+    const qreal anchorX = winX + scenePos.x();
+    const qreal anchorY = winY + scenePos.y();
+
+    qCDebug(lcPopup) << "Popup anchor at screen (" << anchorX << "," << anchorY << ")"
+                     << "size" << anchorW << "x" << anchorH;
 
     qreal x = 0;
     qreal y = 0;
