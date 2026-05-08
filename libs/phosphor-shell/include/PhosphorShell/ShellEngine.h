@@ -12,7 +12,9 @@
 #include <vector>
 
 QT_BEGIN_NAMESPACE
+class QFileSystemWatcher;
 class QQmlEngine;
+class QTimer;
 QT_END_NAMESPACE
 
 namespace PhosphorLayer {
@@ -43,15 +45,24 @@ public:
 
 Q_SIGNALS:
     void loaded();
+    void reloaded();
     void failed(const QString& reason);
+
+private Q_SLOTS:
+    void onFileChanged();
 
 private:
     void materializePanels();
+    void teardown();
+    void setupWatcher();
 
+    QUrl m_shellUrl;
     std::unique_ptr<QQmlEngine> m_engine;
     std::unique_ptr<QObject> m_rootObject;
     Deps m_deps;
     std::vector<PhosphorLayer::Surface*> m_surfaces;
+    QFileSystemWatcher* m_watcher = nullptr;
+    QTimer* m_reloadTimer = nullptr;
 };
 
 } // namespace PhosphorShell

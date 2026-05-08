@@ -10,6 +10,9 @@
 #include <PhosphorLayer/SurfaceConfig.h>
 #include <PhosphorLayer/SurfaceFactory.h>
 
+#include <QDir>
+#include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QQmlComponent>
@@ -17,6 +20,7 @@
 #include <QQmlEngine>
 #include <QScreen>
 #include <QSize>
+#include <QTimer>
 
 Q_LOGGING_CATEGORY(lcShellEngine, "phosphorshell.engine")
 
@@ -26,9 +30,16 @@ ShellEngine::ShellEngine(Deps deps, QObject* parent)
     : QObject(parent)
     , m_deps(deps)
 {
+    m_reloadTimer = new QTimer(this);
+    m_reloadTimer->setSingleShot(true);
+    m_reloadTimer->setInterval(100);
+    connect(m_reloadTimer, &QTimer::timeout, this, &ShellEngine::onFileChanged);
 }
 
-ShellEngine::~ShellEngine() = default;
+ShellEngine::~ShellEngine()
+{
+    teardown();
+}
 
 bool ShellEngine::load(const QUrl& shellUrl)
 {
@@ -36,6 +47,8 @@ bool ShellEngine::load(const QUrl& shellUrl)
         Q_EMIT failed(QStringLiteral("No shell.qml found"));
         return false;
     }
+
+    m_shellUrl = shellUrl;
 
     m_engine = std::make_unique<QQmlEngine>(this);
 
@@ -56,6 +69,7 @@ bool ShellEngine::load(const QUrl& shellUrl)
     }
 
     materializePanels();
+    setupWatcher();
     Q_EMIT loaded();
     return true;
 }
@@ -63,6 +77,75 @@ bool ShellEngine::load(const QUrl& shellUrl)
 QQmlEngine* ShellEngine::engine() const
 {
     return m_engine.get();
+}
+
+void ShellEngine::teardown()
+{
+    for (auto* surface : m_surfaces) {
+        surface->hide();
+        delete surface;
+    }
+    m_surfaces.clear();
+    m_rootObject.reset();
+    m_engine.reset();
+}
+
+void ShellEngine::setupWatcher()
+{
+    if (m_watcher) {
+        return;
+    }
+
+    m_watcher = new QFileSystemWatcher(this);
+
+    const QString filePath = m_shellUrl.toLocalFile();
+    m_watcher->addPath(filePath);
+
+    const QString dir = QFileInfo(filePath).absolutePath();
+    m_watcher->addPath(dir);
+
+    connect(m_watcher, &QFileSystemWatcher::fileChanged, this, [this]() {
+        m_reloadTimer->start();
+    });
+    connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, [this]() {
+        m_reloadTimer->start();
+    });
+
+    qCDebug(lcShellEngine) << "Watching for changes:" << filePath;
+}
+
+void ShellEngine::onFileChanged()
+{
+    qCInfo(lcShellEngine) << "Shell config changed, reloading...";
+
+    teardown();
+
+    m_engine = std::make_unique<QQmlEngine>(this);
+
+    QQmlComponent component(m_engine.get(), m_shellUrl, QQmlComponent::PreferSynchronous);
+    if (component.isError()) {
+        qCWarning(lcShellEngine) << "Reload failed:" << component.errorString();
+        Q_EMIT failed(component.errorString());
+        return;
+    }
+
+    m_rootObject.reset(component.create());
+    if (!m_rootObject) {
+        qCWarning(lcShellEngine) << "Reload instantiation failed:" << component.errorString();
+        Q_EMIT failed(component.errorString());
+        return;
+    }
+
+    materializePanels();
+
+    // Re-arm the file watch (editors that save via atomic rename invalidate the old watch)
+    const QString filePath = m_shellUrl.toLocalFile();
+    if (!m_watcher->files().contains(filePath)) {
+        m_watcher->addPath(filePath);
+    }
+
+    qCInfo(lcShellEngine) << "Reload complete," << m_surfaces.size() << "panel(s)";
+    Q_EMIT reloaded();
 }
 
 void ShellEngine::materializePanels()
