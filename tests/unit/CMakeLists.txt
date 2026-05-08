@@ -144,7 +144,7 @@ target_compile_definitions(test_autotile_handoff PRIVATE "PZ_SOURCE_DIR=\"${PROJ
 # AutotileEngine::applyTiling round-trips through TileRequestEntry
 # parsing and passes validationError(). Would have caught PR #326 C1.
 pz_add_test(test_autotile_tile_request_validation autotile/test_autotile_tile_request_validation.cpp)
-target_link_libraries(test_autotile_tile_request_validation PRIVATE plasmazones_compositor_common)
+target_link_libraries(test_autotile_tile_request_validation PRIVATE PhosphorCompositor::PhosphorCompositor)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Autotile + Virtual Screen Integration Tests
@@ -447,7 +447,7 @@ add_test(NAME test_compositor_bridge COMMAND test_compositor_bridge)
 # crash (moc recorded unqualified type names, metatype lookup failed).
 add_executable(test_dbus_adaptor_routing dbus/test_dbus_adaptor_routing.cpp)
 target_link_libraries(test_dbus_adaptor_routing PRIVATE Qt6::Test Qt6::Core Qt6::DBus
-                                                          plasmazones_compositor_common)
+                                                          PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_dbus_adaptor_routing COMMAND test_dbus_adaptor_routing)
 
 # Panel-ready gate for AutotileAdaptor windowOpened queue. Regression guard
@@ -553,7 +553,7 @@ add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_ov
 # ApplySnap zoneId, TileRequestEntry tiled/floating size semantics, etc.)
 # don't drift as producer code evolves.
 add_executable(test_dbus_validation dbus/test_dbus_validation.cpp)
-target_link_libraries(test_dbus_validation PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_compositor_common)
+target_link_libraries(test_dbus_validation PRIVATE Qt6::Test Qt6::Core Qt6::DBus PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_dbus_validation COMMAND test_dbus_validation)
 
 # LayoutAdaptor signal contract test (Phase 1.2 of refactor/dbus-performance).
@@ -579,12 +579,24 @@ add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
 set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
-#                      TriggerParser, WindowId)
+# compositor-common/ — Shared Library Types Tests (split for <800-line limit)
+#   test_wire_types: D-Bus wire type signature/roundtrip tests
+#   test_floating_cache: FloatingCache + TriggerParser tests
+#   test_autotile_state: AutotileStateHelpers + WindowId tests
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_compositor_common compositor-common/test_compositor_common.cpp)
-target_link_libraries(test_compositor_common PRIVATE Qt6::Test plasmazones_compositor_common)
-add_test(NAME test_compositor_common COMMAND test_compositor_common)
+add_executable(test_wire_types compositor-common/test_wire_types.cpp)
+target_link_libraries(test_wire_types PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
+                                              PhosphorProtocol::PhosphorProtocol)
+add_test(NAME test_wire_types COMMAND test_wire_types)
+
+add_executable(test_floating_cache compositor-common/test_floating_cache.cpp)
+target_link_libraries(test_floating_cache PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_floating_cache COMMAND test_floating_cache)
+
+add_executable(test_autotile_state compositor-common/test_autotile_state.cpp)
+target_link_libraries(test_autotile_state PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
+                                                  PhosphorIdentity::PhosphorIdentity)
+add_test(NAME test_autotile_state COMMAND test_autotile_state)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment support

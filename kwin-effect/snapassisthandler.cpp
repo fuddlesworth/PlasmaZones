@@ -9,7 +9,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/WireTypes.h>
-#include <snap_assist_filter.h>
+#include <PhosphorCompositor/SnapAssistFilter.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -25,6 +25,8 @@
 Q_LOGGING_CATEGORY(lcSnapAssist, "kwin.effect.plasmazones.snapassist", QtWarningMsg)
 
 namespace PlasmaZones {
+
+using namespace PhosphorCompositor;
 
 SnapAssistHandler::SnapAssistHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)

@@ -53,6 +53,8 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/shader_transitions.cpp
     plasmazoneseffect/shader_internal.h
     plasmazoneseffect/types.h
+    shadertransitionmanager.h
+    shadertransitionmanager.cpp
     autotilehandler.cpp
     autotilehandler.h
     autotilehandler/signals.cpp
@@ -75,7 +77,7 @@ set(plasmazones_effect_SRCS
     dragtracker.h
     # virtualscreenid moved to libs/phosphor-identity (PhosphorIdentity::VirtualScreenId).
     # Consumers include <PhosphorIdentity/VirtualScreenId.h> directly; reachable
-    # transitively via plasmazones_compositor_common's PhosphorIdentity link.
+    # transitively via PhosphorCompositor::PhosphorCompositor's PhosphorIdentity link.
     kwin_compositor_bridge.cpp
     kwin_compositor_bridge.h
 )
@@ -99,11 +101,11 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     Qt6::Qml
     Qt6::Quick
     Qt6::Svg
-    plasmazones_compositor_common
+    PhosphorCompositor::PhosphorCompositor
     PhosphorProtocol::PhosphorProtocol
     # Explicit link: `compositorclock.h` and `windowanimator.h` directly
     # include `<PhosphorAnimation/...>`. The dependency is reachable
-    # transitively via `plasmazones_compositor_common`, but depending
+    # transitively via `PhosphorCompositor::PhosphorCompositor`, but depending
     # on a transitive target for a directly-included header is brittle
     # — a future reshuffle of compositor-common's link graph could drop
     # the re-export and this target would break mysteriously. Named

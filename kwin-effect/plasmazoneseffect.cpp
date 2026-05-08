@@ -42,7 +42,7 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
 
 bool PlasmaZonesEffect::isActive() const
 {
-    // Critical: include `!m_shaderTransitions.empty()` here. KWin calls
+    // Critical: include `!m_shaderManager.m_shaderTransitions.empty()` here. KWin calls
     // isActive() before each paint cycle and EXCLUDES the effect from
     // the chain when it returns false — meaning prePaintScreen and
     // paintWindow are never called, so a shader transition installed
@@ -56,7 +56,8 @@ bool PlasmaZonesEffect::isActive() const
     // maximize/resize) installs a shader transition only — without this
     // clause those events would resolve cleanly, redirect the window,
     // and then sit unrendered until the timer-driven teardown fired.
-    return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderTransitions.empty();
+    return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations()
+        || !m_shaderManager.m_shaderTransitions.empty();
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)

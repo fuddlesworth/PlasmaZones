@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "trigger_parser.h"
+#include <PhosphorCompositor/TriggerParser.h>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 namespace TriggerParser {
 
 QVector<ParsedTrigger> parseTriggers(const QVariant& triggerVariant, const QString& modifierFieldName,
@@ -42,4 +42,4 @@ QVector<ParsedTrigger> parseTriggers(const QVariant& triggerVariant, const QStri
 }
 
 } // namespace TriggerParser
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor

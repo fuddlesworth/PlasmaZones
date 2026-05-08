@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
+
+#include <phosphorcompositor_export.h>
 
 #include <QDBusArgument>
 #include <QVariant>
@@ -10,7 +12,7 @@
 #include <QVector>
 #include <Qt>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 
 /**
  * @brief Pre-parsed activation trigger (avoids QVariant unboxing in hot path)
@@ -104,8 +106,8 @@ inline bool anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardM
  * @param mouseButtonFieldName Config key for the mouse button field
  * @return Vector of parsed triggers
  */
-QVector<ParsedTrigger> parseTriggers(const QVariant& triggerVariant, const QString& modifierFieldName,
-                                     const QString& mouseButtonFieldName);
+PHOSPHORCOMPOSITOR_EXPORT QVector<ParsedTrigger>
+parseTriggers(const QVariant& triggerVariant, const QString& modifierFieldName, const QString& mouseButtonFieldName);
 
 } // namespace TriggerParser
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor
