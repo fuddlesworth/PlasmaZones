@@ -23,11 +23,21 @@ namespace PhosphorEngine {
 
 /// Unified placement engine interface.
 ///
-/// NOTE: This interface carries methods for both snap and autotile engines.
-/// Methods documented as engine-specific (e.g., master operations) are no-ops
-/// on engines that don't implement them. A future pass may split this into
-/// focused facets (IScreenManagement, IMasterOperations, IDragPreview, etc.)
-/// once a third engine arrives and the real seams become clearer.
+/// ## Required vs Optional Methods
+///
+/// Methods are divided into two categories:
+///
+/// **REQUIRED (pure virtual, = 0):** Every engine MUST implement these.
+/// They represent the core contract: screen ownership, window lifecycle,
+/// float management, and navigation intents.
+///
+/// **OPTIONAL (have default no-op implementations):** Engines override
+/// only the capabilities they support. A snap engine ignores master
+/// operations; an autotile engine ignores per-screen config. The defaults
+/// are safe no-ops so the daemon can call any method without branching
+/// on engine type.
+///
+/// ## Design Rationale
 ///
 /// Both snap-mode (manual zone layouts) and autotile-mode (automatic
 /// tiling algorithms) implement this so the daemon can dispatch all
@@ -43,7 +53,7 @@ namespace PhosphorEngine {
 /// All methods are idempotent with respect to "no focused window" — each
 /// implementation emits navigation feedback with a sensible reason code
 /// when there's nothing to act on, rather than erroring out.
-class IPlacementEngine
+class PHOSPHORENGINE_EXPORT IPlacementEngine
 {
 public:
     virtual ~IPlacementEngine() = default;
@@ -72,7 +82,9 @@ public:
     /// A window was closed.
     virtual void windowClosed(const QString& windowId) = 0;
 
-    /// A window gained focus.
+    /// A window gained focus (called when the compositor reports activation).
+    /// Named "focused" here because it's the engine's perspective; the D-Bus
+    /// protocol and DaemonClient use "windowActivated" — same event.
     virtual void windowFocused(const QString& windowId, const QString& screenId) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -128,7 +140,7 @@ public:
     virtual void toggleFocusedFloat(const NavigationContext& ctx) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Screen management
+    // OPTIONAL: Screen management (override if engine tracks multi-screen state)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual QSet<QString> activeScreens() const
@@ -141,7 +153,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Window ordering
+    // OPTIONAL: Window ordering (override if engine maintains stacking order)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual QStringList managedWindowOrder(const QString& screenId) const
@@ -156,7 +168,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Per-screen config
+    // OPTIONAL: Per-screen config (override if engine supports per-screen overrides)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
@@ -175,7 +187,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Mode-specific float tracking
+    // OPTIONAL: Mode-specific float tracking (override if engine has mode-aware float)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual bool isModeSpecificFloated(const QString& windowId) const
@@ -199,7 +211,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Drag insert preview
+    // OPTIONAL: Drag insert preview (override if engine supports drag-to-insert)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual bool hasDragInsertPreview() const
@@ -364,7 +376,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Algorithm / mode identity
+    // OPTIONAL: Algorithm / mode identity (override if engine has switchable algorithms)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual QString algorithmId() const
@@ -389,7 +401,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Desktop/activity context
+    // OPTIONAL: Desktop/activity context (override if engine is desktop-aware)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual void setCurrentDesktop(int desktop)
@@ -418,7 +430,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Settings synchronization
+    // OPTIONAL: Settings synchronization (override if engine caches config)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Re-read all tuning values from the engine's settings interface.
@@ -443,7 +455,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Retile / refresh
+    // OPTIONAL: Retile / refresh (override if engine supports on-demand retile)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual void retile(const QString& screenId = QString())
@@ -456,7 +468,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Float origin
+    // OPTIONAL: Float origin (override if engine persists float state across mode switches)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual void markModeSpecificFloated(const QString& windowId)
@@ -475,7 +487,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Serialization delegates
+    // OPTIONAL: Serialization (override if engine has persistent state)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual QJsonArray serializeWindowOrders() const
@@ -496,22 +508,24 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Init hooks
+    // OPTIONAL: Init hooks (override to receive shared services)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Attach a window-class registry (QObject carrying WindowRegistry).
     /// Engines qobject_cast to their concrete type internally.
+    /// @param registry Not owned; must outlive this engine.
     virtual void setWindowRegistry(QObject* registry)
     {
         Q_UNUSED(registry)
     }
+    /// @param fn Callback; must remain valid for this engine's lifetime.
     virtual void setIsWindowFloatingFn(std::function<bool(const QString&)> fn)
     {
         Q_UNUSED(fn)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Master operations (autotile-specific, no-op on snap)
+    // OPTIONAL: Master operations (autotile-specific, no-op on snap engine)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual void increaseMasterRatio(qreal delta = 0.05)
