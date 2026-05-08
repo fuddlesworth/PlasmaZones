@@ -8,7 +8,7 @@
 
 #include <algorithm>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 
 /**
  * @brief Compositor-agnostic geometry helper utilities
@@ -36,4 +36,4 @@ inline QRect snapToRect(const QRectF& rf)
 }
 
 } // namespace GeometryHelpers
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor

@@ -12,7 +12,7 @@
 #include <QVector>
 #include <Qt>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 
 /**
  * @brief Pre-parsed activation trigger (avoids QVariant unboxing in hot path)
@@ -110,4 +110,4 @@ PHOSPHORCOMPOSITOR_EXPORT QVector<ParsedTrigger>
 parseTriggers(const QVariant& triggerVariant, const QString& modifierFieldName, const QString& mouseButtonFieldName);
 
 } // namespace TriggerParser
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor

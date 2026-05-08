@@ -74,9 +74,15 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
 endif()
 
+set_target_properties(PhosphorCompositor PROPERTIES
+    SOVERSION 0
+    VERSION ${PHOSPHORCOMPOSITOR_VERSION}
+)
+
 install(TARGETS PhosphorCompositor
     EXPORT PhosphorCompositorTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
 )
 
 install(DIRECTORY include/PhosphorCompositor

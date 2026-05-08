@@ -8,7 +8,7 @@
 #include <QTimer>
 #include <functional>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 
 /**
  * @brief Compositor-agnostic debounced action with coalescing
@@ -61,18 +61,14 @@ public:
      */
     void geometryChanged(const QRect& currentGeometry)
     {
-        // If an apply is currently in flight, force a coalesced reapply even
-        // when the geometry is unchanged (e.g., identical-resolution monitor
-        // swap during an ongoing apply) — otherwise the change is silently
-        // dropped because `currentGeometry == m_lastGeometry` and the
-        // in-progress apply is still using pre-change state.
-        if (currentGeometry == m_lastGeometry && !m_pending) {
+        if (m_hasLastGeometry && currentGeometry == m_lastGeometry && !m_pending) {
             if (m_applyInProgress) {
                 requestReapply();
             }
             return;
         }
         m_lastGeometry = currentGeometry;
+        m_hasLastGeometry = true;
         m_pending = true;
         m_debounce.start();
     }
@@ -139,9 +135,10 @@ private Q_SLOTS:
 private:
     QTimer m_debounce;
     QRect m_lastGeometry;
+    bool m_hasLastGeometry = false;
     bool m_pending = false;
     bool m_applyInProgress = false;
     bool m_reapplyPending = false;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor

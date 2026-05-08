@@ -12,6 +12,8 @@ class QDBusPendingCallWatcher;
 
 namespace PlasmaZones {
 
+using namespace PhosphorCompositor;
+
 class PlasmaZonesEffect;
 
 /**

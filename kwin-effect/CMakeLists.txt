@@ -53,6 +53,8 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/shader_transitions.cpp
     plasmazoneseffect/shader_internal.h
     plasmazoneseffect/types.h
+    shadertransitionmanager.h
+    shadertransitionmanager.cpp
     autotilehandler.cpp
     autotilehandler.h
     autotilehandler/signals.cpp

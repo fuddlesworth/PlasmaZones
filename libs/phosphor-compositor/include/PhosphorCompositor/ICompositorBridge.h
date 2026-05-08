@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <phosphorcompositor_export.h>
+
 #include <QIcon>
 #include <QObject>
 #include <QPointF>
@@ -13,7 +15,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 
 /**
  * @brief Opaque handle to a compositor window
@@ -72,7 +74,7 @@ struct WindowInfo
  * - Only methods actually needed by shared code are included (no speculative API)
  * - D-Bus helpers (fireAndForget, asyncCall) are free functions, not on this interface
  */
-class ICompositorBridge
+class PHOSPHORCOMPOSITOR_EXPORT ICompositorBridge
 {
 public:
     ICompositorBridge() = default;
@@ -170,4 +172,4 @@ public:
     virtual void invalidateScreenIdCache() = 0;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor

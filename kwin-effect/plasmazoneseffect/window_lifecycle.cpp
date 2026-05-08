@@ -424,11 +424,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     return;
                 }
                 const bool fullyMaximized = horizontal && vertical;
-                const bool wasFullyMaximized = m_lastFullyMaximized.value(window, false);
+                const bool wasFullyMaximized = m_shaderManager.m_lastFullyMaximized.value(window, false);
                 if (fullyMaximized == wasFullyMaximized) {
                     return; // intermediate axis-only flip, no shader
                 }
-                m_lastFullyMaximized.insert(window, fullyMaximized);
+                m_shaderManager.m_lastFullyMaximized.insert(window, fullyMaximized);
                 // Going-to-maximized is "appear" (forward 0→1);
                 // returning to floating is "disappear" (reverse 1→0).
                 tryBeginShaderForEvent(window, PhosphorAnimation::ProfilePaths::WindowMaximize, animationDurationMs(),
@@ -532,11 +532,11 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // on virtual-desktop and activity switches, on re-stacking, and on
     // Wayland focus-stealing arbitration even when the focused window didn't
     // actually change. Without this gate the shader spams every desktop /
-    // activity switch. m_lastFocusShaderWindow is a QPointer that auto-nulls
+    // activity switch. m_shaderManager.m_lastFocusShaderWindow is a QPointer that auto-nulls
     // on window destroy, so a fresh window reusing the address can't
     // false-match.
-    if (m_lastFocusShaderWindow.data() != w) {
-        m_lastFocusShaderWindow = w;
+    if (m_shaderManager.m_lastFocusShaderWindow.data() != w) {
+        m_shaderManager.m_lastFocusShaderWindow = w;
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowFocus, animationDurationMs());
     }
 

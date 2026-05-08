@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QHash>
+#include <QPair>
 #include <QRect>
 #include <QRectF>
 #include <QSet>
@@ -12,7 +13,7 @@
 #include <QVector>
 #include <optional>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 
 /**
  * @brief Compositor-agnostic autotile border state
@@ -324,4 +325,4 @@ inline QVector<QPair<QString, QString>> allTiledPairs(const BorderState& border)
 }
 
 } // namespace AutotileStateHelpers
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor

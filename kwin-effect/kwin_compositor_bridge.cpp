@@ -16,6 +16,8 @@
 
 namespace PlasmaZones {
 
+using namespace PhosphorCompositor;
+
 KWinCompositorBridge::KWinCompositorBridge(PlasmaZonesEffect* effect)
     : m_effect(effect)
 {

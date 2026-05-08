@@ -26,6 +26,8 @@ Q_LOGGING_CATEGORY(lcSnapAssist, "kwin.effect.plasmazones.snapassist", QtWarning
 
 namespace PlasmaZones {
 
+using namespace PhosphorCompositor;
+
 SnapAssistHandler::SnapAssistHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
     , m_effect(effect)

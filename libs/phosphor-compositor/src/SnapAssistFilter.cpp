@@ -7,7 +7,7 @@
 
 #include <QHash>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 namespace SnapAssistFilter {
 
 SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge, const QString& excludeWindowId,
@@ -91,4 +91,4 @@ SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge, const QString
 }
 
 } // namespace SnapAssistFilter
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor

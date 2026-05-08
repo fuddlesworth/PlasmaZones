@@ -317,11 +317,11 @@ void DaemonClient::connectDaemonSignals()
     bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
                 QStringLiteral("snapAllWindowsRequested"), this, SLOT(handleSnapAllWindows(QString)));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::Settings,
-                QStringLiteral("settingsChanged"), this, SIGNAL(settingsChanged()));
+    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::Settings, QStringLiteral("settingsChanged"),
+                this, SIGNAL(settingsChanged()));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::Screen,
-                QStringLiteral("virtualScreensChanged"), this, SIGNAL(virtualScreensChanged(QString)));
+    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::Screen, QStringLiteral("virtualScreensChanged"),
+                this, SIGNAL(virtualScreensChanged(QString)));
 
     bus.connect(Service::Name, Service::ObjectPath, Service::Interface::Settings,
                 QStringLiteral("runningWindowsRequested"), this, SIGNAL(runningWindowsRequested()));
@@ -343,11 +343,29 @@ void DaemonClient::disconnectDaemonSignals()
     bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
                    QStringLiteral("windowFloatingChanged"), this,
                    SLOT(handleWindowFloatingChanged(QString, bool, QString)));
+    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
+                   QStringLiteral("pendingRestoresAvailable"), this, SIGNAL(pendingRestoresAvailable()));
+    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
+                   QStringLiteral("reapplyWindowGeometriesRequested"), this, SIGNAL(reapplyGeometriesRequested()));
     bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowDrag,
                    QStringLiteral("dragPolicyChanged"), this, SLOT(handleDragPolicyChanged(QString, int)));
     bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowDrag,
                    QStringLiteral("snapAssistReady"), this,
                    SLOT(handleSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
+    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowDrag,
+                   QStringLiteral("restoreSizeDuringDragChanged"), this,
+                   SLOT(handleRestoreSizeDuringDrag(QString, int, int)));
+    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
+                   QStringLiteral("moveSpecificWindowToZoneRequested"), this,
+                   SLOT(handleMoveWindowToZone(QString, QString, int, int, int, int)));
+    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
+                   QStringLiteral("snapAllWindowsRequested"), this, SLOT(handleSnapAllWindows(QString)));
+    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::Settings, QStringLiteral("settingsChanged"),
+                   this, SIGNAL(settingsChanged()));
+    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::Screen,
+                   QStringLiteral("virtualScreensChanged"), this, SIGNAL(virtualScreensChanged(QString)));
+    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::Settings,
+                   QStringLiteral("runningWindowsRequested"), this, SIGNAL(runningWindowsRequested()));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -466,6 +484,7 @@ void DaemonClient::probeDaemonAvailable(int timeoutMs)
         w->deleteLater();
         QDBusPendingReply<QString> reply = *w;
         if (reply.isValid() && !m_daemonReady) {
+            m_daemonReady = true;
             Q_EMIT daemonReady();
         }
     });

@@ -12,7 +12,7 @@
 #include <QSet>
 #include <QString>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 
 using PhosphorProtocol::SnapAssistCandidate;
 using PhosphorProtocol::SnapAssistCandidateList;
@@ -47,4 +47,4 @@ PHOSPHORCOMPOSITOR_EXPORT SnapAssistCandidateList buildCandidates(ICompositorBri
                                                                   const QSet<QString>& snappedWindowIds);
 
 } // namespace SnapAssistFilter
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor

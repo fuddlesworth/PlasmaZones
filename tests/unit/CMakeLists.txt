@@ -579,12 +579,24 @@ add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
 set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
-#                      TriggerParser, WindowId)
+# compositor-common/ — Shared Library Types Tests (split for <800-line limit)
+#   test_wire_types: D-Bus wire type signature/roundtrip tests
+#   test_floating_cache: FloatingCache + TriggerParser tests
+#   test_autotile_state: AutotileStateHelpers + WindowId tests
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_compositor_common compositor-common/test_compositor_common.cpp)
-target_link_libraries(test_compositor_common PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
-add_test(NAME test_compositor_common COMMAND test_compositor_common)
+add_executable(test_wire_types compositor-common/test_wire_types.cpp)
+target_link_libraries(test_wire_types PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
+                                              PhosphorProtocol::PhosphorProtocol)
+add_test(NAME test_wire_types COMMAND test_wire_types)
+
+add_executable(test_floating_cache compositor-common/test_floating_cache.cpp)
+target_link_libraries(test_floating_cache PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_floating_cache COMMAND test_floating_cache)
+
+add_executable(test_autotile_state compositor-common/test_autotile_state.cpp)
+target_link_libraries(test_autotile_state PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
+                                                  PhosphorIdentity::PhosphorIdentity)
+add_test(NAME test_autotile_state COMMAND test_autotile_state)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment support

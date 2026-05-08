@@ -11,6 +11,8 @@ class EffectWindow;
 
 namespace PlasmaZones {
 
+using namespace PhosphorCompositor;
+
 class PlasmaZonesEffect;
 
 /**

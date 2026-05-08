@@ -3,7 +3,7 @@
 
 #include <PhosphorCompositor/TriggerParser.h>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 namespace TriggerParser {
 
 QVector<ParsedTrigger> parseTriggers(const QVariant& triggerVariant, const QString& modifierFieldName,
@@ -42,4 +42,4 @@ QVector<ParsedTrigger> parseTriggers(const QVariant& triggerVariant, const QStri
 }
 
 } // namespace TriggerParser
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor

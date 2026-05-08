@@ -8,7 +8,7 @@
 #include <QSet>
 #include <QString>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 
 /**
  * @brief Compositor-agnostic floating window state cache
@@ -86,4 +86,4 @@ private:
     QSet<QString> m_floatingWindows;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor

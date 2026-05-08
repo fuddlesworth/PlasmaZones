@@ -12,10 +12,6 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/AnimationShaderContract.h>
-#include <PhosphorAnimation/AnimationShaderRegistry.h>
-#include <PhosphorAnimation/ShaderProfile.h>
-#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -30,7 +26,6 @@
 #include <QVector>
 #include <QSet>
 #include <QSize>
-#include <QThreadPool>
 #include <QTimer>
 #include <QDBusPendingCall>
 #include <QHash>
@@ -39,9 +34,10 @@
 
 #include <array>
 #include <functional>
-#include <map>
 #include <memory>
 #include <unordered_map>
+
+#include "shadertransitionmanager.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
@@ -58,6 +54,8 @@ class IMotionClock;
 }
 
 namespace PlasmaZones {
+
+using namespace PhosphorCompositor;
 
 // Mirror of core/enums.h AutotileDragBehavior. The effect can't include daemon
 // headers (KWin plugin ABI constraints), so the values are duplicated here.
@@ -441,6 +439,7 @@ private:
     friend class WindowAnimator;
     friend class DragTracker;
     friend class KWinCompositorBridge;
+    friend class ShaderTransitionManager;
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper class instances
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -496,234 +495,21 @@ private:
     std::unique_ptr<WindowAnimator> m_windowAnimator;
 
     // Phase 6: per-window shader transitions via OffscreenEffect.
-    // The registry is populated from the same search paths as the daemon's
-    // via loadShaderRegistryFromDbus(). Until then, effect lookups return
-    // invalid and shader transitions gracefully no-op.
-    PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
-    PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
+    // Shader/texture cache, LRU eviction, warm-up pipeline, profile tree,
+    // and transition lifecycle are managed by ShaderTransitionManager.
+    ShaderTransitionManager m_shaderManager;
 
-    /// User-texture cache, keyed by absolute path. Multiple shader effects
-    /// (and multiple legs of the same effect) that reference the same
-    /// texture file share one upload — saves both GPU memory and the
-    /// per-leg `KWin::GLTexture::upload` cost. Cleared on
-    /// `effectsChanged` alongside `m_shaderCache` so a hot-reload that
-    /// drops a texture file frees the GPU memory rather than holding it
-    /// for the rest of the session. The registry's per-effect watch
-    /// list (see `effectWatchPaths` in animationshaderregistry.cpp)
-    /// includes declared texture file paths, so a bitmap content
-    /// change with no metadata change still re-fires `effectsChanged`
-    /// and invalidates this cache uniformly — no separate watcher
-    /// needed here.
-    ///
-    /// **Growth policy.** Between consecutive `effectsChanged` events
-    /// the cache grows monotonically with the count of UNIQUE texture
-    /// paths surfaced over the session. Bounded in practice by the
-    /// total number of distinct textures across all installed packs
-    /// (kMaxUserTextureSlots × pack count), which is small. No LRU /
-    /// reference-count eviction is implemented because (a) every
-    /// metadata edit / live-reload triggers a full clear, and (b) the
-    /// per-texture footprint is tens of MiB at most for atlas-style
-    /// uploads. Revisit if a third-party pack channel pushes the
-    /// long-tail bitmap count higher.
-    ///
-    /// **Declaration ORDER MATTERS.** C++ destroys members in reverse
-    /// declaration order, so `m_textureCache` declared FIRST means it
-    /// destructs LAST — outlives `m_shaderCache` and `m_shaderTransitions`.
-    /// `ShaderTransition::userTextures[]` holds raw non-owning pointers
-    /// into this cache; a reverse declaration would let the cache
-    /// destruct first and leave the transitions with dangling pointers.
-    /// `m_shaderCache` similarly needs to outlive its dependents (the
-    /// shader-program pointers in transitions) — declared second so it
-    /// destructs after `m_shaderTransitions`.
-    std::map<QString, CachedTexture> m_textureCache;
-    /// Async texture pre-warm pipeline.
-    ///
-    /// Texture loading (PNG decode + format conversion + GLTexture upload —
-    /// or, worse, SVG rasterise via QSvgRenderer at 1024px max-axis +
-    /// upload) takes multiple milliseconds per file on a cold cache, all
-    /// of which would otherwise run synchronously on the compositor
-    /// thread inside `beginShaderTransition`'s per-leg load loop. At
-    /// 144 Hz the per-frame budget is ~6.9 ms, so a single uncached
-    /// SVG slot can blow the budget on its own and produce a visible
-    /// stutter on the very first frame of a freshly-assigned shader.
-    ///
-    /// Pattern: kick `warmUserTextureAsync` to off-load `loadUserTextureImage`
-    /// (CPU-only — QImage decode and QSvgRenderer rasterise) onto a worker
-    /// thread, then dispatch the resulting `QImage` back to the compositor
-    /// thread via `QMetaObject::invokeMethod(...,
-    /// Qt::QueuedConnection)` to perform `KWin::GLTexture::upload`
-    /// (which MUST run on the GL-context thread). Subsequent
-    /// transitions hit the warm cache and pay zero load cost.
-    ///
-    /// Pool size is fixed at 1 to keep semantics simple — multi-threaded
-    /// loads of the same file would race on `m_textureLoadsInFlight`
-    /// dedupe and produce duplicate GPU uploads. A serialised single-
-    /// worker pool delivers near-all of the latency win (the bottleneck
-    /// is the rasterise/decode cost, not parallelism) without that
-    /// complexity.
-    QThreadPool m_textureLoaderPool;
-    /// Set of absolute texture paths currently in-flight on
-    /// `m_textureLoaderPool`. Prevents `warmUserTextureAsync` from
-    /// queuing duplicate loads when several shader transitions
-    /// reference the same file in quick succession (e.g. multiple
-    /// windows opening at once with the same effect assigned).
-    /// Entries are removed when the GL-thread upload completes (or
-    /// the worker observes a load failure).
-    /// All access happens on the compositor thread; the worker reads only
-    /// the captured path string and never touches m_textureLoadsInFlight.
-    /// The queued upload lambda removes the entry on the compositor thread
-    /// before any cache mutation.
-    QSet<QString> m_textureLoadsInFlight;
-    /// Generation counter for the texture cache. Bumped on every
-    /// `effectsChanged` hot-reload so workers in flight (which captured
-    /// the generation at submission time) can discard their queued GL
-    /// upload if the cache has been cleared underneath them. Cheaper than
-    /// draining the loader pool synchronously on the GL thread, which
-    /// could block the compositor for tens of ms on a worker mid-rasterise
-    /// of a 1024x1024 SVG. Distinct from the destructor's
-    /// `m_textureLoaderPool.waitForDone()` — full teardown still waits to
-    /// flush pending invokeMethod posts against `this` while members are
-    /// still intact.
-    quint64 m_textureCacheGeneration = 0;
-    /// Monotonic counter bumped on every cache lookup / insert. Stamped
-    /// onto `CachedTexture::lastAccessTick` so the LRU sweep below has
-    /// a stable order. Distinct from `m_textureCacheGeneration` (which
-    /// flips on hot-reload to invalidate in-flight workers).
-    quint64 m_textureCacheAccessTick = 0;
-    /// Soft upper bound on `m_textureCache` size. The cache is path-keyed
-    /// and entries can be referenced by raw pointers held in
-    /// `ShaderTransition::userTextures[]`, so eviction MUST skip any
-    /// entry currently in-flight. With kMaxUserTextureSlots * (typical
-    /// pack count of 5..20) the cache normally settles at <50 entries
-    /// even on third-party-pack-heavy installations; the cap is a
-    /// long-soak / hot-reload-without-effects-changed safety net rather
-    /// than a routine pressure relief.
-    static constexpr std::size_t kTextureCacheSoftBound = 32;
-    /// LRU sweep: when `m_textureCache.size() > kTextureCacheSoftBound`,
-    /// evict the entry with the smallest `lastAccessTick` that is NOT
-    /// referenced by any `m_shaderTransitions[*].userTextures[*]`. If
-    /// every entry is in flight (pathological), no-op — the cache
-    /// transiently exceeds the bound rather than tearing a live
-    /// transition's pointer. Called from the two cache-insert sites
-    /// (sync fallback in `beginShaderTransition` and async upload in
-    /// `warmUserTextureAsync`).
-    void evictLruTextureIfOverBound();
-    /// Off-load a texture load onto the loader pool, then upload to
-    /// the GL cache on the compositor thread when the worker
-    /// finishes. Returns immediately if the path is already cached
-    /// or already in-flight. SVGs are rasterised at the same
-    /// 1024-px max-axis as `loadUserTextureImage`'s default — the
-    /// path-keyed cache assumes a single canonical size per asset,
-    /// so per-call size overrides would silently collide on the
-    /// cache key with the first-loader-wins.
-    void warmUserTextureAsync(const QString& absolutePath);
-    // Invariant: all ShaderTransition.cached pointers must be ended
-    // (via endShaderTransition) before any cache erasure.
-    std::map<QString, CachedShader> m_shaderCache;
-    std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
-    /// Windows for which a paintWindow expiry-fall-through has already
-    /// queued a deferred @ref endShaderTransition via
-    /// @c QMetaObject::invokeMethod. Guards against the next paint
-    /// frame (before the queued end has actually run) re-queuing a
-    /// duplicate end and double-tearing-down the same transition.
-    /// Cleared when the queued end actually runs (success path) or
-    /// when the transition is otherwise erased / superseded.
-    QSet<KWin::EffectWindow*> m_pendingShaderExpiryEnd;
-    /// 1Hz cache for the `iDate` uniform. Recomputing iDate from
-    /// `QDateTime::currentDateTime()` on every paintWindow tick adds
-    /// microseconds per call, multiplied by every active transition,
-    /// for every output, every frame. The daemon's
-    /// `shadernoderhiuniforms.cpp` already caches at 1Hz for the same
-    /// reason — sub-second iDate variation is invisible (the .w
-    /// channel carries floating-point seconds anyway, but seeded once
-    /// per second is plenty of precision for the typical iDate-driven
-    /// shader effect). Mirror that policy here so kwin-side parity
-    /// matches the daemon side and the cost stays bounded.
-    qint64 m_lastIDateRefreshMs = 0;
-    QVector4D m_cachedIDate{};
-    /// Cursor position cached once per `prePaintScreen` rather than
-    /// re-read in paintWindow per active transition. `KWin::effects->cursorPos()`
-    /// is itself cheap, but multiple transitions paying the call per
-    /// frame multiplies up unnecessarily — and a cache also guarantees
-    /// every transition this frame sees an identical iMouse, eliminating
-    /// any sub-frame jitter from the cursor moving between paint calls.
-    QPointF m_cachedCursorGlobal;
-    /// Monotonic counter feeding @ref ShaderTransition::generation. Bumped
-    /// inside @ref beginShaderTransition every time a transition installs;
-    /// the timer-driven teardown in @ref tryBeginShaderForEvent compares the
-    /// generation it captured at schedule time against the live transition's
-    /// generation before tearing down. Mismatch = a successor replaced us;
-    /// don't kill the successor.
-    quint64 m_shaderTransitionGenerationCounter = 0;
-    /// Per-window edge-detection for windowMaximizedStateChanged. KWin can
-    /// fire that signal twice for a single user-driven maximize transition
-    /// (axis-by-axis), and we only want the WindowMaximize / WindowUnmaximize
-    /// shader to fire on the actual edge, not on the intermediate
-    /// vertical-only / horizontal-only state. Cleared on windowDeleted.
-    QHash<KWin::EffectWindow*, bool> m_lastFullyMaximized;
-    /// Last window we fired a window.focus shader on. KWin emits
-    /// `windowActivated` on virtual-desktop / activity / re-stack churn even
-    /// when the focused window didn't actually change; gating on this avoids
-    /// shader spam. QPointer auto-nulls on window destroy so a fresh window
-    /// reusing the address can't false-match. Cleared explicitly on
-    /// windowDeleted (defence in depth) and on window destroy via QPointer.
-    QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
-    /// @p durationMs interpretation:
-    ///   • > 0: time-based transition. paintWindow reads progress as
-    ///     (now - startTimeMs) / durationMs, linear ramp; tryBeginShaderForEvent's
-    ///     timer fires `endShaderTransition` after this many ms.
-    ///   • 0 (default) / negative: animator-driven transition. paintWindow
-    ///     reads progress from `m_windowAnimator->animationFor(w)` (curved
-    ///     by the geometry animation's profile); the animator's completion
-    ///     callback drives `endShaderTransition`. Used by `applySnapGeometry`
-    ///     for zone.* events that already have an animator-tracked motion.
-    /// `tryBeginShaderForEvent` rejects the negative case before calling here;
-    /// internal callers (`applySnapGeometry`) pass the default 0.
-    ///
-    /// @p reverse flips paintWindow's progress to `1 - progress`, so the
-    /// shader plays its timeline backwards — used by "going away" events
-    /// (window.close, going-to-minimized, going-to-unmaximized) to share a
-    /// single user-assigned shader with the matching forward event.
+    // Shader transition methods — implementations in shader_transitions.cpp,
+    // operating on m_shaderManager state.
     void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false);
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();
     void loadShaderRegistryFromDbus();
-
-    /// Resolve @p profilePath against the shader profile tree and, if a non-empty
-    /// effect id resolves, kick off a @ref beginShaderTransition on @p window
-    /// with a timer-driven @ref endShaderTransition after @p durationMs.
-    ///
-    /// Used for window-lifecycle events (open, close, focus, minimize, maximize,
-    /// move, resize) where there is no @c m_windowAnimator animation to end the
-    /// transition for us — those animations are owned by KWin's own effects or
-    /// happen instantaneously, so we drive the shader leg on its own timer.
-    /// Events that already drive an animator-tracked geometry change (zone.*)
-    /// go through @ref applySnapGeometry's chokepoint instead and let the
-    /// animator's completion callback tear down the shader.
-    ///
-    /// No-op when the profile resolves to empty effectId (user hasn't assigned
-    /// a shader to this path), the registry doesn't have the effect yet, or
-    /// the window pointer is null. Same null-tolerance contract as
-    /// @ref beginShaderTransition.
-    ///
-    /// @p reverse forwards to @ref beginShaderTransition's reverse flag — see
-    /// that doc for semantics. Defaults to false (forward 0→1 timeline).
-    ///
-    /// @p holdCloseGrab is true only for the @c slotWindowClosed call site;
-    /// it claims the window via @c KWin::WindowClosedGrabRole so KWin's
-    /// teardown blocks final deletion until our close shader has had its
-    /// frames. The grab is set BEFORE @ref beginShaderTransition's redirect
-    /// (so it lands while the window is still in the closing-but-not-yet-
-    /// deleted window of validity) and stored on the resulting transition's
-    /// @c closeGrabHeld field so @ref endShaderTransition can release it
-    /// when the timer-driven teardown runs. Pre-resolved here (rather than
-    /// inside the lambda) because we need to skip the grab when no shader
-    /// will install — otherwise a holdCloseGrab=true caller with no user-
-    /// assigned close shader would strand the window in closing state
-    /// forever.
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                 bool reverse = false, bool holdCloseGrab = false);
+    void evictLruTextureIfOverBound();
+    void warmUserTextureAsync(const QString& absolutePath);
 
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;
