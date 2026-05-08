@@ -255,6 +255,7 @@ void PopupWindow::createSurface()
     role.anchors = PhosphorLayer::Anchor::Top | PhosphorLayer::Anchor::Left;
     role.exclusiveZone = -1;
     role.keyboard = PhosphorLayer::KeyboardInteractivity::OnDemand;
+    role.defaultMargins = QMargins(marginLeft, marginTop, 0, 0);
     role.scopePrefix = QStringLiteral("phosphor-shell-popup");
 
     PhosphorLayer::SurfaceConfig cfg;
@@ -262,7 +263,6 @@ void PopupWindow::createSurface()
     cfg.contentItem = std::unique_ptr<QQuickItem>(container);
     cfg.screen = screen;
     cfg.initialSize = QSize(m_popupWidth, m_popupHeight);
-    cfg.marginsOverride = QMargins(marginLeft, marginTop, 0, 0);
     cfg.debugName = QStringLiteral("phosphor-shell-popup");
 
     m_surface = m_factory->create(std::move(cfg), this);
