@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <phosphorengine_export.h>
 #include <QJsonObject>
 #include <QRect>
 #include <QString>
@@ -21,7 +22,7 @@ namespace PhosphorEngine {
 /// TilingState::addWindow, etc.) because the semantics diverge — the
 /// daemon routes mutations through IPlacementEngine which delegates to
 /// the correct concrete state object.
-class IPlacementState
+class PHOSPHORENGINE_EXPORT IPlacementState
 {
 public:
     virtual ~IPlacementState() = default;
