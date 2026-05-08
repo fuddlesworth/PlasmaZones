@@ -32,6 +32,10 @@ namespace PhosphorEngine {
 class WindowRegistry;
 }
 
+namespace PhosphorPlacement {
+class WindowTrackingService;
+}
+
 namespace PhosphorWorkspaces {
 class VirtualDesktopManager;
 }
@@ -40,8 +44,6 @@ namespace PlasmaZones {
 
 class ISettings;
 class ScreenModeRouter;
-
-class PhosphorPlacement::WindowTrackingService;
 
 struct EngineSet
 {
