@@ -11,6 +11,9 @@
 
 #include <QGuiApplication>
 #include <QLoggingCategory>
+#include <QtQml/qqmlextensionplugin.h>
+
+Q_IMPORT_QML_PLUGIN(PhosphorShellPlugin)
 
 Q_LOGGING_CATEGORY(lcShell, "phosphorshell")
 
