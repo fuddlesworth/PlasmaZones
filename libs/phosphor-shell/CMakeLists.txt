@@ -119,6 +119,7 @@ target_link_libraries(PhosphorShell
         Qt6::Quick
         Qt6::Qml
         PhosphorLayer::PhosphorLayer
+        PhosphorRendering::PhosphorRendering
 )
 
 set_target_properties(PhosphorShell PROPERTIES

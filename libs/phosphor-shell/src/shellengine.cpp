@@ -12,6 +12,7 @@
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/SurfaceConfig.h>
 #include <PhosphorLayer/SurfaceFactory.h>
+#include <PhosphorRendering/ShaderEffect.h>
 
 #include <QDir>
 #include <QFileInfo>
@@ -62,6 +63,7 @@ bool ShellEngine::load(const QUrl& shellUrl)
 
     m_engine = std::make_unique<QQmlEngine>(this);
     m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
+    qmlRegisterType<PhosphorRendering::ShaderEffect>("PhosphorShell", 1, 0, "ShaderBackground");
 
     QQmlComponent component(m_engine.get(), shellUrl, QQmlComponent::PreferSynchronous);
     if (component.isError()) {
