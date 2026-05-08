@@ -92,8 +92,8 @@ All live under `libs/`, are SHARED libraries with CMake install + config package
 ### Compositor-Plugin SDK (`phosphor-compositor`)
 
 The single most strategic extraction for the compositor/WM/shell endgame. Enables
-KWin, Wayfire, river, Hyprland, and any wlroots compositor to consume PlasmaZones
-as a plugin with a thin per-compositor adapter (~5,600 LOC for Wayfire vs KWin's 7,316).
+KWin, river, Hyprland, and any wlroots compositor to consume PlasmaZones
+as a plugin with a thin per-compositor adapter (~3,000 LOC for river vs KWin's 7,316).
 
 **What goes into the SDK:**
 
@@ -130,7 +130,7 @@ as a plugin with a thin per-compositor adapter (~5,600 LOC for Wayfire vs KWin's
 **Blockers (all LOW-MEDIUM):**
 
 1. Window-handle lifetime semantics — `ICompositorBridge` uses `void*`; each compositor has different ownership
-2. Animation attachment model — KWin's paint pipeline vs Wayfire's transformers
+2. Animation attachment model — KWin's paint pipeline vs river's transformers
 3. Screen ID stability — EDID serial quirks (already mitigated in KWin)
 
 **Estimated effort:** Medium-Large. The interface already exists; the work is formalizing
@@ -160,10 +160,10 @@ phosphor-geometry              (pure math, zero deps)
             └─► phosphor-placement     (window placement state tracking)
                     └─► [uses zones, snap-engine, screens, workspaces]
 
-phosphor-compositor [PLANNED]  (compositor-plugin SDK)
+phosphor-compositor  (compositor-plugin SDK)
     └─► [uses placement, engine, zones, tiles, protocol, animation]
     └─► ICompositorBridge interface + handler logic
-    └─► Per-compositor: KWinCompositorBridge, WayfireCompositorBridge, etc.
+    └─► Per-compositor: KWinCompositorBridge, riverCompositorBridge, etc.
 
 phosphor-wayland               (wayland protocols)
     └─► phosphor-layer             (shell surfaces)
@@ -184,7 +184,7 @@ phosphor-shaders               (shader assets)
 
 ---
 
-## What a Compositor Plugin Needs (e.g. KWin effect, Wayfire plugin)
+## What a Compositor Plugin Needs (e.g. KWin effect, river plugin)
 
 ```cmake
 target_link_libraries(my-compositor-plugin

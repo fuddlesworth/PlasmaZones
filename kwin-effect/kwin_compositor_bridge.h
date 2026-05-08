@@ -3,13 +3,15 @@
 
 #pragma once
 
-#include "compositor_bridge.h"
+#include <PhosphorCompositor/ICompositorBridge.h>
 
 namespace KWin {
 class EffectWindow;
 }
 
 namespace PlasmaZones {
+
+using namespace PhosphorCompositor;
 
 class PlasmaZonesEffect;
 

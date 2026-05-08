@@ -64,7 +64,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
     // single-digit counts.
     m_windowAnimator->advanceAnimations();
 
-    if (m_windowAnimator->hasActiveAnimations() || !m_shaderTransitions.empty()) {
+    if (m_windowAnimator->hasActiveAnimations() || !m_shaderManager.m_shaderTransitions.empty()) {
         // Windows have translation transforms that move them outside their
         // frame geometry bounds — force full compositing mode. Shader
         // transitions also need this: without
@@ -80,8 +80,8 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
     // times across outputs); reading KWin::effects->cursorPos() at every
     // call multiplies up. Caching here also guarantees every transition
     // this frame reads an identical iMouse, eliminating sub-frame jitter.
-    if (KWin::effects && !m_shaderTransitions.empty()) {
-        m_cachedCursorGlobal = KWin::effects->cursorPos();
+    if (KWin::effects && !m_shaderManager.m_shaderTransitions.empty()) {
+        m_shaderManager.m_cachedCursorGlobal = KWin::effects->cursorPos();
     }
 
     KWin::effects->prePaintScreen(data, presentTime);
@@ -99,9 +99,9 @@ void PlasmaZonesEffect::postPaintScreen()
     // window so the next vsync runs our paint chain. Animator-driven
     // transitions (durationMs == 0) are kept alive by
     // m_windowAnimator->scheduleRepaints above.
-    if (!m_shaderTransitions.empty()) {
+    if (!m_shaderManager.m_shaderTransitions.empty()) {
         const qint64 now = shaderClockNowMs();
-        for (const auto& [w, transition] : m_shaderTransitions) {
+        for (const auto& [w, transition] : m_shaderManager.m_shaderTransitions) {
             if (transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs) {
                 if (w && !w->isDeleted()) {
                     // Fall back to frameGeometry when expanded is empty
@@ -124,7 +124,9 @@ void PlasmaZonesEffect::postPaintScreen()
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                                        std::chrono::milliseconds presentTime)
 {
-    if (w && (m_windowAnimator->hasAnimation(w) || m_shaderTransitions.find(w) != m_shaderTransitions.end())) {
+    if (w
+        && (m_windowAnimator->hasAnimation(w)
+            || m_shaderManager.m_shaderTransitions.find(w) != m_shaderManager.m_shaderTransitions.end())) {
         // Mark as transformed so paintWindow applies our translate+scale, and
         // so the OffscreenEffect redirect drives full-window repaints for the
         // shader leg's iTime advance even when the underlying window content
@@ -142,8 +144,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
 {
     m_windowAnimator->applyTransform(w, data);
 
-    auto sit = m_shaderTransitions.find(w);
-    if (sit != m_shaderTransitions.end() && sit->second.cached && sit->second.cached->shader) {
+    auto sit = m_shaderManager.m_shaderTransitions.find(w);
+    if (sit != m_shaderManager.m_shaderTransitions.end() && sit->second.cached && sit->second.cached->shader) {
         // Non-const reference because the per-frame book-keeping (`frameCount`,
         // `lastPaintTimeMs`) advances on every paintWindow tick that feeds
         // the transition. Without the mutation, `iFrame` would stay at 0 and
@@ -276,7 +278,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // staleness gate even though the cached value itself
                     // is wall-clock-derived: a backwards NTP correction
                     // on the wall clock would push `nowMs` below
-                    // `m_lastIDateRefreshMs`, the diff would go negative,
+                    // `m_shaderManager.m_lastIDateRefreshMs`, the diff would go negative,
                     // and the cache would never refresh again until the
                     // wall clock caught back up. steady_clock guarantees
                     // monotonic increase, matching the rest of the
@@ -284,17 +286,18 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // captured for iTimeDelta / iFrame above so all of
                     // this paint tick's monotonic readings come from the
                     // same clock sample.
-                    if (nowMs - m_lastIDateRefreshMs >= 1000) {
+                    if (nowMs - m_shaderManager.m_lastIDateRefreshMs >= 1000) {
                         const QDateTime nowDateTime = QDateTime::currentDateTime();
                         const QDate date = nowDateTime.date();
                         const QTime t = nowDateTime.time();
                         const float seconds = static_cast<float>(t.hour() * 3600 + t.minute() * 60 + t.second())
                             + static_cast<float>(t.msec()) / 1000.0f;
-                        m_cachedIDate = QVector4D(static_cast<float>(date.year()), static_cast<float>(date.month()),
-                                                  static_cast<float>(date.day()), seconds);
-                        m_lastIDateRefreshMs = nowMs;
+                        m_shaderManager.m_cachedIDate =
+                            QVector4D(static_cast<float>(date.year()), static_cast<float>(date.month()),
+                                      static_cast<float>(date.day()), seconds);
+                        m_shaderManager.m_lastIDateRefreshMs = nowMs;
                     }
-                    shader->setUniform(cached->iDateLoc, m_cachedIDate);
+                    shader->setUniform(cached->iDateLoc, m_shaderManager.m_cachedIDate);
                 }
                 if (cached->iMouseLoc >= 0) {
                     // iMouse: cursor position in window-local logical
@@ -331,7 +334,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // is called per active transition (and per output), so
                     // re-reading KWin::effects->cursorPos() per call would
                     // multiply up across high-Hz multi-output setups.
-                    const QPointF cursorGlobal = m_cachedCursorGlobal;
+                    const QPointF cursorGlobal = m_shaderManager.m_cachedCursorGlobal;
                     float localX = -1.0f;
                     float localY = -1.0f;
                     const bool inside = cursorGlobal.x() >= geo.x() && cursorGlobal.x() < geo.x() + geo.width()
@@ -466,8 +469,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // set guard prevents the next frame (which lands before the
         // queued slot runs) from re-queuing a duplicate end and
         // double-tearing-down the same transition.
-        if (!m_pendingShaderExpiryEnd.contains(w)) {
-            m_pendingShaderExpiryEnd.insert(w);
+        if (!m_shaderManager.m_pendingShaderExpiryEnd.contains(w)) {
+            m_shaderManager.m_pendingShaderExpiryEnd.insert(w);
             QPointer<KWin::EffectWindow> safeWindow(w);
             // Stash the raw pointer too — used as the set key for
             // membership cleanup. We MUST NOT remove the entry if the
@@ -494,9 +497,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // it ever paints. Mirrors the timer-driven teardown pattern
             // in `tryBeginShaderForEvent` (~line 5744).
             // Iterator `sit` was obtained earlier in this function and no
-            // intervening code mutates m_shaderTransitions, so the read is
+            // intervening code mutates m_shaderManager.m_shaderTransitions, so the read is
             // safe. The assertion documents that contract for future edits.
-            Q_ASSERT(sit != m_shaderTransitions.end());
+            Q_ASSERT(sit != m_shaderManager.m_shaderTransitions.end());
             const quint64 expiringGeneration = sit->second.generation;
             QMetaObject::invokeMethod(
                 this,
@@ -511,9 +514,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // doesn't leak when the transition was already
                     // ended via a different path (synchronous teardown,
                     // windowDeleted, generation-mismatch successor).
-                    m_pendingShaderExpiryEnd.remove(rawWindow);
-                    auto liveIt = m_shaderTransitions.find(safeWindow.data());
-                    if (liveIt != m_shaderTransitions.end() && liveIt->second.generation == expiringGeneration) {
+                    m_shaderManager.m_pendingShaderExpiryEnd.remove(rawWindow);
+                    auto liveIt = m_shaderManager.m_shaderTransitions.find(safeWindow.data());
+                    if (liveIt != m_shaderManager.m_shaderTransitions.end()
+                        && liveIt->second.generation == expiringGeneration) {
                         endShaderTransition(safeWindow.data());
                     }
                     // else: a successor replaced us (last-event-wins) and

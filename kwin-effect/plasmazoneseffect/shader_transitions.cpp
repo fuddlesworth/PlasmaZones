@@ -266,7 +266,7 @@ inline GLenum wrapStringToEnum(const QString& wrap)
 // ─────────────────────────────────────────────────────────────────────────────
 // Async texture pre-warm.
 //
-// Pattern: a `QRunnable` posted to `m_textureLoaderPool` performs the
+// Pattern: a `QRunnable` posted to `m_shaderManager.m_textureLoaderPool` performs the
 // CPU-bound load (`loadUserTextureImage` — QImage decode for raster
 // formats, QSvgRenderer rasterise for SVG/SVGZ) on a worker thread,
 // producing a `QImage` in `Format_RGBA8888`. The worker then dispatches
@@ -275,17 +275,17 @@ inline GLenum wrapStringToEnum(const QString& wrap)
 // runs on the GL-context thread (the compositor thread). The cache
 // insert and in-flight set bookkeeping happen entirely on the
 // compositor thread, so no locking is needed against
-// `m_textureCache` or `m_textureLoadsInFlight`.
+// `m_shaderManager.m_textureCache` or `m_shaderManager.m_textureLoadsInFlight`.
 //
 // Thread-safety notes:
 //   • The worker only reads the captured path string (`m_path`) and
 //     `m_svgMaxDim` — both POD captured-by-value at submission time.
-//     It NEVER touches `m_textureCache` or `m_textureLoadsInFlight`;
+//     It NEVER touches `m_shaderManager.m_textureCache` or `m_shaderManager.m_textureLoadsInFlight`;
 //     all access to those members happens on the compositor thread,
 //     either at submission time or inside the queued upload lambda.
 //     The submission-time generation captured into the worker lets
 //     the queued lambda detect a hot-reload that cleared the cache
-//     and discard the upload before touching `m_textureLoadsInFlight`.
+//     and discard the upload before touching `m_shaderManager.m_textureLoadsInFlight`.
 //   • `QSvgRenderer` is NOT thread-safe across instances (it owns
 //     mutable rasteriser state during `render()` per Qt docs).
 //     `loadUserTextureImage` constructs a fresh `QSvgRenderer` per
@@ -298,13 +298,13 @@ inline GLenum wrapStringToEnum(const QString& wrap)
 // ─────────────────────────────────────────────────────────────────────────────
 void PlasmaZonesEffect::evictLruTextureIfOverBound()
 {
-    while (m_textureCache.size() > kTextureCacheSoftBound) {
+    while (m_shaderManager.m_textureCache.size() > ShaderTransitionManager::kTextureCacheSoftBound) {
         // Build the set of cache pointers currently referenced by any
         // active transition's userTextures slots. Eviction must skip
         // every one of these — the transition holds a raw non-owning
         // pointer that would dangle if we erased the entry.
         std::unordered_set<const CachedTexture*> inFlight;
-        for (const auto& [_, transition] : m_shaderTransitions) {
+        for (const auto& [_, transition] : m_shaderManager.m_shaderTransitions) {
             for (CachedTexture* tex : transition.userTextures) {
                 if (tex) {
                     inFlight.insert(tex);
@@ -313,14 +313,14 @@ void PlasmaZonesEffect::evictLruTextureIfOverBound()
         }
         // Find the cache entry with the smallest lastAccessTick that is
         // NOT in-flight. If every entry is in flight (pathological;
-        // would require >kTextureCacheSoftBound concurrent transitions
+        // would require >ShaderTransitionManager::kTextureCacheSoftBound concurrent transitions
         // each referencing a unique texture), break — the cache
         // transiently exceeds the bound rather than tearing a live
         // pointer. Self-heals on the next eviction once a transition
         // ends.
-        auto evictIt = m_textureCache.end();
+        auto evictIt = m_shaderManager.m_textureCache.end();
         quint64 oldestTick = std::numeric_limits<quint64>::max();
-        for (auto it = m_textureCache.begin(); it != m_textureCache.end(); ++it) {
+        for (auto it = m_shaderManager.m_textureCache.begin(); it != m_shaderManager.m_textureCache.end(); ++it) {
             if (inFlight.count(&it->second) > 0) {
                 continue;
             }
@@ -329,13 +329,13 @@ void PlasmaZonesEffect::evictLruTextureIfOverBound()
                 evictIt = it;
             }
         }
-        if (evictIt == m_textureCache.end()) {
+        if (evictIt == m_shaderManager.m_textureCache.end()) {
             return; // every entry is in flight; no safe eviction this pass
         }
         qCDebug(lcEffect) << "evictLruTextureIfOverBound: evicting" << evictIt->first
                           << "(lastAccessTick=" << evictIt->second.lastAccessTick
-                          << ", cache size=" << m_textureCache.size() << ")";
-        m_textureCache.erase(evictIt);
+                          << ", cache size=" << m_shaderManager.m_textureCache.size() << ")";
+        m_shaderManager.m_textureCache.erase(evictIt);
     }
 }
 
@@ -345,16 +345,16 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
         return;
     }
     // Already warm — fast path, no allocation.
-    if (m_textureCache.find(absolutePath) != m_textureCache.end()) {
+    if (m_shaderManager.m_textureCache.find(absolutePath) != m_shaderManager.m_textureCache.end()) {
         return;
     }
     // Already in flight — a worker is mid-load; deduplicate to avoid
     // duplicate GPU uploads when several transitions request the
     // same path before the first one completes.
-    if (m_textureLoadsInFlight.contains(absolutePath)) {
+    if (m_shaderManager.m_textureLoadsInFlight.contains(absolutePath)) {
         return;
     }
-    m_textureLoadsInFlight.insert(absolutePath);
+    m_shaderManager.m_textureLoadsInFlight.insert(absolutePath);
 
     // SVG default size matches `loadUserTextureImage`'s 1024 max-axis.
     // Captured by value into the worker. The cache is path-keyed; if
@@ -365,11 +365,11 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
 
     // Capture the cache generation at submission time. The queued
     // upload lambda compares this against the live
-    // `m_textureCacheGeneration` and discards if mismatched — i.e. a
+    // `m_shaderManager.m_textureCacheGeneration` and discards if mismatched — i.e. a
     // hot-reload (`effectsChanged`) bumped the generation between
     // submission and upload, so this worker's bytes are stale and
     // must not re-populate the cleared cache.
-    const quint64 submissionGeneration = m_textureCacheGeneration;
+    const quint64 submissionGeneration = m_shaderManager.m_textureCacheGeneration;
 
     class Loader : public QRunnable
     {
@@ -390,7 +390,7 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
             // Bounce back to the compositor thread for the GL upload.
             // The QPointer guards against the effect being destroyed
             // while the worker was running — destructor's
-            // `m_textureLoaderPool.waitForDone()` already protects
+            // `m_shaderManager.m_textureLoaderPool.waitForDone()` already protects
             // against this for the in-process teardown case, but the
             // QPointer is defence-in-depth for any future caller that
             // schedules this without owning the pool's lifetime.
@@ -401,18 +401,18 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
                         return;
                     }
                     // Generation check FIRST — before touching
-                    // `m_textureCache` or `m_textureLoadsInFlight`. If
+                    // `m_shaderManager.m_textureCache` or `m_shaderManager.m_textureLoadsInFlight`. If
                     // the cache was cleared underneath us by a hot-
                     // reload (`effectsChanged`) the in-flight set was
                     // already cleared too; touching it now would mean
                     // racing with state the lambda has no business
                     // mutating. Discard cleanly.
-                    if (submissionGeneration != effect->m_textureCacheGeneration) {
+                    if (submissionGeneration != effect->m_shaderManager.m_textureCacheGeneration) {
                         qCDebug(lcEffect) << "warmUserTextureAsync: discarding stale upload for" << path
                                           << "(generation mismatch — cache cleared during load)";
                         return;
                     }
-                    effect->m_textureLoadsInFlight.remove(path);
+                    effect->m_shaderManager.m_textureLoadsInFlight.remove(path);
                     if (img.isNull()) {
                         qCWarning(lcEffect) << "warmUserTextureAsync: load failed for" << path;
                         return;
@@ -421,7 +421,8 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
                     // synchronously loaded this path while we were on
                     // the worker. Honour the existing entry; dropping
                     // ours avoids a redundant GPU upload.
-                    if (effect->m_textureCache.find(path) != effect->m_textureCache.end()) {
+                    if (effect->m_shaderManager.m_textureCache.find(path)
+                        != effect->m_shaderManager.m_textureCache.end()) {
                         return;
                     }
                     std::unique_ptr<KWin::GLTexture> gpuTex = KWin::GLTexture::upload(img);
@@ -434,8 +435,8 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
                     CachedTexture cachedTex;
                     cachedTex.texture = std::move(gpuTex);
                     cachedTex.lastAppliedWrap = GL_CLAMP_TO_EDGE;
-                    cachedTex.lastAccessTick = ++effect->m_textureCacheAccessTick;
-                    effect->m_textureCache.emplace(path, std::move(cachedTex));
+                    cachedTex.lastAccessTick = ++effect->m_shaderManager.m_textureCacheAccessTick;
+                    effect->m_shaderManager.m_textureCache.emplace(path, std::move(cachedTex));
                     effect->evictLruTextureIfOverBound();
                     qCDebug(lcEffect) << "warmUserTextureAsync: cached" << path;
                 },
@@ -455,7 +456,7 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
     // pointer that never registers with QPointer's tracker.
     auto* loader = new Loader(QPointer<PlasmaZonesEffect>(this), absolutePath, svgMaxDim, submissionGeneration);
     loader->setAutoDelete(true);
-    m_textureLoaderPool.start(loader);
+    m_shaderManager.m_textureLoaderPool.start(loader);
 }
 
 void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
@@ -500,10 +501,10 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         return;
     }
 
-    auto eff = m_animationShaderRegistry.effect(effectId);
+    auto eff = m_shaderManager.m_animationShaderRegistry.effect(effectId);
     if (!eff.isValid()) {
-        qCWarning(lcEffect) << "beginShaderTransition: registry has no effect" << effectId
-                            << "— registry effect count=" << m_animationShaderRegistry.availableEffects().size();
+        qCWarning(lcEffect) << "beginShaderTransition: registry has no effect" << effectId << "— registry effect count="
+                            << m_shaderManager.m_animationShaderRegistry.availableEffects().size();
         return;
     }
 
@@ -583,15 +584,15 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
         "}\n");
 
-    auto cacheIt = m_shaderCache.find(effectId);
-    if (cacheIt == m_shaderCache.end()) {
+    auto cacheIt = m_shaderManager.m_shaderCache.find(effectId);
+    if (cacheIt == m_shaderManager.m_shaderCache.end()) {
         // Diagnostic-once-per-compile: log multipass degradation when the
         // shader is first compiled for this session, not on every transition
         // install. Lifecycle events (window.move on a drag, window.focus on
         // alt-tab) can fire beginShaderTransition many times in quick
         // succession against an already-cached effect; a per-install log
         // would flood the journal. Cache invalidation (effectsChanged →
-        // m_shaderCache.clear) re-fires the log at the next install, which
+        // m_shaderManager.m_shaderCache.clear) re-fires the log at the next install, which
         // is the right semantic for hot-reload.
         if (eff.isMultipass) {
             qCInfo(lcEffect) << "Animation effect" << effectId
@@ -609,7 +610,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             return;
         }
         QStringList animIncludePaths;
-        for (const QString& sp : m_animationShaderRegistry.searchPaths()) {
+        for (const QString& sp : m_shaderManager.m_animationShaderRegistry.searchPaths()) {
             const QString sharedDir = sp + QStringLiteral("/shared");
             if (QDir(sharedDir).exists()) {
                 animIncludePaths.append(sharedDir);
@@ -709,7 +710,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // User textures: resolve sampler + iTextureResolution[N] uniform
         // locations only. The actual texture upload happens per-leg
         // inside `beginShaderTransition`'s body below — keyed by the
-        // resolved path in `m_textureCache` so two legs with different
+        // resolved path in `m_shaderManager.m_textureCache` so two legs with different
         // override paths don't collide on the per-effect cache.
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
             // GLSL sampler name: uTexture1..3 (slot+1 because uTexture0 is
@@ -722,7 +723,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             cached.iTextureResolutionLoc[slot] = shader->uniformLocation(kITextureResolutionKeys[slot]);
         }
         cached.shader = std::move(shader);
-        cacheIt = m_shaderCache.emplace(effectId, std::move(cached)).first;
+        cacheIt = m_shaderManager.m_shaderCache.emplace(effectId, std::move(cached)).first;
     }
 
     // Detect supersession before the teardown so we can skip the
@@ -731,8 +732,8 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // unredirect→redirect, and a back-to-back supersession (e.g. an
     // autotile-reorder drag firing window.move at 60 Hz) would
     // otherwise pay that cost every frame.
-    const auto existingIt = m_shaderTransitions.find(window);
-    const bool isSameWindowSupersession = existingIt != m_shaderTransitions.end();
+    const auto existingIt = m_shaderManager.m_shaderTransitions.find(window);
+    const bool isSameWindowSupersession = existingIt != m_shaderManager.m_shaderTransitions.end();
     // Carry the prior transition's closeGrabHeld through supersession so
     // ref/unref stay balanced. If the prior transition refWindow'd the
     // closing window, the ref must stay held (the new transition takes
@@ -746,7 +747,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // Erase the prior bookkeeping but skip the unredirect — we're
         // about to re-shader this same window. setShader() below
         // overwrites the shader pointer; no need to null it first.
-        m_shaderTransitions.erase(existingIt);
+        m_shaderManager.m_shaderTransitions.erase(existingIt);
     }
     // else: window is not currently shaderized; falls through to the
     // redirect() call below (no-op endShaderTransition since the map
@@ -806,7 +807,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // `uTextureN_wrap` keys (pack defaults from `eff.textures` merged
     // with any `friendlyParams` runtime overrides), with relative paths
     // already resolved against `eff.sourceDir`. We look each path up in
-    // `m_textureCache` (keyed by absolute path so two effects sharing
+    // `m_shaderManager.m_textureCache` (keyed by absolute path so two effects sharing
     // the same texture file share one upload) and stash a non-owning
     // pointer in the transition. Wrap mode is stored per-transition so
     // two legs sharing a path can run with different wrap modes
@@ -839,16 +840,16 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             transition.userTextures[slot] = nullptr;
             continue;
         }
-        auto texIt = m_textureCache.find(path);
+        auto texIt = m_shaderManager.m_textureCache.find(path);
         bool freshlyLoaded = false;
-        if (texIt != m_textureCache.end()) {
+        if (texIt != m_shaderManager.m_textureCache.end()) {
             // Bump the access tick on lookup so the LRU sweep sees this
             // path as "fresh" — keeps frequently-used textures warm
             // even if a flood of unique single-use textures pushes the
             // cache over its bound.
-            texIt->second.lastAccessTick = ++m_textureCacheAccessTick;
+            texIt->second.lastAccessTick = ++m_shaderManager.m_textureCacheAccessTick;
         }
-        if (texIt == m_textureCache.end()) {
+        if (texIt == m_shaderManager.m_textureCache.end()) {
             // Synchronous fallback — the warm path didn't promote in
             // time (or this is the very first transition for this
             // path). Subsequent transitions for the same path will
@@ -888,8 +889,8 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             CachedTexture cachedTex;
             cachedTex.texture = std::move(gpuTex);
             cachedTex.lastAppliedWrap = GL_CLAMP_TO_EDGE;
-            cachedTex.lastAccessTick = ++m_textureCacheAccessTick;
-            texIt = m_textureCache.emplace(path, std::move(cachedTex)).first;
+            cachedTex.lastAccessTick = ++m_shaderManager.m_textureCacheAccessTick;
+            texIt = m_shaderManager.m_textureCache.emplace(path, std::move(cachedTex)).first;
             // Eviction sweep is safe here: std::map only invalidates the
             // erased iterator, so `texIt` (the entry we just inserted)
             // stays valid. The freshly-inserted entry's lastAccessTick
@@ -915,7 +916,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // installed before the prior timer fires) and bail without killing the
     // successor. Counter is monotonic per-process; 64-bit so practically
     // unbounded.
-    transition.generation = ++m_shaderTransitionGenerationCounter;
+    transition.generation = ++m_shaderManager.m_shaderTransitionGenerationCounter;
     transition.reverse = reverse;
     // Stamp the close-grab flag so endShaderTransition knows to release
     // refWindow + WindowClosedGrabRole on teardown. The new transition
@@ -978,7 +979,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // redirected with a shader installed but no bookkeeping. RAII guard
     // erases the entry if we don't successfully reach the bottom of the
     // function (either of the two op paths below threw).
-    auto emplaceResult = m_shaderTransitions.emplace(window, std::move(transition));
+    auto emplaceResult = m_shaderManager.m_shaderTransitions.emplace(window, std::move(transition));
     bool emplaceCommitted = false;
     auto emplaceGuard = qScopeGuard([&]() {
         if (emplaceCommitted) {
@@ -1025,7 +1026,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                 },
                 Qt::QueuedConnection);
         }
-        m_shaderTransitions.erase(emplaceResult.first);
+        m_shaderManager.m_shaderTransitions.erase(emplaceResult.first);
     });
 
     if (!isSameWindowSupersession) {
@@ -1040,7 +1041,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // Kick the compositor into painting now so paintWindow fires and
     // the transition's iTime starts advancing. Without this, a shader
     // installed on a stable window (e.g. window.focus on a window with
-    // no in-flight damage) would sit in m_shaderTransitions for its
+    // no in-flight damage) would sit in m_shaderManager.m_shaderTransitions for its
     // full duration without ever reaching paintWindow. Interactive
     // events (window.move) don't need this because the drag is its own
     // continuous repaint source. postPaintScreen drives subsequent
@@ -1075,9 +1076,9 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
     // queued slot to the punch, the queued slot must not see this
     // window flagged as still-pending or it would skip a future
     // expiry's re-queue.
-    m_pendingShaderExpiryEnd.remove(window);
-    auto it = m_shaderTransitions.find(window);
-    if (it == m_shaderTransitions.end()) {
+    m_shaderManager.m_pendingShaderExpiryEnd.remove(window);
+    auto it = m_shaderManager.m_shaderTransitions.find(window);
+    if (it == m_shaderManager.m_shaderTransitions.end()) {
         return;
     }
     const bool releaseCloseGrab = it->second.closeGrabHeld;
@@ -1085,13 +1086,13 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
     // (windowDeleted may have raced our timer). setShader / unredirect on a
     // deleted EffectWindow is undefined behaviour in KWin's offscreen-effect
     // pipeline; just drop our bookkeeping. The windowDeleted handler at the
-    // KWin::effects connection erases m_shaderTransitions for the same
+    // KWin::effects connection erases m_shaderManager.m_shaderTransitions for the same
     // window, so this is a defence-in-depth against ordering races.
     if (!window->isDeleted()) {
         setShader(window, nullptr);
         unredirect(window);
     }
-    m_shaderTransitions.erase(it);
+    m_shaderManager.m_shaderTransitions.erase(it);
     if (releaseCloseGrab) {
         // Clear WindowClosedGrabRole while `window` is still alive
         // (the ref we hold via refWindow() guarantees refcount >= 1
@@ -1144,7 +1145,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
         return;
     }
-    const auto profile = m_shaderProfileTree.resolve(profilePath);
+    const auto profile = m_shaderManager.m_shaderProfileTree.resolve(profilePath);
     if (profile.effectiveEffectId().isEmpty()) {
         // Default-state path: a fresh user with no shader overrides
         // anywhere in the tree resolves every event to empty effectId,
@@ -1154,13 +1155,13 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         // overrides (so an empty resolve here is genuinely surprising —
         // the documented prune / D-Bus-race scenarios), otherwise
         // demote to DEBUG.
-        if (m_shaderProfileTree.overriddenPaths().isEmpty()) {
+        if (m_shaderManager.m_shaderProfileTree.overriddenPaths().isEmpty()) {
             qCDebug(lcEffect) << "tryBeginShader[" << profilePath
                               << "]: no shader assigned (tree empty — default state)";
         } else {
             qCWarning(lcEffect) << "tryBeginShader[" << profilePath
                                 << "]: no shader assigned (tree-resolve returned empty effectId, tree size="
-                                << m_shaderProfileTree.overriddenPaths().size() << ")";
+                                << m_shaderManager.m_shaderProfileTree.overriddenPaths().size() << ")";
         }
         return;
     }
@@ -1171,8 +1172,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // (window.move during zone.snapIn, window.focus interrupting
     // window.maximize) leave a stale timer that tears down the SUCCESSOR
     // when its own timer hasn't fired yet.
-    auto it = m_shaderTransitions.find(window);
-    if (it == m_shaderTransitions.end()) {
+    auto it = m_shaderManager.m_shaderTransitions.find(window);
+    if (it == m_shaderManager.m_shaderTransitions.end()) {
         return; // beginShaderTransition no-op'd (compile fail / invalid id)
     }
     const quint64 myGeneration = it->second.generation;
@@ -1183,8 +1184,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         if (!safeWindow) {
             return;
         }
-        auto it = m_shaderTransitions.find(safeWindow);
-        if (it != m_shaderTransitions.end() && it->second.generation == myGeneration) {
+        auto it = m_shaderManager.m_shaderTransitions.find(safeWindow);
+        if (it != m_shaderManager.m_shaderTransitions.end() && it->second.generation == myGeneration) {
             endShaderTransition(safeWindow);
         }
         // else: a newer transition replaced us (last-event-wins) and owns
@@ -1198,10 +1199,11 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
         this, QStringLiteral("shaderProfileTree"), [this](const QVariant& v) {
             const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
             if (doc.isObject()) {
-                m_shaderProfileTree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
+                m_shaderManager.m_shaderProfileTree =
+                    PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
                 qCDebug(lcEffect) << "loadShaderProfileFromDbus: tree loaded with"
-                                  << m_shaderProfileTree.overriddenPaths().size()
-                                  << "overrides — paths=" << m_shaderProfileTree.overriddenPaths();
+                                  << m_shaderManager.m_shaderProfileTree.overriddenPaths().size()
+                                  << "overrides — paths=" << m_shaderManager.m_shaderProfileTree.overriddenPaths();
             } else {
                 qCWarning(lcEffect) << "Failed to parse shaderProfileTree from D-Bus — not a JSON object";
             }
@@ -1221,11 +1223,11 @@ void PlasmaZonesEffect::loadShaderRegistryFromDbus()
                     paths.append(entry.toString());
             }
             if (!paths.isEmpty()) {
-                m_animationShaderRegistry.addSearchPaths(paths);
+                m_shaderManager.m_animationShaderRegistry.addSearchPaths(paths);
             }
             qCDebug(lcEffect) << "loadShaderRegistryFromDbus: added" << paths.size()
                               << "search paths — registry effect count="
-                              << m_animationShaderRegistry.availableEffects().size();
+                              << m_shaderManager.m_animationShaderRegistry.availableEffects().size();
         });
 }
 

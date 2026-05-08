@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
@@ -8,7 +8,7 @@
 #include <QSet>
 #include <QString>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 
 /**
  * @brief Compositor-agnostic floating window state cache
@@ -86,4 +86,4 @@ private:
     QSet<QString> m_floatingWindows;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor

@@ -55,17 +55,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // mid-migration, (c) test paths that don't drive KWin::effects.
     , m_motionClockFallback(std::make_unique<CompositorClock>(nullptr))
     , m_windowAnimator(std::make_unique<WindowAnimator>())
+    , m_shaderManager(this)
     , m_dragTracker(std::make_unique<DragTracker>(this))
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(this))
 {
     PhosphorProtocol::registerWireTypes();
 
     // Single-worker pool for off-loading user-texture loads. See the
-    // header docstring for `m_textureLoaderPool` for the rationale —
+    // header docstring for `m_shaderManager.m_textureLoaderPool` for the rationale —
     // serialised loads keep the dedupe cheap and avoid duplicate GPU
     // uploads if multiple shader transitions reference the same file
     // in quick succession.
-    m_textureLoaderPool.setMaxThreadCount(1);
+    m_shaderManager.m_textureLoaderPool.setMaxThreadCount(1);
 
     // Populate per-output clocks from the currently-known output set.
     // Subsequent hotplug events land in onScreenAdded / onScreenRemoved.
@@ -91,7 +92,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // origin (i.e. all windows on the primary monitor with origin at
         // (0, 0)) for one frame, producing a false-positive hover spike
         // before prePaintScreen overwrites the cache on the next tick.
-        m_cachedCursorGlobal = KWin::effects->cursorPos();
+        m_shaderManager.m_cachedCursorGlobal = KWin::effects->cursorPos();
     }
 
     // Wire the fallback clock as the animator's default. The animator's
@@ -113,21 +114,21 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // the original animator running its geometry tween, and that
         // animator's eventual completion would prematurely kill the
         // successor (whose own QTimer hasn't fired yet).
-        auto it = m_shaderTransitions.find(w);
-        if (it == m_shaderTransitions.end() || it->second.durationMs > 0) {
+        auto it = m_shaderManager.m_shaderTransitions.find(w);
+        if (it == m_shaderManager.m_shaderTransitions.end() || it->second.durationMs > 0) {
             return;
         }
         endShaderTransition(w);
     });
-    connect(&m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
-            [this]() {
+    connect(&m_shaderManager.m_animationShaderRegistry,
+            &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this, [this]() {
                 QVarLengthArray<KWin::EffectWindow*, 8> windows;
-                for (auto& [w, _] : m_shaderTransitions)
+                for (auto& [w, _] : m_shaderManager.m_shaderTransitions)
                     windows.push_back(w);
                 for (auto* w : windows)
                     endShaderTransition(w);
-                Q_ASSERT(m_shaderTransitions.empty());
-                m_shaderCache.clear();
+                Q_ASSERT(m_shaderManager.m_shaderTransitions.empty());
+                m_shaderManager.m_shaderCache.clear();
                 // Drop the texture cache too — a hot-reload that swaps a
                 // texture file behind the same metadata.json path needs
                 // a fresh upload to pick up the new contents. The cache
@@ -143,14 +144,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // already in flight will complete their CPU rasterise,
                 // but their queued GL upload checks the generation
                 // captured at submission time against
-                // `m_textureCacheGeneration` and discards if mismatched
+                // `m_shaderManager.m_textureCacheGeneration` and discards if mismatched
                 // — so no stale (pre-reload) bytes can re-populate the
                 // cleared cache. Clear immediately so the next
                 // `beginShaderTransition` hits the synchronous fallback
                 // path and uploads fresh content.
-                ++m_textureCacheGeneration;
-                m_textureLoadsInFlight.clear();
-                m_textureCache.clear();
+                ++m_shaderManager.m_textureCacheGeneration;
+                m_shaderManager.m_textureLoadsInFlight.clear();
+                m_shaderManager.m_textureCache.clear();
             });
 
     // Frame-geometry shadow flush timer. Debounces per-window
@@ -418,9 +419,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         m_trackedScreenPerWindow.remove(w);
         // Drop per-window shader-event bookkeeping. m_lastFocusShaderWindow is
         // a QPointer that auto-nulls on destroy, so it's already cleaned up;
-        // m_lastFullyMaximized is a raw-pointer-keyed QHash so we explicitly
+        // m_shaderManager.m_lastFullyMaximized is a raw-pointer-keyed QHash so we explicitly
         // erase here to keep it bounded across long sessions.
-        m_lastFullyMaximized.remove(w);
+        m_shaderManager.m_lastFullyMaximized.remove(w);
     });
 
     connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &PlasmaZonesEffect::slotWindowActivated);
@@ -599,15 +600,15 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 PlasmaZonesEffect::~PlasmaZonesEffect()
 {
     // Sever the registry's `effectsChanged` connection BEFORE anything
-    // else runs. The slot lambda touches `m_shaderTransitions`,
-    // `m_shaderCache`, and `m_textureCache` — all declared AFTER
-    // `m_animationShaderRegistry` in the header (h:507 vs h:698+), so
+    // else runs. The slot lambda touches `m_shaderManager.m_shaderTransitions`,
+    // `m_shaderManager.m_shaderCache`, and `m_shaderManager.m_textureCache` — all declared AFTER
+    // `m_shaderManager.m_animationShaderRegistry` in the header (h:507 vs h:698+), so
     // they destruct FIRST in C++ reverse-declaration order. The
     // registry destructs LAST, and any signal it (or its underlying
     // file-watcher) emits during its own member teardown would
     // dispatch to the slot AFTER the cache members are gone — UAF.
     // Disconnect now while everything is still alive.
-    disconnect(&m_animationShaderRegistry, nullptr, this, nullptr);
+    disconnect(&m_shaderManager.m_animationShaderRegistry, nullptr, this, nullptr);
 
     // Drain the texture loader pool before any other teardown. A
     // worker that's mid-rasterise would otherwise post a queued
@@ -619,13 +620,13 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // intact `this`.
     //
     // Distinct from the hot-reload path in the `effectsChanged`
-    // lambda above: hot-reload bumps `m_textureCacheGeneration` (no
+    // lambda above: hot-reload bumps `m_shaderManager.m_textureCacheGeneration` (no
     // wait) so workers in flight can discard their queued upload
     // without blocking the compositor. Shutdown REQUIRES the wait —
     // the queued uploads need to be flushed against a live `this`,
     // not raced against member destruction.
-    m_textureLoaderPool.waitForDone();
-    m_textureLoadsInFlight.clear();
+    m_shaderManager.m_textureLoaderPool.waitForDone();
+    m_shaderManager.m_textureLoadsInFlight.clear();
 
     // Restore borderless and monocle-maximized windows so they recover properly.
     // Guard against compositor teardown — effects may outlive the stacking order.
@@ -653,7 +654,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // KWin's offscreen state cleanly; relying on default destruction
     // would let the offscreen FBOs linger until KWin's effect-removed
     // bookkeeping ran. Iterates a snapshot because endShaderTransition
-    // erases from `m_shaderTransitions` mid-loop.
+    // erases from `m_shaderManager.m_shaderTransitions` mid-loop.
     //
     // Guarded by `if (KWin::effects)` matching the clearAllBorders /
     // ungrabKeyboard guards above: during compositor teardown the global
@@ -662,7 +663,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // the offscreen state when KWin::effects is gone.
     if (KWin::effects) {
         QVarLengthArray<KWin::EffectWindow*, 8> activeWindows;
-        for (auto& [w, _] : m_shaderTransitions) {
+        for (auto& [w, _] : m_shaderManager.m_shaderTransitions) {
             activeWindows.push_back(w);
         }
         for (auto* w : activeWindows) {

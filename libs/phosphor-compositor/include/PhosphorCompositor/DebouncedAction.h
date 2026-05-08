@@ -1,14 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
+
+#include <phosphorcompositor_export.h>
 
 #include <QObject>
 #include <QRect>
 #include <QTimer>
 #include <functional>
 
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 
 /**
  * @brief Compositor-agnostic debounced action with coalescing
@@ -29,7 +31,7 @@ namespace PlasmaZones {
  * thread (typically the compositor's main thread). QTimer requires an event
  * loop on the owning thread. Do not call from worker threads.
  */
-class DebouncedScreenAction : public QObject
+class PHOSPHORCOMPOSITOR_EXPORT DebouncedScreenAction : public QObject
 {
     Q_OBJECT
 
@@ -61,18 +63,14 @@ public:
      */
     void geometryChanged(const QRect& currentGeometry)
     {
-        // If an apply is currently in flight, force a coalesced reapply even
-        // when the geometry is unchanged (e.g., identical-resolution monitor
-        // swap during an ongoing apply) — otherwise the change is silently
-        // dropped because `currentGeometry == m_lastGeometry` and the
-        // in-progress apply is still using pre-change state.
-        if (currentGeometry == m_lastGeometry && !m_pending) {
+        if (m_hasLastGeometry && currentGeometry == m_lastGeometry && !m_pending) {
             if (m_applyInProgress) {
                 requestReapply();
             }
             return;
         }
         m_lastGeometry = currentGeometry;
+        m_hasLastGeometry = true;
         m_pending = true;
         m_debounce.start();
     }
@@ -121,6 +119,7 @@ public:
     void setLastGeometry(const QRect& geo)
     {
         m_lastGeometry = geo;
+        m_hasLastGeometry = true;
     }
 
 Q_SIGNALS:
@@ -139,9 +138,10 @@ private Q_SLOTS:
 private:
     QTimer m_debounce;
     QRect m_lastGeometry;
+    bool m_hasLastGeometry = false;
     bool m_pending = false;
     bool m_applyInProgress = false;
     bool m_reapplyPending = false;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorCompositor

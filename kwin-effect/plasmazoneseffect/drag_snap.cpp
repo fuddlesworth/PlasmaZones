@@ -472,7 +472,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         }
 
         if (m_windowAnimator->hasAnimation(window)) {
-            const auto shaderProfile = m_shaderProfileTree.resolve(profilePath);
+            const auto shaderProfile = m_shaderManager.m_shaderProfileTree.resolve(profilePath);
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
                 beginShaderTransition(window, shaderProfile);
             }

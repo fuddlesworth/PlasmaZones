@@ -2,40 +2,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * @file test_compositor_common.cpp
- * @brief Unit tests for compositor-common shared library types
+ * @file test_wire_types.cpp
+ * @brief Unit tests for D-Bus wire type signatures and roundtrips
  *
- * Tests D-Bus type roundtrips, FloatingCache logic, TriggerParser modifier
- * checking, and WindowId string utilities.
+ * Tests that every PhosphorProtocol wire type serializes to the expected
+ * D-Bus signature, that metatypes are registered, and that aggregate
+ * construction preserves all fields.
  */
 
+#include <QDBusArgument>
 #include <QTest>
 
-#include "compositor-common/autotile_state.h"
 #include <PhosphorProtocol/WireTypes.h>
-#include "compositor-common/floating_cache.h"
-#include "compositor-common/trigger_parser.h"
-#include <PhosphorIdentity/WindowId.h>
-
-// Easing curves, AnimationMath, and WindowMotion have their own tests
-// under libs/phosphor-animation/tests. Keep this TU focused on the
-// compositor-common D-Bus marshalling + helper code.
 
 namespace {
-
-/**
- * @brief Roundtrip a D-Bus type through QDBusConnection peer connection
- *
- * QDBusArgument is write-only when constructed directly. To produce a
- * readable QDBusArgument we must go through the D-Bus wire format. We
- * use QDBusServer + connectToPeer for a self-contained roundtrip that
- * does not require a running session bus.
- *
- * Fallback: when no session bus is available we verify that the write
- * operator produces the expected D-Bus type signature (which confirms
- * field order and count). The toRect/fromRect/toGeometryEntry tests
- * cover the actual data logic.
- */
 
 /**
  * @brief Verify a D-Bus struct type has the expected signature
@@ -54,7 +34,7 @@ QString dbusSignature(const T& value)
 
 } // anonymous namespace
 
-class TestCompositorCommon : public QObject
+class TestWireTypes : public QObject
 {
     Q_OBJECT
 
@@ -621,248 +601,6 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // FloatingCache: basic operations
-    // =================================================================
-
-    void testFloatingCacheBasic()
-    {
-        PlasmaZones::FloatingCache cache;
-        QVERIFY(!cache.isFloating(QStringLiteral("firefox|1")));
-
-        cache.setFloating(QStringLiteral("firefox|1"), true);
-        QVERIFY(cache.isFloating(QStringLiteral("firefox|1")));
-
-        // Different instance, no bare appId entry
-        QVERIFY(!cache.isFloating(QStringLiteral("firefox|2")));
-
-        cache.setFloating(QStringLiteral("firefox|1"), false);
-        QVERIFY(!cache.isFloating(QStringLiteral("firefox|1")));
-    }
-
-    // =================================================================
-    // FloatingCache: appId fallback
-    // =================================================================
-
-    void testFloatingCacheAppIdFallback()
-    {
-        PlasmaZones::FloatingCache cache;
-        cache.insert(QStringLiteral("firefox")); // bare appId
-        QVERIFY(cache.isFloating(QStringLiteral("firefox|1"))); // matches via appId fallback
-        QVERIFY(cache.isFloating(QStringLiteral("firefox|2"))); // also matches
-
-        cache.remove(QStringLiteral("firefox"));
-        QVERIFY(!cache.isFloating(QStringLiteral("firefox|1")));
-    }
-
-    // =================================================================
-    // FloatingCache: clear
-    // =================================================================
-
-    void testFloatingCacheClear()
-    {
-        PlasmaZones::FloatingCache cache;
-        cache.setFloating(QStringLiteral("app1|1"), true);
-        cache.setFloating(QStringLiteral("app2|1"), true);
-        QCOMPARE(cache.size(), 2);
-        cache.clear();
-        QCOMPARE(cache.size(), 0);
-    }
-
-    // =================================================================
-    // FloatingCache: unfloat removes bare appId
-    // =================================================================
-
-    void testFloatingCacheUnfloatRemovesBareAppId()
-    {
-        PlasmaZones::FloatingCache cache;
-        cache.insert(QStringLiteral("firefox")); // bare appId from daemon sync
-        cache.insert(QStringLiteral("firefox|1")); // specific instance
-
-        cache.setFloating(QStringLiteral("firefox|1"), false);
-        // Both "firefox|1" and bare "firefox" should be removed
-        QVERIFY(!cache.isFloating(QStringLiteral("firefox|1")));
-        // "firefox|2" was never individually floating, and bare appId is gone:
-        QVERIFY(!cache.isFloating(QStringLiteral("firefox|2")));
-    }
-
-    // =================================================================
-    // TriggerParser: checkModifier
-    // =================================================================
-
-    void testCheckModifier()
-    {
-        using PlasmaZones::TriggerParser::checkModifier;
-
-        QVERIFY(!checkModifier(0, Qt::ShiftModifier)); // Disabled
-        QVERIFY(checkModifier(1, Qt::ShiftModifier)); // Shift
-        QVERIFY(!checkModifier(1, Qt::ControlModifier)); // Shift required but Ctrl held
-        QVERIFY(checkModifier(2, Qt::ControlModifier)); // Ctrl
-        QVERIFY(checkModifier(3, Qt::AltModifier)); // Alt
-        QVERIFY(checkModifier(4, Qt::MetaModifier)); // Meta
-        QVERIFY(checkModifier(5, Qt::ControlModifier | Qt::AltModifier)); // CtrlAlt
-        QVERIFY(!checkModifier(5, Qt::ControlModifier)); // Only Ctrl, need CtrlAlt
-        QVERIFY(checkModifier(6, Qt::ControlModifier | Qt::ShiftModifier)); // CtrlShift
-        QVERIFY(checkModifier(7, Qt::AltModifier | Qt::ShiftModifier)); // AltShift
-        QVERIFY(checkModifier(8, Qt::NoModifier)); // AlwaysActive
-        QVERIFY(checkModifier(9, Qt::AltModifier | Qt::MetaModifier)); // AltMeta
-        QVERIFY(checkModifier(10, Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)); // CtrlAltMeta
-        QVERIFY(!checkModifier(99, Qt::ShiftModifier)); // Unknown
-    }
-
-    // =================================================================
-    // TriggerParser: anyTriggerHeld
-    // =================================================================
-
-    void testAnyTriggerHeld()
-    {
-        using PlasmaZones::ParsedTrigger;
-        using PlasmaZones::TriggerParser::anyTriggerHeld;
-
-        QVector<ParsedTrigger> triggers = {{1, 0}}; // Shift modifier, any button
-        QVERIFY(anyTriggerHeld(triggers, Qt::ShiftModifier, Qt::NoButton));
-        QVERIFY(!anyTriggerHeld(triggers, Qt::ControlModifier, Qt::NoButton));
-
-        // Empty triggers
-        QVERIFY(!anyTriggerHeld({}, Qt::ShiftModifier, Qt::LeftButton));
-
-        // Both modifier=0 and mouseButton=0 -- should NOT match (guard clause)
-        QVector<ParsedTrigger> nullTrigger = {{0, 0}};
-        QVERIFY(!anyTriggerHeld(nullTrigger, Qt::ShiftModifier, Qt::LeftButton));
-    }
-
-    void testAnyTriggerHeldMouseButton()
-    {
-        using PlasmaZones::ParsedTrigger;
-        using PlasmaZones::TriggerParser::anyTriggerHeld;
-
-        // Trigger requires left mouse button only (modifier=0 means "any mod is ok"
-        // but the guard clause requires at least one non-zero field)
-        QVector<ParsedTrigger> btnTrigger = {{0, static_cast<int>(Qt::LeftButton)}};
-        QVERIFY(anyTriggerHeld(btnTrigger, Qt::NoModifier, Qt::LeftButton));
-        QVERIFY(!anyTriggerHeld(btnTrigger, Qt::NoModifier, Qt::RightButton));
-    }
-
-    void testAnyTriggerHeldModAndButton()
-    {
-        using PlasmaZones::ParsedTrigger;
-        using PlasmaZones::TriggerParser::anyTriggerHeld;
-
-        // Requires Shift + LeftButton
-        QVector<ParsedTrigger> combined = {{1, static_cast<int>(Qt::LeftButton)}};
-        QVERIFY(anyTriggerHeld(combined, Qt::ShiftModifier, Qt::LeftButton));
-        QVERIFY(!anyTriggerHeld(combined, Qt::ShiftModifier, Qt::RightButton));
-        QVERIFY(!anyTriggerHeld(combined, Qt::ControlModifier, Qt::LeftButton));
-    }
-
-    // =================================================================
-    // WindowId: extractAppId
-    // =================================================================
-
-    void testExtractAppId()
-    {
-        QCOMPARE(::PhosphorIdentity::WindowId::extractAppId(QStringLiteral("firefox|42")), QStringLiteral("firefox"));
-        QCOMPARE(::PhosphorIdentity::WindowId::extractAppId(QStringLiteral("firefox")), QStringLiteral("firefox"));
-        QCOMPARE(::PhosphorIdentity::WindowId::extractAppId(QString()), QString());
-        QCOMPARE(::PhosphorIdentity::WindowId::extractAppId(QStringLiteral("org.kde.dolphin|123")),
-                 QStringLiteral("org.kde.dolphin"));
-    }
-
-    // =================================================================
-    // WindowId: deriveShortName
-    // =================================================================
-
-    void testDeriveShortName()
-    {
-        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("org.kde.dolphin")),
-                 QStringLiteral("dolphin"));
-        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("firefox")), QStringLiteral("firefox"));
-        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QString()), QString());
-        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("com.example.app")),
-                 QStringLiteral("app"));
-    }
-
-    // =================================================================
-    // AutotileStateHelpers: cleanupClosedWindowState
-    // =================================================================
-
-    void testCleanupClosedWindowState()
-    {
-        const QString windowId = QStringLiteral("testapp|42");
-        const QString screenId = QStringLiteral("screen-0");
-
-        // Set up BorderState with the window on its owning screen.
-        PlasmaZones::BorderState border;
-        PlasmaZones::AutotileStateHelpers::addBorderlessOnScreen(border, screenId, windowId);
-        PlasmaZones::AutotileStateHelpers::addTiledOnScreen(border, screenId, windowId);
-        border.zoneGeometries.insert(windowId, QRect(0, 0, 800, 600));
-
-        // Set up AutotileWindowState maps
-        QSet<QString> notifiedWindows;
-        notifiedWindows.insert(windowId);
-
-        QHash<QString, QString> notifiedWindowScreens;
-        notifiedWindowScreens.insert(windowId, screenId);
-
-        QSet<QString> minimizeFloatedWindows;
-        minimizeFloatedWindows.insert(windowId);
-
-        QHash<QString, QRect> autotileTargetZones;
-        autotileTargetZones.insert(windowId, QRect(0, 0, 800, 600));
-
-        QHash<QString, QRect> centeredWaylandZones;
-        centeredWaylandZones.insert(windowId, QRect(100, 100, 600, 400));
-
-        QSet<QString> monocleMaximizedWindows;
-        monocleMaximizedWindows.insert(windowId);
-
-        QHash<QString, QHash<QString, QRectF>> preAutotileGeometries;
-        preAutotileGeometries[screenId].insert(windowId, QRectF(0.1, 0.1, 0.5, 0.5));
-
-        PlasmaZones::AutotileStateHelpers::AutotileWindowState state{
-            notifiedWindows,      notifiedWindowScreens,   minimizeFloatedWindows, autotileTargetZones,
-            centeredWaylandZones, monocleMaximizedWindows, preAutotileGeometries};
-
-        // Perform cleanup
-        PlasmaZones::AutotileStateHelpers::cleanupClosedWindowState(windowId, screenId, border, state);
-
-        // Verify all maps no longer contain the window
-        QVERIFY(!PlasmaZones::AutotileStateHelpers::isBorderlessWindow(border, windowId));
-        QVERIFY(!PlasmaZones::AutotileStateHelpers::isTiledWindow(border, windowId));
-        QVERIFY(!border.zoneGeometries.contains(windowId));
-        QVERIFY(!notifiedWindows.contains(windowId));
-        QVERIFY(!notifiedWindowScreens.contains(windowId));
-        QVERIFY(!minimizeFloatedWindows.contains(windowId));
-        QVERIFY(!autotileTargetZones.contains(windowId));
-        QVERIFY(!centeredWaylandZones.contains(windowId));
-        QVERIFY(!monocleMaximizedWindows.contains(windowId));
-        QVERIFY(!preAutotileGeometries[screenId].contains(windowId));
-    }
-
-    // =================================================================
-    // WindowId: extractAppId leading separator edge case
-    // =================================================================
-
-    void testExtractAppIdLeadingSeparator()
-    {
-        // Leading separator: empty appId prefix, mirroring extractInstanceId's semantics.
-        QCOMPARE(::PhosphorIdentity::WindowId::extractAppId(QStringLiteral("|instance")), QString());
-    }
-
-    // =================================================================
-    // WindowId: deriveShortName trailing dot edge case
-    // =================================================================
-
-    void testDeriveShortNameTrailingDot()
-    {
-        // Trailing dots are stripped before segment extraction so a typo'd
-        // reverse-DNS like "org.kde." normalises to the same short name as
-        // "org.kde". A string of nothing-but-dots collapses to empty.
-        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("org.kde.")), QStringLiteral("kde"));
-        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("org.kde...")), QStringLiteral("kde"));
-        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("...")), QString());
-    }
-
-    // =================================================================
     // D-Bus types: WindowOpenedEntry roundtrip
     // =================================================================
 
@@ -920,5 +658,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_GUILESS_MAIN(TestCompositorCommon)
-#include "test_compositor_common.moc"
+QTEST_GUILESS_MAIN(TestWireTypes)
+#include "test_wire_types.moc"

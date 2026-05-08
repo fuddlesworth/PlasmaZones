@@ -1,6 +1,6 @@
 # phosphor-compositor SDK Plan
 
-D-Bus client SDK for compositor plugins (KWin, Wayfire, river, Hyprland).
+D-Bus client SDK for compositor plugins (KWin, river, Hyprland).
 The daemon always runs and owns all placement logic. Plugins are thin
 geometry-appliers that implement `ICompositorBridge`.
 
@@ -26,7 +26,7 @@ geometry-appliers that implement `ICompositorBridge`.
             │ D-Bus IPC
             ▼
 ┌─────────────────────────────────────────────────────────┐
-│  Compositor Plugin (e.g. KWin effect, Wayfire plugin)   │
+│  Compositor Plugin (e.g. KWin effect, river module)   │
 │  ┌─────────────────────────────────────────────────┐    │
 │  │ phosphor-compositor (SDK)                        │    │
 │  │  • ICompositorBridge interface                   │    │
@@ -36,7 +36,7 @@ geometry-appliers that implement `ICompositorBridge`.
 │  └─────────────────────────────────────────────────┘    │
 │  ┌─────────────────────────────────────────────────┐    │
 │  │ Per-compositor adapter (~300-500 lines)           │    │
-│  │  • KWinCompositorBridge / WayfireCompositorBridge │    │
+│  │  • KWinCompositorBridge / riverCompositorBridge │    │
 │  │  • Native window handle ↔ void* translation      │    │
 │  │  • Effect lifecycle + paint pipeline              │    │
 │  └─────────────────────────────────────────────────┘    │
@@ -78,7 +78,7 @@ geometry-appliers that implement `ICompositorBridge`.
 |-----------|---------------------------|
 | `KWinCompositorBridge` | KWin's `EffectWindow*` APIs |
 | Paint pipeline (`prePaintWindow`, `paintWindow`) | Compositor-specific rendering |
-| Animation attachment | KWin uses `WindowPaintData`, Wayfire uses transformers |
+| Animation attachment | KWin uses `WindowPaintData`, river uses transformers |
 | Input routing (keyboard grabs) | Different per compositor |
 | Thumbnail capture | Uses KWin's `OffscreenQuickScene` |
 | EDID screen ID computation | Each compositor exposes output info differently |
@@ -141,10 +141,10 @@ target_link_libraries(my_compositor_plugin PRIVATE
 
 **Estimated effort: Medium (new code, but guided by existing patterns in kwin-effect/)**
 
-### PR 3: Documentation + Wayfire example
+### PR 3: Documentation + river example
 
 1. Write integration guide: "How to write a PlasmaZones compositor plugin"
-2. Minimal Wayfire plugin skeleton (proof-of-concept, ~500 lines)
+2. Minimal river module skeleton (proof-of-concept, ~500 lines)
 3. Document the `ICompositorBridge` contract with per-method expectations
 
 **Estimated effort: Medium (documentation-heavy)**
@@ -163,7 +163,7 @@ and gains compile-time interface contracts instead of stringly-typed D-Bus calls
 
 ## Success Criteria
 
-- [ ] A Wayfire plugin can link `PhosphorCompositor`, implement `ICompositorBridge`, and get full PlasmaZones functionality
+- [ ] A river module can link `PhosphorCompositor`, implement `ICompositorBridge`, and get full PlasmaZones functionality
 - [ ] KWin effect uses the SDK with zero functionality regression
 - [ ] Plugin is <500 lines for basic snap/tiling (excluding animation)
 - [ ] No daemon changes needed when adding a new compositor

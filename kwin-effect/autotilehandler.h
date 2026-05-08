@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <autotile_state.h>
+#include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/WireTypes.h>
 
 #include <QHash>
@@ -23,6 +23,8 @@ class EffectWindow;
 }
 
 namespace PlasmaZones {
+
+using namespace PhosphorCompositor;
 
 class PlasmaZonesEffect;
 
