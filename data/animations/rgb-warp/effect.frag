@@ -113,20 +113,32 @@ void main()
     vec4 colorG = texture(uTexture0, uv + vec2(0.0, offset * mulG));
     vec4 colorB = texture(uTexture0, uv + vec2(0.0, offset * mulB));
 
-    // Recombine. The texture is pre-multiplied; we extract the
-    // per-channel pre-multiplied values and re-emit with the average
-    // alpha. This preserves chromatic-aberration look without an
-    // un-premultiply / re-premultiply round trip per channel.
+    // Recombine. The texture is pre-multiplied; un-premultiply each
+    // channel against its OWN alpha (those are the only valid divisors
+    // — averaging the alphas first and reapplying it later breaks the
+    // pre-multiplied invariant `rgb ≤ alpha` on translucent windows
+    // and surfaces a hue-shifted halo around the silhouette). Re-
+    // premultiply against the average so the final fragColor stays
+    // pre-multiplied for the daemon's blend pipeline.
     float a = (colorR.a + colorG.a + colorB.a) / 3.0;
-    vec3 rgb = vec3(colorR.r, colorG.g, colorB.b);
+    vec3 straight = vec3(
+        colorR.a > 1e-4 ? colorR.r / colorR.a : 0.0,
+        colorG.a > 1e-4 ? colorG.g / colorG.a : 0.0,
+        colorB.a > 1e-4 ? colorB.b / colorB.a : 0.0
+    );
+    vec3 rgb = straight * a;
 
     // Brightness pulse, peaks mid-leg.
     rgb *= mix(1.0, brightness, fadeInOut(progress, 4.0));
 
     // Surface-edge fade in pixel space (~30 px from each edge) so the
-    // rising-off-top reading is clean.
-    vec2 edgePx = uv * iResolution;
-    vec2 edgeFar = (vec2(1.0) - uv) * iResolution;
+    // rising-off-top reading is clean. Floor `iResolution` so a first-
+    // frame zero-sized surface doesn't collapse `edgePx`/`edgeFar` to
+    // zero — the smoothstep would then return 0 everywhere and the
+    // entire window would render fully transparent for one paint.
+    vec2 res = max(iResolution, vec2(1.0));
+    vec2 edgePx = uv * res;
+    vec2 edgeFar = (vec2(1.0) - uv) * res;
     float edgeFade = smoothstep(0.0, 30.0, edgePx.x) *
                      smoothstep(0.0, 30.0, edgePx.y) *
                      smoothstep(0.0, 30.0, edgeFar.x) *

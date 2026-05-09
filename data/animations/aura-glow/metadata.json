@@ -8,7 +8,7 @@
     "fragmentShader": "effect.frag",
     "parameters": [
         {
-            "id": "speed",
+            "id": "glowSpeed",
             "name": "Hue Speed",
             "type": "float",
             "default": 2.5,
@@ -16,7 +16,7 @@
             "max": 10.0
         },
         {
-            "id": "randomColor",
+            "id": "randomColorFlag",
             "name": "Random Color",
             "type": "bool",
             "default": false
@@ -38,7 +38,7 @@
             "max": 1.0
         },
         {
-            "id": "blur",
+            "id": "blurAmount",
             "name": "Blur Amount",
             "type": "float",
             "default": 15.0,

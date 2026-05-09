@@ -113,7 +113,13 @@ vec2 getRain(vec2 fragCoord, float legProgress) {
     // undefined / NaN in GLSL; defence in depth against a metadata
     // bypass that pushes letterSize to zero.
     float ls = max(letterSize, 1.0);
-    float column = fragCoord.x * iResolution.x;
+    // Floor iResolution so a first-frame zero-sized surface doesn't
+    // collapse `column` to zero across every fragment — that would
+    // synchronize every visible drop to one column for that paint.
+    // The sibling helpers (`getText`, `edgeMask`) already use this
+    // pattern; do the same here for consistency.
+    vec2 res = max(iResolution, vec2(1.0));
+    float column = fragCoord.x * res.x;
     column -= mod(column, ls);
 
     // Clamp randomness as defence in depth — metadata declares [0,1]
@@ -139,7 +145,7 @@ vec2 getRain(vec2 fragCoord, float legProgress) {
     // Window-fadeout sweep: 1 ahead of the rain head (window still
     // visible), 0 behind (window has been wiped). BMW's natural
     // `windowAlpha` for a CLOSE leg.
-    float windowSweep = 1.0 - clamp(iResolution.y * distToDrop, 0.0, FADE_WIDTH) / FADE_WIDTH;
+    float windowSweep = 1.0 - clamp(res.y * distToDrop, 0.0, FADE_WIDTH) / FADE_WIDTH;
 
     rainAlpha *= edgeMask(EDGE_FADE);
 

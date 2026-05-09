@@ -30,7 +30,7 @@
             "max": 1.0
         },
         {
-            "id": "scale",
+            "id": "tileScale",
             "name": "Tile Scale",
             "type": "float",
             "default": 1.5,

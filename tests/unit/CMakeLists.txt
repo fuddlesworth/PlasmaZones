@@ -401,6 +401,18 @@ target_link_libraries(test_animation_shader_bake PRIVATE Qt6::Test Qt6::Core Qt6
 target_compile_definitions(test_animation_shader_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_bake COMMAND test_animation_shader_bake)
 
+# Cross-checks that every animation shader's `#define <paramId>
+# customParams[N].xyzw` (or customColors[N]) line agrees with the
+# allocation order an in-order walk of metadata.json's `parameters[]`
+# array would produce — i.e. the same allocation rule
+# AnimationShaderRegistry::translateAnimationParams uses at runtime.
+# Catches author-side wiring drift at CI time so a misordered pack
+# can't ship and silently deliver wrong values.
+add_executable(test_animation_shader_param_wiring ui/test_animation_shader_param_wiring.cpp)
+target_link_libraries(test_animation_shader_param_wiring PRIVATE Qt6::Test Qt6::Core)
+target_compile_definitions(test_animation_shader_param_wiring PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_animation_shader_param_wiring COMMAND test_animation_shader_param_wiring)
+
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently
 # drift from the GLSL wallpaperUv helper it mirrors.
