@@ -10,10 +10,9 @@ import org.kde.kirigami as Kirigami
  * @brief Reusable parameter editor for a shader.
  *
  * Wraps the Lock-all / Randomize toolbar plus the flat-or-grouped row
- * rendering that previously lived inline in the editor's
- * `ShaderSettingsDialog`. The animation settings consumes it without the
- * toolbar (`enableLocking: false`, `enableRandomize: false`) and without
- * accordion groups (`enableGroups: false`).
+ * rendering. Both the editor's `ShaderSettingsDialog` and the settings
+ * app's `AnimationEventCard` consume it; each toggles the affordances
+ * it wants via the `enable*` flags below.
  *
  * The component is fully props-and-signals — it does not own state.
  * The host:
@@ -24,6 +23,12 @@ import org.kde.kirigami as Kirigami
  *   - listens for `requestColorPicker` / `requestImagePicker` and opens
  *     the platform dialog at the parent level (image dialogs in
  *     particular need to outlive their delegate row)
+ *
+ * Three pure helpers (`lockedAfterToggle`, `lockedAfterAllToggle`,
+ * `computeRandomized`) compute new maps from the component's current
+ * props for hosts that wire the lock + randomize toolbar — both
+ * consumers route their handler bodies through them so the transforms
+ * live in one place.
  *
  * Accordion behavior: when `enableGroups: true` and the parameter list
  * declares any `group` field, rows are split into ShaderParameterSection
@@ -189,7 +194,15 @@ ColumnLayout {
                 continue;
 
             if ((root.lockedParams && root.lockedParams[param.id] === true) || param.type === "image") {
-                next[param.id] = (root.currentValues && root.currentValues[param.id] !== undefined) ? root.currentValues[param.id] : param.default;
+                // Mirror the switch-path's undefined guard below — a
+                // schema with a missing `default` and a currentValues
+                // map missing this id would otherwise write
+                // `undefined` into the result, and a downstream
+                // `setShaderOverride` would persist a malformed entry.
+                var preserved = (root.currentValues && root.currentValues[param.id] !== undefined) ? root.currentValues[param.id] : param.default;
+                if (preserved !== undefined)
+                    next[param.id] = preserved;
+
                 continue;
             }
             var value;
