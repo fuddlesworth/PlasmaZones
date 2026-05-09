@@ -291,7 +291,15 @@ ComboBox {
         // checkmarks). `_owned` is the union of every dynamically-created
         // child, kind-tagged so markDirty() / selectShader can dispatch
         // explicitly instead of inferring child kind from runtime
-        // properties. Each entry: `{ obj, kind: "item" | "separator" | "submenu" }`.
+        // properties. Each entry: `{ obj, owner, kind }` where `owner`
+        // is the Menu the child was added to. `Menu.addMenu(submenu)`
+        // reparents the submenu QML object to an auto-created MenuItem
+        // placeholder, so `entry.obj.parent` points at the placeholder,
+        // NOT the containing menu — reading it as the detach target
+        // fails the `typeof owner.removeMenu === "function"` test, the
+        // submenu stays attached, and a subsequent rebuild appends
+        // duplicate entries. Tracking the owner at insertion time
+        // avoids the parent-pointer ambiguity entirely.
         property var _allItems: []
         property var _owned: []
         property bool _built: false
@@ -305,14 +313,13 @@ ComboBox {
             // future QML imports that introduce other types with `addMenu`.
             for (var i = _owned.length - 1; i >= 0; --i) {
                 var entry = _owned[i];
-                if (!entry || !entry.obj)
+                if (!entry || !entry.obj || !entry.owner)
                     continue;
 
-                var owner = entry.obj.parent;
-                if (entry.kind === "submenu" && owner && typeof owner.removeMenu === "function")
-                    owner.removeMenu(entry.obj);
-                else if (owner && typeof owner.removeItem === "function")
-                    owner.removeItem(entry.obj);
+                if (entry.kind === "submenu" && typeof entry.owner.removeMenu === "function")
+                    entry.owner.removeMenu(entry.obj);
+                else if (typeof entry.owner.removeItem === "function")
+                    entry.owner.removeItem(entry.obj);
                 entry.obj.destroy();
             }
             _owned = [];
@@ -357,14 +364,19 @@ ComboBox {
         }
 
         // Helpers — every dynamically-created child is tracked in `_owned`
-        // with an explicit `kind` tag so markDirty() can dispatch the
-        // correct detach call (removeItem vs removeMenu).
+        // with the owning Menu and a `kind` tag so markDirty() can
+        // dispatch the right detach call (removeItem vs removeMenu) on
+        // the right target. Storing the owner here, rather than reading
+        // it back from `child.parent` later, avoids the
+        // `Menu.addMenu` reparent-to-placeholder ambiguity that was
+        // letting old submenus persist across markDirty.
         function _addItem(menu, props) {
             var item = shaderMenuItemComponent.createObject(menu, props);
             menu.addItem(item);
             _allItems.push(item);
             _owned.push({
                 "obj": item,
+                "owner": menu,
                 "kind": "item"
             });
             return item;
@@ -375,6 +387,7 @@ ComboBox {
             menu.addMenu(sub);
             _owned.push({
                 "obj": sub,
+                "owner": menu,
                 "kind": "submenu"
             });
             return sub;
@@ -385,6 +398,7 @@ ComboBox {
             menu.addItem(sep);
             _owned.push({
                 "obj": sep,
+                "owner": menu,
                 "kind": "separator"
             });
             return sep;
