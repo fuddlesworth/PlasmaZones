@@ -81,12 +81,14 @@ public:
         return m_shaderProfileTree;
     }
 
-    // No public accessor for `m_animationAppRules` — every caller
-    // (`tryBeginShaderForEvent`, `applySnapGeometry`,
-    // `loadAnimationAppRulesFromDbus`) is in `PlasmaZonesEffect` which
-    // is `friend`-declared below; adding an accessor would advertise
-    // the field as part of the public surface without any consumer
-    // benefiting from it.
+    PhosphorAnimationShaders::AnimationAppRuleList& appRules()
+    {
+        return m_animationAppRules;
+    }
+    const PhosphorAnimationShaders::AnimationAppRuleList& appRules() const
+    {
+        return m_animationAppRules;
+    }
 
     // NOTE: Shader transition methods (beginShaderTransition, endShaderTransition,
     // tryBeginShaderForEvent, loadShaderRegistryFromDbus, loadShaderProfileFromDbus,

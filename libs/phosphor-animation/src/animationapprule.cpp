@@ -59,7 +59,7 @@ bool AnimationAppRule::operator==(const AnimationAppRule& other) const noexcept
     case Kind::Timing:
         return curve == other.curve && durationMs == other.durationMs;
     }
-    return false;
+    Q_UNREACHABLE();
 }
 
 QJsonObject AnimationAppRule::toJson() const
@@ -238,17 +238,12 @@ AnimationAppRuleList AnimationAppRuleList::fromJson(const QJsonArray& arr)
             qCWarning(lcRules) << "Dropping rule with unknown kind:" << obj.value(QLatin1String(kKeyKind));
             continue;
         }
-        const auto rule = AnimationAppRule::fromJson(obj);
-        // Same validation as `append()`: refuse to load a rule that
-        // would be empty-pattern-matches-everything dangerous. A
-        // hand-edited config file with malformed entries silently
-        // drops them rather than activating a "match every window"
-        // behaviour the user didn't intend.
-        if (rule.classPattern.isEmpty() || rule.eventPath.isEmpty()) {
-            qCWarning(lcRules) << "Dropping malformed rule from JSON: classPattern or eventPath is empty";
-            continue;
-        }
-        list.m_rules.append(rule);
+        // Route through `append()` rather than re-implementing its
+        // empty-pattern / empty-eventPath gate inline — that way a
+        // future strengthening of `append()` validation (e.g. a
+        // dedup pass) automatically applies to the JSON load path.
+        // `append()` is a no-op (with warning) on rejected entries.
+        list.append(AnimationAppRule::fromJson(obj));
     }
     return list;
 }

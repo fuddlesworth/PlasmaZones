@@ -431,6 +431,17 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     if (!skipAnimation && !allowDuringDrag && m_windowAnimator->isEnabled()) {
         const QRectF targetFrame(geo);
 
+        // Bail before any work when the in-flight animation already
+        // targets this frame — saves both the moveResize signal
+        // emission AND the rule resolve on rapid retargets to the same
+        // zone. Pre-Pass-2 the moveResize ran first and was redundant
+        // here (kwin's moveResize is internally a no-op when geometry
+        // already matches, but still pays signal-dispatch cost on the
+        // hot path of rapid drag retargets).
+        if (m_windowAnimator->hasAnimation(window) && m_windowAnimator->isAnimatingToTarget(window, targetFrame)) {
+            return; // Already animating to this target
+        }
+
         // Apply final geometry immediately — client starts re-rendering at new size.
         // Do this before touching the animator so the controller's
         // downstream bounds / padding queries see the updated
@@ -438,13 +449,6 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         KWin::Window* kw = window->window();
         if (kw) {
             kw->moveResize(targetFrame);
-        }
-
-        // Bail before any cascade work when the in-flight animation
-        // already targets this frame — saves the rule resolve on rapid
-        // retargets to the same zone.
-        if (m_windowAnimator->hasAnimation(window) && m_windowAnimator->isAnimatingToTarget(window, targetFrame)) {
-            return; // Already animating to this target
         }
 
         // AnimationAppRule motion-cascade: a Timing rule for this

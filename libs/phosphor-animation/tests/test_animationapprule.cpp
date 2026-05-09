@@ -371,12 +371,16 @@ private Q_SLOTS:
         QCOMPARE(list.size(), 0);
     }
 
-    void testListJson_missingKindDefaultsToShader()
+    void testListJson_missingKindIsDropped()
     {
-        // A `kind` field that's entirely absent (older JSON without
-        // the discriminator) defaults to Shader so pre-discriminator
-        // payloads remain loadable. Distinct from "engaged-but-unknown"
-        // which is dropped above.
+        // A `kind` field that's entirely absent (e.g. pre-discriminator
+        // JSON that no shipped daemon ever emits) is dropped at the
+        // list-level loader along with engaged-but-unknown values.
+        // `kindFromString("")` returns nullopt, the strict whitelist
+        // rejects, and the rule is omitted — consistent with the
+        // unknown-kind drop above. Pre-discriminator JSON is not a
+        // documented input shape; this test pins the strict-validate
+        // behaviour.
         QJsonArray arr;
         arr.append(QJsonObject{
             {QStringLiteral("classPattern"), QStringLiteral("foo")},
@@ -385,10 +389,6 @@ private Q_SLOTS:
         });
         const auto list = AnimationAppRuleList::fromJson(arr);
         QCOMPARE(list.size(), 0);
-        // `fromJson` rejects entries with `kindFromString` returning
-        // nullopt — an absent string also fails the whitelist, so this
-        // entry is dropped. Pre-discriminator JSON is not a documented
-        // input shape; this test pins the strict-validate behaviour.
     }
 };
 

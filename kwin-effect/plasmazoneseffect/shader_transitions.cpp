@@ -1137,14 +1137,18 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
                                                bool reverse, bool holdCloseGrab)
 {
     if (!window || durationMs <= 0) {
-        // `durationMs <= 0` is the global "no animations" sentinel
-        // (the user has set `Settings::animationDuration` to 0 or
-        // animations are globally disabled). A Timing AnimationAppRule
-        // cannot rescue this — by-design: if the user globally
-        // disables animations, no per-window-class rule should
-        // re-enable them. A null window pointer is a defensive guard
-        // against the kwin-effect being called outside of a window
-        // event.
+        // Defensive guard. The current call sites all pass
+        // `animationDurationMs()` which the daemon-bringup loader
+        // clamps to `[MinAnimationDurationMs, MaxAnimationDurationMs]`
+        // = [50, 2000], so 0 cannot reach this code through normal
+        // flow. The authoritative no-animations gate is
+        // `m_windowAnimator->isEnabled()` checked just below — that
+        // covers the user-toggled case. This guard exists to fail
+        // closed if a future programmatic call site bypasses the
+        // clamp; a Timing AnimationAppRule intentionally cannot
+        // rescue a 0/negative duration since the value is treated as
+        // "caller didn't supply one" rather than the "inherit
+        // per-event default" sentinel that the rule layer recognises.
         return;
     }
     // Fast-path early-out on the global animations toggle. The

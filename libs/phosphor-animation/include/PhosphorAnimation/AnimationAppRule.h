@@ -102,6 +102,17 @@ struct PHOSPHORANIMATION_EXPORT AnimationAppRule
     }
 
     QJsonObject toJson() const;
+
+    /// Lenient rule-level loader. Unknown / missing `kind` strings
+    /// default to `Kind::Shader` so the value type can round-trip
+    /// through any `QJsonObject` form without optional plumbing.
+    /// Callers loading USER DATA from JSON should prefer
+    /// `AnimationAppRuleList::fromJson` — that loader applies a
+    /// strict whitelist on the kind string AND drops empty-pattern
+    /// rules, both of which are silently accepted here. Direct
+    /// callers that bypass the list (tests, ad-hoc round-trips) get
+    /// the lenient shape; anything that lands in `Settings` rides
+    /// through the list-level loader.
     static AnimationAppRule fromJson(const QJsonObject& obj);
 };
 

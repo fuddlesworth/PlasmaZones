@@ -61,17 +61,19 @@ SettingsFlickable {
     /// title-casing camelCase segments. The controller stays language-
     /// neutral (its callers cross daemon / settings boundaries); the
     /// translation hook lives here so the user sees localised labels.
-    /// Keys mirror `PhosphorAnimation::ProfilePaths::Window*`.
+    /// Keys mirror `PhosphorAnimation::ProfilePaths::Window*` —
+    /// keep in sync with that header so a new event path picks up a
+    /// localised label instead of falling through to the raw English
+    /// fallback (visible but not translated).
     readonly property var _eventTranslations: ({
         "window": i18nc("window-event category, used as inheritance anchor", "Window"),
         "window.open": i18nc("window-event verb", "Open"),
         "window.close": i18nc("window-event verb", "Close"),
-        "window.move": i18nc("window-event verb", "Move"),
-        "window.maximize": i18nc("window-event verb", "Maximize"),
         "window.minimize": i18nc("window-event verb", "Minimize"),
-        "window.focus": i18nc("window-event verb", "Focus"),
-        "window.snapIn": i18nc("window-event verb, snap into a zone", "Snap In"),
-        "window.snapOut": i18nc("window-event verb, leave a zone", "Snap Out")
+        "window.maximize": i18nc("window-event verb", "Maximize"),
+        "window.move": i18nc("window-event verb", "Move"),
+        "window.resize": i18nc("window-event verb", "Resize"),
+        "window.focus": i18nc("window-event verb", "Focus")
     })
 
     function _kindLabel(kind) {
@@ -86,13 +88,17 @@ SettingsFlickable {
         // raw English (or the path itself) if the path is not in our
         // translation table — that way a future ProfilePaths addition
         // shows up readable instead of breaking the row entirely.
-        var translated = _eventTranslations[eventPath];
+        // Use `root.` prefixes throughout so QML's binding-dependency
+        // tracker registers reads against the page's properties (bare
+        // identifiers can resolve through enclosing scopes and miss
+        // re-evaluation when the property changes).
+        var translated = root._eventTranslations[eventPath];
         if (translated)
             return translated;
 
-        for (var i = 0; i < eventsList.length; ++i) {
-            if (eventsList[i].path === eventPath)
-                return eventsList[i].label;
+        for (var i = 0; i < root.eventsList.length; ++i) {
+            if (root.eventsList[i].path === eventPath)
+                return root.eventsList[i].label;
 
         }
         return eventPath;
@@ -102,9 +108,9 @@ SettingsFlickable {
         if (!effectId)
             return i18n("(no shader)");
 
-        for (var i = 0; i < shadersList.length; ++i) {
-            if (shadersList[i].id === effectId)
-                return shadersList[i].name;
+        for (var i = 0; i < root.shadersList.length; ++i) {
+            if (root.shadersList[i].id === effectId)
+                return root.shadersList[i].name;
 
         }
         return effectId;

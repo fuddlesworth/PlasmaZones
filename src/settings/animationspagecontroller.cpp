@@ -1209,7 +1209,15 @@ bool AnimationsPageController::moveAppRule(int from, int to)
         qCWarning(lcConfig) << "moveAppRule: out-of-range from=" << from << "to=" << to << "size=" << rules.size();
         return false;
     }
+    // Snapshot + compare so two adjacent identical rules (or any
+    // permutation that yields the same sequence) doesn't flip the
+    // dirty bit and enable the Save button on a non-change. Same
+    // dirty-check pattern as `setAppRule` and `setShaderOverride`.
+    const auto previous = rules.entries();
     rules.move(from, to);
+    if (rules.entries() == previous) {
+        return true;
+    }
     m_settings->setAnimationAppRules(rules);
     m_appRulesDirty = true;
     Q_EMIT pendingChangesChanged();

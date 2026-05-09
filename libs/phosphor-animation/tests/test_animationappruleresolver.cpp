@@ -390,5 +390,8 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestAnimationAppRuleResolver)
+// Resolver tests are pure data — no GUI, no Quick. `QTEST_GUILESS_MAIN`
+// avoids loading the QPA plugin entirely (lighter than `QTEST_MAIN`)
+// and matches the sibling `test_animationapprule.cpp`.
+QTEST_GUILESS_MAIN(TestAnimationAppRuleResolver)
 #include "test_animationappruleresolver.moc"

@@ -290,24 +290,33 @@ private Q_SLOTS:
             makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
         // Mirror the add-side rejection coverage — empty pattern, empty
         // event, and unknown kind all rejected at the controller boundary;
-        // the original entry must survive each rejected replacement.
+        // the original entry must survive each rejected replacement, AND
+        // the list size must stay at 1 (a regression that silently grew
+        // or shrank the list on rejection wouldn't be caught by the
+        // classPattern check alone).
         QVERIFY(
             !c.setAppRule(0, makeShaderRuleMap(QString(), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
+        QCOMPARE(c.appRules().size(), 1);
         QVERIFY(!c.setAppRule(0, makeShaderRuleMap(QStringLiteral("firefox"), QString(), QStringLiteral("dissolve"))));
+        QCOMPARE(c.appRules().size(), 1);
         QVariantMap unknownKindMap;
         unknownKindMap.insert(QStringLiteral("classPattern"), QStringLiteral("firefox"));
         unknownKindMap.insert(QStringLiteral("eventPath"), QStringLiteral("window.open"));
         unknownKindMap.insert(QStringLiteral("kind"), QStringLiteral("not-a-kind"));
         QVERIFY(!c.setAppRule(0, unknownKindMap));
+        QCOMPARE(c.appRules().size(), 1);
         QCOMPARE(c.appRules().first().toMap().value(QStringLiteral("classPattern")).toString(),
                  QStringLiteral("firefox"));
     }
 
-    void setAppRule_unknownEventPath_isRejected()
+    void appRule_unknownEventPath_isRejected()
     {
         // The page-level event combo only offers valid paths, but
         // a programmatic Q_INVOKABLE caller can persist a stale-across-
         // releases path that silently never matches at resolve time.
+        // Both add and set go through the same `appRuleFromVariantMap`
+        // gate, so verify both reject — a regression on either path
+        // would be a real user-data corruption mode.
         IsolatedConfigGuard guard;
         Settings settings;
         AnimationsPageController c(nullptr, &settings);
@@ -315,6 +324,14 @@ private Q_SLOTS:
         QVERIFY(!c.addAppRule(makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.notARealEvent"),
                                                 QStringLiteral("dissolve"))));
         QCOMPARE(c.appRules(), QVariantList{});
+
+        QVERIFY(c.addAppRule(
+            makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
+        QVERIFY(!c.setAppRule(0,
+                              makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.notARealEvent"),
+                                                QStringLiteral("dissolve"))));
+        QCOMPARE(c.appRules().first().toMap().value(QStringLiteral("eventPath")).toString(),
+                 QStringLiteral("window.open"));
     }
 
     void setAppRule_noOp_doesNotEmitPendingChanges()
@@ -366,9 +383,21 @@ private Q_SLOTS:
 
     void animationAppRuleEvents_surfacesOnlyWindowConcreteEvents()
     {
+        // Wrap with the guard for file-wide convention symmetry — even
+        // though this test never touches Settings, a future change
+        // adding any I/O would silently pollute the user's real config
+        // without it.
+        IsolatedConfigGuard guard;
         AnimationsPageController c;
         const auto events = c.animationAppRuleEvents();
-        QVERIFY(!events.isEmpty());
+        // Lower-bound count check: the canonical Window* set is
+        // open/close/minimize/maximize/move/resize/focus = 7 entries.
+        // A future taxonomy refactor that accidentally drops some
+        // would still satisfy `!isEmpty()`; the count gate catches it.
+        QVERIFY2(
+            events.size() >= 7,
+            qPrintable(QStringLiteral("expected at least 7 window events, got ") + QString::number(events.size())));
+        bool sawWindowOpen = false;
         for (const QVariant& entry : events) {
             const QVariantMap m = entry.toMap();
             const QString path = m.value(QStringLiteral("path")).toString();
@@ -378,7 +407,13 @@ private Q_SLOTS:
             QVERIFY2(path.startsWith(QLatin1String("window.")),
                      qPrintable(QStringLiteral("non-window-leaf path: ") + path));
             QVERIFY(!m.value(QStringLiteral("label")).toString().isEmpty());
+            if (path == QLatin1String("window.open")) {
+                sawWindowOpen = true;
+            }
         }
+        // Pin the canonical event by name so a regression that swaps
+        // the entire taxonomy underneath us still trips the test.
+        QVERIFY2(sawWindowOpen, "window.open MUST be in the rule-event surface");
     }
 };
 
