@@ -66,6 +66,7 @@ Item {
 
         Row {
             anchors.centerIn: parent
+            height: parent.height
             spacing: 12
 
             Rectangle {
@@ -159,6 +160,7 @@ Item {
 
         Row {
             anchors.centerIn: parent
+            height: parent.height
             spacing: 14
 
             Row {
