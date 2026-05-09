@@ -59,7 +59,7 @@ Item {
         // GPU frosted glass background
         ShaderBackground {
             anchors.fill: parent
-            shaderSource: Qt.resolvedUrl("../../data/shell-shaders/frosted_glass.frag")
+            shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
             shaderParams: { "tintOpacity": 0.75, "noiseAmount": 0.025, "noiseScale": 45.0, "animSpeed": 0.2 }
             customColor1: "#1e1e2e"
         }
@@ -134,7 +134,7 @@ Item {
         // Animated gradient background
         ShaderBackground {
             anchors.fill: parent
-            shaderSource: Qt.resolvedUrl("../../data/shell-shaders/gradient.frag")
+            shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
             shaderParams: { "speed": 0.3 }
             customColor1: "#1e1e2e"
             customColor2: "#2e1e2e"
@@ -169,7 +169,7 @@ Item {
         // GPU frosted glass background
         ShaderBackground {
             anchors.fill: parent
-            shaderSource: Qt.resolvedUrl("../../data/shell-shaders/frosted_glass.frag")
+            shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
             shaderParams: { "tintOpacity": 0.75, "noiseAmount": 0.02, "noiseScale": 50.0, "animSpeed": 0.15 }
             customColor1: "#1e1e2e"
         }

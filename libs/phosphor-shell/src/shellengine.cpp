@@ -76,11 +76,12 @@ bool ShellEngine::load(const QUrl& shellUrl)
     qmlRegisterType<Process>("Phosphor.Shell", 1, 0, "Process");
     qmlRegisterType<FileView>("Phosphor.Shell", 1, 0, "FileView");
     qmlRegisterType<PersistentProperties>("Phosphor.Shell", 1, 0, "PersistentProperties");
-    qmlRegisterType<Environment>("Phosphor.Shell", 1, 0, "Environment");
     qmlRegisterType<PhosphorRendering::ShaderEffect>("Phosphor.Shell", 1, 0, "ShaderBackground");
 
     m_engine = std::make_unique<QQmlEngine>(this);
     m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
+    m_engine->rootContext()->setContextProperty(QStringLiteral("Environment"),
+                                                new Environment(m_engine.get()));
 
     QQmlComponent component(m_engine.get(), shellUrl, QQmlComponent::PreferSynchronous);
     if (component.isError()) {
