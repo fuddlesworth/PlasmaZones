@@ -207,27 +207,11 @@ Kirigami.Dialog {
     }
 
     function setParamLocked(paramId, locked) {
-        var next = Object.assign({
-        }, lockedParams || {
-        });
-        if (locked)
-            next[paramId] = true;
-        else
-            delete next[paramId];
-        lockedParams = next;
+        lockedParams = paramEditor.lockedAfterToggle(paramId, locked);
     }
 
     function toggleAllLocks(locked) {
-        var copy = {
-        };
-        if (locked && shaderParams) {
-            for (var i = 0; i < shaderParams.length; i++) {
-                if (shaderParams[i] && shaderParams[i].id !== undefined)
-                    copy[shaderParams[i].id] = true;
-
-            }
-        }
-        lockedParams = copy;
+        lockedParams = paramEditor.lockedAfterAllToggle(locked);
     }
 
     function applyChanges() {
@@ -264,57 +248,7 @@ Kirigami.Dialog {
         if (!editorController || shaderParams.length === 0)
             return ;
 
-        var randomized = {
-        };
-        for (var i = 0; i < shaderParams.length; i++) {
-            var param = shaderParams[i];
-            if (!param || param.id === undefined)
-                continue;
-
-            // Skip locked parameters — preserve their current value.
-            if (lockedParams && lockedParams[param.id] === true) {
-                randomized[param.id] = (pendingParams && pendingParams[param.id] !== undefined) ? pendingParams[param.id] : param.default;
-                continue;
-            }
-            var value;
-            switch (param.type) {
-            case "float":
-                var minF = param.min !== undefined ? param.min : 0;
-                var maxF = param.max !== undefined ? param.max : 1;
-                value = minF + Math.random() * (maxF - minF);
-                if (param.step !== undefined && param.step > 0)
-                    value = Math.round(value / param.step) * param.step;
-
-                break;
-            case "int":
-                var minI = param.min !== undefined ? param.min : 0;
-                var maxI = param.max !== undefined ? param.max : 100;
-                value = Math.floor(minI + Math.random() * (maxI - minI + 1));
-                break;
-            case "bool":
-                value = Math.random() < 0.5;
-                break;
-            case "color":
-                var r = Math.floor(Math.random() * 256);
-                var g = Math.floor(Math.random() * 256);
-                var b = Math.floor(Math.random() * 256);
-                value = "#" + r.toString(16).padStart(2, "0") + g.toString(16).padStart(2, "0") + b.toString(16).padStart(2, "0");
-                break;
-            case "image":
-                // Preserve the current path for image params — randomizing a
-                // file path would just erase the user's pick. Same fallback
-                // chain as the lock-skip branch above.
-                value = (pendingParams && pendingParams[param.id] !== undefined) ? pendingParams[param.id] : param.default;
-                break;
-            default:
-                value = param.default;
-                break;
-            }
-            if (value !== undefined)
-                randomized[param.id] = value;
-
-        }
-        pendingParams = randomized;
+        pendingParams = paramEditor.computeRandomized();
     }
 
     function extractDefaults(params) {
@@ -602,6 +536,8 @@ Kirigami.Dialog {
 
             // ── Parameters editor (toolbar + flat/grouped rows) ───────
             PZCommon.ShaderParameterEditor {
+                id: paramEditor
+
                 Layout.fillWidth: true
                 visible: root.hasShaderEffect
                 parameters: root.shaderParams

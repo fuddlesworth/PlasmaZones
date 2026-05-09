@@ -3,27 +3,23 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 /**
- * Zone overlay window that displays zones during window drag
- * Uses specific window flags for Wayland overlay support
+ * Zone overlay content body — Item version of the legacy ZoneOverlay.qml,
+ * hosted inside the unified PassiveOverlayShell's mainOverlay slot when
+ * the screen is using the rectangle-based (non-shader) overlay path.
  */
-Window {
-    // zonePadding isn't used for zone positioning. Zones render at exact snap geometry.
-    // Visual spacing comes from layout.zoneSpacing in C++ GeometryUtils.
-
+Item {
     id: root
 
     property var zones: []
-    property string highlightedZoneId: "" // Use zone ID instead of index for stable selection (single zone)
-    property var highlightedZoneIds: [] // Array of zone IDs for multi-zone highlighting (set by C++ via QQmlProperty)
+    property string highlightedZoneId: ""
+    property var highlightedZoneIds: []
     property bool showNumbers: true
-    property var previewZones: [] // Full zone list with relative geometries for LayoutPreview mode
-    // Ricer-friendly appearance properties - using theme colors
+    property var previewZones: []
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
     property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
     property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
@@ -34,19 +30,10 @@ Window {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
-    property real activeOpacity: 0.5 // Match Settings default
-    property real inactiveOpacity: 0.3 // Match Settings default
-    property int borderWidth: Kirigami.Units.smallSpacing // 4px - increased for better visibility
-    property int borderRadius: Kirigami.Units.gridUnit // 8px - use theme spacing
-    // Idle state: drag-end leaves the QQuickWindow alive (avoids the
-    // NVIDIA vkDestroyDevice deadlock — see OverlayService::setIdleForDragPause)
-    // but we still need the overlay to visually disappear and stop
-    // absorbing pointer input until the next drag. Binding
-    // Qt.WindowTransparentForInput into `flags` gets Qt Wayland to call
-    // wl_surface.set_input_region with an empty region in-place, without
-    // destroying the surface. Toggling content.visible stops the scene
-    // graph from submitting new frames. C++ flips this via
-    // writeQmlProperty(window, "_idled", true/false).
+    property real activeOpacity: 0.5
+    property real inactiveOpacity: 0.3
+    property int borderWidth: Kirigami.Units.smallSpacing
+    property int borderRadius: Kirigami.Units.gridUnit
     property bool _idled: false
 
     function flash() {
@@ -91,20 +78,14 @@ Window {
         return false;
     }
 
-    // Window flags - QPA layer-shell plugin handles the overlay behavior on Wayland
-    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | (root._idled ? Qt.WindowTransparentForInput : 0)
-    color: "transparent"
-    // Start hidden; OverlayService controls visibility via show()/hide().
-    visible: false
+    anchors.fill: parent
 
-    // Main content item
     Item {
         id: content
 
         anchors.fill: parent
         visible: !root._idled
 
-        // Debug background to verify overlay is showing
         Rectangle {
             id: debugBg
 
@@ -112,7 +93,6 @@ Window {
             color: "transparent"
             visible: root.zones.length === 0
 
-            // Show a subtle indicator when no zones
             Text {
                 anchors.centerIn: parent
                 text: i18n("PlasmaZones Overlay Active\n(No zones defined)")
@@ -124,7 +104,6 @@ Window {
 
         }
 
-        // Zone repeater — conditionally renders ZoneItem (mode 0) or LayoutPreview thumbnail (mode 1)
         Repeater {
             model: root.zones
 
@@ -132,25 +111,19 @@ Window {
                 required property var modelData
                 required property int index
 
-                // Position at the zone's exact geometry regardless of display mode
                 x: modelData.x
                 y: modelData.y
                 width: modelData.width
                 height: modelData.height
-                // Switch component based on resolved overlayDisplayMode (0=Rectangles, 1=LayoutPreview)
                 sourceComponent: (modelData.overlayDisplayMode === 1) ? layoutPreviewComponent : zoneRectComponent
             }
 
         }
 
-        // ═══════════════════════════════════════════════════════════════════════
-        // Mode 0: Standard zone rectangle (current behavior)
-        // ═══════════════════════════════════════════════════════════════════════
         Component {
             id: zoneRectComponent
 
             ZoneItem {
-                // Access Loader's required properties (Loader is the parent)
                 property var modelData: parent ? parent.modelData : ({
                 })
                 property int zoneIndex: parent ? parent.index : 0
@@ -193,25 +166,19 @@ Window {
 
         }
 
-        // ═══════════════════════════════════════════════════════════════════════
-        // Mode 1: Layout preview thumbnail (kZones-style)
-        // ═══════════════════════════════════════════════════════════════════════
         Component {
             id: layoutPreviewComponent
 
             Item {
-                // Access Loader's required properties (Loader is the parent)
                 property var modelData: parent ? parent.modelData : ({
                 })
                 property int zoneIndex: parent ? parent.index : 0
 
                 anchors.fill: parent
 
-                // Centered preview thumbnail with themed card background
                 Item {
                     id: previewContainer
 
-                    // Size: 60% of zone width capped at 200px, height from aspect ratio
                     property real previewWidth: Math.min(parent.width * 0.6, 200)
                     property real screenAspect: (root.width > 0 && root.height > 0) ? (root.width / root.height) : (16 / 9)
                     property real previewHeight: previewWidth / screenAspect
@@ -220,7 +187,6 @@ Window {
                     width: previewWidth
                     height: previewHeight
 
-                    // Card background
                     Rectangle {
                         anchors.fill: parent
                         anchors.margins: -Kirigami.Units.smallSpacing
@@ -230,7 +196,6 @@ Window {
                         border.width: 1
                     }
 
-                    // Static ZonePreview — always shows this zone highlighted
                     QFZCommon.ZonePreview {
                         anchors.fill: parent
                         zones: root.previewZones
@@ -259,7 +224,6 @@ Window {
 
         }
 
-        // Flash animation when switching layouts
         Rectangle {
             id: flashOverlay
 
@@ -271,14 +235,6 @@ Window {
             SequentialAnimation {
                 id: flashAnimation
 
-                // Layout-switch flash. The path was historically "zone.flash"
-                // (a custom leaf outside the ProfilePaths taxonomy), which
-                // walk-up resolution from "zone" baseline still served, but it
-                // was invisible to the shader-tree wire-up because the daemon's
-                // ZoneLayoutSwitchIn ProfilePath never matched. Renamed to
-                // zone.layoutSwitchIn for taxonomy parity — the same flash
-                // animation now responds to the same path that drives the
-                // C++-side resnap shader on slotApplyGeometriesBatch.
                 PhosphorMotionAnimation {
                     target: flashOverlay
                     properties: "opacity"

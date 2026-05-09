@@ -10,7 +10,7 @@ import org.kde.kirigami as Kirigami
 // editor property panel). Slide is size/translate motion; fade is
 // opacity. Transient overlays (zone selector, layout picker, snap
 // assist) live under `popup.*` and have their own dedicated page.
-Flickable {
+SettingsFlickable {
     contentHeight: col.implicitHeight
     clip: true
     Accessible.name: i18n("Panel animation events")

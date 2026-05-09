@@ -45,11 +45,17 @@ public:
     static Result compileFromFile(const QString& path, const QStringList& includePaths);
 
     /// Load a shader file and expand #include directives without compiling.
-    /// @param path         Path to .frag or .vert file
-    /// @param includePaths Directories to search for #include directives
-    /// @param outError     If non-null, set on error
+    /// @param path             Path to .frag or .vert file
+    /// @param includePaths     Directories to search for #include directives
+    /// @param outError         If non-null, set on error
+    /// @param outIncludedPaths If non-null, appended with the canonical
+    ///                         absolute path of every transitively-included
+    ///                         header. Lets callers fingerprint includes
+    ///                         so cache-invalidation responds to header
+    ///                         edits, not just edits to the top-level file.
     /// @return Expanded GLSL source, or empty string on error
-    static QString loadAndExpand(const QString& path, const QStringList& includePaths, QString* outError = nullptr);
+    static QString loadAndExpand(const QString& path, const QStringList& includePaths, QString* outError = nullptr,
+                                 QStringList* outIncludedPaths = nullptr);
 
     /// Clear the in-memory compilation cache (e.g. on shader hot-reload).
     ///

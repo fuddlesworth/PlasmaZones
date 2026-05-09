@@ -8,36 +8,10 @@
     "fragmentShader": "effect.frag",
     "parameters": [
         {
-            "id": "flashR",
-            "name": "Flash Red",
-            "type": "float",
-            "default": 1.0,
-            "min": 0.0,
-            "max": 1.0
-        },
-        {
-            "id": "flashG",
-            "name": "Flash Green",
-            "type": "float",
-            "default": 1.0,
-            "min": 0.0,
-            "max": 1.0
-        },
-        {
-            "id": "flashB",
-            "name": "Flash Blue",
-            "type": "float",
-            "default": 1.0,
-            "min": 0.0,
-            "max": 1.0
-        },
-        {
-            "id": "flashAlpha",
-            "name": "Flash Alpha",
-            "type": "float",
-            "default": 1.0,
-            "min": 0.0,
-            "max": 1.0
+            "id": "flashColor",
+            "name": "Flash Color",
+            "type": "color",
+            "default": "#FFFFFFFF"
         }
     ]
 }

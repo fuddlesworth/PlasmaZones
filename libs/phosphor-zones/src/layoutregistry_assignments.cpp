@@ -24,12 +24,20 @@ namespace {
 // Returns the first non-nullopt result from the visitor, or std::nullopt if
 // no entry satisfied the visitor at any cascade level.
 //
-// Cascade order:
+// Cascade order — most specific first:
 //   1. Exact match (screenId, virtualDesktop, activity)
-//   2. Screen + desktop, any activity
-//   3. Screen only (desktop=0, activity="") — the "display default"
-//   4. Connector name fallback (recursive)
-//   5. Virtual screen fallback — inherit from physical screen ID (recursive)
+//   2. Screen + activity, any desktop — `setAllActivityAssignments` stores
+//      per-activity entries at (screen, 0, activity) so this is where
+//      "Settings → Snapping → Assignments → Activity" toggles end up. Sits
+//      above the desktop-keyed level so activity context wins when both
+//      assignment dimensions are configured (matches the KDE Activities
+//      semantics: an activity is a higher-level workspace context than a
+//      virtual desktop).
+//   3. Screen + desktop, any activity
+//   4. Screen only (desktop=0, activity="") — the "display default" /
+//      monitor assignment
+//   5. Connector name fallback (recursive)
+//   6. Virtual screen fallback — inherit from physical screen ID (recursive)
 template<typename Visitor>
 auto walkCascade(const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments, const QString& screenId,
                  int virtualDesktop, const QString& activity, Visitor&& visitor)
@@ -44,21 +52,37 @@ auto walkCascade(const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments,
             return r;
     }
 
-    // 2. Screen + desktop (any activity)
+    // 2. Screen + activity (any desktop). Activity entries are persisted
+    // by `setAllActivityAssignments` at virtualDesktop=0 regardless of
+    // which desktop happened to be current at save time, so the lookup
+    // here pins desktop to 0 even when the caller passes a non-zero
+    // desktop. Without this level, every per-activity assignment was
+    // dead-letter — written but never read — and the cascade fell
+    // straight to the monitor default below, masking the user's
+    // activity choice (discussion #413).
+    if (!activity.isEmpty()) {
+        LayoutAssignmentKey activityKey{screenId, 0, activity};
+        if (auto it = assignments.constFind(activityKey); it != assignments.constEnd()) {
+            if (auto r = visitor(it.value()))
+                return r;
+        }
+    }
+
+    // 3. Screen + desktop (any activity)
     LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
     if (auto it = assignments.constFind(desktopKey); it != assignments.constEnd()) {
         if (auto r = visitor(it.value()))
             return r;
     }
 
-    // 3. Screen only (any desktop, any activity) — the "display default"
+    // 4. Screen only (any desktop, any activity) — the "display default"
     LayoutAssignmentKey screenKey{screenId, 0, QString()};
     if (auto it = assignments.constFind(screenKey); it != assignments.constEnd()) {
         if (auto r = visitor(it.value()))
             return r;
     }
 
-    // 4. Connector name fallback: if screenId looks like a connector name (no colons),
+    // 5. Connector name fallback: if screenId looks like a connector name (no colons),
     // try resolving to a screen ID and looking up again.
     if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)) {
         QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenId);
@@ -67,7 +91,7 @@ auto walkCascade(const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments,
         }
     }
 
-    // 5. Virtual screen fallback: try physical screen ID if this is a virtual screen.
+    // 6. Virtual screen fallback: try physical screen ID if this is a virtual screen.
     // This lets virtual screens inherit the physical screen's snapping layout assignment
     // when no per-virtual-screen assignment exists.
     //

@@ -53,7 +53,7 @@ const QString PopupLayoutPickerShow = QStringLiteral("popup.layoutPicker.show");
 const QString PopupLayoutPickerHide = QStringLiteral("popup.layoutPicker.hide");
 const QString PopupSnapAssist = QStringLiteral("popup.snapAssist");
 const QString PopupSnapAssistShow = QStringLiteral("popup.snapAssist.show");
-// `popup.snapAssist.hide` intentionally undeclared — see ProfilePaths.h.
+const QString PopupSnapAssistHide = QStringLiteral("popup.snapAssist.hide");
 
 // panel.*
 const QString Panel = QStringLiteral("panel");

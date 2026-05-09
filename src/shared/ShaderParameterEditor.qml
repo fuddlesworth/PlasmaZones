@@ -10,10 +10,9 @@ import org.kde.kirigami as Kirigami
  * @brief Reusable parameter editor for a shader.
  *
  * Wraps the Lock-all / Randomize toolbar plus the flat-or-grouped row
- * rendering that previously lived inline in the editor's
- * `ShaderSettingsDialog`. The animation settings consumes it without the
- * toolbar (`enableLocking: false`, `enableRandomize: false`) and without
- * accordion groups (`enableGroups: false`).
+ * rendering. Both the editor's `ShaderSettingsDialog` and the settings
+ * app's `AnimationEventCard` consume it; each toggles the affordances
+ * it wants via the `enable*` flags below.
  *
  * The component is fully props-and-signals — it does not own state.
  * The host:
@@ -24,6 +23,12 @@ import org.kde.kirigami as Kirigami
  *   - listens for `requestColorPicker` / `requestImagePicker` and opens
  *     the platform dialog at the parent level (image dialogs in
  *     particular need to outlive their delegate row)
+ *
+ * Three pure helpers (`lockedAfterToggle`, `lockedAfterAllToggle`,
+ * `computeRandomized`) compute new maps from the component's current
+ * props for hosts that wire the lock + randomize toolbar — both
+ * consumers route their handler bodies through them so the transforms
+ * live in one place.
  *
  * Accordion behavior: when `enableGroups: true` and the parameter list
  * declares any `group` field, rows are split into ShaderParameterSection
@@ -138,6 +143,102 @@ ColumnLayout {
     signal randomizeRequested()
     signal requestColorPicker(string paramId, string paramName, color current)
     signal requestImagePicker(string paramId)
+
+    // ── Pure helpers for the host's lock / randomize plumbing ───────
+    /// Toggle the lock for one parameter. Returns a new lockedParams
+    /// map; the host assigns it back into its own state property.
+    /// Lives here so the editor and settings card don't carry their
+    /// own copy of the same lookup-and-rewrite boilerplate.
+    function lockedAfterToggle(paramId, locked) {
+        var next = Object.assign({
+        }, root.lockedParams || {
+        });
+        if (locked)
+            next[paramId] = true;
+        else
+            delete next[paramId];
+        return next;
+    }
+
+    /// Lock-or-unlock-every-parameter map. Reads `parameters` from
+    /// the component instance.
+    function lockedAfterAllToggle(locked) {
+        var next = {
+        };
+        if (locked && root.parameters) {
+            for (var i = 0; i < root.parameters.length; i++) {
+                var p = root.parameters[i];
+                if (p && p.id !== undefined)
+                    next[p.id] = true;
+
+            }
+        }
+        return next;
+    }
+
+    /// Roll a fresh value for every unlocked parameter within its
+    /// metadata range. Locked entries and `image`-typed entries are
+    /// preserved verbatim from `currentValues` (or the param default
+    /// when missing). Returns a new full values map. Hosts can
+    /// either feed it back via `currentValues` (editor pattern) or
+    /// push it through their write-back API (settings pattern).
+    function computeRandomized() {
+        var next = {
+        };
+        if (!root.parameters)
+            return next;
+
+        for (var i = 0; i < root.parameters.length; i++) {
+            var param = root.parameters[i];
+            if (!param || param.id === undefined)
+                continue;
+
+            if ((root.lockedParams && root.lockedParams[param.id] === true) || param.type === "image") {
+                // Mirror the switch-path's undefined guard below — a
+                // schema with a missing `default` and a currentValues
+                // map missing this id would otherwise write
+                // `undefined` into the result, and a downstream
+                // `setShaderOverride` would persist a malformed entry.
+                var preserved = (root.currentValues && root.currentValues[param.id] !== undefined) ? root.currentValues[param.id] : param.default;
+                if (preserved !== undefined)
+                    next[param.id] = preserved;
+
+                continue;
+            }
+            var value;
+            switch (param.type) {
+            case "float":
+                var minF = param.min !== undefined ? param.min : 0;
+                var maxF = param.max !== undefined ? param.max : 1;
+                value = minF + Math.random() * (maxF - minF);
+                if (param.step !== undefined && param.step > 0)
+                    value = Math.round(value / param.step) * param.step;
+
+                break;
+            case "int":
+                var minI = param.min !== undefined ? param.min : 0;
+                var maxI = param.max !== undefined ? param.max : 100;
+                value = Math.floor(minI + Math.random() * (maxI - minI + 1));
+                break;
+            case "bool":
+                value = Math.random() < 0.5;
+                break;
+            case "color":
+                var r = Math.floor(Math.random() * 256);
+                var g = Math.floor(Math.random() * 256);
+                var b = Math.floor(Math.random() * 256);
+                value = "#" + r.toString(16).padStart(2, "0") + g.toString(16).padStart(2, "0") + b.toString(16).padStart(2, "0");
+                break;
+            default:
+                value = param.default;
+                break;
+            }
+            if (value !== undefined)
+                next[param.id] = value;
+
+        }
+        return next;
+    }
 
     spacing: Kirigami.Units.smallSpacing
 

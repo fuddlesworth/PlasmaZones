@@ -7,7 +7,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-Flickable {
+SettingsFlickable {
     id: root
 
     // Page-scoped bounds + color-import actions live on the sub-controller.

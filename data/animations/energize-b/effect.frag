@@ -40,11 +40,13 @@
 #include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define colorR        customParams[0].x
-#define colorG        customParams[0].y
-#define colorB        customParams[0].z
-#define particleScale customParams[0].w
+// metadata.json declaration order:
+//   color  → customColors[0]  (beamColor — only `.rgb` used; the effect
+//                              drives its own emission alpha from the
+//                              shower / streak / atom envelopes)
+//   float  → customParams[0]  (particleScale)
+#define beamColor     customColors[0]
+#define particleScale customParams[0].x
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -55,7 +57,7 @@ layout(location = 0) out vec4 fragColor;
 
 void main()
 {
-    vec3 effectColor = vec3(colorR, colorG, colorB);
+    vec3 effectColor = beamColor.rgb;
     float pScale     = max(particleScale, 0.05);
 
     vec2 uv = vTexCoord;
@@ -141,12 +143,16 @@ void main()
     // cells, very tall cells so vertical variation is minimal).
     // Output is smooth (not spike-shaped) for the gradient-stripe
     // feel; two octaves layered for fractal richness without being
-    // too busy.
-    const float STREAK_WIDTH_PX  = 15.0;
-    const float STREAK_HEIGHT_PX = 800.0;
+    // too busy. The streak height tracks the surface so a 4K-tall
+    // window covers roughly the same number of cells as a 1080p one
+    // and the "minimal vertical variation" comment above stays true
+    // regardless of surface size; a fixed 800 px would compress the
+    // noise vertically on tall surfaces and wash it out.
+    const float STREAK_WIDTH_PX = 15.0;
+    float streakHeightPx = max(iResolution.y, 1.0) * 0.8;
     vec2 streakUV = vec2(
         pixelUV.x / STREAK_WIDTH_PX,
-        pixelUV.y / STREAK_HEIGHT_PX
+        pixelUV.y / streakHeightPx
     );
     streakUV.y += iTime * 0.4;  // slight vertical drift so streaks evolve
     float ns1 = simplex2D(streakUV);
@@ -196,8 +202,19 @@ void main()
 
     // Sum all emissions additively over the window. Cap final alpha
     // so additive accumulation doesn't blow past 1.
-    vec3  totalEmitRgb = showerRgb + streakRgb + atomRgb;
+    //
+    // Every emission layer's RGB is `effectColor * <layer alpha>`, so
+    // the layer-rgb sum is `effectColor * (showerA + streakA + atomA)`.
+    // Computing it that way and clamping the *combined* alpha
+    // contribution lets the RGB stay tied to the final alpha cap —
+    // summing the per-layer rgb directly leaves rgb tracking the
+    // unclamped alpha sum, so when the alphas saturate at 1.0 the
+    // rgb keeps climbing past it. The result is fragColor.rgb >
+    // fragColor.a (broken pre-multiplied invariant), which lights up
+    // tinted backdrops as a halo — the same failure mode aura-glow
+    // had before the premultiply-at-output fix.
     float totalEmitA   = clamp(showerA + streakA + atomA, 0.0, 1.0);
+    vec3  totalEmitRgb = effectColor * totalEmitA;
 
     fragColor = vec4(
         sampled.rgb + totalEmitRgb,

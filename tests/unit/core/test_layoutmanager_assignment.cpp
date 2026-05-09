@@ -92,6 +92,68 @@ private Q_SLOTS:
         QCOMPARE(fallback->name(), QStringLiteral("Default"));
     }
 
+    // Per-activity assignments (stored at virtualDesktop=0 with a
+    // non-empty activity) must be reachable through the cascade and must
+    // win over the monitor-only default. Discussion #413 reported that
+    // toggling activity assignments did nothing — monitor assignments
+    // kept overriding them — because the cascade jumped from
+    // (screen, desktop, activity) straight to (screen, desktop, "") and
+    // (screen, 0, "") with no level matching the way activity entries
+    // are persisted by `setAllActivityAssignments` ((screen, 0, activity)).
+    void testLayoutManager_layoutForScreen_perActivityCascade()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* monitorLayout = createTestLayout(QStringLiteral("MonitorDefault"));
+        mgr->addLayout(monitorLayout);
+        auto* activityLayout = createTestLayout(QStringLiteral("WorkActivity"));
+        mgr->addLayout(activityLayout);
+
+        const QString screen = QStringLiteral("DP-1");
+        const QString workActivity = QStringLiteral("activity-work");
+        const QString playActivity = QStringLiteral("activity-play");
+
+        // Mirror the storage shape `setAllActivityAssignments` uses.
+        mgr->assignLayout(screen, 0, QString(), monitorLayout);
+        mgr->assignLayout(screen, 0, workActivity, activityLayout);
+
+        // In the work activity, on any desktop, activity entry wins.
+        QCOMPARE(mgr->layoutForScreen(screen, 1, workActivity)->name(), QStringLiteral("WorkActivity"));
+        QCOMPARE(mgr->layoutForScreen(screen, 5, workActivity)->name(), QStringLiteral("WorkActivity"));
+
+        // An activity without a per-activity entry falls through to the
+        // monitor default (level 4).
+        QCOMPARE(mgr->layoutForScreen(screen, 1, playActivity)->name(), QStringLiteral("MonitorDefault"));
+
+        // Empty activity (e.g. ActivityManager not initialised) skips
+        // the activity level and lands on the monitor default.
+        QCOMPARE(mgr->layoutForScreen(screen, 1, QString())->name(), QStringLiteral("MonitorDefault"));
+    }
+
+    // Per-activity entries must outrank per-desktop entries when both
+    // are present and the user is in a configured activity. Activities
+    // are a higher-level workspace context than virtual desktops in
+    // KDE Plasma, so the cascade picks activity first.
+    void testLayoutManager_layoutForScreen_activityWinsOverDesktop()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* desktopLayout = createTestLayout(QStringLiteral("DesktopTwo"));
+        mgr->addLayout(desktopLayout);
+        auto* activityLayout = createTestLayout(QStringLiteral("ActivityWork"));
+        mgr->addLayout(activityLayout);
+
+        const QString screen = QStringLiteral("DP-1");
+        const QString workActivity = QStringLiteral("activity-work");
+
+        mgr->assignLayout(screen, 2, QString(), desktopLayout);
+        mgr->assignLayout(screen, 0, workActivity, activityLayout);
+
+        QCOMPARE(mgr->layoutForScreen(screen, 2, workActivity)->name(), QStringLiteral("ActivityWork"));
+        // No activity → desktop entry applies.
+        QCOMPARE(mgr->layoutForScreen(screen, 2, QString())->name(), QStringLiteral("DesktopTwo"));
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // P2: Quick layout slots
     // ═══════════════════════════════════════════════════════════════════════════

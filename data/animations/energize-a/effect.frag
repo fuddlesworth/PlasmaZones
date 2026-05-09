@@ -41,11 +41,13 @@
 #include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define colorR        customParams[0].x
-#define colorG        customParams[0].y
-#define colorB        customParams[0].z
-#define particleScale customParams[0].w
+// metadata.json declaration order:
+//   color  → customColors[0]  (particleColor — only `.rgb` used; alpha
+//                              ignored, the effect drives its own emission
+//                              alpha from the particle envelopes below)
+//   float  → customParams[0]  (particleScale)
+#define particleColor customColors[0]
+#define particleScale customParams[0].x
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -58,7 +60,7 @@ layout(location = 0) out vec4 fragColor;
 
 void main()
 {
-    vec3 effectColor = vec3(colorR, colorG, colorB);
+    vec3 effectColor = particleColor.rgb;
     float pScale     = max(particleScale, 0.05);
 
     vec2 uv = vTexCoord;

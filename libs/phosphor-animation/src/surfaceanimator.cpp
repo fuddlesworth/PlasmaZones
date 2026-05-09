@@ -12,6 +12,7 @@
 
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/AnimationUniformExtension.h>
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 
@@ -27,6 +28,8 @@
 #include <QPointer>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QScreen>
+#include <QVector4D>
 #include <private/qquickhoverhandler_p.h>
 #include <private/qquickshadereffectsource_p.h>
 #include <private/qquicksinglepointhandler_p.h>
@@ -42,6 +45,22 @@ namespace PhosphorAnimationLayer {
 
 namespace {
 Q_LOGGING_CATEGORY(lcSurfaceAnimator, "phosphoranimationlayer.surfaceanimator")
+
+/// Pull the `AnimationUniformExtension` out of a shader item the
+/// SurfaceAnimator owns, returning nullptr if the shader item somehow
+/// has a different (or no) extension. Used by `syncShaderGeometryNow`
+/// to push iSurfaceScreenPos / iAnchorSize into the right extension
+/// instance — the per-leg attach installs the extension via
+/// `ShaderEffect::setUniformExtension`, so a `dynamic_pointer_cast`
+/// here pulls back the typed pointer for setter calls.
+inline PhosphorAnimation::AnimationUniformExtension* animExtensionFor(PhosphorRendering::ShaderEffect* shaderItem)
+{
+    if (!shaderItem) {
+        return nullptr;
+    }
+    return std::dynamic_pointer_cast<PhosphorAnimation::AnimationUniformExtension>(shaderItem->uniformExtension())
+        .get();
+}
 
 /// Driver tick interval. SteadyClock::refreshRate MUST agree so
 /// velocity-based curves (Spring) sample at the timer's cadence.
@@ -136,8 +155,29 @@ inline qreal sanitiseBoundsPadding(qreal requested)
 /// rendered with the previous leg's pad until the anchor next moves or
 /// resizes. Idempotent on identity (every setter no-ops when the value
 /// is unchanged), so the common no-hot-reload reuse path costs nothing.
+///
+/// `extent` selects where the shader item lives in the QML scene:
+///   - Anchor (default): item covers `anchor + 2 · pad · anchor`,
+///     positioned at anchor's scene rect minus pad. iResolution = FBO
+///     size. vTexCoord 0..1 maps the captured anchor texture 1:1 over
+///     the FBO. Existing fragment-only shaders use this. Vertex-shader
+///     effects that translate the quad (fly-in / slide) opt in to a
+///     `boundsPadding` value > 0 in their metadata — the resulting
+///     padded FBO gives them clip-space room to translate the rendered
+///     card off the anchor's natural bounds without escaping the FBO.
+///   - Parent: item fills the anchor's parent item (the QML scene root
+///     in the screen-sized OSD / popup configurations). iResolution =
+///     anchor pixel size — NOT the FBO. The shader's vertex stage is
+///     responsible for remapping the standard (-1..1) clip-space quad
+///     onto the card's region within the parent-sized FBO. Pre-revert
+///     this was used by fly-in to get screen-scale travel via the now-
+///     removed iSurfaceScreenPos / iAnchorSize uniforms; kept for any
+///     consumer that wants the parent-sized FBO without depending on
+///     those uniforms (they'd have to thread their own positioning via
+///     customParams).
 inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderEffect* shaderItem,
-                                  QQuickShaderEffectSource* shaderSource, qreal requestedPad)
+                                  QQuickShaderEffectSource* shaderSource, qreal requestedPad,
+                                  PhosphorAnimationShaders::AnimationShaderEffect::BoundsExtent extent)
 {
     if (!anchor || !shaderItem) {
         return;
@@ -150,17 +190,90 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
     const qreal pad = clampPaddingToParent(anchor, requestedPad);
     const qreal padW = w * pad;
     const qreal padH = h * pad;
-    shaderItem->setWidth(w + 2.0 * padW);
-    shaderItem->setHeight(h + 2.0 * padH);
-    shaderItem->setX(anchor->x() - padW);
-    shaderItem->setY(anchor->y() - padH);
-    shaderItem->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
+    if (extent == PhosphorAnimationShaders::AnimationShaderEffect::BoundsExtent::Parent) {
+        // Fill the anchor's parent item. The shader item is already
+        // parented to anchor->parentItem() (see attachShaderToAnchor),
+        // so (0, 0) puts the FBO origin at the parent's origin and the
+        // parent's full bounds become the rendering canvas. iResolution
+        // naturally tracks the FBO size — Qt's
+        // QQuickItem::geometryChange auto-resets it to the shader
+        // item's bounds on every geometry event, so we DO NOT try to
+        // override it to anchor size here; that override would silently
+        // get clobbered mid-leg.
+        // Parent-less anchors (rare — see the warning at attach time)
+        // fall through to the Anchor branch.
+        if (QQuickItem* parent = anchor->parentItem()) {
+            const qreal pw = parent->width();
+            const qreal ph = parent->height();
+            shaderItem->setX(0.0);
+            shaderItem->setY(0.0);
+            shaderItem->setWidth(pw);
+            shaderItem->setHeight(ph);
+        } else {
+            shaderItem->setWidth(w + 2.0 * padW);
+            shaderItem->setHeight(h + 2.0 * padH);
+            shaderItem->setX(anchor->x() - padW);
+            shaderItem->setY(anchor->y() - padH);
+            shaderItem->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
+        }
+    } else {
+        shaderItem->setWidth(w + 2.0 * padW);
+        shaderItem->setHeight(h + 2.0 * padH);
+        shaderItem->setX(anchor->x() - padW);
+        shaderItem->setY(anchor->y() - padH);
+        shaderItem->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
+    }
     QVector4D structural = shaderItem->customParamAt(7);
     structural.setX(static_cast<float>(pad));
     shaderItem->setCustomParamAt(7, structural);
     if (shaderSource) {
         shaderSource->setWidth(w);
         shaderSource->setHeight(h);
+    }
+    // iAnchorSize tracks the captured card's pixel size on every sync —
+    // independent of iResolution which Qt auto-resets to the shader
+    // item's bounds. Vertex shaders read this for the visible card's
+    // size in pixels regardless of boundsExtent.
+    if (auto* ext = animExtensionFor(shaderItem)) {
+        ext->setIAnchorSize(QSizeF(w, h));
+
+        // iSurfaceScreenPos describes where the card sits within its
+        // *playing field* and how big that field is. The "playing field"
+        // on the daemon path is the wl_surface (= the window's logical
+        // size = the anchor's parent for Parent-extent shaders): for a
+        // virtual-screen popup the wl_surface IS the VS rect, so a
+        // fly-in from "the nearest edge" naturally reads as flying in
+        // from the VS's edge — which is what the user sees.
+        //
+        // CRITICAL: do NOT add `window->position()` to the card's
+        // surface-local position. For a popup on a VS at screen offset
+        // (X, Y), `window->position()` reports the VS offset but the
+        // shader's FBO is the wl_surface (sized to the VS, NOT to the
+        // physical screen). Adding the offset would produce absolute-
+        // screen coords that overflow the FBO clip-space mapping —
+        // VS-1's centred card would land at clip-x = 2.0 and never
+        // render. xy MUST stay surface-local.
+        //
+        // Likewise zw is the wl_surface size, not the physical screen
+        // size, because the shader's clip-space (-1..1) maps to the
+        // FBO (= wl_surface) bounds. Closest-edge math computed against
+        // the surface size correctly fires the VS edges as the "screen
+        // edges" the user perceives.
+        if (QQuickItem* parent = anchor->parentItem()) {
+            const QPointF anchorScene = anchor->mapToScene(QPointF(0.0, 0.0));
+            const qreal fieldW = parent->width();
+            const qreal fieldH = parent->height();
+            ext->setISurfaceScreenPos(QVector4D(static_cast<float>(anchorScene.x()),
+                                                static_cast<float>(anchorScene.y()), static_cast<float>(fieldW),
+                                                static_cast<float>(fieldH)));
+        } else if (QQuickWindow* window = anchor->window()) {
+            // Parent-less anchor (rare — see attachShaderToAnchor's
+            // warning). Fall back to the window's logical size.
+            const QPointF anchorScene = anchor->mapToScene(QPointF(0.0, 0.0));
+            ext->setISurfaceScreenPos(
+                QVector4D(static_cast<float>(anchorScene.x()), static_cast<float>(anchorScene.y()),
+                          static_cast<float>(window->width()), static_cast<float>(window->height())));
+        }
     }
 }
 } // namespace
@@ -429,6 +542,12 @@ struct ShaderAttachResult
     /// value so it always re-reads the current value when anchor
     /// geometry signals fire mid-leg.
     std::shared_ptr<qreal> requestedPadPtr;
+    /// Live boundsExtent — same lifecycle / hot-reload semantics as
+    /// `requestedPadPtr`. Captured by the syncGeometry lambda so a
+    /// metadata edit that flips an effect from Anchor to Parent (or
+    /// vice versa) takes effect on the next geometry signal without
+    /// reattaching the shader.
+    std::shared_ptr<PhosphorAnimationShaders::AnimationShaderEffect::BoundsExtent> boundsExtentPtr;
 };
 
 /// Build the per-leg ShaderEffect: anchor resolution + layer-enable +
@@ -519,6 +638,19 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // live layer — no same-pass conflict.
     auto* shaderItem =
         new PhosphorRendering::ShaderEffect(shaderAnchor->parentItem() ? shaderAnchor->parentItem() : shaderAnchor);
+    // Install the animation-only UBO extension BEFORE applyEffectStaticConfig.
+    // applyEffectStaticConfig may end up calling node-side load paths whose
+    // SPIR-V expects the extension to land at offset sizeof(BaseUniforms);
+    // installing later would cause the first prepare() to allocate the UBO
+    // without the extension's 32 trailing bytes and the shader would read
+    // garbage at offsets 672/688 until the next allocation cycle.
+    //
+    // Lifetime: the shared_ptr is captured by `ShaderEffect::m_uniformExtension`
+    // and lives for the shaderItem's lifetime. `syncShaderGeometryNow` pulls
+    // the typed pointer back via `animExtensionFor()`'s dynamic_pointer_cast
+    // and writes through the extension's setters; the render-thread `write()`
+    // serializes via the extension's own QMutex.
+    shaderItem->setUniformExtension(std::make_shared<PhosphorAnimation::AnimationUniformExtension>());
     applyEffectStaticConfig(shaderItem, effect, shaderIncludePaths);
 
     // iMouse wiring — mirrors the overlay-shader pattern (RenderNodeOverlay's
@@ -656,10 +788,13 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // on the next anchor geometry signal. Capturing by value would
     // freeze the lambda on the original metadata.
     auto requestedPadPtr = std::make_shared<qreal>(sanitiseBoundsPadding(effect.boundsPadding));
+    auto boundsExtentPtr =
+        std::make_shared<PhosphorAnimationShaders::AnimationShaderEffect::BoundsExtent>(effect.boundsExtent);
     QPointer<PhosphorRendering::ShaderEffect> shaderItemPtr{shaderItem};
     auto syncGeometry = [shaderItemPtr, shaderSourcePtr = QPointer<QQuickShaderEffectSource>(shaderSource),
-                         requestedPadPtr, anchorPtr = QPointer<QQuickItem>(shaderAnchor)]() {
-        syncShaderGeometryNow(anchorPtr.data(), shaderItemPtr.data(), shaderSourcePtr.data(), *requestedPadPtr);
+                         requestedPadPtr, boundsExtentPtr, anchorPtr = QPointer<QQuickItem>(shaderAnchor)]() {
+        syncShaderGeometryNow(anchorPtr.data(), shaderItemPtr.data(), shaderSourcePtr.data(), *requestedPadPtr,
+                              *boundsExtentPtr);
     };
     // Connect to all four geometry signals — anchor x/y can shift mid-leg
     // when sibling visibility flips trigger parent layout reflow (we hide
@@ -680,6 +815,16 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     QObject::connect(shaderAnchor, &QQuickItem::heightChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::xChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::yChanged, shaderItem, syncGeometry);
+
+    // Seed the boundsExtent-dependent shader item geometry once
+    // unconditionally. The signal-driven lambda above only fires on
+    // subsequent anchor geometry changes; for surfaces where the anchor
+    // is persistent across show/hide cycles (zone selector / snap-assist /
+    // layout picker — pre-warmed PopupFrames with constant width/height),
+    // the lambda would never fire post-attach and the shader item's
+    // size would stay at its default-constructed zero, collapsing the
+    // rendered surface to a point for the leg's duration.
+    syncGeometry();
 
     // Hide visible decorator siblings — see `hideAnchorSiblings` for the
     // rationale (Qt 6 MultiEffect can't sample our shader item as source).
@@ -709,6 +854,7 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     out.foundExplicitAnchor = foundExplicitAnchor;
     out.hiddenSiblings = std::move(hiddenSiblings);
     out.requestedPadPtr = std::move(requestedPadPtr);
+    out.boundsExtentPtr = std::move(boundsExtentPtr);
     return out;
 }
 
@@ -721,7 +867,34 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
 class SurfaceAnimator::Private
 {
 public:
-    /// Per-surface in-flight bookkeeping. unique_ptr<AnimatedValue>
+    /// Composite key for in-flight tracks. A single Surface can host
+    /// multiple animated targets simultaneously (the unified overlay
+    /// shell pattern: one per-screen wl_surface containing OSD,
+    /// zone-selector, and modal items as siblings, each animated
+    /// independently). Pre-shell, m_tracks was keyed on Surface*
+    /// alone — adding a second target on the same surface would
+    /// supersede the first via cancelTracking. Now tracks are keyed
+    /// on the pair so concurrent legs on different items in the
+    /// same surface coexist.
+    struct TrackKey
+    {
+        PhosphorLayer::Surface* surface;
+        QQuickItem* target;
+        bool operator==(const TrackKey&) const = default;
+    };
+    struct TrackKeyHash
+    {
+        std::size_t operator()(const TrackKey& k) const noexcept
+        {
+            // Mix the two pointers — XOR alone collides on
+            // (a, b) and (b, a). Shift the second half to break
+            // that symmetry; std::hash<void*> on a sane stdlib is
+            // identity for pointers, so the shift matters.
+            return std::hash<const void*>()(k.surface) ^ (std::hash<const void*>()(k.target) << 1);
+        }
+    };
+
+    /// Per-(surface, target) in-flight bookkeeping. unique_ptr<AnimatedValue>
     /// so slot.opacity.reset() can null the AV before installing a
     /// fresh one — AnimatedValue itself has no moved-from state.
     struct Track
@@ -753,6 +926,11 @@ public:
         /// already-connected lambda picks up the new value on the
         /// next anchor geometry signal.
         std::shared_ptr<qreal> requestedPadPtr;
+        /// Same lifecycle as `requestedPadPtr` — shared with the
+        /// syncGeometry lambda so a metadata hot-reload that flips
+        /// boundsExtent (Anchor ↔ Parent) takes effect on the next
+        /// geometry signal without reattaching.
+        std::shared_ptr<PhosphorAnimationShaders::AnimationShaderEffect::BoundsExtent> boundsExtentPtr;
         int pendingLegs = 0;
         bool shaderExclusive = false; ///< Shader replaces motion legs
         qreal targetOpacity = 1.0; ///< Snapped on completion when shaderExclusive
@@ -783,6 +961,8 @@ public:
         QPointer<QQuickItem> target;
         /// See Track::requestedPadPtr.
         std::shared_ptr<qreal> requestedPadPtr;
+        /// See Track::boundsExtentPtr.
+        std::shared_ptr<PhosphorAnimationShaders::AnimationShaderEffect::BoundsExtent> boundsExtentPtr;
     };
 
     Private(PhosphorAnimation::PhosphorProfileRegistry& registry,
@@ -892,12 +1072,35 @@ public:
             return;
         }
 
-        // Park to m_pendingReuse[surface]. If a previous pending entry
-        // exists for this surface (rare — should only happen if a
-        // shader was parked but never reclaimed), destroy it first to
-        // avoid leaking a stale ShaderEffect.
+        // If track.target's QPointer auto-nulled because the
+        // QQuickItem was destroyed mid-flight, parking under
+        // {surface, nullptr} keys the entry under a sentinel that
+        // runLeg never queries (it always passes a non-null target).
+        // Skip the park step: nothing useful to reuse, and burning
+        // an unreclaimable slot in m_pendingReuse just leaks until
+        // surface destruction. Tear the pieces down inline.
+        if (!track.target) {
+            PendingReuseShader transient;
+            transient.shaderItem = std::move(track.shaderItem);
+            transient.shaderSource = std::move(track.shaderSource);
+            transient.shaderAnchor = track.shaderAnchor;
+            destroyPendingReuseEntry(transient);
+            track.shaderItem = nullptr;
+            track.shaderSource = nullptr;
+            track.shaderAnchor.clear();
+            track.foundExplicitAnchor = false;
+            track.shaderEffectId.clear();
+            track.requestedPadPtr.reset();
+            track.boundsExtentPtr.reset();
+            return;
+        }
+        // Park to m_pendingReuse[{surface, target}]. If a previous
+        // pending entry exists for this (surface, target) pair (rare —
+        // should only happen if a shader was parked but never
+        // reclaimed), destroy it first to avoid leaking a stale
+        // ShaderEffect.
         connectSurfaceCleanup(surface);
-        PendingReuseShader& pending = m_pendingReuse[surface];
+        PendingReuseShader& pending = m_pendingReuse[TrackKey{surface, track.target.data()}];
         if (pending.shaderItem) {
             destroyPendingReuseEntry(pending);
         }
@@ -908,6 +1111,7 @@ public:
         pending.shaderEffectId = std::move(track.shaderEffectId);
         pending.target = track.target;
         pending.requestedPadPtr = std::move(track.requestedPadPtr);
+        pending.boundsExtentPtr = std::move(track.boundsExtentPtr);
 
         // Make parked pieces dormant — see method docstring.
         if (pending.shaderItem) {
@@ -928,6 +1132,7 @@ public:
         track.foundExplicitAnchor = false;
         track.shaderEffectId.clear();
         track.requestedPadPtr.reset();
+        track.boundsExtentPtr.reset();
     }
 
     /// Destroy a single pending-reuse entry's render-side pieces.
@@ -953,14 +1158,34 @@ public:
         pending.shaderEffectId.clear();
         pending.target.clear();
         pending.requestedPadPtr.reset();
+        pending.boundsExtentPtr.reset();
     }
 
     /// Drop the reuse stash for one surface — used when the surface is
     /// destroyed, when the next leg uses a different effect / target,
     /// or when a non-shader leg supersedes a shader leg.
+    /// Walks every (surface, *) entry — a surface may have multiple
+    /// targets parked simultaneously now that the unified shell hosts
+    /// independent items as siblings on one Surface.
     void destroyPendingReuseFor(PhosphorLayer::Surface* surface)
     {
-        const auto it = m_pendingReuse.find(surface);
+        for (auto it = m_pendingReuse.begin(); it != m_pendingReuse.end();) {
+            if (it->first.surface == surface) {
+                destroyPendingReuseEntry(it->second);
+                it = m_pendingReuse.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    /// Single-(surface, target) variant. Used by runLeg's null-target
+    /// path: target is null, so iterate every (surface, *) anyway.
+    /// Used by teardownShaderLeg-driven reuse claim: caller has
+    /// already moved fields out, so we just erase.
+    void destroyPendingReuseForKey(const TrackKey& key)
+    {
+        const auto it = m_pendingReuse.find(key);
         if (it == m_pendingReuse.end()) {
             return;
         }
@@ -1010,31 +1235,36 @@ public:
                 // re-enters this animator, this remove() must happen
                 // BEFORE that path or be re-checked for invalidation.
                 destroyPendingReuseFor(surf);
-                // Also drop any still-tracked entry; consumer's
-                // SurfaceAnimator::cancel may not have run for surfaces
-                // that bypass the standard ~Surface cancel path.
-                const auto trackIt = m_tracks.find(surf);
-                if (trackIt != m_tracks.end()) {
-                    m_tracks.erase(trackIt);
+                // Also drop every still-tracked (surf, *) entry;
+                // consumer's SurfaceAnimator::cancel may not have run
+                // for surfaces that bypass the standard ~Surface cancel
+                // path. Walk the map and erase all matching entries.
+                for (auto trackIt = m_tracks.begin(); trackIt != m_tracks.end();) {
+                    if (trackIt->first.surface == surf) {
+                        trackIt = m_tracks.erase(trackIt);
+                    } else {
+                        ++trackIt;
+                    }
                 }
                 m_destroyedConnections.remove(surf);
             });
         m_destroyedConnections.insert(surface, conn);
     }
 
-    /// Cancel any in-flight legs for a surface. Called directly and
-    /// also implicitly on supersession. AnimatedValue::cancel clears
-    /// m_isAnimating without firing spec.onComplete (cancel = non-
-    /// completion termination per ISurfaceAnimator). AVs are parked in
-    /// m_pendingDestroy because a re-entrant cancel from inside
-    /// spec.onValueChanged must not destroy *this mid-advance
-    /// (AnimatedValue.h:547); graveyard drains on next tickAll. Shader
-    /// pieces are parked in m_pendingReuse (see teardownShaderLeg) so
-    /// they survive the external Surface::show()/hide() pre-cancel and
-    /// can be reclaimed by the immediately-following beginShow/Hide.
-    void cancelTracking(PhosphorLayer::Surface* surface)
+    /// Cancel a single (surface, target) leg. Called by runLeg's pre-
+    /// cancel (supersession of the SAME target) and by cancelAllForSurface.
+    /// AnimatedValue::cancel clears m_isAnimating without firing
+    /// spec.onComplete (cancel = non-completion termination per
+    /// ISurfaceAnimator). AVs are parked in m_pendingDestroy because a
+    /// re-entrant cancel from inside spec.onValueChanged must not
+    /// destroy *this mid-advance (AnimatedValue.h:547); graveyard
+    /// drains on next tickAll. Shader pieces are parked in
+    /// m_pendingReuse (see teardownShaderLeg) so they survive the
+    /// external Surface::show()/hide() pre-cancel and can be reclaimed
+    /// by the immediately-following beginShow/Hide.
+    void cancelTrackingFor(PhosphorLayer::Surface* surface, QQuickItem* target)
     {
-        const auto it = m_tracks.find(surface);
+        const auto it = m_tracks.find(TrackKey{surface, target});
         if (it == m_tracks.end()) {
             return;
         }
@@ -1052,6 +1282,28 @@ public:
         }
         teardownShaderLeg(surface, it->second);
         m_tracks.erase(it);
+    }
+
+    /// Cancel every in-flight leg for the surface, regardless of target.
+    /// Used by the public ISurfaceAnimator::cancel(Surface*) contract,
+    /// which means "wipe all motion for this surface" — appropriate for
+    /// teardown paths and consumer-driven dismissals where every item
+    /// hosted by the surface should stop animating.
+    void cancelAllForSurface(PhosphorLayer::Surface* surface)
+    {
+        // Snapshot keys first — cancelTrackingFor erases from m_tracks,
+        // and erase + iterate on the same unordered_map invalidates
+        // iterators of the erased bucket.
+        std::vector<QQuickItem*> targets;
+        targets.reserve(m_tracks.size());
+        for (const auto& [key, _] : m_tracks) {
+            if (key.surface == surface) {
+                targets.push_back(key.target);
+            }
+        }
+        for (QQuickItem* target : targets) {
+            cancelTrackingFor(surface, target);
+        }
     }
 
     /// Look up the per-role config (longest-prefix-match on
@@ -1114,17 +1366,24 @@ public:
         // Supersede BEFORE the null-target check — leaving a prior
         // entry behind on null-target strands its AV (custom
         // orchestrators bypass Surface::Impl::drive()'s pre-cancel).
-        // cancelTracking parks any in-flight shader pieces in
-        // m_pendingReuse[surface] (see parkShaderForReuse) so they
-        // survive the external Surface::show()/hide() pre-cancel and
-        // can be reclaimed below if the new leg uses the same effect.
-        cancelTracking(surface);
-
+        // cancelTrackingFor parks any in-flight shader pieces in
+        // m_pendingReuse[{surface,target}] (see parkShaderForReuse) so
+        // they survive the external Surface::show()/hide() pre-cancel
+        // and can be reclaimed below if the new leg uses the same
+        // effect. Null target means "supersede whatever was running on
+        // any target of this surface" — fall back to surface-wide
+        // cancel and drop every stash.
         if (!target) {
+            cancelAllForSurface(surface);
             qCWarning(lcSurfaceAnimator) << "runLeg called with null target — onComplete fires synchronously";
-            // Surface won't re-attach without a target; drop any
-            // stashed shader pieces for this surface.
-            destroyPendingReuseFor(surface);
+            // Null-target dispatch is malformed and won't drive any
+            // specific (surface, target) pair. The tickAll sweep will
+            // GC stale pending entries that outlive their target's
+            // QPointer; do NOT cascade-destroy every sibling slot's
+            // parked shader on this surface. The unified-overlay-shell
+            // pattern hosts multiple sibling slots per Surface, so
+            // surface-wide destruction violates the per-(Surface, target)
+            // keying contract.
             // Synchronous onComplete: same forbidden-ops contract as a
             // legCompleted-fired callback (SurfaceAnimator.h:79-90).
             if (onComplete) {
@@ -1132,6 +1391,7 @@ public:
             }
             return;
         }
+        cancelTrackingFor(surface, target);
 
         // Reuse stashed shader pieces from the previous leg if the
         // effect id, target, anchor, and shader item all still match
@@ -1152,22 +1412,29 @@ public:
         QPointer<QQuickItem> reusedShaderAnchor;
         bool reusedFoundExplicit = false;
         std::shared_ptr<qreal> reusedRequestedPadPtr;
+        std::shared_ptr<PhosphorAnimationShaders::AnimationShaderEffect::BoundsExtent> reusedBoundsExtentPtr;
         if (hasShaderLeg) {
-            const auto pendIt = m_pendingReuse.find(surface);
+            const auto pendIt = m_pendingReuse.find(TrackKey{surface, target});
             if (pendIt != m_pendingReuse.end()) {
                 PendingReuseShader& pending = pendIt->second;
                 // Re-validate anchor against the current QML scene.
-                // NotificationOverlay's per-mode Loader unloads + loads
-                // its content on `mode` flip (e.g. layout-osd ↔ navigation-
-                // osd), destroying the previously-found shaderAnchor
-                // descendant. The cached QPointer auto-nulls in that
-                // case, but during the deleteLater window it's still
-                // truthy — and even when truthy, it points at the
-                // previous Loader generation's anchor, not the freshly-
-                // loaded one. findShaderAnchorRecursive on the current
-                // target reflects the live scene; only reuse when the
-                // cache still resolves to the same QQuickItem the
-                // attach found (or both fall back to target itself).
+                // The shell's per-mode Loader unloads + loads its content
+                // on `mode` / `loaded` flips (e.g. layout-osd ↔ navigation-
+                // osd, snap-assist re-instantiate), destroying the
+                // previously-found shaderAnchor descendant. The cached
+                // QPointer auto-nulls when the underlying QObject has
+                // been destroyed — `pending.shaderAnchor.data() == nullptr`
+                // in that case, so the equality compare against
+                // `currentAnchor` (which is the live anchor or null)
+                // correctly rejects reuse and forces a fresh attach. Even
+                // when QPointer hasn't yet cleared (immediately after
+                // deleteLater queues but before the event loop runs), the
+                // pointer would refer to the previous Loader generation's
+                // anchor, not the freshly-loaded one — also a mismatch
+                // against `currentAnchor` (which is the *new* anchor) and
+                // also correctly rejected. Reuse only when the cache
+                // resolves to the same QQuickItem that the live tree's
+                // shaderAnchor walk finds (or both fall back to target).
                 QQuickItem* currentAnchor = findShaderAnchorRecursive(target);
                 const bool anchorMatches = pending.foundExplicitAnchor
                     ? (currentAnchor != nullptr && currentAnchor == pending.shaderAnchor.data())
@@ -1179,6 +1446,7 @@ public:
                     reusedShaderAnchor = pending.shaderAnchor;
                     reusedFoundExplicit = pending.foundExplicitAnchor;
                     reusedRequestedPadPtr = std::move(pending.requestedPadPtr);
+                    reusedBoundsExtentPtr = std::move(pending.boundsExtentPtr);
                     // Refresh the live boundsPadding so the persistent
                     // syncGeometry lambda (still connected from the
                     // original attach) picks up the new metadata value
@@ -1190,20 +1458,28 @@ public:
                     if (reusedRequestedPadPtr) {
                         *reusedRequestedPadPtr = sanitiseBoundsPadding(resolvedShaderEff.boundsPadding);
                     }
+                    if (reusedBoundsExtentPtr) {
+                        *reusedBoundsExtentPtr = resolvedShaderEff.boundsExtent;
+                    }
                     m_pendingReuse.erase(pendIt);
                 } else {
-                    // Mismatch (different effect, different target,
-                    // QML scene rebuild swapped the anchor, or stale
-                    // QPointers from item destruction) — drop the
-                    // stash now rather than letting it sit with dead
-                    // pointers indefinitely.
-                    destroyPendingReuseFor(surface);
+                    // Mismatch (different effect, QML scene rebuild
+                    // swapped the anchor, or stale QPointers from item
+                    // destruction) — drop ONLY this {surface, target}
+                    // entry. Sibling slots on the same shell surface
+                    // (OSD, zone-selector, etc.) keep their parked
+                    // shaders intact; per-(Surface, target) keying is
+                    // the whole point of TrackKey.
+                    destroyPendingReuseEntry(pending);
+                    m_pendingReuse.erase(pendIt);
                 }
             }
         } else {
-            // Non-shader leg following a shader leg — no chance of
-            // reuse. Drop any stashed shader for this surface.
-            destroyPendingReuseFor(surface);
+            // Non-shader leg following a shader leg on THIS target —
+            // drop ONLY this target's stash. Other slots on the same
+            // surface may have valid parked shaders that should
+            // survive (per-(Surface, target) keying contract).
+            destroyPendingReuseForKey(TrackKey{surface, target});
         }
 
         PhosphorAnimation::IMotionClock* clock = &m_clock;
@@ -1222,7 +1498,7 @@ public:
         // erases cleanly (no AVs to park yet) and the post-write
         // re-find below detects the erasure and bails.
         {
-            Track& slot = m_tracks[surface];
+            Track& slot = m_tracks[TrackKey{surface, target}];
             slot.opacity.reset();
             slot.scale.reset();
             // Reset shader-leg state explicitly — a non-shader leg
@@ -1237,6 +1513,7 @@ public:
             slot.foundExplicitAnchor = false;
             slot.shaderEffectId.clear();
             slot.requestedPadPtr.reset();
+            slot.boundsExtentPtr.reset();
             slot.target = target;
             slot.onComplete = std::move(onComplete);
             slot.pendingLegs = legCount;
@@ -1278,7 +1555,7 @@ public:
         // here too in case the setOpacity/setScale chain above just
         // re-entered cancel() — bail per the cancellation contract.
         {
-            auto it = m_tracks.find(surface);
+            auto it = m_tracks.find(TrackKey{surface, target});
             if (it == m_tracks.end()) {
                 return;
             }
@@ -1301,13 +1578,33 @@ public:
                     // any leg-specific state so the SG sync that
                     // follows runLeg picks them up live.
                     if (reusedShaderSource) {
-                        // setHideSource(true) re-installs the anchor's
-                        // QQuickItemLayer so the FBO captures the anchor
-                        // content (and the anchor is suppressed from
-                        // direct scene render — the shader effect is
-                        // the sole renderer for the leg's duration).
-                        reusedShaderSource->setHideSource(true);
+                        // Wake the source FBO + re-hide the anchor from
+                        // direct scene render. The park step in
+                        // `teardownShaderLeg` calls
+                        // `setHideSource(false)` to restore the anchor's
+                        // normal rendering during the idle phase, and
+                        // that toggle tears down the source item's
+                        // internal `QQuickItemLayer`. A bare
+                        // `setHideSource(true)` here doesn't reliably
+                        // rebuild that layer — the FBO comes back live
+                        // but empty, so the shader samples a
+                        // transparent uTexture0 throughout the leg and
+                        // the user sees a "pop in" at completion when
+                        // the post-leg `setOpacity(1.0)` restores the
+                        // anchor's direct render.
+                        //
+                        // Force a clean layer reattach by clearing the
+                        // source item first, then re-pointing it at
+                        // the anchor. Qt rebuilds the layer + FBO from
+                        // scratch, mirroring the fresh-attach setup at
+                        // `attachShaderToAnchor`. The matching order
+                        // (setLive, setHideSource, setSourceItem) keeps
+                        // a single code-path's worth of state machine
+                        // for the source.
+                        reusedShaderSource->setSourceItem(nullptr);
                         reusedShaderSource->setLive(true);
+                        reusedShaderSource->setHideSource(true);
+                        reusedShaderSource->setSourceItem(reusedShaderAnchor.data());
                     }
                     reusedShaderItem->setVisible(true);
                     // Re-apply per-effect static config so a metadata.json
@@ -1328,7 +1625,10 @@ public:
                     // pad is wrong. Manually invoking the same logic
                     // here closes that gap.
                     syncShaderGeometryNow(reusedShaderAnchor.data(), reusedShaderItem.data(), reusedShaderSource.data(),
-                                          reusedRequestedPadPtr ? *reusedRequestedPadPtr : qreal(0.0));
+                                          reusedRequestedPadPtr ? *reusedRequestedPadPtr : qreal(0.0),
+                                          reusedBoundsExtentPtr
+                                              ? *reusedBoundsExtentPtr
+                                              : PhosphorAnimationShaders::AnimationShaderEffect::BoundsExtent::Anchor);
                     // Reset iTime to the new leg's start so the first
                     // painted frame after the shaderTime AV starts
                     // matches the AnimatedValue's intended `from` —
@@ -1366,6 +1666,7 @@ public:
                     it->second.hiddenSiblings = std::move(hidden);
                     it->second.shaderEffectId = shaderEffectId;
                     it->second.requestedPadPtr = std::move(reusedRequestedPadPtr);
+                    it->second.boundsExtentPtr = std::move(reusedBoundsExtentPtr);
                     it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
                     seedShaderUniformsAtAttach(it->second);
                 } else {
@@ -1387,6 +1688,7 @@ public:
                     it->second.hiddenSiblings = std::move(attached.hiddenSiblings);
                     it->second.shaderEffectId = shaderEffectId;
                     it->second.requestedPadPtr = std::move(attached.requestedPadPtr);
+                    it->second.boundsExtentPtr = std::move(attached.boundsExtentPtr);
                     it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
                     seedShaderUniformsAtAttach(it->second);
                 }
@@ -1402,9 +1704,9 @@ public:
             // Shader-exclusive mode: opacity was snapped to toOpacity
             // above. The opacity "leg" completes immediately — the
             // shader's iTime 0→1 drives the entire visual transition.
-            legCompleted(surface);
+            legCompleted(surface, target);
         } else {
-            auto it = m_tracks.find(surface);
+            auto it = m_tracks.find(TrackKey{surface, target});
             if (it == m_tracks.end() || !it->second.opacity) {
                 return;
             }
@@ -1412,21 +1714,21 @@ public:
                                       buildSpec(
                                           resolveProfile(m_registry, opacityProfilePath), clock,
                                           /*onValueChanged=*/
-                                          [this, surface](const qreal& v) {
-                                              auto sit = m_tracks.find(surface);
+                                          [this, surface, target](const qreal& v) {
+                                              auto sit = m_tracks.find(TrackKey{surface, target});
                                               if (sit == m_tracks.end() || !sit->second.target) {
                                                   return;
                                               }
                                               sit->second.target->setOpacity(v);
                                           },
                                           /*onComplete=*/
-                                          [this, surface]() {
-                                              legCompleted(surface);
+                                          [this, surface, target]() {
+                                              legCompleted(surface, target);
                                           }));
         }
 
         if (hasScaleLeg) {
-            auto it = m_tracks.find(surface);
+            auto it = m_tracks.find(TrackKey{surface, target});
             if (it == m_tracks.end() || !it->second.scale) {
                 // The opacity leg's start() (or a synchronous callback)
                 // cancelled the entry; let the cancellation stand.
@@ -1436,21 +1738,21 @@ public:
                                     buildSpec(
                                         resolveProfile(m_registry, scaleProfilePath), clock,
                                         /*onValueChanged=*/
-                                        [this, surface](const qreal& v) {
-                                            auto sit = m_tracks.find(surface);
+                                        [this, surface, target](const qreal& v) {
+                                            auto sit = m_tracks.find(TrackKey{surface, target});
                                             if (sit == m_tracks.end() || !sit->second.target) {
                                                 return;
                                             }
                                             sit->second.target->setScale(v);
                                         },
                                         /*onComplete=*/
-                                        [this, surface]() {
-                                            legCompleted(surface);
+                                        [this, surface, target]() {
+                                            legCompleted(surface, target);
                                         }));
         }
 
         if (hasShaderLeg) {
-            auto it = m_tracks.find(surface);
+            auto it = m_tracks.find(TrackKey{surface, target});
             if (it == m_tracks.end() || !it->second.shaderTime || !it->second.shaderItem) {
                 return;
             }
@@ -1489,8 +1791,8 @@ public:
                                          buildSpec(
                                              shaderLegProfile, clock,
                                              /*onValueChanged=*/
-                                             [this, surface](const qreal& v) {
-                                                 auto sit = m_tracks.find(surface);
+                                             [this, surface, target](const qreal& v) {
+                                                 auto sit = m_tracks.find(TrackKey{surface, target});
                                                  // shaderItem QPointer auto-nulls if the
                                                  // ShaderEffect's parent (the anchor) was torn
                                                  // down between ticks — bail rather than UAF.
@@ -1521,8 +1823,8 @@ public:
                                                  sit->second.shaderItem->setITime(qBound(qreal(0.0), v, qreal(1.0)));
                                              },
                                              /*onComplete=*/
-                                             [this, surface]() {
-                                                 legCompleted(surface);
+                                             [this, surface, target]() {
+                                                 legCompleted(surface, target);
                                              }));
         }
 
@@ -1539,9 +1841,9 @@ public:
     /// because legCompleted runs from inside the spec.onComplete of
     /// the very AV — AnimatedValue.h:547 forbids destroying *this from
     /// within a spec callback.
-    void legCompleted(PhosphorLayer::Surface* surface)
+    void legCompleted(PhosphorLayer::Surface* surface, QQuickItem* target)
     {
-        const auto it = m_tracks.find(surface);
+        const auto it = m_tracks.find(TrackKey{surface, target});
         if (it == m_tracks.end()) {
             return;
         }
@@ -1604,10 +1906,10 @@ public:
         }
 
         // Snapshot — legCompleted may erase from m_tracks while iterating.
-        std::vector<PhosphorLayer::Surface*> surfaces;
-        surfaces.reserve(m_tracks.size());
-        for (auto& [s, _] : m_tracks) {
-            surfaces.push_back(s);
+        std::vector<TrackKey> keys;
+        keys.reserve(m_tracks.size());
+        for (auto& [k, _] : m_tracks) {
+            keys.push_back(k);
         }
         // Real-time delta for shader iTimeDelta — measured between
         // SurfaceAnimator ticks (which fire at kTickIntervalMs cadence
@@ -1627,8 +1929,8 @@ public:
         }
         m_lastShaderTickNs = nowNs;
 
-        for (auto* s : surfaces) {
-            auto it = m_tracks.find(s);
+        for (const auto& k : keys) {
+            auto it = m_tracks.find(k);
             if (it == m_tracks.end()) {
                 continue;
             }
@@ -1636,14 +1938,14 @@ public:
                 it->second.opacity->advance();
             }
             // Re-find: advance may have completed + erased via legCompleted.
-            it = m_tracks.find(s);
+            it = m_tracks.find(k);
             if (it == m_tracks.end()) {
                 continue;
             }
             if (it->second.scale) {
                 it->second.scale->advance();
             }
-            it = m_tracks.find(s);
+            it = m_tracks.find(k);
             if (it == m_tracks.end()) {
                 continue;
             }
@@ -1655,7 +1957,7 @@ public:
             // uniforms (iTimeDelta, iFrame, iMouse, audio spectrum)
             // so the next paint sees the latest values. Cheap on
             // identity (each setter early-returns when unchanged).
-            it = m_tracks.find(s);
+            it = m_tracks.find(k);
             if (it == m_tracks.end()) {
                 continue;
             }
@@ -1786,16 +2088,15 @@ public:
     /// active animation". std::unordered_map (not QHash) because
     /// Track is move-only and QHash still requires copy-constructible
     /// values in Qt6.
-    std::unordered_map<PhosphorLayer::Surface*, Track> m_tracks;
-    /// Per-surface stash for ShaderEffect/Source pieces between legs.
-    /// Populated by teardownShaderLeg, drained on reuse-claim in
+    std::unordered_map<TrackKey, Track, TrackKeyHash> m_tracks;
+    /// Per-(surface, target) stash for ShaderEffect/Source pieces between
+    /// legs. Populated by teardownShaderLeg, drained on reuse-claim in
     /// runLeg or on surface destruction (connectSurfaceCleanup wires
     /// the destroyed signal). Keeps one shader render-tower alive for
-    /// the surface's lifetime instead of the create-then-destroy
-    /// churn that used to leak Qt RHI resource update batches under
-    /// rapid show/hide toggling. std::unordered_map (not QHash) for
-    /// the same move-only-value reason as m_tracks.
-    std::unordered_map<PhosphorLayer::Surface*, PendingReuseShader> m_pendingReuse;
+    /// the (surface, target) pair's lifetime instead of the
+    /// create-then-destroy churn that used to leak Qt RHI resource
+    /// update batches under rapid show/hide toggling.
+    std::unordered_map<TrackKey, PendingReuseShader, TrackKeyHash> m_pendingReuse;
     /// Per-surface destroyed-signal connections, keyed by raw Surface*
     /// pointer. Replaces the earlier `pz_surfaceAnimatorCleanupConnected`
     /// dynamic-property gate which leaked across animator instances —
@@ -1859,7 +2160,8 @@ SurfaceAnimator::~SurfaceAnimator()
     // identical to the normal teardown.
     auto leftovers = std::move(d->m_tracks);
     d->m_tracks.clear();
-    for (auto& [surface, track] : leftovers) {
+    for (auto& [key, track] : leftovers) {
+        (void)key;
         if (track.opacity) {
             track.opacity->cancel();
             d->m_pendingDestroy.push_back(std::move(track.opacity));
@@ -1982,16 +2284,16 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
         // (which may mutate `m_tracks`) is bounded: the callback runs
         // AFTER cancelTracking has already erased our `surface` entry,
         // so any new entry the callback inserts is its own to manage.
-        if (const auto it = d->m_tracks.find(surface); it != d->m_tracks.end()) {
+        if (const auto it = d->m_tracks.find(Private::TrackKey{surface, rootItem}); it != d->m_tracks.end()) {
             if (auto prevOnComplete = std::move(it->second.onComplete)) {
                 auto cb = std::move(prevOnComplete);
-                d->cancelTracking(surface);
+                d->cancelTrackingFor(surface, rootItem);
                 cb();
             } else {
-                d->cancelTracking(surface);
+                d->cancelTrackingFor(surface, rootItem);
             }
         } else {
-            d->cancelTracking(surface);
+            d->cancelTrackingFor(surface, rootItem);
         }
         if (rootItem) {
             rootItem->setOpacity(1.0);
@@ -2055,16 +2357,16 @@ void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* roo
         // (which may mutate `m_tracks`) is bounded: the callback runs
         // AFTER cancelTracking has already erased our `surface` entry,
         // so any new entry the callback inserts is its own to manage.
-        if (const auto it = d->m_tracks.find(surface); it != d->m_tracks.end()) {
+        if (const auto it = d->m_tracks.find(Private::TrackKey{surface, rootItem}); it != d->m_tracks.end()) {
             if (auto prevOnComplete = std::move(it->second.onComplete)) {
                 auto cb = std::move(prevOnComplete);
-                d->cancelTracking(surface);
+                d->cancelTrackingFor(surface, rootItem);
                 cb();
             } else {
-                d->cancelTracking(surface);
+                d->cancelTrackingFor(surface, rootItem);
             }
         } else {
-            d->cancelTracking(surface);
+            d->cancelTrackingFor(surface, rootItem);
         }
         if (rootItem) {
             rootItem->setOpacity(0.0);
@@ -2091,7 +2393,102 @@ void SurfaceAnimator::cancel(PhosphorLayer::Surface* surface)
     if (!surface) {
         return;
     }
-    d->cancelTracking(surface);
+    d->cancelAllForSurface(surface);
+}
+
+void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* rootItem,
+                                const PhosphorLayer::Role& configRole, CompletionCallback onComplete)
+{
+    // Same contract as the no-arg beginShow but the config is resolved
+    // from `configRole` instead of `surface->config().role`. Used by
+    // the unified PassiveOverlayShell pattern where the surface's role
+    // is the shell's (PassiveShell) and per-content motion/shader
+    // configs would otherwise homogenise across content types.
+    if (!surface) {
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
+    if (!d->m_enabled) {
+        if (!rootItem) {
+            qCWarning(lcSurfaceAnimator)
+                << "beginShow on null rootItem with gate off; surface visibility unchanged but onComplete will fire";
+        }
+        if (const auto it = d->m_tracks.find(Private::TrackKey{surface, rootItem}); it != d->m_tracks.end()) {
+            if (auto prevOnComplete = std::move(it->second.onComplete)) {
+                auto cb = std::move(prevOnComplete);
+                d->cancelTrackingFor(surface, rootItem);
+                cb();
+            } else {
+                d->cancelTrackingFor(surface, rootItem);
+            }
+        } else {
+            d->cancelTrackingFor(surface, rootItem);
+        }
+        if (rootItem) {
+            rootItem->setOpacity(1.0);
+            rootItem->setScale(1.0);
+        }
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
+    const Config cfg = d->configFor(configRole);
+    const qreal fromOpacity = 0.0;
+    const qreal toScale = 1.0;
+    qreal fromScale = 1.0;
+    if (!cfg.showScaleProfile.isEmpty()) {
+        const qreal liveScale = rootItem ? rootItem->scale() : 1.0;
+        fromScale = (liveScale < toScale) ? liveScale : cfg.showScaleFrom;
+    }
+    d->runLeg(surface, rootItem, fromOpacity, /*toOpacity=*/1.0, cfg.showProfile, fromScale, toScale,
+              cfg.showScaleProfile, cfg.showShaderEffectId, cfg.showShaderProfile, cfg.showShaderParameters,
+              std::move(onComplete));
+}
+
+void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* rootItem,
+                                const PhosphorLayer::Role& configRole, CompletionCallback onComplete)
+{
+    if (!surface) {
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
+    if (!d->m_enabled) {
+        if (!rootItem) {
+            qCWarning(lcSurfaceAnimator)
+                << "beginHide on null rootItem with gate off; surface visibility unchanged but onComplete will fire";
+        }
+        if (const auto it = d->m_tracks.find(Private::TrackKey{surface, rootItem}); it != d->m_tracks.end()) {
+            if (auto prevOnComplete = std::move(it->second.onComplete)) {
+                auto cb = std::move(prevOnComplete);
+                d->cancelTrackingFor(surface, rootItem);
+                cb();
+            } else {
+                d->cancelTrackingFor(surface, rootItem);
+            }
+        } else {
+            d->cancelTrackingFor(surface, rootItem);
+        }
+        if (rootItem) {
+            rootItem->setOpacity(0.0);
+            rootItem->setScale(1.0);
+        }
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
+    const Config cfg = d->configFor(configRole);
+    const qreal fromOpacity = rootItem ? rootItem->opacity() : 1.0;
+    const qreal fromScale = (cfg.hideScaleProfile.isEmpty() || !rootItem) ? 1.0 : rootItem->scale();
+    const qreal toScale = cfg.hideScaleProfile.isEmpty() ? 1.0 : cfg.hideScaleTo;
+    d->runLeg(surface, rootItem, fromOpacity, /*toOpacity=*/0.0, cfg.hideProfile, fromScale, toScale,
+              cfg.hideScaleProfile, cfg.hideShaderEffectId, cfg.hideShaderProfile, cfg.hideShaderParameters,
+              std::move(onComplete));
 }
 
 void SurfaceAnimator::setEnabled(bool enabled)

@@ -39,19 +39,19 @@
 #include <animation_uniforms.glsl>
 #include <noise.glsl>
 
+// metadata.json declaration order:
+//   bool   → customParams[0].x (additiveBlending)
+//   floats → customParams[0].y/.z/.w + [1].x (seedX, seedY, scale, lineWidth)
+//   colors → customColors[0..1] (glowColor, lineColor — alpha used as
+//                                 the per-layer max strength multiplied
+//                                 by the per-tile shaping below)
 #define additiveBlending customParams[0].x
 #define seedX            customParams[0].y
 #define seedY            customParams[0].z
 #define tileScale        customParams[0].w
 #define lineWidth        customParams[1].x
-#define glowR            customParams[1].y
-#define glowG            customParams[1].z
-#define glowB            customParams[1].w
-#define glowA            customParams[2].x
-#define lineR            customParams[2].y
-#define lineG            customParams[2].z
-#define lineB            customParams[2].w
-#define lineA            customParams[3].x
+#define glowColor        customColors[0]
+#define lineColor        customColors[1]
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -117,8 +117,8 @@ void main()
         vec2 lookupOffset = tileProgress * hex.xy / texScale / max(1.0 - tileProgress, 0.001);
         oColor = texture(uTexture0, uv + lookupOffset);
 
-        vec4 glow = vec4(glowR, glowG, glowB, glowA);
-        vec4 line = vec4(lineR, lineG, lineB, lineA);
+        vec4 glow = glowColor;
+        vec4 line = lineColor;
 
         // Glow shaping: stack of pow-curves on hex.w (squared
         // distance to cell centre) gives a tight bright core with
@@ -146,23 +146,26 @@ void main()
         line.a *= glowProgress;
 
         // Don't extend the lines past the window silhouette — gate
-        // by the local sampled alpha. oColor here is pre-multiplied;
-        // its .a reflects how visible this cell's content is.
-        glow *= oColor.a;
-        line *= oColor.a;
+        // by the local sampled alpha. Scale ONLY the alpha channels;
+        // multiplying the full vec4 would also pre-attenuate
+        // glow.rgb / line.rgb, and the additive composite below then
+        // multiplies them by glow.a / line.a a second time, dimming
+        // the emission against partly-transparent texels.
+        glow.a *= oColor.a;
+        line.a *= oColor.a;
 
         if (additiveBlending > 0.5) {
             // Pre-multiplied additive emission.
             oColor.rgb += glow.rgb * glow.a;
             oColor.rgb += line.rgb * line.a;
         } else {
-            // "Over" blend in straight-alpha-equivalent form on
-            // pre-multiplied input. mix(rgb, color, alpha) on
-            // pre-multiplied rgb gives the right look here because
-            // we've already scaled the overlay alphas by the local
-            // window alpha.
-            oColor.rgb = mix(oColor.rgb, glow.rgb, glow.a);
-            oColor.rgb = mix(oColor.rgb, line.rgb, line.a);
+            // "Over" blend on pre-multiplied input. The standard
+            // formula `under * (1 - over.a) + over_premul` requires
+            // BOTH operands in pre-multiplied form; glow.rgb / line.rgb
+            // are straight, so multiply by their alpha at the call site
+            // to lift them into pre-multiplied space before the merge.
+            oColor.rgb = oColor.rgb * (1.0 - glow.a) + glow.rgb * glow.a;
+            oColor.rgb = oColor.rgb * (1.0 - line.a) + line.rgb * line.a;
         }
     }
 

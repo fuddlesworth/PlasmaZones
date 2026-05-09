@@ -61,6 +61,15 @@ OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDet
             Q_EMIT snapAssistShown(screenId, emptyZones, candidates);
         });
 
+    // Mirror snapAssistShown's path on the way out so external observers
+    // (KCMs, debugging tools, the kwin-effect's thumbnail-injection
+    // bookkeeping) can track visible/hidden symmetrically without
+    // polling isSnapAssistVisible. The internal IOverlayService signal
+    // collapses every dismiss reason (pick, Escape, backdrop, screen-
+    // change cancel, explicit D-Bus hideSnapAssist) through one emit
+    // site, so a parameterless forward is the right shape here.
+    connect(m_overlayService, &IOverlayService::snapAssistDismissed, this, &OverlayAdaptor::snapAssistDismissed);
+
     // Pre-warm the kwin trust cache so the first @c setSnapAssistThumbnail
     // of a session is a one-set-lookup hit instead of a sync
     // GetConnectionUnixProcessID round-trip from inside the D-Bus method

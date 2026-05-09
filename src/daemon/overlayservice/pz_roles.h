@@ -42,41 +42,57 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
                                                                     QMargins(),
                                                                     QStringLiteral("plasmazones-zone-selector")};
 
-/// OSD base shape used by the unified notification surface (and any
-/// future fullscreen-overlay-style surface). FullscreenOverlay primitive:
-/// AnchorAll so the compositor ignores x/y hints and honours the margins
-/// we write dynamically via the transport handle (see
-/// `centerLayerWindowOnScreen` in osd.cpp) to centre the OSD on-screen.
-/// No keyboard, click-through. Pre-warmed per screen at daemon start.
+/// OSD config-only role. The wl_surface lifetime moved to the unified
+/// PassiveShell post-shell-migration; this role is preserved purely for
+/// SurfaceAnimator config-lookup (registerConfigForRole keys on the
+/// scope prefix, and the role-override beginShow/beginHide overloads
+/// resolve per-content motion + shader profiles via this role's prefix
+/// even though the shell's actual surface uses PassiveShell).
+inline const PhosphorLayer::Role Notification =
+    PhosphorLayer::Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("plasmazones-notification"));
+
+/// Passive overlay shell — single per-screen wlr-layer-shell host that
+/// groups every kbd-None overlay (OSD, zone-selector, main zone overlay,
+/// and post-migration snap-assist + layout picker) onto one wl_surface
+/// per screen. FullscreenOverlay primitive (AnchorAll, no keyboard,
+/// click-through). Permanently mapped after first show — keepMappedOnHide
+/// is moot since per-content slots toggle visibility within the shared
+/// scene graph rather than the wl_surface itself unmapping.
 ///
-/// Currently only consumed to derive @ref Notification (post-Phase-2
-/// LayoutOsd + NavigationOsd unification — both ride the Notification
-/// surface now). Preserved as a named OSD-shape primitive so future
-/// click-through fullscreen overlays (e.g. a separate alerts surface)
-/// can branch off the same protocol shape without re-typing the
-/// FullscreenOverlay reference and the "no keyboard, click-through"
-/// invariant inline.
-inline const PhosphorLayer::Role OsdBase = PhosphorLayer::Roles::FullscreenOverlay;
+/// Each per-content slot is animated by the SurfaceAnimator keyed on
+/// (PassiveShell surface, slot QQuickItem). Per-content motion / shader
+/// configs are resolved via the role-override `beginShow`/`beginHide`
+/// overloads — the surface's own role is PassiveShell but the animation
+/// config role is the per-content role (Notification, ZoneSelector, …)
+/// so per-content profiles still drive each slot's transitions.
+///
+/// See `PassiveOverlayShell.qml` for the QML side and the unified-shell
+/// migration commits for the per-consumer rewrite.
+inline const PhosphorLayer::Role PassiveShell =
+    PhosphorLayer::Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("plasmazones-passive-shell"));
 
-/// Unified notification surface — single per-screen wl_surface that hosts
-/// both layout-OSD and navigation-OSD content via NotificationOverlay.qml's
-/// mode-driven Loader. The two OSD modes share OsdBase (FullscreenOverlay,
-/// AnchorAll, no keyboard, click-through) and are never simultaneously
-/// visible, so a single Surface backs both. createNotificationWindow
-/// extends this prefix per-screen-and-generation; the SurfaceAnimator
-/// uses longest-prefix matching to apply the OSD config across all
-/// derived prefixes.
-inline const PhosphorLayer::Role Notification = OsdBase.withScopePrefix(QStringLiteral("plasmazones-notification"));
-
-/// Snap assist (post-snap window picker). Top layer, exclusive keyboard
-/// so Escape reliably dismisses. Singleton — one instance, re-targeted
-/// to whichever screen the snap happened on.
+/// Snap-assist config-only role. The wl_surface lifetime moved to the
+/// unified PassiveShell post-shell-migration; this role is preserved
+/// purely for SurfaceAnimator config-lookup (registerConfigForRole keys
+/// on the scope prefix, and the role-override beginShow/beginHide
+/// overloads resolve per-content motion + shader profiles via this
+/// role's prefix even though the shell's actual surface uses
+/// PassiveShell). Escape-to-dismiss is wired via the daemon's
+/// `cancel_overlay_during_drag` global accelerator (see start.cpp's
+/// snapAssistShown handler) since the shell is kbd-None.
+///
+/// Singleton at the daemon level — m_snapAssistScreenId tracks which
+/// screen's slot is active and re-targets across screens.
 inline const PhosphorLayer::Role SnapAssist =
     PhosphorLayer::Roles::CenteredModal.withScopePrefix(QStringLiteral("plasmazones-snap-assist"));
 
-/// PhosphorZones::Layout picker (interactive layout browser). Singleton modal with
-/// exclusive keyboard. Shape matches SnapAssist but distinct scope so
-/// the compositor keeps them independent.
+/// Layout-picker config-only role. Same migration story as SnapAssist —
+/// the picker now lives as an Item slot inside the per-screen passive
+/// shell, and this role exists purely as the SurfaceAnimator config
+/// lookup key. Picker keyboard navigation (arrow keys + Return/Enter
+/// + Escape) is routed via KGlobalAccel ad-hoc shortcuts registered
+/// by `WindowDragAdaptor::ensureLayoutPickerNavShortcutsRegistered`
+/// on show and released on dismiss.
 inline const PhosphorLayer::Role LayoutPicker =
     PhosphorLayer::Roles::CenteredModal.withScopePrefix(QStringLiteral("plasmazones-layout-picker"));
 

@@ -25,9 +25,15 @@ public:
     /// @param currentFileDir Directory of the file that contains @p source
     /// @param includePaths Directories to search for includes
     /// @param outError If non-null, set on error (file not found, depth exceeded)
+    /// @param outIncludedPaths If non-null, appended with the canonical
+    ///        absolute path of every successfully-resolved include file.
+    ///        Lets callers fingerprint transitively-included headers (e.g.
+    ///        for cache invalidation) — without this, a cache keyed only
+    ///        on the top-level shader's mtime serves stale baked SPIR-V
+    ///        when an included header changes.
     /// @return Expanded source, or empty string on error
     static QString expandIncludes(const QString& source, const QString& currentFileDir, const QStringList& includePaths,
-                                  QString* outError = nullptr);
+                                  QString* outError = nullptr, QStringList* outIncludedPaths = nullptr);
 };
 
 } // namespace PhosphorShaders

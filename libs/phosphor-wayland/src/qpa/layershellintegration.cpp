@@ -215,10 +215,15 @@ void LayerShellIntegration::registryRemoveHandler(void* data, struct wl_registry
         // Their zwlr_layer_surface_v1 objects are now stale — the compositor will
         // send closed events, but nulling m_layerSurface proactively prevents us
         // from issuing protocol requests on dead objects in the interim.
-        auto callbacks = std::exchange(self->m_globalRemovedCallbacks, {});
-        for (const auto& [cbId, cb] : callbacks) {
-            cb();
-        }
+        self->fireGlobalRemovedCallbacks();
+    }
+}
+
+void LayerShellIntegration::fireGlobalRemovedCallbacks()
+{
+    auto callbacks = std::exchange(m_globalRemovedCallbacks, {});
+    for (const auto& [cbId, cb] : callbacks) {
+        cb();
     }
 }
 

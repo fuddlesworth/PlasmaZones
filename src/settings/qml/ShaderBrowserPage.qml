@@ -38,7 +38,7 @@ import org.kde.kirigami as Kirigami
  *     each section headed with the category name and the count.
  *     Card click opens ShaderBrowserDetailDialog.
  */
-Flickable {
+SettingsFlickable {
     id: root
 
     required property var bridge

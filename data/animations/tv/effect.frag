@@ -34,10 +34,10 @@
 
 #include <animation_uniforms.glsl>
 
-#define flashR     customParams[0].x
-#define flashG     customParams[0].y
-#define flashB     customParams[0].z
-#define flashAlpha customParams[0].w
+// metadata.json: color → customColors[0] (flashColor — alpha is the
+// tint-mix gate so the user can dial in a fully transparent flash to
+// disable the colour wash entirely).
+#define flashColor customColors[0]
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -98,7 +98,7 @@ void main()
     // sampled is pre-multiplied; multiplying the flash colour by
     // sampled.a keeps the tint pre-multiplied-correct so transparent
     // window regions don't acquire a flash-colour halo.
-    vec4 flash    = vec4(flashR, flashG, flashB, flashAlpha);
+    vec4 flash    = flashColor;
     float tintMix = flash.a * smoothstep(0.0, 1.0, prog);
     sampled.rgb   = mix(sampled.rgb, flash.rgb * sampled.a, tintMix);
 

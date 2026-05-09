@@ -37,7 +37,17 @@ private Q_SLOTS:
             }
             const QString frag = animationsDir + QLatin1Char('/') + sub + QStringLiteral("/effect.frag");
             if (QFileInfo::exists(frag)) {
-                QTest::newRow(qPrintable(sub)) << frag;
+                QTest::newRow(qPrintable(sub + QStringLiteral(":frag"))) << frag;
+                any = true;
+            }
+            // Also bake the optional vertex shader. Per the AnimationShaderEffect
+            // contract, packs that ship their own `effect.vert` must compile under
+            // the same UBO contract as the fragment side. Without this row the
+            // first vert-driven effect to land would only get bake coverage by
+            // hand at first install.
+            const QString vert = animationsDir + QLatin1Char('/') + sub + QStringLiteral("/effect.vert");
+            if (QFileInfo::exists(vert)) {
+                QTest::newRow(qPrintable(sub + QStringLiteral(":vert"))) << vert;
                 any = true;
             }
         }

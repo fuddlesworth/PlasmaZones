@@ -97,6 +97,19 @@ Q_SIGNALS:
     void zoneHighlightChanged(const QString& zoneId);
     void snapAssistShown(const QString& screenId, const PlasmaZones::EmptyZoneList& emptyZones,
                          const PlasmaZones::SnapAssistCandidateList& candidates);
+    /**
+     * @brief Emitted when the Snap Assist overlay closes.
+     *
+     * Forwarded directly from `IOverlayService::snapAssistDismissed`,
+     * which fires regardless of dismiss source (user pick, Escape,
+     * backdrop click, screen-change cancel, or an explicit
+     * `hideSnapAssist()` D-Bus call). Pairs with @ref snapAssistShown
+     * so external observers can mirror visibility without polling
+     * @ref isSnapAssistVisible. No payload — the dismiss reason is
+     * intentionally not surfaced because the internal signal collapses
+     * every path through the same emit site.
+     */
+    void snapAssistDismissed();
 
 private:
     /**

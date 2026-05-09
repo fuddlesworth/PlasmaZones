@@ -178,5 +178,8 @@
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="PlasmaZones::SnapAssistCandidateList"/>
             </arg>
         </signal>
+        <signal name="snapAssistDismissed">
+            <annotation name="org.gtk.GDBus.DocString" value="Informational signal: emitted when the Snap Assist overlay closes — whether through a user pick, an Escape / backdrop dismiss, an external hideSnapAssist() D-Bus call, or a screen-change cancel. Pairs with snapAssistShown so external observers (KCMs, kwin-effect, debugging tools) can mirror the visible/hidden state without polling isSnapAssistVisible. Carries no payload; the dismiss reason is intentionally not surfaced because the daemon collapses every dismiss path through the same internal IOverlayService::snapAssistDismissed signal."/>
+        </signal>
     </interface>
 </node>

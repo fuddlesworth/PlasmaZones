@@ -72,9 +72,13 @@ vec3 offsetHue(vec3 color, float hueOffset)
     float delta = maxC - minC;
     float hue   = 0.0;
     if (delta > 0.0) {
-        if (maxC == color.r)      hue = mod((color.g - color.b) / delta, 6.0);
-        else if (maxC == color.g) hue = (color.b - color.r) / delta + 2.0;
-        else                      hue = (color.r - color.g) / delta + 4.0;
+        // Pick the dominant channel by magnitude rather than by
+        // float-equality with `maxC` — for cosine-driven inputs where
+        // two channels can land at the same value, exact `==` snaps to
+        // an arbitrary branch and produces a hue jump.
+        if (color.r >= color.g && color.r >= color.b)      hue = mod((color.g - color.b) / delta, 6.0);
+        else if (color.g >= color.r && color.g >= color.b) hue = (color.b - color.r) / delta + 2.0;
+        else                                               hue = (color.r - color.g) / delta + 4.0;
     }
     hue /= 6.0;
 
@@ -98,12 +102,14 @@ vec3 offsetHue(vec3 color, float hueOffset)
 
 // Straight-alpha "over" composite, for pre-multiplied input/output
 // where this layer (`over`) wants to be added on top of `under`
-// without losing colour saturation.
+// without losing colour saturation. Denominator clamp guards the
+// near-empty case `under.a ≈ 0 && over.a ≈ 1e-7` where the early
+// `both-zero` check passes but the divide still produces huge RGB.
 vec4 alphaOver(vec4 under, vec4 over)
 {
     if (under.a == 0.0 && over.a == 0.0) return vec4(0.0);
     float a = mix(under.a, 1.0, over.a);
-    return vec4(mix(under.rgb * under.a, over.rgb, over.a) / a, a);
+    return vec4(mix(under.rgb * under.a, over.rgb, over.a) / max(a, 1e-4), a);
 }
 
 // 16-tap radial blur of the window content. `radius` in pixels;
@@ -112,6 +118,14 @@ vec4 alphaOver(vec4 under, vec4 over)
 // divided by sample count — the result stays pre-multiplied.
 vec4 blurredInputColor(vec2 uv, float radius, float samples)
 {
+    // Skip the 45-tap loop when the radius collapses — at progress=1
+    // (fully visible state) the caller passes radius=0, and every tap
+    // would resolve to the same coordinate. Falling through to a single
+    // texture read saves 44 redundant samples per fragment on every
+    // visible-state frame.
+    if (radius < 0.5) {
+        return texture(uTexture0, uv);
+    }
     vec4 acc = vec4(0.0);
     const float tau = 6.28318530718;
     const float dirs = 15.0;
@@ -228,5 +242,16 @@ void main()
 
     windowCol.a *= cropMask;
 
-    fragColor = windowCol;
+    // Premultiply for the daemon's premultiplied-alpha blend pipeline
+    // (src=One, dst=OneMinusSrcAlpha). The composite chain above mixes
+    // premultiplied `texture(uTexture0,…)` with straight-alpha glow
+    // additions and the alphaOver helper returns straight-alpha; if we
+    // emitted that directly, fragments with low cropMask but nonzero
+    // glow contribution would emit non-premultiplied RGB whose blend
+    // result is `src.rgb + dst.rgb * (1 - src.a)` — additive over
+    // whatever sits underneath. That is invisible in isolation
+    // (transparent backdrop) but lights up snap-assist's tinted
+    // content underneath as a residual halo. Premultiplying RGB by
+    // the final alpha keeps the blend correct against any backdrop.
+    fragColor = vec4(windowCol.rgb * windowCol.a, windowCol.a);
 }

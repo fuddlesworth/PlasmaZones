@@ -1046,6 +1046,12 @@ ApplicationWindow {
         // CONTENT AREA
         // =================================================================
         ColumnLayout {
+            // Aspect ratio submenu — present unless the right-clicked
+            // layout is autotile (showForLayout reconciles its insertion
+            // state in lockstep with the layout kind). Rows are driven
+            // by an Instantiator over `_aspectRatioOptions` so each
+            // ItemDelegate's lifecycle is Qt-managed.
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
@@ -1341,12 +1347,34 @@ ApplicationWindow {
 
                 property var layout: null
                 property int viewMode: 0
-                property var _screenItems: []
-                property bool _aspectRatioMenuInserted: false
+                /// Tracks the kind (`"snap"` / `"autotile"` / `"none"`) the
+                /// aspect-ratio submenu was last reconciled to. showForLayout
+                /// only mutates the menu when the current layout's kind
+                /// differs from this state — `removeMenu` `deleteLater`s
+                /// Qt 6's auto-generated MenuItem placeholder, and the
+                /// inline submenu's reparenting back to its declared parent
+                /// is unreliable enough that doing the dance on every show
+                /// can lose the QML object after many cycles.
+                property string _aspectRatioMenuKind: "none"
                 readonly property bool isAutotile: layout && layout.isAutotile === true
                 readonly property string layoutId: layout ? (layout.id || "") : ""
-                // Aspect ratio options: [key, label, settingsIndex]
+                /// Aspect ratio options: `[key, label, settingsIndex]`. Drives
+                /// the `Instantiator` inside `aspectRatioSubMenu` so each row's
+                /// ItemDelegate is created with a stable Qt-managed lifecycle.
+                /// Imperative `Component.createObject(menu, ...)` parented to
+                /// a popup that isn't yet in the graphics scene emits the
+                /// `Created graphical object was not placed in the graphics
+                /// scene` warning and the unplaced object can leak into Qt's
+                /// menu state.
                 readonly property var _aspectRatioOptions: [["any", window.aspectRatioLabels["any"], 0], ["standard", window.aspectRatioLabels["standard"], 1], ["ultrawide", window.aspectRatioLabels["ultrawide"], 2], ["super-ultrawide", window.aspectRatioLabels["super-ultrawide"], 3], ["portrait", window.aspectRatioLabels["portrait"], 4]]
+                /// Driver for the dynamic "Edit on <screen>" Instantiator
+                /// below. Empty array hides every dynamic row; switching to
+                /// the `screens` list grows them. Single-screen setups never
+                /// populate the model so the submenu collapses cleanly.
+                readonly property var _screenItemsModel: {
+                    var screens = settingsController.screens || [];
+                    return screens.length > 1 ? screens : [];
+                }
 
                 // Signals for dialogs that live in LayoutsPage
                 signal deleteRequested(var layout)
@@ -1355,49 +1383,35 @@ ApplicationWindow {
                 function showForLayout(layout) {
                     layoutContextMenu.layout = layout;
                     layoutContextMenu.viewMode = (layout && layout.isAutotile === true) ? 1 : 0;
-                    // Add/remove aspect ratio submenu (Qt6 ignores visible on inline Menu submenus,
-                    // so we imperatively insert/remove it like screen items)
-                    if (_aspectRatioMenuInserted) {
-                        layoutContextMenu.removeMenu(aspectRatioSubMenu);
-                        _aspectRatioMenuInserted = false;
-                    }
-                    if (!layoutContextMenu.isAutotile) {
-                        aspectRatioSubMenu.updateChecks();
-                        // Insert after the aspectRatioMarker separator
-                        let markerIdx = -1;
-                        for (let k = 0; k < layoutContextMenu.count; k++) {
-                            if (layoutContextMenu.itemAt(k) === aspectRatioMarker) {
-                                markerIdx = k;
-                                break;
+                    var wantKind = layoutContextMenu.isAutotile ? "autotile" : "snap";
+                    // Only reconcile the submenu when the layout kind flips.
+                    // Reconciling on every show churns Qt 6's MenuItem
+                    // placeholder; after enough churn the inline submenu's
+                    // reparenting back to its declared parent fails and
+                    // the QML object is lost.
+                    if (wantKind !== layoutContextMenu._aspectRatioMenuKind) {
+                        if (wantKind === "snap") {
+                            // Insert after the aspectRatioMarker separator so
+                            // the submenu lands in its declared visual slot
+                            // even though it's added imperatively. itemAt
+                            // walks the menu's children, which the inline
+                            // separator joined at parse time.
+                            var markerIdx = -1;
+                            for (var k = 0; k < layoutContextMenu.count; k++) {
+                                if (layoutContextMenu.itemAt(k) === aspectRatioMarker) {
+                                    markerIdx = k;
+                                    break;
+                                }
                             }
+                            if (markerIdx >= 0)
+                                layoutContextMenu.insertMenu(markerIdx + 1, aspectRatioSubMenu);
+                            else
+                                layoutContextMenu.addMenu(aspectRatioSubMenu);
+                        } else {
+                            layoutContextMenu.removeMenu(aspectRatioSubMenu);
                         }
-                        if (markerIdx >= 0)
-                            layoutContextMenu.insertMenu(markerIdx + 1, aspectRatioSubMenu);
-                        else
-                            layoutContextMenu.addMenu(aspectRatioSubMenu);
-                        _aspectRatioMenuInserted = true;
+                        layoutContextMenu._aspectRatioMenuKind = wantKind;
                     }
-                    // Rebuild dynamic "Edit on <screen>" items
-                    for (let j = 0; j < _screenItems.length; j++) {
-                        layoutContextMenu.removeItem(_screenItems[j]);
-                        _screenItems[j].destroy();
-                    }
-                    _screenItems = [];
-                    let screens = settingsController.screens || [];
-                    if (screens.length > 1) {
-                        for (let i = 0; i < screens.length; i++) {
-                            let s = screens[i];
-                            let item = screenMenuItemComponent.createObject(layoutContextMenu, {
-                                "text": i18n("Edit on %1", s.displayLabel || s.name || ""),
-                                "icon.name": s.isPrimary ? "starred-symbolic" : "monitor"
-                            });
-                            item._screenName = s.name;
-                            // Insert after the Edit item (index 1+)
-                            layoutContextMenu.insertItem(1 + i, item);
-                            _screenItems.push(item);
-                        }
-                    }
-                    screenSeparator.visible = _screenItems.length > 0;
                     layoutContextMenu.popup();
                 }
 
@@ -1408,11 +1422,59 @@ ApplicationWindow {
                     onTriggered: settingsController.editLayout(layoutContextMenu.layoutId)
                 }
 
-                // -- Dynamic "Edit on <screen>" items inserted here by showForLayout --
+                // Dynamic "Edit on <screen>" items. Instantiator gives Qt
+                // ownership of each row's lifecycle — rows are placed when
+                // the model grows and torn down synchronously when it
+                // shrinks, with no out-of-scene `createObject` parents and
+                // no deferred `destroy()` racing the next popup. The
+                // delegate is `ItemDelegate` rather than `MenuItem` to
+                // bypass Qt 6's onItemTriggered → dismiss() cascade through
+                // `finalizeExitTransition`; the click handler hides the
+                // menu explicitly via `Qt.callLater` after the click body
+                // finishes.
+                Instantiator {
+                    id: screenItemInstantiator
+
+                    model: layoutContextMenu._screenItemsModel
+                    onObjectAdded: function(index, object) {
+                        // The Edit MenuItem occupies index 0; dynamic rows
+                        // sit immediately after, ahead of screenSeparator
+                        // and the rest of the static menu.
+                        layoutContextMenu.insertItem(1 + index, object);
+                    }
+                    onObjectRemoved: function(index, object) {
+                        layoutContextMenu.removeItem(object);
+                    }
+
+                    delegate: ItemDelegate {
+                        required property var modelData
+                        readonly property string _screenName: (modelData && modelData.name) ? modelData.name : ""
+
+                        text: i18n("Edit on %1", (modelData && modelData.displayLabel) || (modelData && modelData.name) || "")
+                        icon.name: (modelData && modelData.isPrimary) ? "starred-symbolic" : "monitor"
+                        Accessible.name: text
+                        onClicked: {
+                            var screenName = _screenName;
+                            var layoutId = layoutContextMenu.layoutId;
+                            Qt.callLater(function() {
+                                layoutContextMenu.visible = false;
+                                if (screenName.length > 0)
+                                    settingsController.editLayoutOnScreen(layoutId, screenName);
+
+                            });
+                        }
+                    }
+
+                }
+
+                // Tracks the dynamic-row model directly so the separator
+                // hides when no extra screens exist — including live
+                // changes to `settingsController.screens` while the menu
+                // is open.
                 MenuSeparator {
                     id: screenSeparator
 
-                    visible: false
+                    visible: layoutContextMenu._screenItemsModel.length > 0
                 }
 
                 // -- Open in Editor (external text editor) --
@@ -1545,81 +1607,57 @@ ApplicationWindow {
 
             }
 
-            // Component for dynamic "Edit on <screen>" menu items
-            Component {
-                id: screenMenuItemComponent
-
-                MenuItem {
-                    property string _screenName: ""
-
-                    onTriggered: settingsController.editLayoutOnScreen(layoutContextMenu.layoutId, _screenName)
-                }
-
-            }
-
-            // Component for aspect ratio submenu items (ItemDelegate, not MenuItem —
-            // avoids Qt6 finalizeExitTransition crash; same pattern as editor shader menu)
-            Component {
-                id: aspectRatioItemComponent
-
-                ItemDelegate {
-                    property string _arKey: ""
-                    property int _arIndex: 0
-                    property bool isSelected: false
-
-                    icon.name: isSelected ? "checkmark" : ""
-                    Accessible.name: text
-                    onClicked: {
-                        let layoutId = layoutContextMenu.layoutId;
-                        let idx = _arIndex;
-                        Qt.callLater(function() {
-                            aspectRatioSubMenu.visible = false;
-                            layoutContextMenu.visible = false;
-                            settingsController.setLayoutAspectRatio(layoutId, idx);
-                        });
-                    }
-                }
-
-            }
-
-            // Aspect ratio submenu (managed imperatively by showForLayout —
-            // Qt6 ignores visible on inline Menu submenus, so we add/remove it)
+            // Empty `enter` / `exit` Transitions are the
+            // `finalizeExitTransition` hardening pattern (mirrors the
+            // editor's metadata-preset menu): synchronous close avoids
+            // the QQmlData::destroyed race Qt 6's animated Menu teardown
+            // can otherwise hit.
             Menu {
                 id: aspectRatioSubMenu
 
-                property var _items: []
-                property bool _built: false
-
-                function buildOnce() {
-                    if (_built)
-                        return ;
-
-                    _built = true;
-                    var options = layoutContextMenu._aspectRatioOptions;
-                    for (var i = 0; i < options.length; i++) {
-                        var item = aspectRatioItemComponent.createObject(aspectRatioSubMenu, {
-                            "text": options[i][1],
-                            "_arKey": options[i][0],
-                            "_arIndex": options[i][2]
-                        });
-                        aspectRatioSubMenu.addItem(item);
-                        _items.push(item);
-                    }
-                }
-
-                function updateChecks() {
-                    buildOnce();
-                    var currentClass = (layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass) || "any";
-                    for (var i = 0; i < _items.length; i++) {
-                        if (_items[i])
-                            _items[i].isSelected = (_items[i]._arKey === currentClass);
-
-                    }
-                }
-
                 title: i18n("Aspect Ratio")
                 icon.name: "view-fullscreen"
-                onAboutToShow: updateChecks()
+
+                Instantiator {
+                    id: aspectRatioItemInstantiator
+
+                    model: layoutContextMenu._aspectRatioOptions
+                    onObjectAdded: function(index, object) {
+                        aspectRatioSubMenu.insertItem(index, object);
+                    }
+                    onObjectRemoved: function(index, object) {
+                        aspectRatioSubMenu.removeItem(object);
+                    }
+
+                    delegate: ItemDelegate {
+                        required property var modelData
+                        readonly property string _arKey: (modelData && modelData[0]) ? modelData[0] : ""
+                        readonly property int _arIndex: (modelData && modelData[2] !== undefined) ? modelData[2] : 0
+                        // Bound off the layout's aspect-ratio class so the
+                        // check mark tracks the current selection without
+                        // any imperative refresh hook on the submenu —
+                        // such a hook is what fails when the submenu's
+                        // QML object goes null during teardown.
+                        readonly property bool isSelected: {
+                            var current = (layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass) || "any";
+                            return _arKey === current;
+                        }
+
+                        text: (modelData && modelData[1]) ? modelData[1] : ""
+                        icon.name: isSelected ? "checkmark" : ""
+                        Accessible.name: text
+                        onClicked: {
+                            var layoutId = layoutContextMenu.layoutId;
+                            var idx = _arIndex;
+                            Qt.callLater(function() {
+                                aspectRatioSubMenu.visible = false;
+                                layoutContextMenu.visible = false;
+                                settingsController.setLayoutAspectRatio(layoutId, idx);
+                            });
+                        }
+                    }
+
+                }
 
                 enter: Transition {
                 }

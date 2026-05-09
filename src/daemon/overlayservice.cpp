@@ -63,21 +63,20 @@ void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
 {
     QObject::disconnect(state.overlayGeomConnection);
     state.overlayGeomConnection = {};
-    if (state.overlaySurface) {
-        state.overlaySurface->deleteLater();
+    if (state.passiveShellSurface) {
+        state.passiveShellSurface->deleteLater();
     }
-    if (state.zoneSelectorSurface) {
-        state.zoneSelectorSurface->deleteLater();
-    }
-    if (state.notificationSurface) {
-        state.notificationSurface->deleteLater();
-    }
-    state.overlaySurface = nullptr;
-    state.zoneSelectorSurface = nullptr;
-    state.notificationSurface = nullptr;
-    state.overlayWindow = nullptr;
-    state.zoneSelectorWindow = nullptr;
-    state.notificationWindow = nullptr;
+    state.passiveShellSurface = nullptr;
+    state.passiveShellWindow = nullptr;
+    // Slot Items are children of the shell QQuickWindow; deleting the
+    // shell destroys them. Null all five slot pointers so a stale
+    // signal handler that runs before the screen-state entry is purged
+    // doesn't dereference a dangling QQuickItem*.
+    state.passiveShellOsdSlot = nullptr;
+    state.passiveShellSnapAssistSlot = nullptr;
+    state.passiveShellLayoutPickerSlot = nullptr;
+    state.passiveShellZoneSelectorSlot = nullptr;
+    state.passiveShellMainOverlaySlot = nullptr;
     state.overlayPhysScreen = nullptr;
     state.zoneSelectorPhysScreen = nullptr;
     state.notificationPhysScreen = nullptr;
@@ -397,7 +396,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 // not the bare "physId" key itself.
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
-                destroyNotificationWindow(physicalScreenId);
+                destroyPassiveShell(physicalScreenId);
                 m_screenStates.remove(physicalScreenId);
                 return;
             }
@@ -410,7 +409,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
             if (mgr2 && mgr2->hasVirtualScreens(physicalScreenId)) {
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
-                destroyNotificationWindow(physicalScreenId);
+                destroyPassiveShell(physicalScreenId);
             }
 
             // Clear selected zone before destroying windows — the selection references
@@ -533,19 +532,16 @@ OverlayService::~OverlayService()
     // deleted pointer in ~Impl.
     cleanupAllScreenStates(m_screenStates);
 
-    // Singleton surfaces (snap assist, layout picker, shader preview) are
-    // QObject children of `this`, so the QObject parent-child system would
-    // destroy them AFTER our own destructor body runs — i.e. after the
-    // member destructors. Schedule their deletion now so SurfaceManager's
-    // drain loop picks them up before the engine is destroyed.
-    if (m_snapAssistSurface) {
-        m_snapAssistSurface->deleteLater();
-        m_snapAssistSurface = nullptr;
-    }
-    if (m_layoutPickerSurface) {
-        m_layoutPickerSurface->deleteLater();
-        m_layoutPickerSurface = nullptr;
-    }
+    // Singleton surfaces (layout picker, shader preview) are QObject
+    // children of `this`, so the QObject parent-child system would
+    // destroy them AFTER our own destructor body runs — i.e. after
+    // the member destructors. Schedule their deletion now so
+    // SurfaceManager's drain loop picks them up before the engine is
+    // destroyed. Snap-assist post-shell-migration is an Item slot
+    // inside the per-screen passive shell — its lifetime is the
+    // shell's, no separate cleanup here.
+    // Picker post-shell-migration is also a slot in the per-screen
+    // passive shell — no separate surface cleanup.
     if (m_shaderPreviewSurface) {
         m_shaderPreviewSurface->deleteLater();
         m_shaderPreviewSurface = nullptr;
@@ -601,41 +597,70 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams pa
 }
 
 PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLayer::Role& role, const QUrl& qmlUrl,
-                                                               QScreen* physScreen, const char* windowType)
+                                                               QScreen* physScreen, const char* windowType,
+                                                               const QString& screenId)
 {
-    // Warm-up size matches NotificationOverlay.qml's QML literal (240x70).
-    // This only governs the size of the warm-up commit — every per-show
-    // path in osd.cpp goes through assertWindowOnScreen + sizeAndCenterOsd,
-    // both of which still call setGeometry / setWidth / setHeight against
-    // the live window, so per-show swapchain resizes still happen on every
-    // show as before. What changes here is that the daemon stops paying for
-    // a full-screen swapchain for an OSD whose visible content is a tiny
-    // toast: holding ~17 fullscreen swapchains (one per warmed overlay
-    // across virtual screens) cost ~25 MB each at 4K on NVIDIA's proprietary
-    // stack, and a content-sized warm-up brings that down to the toast's
-    // own footprint.
+    // OSD surfaces are screen-sized (mirrors snap-assist / zone-selector).
+    // Phase prior to this change kept OSD wl_surfaces content-sized (240×70
+    // toast) and the layer-shell margins did the on-screen centering, but
+    // that left vertex-shader transitions like fly-in clipped at the
+    // surface edge — geometry shifted past the surface bounds is dropped
+    // by the compositor. A screen-sized OSD surface gives shader effects
+    // headroom equal to the screen, and keeps the wiring path identical
+    // to popups (which were already screen-sized) so a single
+    // `boundsExtent` mechanism works uniformly across every overlay role.
+    //
+    // Cost is real but bearable: a fullscreen swapchain runs ~25 MB at 4K
+    // on the NVIDIA proprietary stack, vs ~tens of KB for the content-
+    // sized warm-up. With one notification surface per effective screen
+    // (~1–6 in typical setups), that's ~25–150 MB. Damage tracking keeps
+    // the per-frame cost negligible while idle: a fullscreen surface with
+    // a small centred card only repaints the card region.
+    QRect screenGeom;
+    if (!screenId.isEmpty() && m_screenManager) {
+        screenGeom = m_screenManager->screenGeometry(screenId);
+    }
+    if (!screenGeom.isValid() && physScreen) {
+        screenGeom = physScreen->geometry();
+    }
+    QSize initialSize = screenGeom.isValid() ? screenGeom.size() : QSize(240, 70);
+
+    // Virtual-screen-aware anchors / margins, same vocabulary popups use
+    // (see selector.cpp::createZoneSelectorWindow). Physical screen →
+    // AnchorAll + zero margins so the compositor sizes the surface to the
+    // full output. Virtual screen → Top|Left + offset margins pinning the
+    // surface to the VS sub-rect's top-left within its physical screen.
+    std::optional<PhosphorLayer::Anchors> anchorsOverride;
+    std::optional<QMargins> marginsOverride;
+    if (physScreen && screenGeom.isValid()) {
+        const bool isVS = !screenId.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
+        const auto placement = layerPlacementForVs(isVS ? screenGeom : QRect(), physScreen->geometry());
+        anchorsOverride = placement.anchors;
+        if (!placement.margins.isNull()) {
+            marginsOverride = placement.margins;
+        }
+    }
+
     auto* surface = createLayerSurface({.qmlUrl = qmlUrl,
                                         .screen = physScreen,
                                         .role = role,
                                         .windowType = windowType,
+                                        .anchorsOverride = anchorsOverride,
+                                        .marginsOverride = marginsOverride,
                                         .keepMappedOnHide = true,
-                                        .initialSize = QSize(240, 70)});
+                                        .initialSize = initialSize});
     if (!surface) {
         return nullptr;
     }
 
-    // Wire the QML-side auto-dismiss signal to Surface::hide(). The OSD
-    // content components (LayoutOsdContent, NavigationOsdContent) both
-    // expose `signal dismissRequested()` driven by their shared
-    // OsdDismissable timer; the unified NotificationOverlay host
-    // re-emits each loaded content's signal as its own dismissRequested.
-    // LayoutPickerOverlay uses the same name (post-#9 rename) for
-    // backdrop-click dismissal. String-based connect is the only path
-    // because QML-defined signals aren't addressable via Qt5
-    // `&Class::signal` pointers.
-    if (auto* window = surface->window()) {
-        QObject::connect(window, SIGNAL(dismissRequested()), surface, SLOT(hide()));
-    }
+    // Post-shell-migration: per-content auto-dismiss is wired through
+    // the shell window's per-slot signals (`osdDismissRequested`,
+    // `snapAssistDismissRequested`, `layoutPickerDismissRequested`),
+    // each routed by ensurePassiveShellFor to a slot-specific
+    // animator-driven hide rather than a whole-surface hide. There's
+    // no generic `dismissRequested` signal on PassiveOverlayShell.qml
+    // anymore — wiring one would unmap the shell on any per-slot
+    // auto-dismiss timer.
     return surface;
 }
 
@@ -710,8 +735,12 @@ PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screen
 
 void OverlayService::hideDisabledAndRefresh()
 {
-    // Destroy windows on screens where the current context is disabled.
-    // Destroy (not hide) to free GPU resources for permanently inactive contexts.
+    // Hide overlay + zone-selector slots on screens where the current
+    // context is disabled. Post-shell-migration the wl_surface stays
+    // mapped (managed by destroyPassiveShell on hot-plug, not per
+    // context-toggle); each per-content slot fades out via its
+    // configured hide leg. dismissOverlayWindow / hideZoneSelectorSlotOnScreen
+    // both clear the per-screen sentinel on completion.
     if (m_settings) {
         const QStringList screenIds = m_screenStates.keys();
         for (const QString& screenId : screenIds) {
@@ -719,7 +748,7 @@ void OverlayService::hideDisabledAndRefresh()
                                   m_currentVirtualDesktop, m_currentActivity)) {
                 destroyZoneSelectorWindow(screenId);
                 if (m_visible) {
-                    destroyOverlayWindow(screenId);
+                    dismissOverlayWindow(screenId);
                 }
             }
         }
@@ -732,10 +761,10 @@ void OverlayService::hideDisabledAndRefresh()
                               m_currentActivity)) {
             continue;
         }
-        if (it.value().zoneSelectorWindow) {
+        if (it.value().passiveShellZoneSelectorSlot) {
             updateZoneSelectorWindow(screenId);
         }
-        if (m_visible && it.value().overlayWindow && it.value().overlayPhysScreen) {
+        if (m_visible && it.value().overlayPhysScreen) {
             updateOverlayWindow(screenId, it.value().overlayPhysScreen);
         }
     }
@@ -766,7 +795,7 @@ void OverlayService::setupForScreen(QScreen* screen)
     const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     if (mgr && mgr->hasVirtualScreens(physId)) {
         for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
-            if (!m_screenStates.contains(vsId) || !m_screenStates[vsId].overlayWindow) {
+            if (!m_screenStates.contains(vsId) || !m_screenStates[vsId].overlayPhysScreen) {
                 QRect vsGeom = mgr->screenGeometry(vsId);
                 if (!vsGeom.isValid()) {
                     qCWarning(lcOverlay) << "setupForScreen: invalid geometry for virtual screen" << vsId
@@ -777,7 +806,7 @@ void OverlayService::setupForScreen(QScreen* screen)
             }
         }
     } else {
-        if (!m_screenStates.contains(physId) || !m_screenStates[physId].overlayWindow) {
+        if (!m_screenStates.contains(physId) || !m_screenStates[physId].overlayPhysScreen) {
             createOverlayWindow(screen);
         }
     }
@@ -825,18 +854,28 @@ void OverlayService::handleScreenAdded(QScreen* screen)
             if (vsGeom.isValid()) {
                 createOverlayWindow(vsId, screen, vsGeom);
                 updateOverlayWindow(vsId, screen);
-                if (auto* window = m_screenStates.value(vsId).overlayWindow) {
-                    assertWindowOnScreen(window, screen, vsGeom);
-                    window->show();
+                const auto& vsState = m_screenStates.value(vsId);
+                if (vsState.overlayPhysScreen) {
+                    if (auto* window = vsState.passiveShellWindow) {
+                        assertWindowOnScreen(window, screen, vsGeom);
+                        if (vsState.passiveShellSurface && !vsState.passiveShellSurface->isLogicallyShown()) {
+                            vsState.passiveShellSurface->show();
+                        }
+                    }
                 }
             }
         }
     } else {
         createOverlayWindow(screen);
         updateOverlayWindow(screen);
-        if (auto* window = m_screenStates.value(physScreenId).overlayWindow) {
-            assertWindowOnScreen(window, screen);
-            window->show();
+        const auto& pState = m_screenStates.value(physScreenId);
+        if (pState.overlayPhysScreen) {
+            if (auto* window = pState.passiveShellWindow) {
+                assertWindowOnScreen(window, screen);
+                if (pState.passiveShellSurface && !pState.passiveShellSurface->isLogicallyShown()) {
+                    pState.passiveShellSurface->show();
+                }
+            }
         }
     }
 }
@@ -852,27 +891,21 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             || state.notificationPhysScreen == screen) {
             destroyOverlayWindow(id);
             destroyZoneSelectorWindow(id);
-            destroyNotificationWindow(id);
-            // If every window for this screen-id was already released (or
-            // this state entry never actually held any — e.g. an OSD
-            // creation failed earlier), drop the empty shell so screen
-            // hot-plug cycles don't slowly accumulate dead keys. Matches
-            // cleanupVirtualScreenStates semantics: the state entry is
-            // meaningless without at least one live window.
+            destroyPassiveShell(id);
+            // Drop the empty state entry once the shell surface is
+            // gone — matches cleanupVirtualScreenStates semantics so
+            // screen hot-plug cycles don't slowly accumulate dead keys.
             auto& s = m_screenStates[id];
-            if (!s.overlaySurface && !s.zoneSelectorSurface && !s.notificationSurface) {
+            if (!s.passiveShellSurface) {
                 m_screenStates.remove(id);
             }
         }
     }
 
-    // Clean up snap assist and layout picker if on this physical screen
-    if (m_snapAssistScreen == screen) {
-        destroySnapAssistWindow();
-    }
-    if (m_layoutPickerScreen == screen) {
-        destroyLayoutPickerWindow();
-    }
+    // Snap-assist + layout picker post-shell-migration are Item slots
+    // inside the per-screen passive shell — destroying the shell
+    // (above, via destroyPassiveShell) tears the slots down with
+    // it. No separate cleanup needed.
 
     // Drop notification-window "creation failed" sentinels for screen ids
     // rooted on this physical screen. Without this, if the same physical

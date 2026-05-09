@@ -33,9 +33,7 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::PopupZoneSelectorShow,
         PP::PopupZoneSelectorHide,
         PP::PopupSnapAssistShow,
-        // SnapAssist's hide leg is intentionally absent — the surface
-        // is destroy-on-hide and never paints a hide frame, so a shader
-        // assignment there would be runtime no-op.
+        PP::PopupSnapAssistHide,
         //
         // Window family — driven by the KWin OffscreenEffect at
         // kwin-effect/plasmazoneseffect.cpp via tryBeginShaderForEvent
