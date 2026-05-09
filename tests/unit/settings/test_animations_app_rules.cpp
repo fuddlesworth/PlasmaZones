@@ -225,15 +225,21 @@ private Q_SLOTS:
                  QStringLiteral("spotify"));
     }
 
-    void moveAppRule_sameIndex_returnsFalse()
+    void moveAppRule_sameIndex_isNoOp()
     {
+        // Same-index move is a no-op equivalent to setAppRule(currentRule):
+        // stored successfully, nothing changed, no dirty flip. Return true
+        // so QML callers can't distinguish "rejected" from "no change".
         IsolatedConfigGuard guard;
         Settings settings;
         AnimationsPageController c(nullptr, &settings);
 
         QVERIFY(c.addAppRule(
             makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
-        QVERIFY(!c.moveAppRule(0, 0));
+
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
+        QVERIFY(c.moveAppRule(0, 0));
+        QCOMPARE(spy.count(), 0);
     }
 
     void moveAppRule_outOfRange_returnsFalse()

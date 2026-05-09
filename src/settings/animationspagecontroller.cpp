@@ -1202,12 +1202,16 @@ bool AnimationsPageController::moveAppRule(int from, int to)
     if (!m_settings)
         return false;
     auto rules = m_settings->animationAppRules();
-    if (from == to) {
-        return false;
-    }
     if (from < 0 || from >= rules.size() || to < 0 || to >= rules.size()) {
         qCWarning(lcConfig) << "moveAppRule: out-of-range from=" << from << "to=" << to << "size=" << rules.size();
         return false;
+    }
+    if (from == to) {
+        // No-op (matches `setAppRule` semantics: stored successfully,
+        // nothing changed). Returns true rather than false so QML
+        // callers can't distinguish "rejected" from "stored, no
+        // change" — both are equivalent from the caller's perspective.
+        return true;
     }
     // Snapshot + compare so two adjacent identical rules (or any
     // permutation that yields the same sequence) doesn't flip the

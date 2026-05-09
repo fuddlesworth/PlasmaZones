@@ -341,7 +341,11 @@ public:
     Q_INVOKABLE bool removeAppRule(int index);
 
     /// Move the rule from @p from to @p to (drag-reorder). Returns
-    /// false on out-of-range indices or no-op moves.
+    /// false only on out-of-range indices. Same-index moves and moves
+    /// that yield an identical sequence (e.g. swapping adjacent
+    /// duplicates) return true and are no-ops — neither flips the
+    /// dirty bit nor emits a change signal, matching the no-op
+    /// semantics of `setAppRule`.
     Q_INVOKABLE bool moveAppRule(int from, int to);
 
     /// Window-event paths suitable for the `AnimationAppRule.eventPath`

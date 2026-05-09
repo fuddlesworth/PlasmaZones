@@ -65,6 +65,15 @@ SettingsFlickable {
     /// keep in sync with that header so a new event path picks up a
     /// localised label instead of falling through to the raw English
     /// fallback (visible but not translated).
+    ///
+    /// The bare `"window"` parent path is NOT surfaced in the Add
+    /// Rule combo (`animationAppRuleEvents()` filters category nodes),
+    /// but it IS in `ProfilePaths::allBuiltInPaths()` and therefore
+    /// passes the controller's `isValidEventPath` whitelist — a
+    /// programmatic Q_INVOKABLE caller could persist a rule whose
+    /// `eventPath == "window"` and the rules-list rendering path
+    /// would land here. Keep the entry so that defensive case still
+    /// renders a localised label.
     readonly property var _eventTranslations: ({
         "window": i18nc("window-event category, used as inheritance anchor", "Window"),
         "window.open": i18nc("window-event verb", "Open"),
