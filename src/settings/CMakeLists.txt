@@ -165,6 +165,7 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimatedBoxTrack.qml
         qml/AnimationEventCard.qml
         qml/AnimationsWindowsPage.qml
+        qml/AnimationsAppRulesPage.qml
         qml/AnimationsZonesPage.qml
         qml/AnimationsNotificationsPage.qml
         qml/AnimationsPopupsPage.qml
