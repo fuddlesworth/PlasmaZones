@@ -32,6 +32,7 @@ struct ZoneSelectorConfig
     bool previewLockAspect = true;
     int gridColumns = 5;
     int triggerDistance = 50;
+    bool nearestZoneByCenter = false;
 };
 
 /**
@@ -50,6 +51,7 @@ inline constexpr const char PreviewHeight[] = "PreviewHeight";
 inline constexpr const char PreviewLockAspect[] = "PreviewLockAspect";
 inline constexpr const char GridColumns[] = "GridColumns";
 inline constexpr const char TriggerDistance[] = "TriggerDistance";
+inline constexpr const char NearestZoneByCenter[] = "NearestZoneByCenter";
 } // namespace ZoneSelectorConfigKey
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -265,6 +267,8 @@ public:
     virtual void setZoneSelectorSizeMode(ZoneSelectorSizeMode mode) = 0;
     virtual int zoneSelectorMaxRows() const = 0;
     virtual void setZoneSelectorMaxRows(int rows) = 0;
+    virtual bool zoneSelectorNearestZoneByCenter() const = 0;
+    virtual void setZoneSelectorNearestZoneByCenter(bool enabled) = 0;
 
     // Per-screen zone selector config resolution
     virtual ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& /*screenIdOrName*/) const
@@ -277,7 +281,8 @@ public:
                 zoneSelectorPreviewHeight(),
                 zoneSelectorPreviewLockAspect(),
                 zoneSelectorGridColumns(),
-                zoneSelectorTriggerDistance()};
+                zoneSelectorTriggerDistance(),
+                zoneSelectorNearestZoneByCenter()};
     }
 };
 

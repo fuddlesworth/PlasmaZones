@@ -6,7 +6,6 @@
 #include "logging.h"
 #include <QSet>
 #include <algorithm>
-#include <cmath>
 #include <limits>
 
 namespace PlasmaZones {
@@ -259,6 +258,13 @@ ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) cons
     ZoneDetectionResult result;
 
     if (!m_layout) {
+        return detectZone(cursorPos);
+    }
+
+    // When nearestZoneByCenter is enabled, skip multi-zone detection entirely.
+    // Without this option enabled, some multi-layered layouts can result in undesired
+    // selection of multiple zones where the edges of multiple layers and sizes of zones intersect
+    if (m_settings && m_settings->zoneSelectorNearestZoneByCenter()) {
         return detectZone(cursorPos);
     }
 

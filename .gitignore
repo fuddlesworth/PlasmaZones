@@ -208,6 +208,9 @@ test_*
 *_test
 *_tests
 
+# Temporary folder
+Testing/Temporary
+
 # Coverage reports
 *.gcov
 *.gcda

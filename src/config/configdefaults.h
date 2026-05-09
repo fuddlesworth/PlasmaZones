@@ -496,6 +496,10 @@ public:
     {
         return 10;
     }
+    static bool nearestZoneByCenter()
+    {
+        return false;
+    }
     static int previewWidth()
     {
         return 180;

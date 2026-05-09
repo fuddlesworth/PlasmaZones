@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Zone selection by center** ([#412](https://github.com/fuddlesworth/PlasmaZones/pull/412)): New "Center of zone only" option in Snapping > Behavior — selects the zone whose center is closest to the cursor, ignoring overlap and avoiding odd behavior at zone edges.
+
+### Changed
+- **"Zone Selector" renamed to "Layout Picker"** in the Settings UI for consistency with the rest of the feature settings.
+
 ## [2.8.7] - 2026-04-14
 
 ### Added

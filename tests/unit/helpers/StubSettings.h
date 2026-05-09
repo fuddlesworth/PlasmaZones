@@ -493,6 +493,13 @@ public:
     void setZoneSelectorMaxRows(int) override
     {
     }
+    bool zoneSelectorNearestZoneByCenter() const override
+    {
+        return false;
+    }
+    void setZoneSelectorNearestZoneByCenter(bool) override
+    {
+    }
 
     // IWindowBehaviorSettings
     bool keepWindowsInZonesOnResolutionChange() const override

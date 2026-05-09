@@ -176,6 +176,8 @@ public:
                    setZoneSelectorPreviewLockAspect NOTIFY zoneSelectorPreviewLockAspectChanged)
     Q_PROPERTY(int zoneSelectorGridColumns READ zoneSelectorGridColumns WRITE setZoneSelectorGridColumns NOTIFY
                    zoneSelectorGridColumnsChanged)
+    Q_PROPERTY(bool zoneSelectorNearestZoneByCenter READ zoneSelectorNearestZoneByCenter WRITE setZoneSelectorNearestZoneByCenter
+                   NOTIFY zoneSelectorNearestZoneByCenterChanged)
 
     // Autotiling Settings
     Q_PROPERTY(bool autotileEnabled READ autotileEnabled WRITE setAutotileEnabled NOTIFY autotileEnabledChanged)
@@ -834,6 +836,11 @@ public:
         return m_zoneSelectorMaxRows;
     }
     void setZoneSelectorMaxRows(int rows) override;
+    bool zoneSelectorNearestZoneByCenter() const override
+    {
+        return m_zoneSelectorNearestZoneByCenter;
+    }
+    void setZoneSelectorNearestZoneByCenter(bool enabled) override;
 
     // Per-screen zone selector config (override > global fallback)
     ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& screenIdOrName) const override;
@@ -1503,8 +1510,9 @@ Q_SIGNALS:
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
     void filterLayoutsByAspectRatioChanged();
+    void zoneSelectorNearestZoneByCenterChanged();
 
-private:
+ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods for load()
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -1690,6 +1698,7 @@ private:
     int m_zoneSelectorPreviewHeight = ConfigDefaults::previewHeight();
     bool m_zoneSelectorPreviewLockAspect = ConfigDefaults::previewLockAspect();
     int m_zoneSelectorGridColumns = ConfigDefaults::gridColumns();
+    bool m_zoneSelectorNearestZoneByCenter = ConfigDefaults::nearestZoneByCenter();
 
     // Per-screen zone selector overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;

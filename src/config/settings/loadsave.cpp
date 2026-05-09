@@ -301,6 +301,8 @@ void Settings::loadZoneSelectorConfig(IConfigBackend* backend)
     m_zoneSelectorMaxRows =
         readValidatedInt(*zoneSelector, ConfigDefaults::maxRowsKey(), ConfigDefaults::maxRows(),
                          ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax(), "zone selector max rows");
+    m_zoneSelectorNearestZoneByCenter =
+        zoneSelector->readBool(ConfigDefaults::nearestZoneByCenterKey(), ConfigDefaults::nearestZoneByCenter());
 }
 
 void Settings::loadShortcutConfig(IConfigBackend* backend)
@@ -788,6 +790,7 @@ void Settings::saveZoneSelectorConfig(IConfigBackend* backend)
     zoneSelector->writeInt(ConfigDefaults::gridColumnsKey(), m_zoneSelectorGridColumns);
     zoneSelector->writeInt(ConfigDefaults::sizeModeKey(), static_cast<int>(m_zoneSelectorSizeMode));
     zoneSelector->writeInt(ConfigDefaults::maxRowsKey(), m_zoneSelectorMaxRows);
+    zoneSelector->writeBool(ConfigDefaults::nearestZoneByCenterKey(), m_zoneSelectorNearestZoneByCenter);
 }
 
 void Settings::saveShortcutConfig(IConfigBackend* backend)

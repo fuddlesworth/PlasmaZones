@@ -105,6 +105,43 @@ Flickable {
         }
 
         // =================================================================
+        // ZONE SELECTION RULES
+        // =================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: zoneSelectionCard.implicitHeight
+
+            SettingsCard {
+                id: zoneSelectionCard
+
+                anchors.fill: parent
+                headerText: i18n("Zone Selection Rules")
+                collapsible: true
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SettingsRow {
+                        title: i18n("Center of zone only")
+                        description: i18n("Select the zone whose center is closest to the cursor. Ignores overlap and avoids odd behavior at zone edges")
+
+                        SettingsSwitch {
+                            checked: appSettings.zoneSelectorNearestZoneByCenter
+                            accessibleName: i18n("Enable selecting nearest zone by center only")
+                            onToggled: function(newValue) {
+                                appSettings.zoneSelectorNearestZoneByCenter = newValue;
+                            }
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        // =================================================================
         // ZONE SPAN
         // =================================================================
         Item {

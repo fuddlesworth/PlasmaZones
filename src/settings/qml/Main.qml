@@ -88,7 +88,7 @@ ApplicationWindow {
             "iconName": "preferences-system"
         }, {
             "name": "snapping-zoneselector",
-            "label": i18n("Zone Selector"),
+            "label": i18n("Layout Picker"),
             "iconName": "view-choose",
             "hasDividerAfter": true
         }, {

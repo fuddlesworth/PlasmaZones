@@ -91,7 +91,7 @@ ColumnLayout {
 
     // Enable toggle
     SettingsRow {
-        title: i18n("Zone selector popup")
+        title: i18n("Layout picker popup")
         description: i18n("Show a layout picker when dragging windows to screen edges")
 
         SettingsSwitch {
