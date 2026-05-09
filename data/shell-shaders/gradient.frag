@@ -1,20 +1,31 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Animated gradient panel shader for PhosphorShell.
+// Animated gradient panel shader for PhosphorShell (self-contained).
 //
-// Parameters (via customParams):
-//   customParams[0].x = animation speed (default 0.5)
-//   customParams[0].y = gradient angle in radians (default 0.0 = horizontal)
-//
-// Colors (via customColors):
-//   customColors[0] = start color
-//   customColors[1] = end color
+// customParams[0]: x=speed y=angle
+// customColors[0]: start color (customColor1 in QML)
+// customColors[1]: end color (customColor2 in QML)
 
-#include "common.glsl"
+layout(std140, binding = 0) uniform buf {
+    mat4 qt_Matrix;
+    float qt_Opacity;
+    float iTime;
+    float iTimeDelta;
+    int iFrame;
+    vec2 iResolution;
+    int appField0;
+    int appField1;
+    vec4 iMouse;
+    vec4 iDate;
+    vec4 customParams[8];
+    vec4 customColors[16];
+};
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-    vec2 uv = fragCoord / iResolution.xy;
+layout(location = 0) out vec4 fragColor;
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / iResolution.xy;
 
     float speed = customParams[0].x > 0.0 ? customParams[0].x : 0.5;
     float angle = customParams[0].y;
@@ -22,11 +33,10 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec4 colorA = customColors[0].a > 0.0 ? customColors[0] : vec4(0.118, 0.118, 0.180, 0.9);
     vec4 colorB = customColors[1].a > 0.0 ? customColors[1] : vec4(0.180, 0.118, 0.235, 0.9);
 
-    // Animated gradient position
     vec2 dir = vec2(cos(angle), sin(angle));
     float t = dot(uv, dir);
     t = t + sin(iTime * speed) * 0.1;
     t = clamp(t, 0.0, 1.0);
 
-    fragColor = mix(colorA, colorB, t);
+    fragColor = mix(colorA, colorB, t) * qt_Opacity;
 }
