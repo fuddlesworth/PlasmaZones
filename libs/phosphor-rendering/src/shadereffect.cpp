@@ -1182,18 +1182,27 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     node->setTimeDelta(static_cast<float>(m_iTimeDelta));
     node->setFrame(m_iFrame);
     node->setIsReversed(m_isReversed);
-    // Use logical pixels for iResolution (shader params depend on consistent
-    // resolution; DPR mismatch handled by bilinear upscaling in the image
-    // pass). Read from `m_iResolution` so the public Q_PROPERTY setter
-    // actually drives the GPU value: previously this read width()/height()
-    // directly, which made `setIResolution` a no-op — the setter wrote the
-    // member, emitted the change signal, but the value never reached the
-    // node. `geometryChange` and `componentComplete` keep `m_iResolution`
-    // tracking the QQuickItem geometry by default, so unchanged callers
-    // see identical behaviour; an explicit override via the setter now
-    // actually takes effect (until the next geometry event clobbers it,
-    // matching the documented "current size for shaders" semantic).
-    node->setResolution(static_cast<float>(m_iResolution.width()), static_cast<float>(m_iResolution.height()));
+    // iResolution must be in PHYSICAL pixels (DPR-scaled), not logical, so it
+    // matches gl_FragCoord — which is the viewport coordinate of the
+    // rasterised fragment. QtQuick's QRhi viewport is set in physical pixels
+    // (item.size * DPR), so gl_FragCoord ranges 0..viewport.size in physical
+    // pixels too. Setting iResolution in logical pixels meant fragCoord and
+    // iResolution disagreed by a factor of DPR — at DPR > 1 the SDF rounded-
+    // rect mask covered only the *logical-sized* region of the *physical-
+    // sized* surface, leaving a transparent stripe on the trailing edge that
+    // looked exactly like content overflow. With DPR == 1 the bug was
+    // invisible (factor 1 — no mismatch) so it lay dormant on all the test
+    // setups that used 1.0 scaling.
+    //
+    // `m_iResolution` itself stays in logical units (Q_PROPERTY semantics —
+    // QML callers expect the same units they bound it from). Only the GPU-
+    // bound value is multiplied.
+    qreal dpr = 1.0;
+    if (window() && window()->screen()) {
+        dpr = window()->effectiveDevicePixelRatio();
+    }
+    node->setResolution(static_cast<float>(m_iResolution.width() * dpr),
+                        static_cast<float>(m_iResolution.height() * dpr));
     node->setMousePosition(m_iMouse);
 
     // ── Custom parameters (indexed API) ──────────────────────────────
