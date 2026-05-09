@@ -469,7 +469,8 @@ SETTINGS_SETTER_ENUM_INT(ZoneSelectorSizeMode, ZoneSelectorSizeMode, 0, static_c
 
 SETTINGS_SETTER_CLAMPED(ZoneSelectorMaxRows, m_zoneSelectorMaxRows, zoneSelectorMaxRowsChanged,
                         ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax())
-SETTINGS_SETTER(bool, ZoneSelectorNearestZoneByCenter, m_zoneSelectorNearestZoneByCenter, zoneSelectorNearestZoneByCenterChanged)
+SETTINGS_SETTER(bool, ZoneSelectorNearestZoneByCenter, m_zoneSelectorNearestZoneByCenter,
+                zoneSelectorNearestZoneByCenterChanged)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Autotiling setters

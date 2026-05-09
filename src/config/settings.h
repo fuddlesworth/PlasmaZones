@@ -176,8 +176,8 @@ public:
                    setZoneSelectorPreviewLockAspect NOTIFY zoneSelectorPreviewLockAspectChanged)
     Q_PROPERTY(int zoneSelectorGridColumns READ zoneSelectorGridColumns WRITE setZoneSelectorGridColumns NOTIFY
                    zoneSelectorGridColumnsChanged)
-    Q_PROPERTY(bool zoneSelectorNearestZoneByCenter READ zoneSelectorNearestZoneByCenter WRITE setZoneSelectorNearestZoneByCenter
-                   NOTIFY zoneSelectorNearestZoneByCenterChanged)
+    Q_PROPERTY(bool zoneSelectorNearestZoneByCenter READ zoneSelectorNearestZoneByCenter WRITE
+                   setZoneSelectorNearestZoneByCenter NOTIFY zoneSelectorNearestZoneByCenterChanged)
 
     // Autotiling Settings
     Q_PROPERTY(bool autotileEnabled READ autotileEnabled WRITE setAutotileEnabled NOTIFY autotileEnabledChanged)
@@ -1512,7 +1512,7 @@ Q_SIGNALS:
     void filterLayoutsByAspectRatioChanged();
     void zoneSelectorNearestZoneByCenterChanged();
 
- private:
+private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods for load()
     // ═══════════════════════════════════════════════════════════════════════════════

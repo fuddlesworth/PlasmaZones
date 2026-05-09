@@ -377,7 +377,8 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("zoneSelectorPreviewLockAspect", zoneSelectorPreviewLockAspect,
                           setZoneSelectorPreviewLockAspect)
     REGISTER_INT_SETTING("zoneSelectorGridColumns", zoneSelectorGridColumns, setZoneSelectorGridColumns)
-    REGISTER_BOOL_SETTING("zoneSelectorNearestZoneByCenter", zoneSelectorNearestZoneByCenter, setZoneSelectorNearestZoneByCenter)
+    REGISTER_BOOL_SETTING("zoneSelectorNearestZoneByCenter", zoneSelectorNearestZoneByCenter,
+                          setZoneSelectorNearestZoneByCenter)
 
     // Animation settings (global — applies to snapping and autotiling)
     REGISTER_BOOL_SETTING("animationsEnabled", animationsEnabled, setAnimationsEnabled)
