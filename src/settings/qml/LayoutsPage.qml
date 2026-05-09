@@ -89,7 +89,7 @@ ColumnLayout {
     }
 
     // ─── Scrollable content ──────────────────────────────────────────────
-    Flickable {
+    SettingsFlickable {
         Layout.fillWidth: true
         Layout.fillHeight: true
         contentHeight: content.implicitHeight

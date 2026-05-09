@@ -8,7 +8,7 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
-Flickable {
+SettingsFlickable {
     id: root
 
     required property string headerText

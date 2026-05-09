@@ -19,14 +19,15 @@ import org.kde.kirigami as Kirigami
  * files — user presets in the same dir are intentionally excluded so
  * a set is portable and self-contained.
  */
-Flickable {
+SettingsFlickable {
     id: root
 
     // Loaded from a Q_INVOKABLE; the Connections block below manually
     // refreshes it on motionSetsChanged. See AnimationEventCard.qml's
     // shaderCombo for the same pattern (Q_INVOKABLE results aren't
     // reactive across the QML binding boundary).
-    property var motionSetsList: settingsController.animationsPage.availableMotionSets() // QVariantList from C++
+    property var motionSetsList: settingsController.animationsPage.availableMotionSets()
+    // QVariantList from C++
     property bool _saving: false
 
     contentHeight: content.implicitHeight
@@ -125,8 +126,11 @@ Flickable {
                             root._saving = false;
                         }
                     }
+
                 }
+
             }
+
         }
 
         SettingsCard {
@@ -176,6 +180,7 @@ Flickable {
                                 color: Kirigami.Theme.disabledTextColor
                                 font: Kirigami.Theme.smallFont
                             }
+
                         }
 
                         Button {
@@ -222,9 +227,15 @@ Flickable {
                                 deleteConfirm.close();
                             }
                         }
+
                     }
+
                 }
+
             }
+
         }
+
     }
+
 }

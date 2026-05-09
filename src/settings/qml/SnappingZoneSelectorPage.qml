@@ -6,7 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-Flickable {
+SettingsFlickable {
     id: root
 
     // Page-scoped bounds live on the sub-controller; Settings-backed live

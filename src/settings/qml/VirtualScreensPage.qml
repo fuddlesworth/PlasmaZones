@@ -14,7 +14,7 @@ import org.kde.kirigami as Kirigami
  * vertical-only splits, and full grids (e.g. 2x2). Changes are staged
  * via settingsController and flushed to the daemon when Apply is clicked.
  */
-Flickable {
+SettingsFlickable {
     id: root
 
     // ── Internal state ───────────────────────────────────────────────────
