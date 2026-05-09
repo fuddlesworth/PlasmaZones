@@ -1046,6 +1046,12 @@ ApplicationWindow {
         // CONTENT AREA
         // =================================================================
         ColumnLayout {
+            // Aspect ratio submenu — present unless the right-clicked
+            // layout is autotile (showForLayout reconciles its insertion
+            // state in lockstep with the layout kind). Rows are driven
+            // by an Instantiator over `_aspectRatioOptions` so each
+            // ItemDelegate's lifecycle is Qt-managed.
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
@@ -1341,32 +1347,25 @@ ApplicationWindow {
 
                 property var layout: null
                 property int viewMode: 0
-                /// Tracks the side-of-the-fence (autotile vs snap-layout) the
-                /// aspect-ratio submenu was last reconciled to so consecutive
-                /// shows on the same kind of layout are no-ops. The previous
-                /// `_aspectRatioMenuInserted` toggle was unconditionally
-                /// removed-and-re-inserted on every show, churning Qt 6's
-                /// internal MenuItem placeholder; after enough churn the
-                /// inline `aspectRatioSubMenu` Menu was getting destroyed
-                /// (`removeMenu` deleteLater's the placeholder, and Qt's
-                /// parent-reverting is unreliable across many cycles),
-                /// surfacing as `Cannot call method 'updateChecks' of null`.
-                /// `_aspectRatioMenuKind` is `"none"` until the first show,
-                /// then either `"snap"` (submenu present) or `"autotile"`
-                /// (submenu absent). showForLayout only mutates the menu
-                /// when the current layout's kind differs from this last
-                /// state.
+                /// Tracks the kind (`"snap"` / `"autotile"` / `"none"`) the
+                /// aspect-ratio submenu was last reconciled to. showForLayout
+                /// only mutates the menu when the current layout's kind
+                /// differs from this state — `removeMenu` `deleteLater`s
+                /// Qt 6's auto-generated MenuItem placeholder, and the
+                /// inline submenu's reparenting back to its declared parent
+                /// is unreliable enough that doing the dance on every show
+                /// can lose the QML object after many cycles.
                 property string _aspectRatioMenuKind: "none"
                 readonly property bool isAutotile: layout && layout.isAutotile === true
                 readonly property string layoutId: layout ? (layout.id || "") : ""
                 /// Aspect ratio options: `[key, label, settingsIndex]`. Drives
-                /// the `Instantiator` inside `aspectRatioSubMenu` so per-row
-                /// ItemDelegates have a stable Qt-managed lifecycle (the
-                /// previous imperative `buildOnce` + parented `createObject`
-                /// chain leaked rows into the parent Menu without ever
-                /// placing them in the graphics scene, surfacing as
-                /// `Created graphical object was not placed…` warnings on
-                /// every right-click).
+                /// the `Instantiator` inside `aspectRatioSubMenu` so each row's
+                /// ItemDelegate is created with a stable Qt-managed lifecycle.
+                /// Imperative `Component.createObject(menu, ...)` parented to
+                /// a popup that isn't yet in the graphics scene emits the
+                /// `Created graphical object was not placed in the graphics
+                /// scene` warning and the unplaced object can leak into Qt's
+                /// menu state.
                 readonly property var _aspectRatioOptions: [["any", window.aspectRatioLabels["any"], 0], ["standard", window.aspectRatioLabels["standard"], 1], ["ultrawide", window.aspectRatioLabels["ultrawide"], 2], ["super-ultrawide", window.aspectRatioLabels["super-ultrawide"], 3], ["portrait", window.aspectRatioLabels["portrait"], 4]]
                 /// Driver for the dynamic "Edit on <screen>" Instantiator
                 /// below. Empty array hides every dynamic row; switching to
@@ -1386,12 +1385,11 @@ ApplicationWindow {
                     layoutContextMenu.viewMode = (layout && layout.isAutotile === true) ? 1 : 0;
                     var wantKind = layoutContextMenu.isAutotile ? "autotile" : "snap";
                     // Only reconcile the submenu when the layout kind flips.
-                    // Reconciling on every show was the source of the
-                    // `aspectRatioSubMenu === null` regression — the
-                    // remove/insert dance churned Qt's internal placeholder
-                    // until the inline declaration's reverted-parent
-                    // ownership was lost.
-                    if (wantKind !== layoutContextMenu._aspectRatioMenuKind && aspectRatioSubMenu) {
+                    // Reconciling on every show churns Qt 6's MenuItem
+                    // placeholder; after enough churn the inline submenu's
+                    // reparenting back to its declared parent fails and
+                    // the QML object is lost.
+                    if (wantKind !== layoutContextMenu._aspectRatioMenuKind) {
                         if (wantKind === "snap") {
                             // Insert after the aspectRatioMarker separator so
                             // the submenu lands in its declared visual slot
@@ -1414,7 +1412,6 @@ ApplicationWindow {
                         }
                         layoutContextMenu._aspectRatioMenuKind = wantKind;
                     }
-                    screenSeparator.visible = layoutContextMenu._screenItemsModel.length > 0;
                     layoutContextMenu.popup();
                 }
 
@@ -1425,16 +1422,16 @@ ApplicationWindow {
                     onTriggered: settingsController.editLayout(layoutContextMenu.layoutId)
                 }
 
-                // Dynamic "Edit on <screen>" items. Using Instantiator
-                // (instead of an imperative createObject loop reparented to
-                // layoutContextMenu) keeps every row's lifecycle in Qt's
-                // hands — items are placed into the menu when the model
-                // gains them and torn down when it shrinks, never racing
-                // an async `destroy()` with the next popup. ItemDelegate
-                // (not MenuItem) avoids the Qt 6 onItemTriggered → dismiss
-                // cascade that crashes finalizeExitTransition; the click
-                // handler hides the menu explicitly via Qt.callLater
-                // after editLayoutOnScreen returns.
+                // Dynamic "Edit on <screen>" items. Instantiator gives Qt
+                // ownership of each row's lifecycle — rows are placed when
+                // the model grows and torn down synchronously when it
+                // shrinks, with no out-of-scene `createObject` parents and
+                // no deferred `destroy()` racing the next popup. The
+                // delegate is `ItemDelegate` rather than `MenuItem` to
+                // bypass Qt 6's onItemTriggered → dismiss() cascade through
+                // `finalizeExitTransition`; the click handler hides the
+                // menu explicitly via `Qt.callLater` after the click body
+                // finishes.
                 Instantiator {
                     id: screenItemInstantiator
 
@@ -1470,15 +1467,14 @@ ApplicationWindow {
 
                 }
 
-                // Bound to `_screenItemsModel.length > 0` from showForLayout —
-                // bindings on the model itself would re-evaluate every time
-                // the controller's `screens` property reshuffles, so we
-                // anchor the visibility flip in showForLayout to keep the
-                // separator stable across every other change.
+                // Tracks the dynamic-row model directly so the separator
+                // hides when no extra screens exist — including live
+                // changes to `settingsController.screens` while the menu
+                // is open.
                 MenuSeparator {
                     id: screenSeparator
 
-                    visible: false
+                    visible: layoutContextMenu._screenItemsModel.length > 0
                 }
 
                 // -- Open in Editor (external text editor) --
@@ -1611,23 +1607,11 @@ ApplicationWindow {
 
             }
 
-            // Aspect ratio submenu — present unless the right-clicked
-            // layout is autotile (showForLayout reconciles its insertion
-            // state in lockstep with the layout kind). The submenu's
-            // rows are driven by an Instantiator over
-            // `layoutContextMenu._aspectRatioOptions` so ItemDelegate
-            // lifecycle is Qt-managed: rows are placed when the model
-            // first appears, never created out-of-scene with deferred
-            // destroy. The previous `buildOnce` + parented createObject
-            // pattern produced
-            // `Created graphical object was not placed in the graphics
-            // scene` warnings on every right-click and accumulated until
-            // Qt's MenuItem placeholder collapsed and aspectRatioSubMenu
-            // itself went null. Empty `enter` / `exit` Transitions
-            // mirror the editor's metadata-preset menu hardening — the
-            // empty animations keep `finalizeExitTransition` synchronous
-            // and side-step the QQmlData::destroyed race that Qt 6's
-            // animated Menu close path can hit during teardown.
+            // Empty `enter` / `exit` Transitions are the
+            // `finalizeExitTransition` hardening pattern (mirrors the
+            // editor's metadata-preset menu): synchronous close avoids
+            // the QQmlData::destroyed race Qt 6's animated Menu teardown
+            // can otherwise hit.
             Menu {
                 id: aspectRatioSubMenu
 
@@ -1649,15 +1633,11 @@ ApplicationWindow {
                         required property var modelData
                         readonly property string _arKey: (modelData && modelData[0]) ? modelData[0] : ""
                         readonly property int _arIndex: (modelData && modelData[2] !== undefined) ? modelData[2] : 0
-                        // Bound directly off the layout's aspect-ratio class
-                        // so the check mark tracks the current selection
-                        // without any imperative `updateChecks()` step. The
-                        // old code re-walked an `_items` array on every
-                        // show, mutating each row's isSelected; replacing
-                        // it with a binding eliminates the only caller of
-                        // updateChecks (which used to be the source of the
-                        // null-deref `Cannot call method 'updateChecks' of
-                        // null` once aspectRatioSubMenu was destroyed).
+                        // Bound off the layout's aspect-ratio class so the
+                        // check mark tracks the current selection without
+                        // any imperative refresh hook on the submenu —
+                        // such a hook is what fails when the submenu's
+                        // QML object goes null during teardown.
                         readonly property bool isSelected: {
                             var current = (layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass) || "any";
                             return _arKey === current;
