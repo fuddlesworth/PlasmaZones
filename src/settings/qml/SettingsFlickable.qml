@@ -46,12 +46,16 @@ Flickable {
 
     Kirigami.WheelHandler {
         target: settingsFlickable
-        // Eat the wheel events at this level rather than letting them
-        // also fall through to Flickable's built-in wheel path —
-        // double-handling would either over-scroll or fight the smooth
-        // animation. `keyNavigationEnabled` mirrors arrow / Page keys
-        // onto the Flickable so keyboard scroll matches mouse.
-        filterMouseEvents: true
+        // Leave `filterMouseEvents` at its default of `false` — that
+        // flag is for nested-Flickable scenarios where you want the
+        // inner Flickable to NOT respond to mouse press/release.
+        // Setting it true here would kill Flickable's native
+        // drag-to-flick path (touch drag, middle-button drag, etc.)
+        // because the handler would swallow the press / release
+        // events. The wheel path runs through this handler regardless
+        // of the flag's value; only the press/release path is gated.
+        // `keyNavigationEnabled` mirrors arrow / Page-Up / Page-Down
+        // onto the Flickable so keyboard scroll matches mouse step.
         keyNavigationEnabled: true
     }
 
