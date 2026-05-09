@@ -52,8 +52,8 @@ void main() {
     vec2 halfSize = iResolution.xy * 0.5;
     float dist = roundedBoxSDF(fragCoord - center, halfSize, radius);
 
-    // Hard step: pixel is either fully inside or fully outside.
-    float mask = step(dist, -0.5);
+    // Smooth AA edge - premultiplied alpha prevents fringe
+    float mask = 1.0 - smoothstep(-1.0, 0.0, dist);
 
     if (mask <= 0.0) {
         fragColor = vec4(0.0);
