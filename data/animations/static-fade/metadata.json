@@ -1,0 +1,27 @@
+{
+    "id": "static-fade",
+    "name": "Static Fade",
+    "description": "TV-static interference reveal — random RGB static panels overlay the surface, ramping with intensity at midpoint.",
+    "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
+    "version": "1.0",
+    "category": "Glitch",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "pixelGrid",
+            "name": "Pixel Grid",
+            "type": "float",
+            "default": 200.0,
+            "min": 32.0,
+            "max": 800.0
+        },
+        {
+            "id": "staticBrightness",
+            "name": "Static Brightness",
+            "type": "float",
+            "default": 0.8,
+            "min": 0.0,
+            "max": 1.0
+        }
+    ]
+}

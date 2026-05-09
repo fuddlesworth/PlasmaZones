@@ -1,0 +1,27 @@
+{
+    "id": "perlin",
+    "name": "Perlin",
+    "description": "Perlin-noise threshold reveal — surface appears where noise crosses the rising progress threshold.",
+    "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
+    "version": "1.0",
+    "category": "Tile",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "noiseScale",
+            "name": "Noise Scale",
+            "type": "float",
+            "default": 4.0,
+            "min": 1.0,
+            "max": 16.0
+        },
+        {
+            "id": "edgeSoftness",
+            "name": "Edge Softness",
+            "type": "float",
+            "default": 0.01,
+            "min": 0.001,
+            "max": 0.2
+        }
+    ]
+}

@@ -6,7 +6,8 @@
 // Hosted here so the per-shader copies (previously duplicated verbatim
 // across apparition, aura-glow, doom, energize-a, energize-b, hexagon,
 // matrix, pixel-wipe) collapse to one definition. Including this from a
-// shader brings hash22 + simplex2D + simplex2DFractal into scope.
+// shader brings hash22 + simplex2D + simplex2DFractal + surfaceSeed
+// into scope.
 //
 // `simplex2D` is the standard 2D simplex-noise variant used across the
 // suite. It returns a value in roughly [0, 1] (the 0.5 + 0.5 * ... shift
@@ -16,22 +17,28 @@
 //
 // `hash22` is a 2-component hash using the Inigo Quilez "fract(sin(...))"
 // pattern; deterministic per input vec2, output in [0, 1).
+//
+// `surfaceSeed()` returns a pseudo-random scalar in [0, 1) derived from
+// `iSurfaceScreenPos.xy`. It substitutes for niri's `niri_random_seed`
+// uniform in ported transitions, with one important behavioural
+// difference: niri's seed is fresh per animation leg (each open or
+// close gets a new random), while ours is keyed only on the surface's
+// screen origin. So a window animated repeatedly at the same screen
+// position will replay the SAME seed every leg — repeated open/close
+// at one location is visually deterministic. Different surfaces (or
+// the same surface moved to a new position) get different seeds. This
+// trade-off keeps the function pure-uniform (no leg-attach plumbing
+// needed) at the cost of cross-leg variability; ports that need true
+// per-leg randomness should mix in a leg-unique input themselves.
+//
+// Requires `iSurfaceScreenPos` to be in scope, which means the caller
+// must include `<animation_uniforms.glsl>` BEFORE `<noise.glsl>`.
+// Both runtimes (daemon RHI and kwin-effect via KWin::GLShader) compile
+// shader sources at `#version 450 core`, where all floats are 32-bit
+// IEEE-754 by default — no precision-coupling concerns to track.
 
 #ifndef PHOSPHOR_NOISE_GLSL
 #define PHOSPHOR_NOISE_GLSL
-
-// `hash22`'s `fract(p3 * 0.1031)` chain operates on
-// per-fragment-pixel inputs at large magnitudes; on drivers that
-// default fragment precision to `mediump` (some classic-GL stacks
-// the kwin-effect path runs on), the multiplication aliases past the
-// 24-bit mantissa and the noise output becomes blocky/banded. The
-// daemon RHI path defaults to highp and is unaffected. Pin the
-// precision here so callers across both runtimes get the same
-// quality. The `#version 450` daemon path treats `precision` as a
-// no-op; the `#version 100`/`100 es` kwin path enforces it.
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#endif
 
 vec2 hash22(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
@@ -63,6 +70,10 @@ float simplex2DFractal(vec2 p) {
     f      += 0.1250 * simplex2D(p);  p = m * p;
     f      += 0.0625 * simplex2D(p);
     return f;
+}
+
+float surfaceSeed() {
+    return fract(sin(dot(iSurfaceScreenPos.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 #endif

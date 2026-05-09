@@ -1,0 +1,27 @@
+{
+    "id": "circle",
+    "name": "Circle",
+    "description": "Circular reveal expanding from a slightly randomized center, with soft edge falloff.",
+    "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
+    "version": "1.0",
+    "category": "Fade",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "smoothness",
+            "name": "Edge Softness",
+            "type": "float",
+            "default": 0.3,
+            "min": 0.01,
+            "max": 0.6
+        },
+        {
+            "id": "centerJitter",
+            "name": "Center Jitter",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.0,
+            "max": 0.5
+        }
+    ]
+}

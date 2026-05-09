@@ -1,0 +1,43 @@
+{
+    "id": "snap",
+    "name": "Snap",
+    "description": "Thanos-style snap — the surface shatters into 10 randomized layers that fly toward a vanishing point. Asymmetric direction and re-form curves.",
+    "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
+    "version": "1.0",
+    "category": "Particle",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "targetX",
+            "name": "Target X",
+            "type": "float",
+            "default": 1.0,
+            "min": -1.0,
+            "max": 2.0
+        },
+        {
+            "id": "targetY",
+            "name": "Target Y",
+            "type": "float",
+            "default": 0.0,
+            "min": -1.0,
+            "max": 2.0
+        },
+        {
+            "id": "layerSpread",
+            "name": "Layer Spread",
+            "type": "float",
+            "default": 0.16,
+            "min": 0.0,
+            "max": 0.6
+        },
+        {
+            "id": "layerStagger",
+            "name": "Layer Stagger",
+            "type": "float",
+            "default": 0.06,
+            "min": 0.0,
+            "max": 0.15
+        }
+    ]
+}
