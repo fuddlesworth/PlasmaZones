@@ -68,16 +68,16 @@ bool ShellEngine::load(const QUrl& shellUrl)
     connect(m_deps.screenProvider->notifier(), &PhosphorLayer::ScreenProviderNotifier::screensChanged, this,
             &ShellEngine::onScreensChanged);
 
-    qmlRegisterType<PanelWindow>("PhosphorShell", 1, 0, "PanelWindow");
-    qmlRegisterType<PopupWindow>("PhosphorShell", 1, 0, "PopupWindow");
-    qmlRegisterType<FloatingWindow>("PhosphorShell", 1, 0, "FloatingWindow");
-    qmlRegisterType<Variants>("PhosphorShell", 1, 0, "Variants");
-    qmlRegisterType<LazyLoader>("PhosphorShell", 1, 0, "LazyLoader");
-    qmlRegisterType<Process>("PhosphorShell", 1, 0, "Process");
-    qmlRegisterType<FileView>("PhosphorShell", 1, 0, "FileView");
-    qmlRegisterType<PersistentProperties>("PhosphorShell", 1, 0, "PersistentProperties");
-    qmlRegisterType<Environment>("PhosphorShell", 1, 0, "Environment");
-    qmlRegisterType<PhosphorRendering::ShaderEffect>("PhosphorShell", 1, 0, "ShaderBackground");
+    qmlRegisterType<PanelWindow>("Phosphor.Shell", 1, 0, "PanelWindow");
+    qmlRegisterType<PopupWindow>("Phosphor.Shell", 1, 0, "PopupWindow");
+    qmlRegisterType<FloatingWindow>("Phosphor.Shell", 1, 0, "FloatingWindow");
+    qmlRegisterType<Variants>("Phosphor.Shell", 1, 0, "Variants");
+    qmlRegisterType<LazyLoader>("Phosphor.Shell", 1, 0, "LazyLoader");
+    qmlRegisterType<Process>("Phosphor.Shell", 1, 0, "Process");
+    qmlRegisterType<FileView>("Phosphor.Shell", 1, 0, "FileView");
+    qmlRegisterType<PersistentProperties>("Phosphor.Shell", 1, 0, "PersistentProperties");
+    qmlRegisterType<Environment>("Phosphor.Shell", 1, 0, "Environment");
+    qmlRegisterType<PhosphorRendering::ShaderEffect>("Phosphor.Shell", 1, 0, "ShaderBackground");
 
     m_engine = std::make_unique<QQmlEngine>(this);
     m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
