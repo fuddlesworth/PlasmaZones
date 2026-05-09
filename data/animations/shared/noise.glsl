@@ -18,13 +18,28 @@
 // `hash22` is a 2-component hash using the Inigo Quilez "fract(sin(...))"
 // pattern; deterministic per input vec2, output in [0, 1).
 //
-// `surfaceSeed()` is a per-instance pseudo-random scalar in [0, 1)
-// derived from `iSurfaceScreenPos.xy`. It substitutes for niri's
-// `niri_random_seed` uniform in ported transitions: different surfaces
-// get different patterns, the same surface keeps its pattern across a
-// leg. Requires `iSurfaceScreenPos` to be in scope, which means the
-// caller must include `<animation_uniforms.glsl>` BEFORE
-// `<noise.glsl>`.
+// `surfaceSeed()` returns a pseudo-random scalar in [0, 1) derived from
+// `iSurfaceScreenPos.xy`. It substitutes for niri's `niri_random_seed`
+// uniform in ported transitions, with one important behavioural
+// difference: niri's seed is fresh per animation leg (each open or
+// close gets a new random), while ours is keyed only on the surface's
+// screen origin. So a window animated repeatedly at the same screen
+// position will replay the SAME seed every leg — repeated open/close
+// at one location is visually deterministic. Different surfaces (or
+// the same surface moved to a new position) get different seeds. This
+// trade-off keeps the function pure-uniform (no leg-attach plumbing
+// needed) at the cost of cross-leg variability; ports that need true
+// per-leg randomness should mix in a leg-unique input themselves.
+//
+// Requires `iSurfaceScreenPos` to be in scope, which means the caller
+// must include `<animation_uniforms.glsl>` BEFORE `<noise.glsl>`. The
+// `iSurfaceScreenPos` declaration's precision is set by the includer
+// (mediump on the kwin-effect GL ES path, highp on the daemon RHI
+// path); the highp pin in this file applies only to local function
+// bodies, so on the kwin path the input value is read at mediump
+// precision before this function operates on it. surfaceSeed's hash
+// shape is chaotic enough that mediump truncation of the input doesn't
+// produce visible aliasing in practice.
 
 #ifndef PHOSPHOR_NOISE_GLSL
 #define PHOSPHOR_NOISE_GLSL

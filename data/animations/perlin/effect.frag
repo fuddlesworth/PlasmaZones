@@ -31,6 +31,15 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
+// File-scope helpers kept verbatim from niri's source rather than
+// substituted with `<noise.glsl>`'s `hash22` / `simplex2D`. Niri's
+// `perlin_random` uses `mod(dt, 3.14)` (a low-precision pi) before the
+// `sin(...) * c` step, which produces a subtly different hash
+// distribution than the shared `hash22`. Replacing with the shared
+// helper would alter the visual at default parameters and lose
+// niri-equivalence; we keep the per-shader copies for bit-exact port
+// fidelity. Same rationale applies to the bilinear `perlin_noise` body
+// below — `simplex2D` would change the texture pattern.
 float perlin_random(vec2 co) {
     float a = 12.9898;
     float b = 78.233;
