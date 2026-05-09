@@ -7,6 +7,7 @@
 
 #include <QHash>
 #include <QObject>
+#include <QSize>
 #include <QUrl>
 #include <QVariantMap>
 
@@ -58,6 +59,7 @@ private Q_SLOTS:
 
 private:
     void materializePanels();
+    void installDynamicAutoFit(PanelWindow* panel, PhosphorLayer::Surface* surface, QSize screenSize);
     void teardown();
     void setupWatcher();
     void savePersistentState();

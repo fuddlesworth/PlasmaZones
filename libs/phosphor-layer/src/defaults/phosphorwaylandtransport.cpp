@@ -142,6 +142,12 @@ public:
             m_surface->setAnchors(toShellAnchors(a));
         }
     }
+    void setDesiredSize(QSize size) override
+    {
+        if (m_surface) {
+            m_surface->setDesiredSize(size);
+        }
+    }
 
 private:
     QPointer<QQuickWindow> m_window;

@@ -58,6 +58,8 @@ private:
     bool m_configured = false;
     uint32_t m_pendingWidth = 0;
     uint32_t m_pendingHeight = 0;
+    uint32_t m_pendingSerial = 0; ///< Serial of the most recent unacked configure
+    bool m_hasPendingConfigure = false;
     uint64_t m_globalRemovedCallbackId = 0;
 };
 

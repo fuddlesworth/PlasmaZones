@@ -14,6 +14,7 @@
 #include <PhosphorShell/ShellGlobal.h>
 #include <PhosphorShell/Variants.h>
 
+#include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/IScreenProvider.h>
 #include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/Surface.h>
@@ -29,9 +30,12 @@
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQuickWindow>
 #include <QScreen>
 #include <QSize>
 #include <QTimer>
+
+#include <cmath>
 
 Q_LOGGING_CATEGORY(lcShellEngine, "phosphorshell.engine")
 
@@ -235,8 +239,37 @@ void ShellEngine::materializePanels()
         } else {
             int length = panel->panelLength();
             if (length == 0) {
-                length =
-                    horizontal ? qMax(1, static_cast<int>(panel->width())) : qMax(1, static_cast<int>(panel->height()));
+                // Auto-fit: derive length from the panel's implicit size.
+                //
+                // The user binds implicitWidth (or implicitHeight for vertical
+                // panels) to the content's implicit size — typically a Row/
+                // Column inside the panel:
+                //
+                //     PanelWindow {
+                //         implicitWidth: contentRow.implicitWidth
+                //         Row { id: contentRow; ... }
+                //     }
+                //
+                // We deliberately do NOT measure panel->childrenRect() because
+                // decorative items anchored to the panel (anchors.fill: parent
+                // for a ShaderBackground; anchors.centerIn: parent for a content
+                // Row) make childrenRect depend on panel.width — and we'd be
+                // *setting* panel.width from that measurement. Qt's anchor system
+                // detects the cycle ("Possible anchor loop detected on centerIn")
+                // and freezes the affected anchors, leaving content stuck at
+                // its first-measured position. Using implicitWidth, which the
+                // user binds to a child whose size is independent of the panel,
+                // breaks the cycle.
+                //
+                // Falls back to the QML width/height when implicitWidth is unset
+                // so callers that prefer explicit sizing still work.
+                const qreal implicitLength = horizontal ? panel->implicitWidth() : panel->implicitHeight();
+                if (implicitLength > 0.0) {
+                    length = qMax(1, static_cast<int>(std::ceil(implicitLength)));
+                } else {
+                    length = horizontal ? qMax(1, static_cast<int>(panel->width()))
+                                        : qMax(1, static_cast<int>(panel->height()));
+                }
             }
 
             switch (panel->alignment()) {
@@ -322,6 +355,14 @@ void ShellEngine::materializePanels()
             m_surfaces.push_back(surface);
             qCDebug(lcShellEngine) << "Created panel surface on edge" << panel->edge() << "alignment"
                                    << panel->alignment() << "size" << panelSize;
+
+            // Dynamic auto-fit: when panelLength == 0, the panel resizes to
+            // follow content changes (clock text loading, fluctuating CPU%
+            // strings, etc.). The Fill case already spans the screen so it
+            // never needs this; non-zero panelLength is an explicit pin.
+            if (panel->panelLength() == 0 && panel->alignment() != PanelWindow::Fill) {
+                installDynamicAutoFit(panel, surface, screenSize);
+            }
         } else {
             qCWarning(lcShellEngine) << "Failed to create surface for PanelWindow";
         }
@@ -333,6 +374,81 @@ void ShellEngine::materializePanels()
         if (!p->reloadId().isEmpty()) {
             m_shellGlobal->registerSingleton(p->reloadId(), p);
         }
+    }
+}
+
+void ShellEngine::installDynamicAutoFit(PanelWindow* panel, PhosphorLayer::Surface* surface, QSize screenSize)
+{
+    // Re-derive the auto-fit length and (for Center alignment) margins each
+    // time the panel's implicit size changes — i.e. when whatever the user
+    // bound implicitWidth/implicitHeight to (typically a content Row's
+    // implicitWidth) updates. Listening on implicit-size signals instead of
+    // childrenRectChanged sidesteps the panel.width ↔ children-anchor cycle
+    // documented in materializePanels().
+    //
+    // The connect target is `surface`, so Qt auto-disconnects the lambda
+    // when the surface is destroyed (Surface owns the panel as its rootItem,
+    // so they share a lifetime).
+    const PanelWindow::Edge edge = panel->edge();
+    const PanelWindow::Alignment alignment = panel->alignment();
+    const int thickness = panel->thickness();
+    const QMargins userMargins = panel->margins();
+    const bool horizontal = (edge == PanelWindow::Top || edge == PanelWindow::Bottom);
+
+    auto resize = [panel, surface, horizontal, alignment, thickness, userMargins, screenSize]() {
+        auto* window = surface->window();
+        if (!window) {
+            return;
+        }
+        auto* handle = surface->transport();
+        if (!handle) {
+            return;
+        }
+        const qreal implicitLength = horizontal ? panel->implicitWidth() : panel->implicitHeight();
+        if (implicitLength <= 0.0) {
+            return;
+        }
+        const int newLength = qMax(1, static_cast<int>(std::ceil(implicitLength)));
+        const QSize newSize = horizontal ? QSize(newLength, thickness) : QSize(thickness, newLength);
+        if (window->size() == newSize) {
+            return;
+        }
+
+        // Compositor-driven resize path (mirrors Quickshell's WlrLayershell).
+        // We deliberately do NOT call `window->resize()` from app code:
+        // QWindow::resize is silently clamped against `windowMinimumSize` /
+        // `windowMaximumSize` (QTBUG-118604), so client-initiated resizes drop
+        // to the old size and the buffer never grows. Instead we push the new
+        // size through the layer-shell protocol via setDesiredSize, which the
+        // QPA reads in applyProperties() and sends as zwlr_layer_surface_v1::
+        // set_size + wl_surface_commit. The compositor's configure response
+        // then drives Qt's actual QWindow resize through resizeFromApplyConfigure
+        // (see LayerShellWindow::handleConfigure), which is the path Qt expects
+        // and does NOT clamp.
+        //
+        // For Center alignment also update margins so the panel stays centred
+        // as it grows (margins are how the wlr-layer-shell protocol expresses
+        // centred positioning when both Left+Right anchors are set).
+        if (alignment == PanelWindow::Center) {
+            QMargins newMargins = userMargins;
+            if (horizontal) {
+                const int margin = (screenSize.width() - newLength) / 2;
+                newMargins.setLeft(qMax(userMargins.left(), margin));
+                newMargins.setRight(qMax(userMargins.right(), margin));
+            } else {
+                const int margin = (screenSize.height() - newLength) / 2;
+                newMargins.setTop(qMax(userMargins.top(), margin));
+                newMargins.setBottom(qMax(userMargins.bottom(), margin));
+            }
+            handle->setMargins(newMargins);
+        }
+        handle->setDesiredSize(newSize);
+    };
+
+    if (horizontal) {
+        QObject::connect(panel, &QQuickItem::implicitWidthChanged, surface, resize);
+    } else {
+        QObject::connect(panel, &QQuickItem::implicitHeightChanged, surface, resize);
     }
 }
 

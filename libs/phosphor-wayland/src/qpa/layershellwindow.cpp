@@ -149,16 +149,31 @@ void LayerShellWindow::applyConfigure()
     if (!m_waylandWindow) {
         return;
     }
-    // Called by QWaylandWindow::applyConfigure() during Qt's configure cycle.
-    // Use the same compositor-controlled-axis logic as handleConfigure.
-    if (m_pendingWidth > 0 && m_pendingHeight > 0) {
+
+    // applyConfigure is called by Qt's render thread when it's ready to draw
+    // a frame at the configured size. This is the right place to:
+    //   1. Resize the QWindow via resizeFromApplyConfigure (the no-clamp path
+    //      that pairs with the pending configure serial).
+    //   2. ack_configure the most recent compositor configure.
+    //   3. wl_surface_commit so the post-render buffer is attached at the
+    //      newly-configured size in the same frame as the ack.
+    //
+    // Doing all three in lockstep here is what makes the resize visually take
+    // effect: the buffer Qt is about to paint now matches the surface size we
+    // ack to the compositor. Acking earlier (in handleConfigure) attached the
+    // previous frame's buffer to the new-size surface — visually broken.
+    if (m_hasPendingConfigure && m_pendingWidth > 0 && m_pendingHeight > 0) {
         QWindow* qwindow = m_waylandWindow->window();
         if (qwindow) {
             const QSize newSize = computeConfigureSize(m_pendingWidth, m_pendingHeight);
             if (newSize != qwindow->size()) {
-                qwindow->resize(newSize);
+                m_waylandWindow->resizeFromApplyConfigure(newSize);
             }
         }
+        if (m_layerSurface) {
+            zwlr_layer_surface_v1_ack_configure(m_layerSurface, m_pendingSerial);
+        }
+        m_hasPendingConfigure = false;
     }
 
     applyProperties();
@@ -174,10 +189,15 @@ void LayerShellWindow::setWindowGeometry(const QRect& rect)
         return;
     }
     if (m_layerSurface) {
-        QWindow* qwindow = m_waylandWindow->window();
-        auto anchors = LayerSurface::Anchors::fromInt(qwindow->property(LayerSurfaceProps::Anchors).toInt());
-        auto [w, h] = LayerSurface::computeLayerSize(anchors, rect.size());
-        zwlr_layer_surface_v1_set_size(m_layerSurface, w, h);
+        // Re-send the full layer-shell state — anchors / layer / exclusive
+        // zone / keyboard / margins / set_size — and commit. set_size alone
+        // is fine per the wlr-layer-shell spec ("set_size is final"), but
+        // re-applying the full state on every client-initiated resize keeps
+        // the protocol-side state in sync with QWindow and avoids edge
+        // cases where the compositor's view of margins / anchors falls out
+        // of sync after a series of client-side mutations.
+        Q_UNUSED(rect)
+        applyProperties();
 
         if (m_wlSurface) {
             wl_surface_commit(m_wlSurface);
@@ -229,8 +249,25 @@ void LayerShellWindow::applyProperties()
     int marginBottom = qwindow->property(LayerSurfaceProps::MarginsBottom).toInt();
     zwlr_layer_surface_v1_set_margin(m_layerSurface, marginTop, marginRight, marginBottom, marginLeft);
 
-    // Size — use 0 for axes anchored to both edges; clamp to avoid uint32_t wrap on negative
-    auto [w, h] = LayerSurface::computeLayerSize(LayerSurface::Anchors::fromInt(anchors), qwindow->size());
+    // Size — use 0 for axes anchored to both edges; clamp to avoid uint32_t wrap on negative.
+    //
+    // Source of truth precedence: caller-set DesiredWidth/DesiredHeight properties
+    // (via LayerSurface::setDesiredSize) override `qwindow->size()`. This decouples
+    // client-initiated layer-shell resizes from `QWindow::resize()`, which is silently
+    // clamped against Qt's min/max sizing on Qt 6 (QTBUG-118604) and so cannot reliably
+    // grow a layer-shell surface from app code. The configure that comes back from the
+    // compositor in response to the new set_size then drives the QWindow size via
+    // resizeFromApplyConfigure (see handleConfigure).
+    QSize sizeForLayerShell = qwindow->size();
+    const int desiredW = qwindow->property(LayerSurfaceProps::DesiredWidth).toInt();
+    const int desiredH = qwindow->property(LayerSurfaceProps::DesiredHeight).toInt();
+    if (desiredW > 0) {
+        sizeForLayerShell.setWidth(desiredW);
+    }
+    if (desiredH > 0) {
+        sizeForLayerShell.setHeight(desiredH);
+    }
+    auto [w, h] = LayerSurface::computeLayerSize(LayerSurface::Anchors::fromInt(anchors), sizeForLayerShell);
     zwlr_layer_surface_v1_set_size(m_layerSurface, w, h);
 
     if (m_integration && m_integration->boundVersion() >= 5) {
@@ -242,31 +279,33 @@ void LayerShellWindow::applyProperties()
 QSize LayerShellWindow::computeConfigureSize(uint32_t width, uint32_t height) const
 {
     // Layer-shell sizing contract:
-    //   - Axis anchored to both edges (e.g. Left+Right): client sent set_size(0,_),
-    //     compositor decides the width -> we MUST accept the configure width.
-    //   - Axis NOT doubly-anchored: client sent an explicit size -> the configure
-    //     echoes it back. We keep the app-specified size to avoid overwriting
-    //     carefully calculated OSD/popup dimensions.
+    //   - Axis anchored to both edges: client sent set_size(0,_), compositor
+    //     decides the size — accept the configure value.
+    //   - Axis NOT doubly-anchored: client sent an explicit set_size(W,H), and
+    //     the compositor's configure echoes it back. Accept the configure value
+    //     too — it's the source of truth for what size the layer surface
+    //     actually is. Older logic preferred `qwindow->size()` here on the
+    //     theory that the app already knew what it asked for, but with the
+    //     LayerSurface::setDesiredSize path the desired size lives in window
+    //     PROPERTIES rather than the QWindow geometry. Reading from
+    //     `qwindow->size()` then returns the stale pre-resize value and we'd
+    //     skip the resizeFromApplyConfigure that would actually grow the
+    //     window. Trusting the configure makes the protocol the single source
+    //     of truth on every axis.
     //
-    // This matters because compositors may send sizes that differ from the screen
-    // geometry (e.g. KDE subtracts panel areas even with exclusiveZone=-1).
-    // Blindly resizing to the configure breaks overlays that assume screen-sized windows.
+    // The one nuance preserved from the older logic: if the compositor returns
+    // 0 on an axis (typically only happens for fully-anchored screen-spanning
+    // surfaces while the output is still being initialised), fall back to the
+    // app's last-known size to avoid producing a zero-size surface.
     QWindow* qwindow = m_waylandWindow->window();
     if (!qwindow) {
         return QSize(static_cast<int>(width), static_cast<int>(height));
     }
 
-    int anchors = qwindow->property(LayerSurfaceProps::Anchors).toInt();
-    bool compositorControlsW = (anchors & LayerSurface::AnchorLeft) && (anchors & LayerSurface::AnchorRight);
-    bool compositorControlsH = (anchors & LayerSurface::AnchorTop) && (anchors & LayerSurface::AnchorBottom);
-
-    // For non-compositor-controlled axes, prefer the app-set size. But if the
-    // app size is 0 (e.g. newly created window before first resize), accept the
-    // compositor's value to avoid creating a zero-size surface.
-    int appW = qMax(0, qwindow->width());
-    int appH = qMax(0, qwindow->height());
-    int newW = compositorControlsW ? static_cast<int>(width) : (appW > 0 ? appW : static_cast<int>(width));
-    int newH = compositorControlsH ? static_cast<int>(height) : (appH > 0 ? appH : static_cast<int>(height));
+    const int appW = qMax(0, qwindow->width());
+    const int appH = qMax(0, qwindow->height());
+    const int newW = (width > 0) ? static_cast<int>(width) : appW;
+    const int newH = (height > 0) ? static_cast<int>(height) : appH;
     return QSize(newW, newH);
 }
 
@@ -342,7 +381,7 @@ void LayerShellWindow::updatePosition()
 #endif
 }
 
-void LayerShellWindow::handleConfigure(void* data, struct zwlr_layer_surface_v1* surface, uint32_t serial,
+void LayerShellWindow::handleConfigure(void* data, struct zwlr_layer_surface_v1* /*surface*/, uint32_t serial,
                                        uint32_t width, uint32_t height)
 {
     auto* self = static_cast<LayerShellWindow*>(data);
@@ -352,31 +391,35 @@ void LayerShellWindow::handleConfigure(void* data, struct zwlr_layer_surface_v1*
     if (!self->m_waylandWindow) {
         return;
     }
+
+    // Just stash the configure — DO NOT resize, ack, or commit here. The
+    // compositor sends configure events when the surface state should change,
+    // but the client should only ack + commit when it has a buffer ready at
+    // the new size. Qt's render thread drives that timing through the
+    // applyConfigure() override, which is invoked when a new buffer is being
+    // prepared. Acking + committing here would attach the *previous-frame*
+    // buffer (still at the old size) to the new-size surface, which is what
+    // produces the "surface grew on the protocol but content didn't" symptom.
+    //
+    // QWaylandWindow::applyConfigureWhenPossible queues this for whenever the
+    // render thread is ready (synchronously inline if it can paint now,
+    // deferred via a render-thread hop otherwise). It's the same pattern Qt's
+    // xdg-shell QPA and Quickshell's layer-shell QPA both use.
     self->m_configured = true;
     self->m_pendingWidth = width;
     self->m_pendingHeight = height;
+    self->m_pendingSerial = serial;
+    self->m_hasPendingConfigure = true;
 
-    // Resize the Qt window to the compositor-assigned size, respecting
-    // compositor-controlled axes (see computeConfigureSize for details).
-    // Resize BEFORE ack_configure to avoid a re-entrant paint committing
-    // a stale-size buffer after ack but before our explicit commit.
+    // Schedule applyConfigure via Qt's render-thread sync. If the window isn't
+    // exposed yet (first configure on a new surface) call applyConfigure
+    // directly so the surface gets its first buffer; afterwards the render
+    // thread drives subsequent applies.
     QWindow* qwindow = self->m_waylandWindow->window();
-    if (qwindow && width > 0 && height > 0) {
-        const QSize newSize = self->computeConfigureSize(width, height);
-        if (newSize != qwindow->size()) {
-            qwindow->resize(newSize);
-        }
-    }
-
-    // Re-apply current properties so the compositor sees up-to-date
-    // anchors/margins/size immediately after the configure.
-    self->applyProperties();
-
-    // Ack + commit in the same frame: the protocol requires the client to
-    // ack the configure and commit a buffer with the new size atomically.
-    zwlr_layer_surface_v1_ack_configure(surface, serial);
-    if (self->m_wlSurface) {
-        wl_surface_commit(self->m_wlSurface);
+    if (qwindow && qwindow->isExposed()) {
+        self->m_waylandWindow->applyConfigureWhenPossible();
+    } else {
+        self->applyConfigure();
     }
 
     // Calculate the window's screen position from anchors/margins/output so

@@ -79,6 +79,20 @@ public:
     virtual void setExclusiveZone(int z) = 0;
     virtual void setKeyboardInteractivity(KeyboardInteractivity k) = 0;
     virtual void setAnchors(Anchors a) = 0;
+
+    /// Push a desired surface size into the layer-shell `set_size` request,
+    /// independent of `QQuickWindow::size()`. Use this for client-initiated
+    /// resizes after the initial configure: calling `QWindow::resize()` from
+    /// app code is silently clamped against `windowMinimumSize`/
+    /// `windowMaximumSize` on Qt 6 (QTBUG-118604), so the wl_egl_window stays
+    /// pinned at the old dimensions even though the app thinks it resized.
+    /// Setting a desired size routes the new value through the protocol
+    /// directly; the compositor's `configure` reply then drives Qt's
+    /// resize-from-configure path, which bypasses the clamp.
+    ///
+    /// Default-constructed `QSize()` clears the override and falls back to
+    /// `qwindow->size()` (preserving xdg-toplevel-style behaviour).
+    virtual void setDesiredSize(QSize size) = 0;
     /// @}
 
     /// Cached last-known pixel size from the compositor's configure event.

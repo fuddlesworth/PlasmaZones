@@ -70,6 +70,10 @@ public:
     {
         m_anchors = a;
     }
+    void setDesiredSize(QSize size) override
+    {
+        m_desiredSize = size;
+    }
 
     // Test drivers
     void simulateConfigure(QSize s)
@@ -86,6 +90,7 @@ public:
     int m_exclusiveZone = -1;
     KeyboardInteractivity m_keyboard = KeyboardInteractivity::None;
     Anchors m_anchors = AnchorNone;
+    QSize m_desiredSize;
 };
 
 /// In-memory transport that records every attach() call and hands out

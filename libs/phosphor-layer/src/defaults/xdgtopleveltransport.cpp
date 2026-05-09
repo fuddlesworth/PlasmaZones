@@ -92,6 +92,16 @@ public:
         // xdg_toplevel has no concept of screen-edge anchoring — compositor
         // decides position. Silently accepted.
     }
+    void setDesiredSize(QSize size) override
+    {
+        // xdg_toplevel sizes via QWindow::resize — there is no equivalent of
+        // zwlr_layer_surface_v1::set_size. Forward to the underlying window
+        // so callers that exercise the desired-size path on the toplevel
+        // transport still get the resize they asked for.
+        if (m_window && !size.isEmpty()) {
+            m_window->resize(size);
+        }
+    }
 
 private:
     QPointer<QQuickWindow> m_window;
