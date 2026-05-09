@@ -62,13 +62,13 @@ public:
     /// - If the key is PRESENT but unparseable as @c T:
     ///     - For scalar types (@c QString, @c int, @c bool, @c double,
     ///       @c QColor) returns the schema default.
-    ///     - For @c QVariantMap, returns an EMPTY map (not the schema
-    ///       default). This intentional asymmetry lets the Settings
-    ///       layer distinguish "user has never written this blob"
-    ///       (returns the schema default — populated map) from
-    ///       "blob is corrupt" (returns empty — caller substitutes
-    ///       library/project defaults instead of stamping the schema
-    ///       default back over corrupt user data).
+    ///     - For @c QVariantMap and @c QVariantList, returns an EMPTY
+    ///       collection (not the schema default). This intentional
+    ///       asymmetry lets the Settings layer distinguish "user has
+    ///       never written this blob" (returns the schema default —
+    ///       populated value) from "blob is corrupt" (returns empty —
+    ///       caller substitutes library/project defaults instead of
+    ///       stamping the schema default back over corrupt user data).
     /// - Undeclared keys always return @c QVariant() — effectively @c T{}.
     ///
     /// The primary template is intentionally a static_assert trap:
@@ -81,7 +81,8 @@ public:
     {
         static_assert(sizeof(T) == 0,
                       "PhosphorConfig::Store::read<T> is only implemented for QString, int, bool, double, "
-                      "QColor, QVariantMap — extend store.cpp with a new specialization to add another type.");
+                      "QColor, QVariantMap, QVariantList — extend store.cpp with a new specialization to add "
+                      "another type.");
         return T();
     }
 
@@ -157,9 +158,10 @@ private:
 
 // ─ Supported read<T> specializations ────────────────────────────────────
 // read<T> is fully specialized in store.cpp for QString / int / bool /
-// double / QColor — calls with any other T will fail to link. Extend by
-// adding a specialization there and re-declaring it below so consumers see
-// a declaration without a primary-template body in the header.
+// double / QColor / QVariantMap / QVariantList — calls with any other T
+// will fail to link. Extend by adding a specialization there and
+// re-declaring it below so consumers see a declaration without a
+// primary-template body in the header.
 
 template<>
 PHOSPHORCONFIG_EXPORT QString Store::read<QString>(const QString&, const QString&) const;
@@ -173,5 +175,7 @@ template<>
 PHOSPHORCONFIG_EXPORT QColor Store::read<QColor>(const QString&, const QString&) const;
 template<>
 PHOSPHORCONFIG_EXPORT QVariantMap Store::read<QVariantMap>(const QString&, const QString&) const;
+template<>
+PHOSPHORCONFIG_EXPORT QVariantList Store::read<QVariantList>(const QString&, const QString&) const;
 
 } // namespace PhosphorConfig

@@ -927,6 +927,16 @@ public:
         return {};
     }
 
+    /// Animation App Rules default — empty array. Persisted as a JSON
+    /// array (top-level QVariantList) so the schema entry can route
+    /// through the same `QVariantList`-typed read/write path the
+    /// existing settings backends already implement for ordered
+    /// arrays. fromJson tolerates an empty list as the no-rules case.
+    static QVariantList animationAppRules()
+    {
+        return {};
+    }
+
     static bool autotileFocusFollowsMouse()
     {
         return false;

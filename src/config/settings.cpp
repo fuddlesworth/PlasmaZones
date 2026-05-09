@@ -1065,6 +1065,63 @@ void Settings::setShaderProfileTreeJson(const QString& json)
     setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
 }
 
+PhosphorAnimationShaders::AnimationAppRuleList Settings::animationAppRules() const
+{
+    const auto raw =
+        m_store->read<QVariantList>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey());
+    QJsonArray arr;
+    for (const auto& v : raw) {
+        // Stored entries arrive as `QVariantMap`s when the JSON backend
+        // round-trips. Convert each back into `QJsonObject` for the
+        // typed `fromJson` consumer; non-map entries are dropped at
+        // the `fromJson` validation layer.
+        if (v.canConvert<QVariantMap>()) {
+            arr.append(QJsonObject::fromVariantMap(v.toMap()));
+        }
+    }
+    return PhosphorAnimationShaders::AnimationAppRuleList::fromJson(arr);
+}
+
+void Settings::setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules)
+{
+    // Skip the write when the new list equals the persisted one
+    // (mirrors the dirty-check pattern used by every other setter
+    // here so a no-op `setX(currentX)` from a binding loop doesn't
+    // emit changed signals or mark the config dirty).
+    const auto previous = animationAppRules();
+    if (previous == rules)
+        return;
+
+    QVariantList raw;
+    const auto arr = rules.toJson();
+    raw.reserve(arr.size());
+    for (const auto& v : arr) {
+        raw.append(v.toObject().toVariantMap());
+    }
+    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey(), raw);
+    Q_EMIT animationAppRulesChanged();
+    Q_EMIT settingsChanged();
+}
+
+QString Settings::animationAppRulesJson() const
+{
+    return QString::fromUtf8(QJsonDocument(animationAppRules().toJson()).toJson(QJsonDocument::Compact));
+}
+
+void Settings::setAnimationAppRulesJson(const QString& json)
+{
+    if (json.isEmpty()) {
+        setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList{});
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isArray()) {
+        qCWarning(lcConfig) << "setAnimationAppRulesJson: malformed JSON (expected array), ignoring";
+        return;
+    }
+    setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array()));
+}
+
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
 // Validator (normalizeRenderingBackend in the schema) coerces unknown values
 // to a known backend, so a hand-edited "Rendering.Backend = foobar" reads

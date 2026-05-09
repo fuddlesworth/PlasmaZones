@@ -655,6 +655,14 @@ public:
     void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree&) override
     {
     }
+    PhosphorAnimationShaders::AnimationAppRuleList animationAppRules() const override
+    {
+        return m_animationAppRules;
+    }
+    void setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules) override
+    {
+        m_animationAppRules = rules;
+    }
 
     // Autotile decoration settings (ISettings)
     bool autotileFocusFollowsMouse() const override
@@ -805,6 +813,7 @@ private:
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
+    PhosphorAnimationShaders::AnimationAppRuleList m_animationAppRules;
 };
 
 } // namespace PlasmaZones
