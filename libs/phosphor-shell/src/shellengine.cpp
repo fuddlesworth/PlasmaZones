@@ -80,8 +80,7 @@ bool ShellEngine::load(const QUrl& shellUrl)
 
     m_engine = std::make_unique<QQmlEngine>(this);
     m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
-    m_engine->rootContext()->setContextProperty(QStringLiteral("Environment"),
-                                                new Environment(m_engine.get()));
+    m_engine->rootContext()->setContextProperty(QStringLiteral("Environment"), new Environment(m_engine.get()));
 
     QQmlComponent component(m_engine.get(), shellUrl, QQmlComponent::PreferSynchronous);
     if (component.isError()) {
@@ -301,6 +300,9 @@ void ShellEngine::materializePanels()
         } else {
             role = role.withExclusiveZone(0);
         }
+
+        panel->setWidth(panelSize.width());
+        panel->setHeight(panelSize.height());
 
         PhosphorLayer::SurfaceConfig cfg;
         cfg.role = role;
