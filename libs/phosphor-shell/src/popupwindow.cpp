@@ -142,10 +142,69 @@ void PopupWindow::showPopup()
     m_popupWindow->setTransientParent(m_anchor->window());
     m_popupWindow->resize(m_popupWidth, m_popupHeight);
 
-    const QRect anchorRect = computeAnchorRect();
-    m_popupWindow->setProperty("_q_waylandPopupAnchorRect", anchorRect);
+    // Translate popupEdge → Wayland xdg-popup positioner anchor + gravity.
+    //
+    // Without these, Qt's QtWayland defaults to "no anchor / no gravity"
+    // → popup ends up centered ON the anchor rect (overlapping it). The
+    // bug was hidden for menus anchored to a small top-left button — the
+    // default placement happened to land roughly below+right — but became
+    // obvious when the anchor lived at the centre of a wider panel.
+    //
+    // The set of properties Qt's xdg-shell client plugin actually reads
+    // (verified by `strings libxdg-shell.so`):
+    //   _q_waylandPopupAnchorRect          (QRect)
+    //   _q_waylandPopupAnchor              (Qt::Edges → xdg anchor)
+    //   _q_waylandPopupGravity             (Qt::Edges → xdg gravity)
+    //   _q_waylandPopupConstraintAdjustment (uint, bitmask)
+    // There is NO _q_waylandPopupAnchorOffset — Qt does not honour an
+    // offset property. We bake the gap into the anchor rect itself by
+    // extending the rect past the anchor item's edge by m_gap pixels in
+    // the direction we want the popup to attach to.
+    Qt::Edges anchorEdges;
+    Qt::Edges gravityEdges;
+    QRect anchorRect = computeAnchorRect();
+    switch (m_popupEdge) {
+    case Above:
+        anchorEdges = Qt::TopEdge;
+        gravityEdges = Qt::TopEdge;
+        anchorRect.adjust(0, -m_gap, 0, 0); // grow upward
+        break;
+    case Below:
+        anchorEdges = Qt::BottomEdge;
+        gravityEdges = Qt::BottomEdge;
+        anchorRect.adjust(0, 0, 0, m_gap); // grow downward
+        break;
+    case LeftOf:
+        anchorEdges = Qt::LeftEdge;
+        gravityEdges = Qt::LeftEdge;
+        anchorRect.adjust(-m_gap, 0, 0, 0); // grow leftward
+        break;
+    case RightOf:
+        anchorEdges = Qt::RightEdge;
+        gravityEdges = Qt::RightEdge;
+        anchorRect.adjust(0, 0, m_gap, 0); // grow rightward
+        break;
+    }
 
-    qCDebug(lcPopup) << "Showing popup: anchorRect=" << anchorRect << "size=" << m_popupWidth << "x" << m_popupHeight;
+    m_popupWindow->setProperty("_q_waylandPopupAnchorRect", anchorRect);
+    // Pass as uint — Qt's xdg-shell plugin reads these via QVariant::toUInt
+    // and uses the value as a Qt::Edges-indexed jump-table key. Passing as
+    // QFlags<Qt::Edge> via QVariant::fromValue can fail to convert (no
+    // registered Qt::Edges→uint conversion) and the property silently
+    // falls back to its default (top-left anchor / bottom-right gravity =
+    // popup roughly right-of-and-below the anchor — which matches the
+    // observed misplacement).
+    m_popupWindow->setProperty("_q_waylandPopupAnchor", static_cast<uint>(anchorEdges));
+    m_popupWindow->setProperty("_q_waylandPopupGravity", static_cast<uint>(gravityEdges));
+    // 0xF = SlideX|SlideY|FlipX|FlipY — let the compositor reposition the
+    // popup if it'd run off-screen.
+    m_popupWindow->setProperty("_q_waylandPopupConstraintAdjustment", static_cast<uint>(0xF));
+
+    qCDebug(lcPopup) << "Showing popup: anchorRect=" << anchorRect << "size=" << m_popupWidth << "x" << m_popupHeight
+                     << "edge=" << m_popupEdge << "anchor=" << static_cast<uint>(anchorEdges)
+                     << "gravity=" << static_cast<uint>(gravityEdges)
+                     << "anchorItem.scenePos=" << (m_anchor ? m_anchor->mapToScene(QPointF(0, 0)) : QPointF())
+                     << "anchorItem.size=" << (m_anchor ? QSizeF(m_anchor->width(), m_anchor->height()) : QSizeF());
     m_popupWindow->show();
 }
 
