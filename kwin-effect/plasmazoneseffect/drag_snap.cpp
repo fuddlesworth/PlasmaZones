@@ -3,6 +3,11 @@
 
 #include "../plasmazoneseffect.h"
 
+#include "../autotilehandler.h"
+#include "../dragtracker.h"
+#include "../snapassisthandler.h"
+#include "../windowanimator.h"
+
 #include <PhosphorAnimation/AnimationAppRuleResolver.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -22,11 +27,6 @@
 #include <QTimer>
 
 #include <memory>
-
-#include "../autotilehandler.h"
-#include "../dragtracker.h"
-#include "../snapassisthandler.h"
-#include "../windowanimator.h"
 
 namespace PlasmaZones {
 
@@ -458,11 +458,22 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         // preserving the historical fast-path. Retarget intentionally does
         // not re-apply the cascade — once an animation is in flight, it
         // stays on the curve that started it for visual continuity.
+        //
+        // Empty-rule-list short-circuit: when the user has no app rules
+        // configured (the default-state case for most users), skip both
+        // the resolver call AND the deep `Profile::operator!=` (which
+        // walks `curve->equals` virtual + 5 std::optional comparisons)
+        // — the cost is paid on every animated snap otherwise.
         const QString windowClass = window->windowClass();
         const auto& baseProfile = m_windowAnimator->profile();
-        const PhosphorAnimation::Profile motionProfile = PhosphorAnimationShaders::resolveAnimationMotionProfile(
-            m_shaderManager.m_animationAppRules, baseProfile, windowClass, profilePath, m_curveRegistry);
-        const PhosphorAnimation::Profile* motionOverridePtr = (motionProfile != baseProfile) ? &motionProfile : nullptr;
+        const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
+        PhosphorAnimation::Profile motionProfile;
+        if (!m_shaderManager.m_animationAppRules.isEmpty()) {
+            motionProfile = PhosphorAnimationShaders::resolveAnimationMotionProfile(
+                m_shaderManager.m_animationAppRules, baseProfile, windowClass, profilePath, m_curveRegistry);
+            if (motionProfile != baseProfile)
+                motionOverridePtr = &motionProfile;
+        }
 
         if (m_windowAnimator->hasAnimation(window)) {
             // Capture the displaced animation's endpoints before retarget

@@ -5,13 +5,15 @@
 
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
-#include <QJsonArray>
-#include <QJsonObject>
 #include <QList>
 #include <QString>
 #include <QVariantMap>
+#include <QtCore/qcontainerfwd.h>
 
 #include <optional>
+
+class QJsonArray;
+class QJsonObject;
 
 namespace PhosphorAnimationShaders {
 
@@ -103,17 +105,15 @@ struct PHOSPHORANIMATION_EXPORT AnimationAppRule
 
     QJsonObject toJson() const;
 
-    /// Lenient rule-level loader. Unknown / missing `kind` strings
-    /// default to `Kind::Shader` so the value type can round-trip
-    /// through any `QJsonObject` form without optional plumbing.
-    /// Callers loading USER DATA from JSON should prefer
-    /// `AnimationAppRuleList::fromJson` — that loader applies a
-    /// strict whitelist on the kind string AND drops empty-pattern
-    /// rules, both of which are silently accepted here. Direct
-    /// callers that bypass the list (tests, ad-hoc round-trips) get
-    /// the lenient shape; anything that lands in `Settings` rides
-    /// through the list-level loader.
-    static AnimationAppRule fromJson(const QJsonObject& obj);
+    /// Strict rule-level loader. Returns @c nullopt when the JSON is
+    /// missing required fields, names an unknown `kind`, or carries
+    /// an empty `classPattern` / `eventPath` — none of which can
+    /// produce a valid rule. Direct callers (tests, ad-hoc round-trips,
+    /// future scripting hooks) get the same drop-on-malformed contract
+    /// the list-level loader already applies, so a typo in `kind`
+    /// can't silently materialise as an engaged-empty-effectId Shader
+    /// rule that would block animations for matching windows.
+    static std::optional<AnimationAppRule> fromJson(const QJsonObject& obj);
 };
 
 /**
@@ -144,7 +144,12 @@ public:
         return m_rules;
     }
 
-    void append(const AnimationAppRule& rule);
+    /// Append @p rule. Returns @c true on success, @c false when the
+    /// rule fails validation (empty `classPattern` or `eventPath` —
+    /// "match every window" rules are silently dangerous, so the gate
+    /// is mandatory). Callers writing UI flow can surface the rejection
+    /// through the return value rather than re-checking after the call.
+    bool append(const AnimationAppRule& rule);
     void removeAt(int index);
     void move(int from, int to);
     void clear() noexcept
@@ -156,8 +161,9 @@ public:
     /// validated through the same gate as `append()` — entries with
     /// empty `classPattern` or `eventPath` are dropped rather than
     /// silently swallowing every window, and a warning is logged so
-    /// the call-site bug is visible in the journal.
-    void setEntries(const QList<AnimationAppRule>& rules);
+    /// the call-site bug is visible in the journal. Returns the number
+    /// of entries actually accepted (so callers can detect drops).
+    int setEntries(const QList<AnimationAppRule>& rules);
 
     /// First matching `Kind::Shader` rule for the given (windowClass,
     /// eventPath). Match is substring case-insensitive on
@@ -183,6 +189,11 @@ public:
     }
 
 private:
+    /// Shared body for `resolveShader` / `resolveTiming` — they only
+    /// differ on the kind filter.
+    std::optional<AnimationAppRule> firstMatchOfKind(AnimationAppRule::Kind kind, const QString& windowClass,
+                                                     const QString& eventPath) const;
+
     QList<AnimationAppRule> m_rules;
 };
 

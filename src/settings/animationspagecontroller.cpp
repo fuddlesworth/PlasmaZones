@@ -939,12 +939,9 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         // which treats `nullopt` and `optional(empty)` as DISTINCT).
         // `disabledProfile` round-trips through toJson/fromJson without
         // changing engaged-state, so a disk-loaded disable sentinel for an
-        // unchanged path short-circuits here. Normalize an engaged-but-empty
-        // parameters optional to nullopt so a future caller passing literal
-        // engaged-empty (rather than the current `{}` disengaged) can't
-        // silently desync this comparison from the on-disk round-trip form.
-        if (disabledProfile.parameters && disabledProfile.parameters->isEmpty())
-            disabledProfile.parameters.reset();
+        // unchanged path short-circuits here. The construction above only
+        // engages `disabledProfile.parameters` when the incoming map was
+        // non-empty, so the on-disk round-trip form is always a match.
         if (tree.directOverride(path) == disabledProfile)
             return true;
         tree.setOverride(path, disabledProfile);
@@ -1006,15 +1003,15 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     return true;
 }
 
-namespace {
+namespace animations_controller_detail {
 /// Collect every override path strictly DEEPER than @p path
 /// (i.e. starting with `<path>.`). Centralises the prefix-match math
 /// so shaderOverrideDescendantCount and clearShaderOverrideDescendants
 /// share one definition of "descendant" — the trailing `.` boundary
 /// is what excludes both the path itself ("popup") and unrelated
 /// names with shared character-prefix ("popups").
-QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
-                                             const QString& path)
+static QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                    const QString& path)
 {
     QStringList out;
     if (path.isEmpty()) {
@@ -1029,7 +1026,7 @@ QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::Sha
     }
     return out;
 }
-} // namespace
+} // namespace animations_controller_detail
 
 int AnimationsPageController::shaderOverrideDescendantCount(const QString& path) const
 {
@@ -1083,17 +1080,19 @@ QVariantList AnimationsPageController::shaderEffectUsages(const QString& effectI
 
 // ─── AnimationAppRule list ─────────────────────────────────────────────
 
-namespace {
+namespace animations_controller_detail {
 
 /// Translate the QML-shape map into an AnimationAppRule. Returns nullopt
-/// when the map is missing required fields, carries an unknown kind, or
-/// names an `eventPath` outside the built-in ProfilePaths taxonomy. The
-/// controller's mutators reject malformed rules at the boundary rather
-/// than letting them silently round-trip through `fromJson`'s drop-on-
-/// malformed path (which would surface as a no-op write the user can't
-/// distinguish from "stored successfully").
-std::optional<PhosphorAnimationShaders::AnimationAppRule>
-appRuleFromVariantMap(const QVariantMap& map, const std::function<bool(const QString&)>& isValidEventPath)
+/// when the map is missing required fields, carries an unknown kind,
+/// names an `eventPath` outside the built-in ProfilePaths taxonomy, or
+/// (for shader-kind rules) names an `effectId` the registry doesn't
+/// know. The controller's mutators reject malformed rules at the
+/// boundary rather than letting them silently round-trip through
+/// `fromJson`'s drop-on-malformed path (which would surface as a no-op
+/// write the user can't distinguish from "stored successfully").
+static std::optional<PhosphorAnimationShaders::AnimationAppRule>
+appRuleFromVariantMap(const QVariantMap& map, const std::function<bool(const QString&)>& isValidEventPath,
+                      const std::function<bool(const QString&)>& isKnownEffectId)
 {
     using PhosphorAnimationShaders::AnimationAppRule;
     AnimationAppRule rule;
@@ -1116,6 +1115,15 @@ appRuleFromVariantMap(const QVariantMap& map, const std::function<bool(const QSt
         rule.kind = AnimationAppRule::Kind::Shader;
         rule.effectId = map.value(QLatin1String("effectId")).toString();
         rule.shaderParams = map.value(QLatin1String("shaderParams")).toMap();
+        // Mirror the validation `setShaderOverride` already applies:
+        // reject unknown effectIds at the boundary so the journal
+        // surfaces typos with a real diagnostic instead of "no shader
+        // applied, no error" at runtime. The non-empty guard preserves
+        // the engaged-empty "block default" sentinel — that's a valid
+        // rule shape that the registry can't validate.
+        if (!rule.effectId.isEmpty() && isKnownEffectId && !isKnownEffectId(rule.effectId)) {
+            return std::nullopt;
+        }
     } else if (kindStr == QLatin1String("timing")) {
         rule.kind = AnimationAppRule::Kind::Timing;
         rule.curve = map.value(QLatin1String("curve")).toString();
@@ -1126,12 +1134,12 @@ appRuleFromVariantMap(const QVariantMap& map, const std::function<bool(const QSt
     return rule;
 }
 
-QVariantMap appRuleToVariantMap(const PhosphorAnimationShaders::AnimationAppRule& rule)
+static QVariantMap appRuleToVariantMap(const PhosphorAnimationShaders::AnimationAppRule& rule)
 {
     return rule.toJson().toVariantMap();
 }
 
-} // namespace
+} // namespace animations_controller_detail
 
 QVariantList AnimationsPageController::appRules() const
 {
@@ -1151,9 +1159,23 @@ bool AnimationsPageController::addAppRule(const QVariantMap& rule)
 {
     if (!m_settings)
         return false;
-    const auto parsed = appRuleFromVariantMap(rule, [this](const QString& p) {
-        return isValidEventPath(p);
-    });
+    const auto parsed = appRuleFromVariantMap(
+        rule,
+        [this](const QString& p) {
+            return isValidEventPath(p);
+        },
+        [this](const QString& id) {
+            // Mirror `setShaderOverride`'s readiness gate: when the
+            // registry hasn't scanned its XDG dirs yet (asynchronous on
+            // some setups, unit tests construct an empty registry), we
+            // can't distinguish "id is unknown" from "registry not yet
+            // populated", so accept everything and let the runtime
+            // diagnose silently. Once the registry has any effect the
+            // gate becomes strict.
+            if (!m_shaderRegistry || m_shaderRegistry->effectIds().isEmpty())
+                return true;
+            return m_shaderRegistry->hasEffect(id);
+        });
     if (!parsed) {
         qCWarning(lcConfig) << "addAppRule: malformed rule, ignoring" << rule;
         return false;
@@ -1175,9 +1197,23 @@ bool AnimationsPageController::setAppRule(int index, const QVariantMap& rule)
         qCWarning(lcConfig) << "setAppRule: index" << index << "out of range (size=" << rules.size() << ")";
         return false;
     }
-    const auto parsed = appRuleFromVariantMap(rule, [this](const QString& p) {
-        return isValidEventPath(p);
-    });
+    const auto parsed = appRuleFromVariantMap(
+        rule,
+        [this](const QString& p) {
+            return isValidEventPath(p);
+        },
+        [this](const QString& id) {
+            // Mirror `setShaderOverride`'s readiness gate: when the
+            // registry hasn't scanned its XDG dirs yet (asynchronous on
+            // some setups, unit tests construct an empty registry), we
+            // can't distinguish "id is unknown" from "registry not yet
+            // populated", so accept everything and let the runtime
+            // diagnose silently. Once the registry has any effect the
+            // gate becomes strict.
+            if (!m_shaderRegistry || m_shaderRegistry->effectIds().isEmpty())
+                return true;
+            return m_shaderRegistry->hasEffect(id);
+        });
     if (!parsed) {
         qCWarning(lcConfig) << "setAppRule: malformed rule, ignoring" << rule;
         return false;

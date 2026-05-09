@@ -20,8 +20,6 @@
 #include <QSignalSpy>
 #include <QTest>
 
-#include <PhosphorAnimation/AnimationShaderRegistry.h>
-
 #include "config/settings.h"
 #include "settings/animationspagecontroller.h"
 #include "../helpers/IsolatedConfigGuard.h"

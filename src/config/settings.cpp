@@ -821,31 +821,35 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     Q_EMIT animationProfileChanged();
 
     // Per-field: only emit when the post-write OBSERVABLE differs from
-    // the pre-write observable. Compare against `animationDuration()`
-    // (etc.) post-write — NOT against `profile.effective*()` (the
+    // the pre-write observable. Compare against `animationProfile()`
+    // re-read post-write — NOT against `profile.effective*()` (the
     // incoming arg), because `merged` preserves prev's values for any
     // field the caller left unset. With the incoming `profile` having
     // all-unset fields, `profile.effective*()` returns library
     // defaults; comparing those against `prev*` would fire spurious
-    // signals even though the on-disk value is unchanged.
-    const int newDuration = qRound(animationProfile().effectiveDuration());
-    if (newDuration != prevDuration) {
+    // signals even though the on-disk value is unchanged. Cache the
+    // post-write Profile in one read instead of paying a JSON parse +
+    // CurveRegistry resolve per field.
+    const auto next = animationProfile();
+    if (qRound(next.effectiveDuration()) != prevDuration) {
         Q_EMIT animationDurationChanged();
     }
+    // `animationEasingCurve()` reads the curve directly off the merged
+    // JSON blob (preserving any unresolved raw spec) — distinct from
+    // `next.curve->toString()` which could lose detail when the curve
+    // failed to resolve through `CurveRegistry::tryCreate`. The wire
+    // form is what disk-level equality tracks.
     const QString newCurveWire = animationEasingCurve();
     if (newCurveWire != prevCurveWire) {
         Q_EMIT animationEasingCurveChanged();
     }
-    const int newMinDistance = animationMinDistance();
-    if (newMinDistance != prevMinDistance) {
+    if (next.effectiveMinDistance() != prevMinDistance) {
         Q_EMIT animationMinDistanceChanged();
     }
-    const int newSequenceMode = animationSequenceMode();
-    if (newSequenceMode != prevSequenceMode) {
+    if (static_cast<int>(next.effectiveSequenceMode()) != prevSequenceMode) {
         Q_EMIT animationSequenceModeChanged();
     }
-    const int newStaggerInterval = animationStaggerInterval();
-    if (newStaggerInterval != prevStaggerInterval) {
+    if (next.effectiveStaggerInterval() != prevStaggerInterval) {
         Q_EMIT animationStaggerIntervalChanged();
     }
 
@@ -1085,12 +1089,12 @@ PhosphorAnimationShaders::AnimationAppRuleList Settings::animationAppRules() con
         // Stored entries arrive as `QVariantMap`s when the JSON backend
         // round-trips. Convert each back into `QJsonObject` for the
         // typed `fromJson` consumer; non-map entries are dropped here.
-        // Use the strict typeId comparison rather than `canConvert<>`
-        // — `canConvert<QVariantMap>()` returns true for QStrings too
-        // (which `toMap()` then collapses to an empty map and that
-        // eventually drops at the rule-list `fromJson` validation gate
-        // anyway, but the strict check matches the comment's intent
-        // and avoids a wasted JSON round-trip).
+        // Use the strict `typeId()` check rather than `canConvert<>`
+        // because `canConvert<QVariantMap>()` returns true for plain
+        // QStrings too — `toMap()` would then build an empty
+        // QVariantMap and we'd round-trip that into an empty
+        // QJsonObject for the rule loader to drop at its own gate.
+        // The strict check skips the wasted QJsonObject construction.
         if (v.typeId() == QMetaType::QVariantMap) {
             arr.append(QJsonObject::fromVariantMap(v.toMap()));
         }

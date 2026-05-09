@@ -74,7 +74,18 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const AnimationAppRuleL
         }
     }
     if (rule->durationMs > 0) {
-        out.duration = static_cast<qreal>(rule->durationMs);
+        // Clamp to the same `[Min, Max]AnimationDurationMs` envelope
+        // `resolveAnimationDuration` applies. Without this, a Timing
+        // rule with `durationMs == 8000` would produce a motion
+        // override whose duration is bounded only by `WindowAnimator::
+        // clampProfile`'s `kMaxDurationMs == 10000`, while the
+        // matching shader cascade in the same `applySnapGeometry`
+        // block would resolve through `resolveAnimationDuration` and
+        // see ~2000ms — desyncing visual motion vs shader for the same
+        // user-facing rule. Sub-50ms rule durations would also bypass
+        // the daemon's `MinAnimationDurationMs` floor on this path.
+        out.duration = static_cast<qreal>(qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, rule->durationMs,
+                                                 PhosphorAnimation::Limits::MaxAnimationDurationMs));
     }
     return out;
 }

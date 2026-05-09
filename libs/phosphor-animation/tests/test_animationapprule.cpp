@@ -30,7 +30,8 @@ private Q_SLOTS:
         r.shaderParams.insert(QStringLiteral("overshoot"), 0.1);
 
         const auto roundTripped = AnimationAppRule::fromJson(r.toJson());
-        QCOMPARE(roundTripped, r);
+        QVERIFY(roundTripped.has_value());
+        QCOMPARE(*roundTripped, r);
     }
 
     void testTimingRule_roundTrip_preservesCurveAndDuration()
@@ -43,7 +44,8 @@ private Q_SLOTS:
         r.durationMs = 450;
 
         const auto roundTripped = AnimationAppRule::fromJson(r.toJson());
-        QCOMPARE(roundTripped, r);
+        QVERIFY(roundTripped.has_value());
+        QCOMPARE(*roundTripped, r);
     }
 
     void testShaderRule_emptyEffectId_isPreserved()
@@ -62,8 +64,9 @@ private Q_SLOTS:
         QCOMPARE(json.value(QLatin1String("effectId")).toString(), QString());
 
         const auto roundTripped = AnimationAppRule::fromJson(json);
-        QCOMPARE(roundTripped.effectId, QString());
-        QCOMPARE(roundTripped, r);
+        QVERIFY(roundTripped.has_value());
+        QCOMPARE(roundTripped->effectId, QString());
+        QCOMPARE(*roundTripped, r);
     }
 
     void testShaderRule_emptyParams_omitsKeyButRoundTrips()
@@ -80,7 +83,8 @@ private Q_SLOTS:
         QVERIFY(!json.contains(QLatin1String("shaderParams")));
 
         const auto roundTripped = AnimationAppRule::fromJson(json);
-        QCOMPARE(roundTripped, r);
+        QVERIFY(roundTripped.has_value());
+        QCOMPARE(*roundTripped, r);
     }
 
     void testTimingRule_zeroDuration_omitsKey()
@@ -96,7 +100,30 @@ private Q_SLOTS:
         QVERIFY(!json.contains(QLatin1String("durationMs")));
 
         const auto roundTripped = AnimationAppRule::fromJson(json);
-        QCOMPARE(roundTripped, r);
+        QVERIFY(roundTripped.has_value());
+        QCOMPARE(*roundTripped, r);
+    }
+
+    void testFromJson_strict_dropsUnknownKind()
+    {
+        // Direct callers of rule-level fromJson now get the same
+        // strict drop-on-malformed contract the list-level loader has.
+        QJsonObject obj{
+            {QStringLiteral("classPattern"), QStringLiteral("firefox")},
+            {QStringLiteral("eventPath"), QStringLiteral("window.open")},
+            {QStringLiteral("kind"), QStringLiteral("not-a-kind")},
+        };
+        QVERIFY(!AnimationAppRule::fromJson(obj).has_value());
+    }
+
+    void testFromJson_strict_dropsEmptyClassPattern()
+    {
+        QJsonObject obj{
+            {QStringLiteral("classPattern"), QString()},
+            {QStringLiteral("eventPath"), QStringLiteral("window.open")},
+            {QStringLiteral("kind"), QStringLiteral("shader")},
+        };
+        QVERIFY(!AnimationAppRule::fromJson(obj).has_value());
     }
 
     // ── List ordering and mutations ────────────────────────────────

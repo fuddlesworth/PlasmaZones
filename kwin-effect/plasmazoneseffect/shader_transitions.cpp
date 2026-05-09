@@ -4,6 +4,8 @@
 #include "../plasmazoneseffect.h"
 #include "shader_internal.h"
 
+#include "../windowanimator.h"
+
 #include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/AnimationAppRuleResolver.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
@@ -43,8 +45,6 @@
 #include <memory>
 #include <unordered_set>
 #include <utility>
-
-#include "../windowanimator.h"
 
 namespace PlasmaZones {
 

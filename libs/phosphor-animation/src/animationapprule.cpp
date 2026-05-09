@@ -11,24 +11,30 @@ namespace PhosphorAnimationShaders {
 namespace {
 Q_LOGGING_CATEGORY(lcRules, "phosphoranimation.apprule")
 
-constexpr auto kKeyClassPattern = "classPattern";
-constexpr auto kKeyEventPath = "eventPath";
-constexpr auto kKeyKind = "kind";
-constexpr auto kKeyEffectId = "effectId";
-constexpr auto kKeyShaderParams = "shaderParams";
-constexpr auto kKeyCurve = "curve";
-constexpr auto kKeyDurationMs = "durationMs";
+// `constexpr QLatin1StringView` lets call sites use the constants as
+// QLatin1String directly without per-call wrapping (e.g.
+// `o.insert(kKeyClassPattern, ...)` instead of
+// `o.insert(QLatin1String(kKeyClassPattern), ...)`). The view is the
+// C++20 type alias for QLatin1String — same memory layout, same
+// runtime cost.
+constexpr QLatin1StringView kKeyClassPattern{"classPattern"};
+constexpr QLatin1StringView kKeyEventPath{"eventPath"};
+constexpr QLatin1StringView kKeyKind{"kind"};
+constexpr QLatin1StringView kKeyEffectId{"effectId"};
+constexpr QLatin1StringView kKeyShaderParams{"shaderParams"};
+constexpr QLatin1StringView kKeyCurve{"curve"};
+constexpr QLatin1StringView kKeyDurationMs{"durationMs"};
 
-constexpr auto kKindShaderStr = "shader";
-constexpr auto kKindTimingStr = "timing";
+constexpr QLatin1StringView kKindShaderStr{"shader"};
+constexpr QLatin1StringView kKindTimingStr{"timing"};
 
 QString kindToString(AnimationAppRule::Kind kind)
 {
     switch (kind) {
     case AnimationAppRule::Kind::Shader:
-        return QString::fromLatin1(kKindShaderStr);
+        return kKindShaderStr;
     case AnimationAppRule::Kind::Timing:
-        return QString::fromLatin1(kKindTimingStr);
+        return kKindTimingStr;
     }
     Q_UNREACHABLE();
 }
@@ -40,9 +46,9 @@ QString kindToString(AnimationAppRule::Kind kind)
 /// animations for matching windows without the user's consent.
 std::optional<AnimationAppRule::Kind> kindFromString(const QString& s)
 {
-    if (s.compare(QLatin1String(kKindShaderStr), Qt::CaseInsensitive) == 0)
+    if (s.compare(kKindShaderStr, Qt::CaseInsensitive) == 0)
         return AnimationAppRule::Kind::Shader;
-    if (s.compare(QLatin1String(kKindTimingStr), Qt::CaseInsensitive) == 0)
+    if (s.compare(kKindTimingStr, Qt::CaseInsensitive) == 0)
         return AnimationAppRule::Kind::Timing;
     return std::nullopt;
 }
@@ -65,48 +71,52 @@ bool AnimationAppRule::operator==(const AnimationAppRule& other) const noexcept
 QJsonObject AnimationAppRule::toJson() const
 {
     QJsonObject o;
-    o.insert(QLatin1String(kKeyClassPattern), classPattern);
-    o.insert(QLatin1String(kKeyEventPath), eventPath);
-    o.insert(QLatin1String(kKeyKind), kindToString(kind));
+    o.insert(kKeyClassPattern, classPattern);
+    o.insert(kKeyEventPath, eventPath);
+    o.insert(kKeyKind, kindToString(kind));
     switch (kind) {
     case Kind::Shader:
         // Always emit `effectId` even when empty — it is a meaningful
         // value (the engaged-blocking sentinel) and consumers compare
         // by presence-vs-absence to distinguish "rule disables shader"
         // from "rule field missing in malformed JSON."
-        o.insert(QLatin1String(kKeyEffectId), effectId);
+        o.insert(kKeyEffectId, effectId);
         if (!shaderParams.isEmpty())
-            o.insert(QLatin1String(kKeyShaderParams), QJsonObject::fromVariantMap(shaderParams));
+            o.insert(kKeyShaderParams, QJsonObject::fromVariantMap(shaderParams));
         break;
     case Kind::Timing:
         if (!curve.isEmpty())
-            o.insert(QLatin1String(kKeyCurve), curve);
+            o.insert(kKeyCurve, curve);
         if (durationMs > 0)
-            o.insert(QLatin1String(kKeyDurationMs), durationMs);
+            o.insert(kKeyDurationMs, durationMs);
         break;
     }
     return o;
 }
 
-AnimationAppRule AnimationAppRule::fromJson(const QJsonObject& obj)
+std::optional<AnimationAppRule> AnimationAppRule::fromJson(const QJsonObject& obj)
 {
     AnimationAppRule r;
-    r.classPattern = obj.value(QLatin1String(kKeyClassPattern)).toString();
-    r.eventPath = obj.value(QLatin1String(kKeyEventPath)).toString();
-    // Default to Shader when the `kind` field is absent or unknown —
-    // the list-level `AnimationAppRuleList::fromJson` re-parses the
-    // raw kind string against `kindFromString`'s strict whitelist and
-    // drops entries that fail it, so silent "unknown → Shader"
-    // coercion at this layer never reaches resolve time.
-    r.kind = kindFromString(obj.value(QLatin1String(kKeyKind)).toString()).value_or(Kind::Shader);
+    r.classPattern = obj.value(kKeyClassPattern).toString();
+    r.eventPath = obj.value(kKeyEventPath).toString();
+    if (r.classPattern.isEmpty() || r.eventPath.isEmpty())
+        return std::nullopt;
+    // Strict kind whitelist. Direct callers (tests, ad-hoc round-trips)
+    // need the drop-on-malformed contract: silently coercing an unknown
+    // kind to Shader produces an engaged-empty-effectId rule that would
+    // block animations for matching windows without the user's consent.
+    const auto parsedKind = kindFromString(obj.value(kKeyKind).toString());
+    if (!parsedKind)
+        return std::nullopt;
+    r.kind = *parsedKind;
     switch (r.kind) {
     case Kind::Shader:
-        r.effectId = obj.value(QLatin1String(kKeyEffectId)).toString();
-        r.shaderParams = obj.value(QLatin1String(kKeyShaderParams)).toObject().toVariantMap();
+        r.effectId = obj.value(kKeyEffectId).toString();
+        r.shaderParams = obj.value(kKeyShaderParams).toObject().toVariantMap();
         break;
     case Kind::Timing:
-        r.curve = obj.value(QLatin1String(kKeyCurve)).toString();
-        r.durationMs = obj.value(QLatin1String(kKeyDurationMs)).toInt(0);
+        r.curve = obj.value(kKeyCurve).toString();
+        r.durationMs = obj.value(kKeyDurationMs).toInt(0);
         break;
     }
     return r;
@@ -125,13 +135,15 @@ AnimationAppRule AnimationAppRuleList::at(int index) const
     return m_rules.at(index);
 }
 
-void AnimationAppRuleList::append(const AnimationAppRule& rule)
+bool AnimationAppRuleList::append(const AnimationAppRule& rule)
 {
     if (rule.classPattern.isEmpty() || rule.eventPath.isEmpty()) {
-        qCWarning(lcRules) << "Rejecting rule with empty classPattern or eventPath";
-        return;
+        qCWarning(lcRules) << "Rejecting rule with empty classPattern or eventPath:" << rule.classPattern
+                           << rule.eventPath;
+        return false;
     }
     m_rules.append(rule);
+    return true;
 }
 
 void AnimationAppRuleList::removeAt(int index)
@@ -141,18 +153,21 @@ void AnimationAppRuleList::removeAt(int index)
     m_rules.removeAt(index);
 }
 
-void AnimationAppRuleList::setEntries(const QList<AnimationAppRule>& rules)
+int AnimationAppRuleList::setEntries(const QList<AnimationAppRule>& rules)
 {
     QList<AnimationAppRule> validated;
     validated.reserve(rules.size());
     for (const auto& rule : rules) {
         if (rule.classPattern.isEmpty() || rule.eventPath.isEmpty()) {
-            qCWarning(lcRules) << "setEntries: dropping rule with empty classPattern or eventPath";
+            qCWarning(lcRules) << "setEntries: dropping rule with empty classPattern or eventPath:" << rule.classPattern
+                               << rule.eventPath;
             continue;
         }
         validated.append(rule);
     }
+    const int accepted = validated.size();
     m_rules = std::move(validated);
+    return accepted;
 }
 
 void AnimationAppRuleList::move(int from, int to)
@@ -181,13 +196,14 @@ bool patternMatches(const QString& pattern, const QString& windowClass)
 }
 } // namespace
 
-std::optional<AnimationAppRule> AnimationAppRuleList::resolveShader(const QString& windowClass,
-                                                                    const QString& eventPath) const
+std::optional<AnimationAppRule> AnimationAppRuleList::firstMatchOfKind(AnimationAppRule::Kind kind,
+                                                                       const QString& windowClass,
+                                                                       const QString& eventPath) const
 {
     if (windowClass.isEmpty() || eventPath.isEmpty())
         return std::nullopt;
     for (const auto& rule : m_rules) {
-        if (rule.kind != AnimationAppRule::Kind::Shader)
+        if (rule.kind != kind)
             continue;
         if (rule.eventPath != eventPath)
             continue;
@@ -197,20 +213,16 @@ std::optional<AnimationAppRule> AnimationAppRuleList::resolveShader(const QStrin
     return std::nullopt;
 }
 
+std::optional<AnimationAppRule> AnimationAppRuleList::resolveShader(const QString& windowClass,
+                                                                    const QString& eventPath) const
+{
+    return firstMatchOfKind(AnimationAppRule::Kind::Shader, windowClass, eventPath);
+}
+
 std::optional<AnimationAppRule> AnimationAppRuleList::resolveTiming(const QString& windowClass,
                                                                     const QString& eventPath) const
 {
-    if (windowClass.isEmpty() || eventPath.isEmpty())
-        return std::nullopt;
-    for (const auto& rule : m_rules) {
-        if (rule.kind != AnimationAppRule::Kind::Timing)
-            continue;
-        if (rule.eventPath != eventPath)
-            continue;
-        if (patternMatches(rule.classPattern, windowClass))
-            return rule;
-    }
-    return std::nullopt;
+    return firstMatchOfKind(AnimationAppRule::Kind::Timing, windowClass, eventPath);
 }
 
 QJsonArray AnimationAppRuleList::toJson() const
@@ -227,23 +239,18 @@ AnimationAppRuleList AnimationAppRuleList::fromJson(const QJsonArray& arr)
     for (const auto& v : arr) {
         if (!v.isObject())
             continue;
-        const auto obj = v.toObject();
-        // Strict kind validation BEFORE constructing the rule —
-        // `AnimationAppRule::fromJson` silently coerces unknown kind
-        // strings to Shader so the value type round-trips without
-        // optional plumbing, but a malformed kind in a JSON load is a
-        // user-data error we'd rather drop than silently reinterpret
-        // as an engaged-blocking shader rule.
-        if (!kindFromString(obj.value(QLatin1String(kKeyKind)).toString()).has_value()) {
-            qCWarning(lcRules) << "Dropping rule with unknown kind:" << obj.value(QLatin1String(kKeyKind));
+        // The rule-level loader is strict (returns nullopt on unknown
+        // kind / empty pattern / empty eventPath), so a single drop
+        // gate covers every malformed entry. Successful parses route
+        // through `append()` so any future strengthening of append's
+        // validation (dedup, normalisation) automatically applies to
+        // the JSON load path.
+        const auto rule = AnimationAppRule::fromJson(v.toObject());
+        if (!rule) {
+            qCWarning(lcRules) << "Dropping malformed rule from JSON";
             continue;
         }
-        // Route through `append()` rather than re-implementing its
-        // empty-pattern / empty-eventPath gate inline — that way a
-        // future strengthening of `append()` validation (e.g. a
-        // dedup pass) automatically applies to the JSON load path.
-        // `append()` is a no-op (with warning) on rejected entries.
-        list.append(AnimationAppRule::fromJson(obj));
+        list.append(*rule);
     }
     return list;
 }

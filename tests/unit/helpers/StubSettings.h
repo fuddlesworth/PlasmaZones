@@ -25,8 +25,10 @@ namespace PlasmaZones {
  */
 class StubSettings : public ISettings, public PhosphorEngine::ISnapSettings
 {
-    // No Q_OBJECT — this stub has no signals/slots of its own.
-    // ISettings::Q_OBJECT provides the meta-object system integration.
+    // No Q_OBJECT — this stub defines no NEW signals/slots; ISettings's
+    // meta-object is reused for the inherited signal emits (e.g.
+    // `animationAppRulesChanged`, `renderingBackendChanged`,
+    // `settingsChanged`) that the setters trigger directly.
 
 public:
     explicit StubSettings(QObject* parent = nullptr)

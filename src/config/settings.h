@@ -5,9 +5,9 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
+#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>

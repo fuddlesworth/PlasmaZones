@@ -297,6 +297,21 @@ SettingsFlickable {
 
                             return i18n("%1 ms", value);
                         }
+                        // Pair with valueFromText so editing the
+                        // textual sentinel "inherit" back into the
+                        // spinbox correctly resolves to 0 — without
+                        // this, Qt's default numeric parser falls
+                        // back to 0 only by coincidence (the textual
+                        // and numeric sentinels happen to collide).
+                        // Anything that doesn't parse as a positive
+                        // integer is treated as inherit (0).
+                        valueFromText: function(text, locale) {
+                            if (text.trim() === i18n("inherit"))
+                                return 0;
+
+                            var parsed = parseInt(text, 10);
+                            return isNaN(parsed) || parsed < 0 ? 0 : parsed;
+                        }
                     }
 
                 }
@@ -345,6 +360,11 @@ SettingsFlickable {
                                 shaderPicker.currentShaderId = "";
                                 curveField.clear();
                                 durationSpin.value = 0;
+                                // Reset the event combo to the first
+                                // entry so consecutive adds open with
+                                // a known starting point instead of
+                                // inheriting the previous selection.
+                                eventCombo.currentIndex = 0;
                             }
                         }
                     }
