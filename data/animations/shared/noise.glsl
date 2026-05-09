@@ -32,30 +32,13 @@
 // per-leg randomness should mix in a leg-unique input themselves.
 //
 // Requires `iSurfaceScreenPos` to be in scope, which means the caller
-// must include `<animation_uniforms.glsl>` BEFORE `<noise.glsl>`. The
-// `iSurfaceScreenPos` declaration's precision is set by the includer
-// (mediump on the kwin-effect GL ES path, highp on the daemon RHI
-// path); the highp pin in this file applies only to local function
-// bodies, so on the kwin path the input value is read at mediump
-// precision before this function operates on it. surfaceSeed's hash
-// shape is chaotic enough that mediump truncation of the input doesn't
-// produce visible aliasing in practice.
+// must include `<animation_uniforms.glsl>` BEFORE `<noise.glsl>`.
+// Both runtimes (daemon RHI and kwin-effect via KWin::GLShader) compile
+// shader sources at `#version 450 core`, where all floats are 32-bit
+// IEEE-754 by default — no precision-coupling concerns to track.
 
 #ifndef PHOSPHOR_NOISE_GLSL
 #define PHOSPHOR_NOISE_GLSL
-
-// `hash22`'s `fract(p3 * 0.1031)` chain operates on
-// per-fragment-pixel inputs at large magnitudes; on drivers that
-// default fragment precision to `mediump` (some classic-GL stacks
-// the kwin-effect path runs on), the multiplication aliases past the
-// 24-bit mantissa and the noise output becomes blocky/banded. The
-// daemon RHI path defaults to highp and is unaffected. Pin the
-// precision here so callers across both runtimes get the same
-// quality. The `#version 450` daemon path treats `precision` as a
-// no-op; the `#version 100`/`100 es` kwin path enforces it.
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#endif
 
 vec2 hash22(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
