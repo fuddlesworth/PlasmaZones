@@ -50,6 +50,7 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/FileView.h
     include/PhosphorShell/FloatingWindow.h
     include/PhosphorShell/LazyLoader.h
+    include/PhosphorShell/Toplevels.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -70,6 +71,7 @@ set(phosphorshell_SRCS
     src/fileview.cpp
     src/floatingwindow.cpp
     src/lazyloader.cpp
+    src/toplevels.cpp
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

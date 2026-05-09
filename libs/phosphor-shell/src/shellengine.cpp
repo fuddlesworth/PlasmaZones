@@ -6,6 +6,7 @@
 #include <PhosphorShell/FileView.h>
 #include <PhosphorShell/FloatingWindow.h>
 #include <PhosphorShell/LazyLoader.h>
+#include <PhosphorShell/Toplevels.h>
 #include <PhosphorShell/PanelWindow.h>
 #include <PhosphorShell/PersistentProperties.h>
 #include <PhosphorShell/PopupWindow.h>
@@ -81,6 +82,16 @@ bool ShellEngine::load(const QUrl& shellUrl)
     qmlRegisterType<FileView>("Phosphor.Shell", 1, 0, "FileView");
     qmlRegisterType<PersistentProperties>("Phosphor.Shell", 1, 0, "PersistentProperties");
     qmlRegisterType<PhosphorRendering::ShaderEffect>("Phosphor.Shell", 1, 0, "ShaderBackground");
+
+    // ForeignToplevel is uncreatable from QML — it's only ever vended by
+    // Toplevels via the toplevelAdded signal / toplevels list. Registering
+    // it as uncreatable lets QML resolve `PhosphorWayland.ForeignToplevel`
+    // type names in delegates (`required property var modelData` doesn't
+    // need the registration, but `as ForeignToplevel` casts do).
+    qmlRegisterUncreatableType<PhosphorWayland::ForeignToplevel>(
+        "Phosphor.Shell", 1, 0, "ForeignToplevel",
+        QStringLiteral("ForeignToplevel is owned by Toplevels and cannot be constructed from QML"));
+    qmlRegisterSingletonType<Toplevels>("Phosphor.Shell", 1, 0, "Toplevels", &Toplevels::create);
 
     m_engine = std::make_unique<QQmlEngine>(this);
     m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);

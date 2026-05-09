@@ -15,6 +15,7 @@
 #include "single_pixel_buffer_protocol.h"
 #include "idle_notify_protocol.h"
 #include "xdg_toplevel_drag_protocol.h"
+#include "foreign_toplevel_protocol.h"
 
 namespace PhosphorWayland {
 
@@ -101,6 +102,18 @@ public:
         return m_toplevelDragManagerAvailable ? m_toplevelDragManager : nullptr;
     }
 
+    struct zwlr_foreign_toplevel_manager_v1* foreignToplevelManager() const
+    {
+        return m_foreignToplevelManagerAvailable ? m_foreignToplevelManager : nullptr;
+    }
+    /// Negotiated version (1-3). Callers gate version-specific features:
+    ///   v2: set_fullscreen / unset_fullscreen
+    ///   v3: parent event
+    uint32_t foreignToplevelManagerVersion() const
+    {
+        return m_foreignToplevelManagerVersion;
+    }
+
     /// Access the Wayland display for explicit flushing after surface creation.
     QtWaylandClient::QWaylandDisplay* display() const
     {
@@ -130,6 +143,11 @@ private:
     struct xdg_toplevel_drag_manager_v1* m_toplevelDragManager = nullptr;
     uint32_t m_toplevelDragManagerId = 0;
     bool m_toplevelDragManagerAvailable = false;
+
+    struct zwlr_foreign_toplevel_manager_v1* m_foreignToplevelManager = nullptr;
+    uint32_t m_foreignToplevelManagerId = 0;
+    uint32_t m_foreignToplevelManagerVersion = 0;
+    bool m_foreignToplevelManagerAvailable = false;
 
     std::vector<std::pair<CallbackId, GlobalRemovedCallback>> m_globalRemovedCallbacks;
     CallbackId m_nextCallbackId = 1;

@@ -28,6 +28,12 @@ LayerShellIntegration::LayerShellIntegration() = default;
 
 LayerShellIntegration::~LayerShellIntegration()
 {
+    if (m_foreignToplevelManager) {
+        // The protocol's stop() request asks the compositor to stop sending
+        // toplevel events; the manager proxy can then be destroyed client-side.
+        zwlr_foreign_toplevel_manager_v1_stop(m_foreignToplevelManager);
+        wl_proxy_destroy(reinterpret_cast<struct wl_proxy*>(m_foreignToplevelManager));
+    }
     if (m_toplevelDragManager) {
         xdg_toplevel_drag_manager_v1_destroy(m_toplevelDragManager);
     }
@@ -176,6 +182,23 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         self->m_toplevelDragManagerId = id;
         self->m_toplevelDragManagerAvailable = true;
         qCDebug(lcLayerShellIntegration).nospace() << "Bound xdg_toplevel_drag_manager_v1 v" << bindVersion;
+    } else if (strcmp(interface, zwlr_foreign_toplevel_manager_v1_interface.name) == 0) {
+        if (self->m_foreignToplevelManager)
+            return;
+        // Maximum protocol version we bind:
+        //   v1: base (title/app_id/state/output_enter/output_leave/done events;
+        //       set_maximized/unset_maximized/set_minimized/unset_minimized/
+        //       activate/close/set_rectangle requests)
+        //   v2: set_fullscreen / unset_fullscreen
+        //   v3: parent event
+        static constexpr uint32_t kMaxVersion = 3;
+        uint32_t bindVersion = qMin(version, kMaxVersion);
+        self->m_foreignToplevelManager = static_cast<struct zwlr_foreign_toplevel_manager_v1*>(
+            wl_registry_bind(registry, id, &zwlr_foreign_toplevel_manager_v1_interface, bindVersion));
+        self->m_foreignToplevelManagerId = id;
+        self->m_foreignToplevelManagerVersion = bindVersion;
+        self->m_foreignToplevelManagerAvailable = true;
+        qCDebug(lcLayerShellIntegration).nospace() << "Bound zwlr_foreign_toplevel_manager_v1 v" << bindVersion;
     }
 }
 
@@ -195,6 +218,10 @@ void LayerShellIntegration::registryRemoveHandler(void* data, struct wl_registry
         self->m_toplevelDragManagerAvailable = false;
         self->m_toplevelDragManagerId = 0;
         qCDebug(lcLayerShellIntegration) << "xdg_toplevel_drag_manager_v1 global removed";
+    } else if (id == self->m_foreignToplevelManagerId) {
+        self->m_foreignToplevelManagerAvailable = false;
+        self->m_foreignToplevelManagerId = 0;
+        qCDebug(lcLayerShellIntegration) << "zwlr_foreign_toplevel_manager_v1 global removed";
     } else if (id == self->m_layerShellId) {
         qCWarning(lcLayerShellIntegration) << "zwlr_layer_shell_v1 global removed (id" << id << ") —"
                                            << "new layer surface creation will fail."
