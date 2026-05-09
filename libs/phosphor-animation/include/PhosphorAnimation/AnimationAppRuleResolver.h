@@ -52,7 +52,11 @@ PHOSPHORANIMATION_EXPORT ShaderProfile resolveAnimationShaderProfile(const Anima
  * for a single (windowClass, eventPath) event:
  *
  *   1. `AnimationAppRuleList::resolveTiming` — first matching rule.
- *      A hit with `durationMs > 0` returns that value. A hit with
+ *      A hit with `durationMs > 0` returns that value, clamped to
+ *      `[Limits::MinAnimationDurationMs, Limits::MaxAnimationDurationMs]`
+ *      so a malformed rule can't feed an unbounded duration into the
+ *      kwin-effect's `QTimer::singleShot` teardown timer or the
+ *      shader transition's per-frame elapsed-time math. A hit with
  *      `durationMs <= 0` is the documented "inherit per-event default"
  *      sentinel and falls through to step 2.
  *
@@ -78,8 +82,11 @@ PHOSPHORANIMATION_EXPORT int resolveAnimationDuration(const AnimationAppRuleList
  *      the override only takes effect when the registry returns a
  *      non-null curve, so a malformed curve string falls through to
  *      the base curve instead of dropping motion entirely. A rule
- *      `durationMs > 0` overrides the base duration (zero / negative
- *      is the documented inherit sentinel).
+ *      `durationMs > 0` overrides the base duration, clamped to
+ *      `[Limits::MinAnimationDurationMs, Limits::MaxAnimationDurationMs]`
+ *      so this path stays aligned with `resolveAnimationDuration`'s
+ *      shader-side cap (zero / negative is the documented inherit
+ *      sentinel and leaves the base duration untouched).
  *
  *   2. The caller-provided @p base profile (typically the
  *      `WindowAnimator`'s configured global profile).

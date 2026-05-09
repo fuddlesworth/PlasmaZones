@@ -149,12 +149,14 @@ private Q_SLOTS:
     void testList_appendRejectsEmptyPattern()
     {
         // Defence in depth: append() must refuse empty patterns so
-        // they can't silently match every window.
+        // they can't silently match every window. Pin both the bool
+        // return (callers rely on it for UI feedback) AND the
+        // size-after invariant.
         AnimationAppRuleList list;
         AnimationAppRule r;
         r.classPattern = QString();
         r.eventPath = QStringLiteral("window.open");
-        list.append(r);
+        QVERIFY(!list.append(r));
         QCOMPARE(list.size(), 0);
     }
 
@@ -164,8 +166,20 @@ private Q_SLOTS:
         AnimationAppRule r;
         r.classPattern = QStringLiteral("firefox");
         r.eventPath = QString();
-        list.append(r);
+        QVERIFY(!list.append(r));
         QCOMPARE(list.size(), 0);
+    }
+
+    void testList_appendReturnsTrueOnSuccess()
+    {
+        AnimationAppRuleList list;
+        AnimationAppRule r;
+        r.classPattern = QStringLiteral("firefox");
+        r.eventPath = QStringLiteral("window.open");
+        r.kind = AnimationAppRule::Kind::Shader;
+        r.effectId = QStringLiteral("popin");
+        QVERIFY(list.append(r));
+        QCOMPARE(list.size(), 1);
     }
 
     void testList_move_reordersInPlace()

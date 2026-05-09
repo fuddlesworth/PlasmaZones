@@ -250,7 +250,16 @@ AnimationAppRuleList AnimationAppRuleList::fromJson(const QJsonArray& arr)
             qCWarning(lcRules) << "Dropping malformed rule from JSON";
             continue;
         }
-        list.append(*rule);
+        // Honour append's bool return so any future strengthening of
+        // its validation (dedup, normalisation) surfaces a journal
+        // entry on the JSON-load path. Today's append never rejects a
+        // post-fromJson rule (the strict rule-level loader already
+        // catches every classPattern/eventPath/kind failure), but
+        // checking the return future-proofs the loader.
+        if (!list.append(*rule)) {
+            qCWarning(lcRules) << "JSON-load: append() rejected a rule that passed rule-level fromJson —"
+                                  " the validation gates have drifted apart";
+        }
     }
     return list;
 }

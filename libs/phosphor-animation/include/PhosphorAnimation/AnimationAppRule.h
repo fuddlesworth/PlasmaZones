@@ -8,7 +8,6 @@
 #include <QList>
 #include <QString>
 #include <QVariantMap>
-#include <QtCore/qcontainerfwd.h>
 
 #include <optional>
 
