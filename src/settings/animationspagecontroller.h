@@ -305,6 +305,50 @@ public:
     /// overrides count, mirroring the existing tree-walk semantics.
     Q_INVOKABLE QVariantList shaderEffectUsages(const QString& effectId) const;
 
+    // ── AnimationAppRule list (Phase 3) ──────────────────────────────
+    //
+    // Per-window-class shader/timing override list — mutators write
+    // through `Settings::setAnimationAppRules` and emit
+    // `appRulesChanged()` (forwarded from
+    // `ISettings::animationAppRulesChanged`). The QML rules page binds
+    // to `appRules()` and calls `add/remove/move/setAppRule` for
+    // mutations, mirroring the shader-tree pattern: there is no
+    // file-snapshot path for rules — they ride the standard
+    // Settings::load() Q_PROPERTY re-emit on Discard.
+
+    /// Snapshot of the rule list as a QVariantList of QVariantMaps,
+    /// each in the same JSON shape `AnimationAppRule::toJson()`
+    /// produces. Empty when no rules are configured.
+    Q_INVOKABLE QVariantList appRules() const;
+
+    /// Append @p rule to the list. The map must carry at least
+    /// `classPattern`, `eventPath`, and `kind` (`"shader"` or
+    /// `"timing"`); empty pattern / event / unknown kind are rejected.
+    /// Shader-kind rules accept `effectId` (may be empty for the
+    /// "block default for matching windows" sentinel) and a
+    /// `shaderParams` map. Timing-kind rules accept `curve` and
+    /// `durationMs`. Returns true on success.
+    Q_INVOKABLE bool addAppRule(const QVariantMap& rule);
+
+    /// Replace the rule at @p index with @p rule. Same validation
+    /// rules as `addAppRule`. Returns false on out-of-range index or
+    /// invalid rule.
+    Q_INVOKABLE bool setAppRule(int index, const QVariantMap& rule);
+
+    /// Remove the rule at @p index. Returns false on out-of-range index.
+    Q_INVOKABLE bool removeAppRule(int index);
+
+    /// Move the rule from @p from to @p to (drag-reorder). Returns
+    /// false on out-of-range indices or no-op moves.
+    Q_INVOKABLE bool moveAppRule(int from, int to);
+
+    /// Window-event paths suitable for the `AnimationAppRule.eventPath`
+    /// dropdown. Returns the `window.*` subset of `eventSections()`
+    /// (rules apply per window-class — popup / osd events have no
+    /// window-class to match against). Each entry:
+    /// `{ path: QString, label: QString }`.
+    Q_INVOKABLE QVariantList animationAppRuleEvents() const;
+
     /// Test hook: redirect file I/O to @p dir instead of the XDG default.
     /// Pass an empty string to restore the default. Not Q_INVOKABLE — QML
     /// callers must not redirect persistence.
@@ -331,6 +375,12 @@ Q_SIGNALS:
 
     /// Emitted on any successful add/removeMotionSet or apply.
     void motionSetsChanged();
+
+    /// Emitted on any successful add/remove/move/setAppRule AND on
+    /// any full settings reload (`ISettings::animationAppRulesChanged`).
+    /// Path-agnostic since the rule list is a single Q_PROPERTY blob —
+    /// QML pages refresh their full rule view on this signal.
+    void appRulesChanged();
 
     /// Emitted whenever `hasPendingChanges()` may have flipped. The
     /// SettingsController's slot calls `setNeedsSave(true)` when there

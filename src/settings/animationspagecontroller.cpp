@@ -11,12 +11,13 @@
 #include "dbusutils.h"
 #include "motionsetstore.h"
 
+#include <PhosphorAnimation/AnimationAppRule.h>
+#include <PhosphorAnimation/AnimationShaderEffect.h>
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/AnimationShaderEffect.h>
-#include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
@@ -198,6 +199,10 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
             // every visible event card on this signal which is cheap enough.
             Q_EMIT shaderProfileChanged(QString());
         });
+        // Same path-agnostic-broadcast rationale: the rule list is one
+        // blob Q_PROPERTY, QML rebinds on appRulesChanged() without
+        // having to diff which entry moved.
+        connect(m_settings, &ISettings::animationAppRulesChanged, this, &AnimationsPageController::appRulesChanged);
     }
 }
 
@@ -1052,6 +1057,168 @@ QVariantList AnimationsPageController::shaderEffectUsages(const QString& effectI
     std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
         return a.toMap().value(QLatin1String("label")).toString() < b.toMap().value(QLatin1String("label")).toString();
     });
+    return out;
+}
+
+// ─── AnimationAppRule list ─────────────────────────────────────────────
+
+namespace {
+
+/// Translate the QML-shape map into an AnimationAppRule. Returns nullopt
+/// when the map is missing required fields or carries an unknown kind —
+/// the controller's mutators reject malformed rules at the boundary
+/// rather than letting them silently round-trip through `fromJson`'s
+/// drop-on-malformed path (which would surface as a no-op write).
+std::optional<PhosphorAnimationShaders::AnimationAppRule> appRuleFromVariantMap(const QVariantMap& map)
+{
+    using PhosphorAnimationShaders::AnimationAppRule;
+    AnimationAppRule rule;
+    rule.classPattern = map.value(QLatin1String("classPattern")).toString();
+    rule.eventPath = map.value(QLatin1String("eventPath")).toString();
+    if (rule.classPattern.isEmpty() || rule.eventPath.isEmpty()) {
+        return std::nullopt;
+    }
+    const QString kindStr = map.value(QLatin1String("kind")).toString();
+    if (kindStr == QLatin1String("shader")) {
+        rule.kind = AnimationAppRule::Kind::Shader;
+        rule.effectId = map.value(QLatin1String("effectId")).toString();
+        rule.shaderParams = map.value(QLatin1String("shaderParams")).toMap();
+    } else if (kindStr == QLatin1String("timing")) {
+        rule.kind = AnimationAppRule::Kind::Timing;
+        rule.curve = map.value(QLatin1String("curve")).toString();
+        rule.durationMs = map.value(QLatin1String("durationMs")).toInt();
+    } else {
+        return std::nullopt;
+    }
+    return rule;
+}
+
+QVariantMap appRuleToVariantMap(const PhosphorAnimationShaders::AnimationAppRule& rule)
+{
+    return rule.toJson().toVariantMap();
+}
+
+} // namespace
+
+QVariantList AnimationsPageController::appRules() const
+{
+    if (!m_settings)
+        return {};
+    const auto rules = m_settings->animationAppRules();
+    QVariantList out;
+    out.reserve(rules.size());
+    const auto entries = rules.entries();
+    for (const auto& rule : entries) {
+        out.append(appRuleToVariantMap(rule));
+    }
+    return out;
+}
+
+bool AnimationsPageController::addAppRule(const QVariantMap& rule)
+{
+    if (!m_settings)
+        return false;
+    const auto parsed = appRuleFromVariantMap(rule);
+    if (!parsed) {
+        qCWarning(lcConfig) << "addAppRule: malformed rule, ignoring" << rule;
+        return false;
+    }
+    auto rules = m_settings->animationAppRules();
+    rules.append(*parsed);
+    m_settings->setAnimationAppRules(rules);
+    Q_EMIT pendingChangesChanged();
+    return true;
+}
+
+bool AnimationsPageController::setAppRule(int index, const QVariantMap& rule)
+{
+    if (!m_settings)
+        return false;
+    auto rules = m_settings->animationAppRules();
+    if (index < 0 || index >= rules.size()) {
+        qCWarning(lcConfig) << "setAppRule: index" << index << "out of range (size=" << rules.size() << ")";
+        return false;
+    }
+    const auto parsed = appRuleFromVariantMap(rule);
+    if (!parsed) {
+        qCWarning(lcConfig) << "setAppRule: malformed rule, ignoring" << rule;
+        return false;
+    }
+    auto entries = rules.entries();
+    if (entries.at(index) == *parsed) {
+        // Same dirty-check pattern as setShaderOverride — a same-state
+        // QML rebind must not cycle Settings → boomerang and emit a
+        // spurious pendingChangesChanged.
+        return true;
+    }
+    entries[index] = *parsed;
+    rules.setEntries(entries);
+    m_settings->setAnimationAppRules(rules);
+    Q_EMIT pendingChangesChanged();
+    return true;
+}
+
+bool AnimationsPageController::removeAppRule(int index)
+{
+    if (!m_settings)
+        return false;
+    auto rules = m_settings->animationAppRules();
+    if (index < 0 || index >= rules.size()) {
+        qCWarning(lcConfig) << "removeAppRule: index" << index << "out of range (size=" << rules.size() << ")";
+        return false;
+    }
+    rules.removeAt(index);
+    m_settings->setAnimationAppRules(rules);
+    Q_EMIT pendingChangesChanged();
+    return true;
+}
+
+bool AnimationsPageController::moveAppRule(int from, int to)
+{
+    if (!m_settings)
+        return false;
+    auto rules = m_settings->animationAppRules();
+    if (from == to) {
+        return false;
+    }
+    if (from < 0 || from >= rules.size() || to < 0 || to >= rules.size()) {
+        qCWarning(lcConfig) << "moveAppRule: out-of-range from=" << from << "to=" << to << "size=" << rules.size();
+        return false;
+    }
+    rules.move(from, to);
+    m_settings->setAnimationAppRules(rules);
+    Q_EMIT pendingChangesChanged();
+    return true;
+}
+
+QVariantList AnimationsPageController::animationAppRuleEvents() const
+{
+    // Rules apply per window-class — popup / osd events have no window
+    // class to match against, so the dropdown only surfaces window.*
+    // event paths. Reuses `eventSections()` so the labels stay aligned
+    // with the rest of the Animations UI.
+    QVariantList out;
+    const auto sections = eventSections();
+    for (const QVariant& sectionVar : sections) {
+        const QVariantMap section = sectionVar.toMap();
+        const QString sectionId = section.value(QLatin1String("section")).toString();
+        if (sectionId != QLatin1String("window")) {
+            continue;
+        }
+        const QVariantList paths = section.value(QLatin1String("paths")).toList();
+        for (const QVariant& pathVar : paths) {
+            const QVariantMap path = pathVar.toMap();
+            // Skip category nodes (they're inheritance anchors, not
+            // concrete events the rule list can target).
+            if (path.value(QLatin1String("isCategory")).toBool()) {
+                continue;
+            }
+            QVariantMap entry;
+            entry.insert(QLatin1String("path"), path.value(QLatin1String("path")));
+            entry.insert(QLatin1String("label"), path.value(QLatin1String("label")));
+            out.append(entry);
+        }
+    }
     return out;
 }
 
