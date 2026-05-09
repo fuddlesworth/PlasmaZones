@@ -223,6 +223,26 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
 {
     Q_ASSERT_X(backend != nullptr, "PhosphorConfig::Store", "backend must not be null");
 
+#ifndef QT_NO_DEBUG
+    // Debug-only schema invariant: when a KeyDef declares both
+    // `expectedType` AND a non-Invalid `defaultValue`, the default's
+    // typeId must match `expectedType`. A mismatch silently routes
+    // reads through the wrong branch of `readVariantAs`'s switch,
+    // producing surprising effective values; the assertion turns the
+    // latent bug into a fail-fast at Store construction.
+    for (auto groupIt = d->schema.groups.constBegin(); groupIt != d->schema.groups.constEnd(); ++groupIt) {
+        for (const auto& def : groupIt.value()) {
+            if (def.expectedType == QMetaType::UnknownType || !def.defaultValue.isValid())
+                continue;
+            Q_ASSERT_X(def.defaultValue.typeId() == int(def.expectedType), "PhosphorConfig::Store",
+                       qPrintable(QStringLiteral("Schema KeyDef [%1.%2]: defaultValue typeId %3 != expectedType %4")
+                                      .arg(groupIt.key(), def.key)
+                                      .arg(def.defaultValue.typeId())
+                                      .arg(int(def.expectedType))));
+        }
+    }
+#endif
+
     // Path resolver: install via the backend's polymorphic hook. Backends
     // without a resolver concept (QSettingsBackend) inherit the no-op
     // default, so the call is cheap and safe.

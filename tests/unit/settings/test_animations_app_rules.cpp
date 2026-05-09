@@ -230,16 +230,21 @@ private Q_SLOTS:
         // Same-index move is a no-op equivalent to setAppRule(currentRule):
         // stored successfully, nothing changed, no dirty flip. Return true
         // so QML callers can't distinguish "rejected" from "no change".
+        // Assert BOTH the signal didn't fire AND the rule content is
+        // preserved — a regression where the no-op silently mutated
+        // the entry would pass the signal-only check.
         IsolatedConfigGuard guard;
         Settings settings;
         AnimationsPageController c(nullptr, &settings);
 
         QVERIFY(c.addAppRule(
             makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
+        const auto before = c.appRules();
 
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QVERIFY(c.moveAppRule(0, 0));
         QCOMPARE(spy.count(), 0);
+        QCOMPARE(c.appRules(), before);
     }
 
     void moveAppRule_outOfRange_returnsFalse()

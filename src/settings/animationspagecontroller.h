@@ -433,7 +433,13 @@ private:
     /// Capture @p filePath's current content into the snapshot if not
     /// already snapshotted. Called by every file-mutating method just
     /// before the write/delete so revert can put it back.
-    void snapshotFileIfFirst(const QString& filePath);
+    /// @return @c true if the snapshot is in place after the call (or
+    /// was already there); @c false if the file exists but couldn't be
+    /// read for snapshot capture (e.g. mid-session permission drift).
+    /// Callers that proceed with a write on a @c false return will
+    /// permanently lose pre-edit content — the controller's direct
+    /// callers (setOverride / clearOverride) bail in that case.
+    bool snapshotFileIfFirst(const QString& filePath);
 
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     ISettings* m_settings = nullptr;

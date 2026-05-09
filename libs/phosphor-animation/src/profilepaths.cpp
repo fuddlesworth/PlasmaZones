@@ -135,6 +135,7 @@ QStringList allBuiltInPaths()
         PopupLayoutPickerHide,
         PopupSnapAssist,
         PopupSnapAssistShow,
+        PopupSnapAssistHide,
         Panel,
         PanelSlideIn,
         PanelSlideOut,

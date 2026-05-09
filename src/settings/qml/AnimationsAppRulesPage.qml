@@ -85,13 +85,6 @@ SettingsFlickable {
         "window.focus": i18nc("window-event verb", "Focus")
     })
 
-    function _kindLabel(kind) {
-        if (kind === root.kindTiming)
-            return i18n("Timing");
-
-        return i18n("Shader");
-    }
-
     function _eventLabel(eventPath) {
         // Prefer the localised label; fall back to the controller's
         // raw English (or the path itself) if the path is not in our

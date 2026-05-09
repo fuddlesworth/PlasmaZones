@@ -327,6 +327,11 @@ private Q_SLOTS:
 
     void testListJson_dropsMalformedRules()
     {
+        // Each malformed entry below carries a valid `kind` so the
+        // strict kind-whitelist gate at the top of fromJson lets it
+        // through to the empty-pattern / empty-eventPath drop. Without
+        // a valid kind, every entry would be dropped at the kind check
+        // and we'd lose JSON-path coverage of the empty-string guard.
         QJsonArray arr;
         // Valid rule.
         arr.append(QJsonObject{
@@ -335,17 +340,19 @@ private Q_SLOTS:
             {QStringLiteral("kind"), QStringLiteral("shader")},
             {QStringLiteral("effectId"), QStringLiteral("popin")},
         });
-        // Empty pattern — must be dropped.
+        // Empty pattern — must be dropped at the empty-pattern guard.
         arr.append(QJsonObject{
             {QStringLiteral("classPattern"), QString()},
             {QStringLiteral("eventPath"), QStringLiteral("window.open")},
+            {QStringLiteral("kind"), QStringLiteral("shader")},
         });
-        // Empty event path — must be dropped.
+        // Empty event path — same drop reason.
         arr.append(QJsonObject{
             {QStringLiteral("classPattern"), QStringLiteral("foo")},
             {QStringLiteral("eventPath"), QString()},
+            {QStringLiteral("kind"), QStringLiteral("shader")},
         });
-        // Non-object — must be skipped.
+        // Non-object — must be skipped at the isObject() guard.
         arr.append(QJsonValue(42));
 
         const auto list = AnimationAppRuleList::fromJson(arr);

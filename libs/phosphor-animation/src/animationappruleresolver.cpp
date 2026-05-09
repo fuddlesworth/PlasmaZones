@@ -3,7 +3,10 @@
 
 #include <PhosphorAnimation/AnimationAppRuleResolver.h>
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
+
+#include <QtGlobal>
 
 namespace PhosphorAnimationShaders {
 
@@ -32,7 +35,17 @@ int resolveAnimationDuration(const AnimationAppRuleList& rules, const QString& w
     }
     const auto rule = rules.resolveTiming(windowClass, eventPath);
     if (rule && rule->durationMs > 0) {
-        return rule->durationMs;
+        // Clamp to the same `[Min, Max]AnimationDurationMs` envelope
+        // the daemon-bringup loader applies to the global animation
+        // duration. Without this, a malformed rule with a huge
+        // `durationMs` would feed an unbounded value into the
+        // kwin-effect's `QTimer::singleShot` teardown timer (and the
+        // shader transition's per-frame elapsed-time math), producing
+        // multi-second-to-day-long shader states. The motion-profile
+        // path goes through `WindowAnimator::clampProfile` so it's
+        // already capped; this brings the shader path in line.
+        return qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, rule->durationMs,
+                      PhosphorAnimation::Limits::MaxAnimationDurationMs);
     }
     return defaultDurationMs;
 }

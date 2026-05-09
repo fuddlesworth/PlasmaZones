@@ -820,21 +820,32 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     // atomically (the daemon's fan-out hook) get one signal per call.
     Q_EMIT animationProfileChanged();
 
-    // Per-field: only emit when the effective value actually differs.
-    if (qRound(profile.effectiveDuration()) != prevDuration) {
+    // Per-field: only emit when the post-write OBSERVABLE differs from
+    // the pre-write observable. Compare against `animationDuration()`
+    // (etc.) post-write — NOT against `profile.effective*()` (the
+    // incoming arg), because `merged` preserves prev's values for any
+    // field the caller left unset. With the incoming `profile` having
+    // all-unset fields, `profile.effective*()` returns library
+    // defaults; comparing those against `prev*` would fire spurious
+    // signals even though the on-disk value is unchanged.
+    const int newDuration = qRound(animationProfile().effectiveDuration());
+    if (newDuration != prevDuration) {
         Q_EMIT animationDurationChanged();
     }
-    const QString newCurveWire = profile.curve ? profile.curve->toString() : ConfigDefaults::animationEasingCurve();
+    const QString newCurveWire = animationEasingCurve();
     if (newCurveWire != prevCurveWire) {
         Q_EMIT animationEasingCurveChanged();
     }
-    if (profile.effectiveMinDistance() != prevMinDistance) {
+    const int newMinDistance = animationMinDistance();
+    if (newMinDistance != prevMinDistance) {
         Q_EMIT animationMinDistanceChanged();
     }
-    if (static_cast<int>(profile.effectiveSequenceMode()) != prevSequenceMode) {
+    const int newSequenceMode = animationSequenceMode();
+    if (newSequenceMode != prevSequenceMode) {
         Q_EMIT animationSequenceModeChanged();
     }
-    if (profile.effectiveStaggerInterval() != prevStaggerInterval) {
+    const int newStaggerInterval = animationStaggerInterval();
+    if (newStaggerInterval != prevStaggerInterval) {
         Q_EMIT animationStaggerIntervalChanged();
     }
 
@@ -1761,9 +1772,10 @@ QVariantList Settings::zoneSpanTriggers() const
     // ZoneSpanModifier but leaves Triggers untouched should report the
     // edited modifier through zoneSpanTriggers(), not the compiled default.
     //
-    // hasKey and zoneSpanModifier() both open a JsonGroup — JsonBackend
-    // enforces a single active group at a time, so sample the modifier
-    // BEFORE grabbing the hasKey group.
+    // hasKey and zoneSpanModifier() both open a JsonGroup, and
+    // JsonBackend enforces a single active group at a time. Scope the
+    // hasKey group in its own block so it's released before
+    // zoneSpanModifier() opens the next one.
     bool hasTriggers = false;
     {
         auto g = m_configBackend->group(ConfigDefaults::snappingBehaviorZoneSpanGroup());

@@ -3,6 +3,7 @@
 
 #include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/AnimationAppRuleResolver.h>
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
@@ -241,6 +242,24 @@ private Q_SLOTS:
         AnimationAppRuleList rules;
         rules.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
         QCOMPARE(resolveAnimationDuration(rules, QStringLiteral("Firefox"), QStringLiteral("window.open"), 200), 200);
+    }
+
+    void testDuration_outOfRangeRule_isClampedToDaemonEnvelope()
+    {
+        // A malformed rule with a huge durationMs (or one below the
+        // daemon's MinAnimationDurationMs) must be clamped — without
+        // this, the kwin-effect would feed an unbounded value into
+        // `QTimer::singleShot` for shader teardown.
+        using PhosphorAnimation::Limits::MaxAnimationDurationMs;
+        using PhosphorAnimation::Limits::MinAnimationDurationMs;
+        AnimationAppRuleList huge;
+        huge.append(timingRule(QStringLiteral("firefox"), QStringLiteral("window.open"), 999999));
+        QCOMPARE(resolveAnimationDuration(huge, QStringLiteral("Firefox"), QStringLiteral("window.open"), 200),
+                 MaxAnimationDurationMs);
+        AnimationAppRuleList tiny;
+        tiny.append(timingRule(QStringLiteral("firefox"), QStringLiteral("window.open"), 1));
+        QCOMPARE(resolveAnimationDuration(tiny, QStringLiteral("Firefox"), QStringLiteral("window.open"), 200),
+                 MinAnimationDurationMs);
     }
 
     // ── Motion-profile cascade ────────────────────────────────────────

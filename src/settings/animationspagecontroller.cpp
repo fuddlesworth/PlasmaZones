@@ -231,18 +231,28 @@ bool AnimationsPageController::isValidEventPath(const QString& path) const
 
 // ─── Pending-changes snapshot machinery ────────────────────────────────
 
-void AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
+bool AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
 {
-    if (filePath.isEmpty() || m_pendingFileSnapshots.contains(filePath))
-        return;
+    if (filePath.isEmpty())
+        return false;
+    if (m_pendingFileSnapshots.contains(filePath))
+        return true;
     QFile f(filePath);
     if (!f.exists()) {
         m_pendingFileSnapshots.insert(filePath, std::nullopt);
-        return;
+        return true;
     }
-    if (!f.open(QIODevice::ReadOnly))
-        return;
+    if (!f.open(QIODevice::ReadOnly)) {
+        // Mid-session permission drift on an existing file would
+        // silently lose pre-edit content if a write proceeded without
+        // a snapshot — log so the journal flags the data-loss path,
+        // and return false so direct callers can refuse the write.
+        qCWarning(lcConfig) << "snapshotFileIfFirst: cannot read existing file" << filePath << "for revert snapshot —"
+                            << f.errorString();
+        return false;
+    }
     m_pendingFileSnapshots.insert(filePath, f.readAll());
+    return true;
 }
 
 bool AnimationsPageController::hasPendingChanges() const
@@ -540,8 +550,13 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     // Snapshot ONLY if this is the first edit to this path; remove the
     // snapshot if the write below fails so hasPendingChanges() doesn't
     // report a phantom pending edit pointing at content we never touched.
+    // Bail before touching disk if the snapshot couldn't be captured —
+    // an unrecoverable revert is worse than the failed write.
     const bool firstSnapshot = !m_pendingFileSnapshots.contains(filePath);
-    snapshotFileIfFirst(filePath);
+    if (!snapshotFileIfFirst(filePath)) {
+        qCWarning(lcConfig) << "setOverride: refusing to write" << filePath << "without a recoverable snapshot";
+        return false;
+    }
 
     QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -572,7 +587,10 @@ bool AnimationsPageController::clearOverride(const QString& path)
     QFile file(filePath);
     if (!file.exists())
         return false;
-    snapshotFileIfFirst(filePath);
+    if (!snapshotFileIfFirst(filePath)) {
+        qCWarning(lcConfig) << "clearOverride: refusing to delete" << filePath << "without a recoverable snapshot";
+        return false;
+    }
     if (!file.remove())
         return false;
     Q_EMIT overrideChanged(path);
