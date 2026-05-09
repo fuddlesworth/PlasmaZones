@@ -228,5 +228,16 @@ void main()
 
     windowCol.a *= cropMask;
 
-    fragColor = windowCol;
+    // Premultiply for the daemon's premultiplied-alpha blend pipeline
+    // (src=One, dst=OneMinusSrcAlpha). The composite chain above mixes
+    // premultiplied `texture(uTexture0,…)` with straight-alpha glow
+    // additions and the alphaOver helper returns straight-alpha; if we
+    // emitted that directly, fragments with low cropMask but nonzero
+    // glow contribution would emit non-premultiplied RGB whose blend
+    // result is `src.rgb + dst.rgb * (1 - src.a)` — additive over
+    // whatever sits underneath. That is invisible in isolation
+    // (transparent backdrop) but lights up snap-assist's tinted
+    // content underneath as a residual halo. Premultiplying RGB by
+    // the final alpha keeps the blend correct against any backdrop.
+    fragColor = vec4(windowCol.rgb * windowCol.a, windowCol.a);
 }

@@ -190,8 +190,43 @@ QSGRenderNode::StateFlags ShaderNodeRhi::changedStates() const
 
 QSGRenderNode::RenderingFlags ShaderNodeRhi::flags() const
 {
-    return QSGRenderNode::BoundedRectRendering | QSGRenderNode::DepthAwareRendering | QSGRenderNode::OpaqueRendering
-        | QSGRenderNode::NoExternalRendering;
+    // Declare ONLY what's actually true. Earlier code returned
+    // `OpaqueRendering | DepthAwareRendering`; both are lies given the
+    // pipeline this node builds:
+    //
+    //   - `OpaqueRendering` claims this node fully covers its rect()
+    //     with opaque pixels, letting Qt's batched renderer skip
+    //     primitives behind it. Our pipeline blends with premultiplied
+    //     alpha (`shadernoderhipipeline.cpp` createFullscreenQuadPipeline
+    //     sets srcColor=One/dstColor=OneMinusSrcAlpha and enable=true),
+    //     and the shader's fragColor.a is content-dependent. Most
+    //     animation shaders output transparent pixels along their crop
+    //     mask. Claiming opacity makes Qt assume the rect is fully
+    //     covered, which permits batch reordering and depth-based
+    //     culling that does NOT preserve sibling-node state restoration
+    //     across two concurrent ShaderEffect instances.
+    //
+    //   - `DepthAwareRendering` claims the node writes depth and
+    //     respects scene-graph Z via depth-buffer occlusion. Our
+    //     pipeline has no depth attachment in its render-pass
+    //     descriptor, no depth-write/test in setDepthOp/setDepthTest,
+    //     and the fragment shader writes only fragColor. With this
+    //     flag set, Qt's renderer may pre-write a depth value at the
+    //     node's bounds that culls siblings behind, again reordering
+    //     batches in a way that breaks state isolation.
+    //
+    // Symptom traced to these lies: when two ShaderEffect siblings
+    // render concurrently (an OSD aura-glow hide leg + a snap-assist
+    // morph show leg), the second-rendered node observes corrupted
+    // per-fragment output (visibly: crop-mask shape goes wrong with
+    // verified-clean UBO/VBO/customParams inputs). With both flags
+    // dropped Qt treats each ShaderEffect as a translucent overlay
+    // and isolates batch state correctly across siblings.
+    //
+    // Keep `BoundedRectRendering` (we DO render only within rect()) and
+    // `NoExternalRendering` (we don't render via an external API
+    // outside Qt's command buffer).
+    return QSGRenderNode::BoundedRectRendering | QSGRenderNode::NoExternalRendering;
 }
 
 QRectF ShaderNodeRhi::rect() const
