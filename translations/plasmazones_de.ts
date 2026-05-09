@@ -170,34 +170,34 @@
 <context>
     <name>EditorController</name>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="625"/>
-        <location filename="../src/editor/controller/layout.cpp" line="670"/>
+        <location filename="../src/editor/controller/layout.cpp" line="651"/>
+        <location filename="../src/editor/controller/layout.cpp" line="696"/>
         <source>File path cannot be empty</source>
         <translation>Dateipfad darf nicht leer sein</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="633"/>
-        <location filename="../src/editor/controller/layout.cpp" line="683"/>
+        <location filename="../src/editor/controller/layout.cpp" line="659"/>
+        <location filename="../src/editor/controller/layout.cpp" line="709"/>
         <source>Cannot connect to PlasmaZones daemon</source>
         <translation>Verbindung zum PlasmaZones-Hintergrunddienst nicht möglich</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="642"/>
+        <location filename="../src/editor/controller/layout.cpp" line="668"/>
         <source>Failed to import layout: %1</source>
         <translation>Layout konnte nicht importiert werden: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="650"/>
+        <location filename="../src/editor/controller/layout.cpp" line="676"/>
         <source>Imported layout but received empty ID</source>
         <translation>Layout importiert, aber leere ID erhalten</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="675"/>
+        <location filename="../src/editor/controller/layout.cpp" line="701"/>
         <source>No layout loaded to export</source>
         <translation>Kein Layout zum Exportieren geladen</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="692"/>
+        <location filename="../src/editor/controller/layout.cpp" line="718"/>
         <source>Failed to export layout: %1</source>
         <translation>Layout konnte nicht exportiert werden: %1</translation>
     </message>
@@ -285,33 +285,48 @@
 <context>
     <name>plasmazones</name>
     <message>
-        <location filename="../src/daemon/main.cpp" line="49"/>
         <source>PlasmaZones Daemon</source>
-        <translation>PlasmaZones-Hintergrunddienst</translation>
+        <translation type="vanished">PlasmaZones-Hintergrunddienst</translation>
     </message>
     <message>
-        <location filename="../src/daemon/main.cpp" line="50"/>
         <source>Window tiling and zone management for KDE Plasma</source>
-        <translation>Fensterteilung und Zonenverwaltung für KDE Plasma</translation>
+        <translation type="vanished">Fensterteilung und Zonenverwaltung für KDE Plasma</translation>
     </message>
     <message>
-        <location filename="../src/daemon/main.cpp" line="51"/>
         <source>© 2026 fuddlesworth</source>
-        <translation>© 2026 fuddlesworth</translation>
+        <translation type="vanished">© 2026 fuddlesworth</translation>
     </message>
     <message>
-        <location filename="../src/daemon/main.cpp" line="52"/>
-        <location filename="../src/editor/main.cpp" line="49"/>
         <source>fuddlesworth</source>
-        <translation>fuddlesworth</translation>
+        <translation type="vanished">fuddlesworth</translation>
     </message>
     <message>
-        <location filename="../src/daemon/main.cpp" line="64"/>
+        <location filename="../src/daemon/main.cpp" line="130"/>
+        <source>Window tiling and zone management</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/main.cpp" line="135"/>
         <source>Replace existing daemon instance</source>
         <translation>Vorhandene Instanz des Hintergrunddienstes ersetzen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="94"/>
+        <location filename="../src/daemon/main.cpp" line="139"/>
+        <source>Enable debug logging for all PlasmaZones categories</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/main.cpp" line="143"/>
+        <source>Write log output to &lt;file&gt; instead of stderr</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/main.cpp" line="143"/>
+        <source>file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/daemon/osd.cpp" line="101"/>
         <source>Layout: %1</source>
         <translation>Layout: %1</translation>
     </message>
@@ -321,22 +336,38 @@
         <translation>Layout gesperrt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="172"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="167"/>
+        <source>Disabled on this monitor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/daemon/osd.cpp" line="180"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="191"/>
+        <source>Disabled on %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/daemon/osd.cpp" line="189"/>
+        <source>Disabled on this activity</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/daemon/osd.cpp" line="226"/>
         <source>Tiling: %1</source>
         <translation>Tiling: %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="535"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="442"/>
         <source>Apply Layout %1</source>
         <translation>Layout %1 anwenden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="609"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="516"/>
         <source>Snap to Zone %1</source>
         <translation>In Zone %1 einrasten</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor.cpp" line="61"/>
+        <location filename="../src/dbus/windowdragadaptor.cpp" line="62"/>
         <source>Cancel Zone Overlay</source>
         <translation>Zonen-Overlay abbrechen</translation>
     </message>
@@ -581,32 +612,32 @@
     </message>
     <message>
         <location filename="../src/editor/controller/clipboard.cpp" line="34"/>
-        <location filename="../src/editor/controller/clipboard.cpp" line="106"/>
+        <location filename="../src/editor/controller/clipboard.cpp" line="107"/>
         <source>Zone manager not initialized</source>
         <comment>@info</comment>
         <translation>Zonen-Verwaltung nicht initialisiert</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/clipboard.cpp" line="95"/>
+        <location filename="../src/editor/controller/clipboard.cpp" line="96"/>
         <source>Cut %1 Zones</source>
         <comment>@action</comment>
         <translation>%1 Zonen ausschneiden</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/clipboard.cpp" line="195"/>
-        <location filename="../src/editor/undo/commands/PasteZonesCommand.cpp" line="13"/>
+        <location filename="../src/editor/controller/clipboard.cpp" line="196"/>
+        <location filename="../src/editor/undo/commands/PasteZonesCommand.cpp" line="14"/>
         <source>Paste %1 Zones</source>
         <comment>@action</comment>
         <translation>%1 Zonen einfügen</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/gaps.cpp" line="323"/>
+        <location filename="../src/editor/controller/gaps.cpp" line="329"/>
         <source>Clear Edge Gap Override</source>
         <comment>@action</comment>
         <translation>Randabstand-Überschreibung zurücksetzen</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="144"/>
+        <location filename="../src/editor/controller/layout.cpp" line="146"/>
         <source>New Layout</source>
         <translation>Neues Layout</translation>
     </message>
@@ -623,22 +654,22 @@
         <translation type="vanished">Kachelung</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="191"/>
+        <location filename="../src/editor/controller/layout.cpp" line="195"/>
         <source>Layout ID cannot be empty</source>
         <translation>Layout-ID darf nicht leer sein</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="196"/>
+        <location filename="../src/editor/controller/layout.cpp" line="200"/>
         <source>Layout service not initialized</source>
         <translation>Layout-Dienst nicht initialisiert</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="208"/>
+        <location filename="../src/editor/controller/layout.cpp" line="212"/>
         <source>Invalid layout data format</source>
         <translation>Ungültiges Layout-Datenformat</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="454"/>
+        <location filename="../src/editor/controller/layout.cpp" line="475"/>
         <source>Services not initialized</source>
         <translation>Dienste nicht initialisiert</translation>
     </message>
@@ -649,29 +680,24 @@
         <translation>%1 Zonen löschen</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/BSPAlgorithm.cpp" line="32"/>
         <source>Balanced recursive splitting into equal regions</source>
-        <translation>Ausgewogene rekursive Aufteilung in gleiche Bereiche</translation>
+        <translation type="vanished">Ausgewogene rekursive Aufteilung in gleiche Bereiche</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/BSPAlgorithm.cpp" line="27"/>
         <source>Binary Split</source>
-        <translation>Binäre Teilung</translation>
+        <translation type="vanished">Binäre Teilung</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/CascadeAlgorithm.cpp" line="24"/>
         <source>Cascade</source>
-        <translation>Kaskade</translation>
+        <translation type="vanished">Kaskade</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/CenteredMasterAlgorithm.cpp" line="28"/>
         <source>Centered Master</source>
-        <translation>Zentrierter Master</translation>
+        <translation type="vanished">Zentrierter Master</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/ColumnsAlgorithm.cpp" line="24"/>
         <source>Columns</source>
-        <translation>Spalten</translation>
+        <translation type="vanished">Spalten</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/multiselect.cpp" line="62"/>
@@ -680,85 +706,71 @@
         <translation>%1 Zonen duplizieren</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/DwindleAlgorithm.cpp" line="27"/>
         <source>Dwindle</source>
-        <translation>Dwindle</translation>
+        <translation type="vanished">Dwindle</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/DwindleAlgorithm.cpp" line="32"/>
         <source>Each new window gets a smaller split, alternating direction</source>
-        <translation>Jedes neue Fenster erhält eine kleinere Teilung, abwechselnde Richtung</translation>
+        <translation type="vanished">Jedes neue Fenster erhält eine kleinere Teilung, abwechselnde Richtung</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/RowsAlgorithm.cpp" line="29"/>
         <source>Equal-height horizontal rows</source>
-        <translation>Horizontale Zeilen gleicher Höhe</translation>
+        <translation type="vanished">Horizontale Zeilen gleicher Höhe</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/GridAlgorithm.cpp" line="29"/>
         <source>Equal-sized grid layout</source>
-        <translation>Raster-Layout gleicher Größe</translation>
+        <translation type="vanished">Raster-Layout gleicher Größe</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/ColumnsAlgorithm.cpp" line="29"/>
         <source>Equal-width vertical columns</source>
-        <translation>Vertikale Spalten gleicher Breite</translation>
+        <translation type="vanished">Vertikale Spalten gleicher Breite</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/GridAlgorithm.cpp" line="24"/>
         <source>Grid</source>
-        <translation>Raster</translation>
+        <translation type="vanished">Raster</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/MasterStackAlgorithm.cpp" line="32"/>
         <source>Large master area with stacked secondary windows</source>
-        <translation>Großer Hauptbereich mit gestapelten Nebenfenstern</translation>
+        <translation type="vanished">Großer Hauptbereich mit gestapelten Nebenfenstern</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/MasterStackAlgorithm.cpp" line="27"/>
         <source>Master + Stack</source>
-        <translation>Master + Stapel</translation>
+        <translation type="vanished">Master + Stapel</translation>
     </message>
     <message>
         <source>BSP</source>
         <translation type="vanished">BSP</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/WideAlgorithm.cpp" line="32"/>
         <source>Master area on top, remaining windows stacked below</source>
-        <translation>Hauptbereich oben, restliche Fenster darunter gestapelt</translation>
+        <translation type="vanished">Hauptbereich oben, restliche Fenster darunter gestapelt</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/ThreeColumnAlgorithm.cpp" line="32"/>
         <source>Master window centered with columns on each side</source>
-        <translation>Hauptfenster zentriert mit Spalten auf jeder Seite</translation>
+        <translation type="vanished">Hauptfenster zentriert mit Spalten auf jeder Seite</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/CenteredMasterAlgorithm.cpp" line="33"/>
         <source>Master windows centered with stacks on both sides</source>
-        <translation>Hauptfenster zentriert mit Stapeln auf beiden Seiten</translation>
+        <translation type="vanished">Hauptfenster zentriert mit Stapeln auf beiden Seiten</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/MonocleAlgorithm.cpp" line="24"/>
         <source>Monocle</source>
-        <translation>Monokel</translation>
+        <translation type="vanished">Monokel</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/multiselect.cpp" line="106"/>
-        <location filename="../src/editor/controller/multiselect.cpp" line="358"/>
+        <location filename="../src/editor/controller/multiselect.cpp" line="359"/>
         <source>Move %1 Zones</source>
         <comment>@action</comment>
         <translation>%1 Zonen verschieben</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/MonocleAlgorithm.cpp" line="29"/>
         <source>One window fullscreen at a time, cycle through others</source>
-        <translation>Ein Fenster im Vollbild, durch andere blättern</translation>
+        <translation type="vanished">Ein Fenster im Vollbild, durch andere blättern</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/CascadeAlgorithm.cpp" line="29"/>
         <source>Overlapping windows in a diagonal cascade</source>
-        <translation>Überlappende Fenster in diagonaler Kaskade</translation>
+        <translation type="vanished">Überlappende Fenster in diagonaler Kaskade</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/multiselect.cpp" line="187"/>
@@ -767,49 +779,40 @@
         <translation>Größe von %1 Zonen ändern</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/RowsAlgorithm.cpp" line="24"/>
         <source>Rows</source>
-        <translation>Zeilen</translation>
+        <translation type="vanished">Zeilen</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/SpiralAlgorithm.cpp" line="27"/>
         <source>Spiral</source>
-        <translation>Spirale</translation>
+        <translation type="vanished">Spirale</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/SpreadAlgorithm.cpp" line="24"/>
         <source>Spread</source>
-        <translation>Verteilt</translation>
+        <translation type="vanished">Verteilt</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/StairAlgorithm.cpp" line="24"/>
         <source>Stair</source>
-        <translation>Treppe</translation>
+        <translation type="vanished">Treppe</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/StairAlgorithm.cpp" line="29"/>
         <source>Stepped staircase arrangement</source>
-        <translation>Gestufte Treppenanordnung</translation>
+        <translation type="vanished">Gestufte Treppenanordnung</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/ThreeColumnAlgorithm.cpp" line="27"/>
         <source>Three Column</source>
-        <translation>Drei Spalten</translation>
+        <translation type="vanished">Drei Spalten</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/WideAlgorithm.cpp" line="27"/>
         <source>Wide</source>
-        <translation>Breit</translation>
+        <translation type="vanished">Breit</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/SpiralAlgorithm.cpp" line="32"/>
         <source>Windows spiral inward from the edges</source>
-        <translation>Fenster spiralförmig von den Rändern nach innen</translation>
+        <translation type="vanished">Fenster spiralförmig von den Rändern nach innen</translation>
     </message>
     <message>
-        <location filename="../src/autotile/algorithms/SpreadAlgorithm.cpp" line="29"/>
         <source>Windows spread evenly across the screen</source>
-        <translation>Fenster gleichmäßig über den Bildschirm verteilt</translation>
+        <translation type="vanished">Fenster gleichmäßig über den Bildschirm verteilt</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/settings.cpp" line="28"/>
@@ -897,13 +900,13 @@
         <translation>Shader in der Voreinstellung ist nicht mehr verfügbar</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/shader.cpp" line="387"/>
+        <location filename="../src/editor/controller/shader.cpp" line="400"/>
         <source>Reset Shader Parameters</source>
         <comment>@action</comment>
         <translation>Shader-Parameter zurücksetzen</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/shader.cpp" line="398"/>
+        <location filename="../src/editor/controller/shader.cpp" line="416"/>
         <source>Switch Shader Effect</source>
         <comment>@action</comment>
         <translation>Shader-Effekt wechseln</translation>
@@ -949,37 +952,35 @@
         <translation>Dienste nicht initialisiert</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="46"/>
         <source>PlasmaZones Layout Editor</source>
-        <translation>PlasmaZones Layout-Editor</translation>
+        <translation type="vanished">PlasmaZones Layout-Editor</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="47"/>
+        <location filename="../src/editor/main.cpp" line="97"/>
         <source>Visual layout editor for PlasmaZones</source>
         <translation>Visueller Layout-Editor für PlasmaZones</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="48"/>
         <source>(c) 2026 fuddlesworth</source>
-        <translation>(c) 2026 fuddlesworth</translation>
+        <translation type="vanished">(c) 2026 fuddlesworth</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="58"/>
+        <location filename="../src/editor/main.cpp" line="102"/>
         <source>Layout ID to edit</source>
         <translation>Zu bearbeitende Layout-ID</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="60"/>
+        <location filename="../src/editor/main.cpp" line="104"/>
         <source>Target screen name</source>
         <translation>Name des Zielbildschirms</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="62"/>
+        <location filename="../src/editor/main.cpp" line="106"/>
         <source>Create new layout</source>
         <translation>Neues Layout erstellen</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="63"/>
+        <location filename="../src/editor/main.cpp" line="107"/>
         <source>Open in read-only preview mode</source>
         <translation>Im schreibgeschützten Vorschaumodus öffnen</translation>
     </message>
@@ -2845,13 +2846,13 @@
         <translation>Zone hinzufügen</translation>
     </message>
     <message>
-        <location filename="../src/editor/undo/commands/ApplyTemplateCommand.cpp" line="13"/>
+        <location filename="../src/editor/undo/commands/ApplyTemplateCommand.cpp" line="14"/>
         <source>Apply Template: %1</source>
         <comment>@action</comment>
         <translation>Vorlage anwenden: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp" line="20"/>
+        <location filename="../src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp" line="21"/>
         <source>Update Appearance for %1 Zones</source>
         <comment>@action</comment>
         <translation>Aussehen von %1 Zonen aktualisieren</translation>
@@ -2930,13 +2931,13 @@
         <translation>Nutzung des gesamten Bildschirmbereichs umschalten</translation>
     </message>
     <message>
-        <location filename="../src/editor/undo/commands/UpdateGapOverrideCommand.cpp" line="17"/>
+        <location filename="../src/editor/undo/commands/UpdateGapOverrideCommand.cpp" line="16"/>
         <source>Change Zone Padding</source>
         <comment>@action</comment>
         <translation>Zonenabstand ändern</translation>
     </message>
     <message>
-        <location filename="../src/editor/undo/commands/UpdateGapOverrideCommand.cpp" line="19"/>
+        <location filename="../src/editor/undo/commands/UpdateGapOverrideCommand.cpp" line="18"/>
         <source>Toggle Per-Side Edge Gap</source>
         <comment>@action</comment>
         <translation>Seitenweisen Randabstand umschalten</translation>
@@ -4909,8 +4910,9 @@
         <translation type="vanished">Überschreibungen pro Arbeitsfläche</translation>
     </message>
     <message>
+        <location filename="../src/daemon/daemon/osd.cpp" line="178"/>
         <source>Desktop %1</source>
-        <translation type="vanished">Arbeitsfläche %1</translation>
+        <translation>Arbeitsfläche %1</translation>
     </message>
     <message>
         <source>Unlock layout for %1</source>
@@ -5281,26 +5283,23 @@ Seitenverhältnis: %3</translation>
         <source>Zone Layout</source>
         <translation type="vanished">Zonen-Layout</translation>
     </message>
-</context>
-<context>
-    <name>plasmazones</name>
     <message numerus="yes">
         <source>Rotated %n windows</source>
-        <translation>
+        <translation type="vanished">
             <numerusform>%n Fenster rotiert</numerusform>
             <numerusform>%n Fenster rotiert</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>Rearranged %n windows</source>
-        <translation>
+        <translation type="vanished">
             <numerusform>%n Fenster neu angeordnet</numerusform>
             <numerusform>%n Fenster neu angeordnet</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>Max %n windows</source>
-        <translation>
+        <translation type="vanished">
             <numerusform>Max. %n Fenster</numerusform>
             <numerusform>Max. %n Fenster</numerusform>
         </translation>
@@ -5308,7 +5307,7 @@ Seitenverhältnis: %3</translation>
     <message numerus="yes">
         <source>%n Zones Selected</source>
         <comment>@title</comment>
-        <translation>
+        <translation type="vanished">
             <numerusform>%n Zone ausgewählt</numerusform>
             <numerusform>%n Zonen ausgewählt</numerusform>
         </translation>
@@ -5316,10 +5315,20 @@ Seitenverhältnis: %3</translation>
     <message numerus="yes">
         <source>Delete %n selected zones</source>
         <comment>@info</comment>
-        <translation>
+        <translation type="vanished">
             <numerusform>%n ausgewählte Zone löschen</numerusform>
             <numerusform>%n ausgewählte Zonen löschen</numerusform>
         </translation>
+    </message>
+    <message>
+        <location filename="../src/autotile/algorithms/ScriptedAlgorithm.cpp" line="769"/>
+        <source>Scripted</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/autotile/algorithms/ScriptedAlgorithm.cpp" line="777"/>
+        <source>User-provided scripted tiling algorithm</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>
