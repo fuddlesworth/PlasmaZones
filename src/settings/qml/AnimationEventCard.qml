@@ -65,6 +65,15 @@ Item {
     // shaderProfileChanged via the Connections block at the bottom.
     property var currentShaderParams: ({
     })
+    /// Per-card lock state for the parameter editor's lock-all /
+    /// randomize toolbar. Keyed by param id; values are `true` for
+    /// locked. Local to the card — not persisted (locking is a UI
+    /// affordance for shaping the next randomize roll, not a property
+    /// of the saved override). Cleared whenever the assigned shader
+    /// effect changes so a stale lock from the previous shader's
+    /// schema can't shadow the new shader's same-id param.
+    property var lockedShaderParams: ({
+    })
     readonly property string currentCurveString: {
         if (currentTimingMode === CurvePresets.timingModeSpring)
             return "spring:" + currentSpringOmega.toFixed(2) + "," + currentSpringZeta.toFixed(2);
@@ -191,9 +200,34 @@ Item {
         settingsController.animationsPage.setShaderOverride(root.eventPath, effectId, next);
     }
 
+    /// Replace every parameter in one write. Used by the randomize
+    /// affordance so N rolled values land as a single override push
+    /// (and a single daemon round-trip) rather than N sequential
+    /// `setShaderOverride` calls each reading the previous map back.
+    /// Same stale-effect guard as `_writeShaderParam`.
+    function _writeAllShaderParams(effectId, allParams) {
+        if (!effectId)
+            return ;
+
+        if (effectId !== root.currentShaderEffectId)
+            return ;
+
+        root.currentShaderParams = allParams;
+        settingsController.animationsPage.setShaderOverride(root.eventPath, effectId, allParams);
+    }
+
     function refreshShaderFromTree() {
         var resolved = settingsController.animationsPage.resolvedShaderProfile(root.eventPath);
-        root.currentShaderEffectId = (resolved && resolved.effectId) ? resolved.effectId : "";
+        var nextEffectId = (resolved && resolved.effectId) ? resolved.effectId : "";
+        // Drop stale locks whenever the effect changes — keeping a
+        // lock keyed by `seedX` from one shader's schema could pin a
+        // same-named-but-unrelated param in a different shader's
+        // schema across a switch.
+        if (nextEffectId !== root.currentShaderEffectId)
+            root.lockedShaderParams = ({
+        });
+
+        root.currentShaderEffectId = nextEffectId;
         root.currentShaderParams = (resolved && resolved.parameters) ? resolved.parameters : ({
         });
         // Recompute deeper-override count on every shader-tree update —
@@ -677,13 +711,24 @@ Item {
                 visible: root._shaderLegSupported && root.currentShaderEffectId.length > 0 && _paramSchema.length > 0
                 parameters: _paramSchema
                 currentValues: root.currentShaderParams
-                enableLocking: false
-                enableRandomize: false
+                lockedParams: root.lockedShaderParams
+                enableLocking: true
+                enableRandomize: true
                 enableGroups: true
                 enableImage: false
                 compact: true
                 onValueChanged: function(paramId, value) {
                     root._writeShaderParam(root.currentShaderEffectId, paramId, value);
+                }
+                onLockToggled: function(paramId, locked) {
+                    root.lockedShaderParams = animationParamEditor.lockedAfterToggle(paramId, locked);
+                }
+                onLockAllRequested: function(lock) {
+                    root.lockedShaderParams = animationParamEditor.lockedAfterAllToggle(lock);
+                }
+                onRandomizeRequested: {
+                    var rolled = animationParamEditor.computeRandomized();
+                    root._writeAllShaderParams(root.currentShaderEffectId, rolled);
                 }
                 onRequestColorPicker: function(paramId, paramName, current) {
                     // Snapshot the effect id at dialog-open time so the
