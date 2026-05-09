@@ -1,0 +1,41 @@
+{
+    "id": "portal",
+    "name": "Portal",
+    "description": "Star-Trek-style swirling portal — surface gets sucked into / blasted out of a colored vortex.",
+    "author": "PlasmaZones (ported from Burn-My-Windows by Simon Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
+    "version": "1.0",
+    "category": "Distortion",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "uRotationSpeed",
+            "name": "Rotation Speed",
+            "type": "float",
+            "default": 0.3,
+            "min": -2.0,
+            "max": 2.0
+        },
+        {
+            "id": "uWhirling",
+            "name": "Whirling",
+            "type": "float",
+            "default": 1.0,
+            "min": -2.0,
+            "max": 2.0
+        },
+        {
+            "id": "uDetails",
+            "name": "Details",
+            "type": "float",
+            "default": 15.0,
+            "min": 1.0,
+            "max": 100.0
+        },
+        {
+            "id": "uColor",
+            "name": "Color",
+            "type": "color",
+            "default": "#79E918FF"
+        }
+    ]
+}

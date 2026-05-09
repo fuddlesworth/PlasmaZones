@@ -1,0 +1,41 @@
+{
+    "id": "tv-glitch",
+    "name": "TV Glitch",
+    "description": "Analog glitch artifacts — RGB shift, scanlines, and noise tear across the surface as it collapses.",
+    "author": "PlasmaZones (ported from Burn-My-Windows by Simon Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
+    "version": "1.0",
+    "category": "Glitch",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "uScale",
+            "name": "Scale",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.1,
+            "max": 10.0
+        },
+        {
+            "id": "uStrength",
+            "name": "Strength",
+            "type": "float",
+            "default": 2.0,
+            "min": 0.1,
+            "max": 10.0
+        },
+        {
+            "id": "uSpeed",
+            "name": "Speed",
+            "type": "float",
+            "default": 2.0,
+            "min": 0.1,
+            "max": 10.0
+        },
+        {
+            "id": "uColor",
+            "name": "Color",
+            "type": "color",
+            "default": "#64A0FFFF"
+        }
+    ]
+}

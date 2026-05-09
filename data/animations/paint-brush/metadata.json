@@ -1,0 +1,16 @@
+{
+    "id": "paint-brush",
+    "name": "Paint Brush",
+    "description": "Paint-stroke wipe across the surface.",
+    "author": "PlasmaZones (ported from Burn-My-Windows by Simon Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
+    "version": "1.0",
+    "category": "Distortion",
+    "fragmentShader": "effect.frag",
+    "parameters": [],
+    "textures": [
+        {
+            "path": "brush.png",
+            "wrap": "clamp"
+        }
+    ]
+}

@@ -1,0 +1,171 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-FileCopyrightText: 2021-2024 Simon Schneegans (Burn-My-Windows)
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Fire transition — ported from Burn-My-Windows' fire.frag
+// (https://github.com/Schneegans/Burn-My-Windows). BMW's flagship
+// effect: an animated procedural fire texture eats the surface from
+// top to bottom, mapping vertically-scrolling simplex noise through a
+// five-stop color gradient.
+//
+// BMW uniform shims come from `<bmw_compat.glsl>`; helpers
+// `hash22`/`simplex2D`/`simplex2DFractal` come from `<noise.glsl>`
+// (byte-equivalent to BMW's). See bmw_compat.glsl header for the
+// BMW-to-PlasmaZones uniform-name remap.
+
+#version 450
+
+#include <animation_uniforms.glsl>
+#include <noise.glsl>
+
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 fragColor;
+
+#include <bmw_compat.glsl>
+
+// metadata.json declaration order → customParams sub-slots.
+//
+// `u3DNoise` and `uRandomColor` are BMW booleans; PlasmaZones declares
+// them as `int` slots and the cast-to-bool below lets the body's
+// `if (u3DNoise) ...` / `if (uRandomColor) ...` branches stay verbatim.
+// Six floats spill from customParams[0] (.xyzw) into customParams[1].xy
+// — well clear of the customParams[7] redline.
+#define uScale          customParams[0].x
+#define uMovementSpeed  customParams[0].y
+#define uSeed           customParams[0].z
+#define u3DNoise        (int(customParams[0].w) != 0)
+#define uRandomColor    (int(customParams[1].x) != 0)
+
+#define uGradient1      customColors[0]
+#define uGradient2      customColors[1]
+#define uGradient3      customColors[2]
+#define uGradient4      customColors[3]
+#define uGradient5      customColors[4]
+
+// These may be configurable in the future.
+const float EDGE_FADE  = 70.0;
+const float FADE_WIDTH = 0.1;
+const float HIDE_TIME  = 0.4;
+
+// This maps the input value from [0..1] to a color from the gradient.
+vec4 getFireColor(float v, vec4 c0, vec4 c1, vec4 c2, vec4 c3, vec4 c4) {
+  float steps[5];
+  steps[0] = 0.0;
+  steps[1] = 0.2;
+  steps[2] = 0.35;
+  steps[3] = 0.5;
+  steps[4] = 0.8;
+
+  vec4 colors[5];
+  colors[0] = c0;
+  colors[1] = c1;
+  colors[2] = c2;
+  colors[3] = c3;
+  colors[4] = c4;
+
+  if (v < steps[0]) {
+    return colors[0];
+  }
+
+  for (int i = 0; i < 4; ++i) {
+    if (v <= steps[i + 1]) {
+      return mix(colors[i], colors[i + 1],
+                 vec4(v - steps[i]) / (steps[i + 1] - steps[i]));
+    }
+  }
+
+  return colors[4];
+}
+
+// This method requires the uniforms from standardUniforms() to be available.
+// It returns two values: The first is an alpha value which can be used for the window
+// texture. This gradually dissolves the window from top to bottom. The second can be used
+// to mask any effect, it will be most opaque where the window is currently fading and
+// gradually dissolve to zero over time.
+// hideTime:      A value in [0..1]. It determines the percentage of the animation which
+//                is spent for hiding the window. 1-hideTime will be spent thereafter for
+//                dissolving the effect mask.
+// fadeWidth:     The relative size of the window-hiding gradient in [0..1].
+// edgeFadeWidth: The pixel width of the effect fading range at the edges of the window.
+vec2 effectMask(float hideTime, float fadeWidth, float edgeFadeWidth) {
+  float progress = easeOutQuad(uProgress);
+
+  float burnProgress      = clamp(progress / hideTime, 0.0, 1.0);
+  float afterBurnProgress = clamp((progress - hideTime) / (1.0 - hideTime), 0.0, 1.0);
+
+  // Gradient from top to bottom.
+  float t = iTexCoord.t * (1.0 - fadeWidth);
+
+  // Visible part of the window. Gradually dissolves towards the bottom.
+  float windowMask = 1.0 - clamp((burnProgress - t) / fadeWidth, 0.0, 1.0);
+
+  // Gradient from top burning window.
+  float effectMask = clamp(t * (1.0 - windowMask) / burnProgress, 0.0, 1.0);
+
+  // Fade-out when the window burned down.
+  if (progress > hideTime) {
+    float fade = sqrt(1.0 - afterBurnProgress * afterBurnProgress);
+    effectMask *= mix(1.0, 1.0 - t, afterBurnProgress) * fade;
+  }
+
+  // Fade at window borders.
+  effectMask *= getAbsoluteEdgeMask(edgeFadeWidth, 0.5);
+
+  if (uForOpening) {
+    windowMask = 1.0 - windowMask;
+  }
+
+  return vec2(windowMask, effectMask);
+}
+
+void main() {
+  // Get a noise value which moves vertically in time.
+  vec2 uv = iTexCoord.st * uSize / vec2(400, 600) / uScale;
+  uv.y += (float(iFrame) / 60.0) * uMovementSpeed;
+
+  float noise =
+    u3DNoise
+      ? simplex3DFractal(vec3(uv * 4.0, (float(iFrame) / 60.0) * uMovementSpeed * 1.5))
+      : simplex2DFractal(uv * 4.0);
+
+  // Modulate noise by effect mask.
+  vec2 effectMask = effectMask(HIDE_TIME, FADE_WIDTH, EDGE_FADE);
+  noise *= effectMask.y;
+
+  // Map noise value to color.
+  vec4 fire = vec4(0.0);
+
+  if (uRandomColor) {
+    vec3 baseColor0 = offsetHue(vec3(1.0, 0.0, 0.0), hash11(uSeed));
+    vec3 baseColor1 = offsetHue(baseColor0, 0.1);
+    vec3 baseColor2 = offsetHue(baseColor1, 0.1);
+
+    // Hardcoding some alpha values.
+    vec4 c0 = vec4(baseColor0, 0.0);
+    vec4 c1 = vec4(baseColor0, 0.5);
+    vec4 c2 = vec4(baseColor1, 0.8);
+    vec4 c3 = vec4(baseColor1, 0.9);
+    vec4 c4 = vec4(baseColor2, 1.0);
+
+    fire = getFireColor(noise, c0, c1, c2, c3, c4);
+  } else {
+    fire =
+      getFireColor(noise, uGradient1, uGradient2, uGradient3, uGradient4, uGradient5);
+  }
+
+  // Get the window texture.
+  vec4 oColor = getInputColor(iTexCoord.st);
+
+  // Fade the window according to the effect mask.
+  oColor.a *= effectMask.x;
+
+  // Add the fire to the window.
+  oColor = alphaOver(oColor, fire);
+
+  // These are pretty useful for understanding how this works.
+  // oColor = vec4(vec3(noise), 1);
+  // oColor = vec4(vec3(effectMask.x), 1);
+  // oColor = vec4(vec3(effectMask.y), 1);
+
+  setOutputColor(oColor);
+}
