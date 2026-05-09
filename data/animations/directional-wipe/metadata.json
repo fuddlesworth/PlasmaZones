@@ -1,0 +1,35 @@
+{
+    "id": "directional-wipe",
+    "name": "Directional Wipe",
+    "description": "Diagonal soft-edge wipe with smoothstep falloff.",
+    "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
+    "version": "1.0",
+    "category": "Slide",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "dirX",
+            "name": "Direction X",
+            "type": "float",
+            "default": 1.0,
+            "min": -1.0,
+            "max": 1.0
+        },
+        {
+            "id": "dirY",
+            "name": "Direction Y",
+            "type": "float",
+            "default": -1.0,
+            "min": -1.0,
+            "max": 1.0
+        },
+        {
+            "id": "wipeSmoothness",
+            "name": "Edge Softness",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        }
+    ]
+}
