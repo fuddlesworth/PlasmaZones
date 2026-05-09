@@ -3,14 +3,20 @@
 
 #include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/AnimationAppRuleResolver.h>
+#include <PhosphorAnimation/Curve.h>
+#include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include <QTest>
 
+using PhosphorAnimation::CurveRegistry;
+using PhosphorAnimation::Profile;
 using PhosphorAnimationShaders::AnimationAppRule;
 using PhosphorAnimationShaders::AnimationAppRuleList;
 using PhosphorAnimationShaders::resolveAnimationDuration;
+using PhosphorAnimationShaders::resolveAnimationMotionProfile;
 using PhosphorAnimationShaders::resolveAnimationShaderProfile;
 using PhosphorAnimationShaders::ShaderProfile;
 using PhosphorAnimationShaders::ShaderProfileTree;
@@ -230,6 +236,152 @@ private Q_SLOTS:
         AnimationAppRuleList rules;
         rules.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
         QCOMPARE(resolveAnimationDuration(rules, QStringLiteral("Firefox"), QStringLiteral("window.open"), 200), 200);
+    }
+
+    // ── Motion-profile cascade ────────────────────────────────────────
+
+    void testMotionProfile_emptyRules_returnsBaseUnchanged()
+    {
+        CurveRegistry registry;
+        Profile base;
+        base.duration = 250.0;
+        base.curve = registry.create(QStringLiteral("0.42,0.0,0.58,1.0"));
+
+        const auto out = resolveAnimationMotionProfile(AnimationAppRuleList{}, base, QStringLiteral("Firefox"),
+                                                       QStringLiteral("window.move"), registry);
+        QCOMPARE(out, base);
+    }
+
+    void testMotionProfile_classMiss_returnsBaseUnchanged()
+    {
+        CurveRegistry registry;
+        Profile base;
+        base.duration = 250.0;
+        base.curve = registry.create(QStringLiteral("0.42,0.0,0.58,1.0"));
+
+        AnimationAppRuleList rules;
+        rules.append(timingRule(QStringLiteral("firefox"), QStringLiteral("window.move"), 800,
+                                QStringLiteral("0.0,0.0,1.0,1.0")));
+
+        const auto out = resolveAnimationMotionProfile(rules, base, QStringLiteral("Spotify"),
+                                                       QStringLiteral("window.move"), registry);
+        QCOMPARE(out, base);
+    }
+
+    void testMotionProfile_emptyWindowClass_returnsBaseUnchanged()
+    {
+        CurveRegistry registry;
+        Profile base;
+        base.duration = 250.0;
+
+        AnimationAppRuleList rules;
+        rules.append(timingRule(QStringLiteral("firefox"), QStringLiteral("window.move"), 800));
+
+        const auto out = resolveAnimationMotionProfile(rules, base, QString(), QStringLiteral("window.move"), registry);
+        QCOMPARE(out, base);
+    }
+
+    void testMotionProfile_curveOverride_replacesBaseCurve()
+    {
+        CurveRegistry registry;
+        Profile base;
+        base.curve = registry.create(QStringLiteral("0.42,0.0,0.58,1.0"));
+        const auto baseCurve = base.curve;
+        QVERIFY(baseCurve != nullptr);
+
+        AnimationAppRuleList rules;
+        rules.append(
+            timingRule(QStringLiteral("firefox"), QStringLiteral("window.move"), 0, QStringLiteral("0.0,0.0,1.0,1.0")));
+
+        const auto out = resolveAnimationMotionProfile(rules, base, QStringLiteral("Firefox"),
+                                                       QStringLiteral("window.move"), registry);
+        QVERIFY(out.curve != nullptr);
+        QVERIFY(out.curve != baseCurve);
+    }
+
+    void testMotionProfile_durationOverride_replacesBaseDuration()
+    {
+        CurveRegistry registry;
+        Profile base;
+        base.duration = 250.0;
+
+        AnimationAppRuleList rules;
+        rules.append(timingRule(QStringLiteral("firefox"), QStringLiteral("window.move"), 800));
+
+        const auto out = resolveAnimationMotionProfile(rules, base, QStringLiteral("Firefox"),
+                                                       QStringLiteral("window.move"), registry);
+        QCOMPARE(out.effectiveDuration(), 800.0);
+    }
+
+    void testMotionProfile_zeroDuration_keepsBaseDuration()
+    {
+        CurveRegistry registry;
+        Profile base;
+        base.duration = 250.0;
+
+        AnimationAppRuleList rules;
+        // durationMs == 0 is the inherit sentinel.
+        rules.append(
+            timingRule(QStringLiteral("firefox"), QStringLiteral("window.move"), 0, QStringLiteral("0.0,0.0,1.0,1.0")));
+
+        const auto out = resolveAnimationMotionProfile(rules, base, QStringLiteral("Firefox"),
+                                                       QStringLiteral("window.move"), registry);
+        QCOMPARE(out.effectiveDuration(), 250.0);
+    }
+
+    void testMotionProfile_emptyCurve_keepsBaseCurve()
+    {
+        CurveRegistry registry;
+        Profile base;
+        base.curve = registry.create(QStringLiteral("0.42,0.0,0.58,1.0"));
+        const auto baseCurve = base.curve;
+
+        AnimationAppRuleList rules;
+        // Empty curve string = "use per-event default" sentinel; only
+        // the duration override should apply.
+        rules.append(timingRule(QStringLiteral("firefox"), QStringLiteral("window.move"), 800, QString()));
+
+        const auto out = resolveAnimationMotionProfile(rules, base, QStringLiteral("Firefox"),
+                                                       QStringLiteral("window.move"), registry);
+        QCOMPARE(out.curve, baseCurve);
+        QCOMPARE(out.effectiveDuration(), 800.0);
+    }
+
+    void testMotionProfile_malformedCurve_keepsBaseCurve()
+    {
+        // A typo in the rule's curve field must NOT silently swap the
+        // user's configured global curve for OutCubic — tryCreate
+        // returns nullptr on failure so the resolver keeps base.curve.
+        CurveRegistry registry;
+        Profile base;
+        base.curve = registry.create(QStringLiteral("0.42,0.0,0.58,1.0"));
+        const auto baseCurve = base.curve;
+        base.duration = 250.0;
+
+        AnimationAppRuleList rules;
+        rules.append(timingRule(QStringLiteral("firefox"), QStringLiteral("window.move"), 0,
+                                QStringLiteral("not-a-curve-spec")));
+
+        const auto out = resolveAnimationMotionProfile(rules, base, QStringLiteral("Firefox"),
+                                                       QStringLiteral("window.move"), registry);
+        QCOMPARE(out.curve, baseCurve);
+        QCOMPARE(out.effectiveDuration(), 250.0);
+    }
+
+    void testMotionProfile_shaderRule_doesNotMatchTimingAxis()
+    {
+        // A Shader-kind rule for the same (class, event) must not surface
+        // through resolveTiming — keep the axes independent.
+        CurveRegistry registry;
+        Profile base;
+        base.duration = 250.0;
+
+        AnimationAppRuleList rules;
+        rules.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.move"), QStringLiteral("dissolve")));
+
+        const auto out = resolveAnimationMotionProfile(rules, base, QStringLiteral("Firefox"),
+                                                       QStringLiteral("window.move"), registry);
+        QCOMPARE(out, base);
     }
 };
 

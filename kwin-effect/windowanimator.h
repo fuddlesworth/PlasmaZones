@@ -121,9 +121,17 @@ public:
     bool hasActiveAnimations() const;
     bool hasAnimation(KWin::EffectWindow* handle) const;
 
-    bool startAnimation(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame);
-    PhosphorAnimation::StartResult startAnimationWithResult(KWin::EffectWindow* handle, const QRectF& oldFrame,
-                                                            const QRectF& newFrame);
+    /// Start an animation. When @p profileOverride is non-null, the per-call
+    /// curve / duration / minDistance / sequence overrides on it replace the
+    /// configured global profile (`m_profile`) for THIS animation only —
+    /// subsequent animations on other windows continue to use the global
+    /// profile. Used by the AnimationAppRule cascade to apply a per-window-
+    /// class motion override without mutating shared animator state.
+    bool startAnimation(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame,
+                        const PhosphorAnimation::Profile* profileOverride = nullptr);
+    PhosphorAnimation::StartResult
+    startAnimationWithResult(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame,
+                             const PhosphorAnimation::Profile* profileOverride = nullptr);
 
     bool retarget(KWin::EffectWindow* handle, const QRectF& newFrame, PhosphorAnimation::RetargetPolicy policy);
     bool retarget(KWin::EffectWindow* handle, const QRectF& newFrame);

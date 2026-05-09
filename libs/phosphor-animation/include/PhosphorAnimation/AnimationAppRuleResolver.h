@@ -4,11 +4,16 @@
 #pragma once
 
 #include <PhosphorAnimation/AnimationAppRule.h>
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QString>
+
+namespace PhosphorAnimation {
+class CurveRegistry;
+}
 
 namespace PhosphorAnimationShaders {
 
@@ -60,5 +65,34 @@ PHOSPHORANIMATION_EXPORT ShaderProfile resolveAnimationShaderProfile(const Anima
  */
 PHOSPHORANIMATION_EXPORT int resolveAnimationDuration(const AnimationAppRuleList& rules, const QString& windowClass,
                                                       const QString& eventPath, int defaultDurationMs);
+
+/**
+ * @brief Motion-profile cascade: window-class timing rule → base profile.
+ *
+ * Returns a `PhosphorAnimation::Profile` whose `curve` and `duration`
+ * fields have been replaced with the matching `Timing` rule's values
+ * when one is engaged. The cascade is:
+ *
+ *   1. `AnimationAppRuleList::resolveTiming` — first matching rule.
+ *      A non-empty `curve` field is parsed through @p curveRegistry;
+ *      the override only takes effect when the registry returns a
+ *      non-null curve, so a malformed curve string falls through to
+ *      the base curve instead of dropping motion entirely. A rule
+ *      `durationMs > 0` overrides the base duration (zero / negative
+ *      is the documented inherit sentinel).
+ *
+ *   2. The caller-provided @p base profile (typically the
+ *      `WindowAnimator`'s configured global profile).
+ *
+ * Empty @p windowClass short-circuits to the base profile. Callers
+ * pass the returned profile into the snap-animation startup as a
+ * per-call override rather than mutating the animator's global
+ * profile, so adjacent windows on the same compositor still animate
+ * with the global curve.
+ */
+PHOSPHORANIMATION_EXPORT PhosphorAnimation::Profile
+resolveAnimationMotionProfile(const AnimationAppRuleList& rules, const PhosphorAnimation::Profile& base,
+                              const QString& windowClass, const QString& eventPath,
+                              const PhosphorAnimation::CurveRegistry& curveRegistry);
 
 } // namespace PhosphorAnimationShaders

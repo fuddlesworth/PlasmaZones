@@ -440,6 +440,20 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             kw->moveResize(targetFrame);
         }
 
+        // AnimationAppRule motion-cascade: a Timing rule for this
+        // (windowClass, eventPath) replaces the global animator profile's
+        // curve / duration for THIS animation only. No rule → resolver
+        // returns the base profile unchanged and no override is passed,
+        // preserving the historical fast-path. Retarget intentionally does
+        // not re-apply the cascade — once an animation is in flight, it
+        // stays on the curve that started it for visual continuity.
+        const QString windowClass = window->windowClass();
+        const PhosphorAnimation::Profile motionProfile = PhosphorAnimationShaders::resolveAnimationMotionProfile(
+            m_shaderManager.m_animationAppRules, m_windowAnimator->profile(), windowClass, profilePath,
+            m_curveRegistry);
+        const bool hasMotionOverride = motionProfile != m_windowAnimator->profile();
+        const PhosphorAnimation::Profile* motionOverridePtr = hasMotionOverride ? &motionProfile : nullptr;
+
         if (m_windowAnimator->hasAnimation(window)) {
             if (m_windowAnimator->isAnimatingToTarget(window, targetFrame)) {
                 return; // Already animating to this target
@@ -466,10 +480,10 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
                 // returns false and no animation plays — correct, since
                 // there's no visual distance to cover.
                 const QRectF animFrom = (displacedTarget != targetFrame) ? displacedTarget : visualPos;
-                m_windowAnimator->startAnimation(window, animFrom, targetFrame);
+                m_windowAnimator->startAnimation(window, animFrom, targetFrame, motionOverridePtr);
             }
         } else {
-            m_windowAnimator->startAnimation(window, QRectF(oldFrame), targetFrame);
+            m_windowAnimator->startAnimation(window, QRectF(oldFrame), targetFrame, motionOverridePtr);
         }
 
         if (m_windowAnimator->hasAnimation(window)) {

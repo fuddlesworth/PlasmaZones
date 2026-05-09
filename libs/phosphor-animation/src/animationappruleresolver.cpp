@@ -3,6 +3,8 @@
 
 #include <PhosphorAnimation/AnimationAppRuleResolver.h>
 
+#include <PhosphorAnimation/CurveRegistry.h>
+
 namespace PhosphorAnimationShaders {
 
 ShaderProfile resolveAnimationShaderProfile(const AnimationAppRuleList& rules, const ShaderProfileTree& tree,
@@ -33,6 +35,35 @@ int resolveAnimationDuration(const AnimationAppRuleList& rules, const QString& w
         return rule->durationMs;
     }
     return defaultDurationMs;
+}
+
+PhosphorAnimation::Profile resolveAnimationMotionProfile(const AnimationAppRuleList& rules,
+                                                         const PhosphorAnimation::Profile& base,
+                                                         const QString& windowClass, const QString& eventPath,
+                                                         const PhosphorAnimation::CurveRegistry& curveRegistry)
+{
+    if (windowClass.isEmpty()) {
+        return base;
+    }
+    const auto rule = rules.resolveTiming(windowClass, eventPath);
+    if (!rule) {
+        return base;
+    }
+    PhosphorAnimation::Profile out = base;
+    if (!rule->curve.isEmpty()) {
+        // tryCreate (NOT create) — malformed curve strings stay on the
+        // base curve. CurveRegistry::create silently coerces failures to
+        // OutCubic, which would mask typos in the rule's curve field
+        // and silently swap out the user's configured global curve;
+        // tryCreate returns nullptr on failure so we keep the base.
+        if (auto curve = curveRegistry.tryCreate(rule->curve)) {
+            out.curve = std::move(curve);
+        }
+    }
+    if (rule->durationMs > 0) {
+        out.duration = static_cast<qreal>(rule->durationMs);
+    }
+    return out;
 }
 
 } // namespace PhosphorAnimationShaders
