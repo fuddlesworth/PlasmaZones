@@ -1,0 +1,10 @@
+{
+    "id": "crazy-parametric",
+    "name": "Crazy Parametric",
+    "description": "Luminance-flat fade with a 20% dead-tail at the start (matches niri's actual behavior; the parametric distortion the source name implies is computed but discarded by niri).",
+    "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
+    "version": "1.0",
+    "category": "Fade",
+    "fragmentShader": "effect.frag",
+    "parameters": []
+}

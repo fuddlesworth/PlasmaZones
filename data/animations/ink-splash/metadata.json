@@ -1,0 +1,43 @@
+{
+    "id": "ink-splash",
+    "name": "Ink Splash",
+    "description": "Ink-blot reveal — fbm-distorted radial threshold blooms outward like spilled ink.",
+    "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
+    "version": "1.0",
+    "category": "Particle",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "blobScale",
+            "name": "Blob Scale",
+            "type": "float",
+            "default": 3.5,
+            "min": 1.0,
+            "max": 8.0
+        },
+        {
+            "id": "fingerScale",
+            "name": "Finger Scale",
+            "type": "float",
+            "default": 14.0,
+            "min": 5.0,
+            "max": 30.0
+        },
+        {
+            "id": "splashSpeed",
+            "name": "Splash Speed",
+            "type": "float",
+            "default": 1.7,
+            "min": 0.8,
+            "max": 3.0
+        },
+        {
+            "id": "edgeSoftness",
+            "name": "Edge Softness",
+            "type": "float",
+            "default": 0.04,
+            "min": 0.005,
+            "max": 0.15
+        }
+    ]
+}

@@ -1,0 +1,27 @@
+{
+    "id": "crosshatch",
+    "name": "Crosshatch",
+    "description": "Crosshatch reveal — random diagonal threshold with radial falloff from center.",
+    "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
+    "version": "1.0",
+    "category": "Tile",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "radialFalloff",
+            "name": "Radial Falloff",
+            "type": "float",
+            "default": 3.0,
+            "min": 0.5,
+            "max": 6.0
+        },
+        {
+            "id": "edgeFade",
+            "name": "Edge Fade",
+            "type": "float",
+            "default": 0.1,
+            "min": 0.02,
+            "max": 0.4
+        }
+    ]
+}
