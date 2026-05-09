@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Frosted glass panel shader for PhosphorShell (self-contained).
+// Output is pre-multiplied alpha. SDF mask uses hard cutoff to avoid fringe.
 //
 // customParams[0]: x=tintOpacity y=noiseAmount z=noiseScale w=animSpeed
 // customParams[1]: x=cornerRadius (pixels, default 12.0)
@@ -26,19 +27,25 @@ layout(std140, binding = 0) uniform buf {
 
 layout(location = 0) out vec4 fragColor;
 
+// SDF for a rounded rectangle centered at origin
 float roundedBoxSDF(vec2 p, vec2 b, float r) {
     vec2 d = abs(p) - b + r;
     return length(max(d, 0.0)) - r;
 }
 
+// High-quality hash - avoids directional artifacts
 float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
 }
 
+// Smooth value noise with quintic interpolation
 float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
+    // Quintic Hermite for smoother derivatives
+    f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
     float a = hash(i);
     float b = hash(i + vec2(1.0, 0.0));
     float c = hash(i + vec2(0.0, 1.0));
@@ -46,15 +53,42 @@ float noise(vec2 p) {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-float fbm(vec2 p) {
-    float value = 0.0;
-    float amplitude = 0.5;
-    for (int i = 0; i < 4; i++) {
-        value += amplitude * noise(p);
-        p *= 2.0;
-        amplitude *= 0.5;
+// Crystalline Voronoi noise - simulates frosted glass grain structure
+float voronoi(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    float minDist = 1.0;
+    float secondMin = 1.0;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 neighbor = vec2(float(x), float(y));
+            vec2 point = hash(i + neighbor) * vec2(hash(i + neighbor + vec2(37.0, 59.0)));
+            // Use a stable 2D hash for the cell point
+            vec2 cellId = i + neighbor;
+            float h1 = hash(cellId);
+            float h2 = hash(cellId + vec2(127.1, 311.7));
+            point = vec2(h1, h2);
+            vec2 diff = neighbor + point - f;
+            float dist = dot(diff, diff);
+            if (dist < minDist) {
+                secondMin = minDist;
+                minDist = dist;
+            } else if (dist < secondMin) {
+                secondMin = dist;
+            }
+        }
     }
-    return value;
+    // Edge distance gives crystalline cell boundaries
+    return sqrt(secondMin) - sqrt(minDist);
+}
+
+// Multi-octave crystalline texture
+float frostedTexture(vec2 p, float time) {
+    float crystal = voronoi(p);
+    float fine = voronoi(p * 2.3 + vec2(time * 0.1, time * 0.07));
+    float micro = noise(p * 8.0 + time * 0.2);
+    // Blend: dominant crystal structure + fine detail + micro noise
+    return crystal * 0.6 + fine * 0.3 + micro * 0.1;
 }
 
 void main() {
@@ -67,11 +101,14 @@ void main() {
     float animSpeed = customParams[0].w > 0.0 ? customParams[0].w : 0.3;
     float radius = customParams[1].x > 0.0 ? customParams[1].x : 12.0;
 
-    // SDF rounded rectangle mask
+    // SDF rounded rectangle mask - hard cutoff eliminates fringe
     vec2 center = iResolution.xy * 0.5;
     vec2 halfSize = iResolution.xy * 0.5;
     float dist = roundedBoxSDF(fragCoord - center, halfSize, radius);
-    float mask = 1.0 - smoothstep(-0.5, 0.5, dist);
+
+    // Hard step: pixel is either fully inside or fully outside.
+    // The 0.5 offset accounts for pixel center sampling.
+    float mask = step(dist, -0.5);
 
     if (mask <= 0.0) {
         fragColor = vec4(0.0);
@@ -80,13 +117,25 @@ void main() {
 
     vec4 tintColor = customColors[0].a > 0.0 ? customColors[0] : vec4(0.118, 0.118, 0.180, 1.0);
 
-    vec2 noiseUv = uv * noiseScale + vec2(iTime * animSpeed, iTime * animSpeed * 0.7);
-    float grain = fbm(noiseUv);
-    float fineGrain = noise(uv * noiseScale * 3.0 + iTime * 0.5);
+    // Crystalline frosted glass texture
+    vec2 noiseUv = uv * noiseScale;
+    float frost = frostedTexture(noiseUv, iTime * animSpeed);
 
-    vec3 frostTint = tintColor.rgb + vec3(grain - 0.5, grain - 0.5, fineGrain - 0.5) * noiseAmount;
-    float vignette = 1.0 - length((uv - 0.5) * vec2(0.3, 1.0)) * 0.2;
+    // Subtle variation centered around zero - does NOT brighten
+    float variation = (frost - 0.5) * noiseAmount;
 
-    vec3 color = frostTint * vignette;
-    fragColor = vec4(color, tintOpacity * mask) * qt_Opacity;
+    // Apply variation to tint - clamped so it never exceeds tint brightness
+    vec3 color = tintColor.rgb + vec3(variation);
+    color = min(color, tintColor.rgb * 1.05); // Never brighter than 5% above tint
+
+    // Vignette darkens edges - never brightens
+    float vignette = 1.0 - length((uv - 0.5) * vec2(0.3, 1.0)) * 0.15;
+    vignette = clamp(vignette, 0.0, 1.0);
+    color *= vignette;
+
+    // Final alpha
+    float alpha = tintOpacity * mask;
+
+    // Pre-multiplied alpha output: RGB * alpha before output
+    fragColor = vec4(color * alpha, alpha) * qt_Opacity;
 }
