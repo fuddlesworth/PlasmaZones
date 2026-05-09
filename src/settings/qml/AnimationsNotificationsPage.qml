@@ -11,7 +11,7 @@ import org.kde.kirigami as Kirigami
 // to `osd.show` and `osd.hide` via ShaderProfileTree::resolve's
 // walk-up. Popup-family events (zone selector, layout picker, snap
 // assist) live under `popup.*` and have their own dedicated page.
-Flickable {
+SettingsFlickable {
     contentHeight: col.implicitHeight
     clip: true
     Accessible.name: i18n("Notification animation events")

@@ -26,7 +26,7 @@ import org.kde.kirigami as Kirigami
  * state preserves each axis across mode toggles so previewing Spring
  * doesn't permanently lose the user's easing curve.
  */
-Flickable {
+SettingsFlickable {
     id: page
 
     // Slider sizing constants needed by EasingSettings (mirrors GeneralPage's

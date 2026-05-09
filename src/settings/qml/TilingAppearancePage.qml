@@ -7,7 +7,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-Flickable {
+SettingsFlickable {
     id: root
 
     readonly property var settingsBridge: settingsController.tilingAppearancePage

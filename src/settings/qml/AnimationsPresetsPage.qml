@@ -21,20 +21,22 @@ import org.kde.kirigami as Kirigami
  * Settings::animationProfile getter routes it through CurveRegistry like
  * any other curve string.
  */
-Flickable {
+SettingsFlickable {
     id: root
 
     readonly property var appSettings: settingsController.settings
-
     // Refresh hook bound to the controller signal below. The list is loaded
     // from a Q_INVOKABLE — QML can't observe the controller's internal state
     // through that boundary, so the Connections block below manually
     // reassigns `userPresetsList` whenever the controller emits a change
     // signal. The cached `_easingUserPresets` / `_springUserPresets`
     // bindings re-evaluate from the new list automatically.
-    property var userPresetsList: settingsController.animationsPage.userPresets() // QVariantList from C++
-    readonly property var _easingUserPresets: filterUserPresets(false) // QVariantList from C++
-    readonly property var _springUserPresets: filterUserPresets(true) // QVariantList from C++
+    property var userPresetsList: settingsController.animationsPage.userPresets()
+    // QVariantList from C++
+    readonly property var _easingUserPresets: filterUserPresets(false)
+    // QVariantList from C++
+    readonly property var _springUserPresets: filterUserPresets(true)
+    // QVariantList from C++
     property bool _deletingPreset: false
 
     function isSpringEntry(curveStr) {

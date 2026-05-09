@@ -13,7 +13,7 @@ import org.plasmazones.common as QFZCommon
  * Uses the visual monitor selector bar to pick a monitor, then shows
  * a layout preview with mode toggle and layout/algorithm selector.
  */
-Flickable {
+SettingsFlickable {
     id: root
 
     property var _layouts: settingsController.layouts

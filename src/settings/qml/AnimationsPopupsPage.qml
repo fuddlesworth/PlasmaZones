@@ -12,7 +12,7 @@ import org.kde.kirigami as Kirigami
 // (`popup` is the closest common ancestor of all three popup surfaces).
 // In-app side panels (settings nav rail, editor property panel) live
 // under `panel.*` and have their own dedicated Panels page.
-Flickable {
+SettingsFlickable {
     contentHeight: col.implicitHeight
     clip: true
     Accessible.name: i18n("Popup animation events")
