@@ -71,7 +71,7 @@ void main() {
     vec2 center = iResolution.xy * 0.5;
     vec2 halfSize = iResolution.xy * 0.5;
     float dist = roundedBoxSDF(fragCoord - center, halfSize, radius);
-    float mask = 1.0 - smoothstep(-1.0, 1.0, dist);
+    float mask = 1.0 - smoothstep(-0.5, 0.5, dist);
 
     if (mask <= 0.0) {
         fragColor = vec4(0.0);
