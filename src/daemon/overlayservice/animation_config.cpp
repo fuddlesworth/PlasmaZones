@@ -200,25 +200,23 @@ PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTre
         .hideShaderParameters = resolveShaderParameters(tree, PP::PopupZoneSelectorHide)};
 }
 
-/// SnapAssist: pop-in show only. The overlay uses destroy-on-hide
-/// (keepMappedOnHide=false), so ~Surface synchronously cancels any
-/// in-flight beginHide before the hide animation can paint a frame.
-/// Only `popup.snapAssist.show` is meaningful — `.hide` is
-/// intentionally absent from the taxonomy because no frame ever paints.
+/// SnapAssist: full show/hide pair. Pre-unified-shell, snap-assist
+/// owned its own wl_surface and tore it down on hide (~Surface
+/// synchronously cancelling any in-flight beginHide), so the hide leg
+/// never painted and `popup.snapAssist.hide` was intentionally absent
+/// from the taxonomy. After the unified-shell migration the surface
+/// stays mapped (keepMappedOnHide=true on the shared shell wl_surface)
+/// and snap-assist's hide runs a normal SurfaceAnimator::beginHide on
+/// the slot — so the hide leg paints frames and a per-event shader
+/// assignment is now meaningful.
 ///
-/// **Inheritance caveat (popup-family-only).** ShaderProfileTree::resolve
-/// walks parent paths, so within the popup family a user setting
-/// `popup` to dissolve cascades to LayoutPicker and ZoneSelector
-/// (both legs) and to SnapAssist's show leg via the chain
-/// `popup.<surface>.<leg>` → `popup.<surface>` →
-/// `popup` → `global`. SnapAssist's HIDE leg deliberately drops
-/// that walk-up — the surface destroys before paint, so the resolve
-/// would be contract-pure-and-runtime-no-op. The genuine OSD
+/// **Inheritance.** ShaderProfileTree::resolve walks parent paths, so
+/// within the popup family a user setting `popup` to dissolve cascades
+/// to LayoutPicker and ZoneSelector (both legs) and to SnapAssist's
+/// show AND hide legs via the chain `popup.<surface>.<leg>` →
+/// `popup.<surface>` → `popup` → `global`. The genuine OSD
 /// (`osd.show`/`osd.hide`) is in a separate subtree and is NOT touched
-/// by `popup` overrides regardless. If someone ever flips
-/// `keepMappedOnHide` to true on snap-assist, restore the
-/// `resolveShaderEffect(tree, PopupSnapAssistHide)` line below in
-/// lockstep with adding the new path constant.
+/// by `popup` overrides regardless.
 PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree& tree)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
@@ -228,15 +226,15 @@ PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree&
                                         // prior `popup` (150 ms widget-out) so behaviour is
                                         // preserved.
                                         .showProfile = PP::PopupSnapAssistShow,
-                                        .hideProfile = {},
+                                        .hideProfile = PP::PopupSnapAssistHide,
                                         .showScaleProfile = {},
                                         .hideScaleProfile = {},
                                         .showShaderEffectId = resolveShaderEffect(tree, PP::PopupSnapAssistShow),
-                                        .hideShaderEffectId = {},
+                                        .hideShaderEffectId = resolveShaderEffect(tree, PP::PopupSnapAssistHide),
                                         .showShaderProfile = PP::PopupSnapAssistShow,
-                                        .hideShaderProfile = {},
+                                        .hideShaderProfile = PP::PopupSnapAssistHide,
                                         .showShaderParameters = resolveShaderParameters(tree, PP::PopupSnapAssistShow),
-                                        .hideShaderParameters = {}};
+                                        .hideShaderParameters = resolveShaderParameters(tree, PP::PopupSnapAssistHide)};
 }
 
 } // namespace
@@ -310,7 +308,8 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
                                      << " zoneSelector.hide=" << resolveShaderEffect(tree, PP::PopupZoneSelectorHide)
                                      << " layoutPicker.show=" << resolveShaderEffect(tree, PP::PopupLayoutPickerShow)
                                      << " layoutPicker.hide=" << resolveShaderEffect(tree, PP::PopupLayoutPickerHide)
-                                     << " snapAssist.show=" << resolveShaderEffect(tree, PP::PopupSnapAssistShow);
+                                     << " snapAssist.show=" << resolveShaderEffect(tree, PP::PopupSnapAssistShow)
+                                     << " snapAssist.hide=" << resolveShaderEffect(tree, PP::PopupSnapAssistHide);
     }
     m_surfaceAnimator->registerConfigForRole(PzRoles::Notification, buildOsdConfig(tree));
     m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig(tree));

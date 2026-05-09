@@ -433,6 +433,7 @@ private Q_SLOTS:
         QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.zoneSelector.show")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.zoneSelector.hide")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.show")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.hide")));
 
         // Window family — consumed leaves driven by the KWin effect's
         // tryBeginShaderForEvent at kwin-effect/plasmazoneseffect.cpp.
@@ -484,11 +485,6 @@ private Q_SLOTS:
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("osd.pop")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("osd.dim")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("popup.layoutPicker.popIn")));
-        // SnapAssist hide is intentionally absent — surface destroys
-        // before any hide frame paints. (Note: it would still be a
-        // "consumable ancestor" if added, so this asserts it's NOT a
-        // consumed leaf.)
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("popup.snapAssist.hide")));
         // Empty path / nonsense path.
         QVERIFY(!c.supportsShaderLeg(QString()));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("../etc/passwd")));

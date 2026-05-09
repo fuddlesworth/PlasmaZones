@@ -75,12 +75,7 @@ PHOSPHORANIMATION_EXPORT extern const QString PopupLayoutPickerShow;
 PHOSPHORANIMATION_EXPORT extern const QString PopupLayoutPickerHide;
 PHOSPHORANIMATION_EXPORT extern const QString PopupSnapAssist;
 PHOSPHORANIMATION_EXPORT extern const QString PopupSnapAssistShow;
-// `popup.snapAssist.hide` is intentionally absent — the surface uses
-// destroy-on-hide (keepMappedOnHide=false), so no hide frame paints
-// and any profile assignment would be runtime-dead. If the surface
-// model ever changes to keep mapped on hide, add the constant in
-// lockstep with the daemon's `OverlayService::buildSnapAssistConfig`
-// resolveShaderEffect line.
+PHOSPHORANIMATION_EXPORT extern const QString PopupSnapAssistHide;
 
 // panel.* — persistent in-app side surfaces (settings nav rail, editor
 // property panel). Absorbs the former sidebar.* root — sidebars are panels.
