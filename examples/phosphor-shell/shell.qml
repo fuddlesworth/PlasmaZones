@@ -54,7 +54,7 @@ Item {
         thickness: 38
         width: 240; height: 38
         alignment: PanelWindow.Start
-        panelLength: 240
+        panelLength: 0
         margins { left: 8; top: 6 }
 
         ShaderBackground {
@@ -68,51 +68,51 @@ Item {
             anchors.centerIn: parent
             spacing: 12
 
-                // Menu button
-                Rectangle {
-                    id: menuButton
-                    width: 30; height: 30
-                    radius: 8
-                    color: menuArea.containsMouse ? "#45475a" : "transparent"
+            Rectangle {
+                id: menuButton
+                width: 30; height: 30
+                anchors.verticalCenter: parent.verticalCenter
+                radius: 8
+                color: menuArea.containsMouse ? "#45475a" : "transparent"
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: state.menuOpen ? "✕" : "☰"
-                        color: state.menuOpen ? "#f38ba8" : "#cdd6f4"
-                        font.pixelSize: 14
-                    }
-
-                    MouseArea {
-                        id: menuArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: state.menuOpen = !state.menuOpen
-                    }
+                Text {
+                    anchors.centerIn: parent
+                    text: state.menuOpen ? "✕" : "☰"
+                    color: state.menuOpen ? "#f38ba8" : "#cdd6f4"
+                    font.pixelSize: 14
                 }
 
-                // Workspaces
-                Row {
-                    spacing: 6
-                    Repeater {
-                        model: 5
-                        Rectangle {
-                            required property int index
-                            width: index === state.activeWorkspace ? 20 : 8
-                            height: 8
-                            radius: 4
-                            color: index === state.activeWorkspace ? "#89b4fa" : "#45475a"
+                MouseArea {
+                    id: menuArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: state.menuOpen = !state.menuOpen
+                }
+            }
 
-                            Behavior on width { NumberAnimation { duration: 150 } }
+            Row {
+                spacing: 6
+                anchors.verticalCenter: parent.verticalCenter
+                Repeater {
+                    model: 5
+                    Rectangle {
+                        required property int index
+                        width: index === state.activeWorkspace ? 20 : 8
+                        height: 8
+                        radius: 4
+                        color: index === state.activeWorkspace ? "#89b4fa" : "#45475a"
 
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: state.activeWorkspace = parent.index
-                            }
+                        Behavior on width { NumberAnimation { duration: 150 } }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: state.activeWorkspace = parent.index
                         }
                     }
                 }
             }
         }
+    }
     // ─── Center panel segment ────────────────────────────────────────────
     PanelWindow {
         id: centerPanel
@@ -120,7 +120,7 @@ Item {
         thickness: 38
         width: 220; height: 38
         alignment: PanelWindow.Center
-        panelLength: 220
+        panelLength: 0
         margins { top: 6 }
 
         ShaderBackground {
@@ -147,7 +147,7 @@ Item {
         thickness: 38
         width: 280; height: 38
         alignment: PanelWindow.End
-        panelLength: 280
+        panelLength: 0
         margins { right: 8; top: 6 }
 
         ShaderBackground {
@@ -161,62 +161,62 @@ Item {
             anchors.centerIn: parent
             spacing: 14
 
-            // CPU
-                Row {
-                    spacing: 4
-                    Text { text: "CPU"; color: "#a6e3a1"; font.pixelSize: 11; font.weight: Font.Medium }
-                    Text {
-                        text: (cpuUsage.stdout.trim() || "0") + "%"
-                        color: "#cdd6f4"
-                        font.pixelSize: 11
-                    }
+            Row {
+                spacing: 4
+                anchors.verticalCenter: parent.verticalCenter
+                Text { text: "CPU"; color: "#a6e3a1"; font.pixelSize: 11; font.weight: Font.Medium }
+                Text {
+                    text: (cpuUsage.stdout.trim() || "0") + "%"
+                    color: "#cdd6f4"
+                    font.pixelSize: 11
+                }
+            }
+
+            Row {
+                spacing: 4
+                anchors.verticalCenter: parent.verticalCenter
+                Text { text: "MEM"; color: "#89dceb"; font.pixelSize: 11; font.weight: Font.Medium }
+                Text {
+                    text: (memUsage.stdout.trim() || "0") + "%"
+                    color: "#cdd6f4"
+                    font.pixelSize: 11
+                }
+            }
+
+            Row {
+                spacing: 4
+                anchors.verticalCenter: parent.verticalCenter
+                visible: battery.exists
+                Text { text: "BAT"; color: "#f9e2af"; font.pixelSize: 11; font.weight: Font.Medium }
+                Text {
+                    text: battery.content.trim() + "%"
+                    color: "#cdd6f4"
+                    font.pixelSize: 11
+                }
+            }
+
+            Rectangle {
+                width: 26; height: 26
+                anchors.verticalCenter: parent.verticalCenter
+                radius: 6
+                color: settingsArea.containsMouse ? "#45475a" : "transparent"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "⚙"
+                    color: "#cdd6f4"
+                    font.pixelSize: 13
                 }
 
-                // Memory
-                Row {
-                    spacing: 4
-                    Text { text: "MEM"; color: "#89dceb"; font.pixelSize: 11; font.weight: Font.Medium }
-                    Text {
-                        text: (memUsage.stdout.trim() || "0") + "%"
-                        color: "#cdd6f4"
-                        font.pixelSize: 11
-                    }
-                }
-
-                // Battery (only on laptops)
-                Row {
-                    spacing: 4
-                    visible: battery.exists
-                    Text { text: "BAT"; color: "#f9e2af"; font.pixelSize: 11; font.weight: Font.Medium }
-                    Text {
-                        text: battery.content.trim() + "%"
-                        color: "#cdd6f4"
-                        font.pixelSize: 11
-                    }
-                }
-
-                // Settings button
-                Rectangle {
-                    width: 26; height: 26
-                    radius: 6
-                    color: settingsArea.containsMouse ? "#45475a" : "transparent"
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "⚙"
-                        color: "#cdd6f4"
-                        font.pixelSize: 13
-                    }
-
-                    MouseArea {
-                        id: settingsArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: state.settingsOpen = !state.settingsOpen
-                    }
+                MouseArea {
+                    id: settingsArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: state.settingsOpen = !state.settingsOpen
                 }
             }
         }
+    }
     // ─── App launcher popup ──────────────────────────────────────────────
     PopupWindow {
         id: menuPopup

@@ -233,7 +233,11 @@ void ShellEngine::materializePanels()
                 panelSize = QSize(panel->thickness(), screenSize.height());
             }
         } else {
-            const int length = panel->panelLength();
+            int length = panel->panelLength();
+            if (length == 0) {
+                length =
+                    horizontal ? qMax(1, static_cast<int>(panel->width())) : qMax(1, static_cast<int>(panel->height()));
+            }
 
             switch (panel->alignment()) {
             case PanelWindow::Start:
