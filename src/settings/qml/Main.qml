@@ -163,7 +163,7 @@ ApplicationWindow {
             "iconName": "window-new"
         }, {
             "name": "animations-app-rules",
-            "label": i18n("App Rules (sketch)"),
+            "label": i18n("App Rules"),
             "iconName": "application-x-executable"
         }, {
             "name": "animations-zones",
