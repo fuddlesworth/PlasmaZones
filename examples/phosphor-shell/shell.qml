@@ -61,7 +61,7 @@ Item {
             anchors.fill: parent
             shaderSource: Qt.resolvedUrl("../../data/shell-shaders/frosted_glass.frag")
             shaderParams: { "tintOpacity": 0.75, "noiseAmount": 0.025, "noiseScale": 45.0, "animSpeed": 0.2 }
-            customColor0: "#1e1e2e"
+            customColor1: "#1e1e2e"
         }
 
         Rectangle {
@@ -136,8 +136,8 @@ Item {
             anchors.fill: parent
             shaderSource: Qt.resolvedUrl("../../data/shell-shaders/gradient.frag")
             shaderParams: { "speed": 0.3 }
-            customColor0: "#1e1e2e"
-            customColor1: "#2e1e2e"
+            customColor1: "#1e1e2e"
+            customColor2: "#2e1e2e"
         }
 
         Rectangle {
@@ -171,7 +171,7 @@ Item {
             anchors.fill: parent
             shaderSource: Qt.resolvedUrl("../../data/shell-shaders/frosted_glass.frag")
             shaderParams: { "tintOpacity": 0.75, "noiseAmount": 0.02, "noiseScale": 50.0, "animSpeed": 0.15 }
-            customColor0: "#1e1e2e"
+            customColor1: "#1e1e2e"
         }
 
         Rectangle {
