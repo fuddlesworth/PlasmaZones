@@ -1,0 +1,268 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Calendar popup — riceability test for animation shader framework.
+
+import Phosphor.Shell 1.0
+import QtQuick
+
+// Click the clock → MonthGrid pops in via a transition shader sampling
+// a layered offscreen texture of the calendar content. Demonstrates
+// four parts of the framework working together:
+//   1. PopupWindow anchored to a panel item via Wayland xdg-popup
+//   2. ShaderBackground.playing=true for the continuous frosted backdrop
+//   3. Animation-shader pack (data/animations/popin) consumed at the
+//      QML level via ShaderBackground.sourceItem + iTime keyframing —
+//      same shader source the kwin-effect's SurfaceAnimator uses for
+//      window transitions, here driving a popup transition instead.
+//   4. Layer-enabled QML capture (calendarSource.layer.enabled) feeds
+//      the transition shader its uTexture0 sample.
+PopupWindow {
+    id: root
+
+    required property var shellState
+    required property var anchorItem
+
+    anchor: anchorItem
+    popupEdge: PopupWindow.Below
+    popupWidth: 280
+    popupHeight: 320
+    gap: 8
+    popupVisible: shellState.calendarOpen
+
+    // Backdrop — opaque base + frosted shader on top, in case the shader
+    // is still warming when the popup maps.
+    Rectangle {
+        anchors.fill: parent
+        color: "#1e1e2e"
+        radius: 14
+        border.color: "#313244"
+        border.width: 1
+    }
+
+    ShaderBackground {
+        anchors.fill: parent
+        playing: true
+        shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
+        shaderParams: {
+            "tintOpacity": 0.85,
+            "noiseAmount": 0.12,
+            "noiseScale": 22,
+            "animSpeed": 0.4,
+            "cornerRadius": 14
+        }
+        customColor1: "#1e1e2e"
+    }
+
+    // Calendar content (animated via popin shader transition). Wrapped
+    // in scale + opacity Behaviors driven by the same 0→1 keyframe as
+    // the popin shader uses, so even if the shader overlay below is
+    // held back by texture-provider warmup the user sees the popup
+    // actually arrive. The shader overlay adds bouncy zoom on top.
+    Item {
+        id: calendarSource
+
+        // Catppuccin palette
+        readonly property color colText: "#cdd6f4"
+        readonly property color colSubtle: "#a6adc8"
+        readonly property color colMuted: "#6c7086"
+        readonly property color colAccent: "#cba6f7"
+        readonly property color colToday: "#89dceb"
+        // Currently displayed month — defaults to today, prev/next nav.
+        property date displayDate: new Date()
+
+        anchors.fill: parent
+        anchors.margins: 14
+        scale: root.shellState.calendarOpen ? 1 : 0.7
+        opacity: root.shellState.calendarOpen ? 1 : 0
+
+        Column {
+            anchors.fill: parent
+            spacing: 8
+
+            // Header: < Month YYYY >
+            Row {
+                width: parent.width
+                height: 28
+                spacing: 8
+
+                Rectangle {
+                    width: 24
+                    height: 24
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: 6
+                    color: prevHover.containsMouse ? "#313244" : "transparent"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "‹"
+                        color: calendarSource.colText
+                        font.pixelSize: 18
+                    }
+
+                    MouseArea {
+                        id: prevHover
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            let d = new Date(calendarSource.displayDate);
+                            d.setMonth(d.getMonth() - 1);
+                            calendarSource.displayDate = d;
+                        }
+                    }
+
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - 64
+                    horizontalAlignment: Text.AlignHCenter
+                    text: Qt.formatDate(calendarSource.displayDate, "MMMM yyyy")
+                    color: calendarSource.colText
+                    font.pixelSize: 15
+                    font.weight: Font.Medium
+                }
+
+                Rectangle {
+                    width: 24
+                    height: 24
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: 6
+                    color: nextHover.containsMouse ? "#313244" : "transparent"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "›"
+                        color: calendarSource.colText
+                        font.pixelSize: 18
+                    }
+
+                    MouseArea {
+                        id: nextHover
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            let d = new Date(calendarSource.displayDate);
+                            d.setMonth(d.getMonth() + 1);
+                            calendarSource.displayDate = d;
+                        }
+                    }
+
+                }
+
+            }
+
+            // Day-of-week header row
+            Row {
+                width: parent.width
+                spacing: 0
+
+                Repeater {
+                    model: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+
+                    delegate: Text {
+                        required property string modelData
+
+                        width: parent.width / 7
+                        horizontalAlignment: Text.AlignHCenter
+                        text: modelData
+                        color: calendarSource.colMuted
+                        font.pixelSize: 10
+                        font.weight: Font.Medium
+                    }
+
+                }
+
+            }
+
+            // Month grid — 6 weeks × 7 days = 42 cells. Each cell shows
+            // day-of-month for displayDate's month, with leading/trailing
+            // days from neighbour months greyed out.
+            Grid {
+                width: parent.width
+                columns: 7
+                rowSpacing: 2
+                columnSpacing: 0
+
+                Repeater {
+                    model: 42
+
+                    delegate: Item {
+                        required property int index
+                        // Day 0 = first cell = first day of week containing the 1st.
+                        readonly property date cellDate: {
+                            let firstOfMonth = new Date(calendarSource.displayDate);
+                            firstOfMonth.setDate(1);
+                            let firstDow = firstOfMonth.getDay();
+                            let d = new Date(firstOfMonth);
+                            d.setDate(1 - firstDow + index);
+                            return d;
+                        }
+                        readonly property bool inCurrentMonth: cellDate.getMonth() === calendarSource.displayDate.getMonth()
+                        readonly property bool isToday: {
+                            let now = new Date();
+                            return cellDate.getDate() === now.getDate() && cellDate.getMonth() === now.getMonth() && cellDate.getFullYear() === now.getFullYear();
+                        }
+
+                        width: parent.width / 7
+                        height: 32
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 26
+                            height: 26
+                            radius: 13
+                            color: isToday ? calendarSource.colToday : (cellHover.containsMouse ? "#313244" : "transparent")
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 100
+                                }
+
+                            }
+
+                        }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: cellDate.getDate()
+                            color: isToday ? "#1e1e2e" : (inCurrentMonth ? calendarSource.colText : calendarSource.colMuted)
+                            font.pixelSize: 12
+                            font.weight: isToday ? Font.Bold : Font.Normal
+                        }
+
+                        MouseArea {
+                            id: cellHover
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 350
+                easing.type: Easing.OutBack
+                easing.overshoot: 1.4
+            }
+
+        }
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 250
+            }
+
+        }
+
+    }
+
+}
