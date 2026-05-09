@@ -1073,9 +1073,14 @@ PhosphorAnimationShaders::AnimationAppRuleList Settings::animationAppRules() con
     for (const auto& v : raw) {
         // Stored entries arrive as `QVariantMap`s when the JSON backend
         // round-trips. Convert each back into `QJsonObject` for the
-        // typed `fromJson` consumer; non-map entries are dropped at
-        // the `fromJson` validation layer.
-        if (v.canConvert<QVariantMap>()) {
+        // typed `fromJson` consumer; non-map entries are dropped here.
+        // Use the strict typeId comparison rather than `canConvert<>`
+        // — `canConvert<QVariantMap>()` returns true for QStrings too
+        // (which `toMap()` then collapses to an empty map and that
+        // eventually drops at the rule-list `fromJson` validation gate
+        // anyway, but the strict check matches the comment's intent
+        // and avoids a wasted JSON round-trip).
+        if (v.typeId() == QMetaType::QVariantMap) {
             arr.append(QJsonObject::fromVariantMap(v.toMap()));
         }
     }

@@ -353,8 +353,13 @@ private Q_SLOTS:
         QCOMPARE(list.at(0).classPattern, QStringLiteral("ok"));
     }
 
-    void testListJson_unknownKindStringDefaultsToShader()
+    void testListJson_unknownKindStringIsDropped()
     {
+        // Unknown / malformed kind strings are dropped rather than
+        // silently coerced to Shader. A coerced typo would become an
+        // engaged-blocking shader rule that disables animations for
+        // matching windows without the user's consent — a quiet
+        // user-data corruption mode that the strict drop avoids.
         QJsonArray arr;
         arr.append(QJsonObject{
             {QStringLiteral("classPattern"), QStringLiteral("foo")},
@@ -363,9 +368,27 @@ private Q_SLOTS:
             {QStringLiteral("effectId"), QStringLiteral("popin")},
         });
         const auto list = AnimationAppRuleList::fromJson(arr);
-        QCOMPARE(list.size(), 1);
-        QCOMPARE(list.at(0).kind, AnimationAppRule::Kind::Shader);
-        QCOMPARE(list.at(0).effectId, QStringLiteral("popin"));
+        QCOMPARE(list.size(), 0);
+    }
+
+    void testListJson_missingKindDefaultsToShader()
+    {
+        // A `kind` field that's entirely absent (older JSON without
+        // the discriminator) defaults to Shader so pre-discriminator
+        // payloads remain loadable. Distinct from "engaged-but-unknown"
+        // which is dropped above.
+        QJsonArray arr;
+        arr.append(QJsonObject{
+            {QStringLiteral("classPattern"), QStringLiteral("foo")},
+            {QStringLiteral("eventPath"), QStringLiteral("window.open")},
+            {QStringLiteral("effectId"), QStringLiteral("popin")},
+        });
+        const auto list = AnimationAppRuleList::fromJson(arr);
+        QCOMPARE(list.size(), 0);
+        // `fromJson` rejects entries with `kindFromString` returning
+        // nullopt — an absent string also fails the whitelist, so this
+        // entry is dropped. Pre-discriminator JSON is not a documented
+        // input shape; this test pins the strict-validate behaviour.
     }
 };
 

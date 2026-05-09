@@ -39,18 +39,40 @@ SettingsFlickable {
 
     /// Live model — refreshed on every `appRulesChanged` so the list
     /// rebinds after add/remove/move and after Settings::load() Discard.
+    /// Init-only on its own; the Connections block below re-evaluates
+    /// it on every controller signal.
     property var rulesList: settingsController.animationsPage.appRules()
     /// Window-event paths the rule list can target. Static across the
     /// page lifetime since the underlying ProfilePaths catalogue is
-    /// compile-time.
+    /// compile-time, so a one-shot capture is correct here.
     readonly property var eventsList: settingsController.animationsPage.animationAppRuleEvents()
     /// Available shader effects from the registry, including a "None"
-    /// entry the picker prepends via `includeNoneEntry: true`.
-    readonly property var shadersList: settingsController.animationsPage.availableShaderEffects()
+    /// entry the picker prepends via `includeNoneEntry: true`. Captured
+    /// at component creation; refreshed via the Connections block on
+    /// `shaderEffectsChanged` so dropping a new shader pack while this
+    /// page is open reflects in the picker without reopening.
+    property var shadersList: settingsController.animationsPage.availableShaderEffects()
     /// Rule kinds — keep in sync with `AnimationAppRule::Kind` JSON
     /// strings. Used by the kind radio.
     readonly property string kindShader: "shader"
     readonly property string kindTiming: "timing"
+    /// Translation table for the C++ controller's `eventLabel()`,
+    /// which produces raw English ("Open", "Close", ...) by
+    /// title-casing camelCase segments. The controller stays language-
+    /// neutral (its callers cross daemon / settings boundaries); the
+    /// translation hook lives here so the user sees localised labels.
+    /// Keys mirror `PhosphorAnimation::ProfilePaths::Window*`.
+    readonly property var _eventTranslations: ({
+        "window": i18nc("window-event category, used as inheritance anchor", "Window"),
+        "window.open": i18nc("window-event verb", "Open"),
+        "window.close": i18nc("window-event verb", "Close"),
+        "window.move": i18nc("window-event verb", "Move"),
+        "window.maximize": i18nc("window-event verb", "Maximize"),
+        "window.minimize": i18nc("window-event verb", "Minimize"),
+        "window.focus": i18nc("window-event verb", "Focus"),
+        "window.snapIn": i18nc("window-event verb, snap into a zone", "Snap In"),
+        "window.snapOut": i18nc("window-event verb, leave a zone", "Snap Out")
+    })
 
     function _kindLabel(kind) {
         if (kind === root.kindTiming)
@@ -60,6 +82,14 @@ SettingsFlickable {
     }
 
     function _eventLabel(eventPath) {
+        // Prefer the localised label; fall back to the controller's
+        // raw English (or the path itself) if the path is not in our
+        // translation table — that way a future ProfilePaths addition
+        // shows up readable instead of breaking the row entirely.
+        var translated = _eventTranslations[eventPath];
+        if (translated)
+            return translated;
+
         for (var i = 0; i < eventsList.length; ++i) {
             if (eventsList[i].path === eventPath)
                 return eventsList[i].label;
@@ -98,6 +128,13 @@ SettingsFlickable {
     Connections {
         function onAppRulesChanged() {
             root._refresh();
+        }
+
+        function onShaderEffectsChanged() {
+            // Refresh the shader catalogue so a newly-installed pack
+            // appears in the per-rule picker without the user having
+            // to leave and re-open the page.
+            root.shadersList = settingsController.animationsPage.availableShaderEffects();
         }
 
         target: settingsController.animationsPage
@@ -274,8 +311,12 @@ SettingsFlickable {
                         // explicit-block sentinel) — only require a
                         // pattern. For timing-kind, require either a
                         // non-empty curve or a non-zero duration so the
-                        // rule actually overrides something.
-                        enabled: patternField.text.length > 0 && (shaderKindRadio.checked || curveField.text.length > 0 || durationSpin.value > 0)
+                        // rule actually overrides something. The
+                        // event-combo gate guards against a future
+                        // empty `eventsList` (e.g. taxonomy refactor)
+                        // building rules with empty `eventPath` that
+                        // the controller would silently reject.
+                        enabled: patternField.text.length > 0 && (eventCombo.currentValue || "").length > 0 && (shaderKindRadio.checked || curveField.text.length > 0 || durationSpin.value > 0)
                         ToolTip.text: i18n("Append the rule to the list")
                         ToolTip.visible: hovered
                         onClicked: {
@@ -364,7 +405,12 @@ SettingsFlickable {
                                 font.bold: true
                                 Layout.alignment: Qt.AlignVCenter
                                 elide: Text.ElideRight
-                                Layout.maximumWidth: Math.min(implicitWidth, parent.width * 0.25)
+                                // Anchor cap to the delegate width
+                                // (explicit `id`) rather than `parent`
+                                // so a future restructure of the inner
+                                // RowLayout doesn't silently flip the
+                                // anchor target.
+                                Layout.maximumWidth: Math.min(implicitWidth, ruleDelegate.width * 0.25)
                             }
 
                             Label {
@@ -372,7 +418,7 @@ SettingsFlickable {
                                 opacity: 0.8
                                 Layout.alignment: Qt.AlignVCenter
                                 elide: Text.ElideRight
-                                Layout.maximumWidth: Math.min(implicitWidth, parent.width * 0.25)
+                                Layout.maximumWidth: Math.min(implicitWidth, ruleDelegate.width * 0.25)
                             }
 
                             Label {

@@ -661,7 +661,11 @@ public:
     }
     void setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules) override
     {
+        if (m_animationAppRules == rules)
+            return;
         m_animationAppRules = rules;
+        Q_EMIT animationAppRulesChanged();
+        Q_EMIT settingsChanged();
     }
 
     // Autotile decoration settings (ISettings)

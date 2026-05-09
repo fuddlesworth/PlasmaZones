@@ -332,7 +332,9 @@ public:
 
     /// Replace the rule at @p index with @p rule. Same validation
     /// rules as `addAppRule`. Returns false on out-of-range index or
-    /// invalid rule.
+    /// invalid rule. Returns true and is a no-op when the new rule
+    /// equals the current entry at @p index, so a QML two-way binding
+    /// rebinding the same value doesn't cycle the dirty bit.
     Q_INVOKABLE bool setAppRule(int index, const QVariantMap& rule);
 
     /// Remove the rule at @p index. Returns false on out-of-range index.
@@ -443,6 +445,12 @@ private:
     /// re-emit path like every other settings page.
     QHash<QString, std::optional<QByteArray>> m_pendingFileSnapshots;
     bool m_shaderTreeDirty = false;
+    /// Symmetric with `m_shaderTreeDirty`. Mutators set this true on
+    /// every actual write; `commitPending` and `revertPending` reset
+    /// it. `hasPendingChanges()` ORs this with the other dirty signals
+    /// so the SettingsController save/discard gate flips correctly
+    /// when the only edit was an app-rule mutation.
+    bool m_appRulesDirty = false;
 };
 
 } // namespace PlasmaZones

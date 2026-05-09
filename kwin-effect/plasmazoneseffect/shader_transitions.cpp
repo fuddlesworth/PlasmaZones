@@ -1137,6 +1137,14 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
                                                bool reverse, bool holdCloseGrab)
 {
     if (!window || durationMs <= 0) {
+        // `durationMs <= 0` is the global "no animations" sentinel
+        // (the user has set `Settings::animationDuration` to 0 or
+        // animations are globally disabled). A Timing AnimationAppRule
+        // cannot rescue this — by-design: if the user globally
+        // disables animations, no per-window-class rule should
+        // re-enable them. A null window pointer is a defensive guard
+        // against the kwin-effect being called outside of a window
+        // event.
         return;
     }
     // Fast-path early-out on the global animations toggle. The

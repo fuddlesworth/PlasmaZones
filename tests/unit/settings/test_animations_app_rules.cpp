@@ -77,6 +77,10 @@ private Q_SLOTS:
 
     void appRules_returnsEmptyWhenSettingsIsNull()
     {
+        // Defense in depth: even though the body never touches Settings
+        // (nullptr arg), wrap with the guard so an accidental future
+        // change adding any I/O can't pollute the user's real config.
+        IsolatedConfigGuard guard;
         AnimationsPageController c(nullptr, nullptr);
         QCOMPARE(c.appRules(), QVariantList{});
     }
@@ -107,7 +111,7 @@ private Q_SLOTS:
         AnimationsPageController c(nullptr, &settings);
 
         QVERIFY(!c.addAppRule(makeShaderRuleMap(QString(), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
-        QCOMPARE(c.appRules().size(), 0);
+        QCOMPARE(c.appRules(), QVariantList{});
     }
 
     void addAppRule_emptyEventPath_isRejected()
@@ -117,7 +121,7 @@ private Q_SLOTS:
         AnimationsPageController c(nullptr, &settings);
 
         QVERIFY(!c.addAppRule(makeShaderRuleMap(QStringLiteral("firefox"), QString(), QStringLiteral("dissolve"))));
-        QCOMPARE(c.appRules().size(), 0);
+        QCOMPARE(c.appRules(), QVariantList{});
     }
 
     void addAppRule_unknownKind_isRejected()
@@ -131,7 +135,7 @@ private Q_SLOTS:
         m.insert(QStringLiteral("eventPath"), QStringLiteral("window.open"));
         m.insert(QStringLiteral("kind"), QStringLiteral("not-a-kind"));
         QVERIFY(!c.addAppRule(m));
-        QCOMPARE(c.appRules().size(), 0);
+        QCOMPARE(c.appRules(), QVariantList{});
     }
 
     void addAppRule_emptyEffectIdShaderRule_isAccepted()
@@ -194,6 +198,17 @@ private Q_SLOTS:
         QCOMPARE(c.appRules().size(), 1);
     }
 
+    void removeAppRule_emptyList_returnsFalse()
+    {
+        // Most common QML-side off-by-one: user deletes the last rule
+        // and the click handler fires once more before the list rebinds.
+        IsolatedConfigGuard guard;
+        Settings settings;
+        AnimationsPageController c(nullptr, &settings);
+
+        QVERIFY(!c.removeAppRule(0));
+    }
+
     void moveAppRule_reordersTwoEntries()
     {
         IsolatedConfigGuard guard;
@@ -229,8 +244,12 @@ private Q_SLOTS:
 
         QVERIFY(c.addAppRule(
             makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
+        // Cover both halves of the (from, to) matrix — out-of-range
+        // `to` AND out-of-range `from`, plus negative on each side.
         QVERIFY(!c.moveAppRule(0, 5));
+        QVERIFY(!c.moveAppRule(5, 0));
         QVERIFY(!c.moveAppRule(-1, 0));
+        QVERIFY(!c.moveAppRule(0, -1));
     }
 
     // ── Set in place ──────────────────────────────────────────────────
@@ -269,11 +288,33 @@ private Q_SLOTS:
 
         QVERIFY(c.addAppRule(
             makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
-        // Empty pattern in the replacement is rejected, original survives.
+        // Mirror the add-side rejection coverage — empty pattern, empty
+        // event, and unknown kind all rejected at the controller boundary;
+        // the original entry must survive each rejected replacement.
         QVERIFY(
             !c.setAppRule(0, makeShaderRuleMap(QString(), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
+        QVERIFY(!c.setAppRule(0, makeShaderRuleMap(QStringLiteral("firefox"), QString(), QStringLiteral("dissolve"))));
+        QVariantMap unknownKindMap;
+        unknownKindMap.insert(QStringLiteral("classPattern"), QStringLiteral("firefox"));
+        unknownKindMap.insert(QStringLiteral("eventPath"), QStringLiteral("window.open"));
+        unknownKindMap.insert(QStringLiteral("kind"), QStringLiteral("not-a-kind"));
+        QVERIFY(!c.setAppRule(0, unknownKindMap));
         QCOMPARE(c.appRules().first().toMap().value(QStringLiteral("classPattern")).toString(),
                  QStringLiteral("firefox"));
+    }
+
+    void setAppRule_unknownEventPath_isRejected()
+    {
+        // The page-level event combo only offers valid paths, but
+        // a programmatic Q_INVOKABLE caller can persist a stale-across-
+        // releases path that silently never matches at resolve time.
+        IsolatedConfigGuard guard;
+        Settings settings;
+        AnimationsPageController c(nullptr, &settings);
+
+        QVERIFY(!c.addAppRule(makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.notARealEvent"),
+                                                QStringLiteral("dissolve"))));
+        QCOMPARE(c.appRules(), QVariantList{});
     }
 
     void setAppRule_noOp_doesNotEmitPendingChanges()
@@ -331,8 +372,11 @@ private Q_SLOTS:
         for (const QVariant& entry : events) {
             const QVariantMap m = entry.toMap();
             const QString path = m.value(QStringLiteral("path")).toString();
-            QVERIFY2(path.startsWith(QLatin1String("window.")) || path == QLatin1String("window"),
-                     qPrintable(QStringLiteral("non-window path: ") + path));
+            // Strict: only `window.<leaf>` paths — the bare `"window"`
+            // category is filtered by the controller's `isCategory`
+            // skip, so accepting it here would mask a regression.
+            QVERIFY2(path.startsWith(QLatin1String("window.")),
+                     qPrintable(QStringLiteral("non-window-leaf path: ") + path));
             QVERIFY(!m.value(QStringLiteral("label")).toString().isEmpty());
         }
     }

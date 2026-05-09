@@ -26,18 +26,25 @@ QString kindToString(AnimationAppRule::Kind kind)
 {
     switch (kind) {
     case AnimationAppRule::Kind::Shader:
-        return QStringLiteral("shader");
+        return QString::fromLatin1(kKindShaderStr);
     case AnimationAppRule::Kind::Timing:
-        return QStringLiteral("timing");
+        return QString::fromLatin1(kKindTimingStr);
     }
-    return QStringLiteral("shader");
+    Q_UNREACHABLE();
 }
 
-AnimationAppRule::Kind kindFromString(const QString& s)
+/// Strict parse: an unknown kind string returns nullopt so the caller
+/// (`fromJson`) can drop the rule rather than silently coercing every
+/// typo / future-kind into `Shader`. `kindFromString("xyz")` previously
+/// produced an engaged-blocking shader rule, which would disable
+/// animations for matching windows without the user's consent.
+std::optional<AnimationAppRule::Kind> kindFromString(const QString& s)
 {
+    if (s.compare(QLatin1String(kKindShaderStr), Qt::CaseInsensitive) == 0)
+        return AnimationAppRule::Kind::Shader;
     if (s.compare(QLatin1String(kKindTimingStr), Qt::CaseInsensitive) == 0)
         return AnimationAppRule::Kind::Timing;
-    return AnimationAppRule::Kind::Shader;
+    return std::nullopt;
 }
 
 } // namespace
@@ -86,7 +93,12 @@ AnimationAppRule AnimationAppRule::fromJson(const QJsonObject& obj)
     AnimationAppRule r;
     r.classPattern = obj.value(QLatin1String(kKeyClassPattern)).toString();
     r.eventPath = obj.value(QLatin1String(kKeyEventPath)).toString();
-    r.kind = kindFromString(obj.value(QLatin1String(kKeyKind)).toString());
+    // Default to Shader when the `kind` field is absent or unknown —
+    // the list-level `AnimationAppRuleList::fromJson` re-parses the
+    // raw kind string against `kindFromString`'s strict whitelist and
+    // drops entries that fail it, so silent "unknown → Shader"
+    // coercion at this layer never reaches resolve time.
+    r.kind = kindFromString(obj.value(QLatin1String(kKeyKind)).toString()).value_or(Kind::Shader);
     switch (r.kind) {
     case Kind::Shader:
         r.effectId = obj.value(QLatin1String(kKeyEffectId)).toString();
@@ -129,6 +141,20 @@ void AnimationAppRuleList::removeAt(int index)
     m_rules.removeAt(index);
 }
 
+void AnimationAppRuleList::setEntries(const QList<AnimationAppRule>& rules)
+{
+    QList<AnimationAppRule> validated;
+    validated.reserve(rules.size());
+    for (const auto& rule : rules) {
+        if (rule.classPattern.isEmpty() || rule.eventPath.isEmpty()) {
+            qCWarning(lcRules) << "setEntries: dropping rule with empty classPattern or eventPath";
+            continue;
+        }
+        validated.append(rule);
+    }
+    m_rules = std::move(validated);
+}
+
 void AnimationAppRuleList::move(int from, int to)
 {
     if (from < 0 || from >= m_rules.size())
@@ -143,11 +169,13 @@ void AnimationAppRuleList::move(int from, int to)
 namespace {
 bool patternMatches(const QString& pattern, const QString& windowClass)
 {
-    // Empty pattern matches nothing — guard against accidentally-empty
-    // entries swallowing every window. `append()` already rejects
-    // empty patterns, but defence in depth: a malformed JSON load
-    // could still slip through.
-    if (pattern.isEmpty() || windowClass.isEmpty())
+    // Belt-and-braces empty-pattern guard. `append` and `fromJson`
+    // both reject empty patterns at insertion time AND the resolvers
+    // short-circuit on empty windowClass before calling here, so this
+    // can only fire if a future call site bypasses both layers — but
+    // a "match every window" rule is dangerous enough that the cost
+    // of the extra branch is worth the safety property.
+    if (pattern.isEmpty())
         return false;
     return windowClass.contains(pattern, Qt::CaseInsensitive);
 }
@@ -199,7 +227,18 @@ AnimationAppRuleList AnimationAppRuleList::fromJson(const QJsonArray& arr)
     for (const auto& v : arr) {
         if (!v.isObject())
             continue;
-        const auto rule = AnimationAppRule::fromJson(v.toObject());
+        const auto obj = v.toObject();
+        // Strict kind validation BEFORE constructing the rule —
+        // `AnimationAppRule::fromJson` silently coerces unknown kind
+        // strings to Shader so the value type round-trips without
+        // optional plumbing, but a malformed kind in a JSON load is a
+        // user-data error we'd rather drop than silently reinterpret
+        // as an engaged-blocking shader rule.
+        if (!kindFromString(obj.value(QLatin1String(kKeyKind)).toString()).has_value()) {
+            qCWarning(lcRules) << "Dropping rule with unknown kind:" << obj.value(QLatin1String(kKeyKind));
+            continue;
+        }
+        const auto rule = AnimationAppRule::fromJson(obj);
         // Same validation as `append()`: refuse to load a rule that
         // would be empty-pattern-matches-everything dangerous. A
         // hand-edited config file with malformed entries silently

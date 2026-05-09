@@ -154,10 +154,15 @@ private Q_SLOTS:
     {
         const auto profile = resolveAnimationShaderProfile(AnimationAppRuleList{}, ShaderProfileTree{},
                                                            QStringLiteral("Firefox"), QStringLiteral("window.open"));
-        // Tree resolves to empty when there's no baseline and no leaf — that
-        // surfaces as engaged-nullopt fields, the documented "no shader"
-        // baseline state. effectiveEffectId() returns the empty string.
-        QVERIFY(profile.effectiveEffectId().isEmpty());
+        // Tree's `resolve(eventPath)` runs `withDefaults()`, so an
+        // empty tree surfaces engaged-empty effectId / engaged-empty
+        // parameters — the library's "no shader configured" baseline.
+        // Distinct from a rule-supplied engaged-empty (which encodes
+        // the user's "block default" sentinel for matching windows);
+        // the no-rule case here happens because the rule list is
+        // empty and the tree fall-through hit the library default.
+        QCOMPARE(profile.effectiveEffectId(), QString());
+        QVERIFY(profile.effectId.has_value() && profile.effectId->isEmpty());
     }
 
     void testShader_timingRule_doesNotMatchShaderAxis()

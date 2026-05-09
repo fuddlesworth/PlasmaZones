@@ -141,11 +141,12 @@ public:
         m_rules.clear();
     }
     /// Replace the entire list (used by setters that take a full
-    /// already-built list, e.g. drag-reorder commits).
-    void setEntries(const QList<AnimationAppRule>& rules)
-    {
-        m_rules = rules;
-    }
+    /// already-built list, e.g. drag-reorder commits). Each entry is
+    /// validated through the same gate as `append()` — entries with
+    /// empty `classPattern` or `eventPath` are dropped rather than
+    /// silently swallowing every window, and a warning is logged so
+    /// the call-site bug is visible in the journal.
+    void setEntries(const QList<AnimationAppRule>& rules);
 
     /// First matching `Kind::Shader` rule for the given (windowClass,
     /// eventPath). Match is substring case-insensitive on

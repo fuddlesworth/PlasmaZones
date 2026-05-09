@@ -247,7 +247,7 @@ void AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
 
 bool AnimationsPageController::hasPendingChanges() const
 {
-    return !m_pendingFileSnapshots.isEmpty() || m_shaderTreeDirty;
+    return !m_pendingFileSnapshots.isEmpty() || m_shaderTreeDirty || m_appRulesDirty;
 }
 
 void AnimationsPageController::commitPending()
@@ -255,15 +255,17 @@ void AnimationsPageController::commitPending()
     const bool had = hasPendingChanges();
     m_pendingFileSnapshots.clear();
     m_shaderTreeDirty = false;
+    m_appRulesDirty = false;
     if (had)
         Q_EMIT pendingChangesChanged();
 }
 
 void AnimationsPageController::revertPending()
 {
-    // Shader tree changes are reverted by the subsequent m_settings.load() call
-    // in SettingsController, not by this method. Do not call revertPending()
-    // without a following load().
+    // Shader tree and app-rule list changes are both reverted by the
+    // subsequent m_settings.load() call in SettingsController, not by
+    // this method. Do not call revertPending() without a following
+    // load().
     using namespace PhosphorAnimation;
     using namespace PhosphorAnimationShaders;
 
@@ -271,6 +273,7 @@ void AnimationsPageController::revertPending()
         return;
 
     m_shaderTreeDirty = false;
+    m_appRulesDirty = false;
 
     const QString profilesDir = userProfilesDir();
     const QString setsDir = userMotionSetsDir();
@@ -1065,17 +1068,29 @@ QVariantList AnimationsPageController::shaderEffectUsages(const QString& effectI
 namespace {
 
 /// Translate the QML-shape map into an AnimationAppRule. Returns nullopt
-/// when the map is missing required fields or carries an unknown kind —
-/// the controller's mutators reject malformed rules at the boundary
-/// rather than letting them silently round-trip through `fromJson`'s
-/// drop-on-malformed path (which would surface as a no-op write).
-std::optional<PhosphorAnimationShaders::AnimationAppRule> appRuleFromVariantMap(const QVariantMap& map)
+/// when the map is missing required fields, carries an unknown kind, or
+/// names an `eventPath` outside the built-in ProfilePaths taxonomy. The
+/// controller's mutators reject malformed rules at the boundary rather
+/// than letting them silently round-trip through `fromJson`'s drop-on-
+/// malformed path (which would surface as a no-op write the user can't
+/// distinguish from "stored successfully").
+std::optional<PhosphorAnimationShaders::AnimationAppRule>
+appRuleFromVariantMap(const QVariantMap& map, const std::function<bool(const QString&)>& isValidEventPath)
 {
     using PhosphorAnimationShaders::AnimationAppRule;
     AnimationAppRule rule;
     rule.classPattern = map.value(QLatin1String("classPattern")).toString();
     rule.eventPath = map.value(QLatin1String("eventPath")).toString();
     if (rule.classPattern.isEmpty() || rule.eventPath.isEmpty()) {
+        return std::nullopt;
+    }
+    if (isValidEventPath && !isValidEventPath(rule.eventPath)) {
+        // A typo or stale-across-releases event path round-trips through
+        // the list, occupies a UI row, and silently never matches at
+        // resolve time — reject at the QML boundary instead. The page-
+        // level dropdown only offers valid paths, but a programmatic
+        // caller (Q_INVOKABLE, scripting hook, hand-edited config) can
+        // bypass that gate.
         return std::nullopt;
     }
     const QString kindStr = map.value(QLatin1String("kind")).toString();
@@ -1118,7 +1133,9 @@ bool AnimationsPageController::addAppRule(const QVariantMap& rule)
 {
     if (!m_settings)
         return false;
-    const auto parsed = appRuleFromVariantMap(rule);
+    const auto parsed = appRuleFromVariantMap(rule, [this](const QString& p) {
+        return isValidEventPath(p);
+    });
     if (!parsed) {
         qCWarning(lcConfig) << "addAppRule: malformed rule, ignoring" << rule;
         return false;
@@ -1126,6 +1143,7 @@ bool AnimationsPageController::addAppRule(const QVariantMap& rule)
     auto rules = m_settings->animationAppRules();
     rules.append(*parsed);
     m_settings->setAnimationAppRules(rules);
+    m_appRulesDirty = true;
     Q_EMIT pendingChangesChanged();
     return true;
 }
@@ -1139,7 +1157,9 @@ bool AnimationsPageController::setAppRule(int index, const QVariantMap& rule)
         qCWarning(lcConfig) << "setAppRule: index" << index << "out of range (size=" << rules.size() << ")";
         return false;
     }
-    const auto parsed = appRuleFromVariantMap(rule);
+    const auto parsed = appRuleFromVariantMap(rule, [this](const QString& p) {
+        return isValidEventPath(p);
+    });
     if (!parsed) {
         qCWarning(lcConfig) << "setAppRule: malformed rule, ignoring" << rule;
         return false;
@@ -1148,12 +1168,15 @@ bool AnimationsPageController::setAppRule(int index, const QVariantMap& rule)
     if (entries.at(index) == *parsed) {
         // Same dirty-check pattern as setShaderOverride — a same-state
         // QML rebind must not cycle Settings → boomerang and emit a
-        // spurious pendingChangesChanged.
+        // spurious pendingChangesChanged. Returns true so the caller
+        // sees "stored successfully" semantics for an already-stored
+        // value.
         return true;
     }
     entries[index] = *parsed;
     rules.setEntries(entries);
     m_settings->setAnimationAppRules(rules);
+    m_appRulesDirty = true;
     Q_EMIT pendingChangesChanged();
     return true;
 }
@@ -1169,6 +1192,7 @@ bool AnimationsPageController::removeAppRule(int index)
     }
     rules.removeAt(index);
     m_settings->setAnimationAppRules(rules);
+    m_appRulesDirty = true;
     Q_EMIT pendingChangesChanged();
     return true;
 }
@@ -1187,6 +1211,7 @@ bool AnimationsPageController::moveAppRule(int from, int to)
     }
     rules.move(from, to);
     m_settings->setAnimationAppRules(rules);
+    m_appRulesDirty = true;
     Q_EMIT pendingChangesChanged();
     return true;
 }
