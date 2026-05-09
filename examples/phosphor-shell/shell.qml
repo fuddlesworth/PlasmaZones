@@ -60,7 +60,7 @@ Item {
             anchors.fill: parent
             color: "#1e1e2e"
             radius: 12
-            clip: true
+            clip: false
             border.color: "#313244"
             border.width: 1
 
@@ -135,7 +135,7 @@ Item {
             anchors.fill: parent
             color: "#1e1e2e"
             radius: 12
-            clip: true
+            clip: false
             border.color: "#313244"
             border.width: 1
 
@@ -170,7 +170,7 @@ Item {
             anchors.fill: parent
             color: "#1e1e2e"
             radius: 12
-            clip: true
+            clip: false
             border.color: "#313244"
             border.width: 1
 
