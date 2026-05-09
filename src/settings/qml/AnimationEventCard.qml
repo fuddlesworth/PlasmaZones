@@ -65,6 +65,12 @@ Item {
     // shaderProfileChanged via the Connections block at the bottom.
     property var currentShaderParams: ({
     })
+    /// Per-card lock state for the parameter editor's lock + randomize
+    /// toolbar. UI affordance only — not persisted. Cleared on shader
+    /// switch in `refreshShaderFromTree` (same-named ids in different
+    /// shader schemas are unrelated).
+    property var lockedShaderParams: ({
+    })
     readonly property string currentCurveString: {
         if (currentTimingMode === CurvePresets.timingModeSpring)
             return "spring:" + currentSpringOmega.toFixed(2) + "," + currentSpringZeta.toFixed(2);
@@ -106,7 +112,8 @@ Item {
     // `ShaderProfileTree::resolve` and shadows the parent's value at
     // runtime. Surfaced via the warning banner below with a one-click
     // "Clear shadowing children" button. Refreshed on any
-    // shaderProfileChanged signal (see Connections at line 222+).
+    // shaderProfileChanged signal — see `onShaderProfileChanged` in the
+    // `target: settingsController.animationsPage` Connections block below.
     property int _shadowingChildrenCount: 0
     // Bumped on every `shaderEffectsChanged` so any binding that reads
     // a shader-registry Q_INVOKABLE (`availableShaderEffects()`,
@@ -191,9 +198,27 @@ Item {
         settingsController.animationsPage.setShaderOverride(root.eventPath, effectId, next);
     }
 
+    /// Batch write — randomize rolls N values that should land as one
+    /// `setShaderOverride` round-trip. Same stale-effect guard as
+    /// `_writeShaderParam`.
+    function _writeAllShaderParams(effectId, allParams) {
+        if (!effectId || effectId !== root.currentShaderEffectId)
+            return ;
+
+        root.currentShaderParams = allParams;
+        settingsController.animationsPage.setShaderOverride(root.eventPath, effectId, allParams);
+    }
+
     function refreshShaderFromTree() {
         var resolved = settingsController.animationsPage.resolvedShaderProfile(root.eventPath);
-        root.currentShaderEffectId = (resolved && resolved.effectId) ? resolved.effectId : "";
+        var nextEffectId = (resolved && resolved.effectId) ? resolved.effectId : "";
+        // Stale-lock clear on effect switch — same-named ids in
+        // different shaders are unrelated.
+        if (nextEffectId !== root.currentShaderEffectId)
+            root.lockedShaderParams = ({
+        });
+
+        root.currentShaderEffectId = nextEffectId;
         root.currentShaderParams = (resolved && resolved.parameters) ? resolved.parameters : ({
         });
         // Recompute deeper-override count on every shader-tree update —
@@ -677,13 +702,24 @@ Item {
                 visible: root._shaderLegSupported && root.currentShaderEffectId.length > 0 && _paramSchema.length > 0
                 parameters: _paramSchema
                 currentValues: root.currentShaderParams
-                enableLocking: false
-                enableRandomize: false
+                lockedParams: root.lockedShaderParams
+                enableLocking: true
+                enableRandomize: true
                 enableGroups: true
                 enableImage: false
                 compact: true
                 onValueChanged: function(paramId, value) {
                     root._writeShaderParam(root.currentShaderEffectId, paramId, value);
+                }
+                onLockToggled: function(paramId, locked) {
+                    root.lockedShaderParams = animationParamEditor.lockedAfterToggle(paramId, locked);
+                }
+                onLockAllRequested: function(lock) {
+                    root.lockedShaderParams = animationParamEditor.lockedAfterAllToggle(lock);
+                }
+                onRandomizeRequested: {
+                    var rolled = animationParamEditor.computeRandomized();
+                    root._writeAllShaderParams(root.currentShaderEffectId, rolled);
                 }
                 onRequestColorPicker: function(paramId, paramName, current) {
                     // Snapshot the effect id at dialog-open time so the
