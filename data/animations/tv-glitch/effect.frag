@@ -37,9 +37,16 @@ layout(location = 0) out vec4 fragColor;
 #define uSeed (surfaceSeed())
 
 // uDuration: BMW gschema default `tv-glitch-animation-time` is 750 ms.
-// Keeping the BMW-default seconds value here preserves the upstream
-// noise-wave pacing regardless of the animation profile timing the
-// PlasmaZones runtime feeds iTime with.
+// Per the bmw_compat.glsl substitution rule, `uProgress * uDuration`
+// would normally be replaced with `(float(iFrame) / 60.0)` (real
+// elapsed seconds). Pinning `uDuration` to BMW's gschema default
+// preserves upstream noise-wave pacing exactly when the PlasmaZones
+// leg duration matches 750 ms; at other durations the visible
+// pacing drifts linearly from BMW. Documented divergence from the
+// bmw_compat substitution rule — kept because the pacing-from-the-
+// BMW-default reads more like the upstream effect than a floating
+// real-elapsed-seconds clock would, and PlasmaZones doesn't expose
+// a per-leg duration uniform to derive the BMW-equivalent value.
 #define uDuration 0.75
 
 // hash12: BMW common.glsl:489 verbatim. Used for per-line interference.

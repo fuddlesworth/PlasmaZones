@@ -16,10 +16,15 @@
 //
 // Note on actor scale: BMW grows the actor by 2x so shards can fly past
 // the original window bounds. PlasmaZones' runtime does not double the
-// quad, so shards approaching `coords` outside [0, 1] will sample
-// transparent black (handled by `getInputColor`'s un-premult guard) and
-// land cropped at the original window rectangle. The cascade still reads
-// as a shatter; only the off-window flight tail is clipped.
+// quad, so the shard math produces `coords` outside [0, 1] for shards
+// in the outer half of the cascade. `bmw_compat.glsl`'s default
+// `getInputColor` only divides by alpha — it does NOT clip — so an
+// off-window sample on a clamp-to-edge `uTexture0` would smear edge
+// pixels (visible artefact for opaque-edged windows like terminals or
+// most app chrome). We therefore override `getInputColor` locally to
+// return `vec4(0.0)` outside [0, 1], matching the matrix.frag pattern
+// (matrix/effect.frag:196-205). The cascade still reads as a shatter;
+// shards beyond the window crop cleanly to transparent.
 
 #version 450
 
@@ -36,14 +41,11 @@ layout(location = 0) out vec4 fragColor;
 #define uBlowForce  customParams[0].y
 #define uGravity    customParams[0].z
 
-// uSeed: BMW samples Math.random() per leg; PlasmaZones derives a
-// stable per-surface seed via `hash22(iSurfaceScreenPos.xy)`. The
-// shard atlas is large relative to the per-window coordinate range,
-// so even the same seed across legs produces a believable shatter
-// — only repeated open/close at the exact same screen position
-// replays the identical pattern (acceptable trade-off, see
-// noise.glsl header for rationale).
-#define uSeed (hash22(iSurfaceScreenPos.xy))
+// uSeed (BMW: per-leg `Math.random()`) is computed once at the top of
+// `main()` from `hash22(iSurfaceScreenPos.xy)` and bound to a local
+// `surfaceHash` so the loop below doesn't recompute the hash 5× per
+// fragment. See noise.glsl header for the per-instance vs per-leg
+// trade-off rationale.
 
 // uEpicenter: BMW defaults to (0.5, 0.5) and only overrides via the
 // `broken-glass-use-pointer` setting. PlasmaZones doesn't carry a
@@ -59,7 +61,28 @@ const float SHARD_LAYERS = 5.0;
 const float ACTOR_SCALE  = 2.0;
 const float PADDING      = ACTOR_SCALE / 2.0 - 0.5;
 
+// Local off-window-clipping variant of `bmw_compat.glsl`'s
+// `getInputColor`. The shim's default samples uTexture0 directly,
+// which on a clamp-to-edge sampler smears edge pixels for shards
+// flying past the original window bounds. Returning vec4(0.0) outside
+// [0, 1] crops cleanly to transparent so the cascade reads as a
+// shatter, not a streaked smear. Same pattern as matrix/effect.frag.
+vec4 getClippedInputColor(vec2 coords) {
+    if (coords.x < 0.0 || coords.x > 1.0 || coords.y < 0.0 || coords.y > 1.0) {
+        return vec4(0.0);
+    }
+    return getInputColor(coords);
+}
+
 void main() {
+  // Hoist the per-instance hash so we don't recompute it 5×SHARD_LAYERS
+  // times per fragment in the loop below.
+  vec2 surfaceHash = hash22(iSurfaceScreenPos.xy);
+  // Defence-in-depth on the divisor: metadata declares min 0.2, but a
+  // host that bypasses validation could push uShardScale to zero and
+  // turn the shard-atlas UV math below into NaN.
+  float shardScaleSafe = max(uShardScale, 1e-3);
+
   vec4 oColor = vec4(0.0);
 
   float progress = uForOpening ? 1.0 - uProgress : uProgress;
@@ -92,7 +115,7 @@ void main() {
     coords += uEpicenter;
 
     // Retrieve information from the shard texture for our layer.
-    vec2 shardCoords = (coords + uSeed) * uSize / uShardScale / 500.0;
+    vec2 shardCoords = (coords + surfaceHash) * uSize / shardScaleSafe / 500.0;
     vec2 shardMap    = texture(uShardTexture, shardCoords).rg;
 
     // The green channel contains a random value in [0..1] for each shard. We
@@ -101,7 +124,7 @@ void main() {
     float shardGroup = floor(shardMap.g * SHARD_LAYERS * 0.999);
 
     if (shardGroup == i && (shardMap.x - pow(progress + 0.1, 2.0)) > 0.0) {
-      oColor = getInputColor(coords);
+      oColor = getClippedInputColor(coords);
     }
   }
 

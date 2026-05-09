@@ -32,14 +32,27 @@ layout(location = 0) out vec4 fragColor;
 // (alpha unused); take only .rgb so the body math stays verbatim.
 #define uColor (customColors[0].rgb)
 
-// uSeed: BMW samples Math.random() per leg; PlasmaZones derives a
-// stable per-surface vec2 via `hash22(iSurfaceScreenPos.xy)`.
+// uSeed: BMW samples `Math.random()` per leg; PlasmaZones derives a
+// stable per-surface vec2 via `hash22(iSurfaceScreenPos.xy)`. The
+// macro expands at every textual use (5 sites in the helpers below);
+// the hash inputs are loop-invariant so the SPIR-V optimiser will
+// fold redundant calls into one. Each helper is invoked once per
+// fragment, so the unfolded worst case is 5 hash22 evaluations —
+// well below a perf threshold worth refactoring around.
 #define uSeed (hash22(iSurfaceScreenPos.xy))
 
 // uDuration: BMW gschema default `portal-animation-time` is 1250 ms.
-// Body code uses uDuration in the WINDOW / PORTAL open-close timing
-// math (e.g. `closeTime / uDuration`); keeping the BMW-default value
-// preserves upstream pacing regardless of PlasmaZones profile timing.
+// Per the bmw_compat.glsl substitution rule, `uProgress * uDuration`
+// would normally be replaced with `(float(iFrame) / 60.0)` (real
+// elapsed seconds). That works for `uProgress * uDuration` literals,
+// but portal also computes `(1.0 - uProgress) * uDuration` and
+// `<const> / uDuration`, neither of which has a clean `iFrame`
+// equivalent without a per-leg duration uniform PlasmaZones doesn't
+// expose. Pinning `uDuration` to BMW's gschema default preserves
+// upstream pacing exactly when the PlasmaZones leg duration matches
+// 1250 ms; at other durations the visible portal-window timing drifts
+// linearly. Documented divergence from the bmw_compat substitution
+// rule.
 #define uDuration 1.25
 
 // ── BMW common.glsl helpers (verbatim) ──────────────────────────────
@@ -73,9 +86,9 @@ const float WINDOW_TILT            = -1.0;
 
 // Make sure that the portal and window open / close animations are quick even if the
 // duration is longer.
-float PORTAL_OPEN_TIME  = 0.4;
-float PORTAL_CLOSE_TIME = 0.4;
-float WINDOW_OPEN_TIME  = 0.35;
+const float PORTAL_OPEN_TIME  = 0.4;
+const float PORTAL_CLOSE_TIME = 0.4;
+const float WINDOW_OPEN_TIME  = 0.35;
 
 // This will distort the given coordinate to achieve the wobble effect of the portal when
 // the window passes through. The wobble happens around the point where the window appears

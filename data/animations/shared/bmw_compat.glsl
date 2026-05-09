@@ -56,6 +56,14 @@
 // the same Inigo Quilez patterns. Include `<noise.glsl>` separately
 // when a BMW shader needs them. The combined-work license stays
 // GPL-3.0-or-later because this file pulls in BMW-derived bodies.
+//
+// Hash coverage: only `hash11` and `hash33` (the inputs simplex3D
+// needs) are mirrored from BMW. The other hashNN variants in BMW's
+// common.glsl (`hash12`, `hash13`, `hash21`, `hash23`, `hash31`,
+// `hash32`, `hash41..44`) are not ported here — a future shader that
+// needs one keeps its own file-scope copy until enough consumers
+// justify lifting it. `hash22` is provided by `<noise.glsl>` and is
+// byte-equivalent to BMW's; reuse that instead of defining a local.
 
 #ifndef PHOSPHOR_BMW_COMPAT_GLSL
 #define PHOSPHOR_BMW_COMPAT_GLSL
@@ -63,7 +71,10 @@
 // ── Uniform-name aliases ─────────────────────────────────────────────
 #define iTexCoord     vTexCoord
 #define uForOpening   (iIsReversed == 0)
-#define uProgress     (clamp(mix(clamp(iTime, 0.0, 1.0), 1.0 - clamp(iTime, 0.0, 1.0), float(iIsReversed)), 0.0, 1.0))
+// Leg-progress 0→1 recovered from iTime. The two `clamp(iTime, 0, 1)`
+// inputs to `mix` already guarantee the result is in [0, 1] for any
+// finite `iIsReversed`, so no outer clamp is needed.
+#define uProgress     mix(clamp(iTime, 0.0, 1.0), 1.0 - clamp(iTime, 0.0, 1.0), float(iIsReversed))
 #define uSize         max(iAnchorSize, vec2(1.0))
 #define uPadding      (0.0)
 #define uIsFullscreen (false)
