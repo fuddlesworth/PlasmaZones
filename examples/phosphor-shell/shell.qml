@@ -74,12 +74,16 @@ Item {
 
         ShaderBackground {
             anchors.fill: parent
+            playing: true
             shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
+            // noiseAmount bumped from 0.025 to 0.18 so the crystalline frost
+            // grain is actually visible. animSpeed crawls visibly, noiseScale
+            // lowered so cells are bigger / more legible at panel sizes.
             shaderParams: {
-                "tintOpacity": 0.75,
-                "noiseAmount": 0.025,
-                "noiseScale": 45,
-                "animSpeed": 0.2,
+                "tintOpacity": 0.85,
+                "noiseAmount": 0.18,
+                "noiseScale": 18,
+                "animSpeed": 0.6,
                 "cornerRadius": 12
             }
             customColor1: "#1e1e2e"
@@ -173,13 +177,19 @@ Item {
 
         ShaderBackground {
             anchors.fill: parent
+            playing: true
             shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
             shaderParams: {
-                "speed": 0.3,
+                "speed": 1.2,
+                "angle": 0,
                 "cornerRadius": 12
             }
-            customColor1: "#1e1e2e"
-            customColor2: "#2e1e2e"
+            // Visibly distinct gradient endpoints — Catppuccin mocha mauve →
+            // Catppuccin macchiato sky. The previous #1e1e2e → #2e1e2e pair
+            // differed only ~16 units in the red channel, producing a flat
+            // panel with no visible gradient or animation.
+            customColor1: "#cba6f7"
+            customColor2: "#89dceb"
         }
 
         Text {
@@ -187,9 +197,9 @@ Item {
 
             anchors.centerIn: parent
             text: clock.stdout.trim() || "..."
-            color: "#cdd6f4"
+            color: "#1e1e2e"
             font.pixelSize: 13
-            font.weight: Font.Medium
+            font.weight: Font.Bold
             leftPadding: 20
             rightPadding: 20
         }
@@ -213,12 +223,13 @@ Item {
 
         ShaderBackground {
             anchors.fill: parent
+            playing: true
             shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
             shaderParams: {
-                "tintOpacity": 0.75,
-                "noiseAmount": 0.02,
-                "noiseScale": 50,
-                "animSpeed": 0.15,
+                "tintOpacity": 0.85,
+                "noiseAmount": 0.18,
+                "noiseScale": 18,
+                "animSpeed": 0.6,
                 "cornerRadius": 12
             }
             customColor1: "#1e1e2e"
@@ -432,12 +443,13 @@ Item {
 
         ShaderBackground {
             anchors.fill: parent
+            playing: true
             shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
             shaderParams: {
-                "tintOpacity": 0.65,
-                "noiseAmount": 0.02,
-                "noiseScale": 50,
-                "animSpeed": 0.1,
+                "tintOpacity": 0.8,
+                "noiseAmount": 0.15,
+                "noiseScale": 20,
+                "animSpeed": 0.5,
                 "cornerRadius": 12
             }
             customColor1: "#1e1e2e"
