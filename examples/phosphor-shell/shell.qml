@@ -63,12 +63,9 @@ Item {
             customColor1: "#1e1e2e"
         }
 
-        Item {
-            anchors.fill: parent
-
-            Row {
-                anchors.centerIn: parent
-                spacing: 12
+        Row {
+            anchors.centerIn: parent
+            spacing: 12
 
                 // Menu button
                 Rectangle {
@@ -115,8 +112,6 @@ Item {
                 }
             }
         }
-    }
-
     // ─── Center panel segment ────────────────────────────────────────────
     PanelWindow {
         id: centerPanel
@@ -159,14 +154,11 @@ Item {
             customColor1: "#1e1e2e"
         }
 
-        Item {
-            anchors.fill: parent
+        Row {
+            anchors.centerIn: parent
+            spacing: 14
 
-            Row {
-                anchors.centerIn: parent
-                spacing: 14
-
-                // CPU
+            // CPU
                 Row {
                     spacing: 4
                     Text { text: "CPU"; color: "#a6e3a1"; font.pixelSize: 11; font.weight: Font.Medium }
@@ -222,8 +214,6 @@ Item {
                 }
             }
         }
-    }
-
     // ─── App launcher popup ──────────────────────────────────────────────
     PopupWindow {
         id: menuPopup
