@@ -4,7 +4,13 @@
 // Animated gradient panel shader for PhosphorShell (self-contained).
 // Output is pre-multiplied alpha. SDF mask uses hard cutoff to avoid fringe.
 //
-// customParams[0]: x=speed y=angle
+// Visual: a two-colour gradient whose direction slowly rotates around the
+// panel centre while the gradient position simultaneously pulses back and
+// forth — produces a constantly-moving "flowing aurora" look without ever
+// stopping or jittering. Both motions are derived from `speed` so the
+// caller can scale the whole animation with one parameter.
+//
+// customParams[0]: x=speed y=baseAngle (radians, added to the rotation)
 // customParams[1]: x=cornerRadius (pixels, default 12.0)
 // customColors[0]: start color (customColor1 in QML)
 // customColors[1]: end color (customColor2 in QML)
@@ -63,14 +69,23 @@ void main() {
     vec4 colorA = customColors[0].a > 0.0 ? customColors[0] : vec4(0.118, 0.118, 0.180, 0.9);
     vec4 colorB = customColors[1].a > 0.0 ? customColors[1] : vec4(0.180, 0.118, 0.235, 0.9);
 
-    // Gradient direction from angle
-    vec2 dir = vec2(cos(angle), sin(angle));
-    float t = dot(uv - 0.5, dir) + 0.5;
+    // ─── Animated gradient direction ──────────────────────────────────
+    // Rotate the gradient direction around the panel centre. Multiplier
+    // tuned so a default speed=1.0 gives a full rotation in ~6 seconds
+    // — visibly moving without being seizure-inducing.
+    float rotatedAngle = angle + iTime * speed * 1.0;
+    vec2 dir = vec2(cos(rotatedAngle), sin(rotatedAngle));
 
-    // Smooth animation offset using sine easing - no abrupt jumps
-    float animPhase = iTime * speed;
-    float offset = sin(animPhase) * 0.1;
-    t = t + offset;
+    // ─── Gradient position with double pulse ──────────────────────────
+    // Two out-of-phase sine waves at relatively-prime rates produce a
+    // continuously-evolving compound motion that never visibly repeats.
+    // Amplitudes sized aggressively (sum ~0.9) so the gradient sweeps
+    // edge-to-edge — anything subtler is hard to notice on a small
+    // panel where the gradient direction itself is also rotating.
+    float t = dot(uv - 0.5, dir) + 0.5;
+    float wave1 = sin(iTime * speed * 2.7) * 0.55;
+    float wave2 = sin(iTime * speed * 1.7 + 1.57) * 0.35;
+    t += wave1 + wave2;
 
     // Smooth hermite clamp for gradient edges
     t = smoothstep(0.0, 1.0, t);

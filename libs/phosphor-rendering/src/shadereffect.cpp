@@ -9,6 +9,7 @@
 #include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/IUniformExtension.h>
 
+#include <QElapsedTimer>
 #include <QMutexLocker>
 #include <QPainter>
 #include <QQuickWindow>
@@ -330,6 +331,77 @@ void ShaderEffect::setIFrame(int frame)
     m_iFrame = frame;
     Q_EMIT iFrameChanged();
     update();
+}
+
+void ShaderEffect::setPlaying(bool playing)
+{
+    if (m_playing == playing) {
+        return;
+    }
+    m_playing = playing;
+    if (m_playing) {
+        // Reset the wall-clock baseline so the next tick produces a sensible
+        // delta (not a several-second jump from the time the property was
+        // last toggled). iTime is *not* reset — toggling playing off and on
+        // resumes from whatever iTime value the shader was at.
+        m_playingLastFrameSeconds = 0.0;
+    }
+    updatePlayingConnection();
+    Q_EMIT playingChanged();
+}
+
+void ShaderEffect::updatePlayingConnection()
+{
+    // Always tear down the previous connection before deciding whether to
+    // re-establish it. itemChange (window changes) and setPlaying both call
+    // through here; tearing down unconditionally avoids leaking a stale
+    // connection to a previous window.
+    QObject::disconnect(m_playingConnection);
+    m_playingConnection = {};
+    if (!m_playing) {
+        return;
+    }
+    QQuickWindow* w = window();
+    if (!w) {
+        // Item not parented to a window yet. itemChange(ItemSceneChange)
+        // will re-call us when the item gets a window.
+        return;
+    }
+    // afterFrameEnd fires once per rendered frame on the GUI thread (Qt 6),
+    // ideal for advancing per-frame uniforms. beforeRendering would fire on
+    // the render thread and force us to thread-marshal every tick.
+    m_playingConnection =
+        QObject::connect(w, &QQuickWindow::afterFrameEnd, this, &ShaderEffect::onPlayingTick, Qt::DirectConnection);
+    // Kick a first frame so the shader paints the new state immediately
+    // (otherwise it'd wait until something else dirties the scene).
+    update();
+}
+
+void ShaderEffect::onPlayingTick()
+{
+    if (!m_playing) {
+        return;
+    }
+    // QElapsedTimer wall-clock seconds — monotonic, immune to NTP jumps.
+    // Static so cross-instance timestamps stay consistent (multiple
+    // playing shaders all read off the same monotonic clock).
+    static QElapsedTimer s_clock;
+    if (!s_clock.isValid()) {
+        s_clock.start();
+    }
+    const qreal now = s_clock.nsecsElapsed() * 1e-9;
+    const qreal delta = (m_playingLastFrameSeconds > 0.0) ? (now - m_playingLastFrameSeconds) : 0.0;
+    m_playingLastFrameSeconds = now;
+
+    // Increment iTime by the frame delta rather than assigning `now`
+    // directly so toggling `playing` off and on doesn't produce a giant
+    // visual jump — iTime is the shader's animation clock, not wall time.
+    setITime(m_iTime + delta);
+    setITimeDelta(delta);
+    setIFrame(m_iFrame + 1);
+    // setITime/setITimeDelta/setIFrame each call update(); the scene graph
+    // coalesces multiple update() requests on the same frame so this is
+    // cheap.
 }
 
 void ShaderEffect::setIsReversed(bool reverse)
@@ -1399,6 +1471,13 @@ void ShaderEffect::itemChange(ItemChange change, const ItemChangeData& value)
         // destroys the swapchain; update() calls during the hidden period are lost.
         m_shaderDirty = true;
         update();
+    } else if (change == ItemSceneChange) {
+        // Re-hook the playing-mode tick connection to whatever window the
+        // item is now in (or tear it down if value.window is null). Without
+        // this, a ShaderEffect created with playing=true before being
+        // parented to a window would never tick — the connection in
+        // setPlaying short-circuits when window() is null.
+        updatePlayingConnection();
     }
 }
 

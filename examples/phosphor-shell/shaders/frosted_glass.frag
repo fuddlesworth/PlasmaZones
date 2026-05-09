@@ -120,14 +120,16 @@ void main() {
     vec2 noiseUv = uv * noiseScale;
     float frost = frostedTexture(noiseUv, iTime * animSpeed);
 
-    // Subtle variation centered around zero - does NOT brighten
+    // Variation centered around zero. Allowed in both directions — clamping
+    // only the positive side (as an earlier revision did) made the noise
+    // visibly one-sided (darker speckles only) and the effect ended up
+    // imperceptible at any reasonable noiseAmount. The 0..1 clamp at the
+    // bottom keeps us in valid colour space.
     float variation = (frost - 0.5) * noiseAmount;
+    vec3 color = clamp(tintColor.rgb + vec3(variation), 0.0, 1.0);
 
-    // Apply variation to tint - clamped so it never exceeds tint brightness
-    vec3 color = tintColor.rgb + vec3(variation);
-    color = min(color, tintColor.rgb * 1.05); // Never brighter than 5% above tint
-
-    // Vignette darkens edges - never brightens
+    // Vignette darkens edges — applied multiplicatively so it never
+    // increases brightness, just deepens the corners for depth cues.
     float vignette = 1.0 - length((uv - 0.5) * vec2(0.3, 1.0)) * 0.15;
     vignette = clamp(vignette, 0.0, 1.0);
     color *= vignette;
