@@ -4,6 +4,8 @@
 #include "../plasmazoneseffect.h"
 #include "shader_internal.h"
 
+#include <PhosphorAnimation/AnimationAppRule.h>
+#include <PhosphorAnimation/AnimationAppRuleResolver.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ShaderProfile.h>
@@ -1145,7 +1147,19 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
         return;
     }
-    const auto profile = m_shaderManager.m_shaderProfileTree.resolve(profilePath);
+    // Cascade: AnimationAppRule (per-window-class) → ShaderProfileTree
+    // (per-event default). The rule layer wins for matching windows;
+    // an engaged-empty effectId on the rule deliberately blocks the
+    // tree fallthrough (the user's "no animation for this app on this
+    // event" sentinel).
+    const QString windowClass = window->windowClass();
+    const auto profile = PhosphorAnimationShaders::resolveAnimationShaderProfile(
+        m_shaderManager.m_animationAppRules, m_shaderManager.m_shaderProfileTree, windowClass, profilePath);
+    // Resolve duration through the rule cascade too — a Timing rule for
+    // the same (class, event) bumps a per-event default. A rule with
+    // durationMs == 0 is the inherit sentinel and falls through.
+    const int effectiveDurationMs = PhosphorAnimationShaders::resolveAnimationDuration(
+        m_shaderManager.m_animationAppRules, windowClass, profilePath, durationMs);
     if (profile.effectiveEffectId().isEmpty()) {
         // Default-state path: a fresh user with no shader overrides
         // anywhere in the tree resolves every event to empty effectId,
@@ -1155,17 +1169,19 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         // overrides (so an empty resolve here is genuinely surprising —
         // the documented prune / D-Bus-race scenarios), otherwise
         // demote to DEBUG.
-        if (m_shaderManager.m_shaderProfileTree.overriddenPaths().isEmpty()) {
+        if (m_shaderManager.m_shaderProfileTree.overriddenPaths().isEmpty()
+            && m_shaderManager.m_animationAppRules.isEmpty()) {
             qCDebug(lcEffect) << "tryBeginShader[" << profilePath
                               << "]: no shader assigned (tree empty — default state)";
         } else {
             qCWarning(lcEffect) << "tryBeginShader[" << profilePath
-                                << "]: no shader assigned (tree-resolve returned empty effectId, tree size="
-                                << m_shaderManager.m_shaderProfileTree.overriddenPaths().size() << ")";
+                                << "]: no shader assigned (cascade returned empty effectId, tree size="
+                                << m_shaderManager.m_shaderProfileTree.overriddenPaths().size()
+                                << " rules=" << m_shaderManager.m_animationAppRules.size() << ")";
         }
         return;
     }
-    beginShaderTransition(window, profile, durationMs, reverse, holdCloseGrab);
+    beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab);
     // Capture the just-installed transition's generation so the deferred
     // teardown bails if a successor has replaced us by the time the timer
     // fires. Without this, two events overlapping on the same window
@@ -1178,7 +1194,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     }
     const quint64 myGeneration = it->second.generation;
     QPointer<KWin::EffectWindow> safeWindow(window);
-    QTimer::singleShot(durationMs, this, [this, safeWindow, myGeneration]() {
+    QTimer::singleShot(effectiveDurationMs, this, [this, safeWindow, myGeneration]() {
         // Two-tier guard: QPointer catches QObject destruction,
         // endShaderTransition's isDeleted() catches KWin's deletion-animation phase
         if (!safeWindow) {
@@ -1206,6 +1222,22 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
                                   << "overrides — paths=" << m_shaderManager.m_shaderProfileTree.overriddenPaths();
             } else {
                 qCWarning(lcEffect) << "Failed to parse shaderProfileTree from D-Bus — not a JSON object";
+            }
+        });
+}
+
+void PlasmaZonesEffect::loadAnimationAppRulesFromDbus()
+{
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(
+        this, QStringLiteral("animationAppRules"), [this](const QVariant& v) {
+            const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+            if (doc.isArray()) {
+                m_shaderManager.m_animationAppRules =
+                    PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array());
+                qCDebug(lcEffect) << "loadAnimationAppRulesFromDbus: loaded"
+                                  << m_shaderManager.m_animationAppRules.size() << "rules";
+            } else {
+                qCWarning(lcEffect) << "Failed to parse animationAppRules from D-Bus — not a JSON array";
             }
         });
 }

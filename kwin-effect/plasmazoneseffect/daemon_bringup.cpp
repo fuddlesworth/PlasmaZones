@@ -510,6 +510,7 @@ void PlasmaZonesEffect::loadCachedSettings()
                                                   PhosphorAnimation::Limits::MaxAnimationStaggerIntervalMs);
     });
     loadShaderProfileFromDbus();
+    loadAnimationAppRulesFromDbus();
     loadShaderRegistryFromDbus();
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
         m_cachedToggleActivation = v.toBool();

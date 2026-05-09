@@ -123,6 +123,7 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/ShaderProfile.h
     include/PhosphorAnimation/ShaderProfileTree.h
     include/PhosphorAnimation/AnimationAppRule.h
+    include/PhosphorAnimation/AnimationAppRuleResolver.h
 
     # Layer animator (ex phosphor-animation-layer)
     include/PhosphorAnimation/PhosphorAnimationLayer.h
@@ -173,6 +174,7 @@ set(phosphoranimation_SRCS
     src/shaderprofile.cpp
     src/shaderprofiletree.cpp
     src/animationapprule.cpp
+    src/animationappruleresolver.cpp
     src/contract_pins.cpp
 
     # Layer animator (ex phosphor-animation-layer)

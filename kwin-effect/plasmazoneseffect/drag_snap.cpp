@@ -3,6 +3,7 @@
 
 #include "../plasmazoneseffect.h"
 
+#include <PhosphorAnimation/AnimationAppRuleResolver.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -472,7 +473,12 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         }
 
         if (m_windowAnimator->hasAnimation(window)) {
-            const auto shaderProfile = m_shaderManager.m_shaderProfileTree.resolve(profilePath);
+            // Same cascade as tryBeginShaderForEvent: rule layer wins
+            // for matching windows; engaged-empty rule effectId blocks
+            // the tree fallthrough.
+            const auto shaderProfile = PhosphorAnimationShaders::resolveAnimationShaderProfile(
+                m_shaderManager.m_animationAppRules, m_shaderManager.m_shaderProfileTree, window->windowClass(),
+                profilePath);
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
                 beginShaderTransition(window, shaderProfile);
             }
