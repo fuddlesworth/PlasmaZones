@@ -52,6 +52,7 @@ Item {
         id: leftPanel
         edge: PanelWindow.Top
         thickness: 38
+        width: 240; height: 38
         alignment: PanelWindow.Start
         panelLength: 240
         margins { left: 8; top: 6 }
@@ -117,6 +118,7 @@ Item {
         id: centerPanel
         edge: PanelWindow.Top
         thickness: 38
+        width: 220; height: 38
         alignment: PanelWindow.Center
         panelLength: 220
         margins { top: 6 }
@@ -143,6 +145,7 @@ Item {
         id: rightPanel
         edge: PanelWindow.Top
         thickness: 38
+        width: 280; height: 38
         alignment: PanelWindow.End
         panelLength: 280
         margins { right: 8; top: 6 }
