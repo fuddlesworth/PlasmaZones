@@ -6,6 +6,8 @@
 // customParams[0]: x=tintOpacity y=noiseAmount z=noiseScale w=animSpeed
 // customColors[0]: tint color (customColor1 in QML)
 
+#version 450
+
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;

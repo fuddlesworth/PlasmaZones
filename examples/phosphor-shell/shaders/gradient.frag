@@ -7,6 +7,8 @@
 // customColors[0]: start color (customColor1 in QML)
 // customColors[1]: end color (customColor2 in QML)
 
+#version 450
+
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
