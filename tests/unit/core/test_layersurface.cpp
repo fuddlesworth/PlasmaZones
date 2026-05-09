@@ -602,8 +602,10 @@ private Q_SLOTS:
     void testGlobalRemovedCallback_firesAndIsCleared()
     {
         // Test the callback registration/deregistration/fire lifecycle
-        // without needing a real Wayland compositor. We test the
-        // LayerShellIntegration's callback bookkeeping directly.
+        // without needing a real Wayland compositor. We drive dispatch
+        // via the public `fireGlobalRemovedCallbacks` entry point so
+        // the test isn't sensitive to which manager id-field happens to
+        // alias with a sentinel value inside `registryRemoveHandler`.
         LayerShellIntegration integration;
 
         bool called1 = false;
@@ -618,10 +620,10 @@ private Q_SLOTS:
         // Remove one callback before firing
         integration.removeGlobalRemovedCallback(id1);
 
-        // Simulate global removal by calling the static handler with a fake
-        // registry id=0 — since m_layerShellId is 0 (never bound), this triggers
-        // the removal path.
-        LayerShellIntegration::registryRemoveHandler(&integration, nullptr, 0);
+        // Simulate the layer-shell global being removed — fires every
+        // currently-registered callback exactly once and clears the
+        // list (std::exchange).
+        integration.fireGlobalRemovedCallbacks();
 
         QVERIFY(!called1); // Was removed before firing
         QVERIFY(called2); // Was still registered
@@ -651,7 +653,7 @@ private Q_SLOTS:
         integration.removeGlobalRemovedCallback(id);
 
         // Trigger removal — callback must NOT fire
-        LayerShellIntegration::registryRemoveHandler(&integration, nullptr, 0);
+        integration.fireGlobalRemovedCallbacks();
         QVERIFY(!called);
     }
 

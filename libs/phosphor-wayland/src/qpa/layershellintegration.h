@@ -74,6 +74,18 @@ public:
     CallbackId addGlobalRemovedCallback(GlobalRemovedCallback cb);
     void removeGlobalRemovedCallback(CallbackId id);
 
+    /// Drain and invoke every registered global-removed callback exactly
+    /// once. `registryRemoveHandler` calls this from the layer-shell branch
+    /// when the compositor removes the zwlr_layer_shell_v1 global.
+    /// Exposed publicly so unit tests can drive dispatch without standing
+    /// up a real Wayland connection — the previous test path (calling
+    /// `registryRemoveHandler` with `id=0` on the assumption that
+    /// `m_layerShellId == 0` would match) aliased with every other
+    /// optional-protocol id field that also defaults to 0, so the
+    /// single-pixel-buffer branch matched first and the callbacks were
+    /// never reached.
+    void fireGlobalRemovedCallbacks();
+
     struct wp_single_pixel_buffer_manager_v1* singlePixelBufferManager() const
     {
         return m_singlePixelBufferAvailable ? m_singlePixelBufferManager : nullptr;
