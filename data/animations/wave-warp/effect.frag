@@ -12,15 +12,14 @@
 // translated to `clamp(iTime, 0.0, 1.0)` and the runtime flip
 // auto-mirrors the visual on close — no iIsReversed branch needed.
 //
-// Niri uniform shims (`niri_tex` → `uTexture0`; `niri_geo_to_tex` →
-// identity mat3; `niri_random_seed` → `niri_random_seed_value()`) are
-// provided by `<niri_compat.glsl>`. `texture2D` is rewritten to
-// `texture` (GLSL 4.50 core) inline.
+// niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
+// == texture coords here), so the matrix multiply is dropped and
+// `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
+// rewritten to `texture` (GLSL 4.50 core) inline.
 
 #version 450
 
 #include <animation_uniforms.glsl>
-#include <niri_compat.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots.
 // `waveAngle` (radians) replaces niri's hardcoded `vec2 dir = (1, 0)`
@@ -33,22 +32,23 @@ layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 void main() {
-    vec3 coords_geo = vec3(vTexCoord, 1.0);
-    vec3 size_geo = vec3(max(iAnchorSize, vec2(1.0)), 1.0);
-
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = coords_geo.xy;
+    vec2 uv = vTexCoord;
 
+    // `(cos θ, sin θ)` is unit-length for any finite θ, so niri's
+    // `normalize(dir)` is a no-op here — dropped. The `v /=
+    // abs(v.x) + abs(v.y)` rescale below is the load-bearing
+    // L1-normalisation that converts the unit direction into the
+    // diagonal-aware wave coordinate space.
     vec2 dir = vec2(cos(waveAngle), sin(waveAngle));
-    vec2 v = normalize(dir);
+    vec2 v = dir;
     v /= abs(v.x) + abs(v.y);
     float d = v.x * 0.5 + v.y * 0.5;
     float m = 1.0 - smoothstep(-waveSmoothness, 0.0, v.x * uv.x + v.y * uv.y - (d - 0.5 + p * (1.0 + waveSmoothness)));
 
     vec2 warped = clamp((uv - 0.5) * m + 0.5, vec2(0.0), vec2(1.0));
-    vec3 tc = niri_geo_to_tex * vec3(warped, 1.0);
-    vec4 win = texture(uTexture0, tc.st);
+    vec4 win = texture(uTexture0, warped);
 
     float in_bounds = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
     fragColor = win * m * in_bounds;

@@ -14,16 +14,15 @@
 // and the runtime flip auto-mirrors the visual on close. No
 // `iIsReversed` branch required.
 //
-// Niri uniform shims (`niri_tex` → `uTexture0`; `niri_geo_to_tex` →
-// identity mat3; `niri_random_seed` → `niri_random_seed_value()`) are
-// provided by `<niri_compat.glsl>`. `texture2D` is rewritten to
-// `texture` (GLSL 4.50 core) inline. Niri's `swf_hash` and `swf_noise`
-// helpers lift to file scope unchanged.
+// niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
+// == texture coords here), so the matrix multiply is dropped and
+// `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
+// rewritten to `texture` (GLSL 4.50 core) inline. Niri's `swf_hash` and
+// `swf_noise` helpers lift to file scope unchanged.
 
 #version 450
 
 #include <animation_uniforms.glsl>
-#include <niri_compat.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define warpStrength customParams[0].x
@@ -45,12 +44,9 @@ float swf_noise(vec2 p) {
 }
 
 void main() {
-    vec3 coords_geo = vec3(vTexCoord, 1.0);
-    vec3 size_geo = vec3(max(iAnchorSize, vec2(1.0)), 1.0);
-
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = coords_geo.xy;
+    vec2 uv = vTexCoord;
 
     float strength = sin(p * 3.14159) * warpStrength;
     vec2 warp = vec2(
@@ -59,8 +55,7 @@ void main() {
     ) - 0.5;
     vec2 warped = uv + warp * strength;
 
-    vec3 tc = niri_geo_to_tex * vec3(warped, 1.0);
-    vec4 win = texture(uTexture0, tc.st);
+    vec4 win = texture(uTexture0, warped);
 
     float t = smoothstep(0.05, 0.95, p);
     t = t * t * (3.0 - 2.0 * t);

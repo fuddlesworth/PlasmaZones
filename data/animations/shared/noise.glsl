@@ -6,7 +6,8 @@
 // Hosted here so the per-shader copies (previously duplicated verbatim
 // across apparition, aura-glow, doom, energize-a, energize-b, hexagon,
 // matrix, pixel-wipe) collapse to one definition. Including this from a
-// shader brings hash22 + simplex2D + simplex2DFractal into scope.
+// shader brings hash22 + simplex2D + simplex2DFractal + surfaceSeed
+// into scope.
 //
 // `simplex2D` is the standard 2D simplex-noise variant used across the
 // suite. It returns a value in roughly [0, 1] (the 0.5 + 0.5 * ... shift
@@ -16,6 +17,14 @@
 //
 // `hash22` is a 2-component hash using the Inigo Quilez "fract(sin(...))"
 // pattern; deterministic per input vec2, output in [0, 1).
+//
+// `surfaceSeed()` is a per-instance pseudo-random scalar in [0, 1)
+// derived from `iSurfaceScreenPos.xy`. It substitutes for niri's
+// `niri_random_seed` uniform in ported transitions: different surfaces
+// get different patterns, the same surface keeps its pattern across a
+// leg. Requires `iSurfaceScreenPos` to be in scope, which means the
+// caller must include `<animation_uniforms.glsl>` BEFORE
+// `<noise.glsl>`.
 
 #ifndef PHOSPHOR_NOISE_GLSL
 #define PHOSPHOR_NOISE_GLSL
@@ -63,6 +72,10 @@ float simplex2DFractal(vec2 p) {
     f      += 0.1250 * simplex2D(p);  p = m * p;
     f      += 0.0625 * simplex2D(p);
     return f;
+}
+
+float surfaceSeed() {
+    return fract(sin(dot(iSurfaceScreenPos.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 #endif

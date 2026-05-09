@@ -8,7 +8,7 @@
     "fragmentShader": "effect.frag",
     "parameters": [
         {
-            "id": "minBlocks",
+            "id": "peakBlocks",
             "name": "Peak Block Size",
             "type": "float",
             "default": 8.0,
@@ -16,7 +16,7 @@
             "max": 64.0
         },
         {
-            "id": "maxBlocks",
+            "id": "baselineBlocks",
             "name": "Baseline Resolution",
             "type": "float",
             "default": 800.0,

@@ -12,40 +12,41 @@
 // translated to `clamp(iTime, 0.0, 1.0)` and the runtime flip
 // auto-mirrors the visual on close — no iIsReversed branch needed.
 //
-// Niri uniform shims (`niri_tex` → `uTexture0`; `niri_geo_to_tex` →
-// identity mat3; `niri_random_seed` → `niri_random_seed_value()`) are
-// provided by `<niri_compat.glsl>`. `texture2D` is rewritten to
-// `texture` (GLSL 4.50 core) inline.
+// niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
+// == texture coords here), so the matrix multiply is dropped and
+// `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
+// rewritten to `texture` (GLSL 4.50 core) inline.
 
 #version 450
 
 #include <animation_uniforms.glsl>
-#include <niri_compat.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define minBlocks  customParams[0].x
-#define maxBlocks  customParams[0].y
-#define waveSlope  customParams[0].z
+// metadata.json declaration order → customParams[0] sub-slots.
+// `peakBlocks` is the chunkiest endpoint of the wave (fewest blocks
+// across the surface = biggest visual blocks at the wave crest);
+// `baselineBlocks` is the finest endpoint (idle resolution between
+// crests). The names follow visual semantics rather than the
+// numerical min/max — `peakBlocks` (default 8) is < `baselineBlocks`
+// (default 800) because more blocks = smaller blocks.
+#define peakBlocks      customParams[0].x
+#define baselineBlocks  customParams[0].y
+#define waveSlope       customParams[0].z
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 void main() {
-    vec3 coords_geo = vec3(vTexCoord, 1.0);
-    vec3 size_geo = vec3(max(iAnchorSize, vec2(1.0)), 1.0);
-
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = coords_geo.xy;
+    vec2 uv = vTexCoord;
 
     float wave_x = (uv.x + uv.y) * 0.5;
     float wave_p = smoothstep(0.0, 1.0, p * 1.6 - wave_x * waveSlope);
     float bump = sin(wave_p * 3.14159);
-    float blocks = mix(maxBlocks, minBlocks, bump);
+    float blocks = mix(baselineBlocks, peakBlocks, bump);
     vec2 q = floor(uv * blocks) / blocks + 0.5 / blocks;
 
-    vec3 tc = niri_geo_to_tex * vec3(q, 1.0);
-    vec4 win = texture(uTexture0, tc.st);
+    vec4 win = texture(uTexture0, q);
 
     float reveal = smoothstep(0.0, 1.0, wave_p);
     fragColor = win * reveal;

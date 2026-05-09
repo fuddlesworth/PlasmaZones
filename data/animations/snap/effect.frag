@@ -15,15 +15,16 @@
 // and open's `p = niri_clamped_progress` becomes
 // `p = clamp(iTime, 0.0, 1.0)` (per translation rules).
 //
-// Niri uniform shims (`niri_tex` → `uTexture0`; `niri_geo_to_tex` →
-// identity mat3; `niri_random_seed` → `niri_random_seed_value()`) are
-// provided by `<niri_compat.glsl>`. `texture2D` is rewritten to
-// `texture` (GLSL 4.50 core) inline.
+// niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
+// == texture coords here), so the matrix multiply is dropped and
+// `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
+// rewritten to `texture` (GLSL 4.50 core) inline. niri's
+// `niri_random_seed` is replaced by `surfaceSeed()` from `<noise.glsl>`.
 
 #version 450
 
 #include <animation_uniforms.glsl>
-#include <niri_compat.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots. Both
 // iIsReversed branches share the same params. `layerSpread` controls
@@ -41,22 +42,20 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-float hash(vec2 p) {
+float sn_hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
 void main() {
-    vec3 coords_geo = vec3(vTexCoord, 1.0);
-    vec3 size_geo = vec3(max(iAnchorSize, vec2(1.0)), 1.0);
     vec4 result;
     if (iIsReversed != 0) {
         // ── niri close.glsl body ──
         float p = 1.0 - clamp(iTime, 0.0, 1.0);
-        vec2 uv = coords_geo.xy;
-        float seed = niri_random_seed_value() * 100.0;
+        vec2 uv = vTexCoord;
+        float seed = surfaceSeed() * 100.0;
 
         float num_layers = 10.0;
-        float pixel_layer = floor(hash(floor(uv * size_geo.xy) + seed) * num_layers);
+        float pixel_layer = floor(sn_hash(floor(uv * max(iAnchorSize, vec2(1.0))) + seed) * num_layers);
 
         vec4 inner = vec4(0.0);
         vec2 target = vec2(targetX, targetY);
@@ -70,14 +69,13 @@ void main() {
 
             float layer_alpha = 1.0 - smoothstep(0.3, 0.85, layer_p);
 
-            float lh = hash(vec2(layer + 0.5, seed));
+            float lh = sn_hash(vec2(layer + 0.5, seed));
             vec2 layer_target = target + vec2((-0.5 + lh) * layerSpread, (-0.5 + lh) * layerSpread * 0.5);
 
             float converge = t * 0.92;
             vec2 sample_uv = (uv - layer_target * converge) / (1.0 - converge);
 
-            vec3 tex_coords = niri_geo_to_tex * vec3(sample_uv, 1.0);
-            vec4 color = texture(uTexture0, tex_coords.st);
+            vec4 color = texture(uTexture0, sample_uv);
 
             float belongs = step(abs(pixel_layer - layer), 0.5);
             inner += color * belongs * layer_alpha;
@@ -85,20 +83,19 @@ void main() {
 
         float initial_fade = smoothstep(0.0, 0.05, p);
         inner.a *= mix(1.0, 0.0, initial_fade);
-        vec3 base_tex = niri_geo_to_tex * vec3(uv, 1.0);
-        vec4 base_color = texture(uTexture0, base_tex.st);
+        vec4 base_color = texture(uTexture0, uv);
         float base_alpha = 1.0 - smoothstep(0.0, 0.1, p);
 
         result = base_color * base_alpha + inner * (1.0 - base_alpha);
     } else {
         // ── niri open.glsl body ──
         float p = clamp(iTime, 0.0, 1.0);
-        vec2 uv = coords_geo.xy;
-        float seed = niri_random_seed_value() * 100.0;
+        vec2 uv = vTexCoord;
+        float seed = surfaceSeed() * 100.0;
         float rp = 1.0 - p;
 
         float num_layers = 10.0;
-        float pixel_layer = floor(hash(floor(uv * size_geo.xy) + seed) * num_layers);
+        float pixel_layer = floor(sn_hash(floor(uv * max(iAnchorSize, vec2(1.0))) + seed) * num_layers);
 
         vec4 inner = vec4(0.0);
         vec2 target = vec2(targetX, targetY);
@@ -112,14 +109,13 @@ void main() {
 
             float layer_alpha = 1.0 - smoothstep(0.3, 0.85, layer_p);
 
-            float lh = hash(vec2(layer + 0.5, seed));
+            float lh = sn_hash(vec2(layer + 0.5, seed));
             vec2 layer_target = target + vec2((-0.5 + lh) * layerSpread, (-0.5 + lh) * layerSpread * 0.5);
 
             float converge = t * 0.92;
             vec2 sample_uv = (uv - layer_target * converge) / (1.0 - converge);
 
-            vec3 tex_coords = niri_geo_to_tex * vec3(sample_uv, 1.0);
-            vec4 color = texture(uTexture0, tex_coords.st);
+            vec4 color = texture(uTexture0, sample_uv);
 
             float belongs = step(abs(pixel_layer - layer), 0.5);
             inner += color * belongs * layer_alpha;
@@ -127,8 +123,7 @@ void main() {
 
         float initial_form = smoothstep(0.0, 0.05, rp);
         inner.a *= mix(1.0, 0.0, initial_form);
-        vec3 base_tex = niri_geo_to_tex * vec3(uv, 1.0);
-        vec4 base_color = texture(uTexture0, base_tex.st);
+        vec4 base_color = texture(uTexture0, uv);
         float base_alpha = 1.0 - smoothstep(0.0, 0.1, rp);
 
         result = base_color * base_alpha + inner * (1.0 - base_alpha);

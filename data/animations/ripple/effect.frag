@@ -13,15 +13,16 @@
 // can't express both curves, so we branch on iIsReversed to dispatch
 // the matching niri body for each leg.
 //
-// Niri uniform shims (`niri_tex` → `uTexture0`; `niri_geo_to_tex` →
-// identity mat3; `niri_random_seed` → `niri_random_seed_value()`) are
-// provided by `<niri_compat.glsl>`. `texture2D` is rewritten to
-// `texture` (GLSL 4.50 core) inline.
+// niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
+// == texture coords here), so the matrix multiply is dropped and
+// `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
+// rewritten to `texture` (GLSL 4.50 core) inline. niri's
+// `niri_random_seed` is replaced by `surfaceSeed()` from `<noise.glsl>`.
 
 #version 450
 
 #include <animation_uniforms.glsl>
-#include <niri_compat.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots.
 // Same params drive BOTH open/close legs — the asymmetry lives in
@@ -33,8 +34,6 @@ layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 void main() {
-    vec3 coords_geo = vec3(vTexCoord, 1.0);
-    vec3 size_geo = vec3(max(iAnchorSize, vec2(1.0)), 1.0);
     vec4 result;
     if (iIsReversed != 0) {
         // ── niri close.glsl body ──
@@ -42,8 +41,8 @@ void main() {
         // PlasmaZones close leg, niri_clamped_progress = 1 - iTime, so:
         //   `float p = 1.0 - clamp(iTime, 0.0, 1.0);`
         float p = 1.0 - clamp(iTime, 0.0, 1.0);
-        vec2 uv = coords_geo.xy;
-        float seed = niri_random_seed_value() * 6.28318;
+        vec2 uv = vTexCoord;
+        float seed = surfaceSeed() * 6.28318;
 
         vec2 dir = uv - vec2(0.5);
         float dist = length(dir);
@@ -52,8 +51,7 @@ void main() {
         vec2 offset = dir * (sin(p * dist * rippleAmplitude - p * rippleSpeed + seed) + 0.5) / 30.0;
 
         vec2 wuv = uv + offset * intensity;
-        vec3 tc = niri_geo_to_tex * vec3(wuv, 1.0);
-        vec4 color = texture(uTexture0, tc.st);
+        vec4 color = texture(uTexture0, wuv);
 
         float alpha = smoothstep(1.0, 0.5, p);
         result = color * alpha;
@@ -63,8 +61,8 @@ void main() {
         // open leg, niri_clamped_progress = iTime, so:
         //   `float p = clamp(iTime, 0.0, 1.0);`
         float p = clamp(iTime, 0.0, 1.0);
-        vec2 uv = coords_geo.xy;
-        float seed = niri_random_seed_value() * 6.28318;
+        vec2 uv = vTexCoord;
+        float seed = surfaceSeed() * 6.28318;
 
         vec2 dir = uv - vec2(0.5);
         float dist = length(dir);
@@ -73,8 +71,7 @@ void main() {
         vec2 offset = dir * (sin(p * dist * rippleAmplitude - p * rippleSpeed + seed) + 0.5) / 30.0;
 
         vec2 wuv = uv + offset * intensity;
-        vec3 tc = niri_geo_to_tex * vec3(wuv, 1.0);
-        vec4 color = texture(uTexture0, tc.st);
+        vec4 color = texture(uTexture0, wuv);
 
         float alpha = smoothstep(0.0, 0.3, p);
         result = color * alpha;

@@ -13,15 +13,14 @@
 // the runtime flip auto-mirrors the visual on close — no iIsReversed
 // branch needed.
 //
-// Niri uniform shims (`niri_tex` → `uTexture0`; `niri_geo_to_tex` →
-// identity mat3; `niri_random_seed` → `niri_random_seed_value()`) are
-// provided by `<niri_compat.glsl>`. `texture2D` is rewritten to
-// `texture` (GLSL 4.50 core) inline.
+// niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
+// == texture coords here), so the matrix multiply is dropped and
+// `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
+// rewritten to `texture` (GLSL 4.50 core) inline.
 
 #version 450
 
 #include <animation_uniforms.glsl>
-#include <niri_compat.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define gridDensity     customParams[0].x
@@ -35,14 +34,10 @@ float rs_rand(vec2 co) {
 }
 
 void main() {
-    vec3 coords_geo = vec3(vTexCoord, 1.0);
-    vec3 size_geo = vec3(max(iAnchorSize, vec2(1.0)), 1.0);
-
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = coords_geo.xy;
-    vec3 tc = niri_geo_to_tex * vec3(uv, 1.0);
-    vec4 win = texture(uTexture0, tc.st);
+    vec2 uv = vTexCoord;
+    vec4 win = texture(uTexture0, uv);
 
     vec2 sz = vec2(gridDensity);
     float r = rs_rand(floor(sz * uv));
