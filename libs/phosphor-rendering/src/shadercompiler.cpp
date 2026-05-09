@@ -131,7 +131,8 @@ ShaderCompiler::Result ShaderCompiler::compile(const QByteArray& source, QShader
 // loadAndExpand()
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QString ShaderCompiler::loadAndExpand(const QString& path, const QStringList& includePaths, QString* outError)
+QString ShaderCompiler::loadAndExpand(const QString& path, const QStringList& includePaths, QString* outError,
+                                      QStringList* outIncludedPaths)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -152,8 +153,8 @@ QString ShaderCompiler::loadAndExpand(const QString& path, const QStringList& in
     }
 
     QString err;
-    const QString expanded =
-        PhosphorShaders::ShaderIncludeResolver::expandIncludes(raw, currentFileDir, searchPaths, &err);
+    const QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(raw, currentFileDir, searchPaths,
+                                                                                    &err, outIncludedPaths);
     if (!err.isEmpty()) {
         if (outError)
             *outError = err;

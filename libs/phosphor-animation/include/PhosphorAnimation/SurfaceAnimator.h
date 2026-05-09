@@ -7,7 +7,6 @@
 
 #include <PhosphorLayer/ISurfaceAnimator.h>
 
-#include <QHash>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -292,6 +291,27 @@ public:
     void beginHide(PhosphorLayer::Surface* surface, QQuickItem* rootItem, CompletionCallback onComplete) override;
     void cancel(PhosphorLayer::Surface* surface) override;
     /// @}
+
+    /// Role-override show/hide. The surface's own role is used for
+    /// layer-shell-protocol concerns (anchors, kbd, layer); the
+    /// `configRole` argument is used for animation-config resolution
+    /// — replacing the implicit `configFor(surface->config().role)`
+    /// lookup the no-arg variants do. Required by the unified
+    /// `PassiveOverlayShell` pattern: one shell wl_surface hosts
+    /// multiple per-content slots (OSD, zone-selector, snap-assist,
+    /// picker), each animated with their own per-content motion +
+    /// shader profiles. Without role override they'd all share the
+    /// shell's role-config, which would homogenise transitions across
+    /// content types.
+    ///
+    /// Pre-shell, every content had its own Surface and the no-arg
+    /// variant resolved the right config from the surface's role
+    /// directly. Post-shell, the surface's role is the shell's
+    /// (PassiveShell) and we need to override per-content per-show.
+    void beginShow(PhosphorLayer::Surface* surface, QQuickItem* rootItem, const PhosphorLayer::Role& configRole,
+                   CompletionCallback onComplete);
+    void beginHide(PhosphorLayer::Surface* surface, QQuickItem* rootItem, const PhosphorLayer::Role& configRole,
+                   CompletionCallback onComplete);
 
     /// Global animation enable/disable. When disabled, `beginShow` and
     /// `beginHide` snap the rootItem to the target opacity (1.0 / 0.0)

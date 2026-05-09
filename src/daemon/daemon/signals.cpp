@@ -446,27 +446,27 @@ void Daemon::connectLayoutSignals()
     // Set initial layout filter
     updateLayoutFilter();
 
-    // Pre-warm the per-screen NotificationOverlay surface unconditionally.
-    // First-time QML compilation of NotificationOverlay.qml (~100-300ms)
-    // would otherwise block the event loop during the first layout switch
-    // (manual or autotile) or first keyboard navigation action, causing
-    // perceptible lag. Deferred so daemon init completes first.
+    // Pre-warm the per-screen unified passive overlay shell. The shell
+    // hosts every kbd-None overlay slot (OSD, snap-assist, …) so a
+    // single warm-up at daemon start covers QML compile + first-paint
+    // pipeline build for all of them — subsequent per-content shows are
+    // animator-only operations on already-mapped slot Items inside the
+    // already-warmed shell wl_surface. Deferred so daemon init completes
+    // first.
     if (m_overlayService) {
         QTimer::singleShot(0, this, [this]() {
-            // Single warm-up covers both layout-OSD and navigation-OSD —
-            // they share one per-screen surface (NotificationOverlay.qml).
             m_overlayService->warmUpNotifications();
-            // Layout Picker is intentionally NOT pre-warmed: the
-            // pre-warmed wl_surface gets initially mapped with
-            // keyboard_interactivity=None (so the warm hidden surface
-            // doesn't grab the keyboard), and KWin's wlr-layer-shell
-            // doesn't re-evaluate keyboard focus when interactivity is
-            // mutated to Exclusive on a still-mapped surface. Result:
-            // the picker never received KeyPress events on user-show
-            // and Escape didn't dismiss it. Creating fresh per-show
-            // makes the surface map with Exclusive from the start;
-            // KWin grants focus on initial map. ~50-100 ms first-show
-            // latency is back, but the picker is rare and user-triggered.
+            // Post-shell-migration every kbd-None overlay (OSD,
+            // snap-assist, layout picker, zone-selector, main overlay)
+            // lives as an Item slot inside the per-screen passive shell.
+            // warmUpNotifications builds the shell wl_surface +
+            // QQuickWindow + QML compile + first-paint pipeline once per
+            // screen, which covers QML compile cost for every slot. Each
+            // slot's content body (SnapAssistContent / LayoutPickerContent
+            // / ZoneSelectorContent) is async-loaded on its first show
+            // via the slot's `loaded` toggle, so per-content classes only
+            // pay their construction cost when the user actually summons
+            // them rather than at daemon start.
         });
     }
 
@@ -508,12 +508,15 @@ void Daemon::connectLayoutSignals()
     // Connect unified layout controller signals for OSD display
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this,
             [this](PhosphorZones::Layout* layout) {
+                if (!layout) {
+                    return;
+                }
                 // Dismiss snap assist — it's stale once the layout changes
-                if (m_overlayService->isSnapAssistVisible()) {
+                if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
                 }
                 // Defer OSD display (same rationale as autotileApplied — first-time
-                // QML compilation of NotificationOverlay.qml blocks the event loop
+                // QML compilation of the passive shell blocks the event loop
                 // ~100-300ms). Capture layout ID (not raw pointer) to avoid
                 // use-after-free if the layout is ever replaced between now and
                 // next event loop pass.

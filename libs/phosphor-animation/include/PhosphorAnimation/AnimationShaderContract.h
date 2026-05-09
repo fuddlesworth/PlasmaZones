@@ -57,8 +57,9 @@ namespace PhosphorAnimationShaders {
 ///
 ///   • Default branch (daemon path): `layout(std140, binding = 0) uniform
 ///     AnimationUniforms { ... };` — std140-aligned with
-///     `PhosphorShaders::BaseUniforms` covering the full 672-byte
-///     footprint, populated by Qt-RHI's binding=0 upload.
+///     `PhosphorShaders::BaseUniforms` covering its full footprint
+///     (currently 688 bytes; pinned by BaseUniforms.h's static_asserts),
+///     populated by Qt-RHI's binding=0 upload.
 ///
 ///   • `#ifdef PLASMAZONES_KWIN` branch (compositor path): plain
 ///     default-block `uniform float iTime;`-style declarations. The
@@ -212,6 +213,37 @@ inline constexpr const char* kIDate = "iDate";
 /// runtime that elects to extend the encoding (e.g. negative for
 /// "unknown direction"). The matrix shader follows this convention.
 inline constexpr const char* kIIsReversed = "iIsReversed";
+
+/// `vec4 iSurfaceScreenPos` — the shader surface's position in screen
+/// coords plus the host screen dimensions, both in logical pixels.
+///   .xy = (surfaceX, surfaceY) — top-left of the shader surface
+///         relative to the screen origin
+///   .zw = (screenWidth, screenHeight) of the host screen
+///
+/// Daemon: written to the appended `AnimationUniformExtension` (UBO
+/// offset 672 = sizeof(BaseUniforms)). The extension is installed by
+/// `SurfaceAnimator::attachShaderToAnchor` so this field is animation-
+/// only — it never lands in zone-shader UBOs (those use
+/// `ZoneUniformExtension` instead).
+///
+/// kwin-effect: pushed via classic-GL `setUniform` keyed on this exact
+/// name. Independent of the UBO mechanism — the UBO contract isolation
+/// only matters on the daemon path.
+///
+/// Vertex / fragment shaders that need to know where the surface sits
+/// on its host screen (fly-in from closest edge, screen-relative noise)
+/// read this. Both runtimes populate it once per leg attach + on every
+/// anchor or window geometry signal.
+inline constexpr const char* kISurfaceScreenPos = "iSurfaceScreenPos";
+
+/// `vec2 iAnchorSize` — captured anchor (card) pixel size in logical
+/// pixels. Decoupled from `iResolution` so vertex shaders can rely on
+/// it under any boundsExtent; `iResolution` is auto-reset by Qt to the
+/// shader item's bounds on every geometry event and would otherwise
+/// clobber any anchor-size override on a `boundsExtent: parent` item.
+/// Daemon-side written via `AnimationUniformExtension`; kwin-effect
+/// uses classic-GL `setUniform`.
+inline constexpr const char* kIAnchorSize = "iAnchorSize";
 
 /// Maximum number of user-declared textures per animation effect.
 ///

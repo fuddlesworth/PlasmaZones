@@ -51,13 +51,13 @@ inline void writeQmlProperty(QObject* object, const QString& name, const QVarian
 // Patch zone data with current highlight state from QML window properties.
 // The zone model doesn't know about overlay highlights (keyboard/hover),
 // so we patch isHighlighted here before passing to shaders.
-inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QQuickWindow* window)
+inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QObject* propertyHost)
 {
-    if (!window) {
+    if (!propertyHost) {
         return zones;
     }
-    const QString hid = window->property(OverlayQmlPropertyNames::HighlightedZoneId.data()).toString();
-    const QVariantList hids = window->property(OverlayQmlPropertyNames::HighlightedZoneIds.data()).toList();
+    const QString hid = propertyHost->property(OverlayQmlPropertyNames::HighlightedZoneId.data()).toString();
+    const QVariantList hids = propertyHost->property(OverlayQmlPropertyNames::HighlightedZoneIds.data()).toList();
 
     QVariantList out;
     for (const QVariant& z : zones) {

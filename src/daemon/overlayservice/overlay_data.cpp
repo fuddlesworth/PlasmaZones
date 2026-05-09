@@ -104,53 +104,35 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
 }
 } // namespace
 
-void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
+void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVariantList& patched, QScreen* screen,
                                                   PhosphorZones::Layout* screenLayout)
 {
     Q_UNUSED(screen)
-    if (!window) {
+    if (!slot) {
         return;
     }
     const bool showNumbers =
         (m_settings ? m_settings->showZoneNumbers() : true) && (!screenLayout || screenLayout->showZoneNumbers());
     const LabelFontSettings lfs = extractLabelFontSettings(m_settings);
-    const QSize size(qMax(1, static_cast<int>(window->width())), qMax(1, static_cast<int>(window->height())));
+    // Slot is anchors.fill: parent on the shell window, so its size
+    // matches the shell — which has been sized to the per-screen rect.
+    const QSize size(qMax(1, static_cast<int>(slot->width())), qMax(1, static_cast<int>(slot->height())));
 
-    // Hash-cache short-circuit.
-    //
-    // Without this, every call rebuilds a fresh QImage at the overlay's full
-    // size (3200×1800 = 23 MB on a 4K monitor) and ships it through
-    // QObject::setProperty, which Qt's QML meta-object layer change-detects
-    // via QVariant::equals → QImage::operator== — a pixel-by-pixel memcmp of
-    // that same 23 MB. The inputs change rarely (only when a zone layout or
-    // font setting changes), so caching by an input hash lets us skip BOTH
-    // the rebuild and the O(pixels) property-write equality check.
-    //
-    // This is what keeps refreshFromIdle() cheap — re-pushing zones after a
-    // mid-drag trigger release hits the cache and costs one hash compute.
-    //
-    // Find the owning PerScreenOverlayState entry. updateZonesForAllWindows
-    // is the only caller and iterates m_screenStates itself, so this lookup
-    // must always succeed — warn + fail loudly otherwise, because a
-    // nullptr state would silently defeat the cache (hash never stored →
-    // next call rebuilds again → wasted 23 MB × 2 per tick).
     PerScreenOverlayState* state = nullptr;
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        if (it.value().overlayWindow == window) {
+        if (it.value().passiveShellMainOverlaySlot == slot) {
             state = &it.value();
             break;
         }
     }
     if (!state) {
-        qCWarning(lcOverlay) << "updateLabelsTextureForWindow: window not tracked in m_screenStates — "
+        qCWarning(lcOverlay) << "updateLabelsTextureForWindow: slot not tracked in m_screenStates — "
                                 "labels-texture cache bypassed";
-        // Continue without caching so rendering stays correct; the user will
-        // see label updates, just without the hot-path optimization.
     }
 
     const quint64 newHash = hashLabelsTextureInputs(patched, size, showNumbers, lfs);
     if (state && state->labelsTextureHash == newHash) {
-        return; // inputs unchanged — skip the 23 MB build and the setProperty equality compare
+        return;
     }
 
     QImage labelsImage = ZoneLabelTextureBuilder::build(patched, size, lfs.fontColor, showNumbers, lfs.backgroundColor,
@@ -160,7 +142,7 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QV
         labelsImage = QImage(1, 1, QImage::Format_ARGB32);
         labelsImage.fill(Qt::transparent);
     }
-    window->setProperty("labelsTexture", QVariant::fromValue(labelsImage));
+    slot->setProperty("labelsTexture", QVariant::fromValue(labelsImage));
     if (state) {
         state->labelsTextureHash = newHash;
     }
@@ -358,15 +340,15 @@ void OverlayService::updateZonesForAllWindows()
 
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
         const QString& screenId = it.key();
-        QQuickWindow* window = it.value().overlayWindow;
+        auto* slot = it.value().passiveShellMainOverlaySlot;
 
-        if (!window) {
+        if (!slot) {
             continue;
         }
 
         QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
         QVariantList zones = buildZonesList(screenId, physScreen);
-        QVariantList patched = patchZonesWithHighlight(zones, window);
+        QVariantList patched = patchZonesWithHighlight(zones, slot);
 
         int highlightedCount = 0;
         for (const QVariant& z : patched) {
@@ -375,21 +357,21 @@ void OverlayService::updateZonesForAllWindows()
             }
         }
 
-        writeQmlProperty(window, QStringLiteral("zones"), patched);
-        writeQmlProperty(window, QStringLiteral("zoneCount"), patched.size());
-        writeQmlProperty(window, QStringLiteral("highlightedCount"), highlightedCount);
+        writeQmlProperty(slot, QStringLiteral("zones"), patched);
+        writeQmlProperty(slot, QStringLiteral("zoneCount"), patched.size());
+        writeQmlProperty(slot, QStringLiteral("highlightedCount"), highlightedCount);
 
         if (useShaderForScreen(screenId)) {
             PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
-            updateLabelsTextureForWindow(window, patched, physScreen, screenLayout);
+            updateLabelsTextureForWindow(slot, patched, physScreen, screenLayout);
         }
     }
 
     ++m_zoneDataVersion;
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-        auto* w = it_.value().overlayWindow;
-        if (w) {
-            writeQmlProperty(w, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
+        auto* slot = it_.value().passiveShellMainOverlaySlot;
+        if (slot) {
+            writeQmlProperty(slot, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
         }
     }
 }

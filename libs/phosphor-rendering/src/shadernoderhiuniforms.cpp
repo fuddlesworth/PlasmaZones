@@ -207,7 +207,8 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 if (m_sceneDataDirty) {
                     // Scene header: iResolution through end of BaseUniforms
                     // (subsumes the appFields, iTimeHi, and iIsReversed
-                    // regions — no need for separate uploads when this fires).
+                    // regions — no need for separate uploads when this
+                    // fires).
                     batch->updateDynamicBuffer(m_ubo.get(), K_SCENE_HEADER_OFFSET, K_SCENE_HEADER_SIZE,
                                                static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
                                                    + K_SCENE_HEADER_OFFSET);

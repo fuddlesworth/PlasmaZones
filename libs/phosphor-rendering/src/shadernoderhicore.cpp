@@ -61,15 +61,50 @@ static void shaderCacheEvictOne()
 
 static constexpr char kShaderCacheKeyDelim = '\0';
 
-static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, const QString& fragPath, qint64 fragMtime)
+/// Build a fingerprint over a list of canonical include paths. Each
+/// included file contributes its canonical path + mtime, separated by
+/// the standard delimiter. Stable across runs (mtime is fs metadata)
+/// but invalidates the cache the moment ANY transitively-included
+/// header is modified — closing the gap that previously let an edit
+/// to `data/shaders/shared/common.glsl` (e.g. a UBO layout change) be
+/// silently masked by a per-`.frag`/`.vert` cache hit because the
+/// top-level shader file's mtime didn't change.
+///
+/// Sort the input first so the order in which the resolver walked
+/// nested `#include` directives doesn't affect the fingerprint —
+/// otherwise a re-ordering of `#include` lines inside the same shader
+/// would produce a fresh key even when the included content is
+/// identical, costing a needless re-bake. The set of files matters,
+/// the visit order doesn't.
+static QByteArray includeFingerprint(QStringList paths)
+{
+    QByteArray fp;
+    paths.sort();
+    paths.removeDuplicates();
+    for (const QString& p : paths) {
+        const qint64 mtime = QFileInfo(p).lastModified().toMSecsSinceEpoch();
+        fp.append(p.toUtf8());
+        fp.append(kShaderCacheKeyDelim);
+        fp.append(QByteArray::number(mtime));
+        fp.append(kShaderCacheKeyDelim);
+    }
+    return fp;
+}
+
+static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, const QByteArray& vertIncludeFp,
+                                 const QString& fragPath, qint64 fragMtime, const QByteArray& fragIncludeFp)
 {
     QByteArray key = vertPath.toUtf8();
     key.append(kShaderCacheKeyDelim);
     key.append(QByteArray::number(vertMtime));
     key.append(kShaderCacheKeyDelim);
+    key.append(vertIncludeFp);
+    key.append(kShaderCacheKeyDelim);
     key.append(fragPath.toUtf8());
     key.append(kShaderCacheKeyDelim);
     key.append(QByteArray::number(fragMtime));
+    key.append(kShaderCacheKeyDelim);
+    key.append(fragIncludeFp);
     return key;
 }
 
@@ -87,6 +122,11 @@ void clearFilenameShaderCache()
 QString ShaderNodeRhi::loadAndExpandShader(const QString& path, QString* outError)
 {
     return ShaderCompiler::loadAndExpand(path, m_shaderIncludePaths, outError);
+}
+
+QString ShaderNodeRhi::loadAndExpandShaderTracked(const QString& path, QStringList* outIncludedPaths, QString* outError)
+{
+    return ShaderCompiler::loadAndExpand(path, m_shaderIncludePaths, outError, outIncludedPaths);
 }
 
 QRhi* ShaderNodeRhi::safeRhi() const
@@ -327,7 +367,10 @@ void ShaderNodeRhi::prepare()
             return;
         }
 
-        const QByteArray cacheKey = shaderCacheKey(m_vertexPath, m_vertexMtime, m_fragmentPath, m_fragmentMtime);
+        const QByteArray vertIncludeFp = includeFingerprint(m_vertexIncludedPaths);
+        const QByteArray fragIncludeFp = includeFingerprint(m_fragmentIncludedPaths);
+        const QByteArray cacheKey =
+            shaderCacheKey(m_vertexPath, m_vertexMtime, vertIncludeFp, m_fragmentPath, m_fragmentMtime, fragIncludeFp);
         if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
             QMutexLocker lock(&filenameShaderCacheMutex());
             auto& cache = filenameShaderCache();
@@ -676,12 +719,14 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
     const qint64 vertMtime = QFileInfo(vertexPath).lastModified().toMSecsSinceEpoch();
     const qint64 fragMtime = QFileInfo(fragmentPath).lastModified().toMSecsSinceEpoch();
     QString err;
-    const QString vertSource = ShaderCompiler::loadAndExpand(vertexPath, includePaths, &err);
+    QStringList vertIncludedPaths;
+    QStringList fragIncludedPaths;
+    const QString vertSource = ShaderCompiler::loadAndExpand(vertexPath, includePaths, &err, &vertIncludedPaths);
     if (vertSource.isEmpty()) {
         result.errorMessage = err.isEmpty() ? QStringLiteral("Failed to load vertex shader") : err;
         return result;
     }
-    const QString fragSource = ShaderCompiler::loadAndExpand(fragmentPath, includePaths, &err);
+    const QString fragSource = ShaderCompiler::loadAndExpand(fragmentPath, includePaths, &err, &fragIncludedPaths);
     if (fragSource.isEmpty()) {
         result.errorMessage = err.isEmpty() ? QStringLiteral("Failed to load fragment shader") : err;
         return result;
@@ -700,7 +745,15 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
         return result;
     }
 
-    const QByteArray key = shaderCacheKey(vertexPath, vertMtime, fragmentPath, fragMtime);
+    // Fingerprint includes so the warm-bake cache entry matches what
+    // a per-stage `loadVertexShader` / `loadFragmentShader` later
+    // computes — without this, the warm-baked entry would key on
+    // {top-level path, mtime} alone and diverge from the runtime
+    // bake's now-fingerprint-aware key, producing a cache miss every
+    // first frame and erasing the warm-bake's purpose.
+    const QByteArray vertIncludeFp = includeFingerprint(vertIncludedPaths);
+    const QByteArray fragIncludeFp = includeFingerprint(fragIncludedPaths);
+    const QByteArray key = shaderCacheKey(vertexPath, vertMtime, vertIncludeFp, fragmentPath, fragMtime, fragIncludeFp);
     QMutexLocker lock(&filenameShaderCacheMutex());
     auto& cache = filenameShaderCache();
     if (cache.size() >= kShaderCacheMaxSize) {

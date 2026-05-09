@@ -96,6 +96,20 @@ uniform float iTimeHi;
 // Asymmetric shaders (matrix's directional rain + open-vs-close window
 // reveal) branch on it. See UBO branch below for the full contract.
 uniform int iIsReversed;
+// .xy = surface origin in logical-screen pixels; .zw = (screenW, screenH).
+// Vertex / fragment shaders that need to know where the surface sits on
+// its host screen (fly-in from closest edge, screen-relative noise) read
+// this. Both runtimes populate it once per leg attach + on every anchor
+// or window geometry signal.
+uniform vec4 iSurfaceScreenPos;
+// Anchor (card) pixel size in logical pixels. Decoupled from iResolution
+// because Qt auto-resets iResolution to the QQuickItem's bounds on any
+// geometry event — a `boundsExtent: parent` shader item is parent-sized
+// (= screen) and that auto-reset would clobber any anchor-size override.
+// Vertex shaders mapping a captured small texture into a parent-sized
+// FBO read this for the card's pixel dimensions; iResolution still
+// carries the FBO size as usual.
+uniform vec2 iAnchorSize;
 
 // uTexture0 — redirected window content (the surface the shader is
 // transitioning). Auto-bound by the runtime: KWin's OffscreenEffect
@@ -171,11 +185,27 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              flip alone can't express the open-vs-
                                  //              close difference (e.g. matrix's rain
                                  //              direction + windowAlpha reveal).
-                                 //              Carved out of the trailing std140
-                                 //              pad so total UBO size stays 672 bytes.
+    // implicit 8-byte std140 pad here — `vec4 iSurfaceScreenPos` below
+    // has 16-byte alignment, so std140 forces the next field to offset
+    // 672. The C struct mirrors this with `_pad_before_iSurfaceScreenPos[2]`.
+    vec4 iSurfaceScreenPos;      // offset 672 (16 bytes) — .xy = surface origin
+                                 //              in logical-screen pixels;
+                                 //              .zw = (screenWidth, screenHeight).
+                                 //              Populated by SurfaceAnimator (daemon)
+                                 //              and paint_pipeline (kwin-effect) once
+                                 //              per leg attach + on every anchor /
+                                 //              window geometry change.
+    vec2 iAnchorSize;            // offset 688 (8 bytes) — anchor (card) pixel size
+                                 //              in logical pixels. Decoupled from
+                                 //              iResolution because Qt's QQuickItem
+                                 //              geometryChange auto-resets iResolution
+                                 //              to the item's bounds on any geometry
+                                 //              event, which clobbers an anchor-size
+                                 //              override under boundsExtent=parent.
+                                 //              Vertex shaders that need the captured
+                                 //              card's pixel dimensions read this.
     // implicit 8-byte trailing pad — std140 rounds the struct end up
-    // to a 16-byte boundary, total 672 bytes, mirroring C's
-    // `_pad_after_iIsReversed[2]`.
+    // to a 16-byte boundary, total 704 bytes.
 };
 
 layout(binding = 7) uniform sampler2D uTexture0;

@@ -50,6 +50,13 @@ QJsonObject AnimationShaderEffect::toJson() const
         if (clampedPadding > 0.0)
             obj.insert(QLatin1String("boundsPadding"), clampedPadding);
     }
+    // Emit boundsExtent only when it diverges from the Anchor default —
+    // keeps authored metadata.json terse for the common fragment-shader
+    // case. Round-trip stability mirrors boundsPadding's pattern above:
+    // an unknown / typo value falls back to Anchor on read, and toJson
+    // omits the field rather than emitting an explicit "anchor" string.
+    if (boundsExtent == BoundsExtent::Parent)
+        obj.insert(QLatin1String("boundsExtent"), QLatin1String("parent"));
     if (isMultipass)
         obj.insert(QLatin1String("multipass"), true);
     if (!bufferShaderPaths.isEmpty()) {
@@ -192,6 +199,14 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     // `kMaxBoundsPadding` constant — see its rationale on the struct.
     e.boundsPadding = qBound(0.0, obj.value(QLatin1String("boundsPadding")).toDouble(0.0), kMaxBoundsPadding);
 
+    // boundsExtent: "anchor" (default) or "parent". Unknown / missing /
+    // typo'd values silently fall back to Anchor — matches the lenient
+    // round-trip semantics elsewhere in this struct (no hard error on a
+    // malformed value, but the value the runtime sees is always one of
+    // the two declared variants).
+    if (obj.value(QLatin1String("boundsExtent")).toString().compare(QLatin1String("parent"), Qt::CaseInsensitive) == 0)
+        e.boundsExtent = BoundsExtent::Parent;
+
     const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
     e.parameters.reserve(params.size());
     for (const QJsonValue& v : params) {
@@ -294,6 +309,8 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
     if (previewPath != other.previewPath)
         return false;
     if (!qFuzzyCompare(boundsPadding + 1.0, other.boundsPadding + 1.0))
+        return false;
+    if (boundsExtent != other.boundsExtent)
         return false;
     if (isMultipass != other.isMultipass || useWallpaper != other.useWallpaper || bufferFeedback != other.bufferFeedback
         || useDepthBuffer != other.useDepthBuffer)

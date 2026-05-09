@@ -127,6 +127,19 @@ public:
         unregisterCancelOverlayShortcut();
     }
 
+    /// Register the layout-picker keyboard navigation accelerators
+    /// (Left/Right/Up/Down/Return/Enter) as global shortcuts. Required
+    /// because the unified PassiveOverlayShell is kbd-None — the
+    /// picker content's QML Shortcuts don't fire. Match release on
+    /// dismiss.
+    ///
+    /// Callbacks are owned by the caller and must outlive the
+    /// registration. start.cpp passes lambdas that capture the
+    /// long-lived OverlayService pointer.
+    void ensureLayoutPickerNavShortcutsRegistered(std::function<void(int dx, int dy)> moveCb,
+                                                  std::function<void()> confirmCb);
+    void releaseLayoutPickerNavShortcuts();
+
     /// Whether a drag is currently active (m_draggedWindowId non-empty).
     /// Daemon uses this to gate the picker-dismissed Escape release on
     /// drag state — releasing while a drag is in flight would tear down

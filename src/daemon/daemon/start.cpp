@@ -517,8 +517,36 @@ void Daemon::connectShortcutSignals()
         m_overlayService->showLayoutPicker(screenId);
         if (m_windowDragAdaptor) {
             m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
+            // Picker navigation accels — registered while picker is
+            // shown, dropped on dismiss. The unified PassiveOverlayShell
+            // is kbd-None so the QML Shortcuts in LayoutPickerContent
+            // can't fire; routing via KGlobalAccel is the replacement.
+            // Lambdas capture the long-lived OverlayService — outlives
+            // the registration window.
+            auto* svc = m_overlayService.get();
+            m_windowDragAdaptor->ensureLayoutPickerNavShortcutsRegistered(
+                [svc](int dx, int dy) {
+                    svc->pickerMoveSelection(dx, dy);
+                },
+                [svc] {
+                    svc->pickerConfirmSelection();
+                });
         }
     });
+    // Snap-assist Escape: the unified PassiveOverlayShell is kbd-None
+    // (the legacy SnapAssistOverlay's kbd-Exclusive QML Shortcut for
+    // Escape no longer exists), so we register the global Escape
+    // accelerator on every snap-assist show — cancelSnap() routes
+    // Escape to hideSnapAssist() via the existing
+    // isSnapAssistVisible() branch (windowdragadaptor.cpp:265). The
+    // matching unregister fires on snapAssistDismissed via
+    // WindowDragAdaptor::onSnapAssistDismissed.
+    connect(m_overlayService.get(), &IOverlayService::snapAssistShown, this,
+            [this](const QString&, const EmptyZoneList&, const SnapAssistCandidateList&) {
+                if (m_windowDragAdaptor) {
+                    m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
+                }
+            });
     connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
         // Only release the Escape grab if no drag is currently active —
         // otherwise the in-progress drag's own cancel-overlay shortcut
@@ -526,6 +554,9 @@ void Daemon::connectShortcutSignals()
         // path will release on its own when appropriate.
         if (m_windowDragAdaptor && !m_windowDragAdaptor->isDragActive()) {
             m_windowDragAdaptor->releaseCancelOverlayShortcut();
+        }
+        if (m_windowDragAdaptor) {
+            m_windowDragAdaptor->releaseLayoutPickerNavShortcuts();
         }
     });
     connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
