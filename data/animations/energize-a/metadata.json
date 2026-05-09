@@ -8,28 +8,10 @@
     "fragmentShader": "effect.frag",
     "parameters": [
         {
-            "id": "colorR",
-            "name": "Particle Red",
-            "type": "float",
-            "default": 1.0,
-            "min": 0.0,
-            "max": 1.0
-        },
-        {
-            "id": "colorG",
-            "name": "Particle Green",
-            "type": "float",
-            "default": 0.784,
-            "min": 0.0,
-            "max": 1.0
-        },
-        {
-            "id": "colorB",
-            "name": "Particle Blue",
-            "type": "float",
-            "default": 0.196,
-            "min": 0.0,
-            "max": 1.0
+            "id": "particleColor",
+            "name": "Particle Color",
+            "type": "color",
+            "default": "#FFC832"
         },
         {
             "id": "particleScale",
