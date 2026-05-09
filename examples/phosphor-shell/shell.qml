@@ -56,20 +56,15 @@ Item {
         panelLength: 240
         margins { left: 8; top: 6 }
 
-        Rectangle {
+        ShaderBackground {
             anchors.fill: parent
-            color: "#1e1e2e"
-            radius: 12
-            clip: false
-            border.color: "#313244"
-            border.width: 1
+            shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
+            shaderParams: { "tintOpacity": 0.75, "noiseAmount": 0.025, "noiseScale": 45.0, "animSpeed": 0.2, "cornerRadius": 12.0 }
+            customColor1: "#1e1e2e"
+        }
 
-            ShaderBackground {
-                anchors.fill: parent
-                shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
-                shaderParams: { "tintOpacity": 0.75, "noiseAmount": 0.025, "noiseScale": 45.0, "animSpeed": 0.2 }
-                customColor1: "#1e1e2e"
-            }
+        Item {
+            anchors.fill: parent
 
             Row {
                 anchors.centerIn: parent
@@ -131,29 +126,20 @@ Item {
         panelLength: 220
         margins { top: 6 }
 
-        Rectangle {
+        ShaderBackground {
             anchors.fill: parent
-            color: "#1e1e2e"
-            radius: 12
-            clip: false
-            border.color: "#313244"
-            border.width: 1
+            shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
+            shaderParams: { "speed": 0.3, "cornerRadius": 12.0 }
+            customColor1: "#1e1e2e"
+            customColor2: "#2e1e2e"
+        }
 
-            ShaderBackground {
-                anchors.fill: parent
-                shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
-                shaderParams: { "speed": 0.3 }
-                customColor1: "#1e1e2e"
-                customColor2: "#2e1e2e"
-            }
-
-            Text {
-                anchors.centerIn: parent
-                text: clock.stdout.trim() || "..."
-                color: "#cdd6f4"
-                font.pixelSize: 13
-                font.weight: Font.Medium
-            }
+        Text {
+            anchors.centerIn: parent
+            text: clock.stdout.trim() || "..."
+            color: "#cdd6f4"
+            font.pixelSize: 13
+            font.weight: Font.Medium
         }
     }
 
@@ -166,20 +152,15 @@ Item {
         panelLength: 280
         margins { right: 8; top: 6 }
 
-        Rectangle {
+        ShaderBackground {
             anchors.fill: parent
-            color: "#1e1e2e"
-            radius: 12
-            clip: false
-            border.color: "#313244"
-            border.width: 1
+            shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
+            shaderParams: { "tintOpacity": 0.75, "noiseAmount": 0.02, "noiseScale": 50.0, "animSpeed": 0.15, "cornerRadius": 12.0 }
+            customColor1: "#1e1e2e"
+        }
 
-            ShaderBackground {
-                anchors.fill: parent
-                shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
-                shaderParams: { "tintOpacity": 0.75, "noiseAmount": 0.02, "noiseScale": 50.0, "animSpeed": 0.15 }
-                customColor1: "#1e1e2e"
-            }
+        Item {
+            anchors.fill: parent
 
             Row {
                 anchors.centerIn: parent

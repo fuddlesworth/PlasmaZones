@@ -4,6 +4,7 @@
 // Frosted glass panel shader for PhosphorShell (self-contained).
 //
 // customParams[0]: x=tintOpacity y=noiseAmount z=noiseScale w=animSpeed
+// customParams[1]: x=cornerRadius (pixels, default 12.0)
 // customColors[0]: tint color (customColor1 in QML)
 
 #version 450
@@ -24,6 +25,11 @@ layout(std140, binding = 0) uniform buf {
 };
 
 layout(location = 0) out vec4 fragColor;
+
+float roundedBoxSDF(vec2 p, vec2 b, float r) {
+    vec2 d = abs(p) - b + r;
+    return length(max(d, 0.0)) - r;
+}
 
 float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -52,12 +58,25 @@ float fbm(vec2 p) {
 }
 
 void main() {
-    vec2 uv = gl_FragCoord.xy / iResolution.xy;
+    vec2 fragCoord = gl_FragCoord.xy;
+    vec2 uv = fragCoord / iResolution.xy;
 
     float tintOpacity = customParams[0].x > 0.0 ? customParams[0].x : 0.7;
     float noiseAmount = customParams[0].y > 0.0 ? customParams[0].y : 0.03;
     float noiseScale = customParams[0].z > 0.0 ? customParams[0].z : 40.0;
     float animSpeed = customParams[0].w > 0.0 ? customParams[0].w : 0.3;
+    float radius = customParams[1].x > 0.0 ? customParams[1].x : 12.0;
+
+    // SDF rounded rectangle mask
+    vec2 center = iResolution.xy * 0.5;
+    vec2 halfSize = iResolution.xy * 0.5;
+    float dist = roundedBoxSDF(fragCoord - center, halfSize, radius);
+    float mask = 1.0 - smoothstep(-1.0, 1.0, dist);
+
+    if (mask <= 0.0) {
+        fragColor = vec4(0.0);
+        return;
+    }
 
     vec4 tintColor = customColors[0].a > 0.0 ? customColors[0] : vec4(0.118, 0.118, 0.180, 1.0);
 
@@ -69,5 +88,5 @@ void main() {
     float vignette = 1.0 - length((uv - 0.5) * vec2(0.3, 1.0)) * 0.2;
 
     vec3 color = frostTint * vignette;
-    fragColor = vec4(color, tintOpacity) * qt_Opacity;
+    fragColor = vec4(color, tintOpacity * mask) * qt_Opacity;
 }
