@@ -112,7 +112,8 @@ Item {
     // `ShaderProfileTree::resolve` and shadows the parent's value at
     // runtime. Surfaced via the warning banner below with a one-click
     // "Clear shadowing children" button. Refreshed on any
-    // shaderProfileChanged signal (see Connections at line 222+).
+    // shaderProfileChanged signal — see `onShaderProfileChanged` in the
+    // `target: settingsController.animationsPage` Connections block below.
     property int _shadowingChildrenCount: 0
     // Bumped on every `shaderEffectsChanged` so any binding that reads
     // a shader-registry Q_INVOKABLE (`availableShaderEffects()`,
