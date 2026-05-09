@@ -44,6 +44,17 @@ void main()
     float visibility = clamp(iTime, 0.0, 1.0);
     float strength = intensity * sin(visibility * 3.14159);
 
+    // Strength collapses to zero at both leg endpoints (sin is 0 at
+    // visibility 0 and 1), where displacement and rgbSplit*strength
+    // also vanish — every per-channel sample resolves to the same UV.
+    // Skip the three-tap chromatic-aberration path and hand back a
+    // single sample so the endpoint frames don't pay the redundant
+    // texture cost on every fragment.
+    if (strength < 1e-4) {
+        fragColor = texture(uTexture0, uv);
+        return;
+    }
+
     float bs = max(blockSize, 0.01);
     vec2 block = floor(uv / bs);
     // Quantise the jitter to per-leg-frame buckets that bump every ~10

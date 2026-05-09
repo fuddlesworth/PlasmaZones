@@ -432,13 +432,13 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
 
     int floatSlot = 0;
     int colorSlot = 0;
+    QStringList droppedColorParams;
+    QStringList droppedFloatParams;
     for (const auto& param : effect.parameters) {
         const QString& type = param.type;
         if (type == QLatin1String("color")) {
             if (colorSlot >= AnimationShaderContract::kMaxCustomColors) {
-                qCWarning(lcRegistry).noquote() << "translateAnimationParams: effect" << effect.id << "exceeds"
-                                                << AnimationShaderContract::kMaxCustomColors
-                                                << "-slot customColors budget; dropping color param" << param.id;
+                droppedColorParams.append(param.id);
                 continue;
             }
             const QString uniformKey = AnimationShaderContract::colorKey(colorSlot);
@@ -491,9 +491,7 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         }
 
         if (floatSlot >= AnimationShaderContract::kMaxParameterSlots) {
-            qCWarning(lcRegistry).noquote() << "translateAnimationParams: effect" << effect.id << "exceeds"
-                                            << AnimationShaderContract::kMaxParameterSlots
-                                            << "-slot customParams budget; dropping param" << param.id;
+            droppedFloatParams.append(param.id);
             continue;
         }
 
@@ -519,6 +517,23 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
 
         result[uniformKey] = value;
         ++floatSlot;
+    }
+
+    // One summary warning per overflow class instead of one per param —
+    // an effect that pushes the slot budget hard would otherwise spam
+    // the journal with N near-identical lines that all carry the same
+    // remediation.
+    if (!droppedColorParams.isEmpty()) {
+        qCWarning(lcRegistry).noquote() << "translateAnimationParams: effect" << effect.id << "exceeds"
+                                        << AnimationShaderContract::kMaxCustomColors
+                                        << "-slot customColors budget; dropped" << droppedColorParams.size()
+                                        << "color params:" << droppedColorParams.join(QLatin1String(", "));
+    }
+    if (!droppedFloatParams.isEmpty()) {
+        qCWarning(lcRegistry).noquote() << "translateAnimationParams: effect" << effect.id << "exceeds"
+                                        << AnimationShaderContract::kMaxParameterSlots
+                                        << "-slot customParams budget; dropped" << droppedFloatParams.size()
+                                        << "params:" << droppedFloatParams.join(QLatin1String(", "));
     }
 
     // ── User textures (uTexture1..3, uTexture1_wrap, ...) ──────────────

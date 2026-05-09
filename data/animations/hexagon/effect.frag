@@ -146,23 +146,26 @@ void main()
         line.a *= glowProgress;
 
         // Don't extend the lines past the window silhouette — gate
-        // by the local sampled alpha. oColor here is pre-multiplied;
-        // its .a reflects how visible this cell's content is.
-        glow *= oColor.a;
-        line *= oColor.a;
+        // by the local sampled alpha. Scale ONLY the alpha channels;
+        // multiplying the full vec4 would also pre-attenuate
+        // glow.rgb / line.rgb, and the additive composite below then
+        // multiplies them by glow.a / line.a a second time, dimming
+        // the emission against partly-transparent texels.
+        glow.a *= oColor.a;
+        line.a *= oColor.a;
 
         if (additiveBlending > 0.5) {
             // Pre-multiplied additive emission.
             oColor.rgb += glow.rgb * glow.a;
             oColor.rgb += line.rgb * line.a;
         } else {
-            // "Over" blend in straight-alpha-equivalent form on
-            // pre-multiplied input. mix(rgb, color, alpha) on
-            // pre-multiplied rgb gives the right look here because
-            // we've already scaled the overlay alphas by the local
-            // window alpha.
-            oColor.rgb = mix(oColor.rgb, glow.rgb, glow.a);
-            oColor.rgb = mix(oColor.rgb, line.rgb, line.a);
+            // "Over" blend on pre-multiplied input. The standard
+            // formula `under * (1 - over.a) + over_premul` requires
+            // BOTH operands in pre-multiplied form; glow.rgb / line.rgb
+            // are straight, so multiply by their alpha at the call site
+            // to lift them into pre-multiplied space before the merge.
+            oColor.rgb = oColor.rgb * (1.0 - glow.a) + glow.rgb * glow.a;
+            oColor.rgb = oColor.rgb * (1.0 - line.a) + line.rgb * line.a;
         }
     }
 

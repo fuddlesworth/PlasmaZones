@@ -20,6 +20,19 @@
 #ifndef PHOSPHOR_NOISE_GLSL
 #define PHOSPHOR_NOISE_GLSL
 
+// `hash22`'s `fract(p3 * 0.1031)` chain operates on
+// per-fragment-pixel inputs at large magnitudes; on drivers that
+// default fragment precision to `mediump` (some classic-GL stacks
+// the kwin-effect path runs on), the multiplication aliases past the
+// 24-bit mantissa and the noise output becomes blocky/banded. The
+// daemon RHI path defaults to highp and is unaffected. Pin the
+// precision here so callers across both runtimes get the same
+// quality. The `#version 450` daemon path treats `precision` as a
+// no-op; the `#version 100`/`100 es` kwin path enforces it.
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#endif
+
 vec2 hash22(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
     p3 += dot(p3, p3.yzx + 33.33);
