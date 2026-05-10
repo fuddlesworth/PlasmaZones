@@ -44,6 +44,23 @@ void PanelWindow::setThickness(int thickness)
     Q_EMIT thicknessChanged();
 }
 
+int PanelWindow::shadowSize() const
+{
+    return m_shadowSize;
+}
+
+void PanelWindow::setShadowSize(int size)
+{
+    // Clamp to [0, INT_MAX]. 0 = no shadow strip (default, backwards-
+    // compatible); negative values are nonsense.
+    const int clamped = qMax(0, size);
+    if (m_shadowSize == clamped) {
+        return;
+    }
+    m_shadowSize = clamped;
+    Q_EMIT shadowSizeChanged();
+}
+
 QScreen* PanelWindow::screen() const
 {
     return m_screen;

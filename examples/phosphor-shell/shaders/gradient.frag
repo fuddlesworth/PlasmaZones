@@ -12,6 +12,7 @@
 // customParams[0]: x=speed       y=baseAngle     z=tintOpacity   w=frostAmount
 // customParams[1]: x=cornerRadius y=frostScale
 // customParams[2]: x=screenHeight y=blurRadius
+// customParams[3]: x=shadowSize   y=shadowOpacity
 //   - screenHeight: physical-pixel height of the screen the panel is
 //     attached to. Required to map the panel's UV (which spans the
 //     panel's height, typically 38 px) to the wallpaper's UV (which
@@ -19,6 +20,17 @@
 //     wallpaper would be squashed into the panel.
 //   - blurRadius: blur kernel radius in WALLPAPER pixels, so the
 //     visual blur stays consistent regardless of panel thickness.
+//   - shadowSize: physical-pixel height of the drop-shadow strip at
+//     the BOTTOM of the surface (Top-edge panel assumption). Set to 0
+//     to disable the shadow. The panel's wl_surface must already be
+//     this many pixels taller than the visible panel thickness —
+//     PhosphorShell::PanelWindow::shadowSize is the QML knob that
+//     enlarges the surface; the exclusiveZone reservation stays at
+//     the visible thickness so other windows don't reserve the
+//     shadow strip.
+//   - shadowOpacity: alpha of the shadow at its strongest (right
+//     below the panel edge); fades quadratically to 0 at the far end
+//     of the strip. Default 0.4 looks right against most wallpapers.
 // customColors[0]: gradient start color (customColor1 in QML)
 // customColors[1]: gradient end color   (customColor2 in QML)
 
@@ -121,10 +133,24 @@ void main() {
     // thickness) and keeps the SDF properly negative on the interior.
     float radius       = max(1.0, customParams[1].x);
     float frostScale   = customParams[1].y > 0.0 ? customParams[1].y : 24.0;
-    float screenHeight = customParams[2].x > 0.0 ? customParams[2].x : iResolution.y;
-    float blurRadius   = customParams[2].y > 0.0 ? customParams[2].y : 8.0;
+    float screenHeight  = customParams[2].x > 0.0 ? customParams[2].x : iResolution.y;
+    float blurRadius    = customParams[2].y > 0.0 ? customParams[2].y : 8.0;
+    float shadowSizePx  = max(0.0, customParams[3].x);
+    float shadowOpacity = customParams[3].y > 0.0 ? customParams[3].y : 0.4;
 
-    // SDF rounded rectangle mask - hard cutoff eliminates fringe
+    // Split the surface into the visible panel region (top) and the
+    // drop-shadow strip (bottom). shadowSizePx==0 collapses this to
+    // "everything is panel" — shadowStartV becomes 1.0 and the shadow
+    // branch never fires. For Top-edge panels the shadow falls below
+    // the visible region; other edges currently render the shadow at
+    // the bottom of the surface regardless, which only looks right
+    // for Top-edge panels (the example's intended usage).
+    float shadowStartV = 1.0 - shadowSizePx / max(iResolution.y, 1.0);
+
+    // SDF rounded rectangle mask for the SURFACE — gives AA at all
+    // four edges of the wl_surface. The shadow branch below already
+    // tapers its own alpha so the SDF AA only contributes at the
+    // very corners.
     vec2 center = iResolution.xy * 0.5;
     vec2 halfSize = iResolution.xy * 0.5;
     float dist = roundedBoxSDF(fragCoord - center, halfSize, radius);
@@ -133,6 +159,29 @@ void main() {
         fragColor = vec4(0.0);
         return;
     }
+
+    // ─── Shadow strip ─────────────────────────────────────────────────
+    // Quadratic alpha falloff: strongest at the panel-bottom edge
+    // (right after shadowStartV), fading to 0 at the surface-bottom
+    // edge. RGB is black; the compositor blends this over whatever's
+    // behind, producing a real darken-the-region-below-the-panel
+    // shadow.
+    if (shadowSizePx > 0.0 && uv.y > shadowStartV) {
+        float shadowSpan = 1.0 - shadowStartV;
+        float t = (uv.y - shadowStartV) / max(shadowSpan, 0.001);
+        float a = shadowOpacity * (1.0 - t);
+        a *= a; // quadratic falloff reads as soft drop-shadow
+        a *= mask;
+        fragColor = vec4(0.0, 0.0, 0.0, a) * qt_Opacity;
+        return;
+    }
+
+    // Remap uv.y to "panel-local" coordinates [0..1] so the gradient
+    // direction rotates around the centre of the VISIBLE panel rather
+    // than the centre of the (shadow-extended) surface. Wallpaper
+    // sampling still uses the raw `uv` because the wallpaper's screen
+    // y position is a function of the surface y, not panel-local y.
+    vec2 panelUv = vec2(uv.x, uv.y / max(shadowStartV, 0.001));
 
     // ─── Wallpaper backdrop (blurred top strip) ───────────────────────
     // Auto-detect availability: the wallpaper sampler is bound to a 1×1
@@ -173,7 +222,7 @@ void main() {
 
     float rotatedAngle = angle + iTime * speed * 1.0;
     vec2 dir = vec2(cos(rotatedAngle), sin(rotatedAngle));
-    float t = dot(uv - 0.5, dir) + 0.5;
+    float t = dot(panelUv - 0.5, dir) + 0.5;
     float wave1 = sin(iTime * speed * 2.7) * 0.55;
     float wave2 = sin(iTime * speed * 1.7 + 1.57) * 0.35;
     t += wave1 + wave2;
@@ -182,7 +231,7 @@ void main() {
 
     // Crystalline grain — slow drift on sample coords, centred around
     // zero so it darkens and lightens symmetrically.
-    vec2 frostUv = uv * frostScale + vec2(iTime * speed * 0.08, iTime * speed * 0.05);
+    vec2 frostUv = panelUv * frostScale + vec2(iTime * speed * 0.08, iTime * speed * 0.05);
     float frost = voronoi(frostUv);
     gradient = clamp(gradient + vec3(frost - 0.5) * frostAmount, 0.0, 1.0);
 

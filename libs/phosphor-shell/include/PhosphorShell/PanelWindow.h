@@ -21,6 +21,15 @@ class PHOSPHORSHELL_EXPORT PanelWindow : public QQuickItem
 
     Q_PROPERTY(Edge edge READ edge WRITE setEdge NOTIFY edgeChanged)
     Q_PROPERTY(int thickness READ thickness WRITE setThickness NOTIFY thicknessChanged)
+    /// Additional surface pixels rendered BEYOND the visible panel
+    /// thickness, intended for the shell to draw a drop-shadow into.
+    /// The layer-shell surface size = thickness + shadowSize on the
+    /// edge-perpendicular axis; the exclusiveZone advertised to the
+    /// compositor stays at `thickness` so other windows don't reserve
+    /// the shadow area. The shader is responsible for actually
+    /// rendering the shadow in that extra strip — PanelWindow only
+    /// hands it the surface space.
+    Q_PROPERTY(int shadowSize READ shadowSize WRITE setShadowSize NOTIFY shadowSizeChanged)
     Q_PROPERTY(QScreen* screen READ screen WRITE setScreen NOTIFY screenChanged)
     Q_PROPERTY(Layer layer READ layer WRITE setLayer NOTIFY layerChanged)
     Q_PROPERTY(int exclusiveZone READ exclusiveZone WRITE setExclusiveZone NOTIFY exclusiveZoneChanged)
@@ -64,6 +73,9 @@ public:
     [[nodiscard]] int thickness() const;
     void setThickness(int thickness);
 
+    [[nodiscard]] int shadowSize() const;
+    void setShadowSize(int size);
+
     [[nodiscard]] QScreen* screen() const;
     void setScreen(QScreen* screen);
 
@@ -88,6 +100,7 @@ public:
 Q_SIGNALS:
     void edgeChanged();
     void thicknessChanged();
+    void shadowSizeChanged();
     void screenChanged();
     void layerChanged();
     void exclusiveZoneChanged();
@@ -99,6 +112,7 @@ Q_SIGNALS:
 private:
     Edge m_edge = Top;
     int m_thickness = 32;
+    int m_shadowSize = 0;
     // QPointer so monitor hot-unplug doesn't leave us with a dangling
     // QScreen pointer. ScreenManager owns QScreen lifetimes externally.
     QPointer<QScreen> m_screen;

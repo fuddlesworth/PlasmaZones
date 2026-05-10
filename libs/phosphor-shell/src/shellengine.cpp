@@ -269,14 +269,20 @@ void ShellEngine::materializePanels()
         PhosphorLayer::Anchors anchors;
         QMargins layerMargins = panel->margins();
         QSize panelSize;
+        // Surface-axis thickness includes the shadow strip; the
+        // exclusiveZone advertised to the compositor stays at the
+        // VISIBLE thickness so other windows don't reserve the
+        // shadow space. The shader is responsible for rendering the
+        // shadow into the extra strip.
+        const int surfaceThickness = panel->thickness() + panel->shadowSize();
 
         if (panel->alignment() == PanelWindow::Fill || panel->panelLength() < 0) {
             if (horizontal) {
                 anchors = primaryAnchor | PhosphorLayer::Anchor::Left | PhosphorLayer::Anchor::Right;
-                panelSize = QSize(screenSize.width(), panel->thickness());
+                panelSize = QSize(screenSize.width(), surfaceThickness);
             } else {
                 anchors = primaryAnchor | PhosphorLayer::Anchor::Top | PhosphorLayer::Anchor::Bottom;
-                panelSize = QSize(panel->thickness(), screenSize.height());
+                panelSize = QSize(surfaceThickness, screenSize.height());
             }
         } else {
             int length = panel->panelLength();
@@ -318,19 +324,19 @@ void ShellEngine::materializePanels()
             case PanelWindow::Start:
                 if (horizontal) {
                     anchors = primaryAnchor | PhosphorLayer::Anchor::Left;
-                    panelSize = QSize(length, panel->thickness());
+                    panelSize = QSize(length, surfaceThickness);
                 } else {
                     anchors = primaryAnchor | PhosphorLayer::Anchor::Top;
-                    panelSize = QSize(panel->thickness(), length);
+                    panelSize = QSize(surfaceThickness, length);
                 }
                 break;
             case PanelWindow::End:
                 if (horizontal) {
                     anchors = primaryAnchor | PhosphorLayer::Anchor::Right;
-                    panelSize = QSize(length, panel->thickness());
+                    panelSize = QSize(length, surfaceThickness);
                 } else {
                     anchors = primaryAnchor | PhosphorLayer::Anchor::Bottom;
-                    panelSize = QSize(panel->thickness(), length);
+                    panelSize = QSize(surfaceThickness, length);
                 }
                 break;
             case PanelWindow::Center:
@@ -339,13 +345,13 @@ void ShellEngine::materializePanels()
                     const int margin = (screenSize.width() - length) / 2;
                     layerMargins.setLeft(qMax(layerMargins.left(), margin));
                     layerMargins.setRight(qMax(layerMargins.right(), margin));
-                    panelSize = QSize(length, panel->thickness());
+                    panelSize = QSize(length, surfaceThickness);
                 } else {
                     anchors = primaryAnchor | PhosphorLayer::Anchor::Top | PhosphorLayer::Anchor::Bottom;
                     const int margin = (screenSize.height() - length) / 2;
                     layerMargins.setTop(qMax(layerMargins.top(), margin));
                     layerMargins.setBottom(qMax(layerMargins.bottom(), margin));
-                    panelSize = QSize(panel->thickness(), length);
+                    panelSize = QSize(surfaceThickness, length);
                 }
                 break;
             case PanelWindow::Fill:
@@ -493,11 +499,15 @@ void ShellEngine::installDynamicAutoFit(PanelWindow* panel, PhosphorLayer::Surfa
     // so they share a lifetime).
     const PanelWindow::Edge edge = panel->edge();
     const PanelWindow::Alignment alignment = panel->alignment();
-    const int thickness = panel->thickness();
+    // Surface thickness — includes shadowSize. Matches the size we
+    // initially passed to the surface factory; using `thickness` alone
+    // here would shrink the surface on the first auto-fit tick and
+    // clip the shadow strip.
+    const int surfaceThickness = panel->thickness() + panel->shadowSize();
     const QMargins userMargins = panel->margins();
     const bool horizontal = (edge == PanelWindow::Top || edge == PanelWindow::Bottom);
 
-    auto resize = [panel, surface, horizontal, alignment, thickness, userMargins, screenSize]() {
+    auto resize = [panel, surface, horizontal, alignment, surfaceThickness, userMargins, screenSize]() {
         auto* window = surface->window();
         if (!window) {
             return;
@@ -511,7 +521,7 @@ void ShellEngine::installDynamicAutoFit(PanelWindow* panel, PhosphorLayer::Surfa
             return;
         }
         const int newLength = qMax(1, static_cast<int>(std::ceil(implicitLength)));
-        const QSize newSize = horizontal ? QSize(newLength, thickness) : QSize(thickness, newLength);
+        const QSize newSize = horizontal ? QSize(newLength, surfaceThickness) : QSize(surfaceThickness, newLength);
         if (window->size() == newSize) {
             return;
         }
