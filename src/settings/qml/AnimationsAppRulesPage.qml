@@ -84,6 +84,11 @@ SettingsFlickable {
         "window.resize": i18nc("window-event verb", "Resize"),
         "window.focus": i18nc("window-event verb", "Focus")
     })
+    /// Gates the window-picker callback so other cards on this page
+    /// (or sibling pages sharing the same SettingsController) don't
+    /// react when this card opens the dialog. Mirrors the same pattern
+    /// `AppRulesCard.qml` uses for snap rules.
+    property bool _pickerOpenedByUs: false
 
     function _eventLabel(eventPath) {
         // Prefer the localised label; fall back to the controller's
@@ -148,6 +153,31 @@ SettingsFlickable {
         target: settingsController.animationsPage
     }
 
+    WindowPickerDialog {
+        id: windowPickerDialog
+
+        // Pass `settingsController` directly — it exposes the
+        // `cachedRunningWindows()` / `requestRunningWindows()` Q_INVOKABLEs
+        // and the `runningWindowsAvailable` / `runningWindowsTimedOut`
+        // signals the dialog binds against. Same wiring as
+        // `ExclusionsPage.qml`.
+        appSettings: settingsController
+    }
+
+    Connections {
+        function onPicked(value) {
+            patternField.text = value;
+            root._pickerOpenedByUs = false;
+        }
+
+        function onClosed() {
+            root._pickerOpenedByUs = false;
+        }
+
+        target: windowPickerDialog
+        enabled: root._pickerOpenedByUs
+    }
+
     ColumnLayout {
         id: mainCol
 
@@ -183,6 +213,21 @@ SettingsFlickable {
                         Layout.fillWidth: true
                         placeholderText: i18n("Window class pattern (e.g., firefox, org.kde.dolphin)")
                         Accessible.name: i18n("Window class pattern")
+                    }
+
+                    ToolButton {
+                        icon.name: "crosshairs"
+                        ToolTip.text: i18n("Pick from running windows")
+                        ToolTip.visible: hovered
+                        Accessible.name: i18n("Pick window class from running windows")
+                        onClicked: {
+                            // Set the gate before opening so the
+                            // page's `onPicked` Connections takes
+                            // effect; cleared inside the picked /
+                            // closed handlers.
+                            root._pickerOpenedByUs = true;
+                            windowPickerDialog.openForClasses();
+                        }
                     }
 
                     Label {
