@@ -137,19 +137,16 @@ void Process::startProcess()
         return;
     }
 
-    // Reset accumulated output for the new run so consumers see only this
-    // invocation's output, not stale bytes from the previous run.
-    if (!m_stdout.isEmpty()) {
-        m_stdout.clear();
-        Q_EMIT stdoutTextChanged();
-    }
-    if (!m_stderr.isEmpty()) {
-        m_stderr.clear();
-        Q_EMIT stderrTextChanged();
-    }
-    // Reset the stateful decoders too, otherwise a partial UTF-8
-    // sequence left over from the previous run would corrupt the
-    // first character of the new run's output.
+    // Mark stdout/stderr buffers as "fresh" — the first readyRead* of
+    // the new run will REPLACE the buffer rather than clear-then-emit-
+    // then-append. Without this, an interval=N consumer (e.g. clock)
+    // sees stdoutText briefly become empty between startProcess and
+    // the first readyRead, producing a visible blink.
+    m_stdoutFresh = true;
+    m_stderrFresh = true;
+    // Reset the stateful decoders, otherwise a partial UTF-8 sequence
+    // left over from the previous run would corrupt the first character
+    // of the new run's output.
     m_stdoutDecoder.resetState();
     m_stderrDecoder.resetState();
 
@@ -180,22 +177,36 @@ void Process::stopProcess()
 
 void Process::onReadyReadStdout()
 {
-    // Append, don't replace — readyReadStandardOutput can fire multiple
-    // times per invocation, and replacing would lose all but the last
-    // chunk. trimToCap keeps memory bounded for chatty long-running
-    // children (interval=0 stream subscriptions). The QStringDecoder
-    // retains any trailing partial UTF-8 sequence so a codepoint
-    // straddling two chunk boundaries decodes correctly when the next
-    // chunk arrives — using QString::fromUtf8 per chunk would emit
-    // U+FFFD on both halves.
-    m_stdout.append(m_stdoutDecoder.decode(m_process->readAllStandardOutput()));
+    // First readyRead of a new run REPLACES the buffer (clears the
+    // previous invocation's output atomically); subsequent readyReads
+    // APPEND because readyReadStandardOutput can fire multiple times
+    // per invocation. The replace-on-first-read pattern is what makes
+    // interval-N consumers (clock, etc.) transition cleanly from old
+    // output to new without a visible empty-text blink in between.
+    // trimToCap keeps memory bounded for chatty long-running children.
+    // The QStringDecoder retains any trailing partial UTF-8 sequence so
+    // a codepoint straddling two chunk boundaries decodes correctly
+    // when the next chunk arrives.
+    const QString chunk = m_stdoutDecoder.decode(m_process->readAllStandardOutput());
+    if (m_stdoutFresh) {
+        m_stdout = chunk;
+        m_stdoutFresh = false;
+    } else {
+        m_stdout.append(chunk);
+    }
     trimToCap(m_stdout);
     Q_EMIT stdoutTextChanged();
 }
 
 void Process::onReadyReadStderr()
 {
-    m_stderr.append(m_stderrDecoder.decode(m_process->readAllStandardError()));
+    const QString chunk = m_stderrDecoder.decode(m_process->readAllStandardError());
+    if (m_stderrFresh) {
+        m_stderr = chunk;
+        m_stderrFresh = false;
+    } else {
+        m_stderr.append(chunk);
+    }
     trimToCap(m_stderr);
     Q_EMIT stderrTextChanged();
 }
@@ -212,19 +223,45 @@ void Process::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
     }
 
     // Drain any final stdout/stderr that arrived between the last
-    // readyRead and finished. Use the same stateful decoders so any
-    // partial sequence the previous chunk left behind is consumed and
-    // emitted as the proper codepoint here at end-of-stream.
+    // readyRead and finished. Honour the fresh-run latch so the first
+    // drained chunk REPLACES the buffer (in case readyRead never fired
+    // because the child wrote everything in one shot during exit).
+    // The stateful decoders consume any partial sequence the previous
+    // chunk left behind and emit the proper codepoint here at
+    // end-of-stream.
     const QByteArray remainingOut = m_process->readAllStandardOutput();
     if (!remainingOut.isEmpty()) {
-        m_stdout.append(m_stdoutDecoder.decode(remainingOut));
+        const QString chunk = m_stdoutDecoder.decode(remainingOut);
+        if (m_stdoutFresh) {
+            m_stdout = chunk;
+            m_stdoutFresh = false;
+        } else {
+            m_stdout.append(chunk);
+        }
         trimToCap(m_stdout);
+        Q_EMIT stdoutTextChanged();
+    } else if (m_stdoutFresh && !m_stdout.isEmpty()) {
+        // Run finished without producing any output — explicitly clear
+        // the buffer so stale data from the previous invocation doesn't
+        // linger when the consumer next reads.
+        m_stdout.clear();
+        m_stdoutFresh = false;
         Q_EMIT stdoutTextChanged();
     }
     const QByteArray remainingErr = m_process->readAllStandardError();
     if (!remainingErr.isEmpty()) {
-        m_stderr.append(m_stderrDecoder.decode(remainingErr));
+        const QString chunk = m_stderrDecoder.decode(remainingErr);
+        if (m_stderrFresh) {
+            m_stderr = chunk;
+            m_stderrFresh = false;
+        } else {
+            m_stderr.append(chunk);
+        }
         trimToCap(m_stderr);
+        Q_EMIT stderrTextChanged();
+    } else if (m_stderrFresh && !m_stderr.isEmpty()) {
+        m_stderr.clear();
+        m_stderrFresh = false;
         Q_EMIT stderrTextChanged();
     }
 

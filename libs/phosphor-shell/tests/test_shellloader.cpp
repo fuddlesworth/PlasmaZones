@@ -82,12 +82,19 @@ private Q_SLOTS:
 
     void testValidNameProducesConfigDir()
     {
-        ShellLoader loader(QStringLiteral("phosphor-shell"));
+        // Use a name guaranteed not to collide with any installed
+        // shell.qml on the host. `setTestModeEnabled(true)` redirects
+        // the user-config dir to a temp location, but it does NOT
+        // redirect system data dirs (XDG_DATA_DIRS) — so a developer
+        // running this test on a machine where phosphor-shell is
+        // installed system-wide would find /usr/share/phosphor-shell/
+        // shell.qml. A unique sentinel name keeps the test environment-
+        // independent.
+        ShellLoader loader(QStringLiteral("phosphorshell-test-no-such-shell-xyz"));
         const QString configDir = loader.shellConfigDir();
         QVERIFY(!configDir.isEmpty());
-        QVERIFY(configDir.endsWith(QLatin1String("/phosphor-shell")));
-        // resolve() returns empty when no shell.qml exists at the path,
-        // which is the expected state in the test environment.
+        QVERIFY(configDir.endsWith(QLatin1String("/phosphorshell-test-no-such-shell-xyz")));
+        // resolve() returns empty when no shell.qml exists at the path.
         QCOMPARE(loader.resolve(), QUrl());
     }
 

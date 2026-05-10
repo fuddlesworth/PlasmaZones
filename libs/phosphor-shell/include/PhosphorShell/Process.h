@@ -79,6 +79,15 @@ private:
     int m_interval = 0;
     QString m_stdout;
     QString m_stderr;
+    // "Fresh run" latches — set in startProcess, cleared by the first
+    // readyRead of the new run. The next readyRead REPLACES the buffer
+    // instead of appending, so a clock-style interval=N consumer never
+    // sees a transient empty stdoutText (the visible "blink" the old
+    // emit-on-clear path produced). Drain in onProcessFinished still
+    // honours the latch: a run that exited with no output at all
+    // explicitly clears the buffer there so old data doesn't linger.
+    bool m_stdoutFresh = true;
+    bool m_stderrFresh = true;
     // Stateful UTF-8 → UTF-16 decoders that retain partial multi-byte
     // sequences across `readyRead*` chunk boundaries. Without this, a
     // codepoint that straddles two read chunks (common at 4 KiB
