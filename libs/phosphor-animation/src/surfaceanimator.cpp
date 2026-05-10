@@ -104,24 +104,49 @@ inline qreal clampPaddingToParent(QQuickItem* anchor, qreal requestedPad)
     }
     qreal pad = qMax(qreal(0.0), requestedPad);
     if (anchor) {
-        if (QQuickItem* anchorParent = anchor->parentItem()) {
-            const qreal parentW = anchorParent->width();
-            const qreal parentH = anchorParent->height();
+        // Clamp against the QQuickWindow's contentItem (the surface scene
+        // root) rather than the anchor's immediate parentItem. The
+        // framebuffer that actually clips rendering is the wl_surface,
+        // and the contentItem matches that 1:1; the anchor's QML
+        // parentItem can be a much smaller inner container (e.g. a
+        // popup's PopupContent wrapping a PopupFrame anchor), which
+        // would pinch `maxPadH` to a tiny fraction when the anchor sits
+        // near its container's edge (morph on zoneSelector reported
+        // ~3.7% pad because the PopupFrame's `anchor.y == 10` inside
+        // its container) — the visible "morph hits edge limits"
+        // symptom. Qt scene graph items render past their QML parent's
+        // bounds without explicit `clip: true`, so the only hard limit
+        // is the surface FBO.
+        QQuickItem* clipFrame = nullptr;
+        QPointF anchorPosInClipFrame(anchor->x(), anchor->y());
+        if (QQuickWindow* win = anchor->window()) {
+            if (QQuickItem* root = win->contentItem()) {
+                clipFrame = root;
+                anchorPosInClipFrame = anchor->mapToItem(root, QPointF(0.0, 0.0));
+            }
+        }
+        if (!clipFrame) {
+            clipFrame = anchor->parentItem();
+        }
+        if (clipFrame) {
+            const qreal frameW = clipFrame->width();
+            const qreal frameH = clipFrame->height();
             const qreal anchorW = anchor->width();
             const qreal anchorH = anchor->height();
-            // Reject NaN derived from anchor/parent geometry too — the
-            // input-only NaN guard above doesn't catch the case where
-            // anchor->y() is NaN (anchor mid-recompute, layout binding
-            // partially evaluated), which would propagate through qMax
-            // and yield a NaN clamp result that cascades into NaN
-            // shader-item geometry. `qIsFinite` catches NaN AND Inf.
-            const bool geomFinite = qIsFinite(parentW) && qIsFinite(parentH) && qIsFinite(anchorW) && qIsFinite(anchorH)
-                && qIsFinite(anchor->x()) && qIsFinite(anchor->y());
-            if (geomFinite && parentW > 0.0 && parentH > 0.0 && anchorW > 0.0 && anchorH > 0.0) {
-                const qreal availTop = qMax(qreal(0.0), anchor->y());
-                const qreal availBottom = qMax(qreal(0.0), parentH - (anchor->y() + anchorH));
-                const qreal availLeft = qMax(qreal(0.0), anchor->x());
-                const qreal availRight = qMax(qreal(0.0), parentW - (anchor->x() + anchorW));
+            // Reject NaN derived from anchor/frame geometry — the input-
+            // only NaN guard above doesn't catch the case where
+            // `anchorPosInClipFrame.y()` is NaN (anchor mid-recompute,
+            // layout binding partially evaluated), which would propagate
+            // through qMax and yield a NaN clamp result that cascades
+            // into NaN shader-item geometry. `qIsFinite` catches NaN
+            // AND Inf.
+            const bool geomFinite = qIsFinite(frameW) && qIsFinite(frameH) && qIsFinite(anchorW) && qIsFinite(anchorH)
+                && qIsFinite(anchorPosInClipFrame.x()) && qIsFinite(anchorPosInClipFrame.y());
+            if (geomFinite && frameW > 0.0 && frameH > 0.0 && anchorW > 0.0 && anchorH > 0.0) {
+                const qreal availTop = qMax(qreal(0.0), anchorPosInClipFrame.y());
+                const qreal availBottom = qMax(qreal(0.0), frameH - (anchorPosInClipFrame.y() + anchorH));
+                const qreal availLeft = qMax(qreal(0.0), anchorPosInClipFrame.x());
+                const qreal availRight = qMax(qreal(0.0), frameW - (anchorPosInClipFrame.x() + anchorW));
                 const qreal maxPadH = qMin(availTop, availBottom) / anchorH;
                 const qreal maxPadW = qMin(availLeft, availRight) / anchorW;
                 pad = qMin(pad, qMin(maxPadH, maxPadW));
