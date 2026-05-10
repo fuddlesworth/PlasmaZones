@@ -129,6 +129,8 @@ SettingsFlickable {
         profileEditor.shaderEffectId = "";
         profileEditor.shaderParams = ({
         });
+        profileEditor.lockedShaderParams = ({
+        });
         profileEditor.overrideCurve = true;
         profileEditor.overrideDuration = true;
     }
@@ -284,6 +286,14 @@ SettingsFlickable {
                     showShaderSection: shaderKindRadio.checked
                     showTimingSection: timingKindRadio.checked
                     showOverrideCheckboxes: true
+                    // Same lock + randomize toolbar the per-event
+                    // card surfaces — the rule editor mirrors every
+                    // affordance available on the per-event editor.
+                    // Lock state isn't persisted (it's a UI hint for
+                    // the randomize roll); it's reset on shader
+                    // switch and on successful Add.
+                    enableLocking: true
+                    enableRandomize: true
                     eventLabel: i18nc("placeholder used in the curve dialog title for app-rule curves", "this rule")
                     availableShaders: root.shadersList || []
                     // Param-write signals fold mutations back into the
@@ -291,14 +301,33 @@ SettingsFlickable {
                     // card persists immediately; rules just update
                     // local state.
                     onShaderEffectActivated: function(id) {
-                        if (id !== profileEditor.shaderEffectId)
+                        if (id !== profileEditor.shaderEffectId) {
                             // Switching effects clears the working
-                            // parameter map — same-named ids in
-                            // different shader schemas are unrelated.
+                            // parameter map AND the lock map —
+                            // same-named ids in different shader
+                            // schemas are unrelated, so carrying
+                            // either across an effect switch would
+                            // alias unrelated params.
                             profileEditor.shaderParams = ({
                             });
-
+                            profileEditor.lockedShaderParams = ({
+                            });
+                        }
                         profileEditor.shaderEffectId = id;
+                    }
+                    onLockToggleRequested: function(paramId, locked) {
+                        profileEditor.lockedShaderParams = profileEditor.lockedAfterToggle(paramId, locked);
+                    }
+                    onLockAllToggleRequested: function(locked) {
+                        profileEditor.lockedShaderParams = profileEditor.lockedAfterAllToggle(locked);
+                    }
+                    onRandomizeRequested: {
+                        // The roll honours the lock map — locked
+                        // params are kept at their current values,
+                        // unlocked ones are re-rolled within their
+                        // schema-declared ranges. The merged map
+                        // becomes the new working state.
+                        profileEditor.shaderParams = profileEditor.randomizedShaderParams();
                     }
                     onShaderParamWriteRequested: function(effectId, paramId, value) {
                         if (effectId !== profileEditor.shaderEffectId)
