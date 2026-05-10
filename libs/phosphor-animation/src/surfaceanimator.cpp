@@ -788,8 +788,9 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // offsets 672/688 and a fly-in / slide vert reads
     // `screenW = max(0, 1) = 1`, collapsing `clearancePx` to a single
     // pixel, so the card snaps to its rest position with no slide-in.
-    // Hide legs hide this because they reuse iSurfaceScreenPos values
-    // populated by the show leg's later geometry signals.
+    // Pre-fix this only manifested on show legs (hide legs ran against
+    // iSurfaceScreenPos values populated by the show leg's later
+    // anchor-geometry signals, so the slide-out played correctly).
     //
     // For the persistent-anchor case (zone selector, snap-assist,
     // layout picker pre-warmed PopupFrames), this also seeds the
