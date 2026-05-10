@@ -110,8 +110,8 @@ void main() {
         // samples beyond the surface produce a grey-transparent border.
         // Fade to zero across a tight 0.005-wide band at each edge so the
         // warped silhouette crops cleanly. Same pattern as morph/plasma-flow.
-        vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), warped_uv);
-        vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), warped_uv);
+        vec2 insideLo = smoothstep(vec2(-0.005), vec2(0.0), warped_uv);
+        vec2 insideHi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.005), warped_uv);
         float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
         vec4 color = texture(uTexture0, warped_uv) * mask;
 
@@ -146,8 +146,8 @@ void main() {
         // samples beyond the surface produce a grey-transparent border.
         // Fade to zero across a tight 0.005-wide band at each edge so the
         // warped silhouette crops cleanly. Same pattern as morph/plasma-flow.
-        vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), warped_uv);
-        vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), warped_uv);
+        vec2 insideLo = smoothstep(vec2(-0.005), vec2(0.0), warped_uv);
+        vec2 insideHi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.005), warped_uv);
         float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
         vec4 color = texture(uTexture0, warped_uv) * mask;
 

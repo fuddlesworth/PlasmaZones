@@ -55,8 +55,8 @@ void main()
     // the prior hard `if (outside) return vec4(0)` — the hard cutoff
     // produced a visible 1-texel discontinuity during the overshoot
     // phase when inverse-scaled UV briefly leaves [0,1].
-    vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), sampleUv);
-    vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), sampleUv);
+    vec2 insideLo = smoothstep(vec2(-0.005), vec2(0.0), sampleUv);
+    vec2 insideHi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.005), sampleUv);
     float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
     fragColor = texture(uTexture0, sampleUv) * mask;
 }

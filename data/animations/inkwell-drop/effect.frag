@@ -55,8 +55,8 @@ void main() {
     // the transparent edge. Fade to zero across a tight 0.005-wide band at
     // each edge so the rippled silhouette crops cleanly. Same pattern as
     // morph/plasma-flow.
-    vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), distorted);
-    vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), distorted);
+    vec2 insideLo = smoothstep(vec2(-0.005), vec2(0.0), distorted);
+    vec2 insideHi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.005), distorted);
     float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
     vec4 win = texture(uTexture0, distorted) * mask;
 

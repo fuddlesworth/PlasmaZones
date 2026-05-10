@@ -82,8 +82,8 @@ void main() {
             // visible. Same soft-mask pattern morph/effect.frag uses to fade
             // out-of-bounds samples to transparent without a hard 1-texel
             // discontinuity.
-            vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), sample_uv);
-            vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), sample_uv);
+            vec2 insideLo = smoothstep(vec2(-0.005), vec2(0.0), sample_uv);
+            vec2 insideHi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.005), sample_uv);
             float boundsMask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
 
             vec4 color = texture(uTexture0, sample_uv) * boundsMask;
@@ -128,8 +128,8 @@ void main() {
 
             // Boundary mask — see close-leg branch above for rationale.
             // Same divide produces the same UV stretch on the open leg.
-            vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), sample_uv);
-            vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), sample_uv);
+            vec2 insideLo = smoothstep(vec2(-0.005), vec2(0.0), sample_uv);
+            vec2 insideHi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.005), sample_uv);
             float boundsMask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
 
             vec4 color = texture(uTexture0, sample_uv) * boundsMask;
