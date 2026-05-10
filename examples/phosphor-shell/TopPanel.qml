@@ -26,16 +26,16 @@ PanelWindow {
     required property string memPercent
     required property string batteryPercent
     required property bool batteryVisible
-    // Screen height in PHYSICAL pixels — gradient.frag needs this to
-    // map the panel's UV (which spans the surface height) to the
-    // wallpaper's UV (which spans the screen's height). iResolution
-    // in the shader is already physical-pixel scaled by DPR, so we
-    // multiply here too.
-    readonly property real screenHeightPx: Screen.height * Screen.devicePixelRatio
-    // Shadow height in physical pixels — same DPR adjustment as
-    // screenHeightPx so the shader compares apples to apples against
-    // iResolution.y.
-    readonly property real shadowSizePx: root.shadowSize * Screen.devicePixelRatio
+    // Surface-to-screen height RATIO (DPR-independent). The shader
+    // multiplies the panel's surface UV by this to get the wallpaper-
+    // texture UV for the strip of wallpaper the panel sits on top of.
+    // A ratio sidesteps having to reconcile `Screen.devicePixelRatio`
+    // with the panel's actual rendering DPR — they cancel out here.
+    readonly property real panelToScreenH: (root.thickness + root.shadowSize) / Math.max(Screen.height, 1)
+    // Shadow strip as fraction of total surface height (also DPR-
+    // independent). The shader uses 1 - shadowFraction as the
+    // panel/shadow split position in surface-local UV.
+    readonly property real shadowFraction: root.shadowSize / Math.max(root.thickness + root.shadowSize, 1)
 
     edge: PanelWindow.Top
     thickness: 38
@@ -72,6 +72,14 @@ PanelWindow {
         // 0.45 looks like a real drop-shadow against the
         // Catppuccin wallpaper palette without obscuring the
         // window content underneath.
+        // Ratio form is DPR-independent — see the property comment
+        // above. Passing physical-pixel screenHeight + shadowSize
+        // separately would risk a 2× mismatch if Screen.dpr ever
+        // disagreed with the panel's actual rendering DPR (which
+        // produced the "shadow strip is half the panel" symptom
+        // observed in the earlier rev).
+        // 0.5 gives a clearly readable drop shadow without
+        // obscuring window content immediately below the panel.
 
         anchors.fill: parent
         playing: root.visible
@@ -90,8 +98,8 @@ PanelWindow {
         wallpaperTexture: PhosphorShell.wallpaper.image
         //   customParams1: speed / baseAngle / tintOpacity / frostAmount
         //   customParams2: cornerRadius / frostScale
-        //   customParams3: screenHeight / blurRadius
-        //   customParams4: shadowSize / shadowOpacity
+        //   customParams3: panelToScreenH / blurRadius
+        //   customParams4: shadowFraction / shadowOpacity
         shaderParams: {
             "customParams1_x": 1.2,
             "customParams1_y": 0,
@@ -99,10 +107,10 @@ PanelWindow {
             "customParams1_w": 0.08,
             "customParams2_x": 0,
             "customParams2_y": 24,
-            "customParams3_x": root.screenHeightPx,
+            "customParams3_x": root.panelToScreenH,
             "customParams3_y": 8,
-            "customParams4_x": root.shadowSizePx,
-            "customParams4_y": 0.45
+            "customParams4_x": root.shadowFraction,
+            "customParams4_y": 0.5
         }
         // Catppuccin mocha mauve → macchiato sky.
         customColor1: "#cba6f7"

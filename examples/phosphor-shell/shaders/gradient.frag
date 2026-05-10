@@ -9,28 +9,30 @@
 // alpha so the compositor's behind-color shows. Pre-multiplied alpha
 // output. SDF mask uses hard cutoff to avoid fringe.
 //
-// customParams[0]: x=speed       y=baseAngle     z=tintOpacity   w=frostAmount
-// customParams[1]: x=cornerRadius y=frostScale
-// customParams[2]: x=screenHeight y=blurRadius
-// customParams[3]: x=shadowSize   y=shadowOpacity
-//   - screenHeight: physical-pixel height of the screen the panel is
-//     attached to. Required to map the panel's UV (which spans the
-//     panel's height, typically 38 px) to the wallpaper's UV (which
-//     spans the screen's height, ~1080+ px). Without this the
-//     wallpaper would be squashed into the panel.
+// customParams[0]: x=speed           y=baseAngle      z=tintOpacity    w=frostAmount
+// customParams[1]: x=cornerRadius    y=frostScale
+// customParams[2]: x=panelToScreenH  y=blurRadius
+// customParams[3]: x=shadowFraction  y=shadowOpacity
+//   - panelToScreenH: DPR-INDEPENDENT ratio of the panel's TOTAL
+//     surface height (visible + shadow strip) over the screen's
+//     height, both measured in the SAME unit system (logical or
+//     physical — the ratio cancels DPR). The shader uses this
+//     directly to compute the wallpaper-UV y position from the
+//     panel's surface-local UV. Passing a physical-pixel screen
+//     height with a DPR-adjusted shadowSize would be a DPR trap if
+//     `Screen.devicePixelRatio` ever disagrees with the panel's
+//     actual rendering DPR — the ratio form avoids the trap.
 //   - blurRadius: blur kernel radius in WALLPAPER pixels, so the
 //     visual blur stays consistent regardless of panel thickness.
-//   - shadowSize: physical-pixel height of the drop-shadow strip at
-//     the BOTTOM of the surface (Top-edge panel assumption). Set to 0
-//     to disable the shadow. The panel's wl_surface must already be
-//     this many pixels taller than the visible panel thickness —
-//     PhosphorShell::PanelWindow::shadowSize is the QML knob that
-//     enlarges the surface; the exclusiveZone reservation stays at
-//     the visible thickness so other windows don't reserve the
-//     shadow strip.
+//   - shadowFraction: shadowSize / (thickness + shadowSize). DPR-
+//     independent ratio of "how much of the surface is shadow". 0
+//     disables the shadow. The C++ side (PhosphorShell::PanelWindow::
+//     shadowSize + ShellEngine::materializePanels) is responsible for
+//     allocating the extra surface space; this param just tells the
+//     shader where the panel-to-shadow split lives.
 //   - shadowOpacity: alpha of the shadow at its strongest (right
 //     below the panel edge); fades quadratically to 0 at the far end
-//     of the strip. Default 0.4 looks right against most wallpapers.
+//     of the strip. Default 0.5 looks right against most wallpapers.
 // customColors[0]: gradient start color (customColor1 in QML)
 // customColors[1]: gradient end color   (customColor2 in QML)
 
@@ -133,19 +135,25 @@ void main() {
     // thickness) and keeps the SDF properly negative on the interior.
     float radius       = max(1.0, customParams[1].x);
     float frostScale   = customParams[1].y > 0.0 ? customParams[1].y : 24.0;
-    float screenHeight  = customParams[2].x > 0.0 ? customParams[2].x : iResolution.y;
-    float blurRadius    = customParams[2].y > 0.0 ? customParams[2].y : 8.0;
-    float shadowSizePx  = max(0.0, customParams[3].x);
-    float shadowOpacity = customParams[3].y > 0.0 ? customParams[3].y : 0.4;
+    // panelToScreenH: panel surface height / screen height (logical or
+    // physical, ratio cancels DPR). Default 1.0 → samples the whole
+    // wallpaper height across the panel (visually wrong but won't NaN
+    // when the QML side hasn't computed the ratio yet).
+    float panelToScreenH = customParams[2].x > 0.0 ? customParams[2].x : 1.0;
+    float blurRadius     = customParams[2].y > 0.0 ? customParams[2].y : 8.0;
+    // shadowFraction: ratio of the surface that's the shadow strip
+    // (0..1). 0 disables the shadow branch entirely.
+    float shadowFraction = clamp(customParams[3].x, 0.0, 1.0);
+    float shadowOpacity  = customParams[3].y > 0.0 ? customParams[3].y : 0.5;
 
     // Split the surface into the visible panel region (top) and the
-    // drop-shadow strip (bottom). shadowSizePx==0 collapses this to
+    // drop-shadow strip (bottom). shadowFraction==0 collapses this to
     // "everything is panel" — shadowStartV becomes 1.0 and the shadow
-    // branch never fires. For Top-edge panels the shadow falls below
-    // the visible region; other edges currently render the shadow at
-    // the bottom of the surface regardless, which only looks right
-    // for Top-edge panels (the example's intended usage).
-    float shadowStartV = 1.0 - shadowSizePx / max(iResolution.y, 1.0);
+    // branch never fires. DPR-independent: the QML side passes the
+    // surface-height ratio directly, so a mismatch between
+    // `Screen.devicePixelRatio` and the actual rendering DPR can't
+    // misplace the split.
+    float shadowStartV = 1.0 - shadowFraction;
 
     // SDF rounded rectangle mask for the SURFACE — gives AA at all
     // four edges of the wl_surface. The shadow branch below already
@@ -166,12 +174,17 @@ void main() {
     // edge. RGB is black; the compositor blends this over whatever's
     // behind, producing a real darken-the-region-below-the-panel
     // shadow.
-    if (shadowSizePx > 0.0 && uv.y > shadowStartV) {
+    if (shadowFraction > 0.001 && uv.y > shadowStartV) {
         float shadowSpan = 1.0 - shadowStartV;
         float t = (uv.y - shadowStartV) / max(shadowSpan, 0.001);
-        float a = shadowOpacity * (1.0 - t);
-        a *= a; // quadratic falloff reads as soft drop-shadow
-        a *= mask;
+        // Quadratic falloff SHAPE — peaks at 1.0 at the panel-bottom
+        // edge and decays to 0 at the far end. Previous formulation
+        // multiplied the falloff INTO the opacity then squared the
+        // whole thing, giving peak alpha = opacity² (≈0.20 at
+        // opacity=0.45) — way too subtle to read as a drop shadow.
+        float falloff = 1.0 - t;
+        falloff *= falloff;
+        float a = shadowOpacity * falloff * mask;
         fragColor = vec4(0.0, 0.0, 0.0, a) * qt_Opacity;
         return;
     }
@@ -194,14 +207,20 @@ void main() {
         hasWallpaper = true;
         // Panel UV → screen UV. Panel is at the top of the screen
         // spanning full width, so screenU == panelU and screenV ramps
-        // 0..panelHeight/screenHeight as panel UV ramps 0..1.
-        vec2 screenUv = vec2(uv.x, uv.y * iResolution.y / screenHeight);
+        // 0 .. (panel total height / screen height) as panel UV ramps
+        // 0 .. 1. The ratio is passed DPR-independently via
+        // panelToScreenH so we don't have to reconcile QML's
+        // Screen.devicePixelRatio with the panel's actual rendering DPR.
+        vec2 screenUv = vec2(uv.x, uv.y * panelToScreenH);
         // Screen UV → wallpaper UV. KDE / GNOME / Hyprland default to
         // "scaled and cropped" wallpaper positioning; emulate center-
         // crop fit so the on-screen pixel maps to the right wallpaper
         // pixel.
+        // Derive screen aspect from `panelToScreenH`: panel surface
+        // is full screen width, so screen width = iResolution.x and
+        // screen height = iResolution.y / panelToScreenH.
         float wpAspect = wpSize.x / max(wpSize.y, 1.0);
-        float scrAspect = iResolution.x / max(screenHeight, 1.0);
+        float scrAspect = (iResolution.x * panelToScreenH) / max(iResolution.y, 1.0);
         vec2 wpUv = screenUv;
         if (wpAspect > scrAspect) {
             float scale = scrAspect / wpAspect;
