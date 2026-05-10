@@ -571,21 +571,34 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     return redirects;
 }
 
-const QHash<QString, QSet<QString>>& SettingsController::virtualParentChildren()
+const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
 {
-    // Mid-level virtual parents whose children DON'T share their name
-    // prefix. The QML sidebar nests animations leaves under "Surfaces"
-    // and "Library" virtual rows for visual grouping, but the leaf
-    // page names stayed flat (`animations-windows` etc.) so existing
-    // page IDs / persisted-config / D-Bus traffic don't churn. The
-    // dirty-state propagation needs the explicit child set because the
-    // prefix walk used for top-level parents (`animations-windows`
-    // starts with `animations-`) misses the virtual layer
-    // (`animations-windows` does NOT start with `animations-surfaces-`).
+    // Single source of truth: parent name → set of leaf child page
+    // names. Used by `isPageDirty` to propagate dirty state from a
+    // leaf to any group it belongs to. Covers both top-level parents
+    // (snapping / tiling / animations) AND mid-level virtual parents
+    // (animations-surfaces / animations-library) whose children don't
+    // share their name prefix — the explicit set sidesteps the
+    // asymmetry between prefix-walk and direct membership lookup.
     //
-    // Keep this mapping in sync with the matching `_childItems` keys
-    // in src/settings/qml/Main.qml.
-    static const QHash<QString, QSet<QString>> children{
+    // Keep this mapping in sync with the matching `_childItems`
+    // entries in src/settings/qml/Main.qml.
+    static const QHash<QString, QSet<QString>> groups{
+        {QStringLiteral("snapping"),
+         {QStringLiteral("snapping-appearance"), QStringLiteral("snapping-effects"), QStringLiteral("snapping-shaders"),
+          QStringLiteral("snapping-behavior"), QStringLiteral("snapping-zoneselector"),
+          QStringLiteral("snapping-assignments"), QStringLiteral("snapping-apprules"),
+          QStringLiteral("snapping-ordering"), QStringLiteral("snapping-shortcuts")}},
+        {QStringLiteral("tiling"),
+         {QStringLiteral("tiling-appearance"), QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm"),
+          QStringLiteral("tiling-assignments"), QStringLiteral("tiling-ordering"), QStringLiteral("tiling-shortcuts")}},
+        {QStringLiteral("animations"),
+         {QStringLiteral("animations-general"), QStringLiteral("animations-app-rules"),
+          QStringLiteral("animations-windows"), QStringLiteral("animations-zones"),
+          QStringLiteral("animations-notifications"), QStringLiteral("animations-popups"),
+          QStringLiteral("animations-panels"), QStringLiteral("animations-workspaces"),
+          QStringLiteral("animations-widgets"), QStringLiteral("animations-presets"),
+          QStringLiteral("animations-motionsets"), QStringLiteral("animations-shaders")}},
         {QStringLiteral("animations-surfaces"),
          {QStringLiteral("animations-windows"), QStringLiteral("animations-zones"),
           QStringLiteral("animations-notifications"), QStringLiteral("animations-popups"),
@@ -595,7 +608,7 @@ const QHash<QString, QSet<QString>>& SettingsController::virtualParentChildren()
          {QStringLiteral("animations-presets"), QStringLiteral("animations-motionsets"),
           QStringLiteral("animations-shaders")}},
     };
-    return children;
+    return groups;
 }
 
 const QSet<QString>& SettingsController::validPageNames()
@@ -830,33 +843,17 @@ bool SettingsController::isPageDirty(const QString& page) const
 {
     if (m_dirtyPages.contains(page))
         return true;
-    // Parent category: dirty if any child page is dirty. Two paths:
-    //
-    //   1. Top-level parents (snapping / tiling / animations) where every
-    //      child page name is `<parent>-<leaf>` — the prefix walk is
-    //      cheap and avoids enumerating every child explicitly.
-    //
-    //   2. Mid-level virtual parents (animations-surfaces /
-    //      animations-library) whose children inherit the GRANDPARENT's
-    //      name prefix (e.g. `animations-surfaces` wraps
-    //      `animations-windows`, NOT `animations-surfaces-windows`). The
-    //      prefix walk would miss those, so look up the explicit child
-    //      set instead. Keep the mapping in sync with QML's
-    //      `_childItems` virtual-parent buckets in Main.qml.
-    if (parentPageRedirects().contains(page)) {
-        const QString prefix = page + QStringLiteral("-");
-        for (const QString& dirty : m_dirtyPages) {
-            if (dirty.startsWith(prefix))
+    // Parent / virtual-parent category: dirty if any child leaf in
+    // the group is dirty. Single direct-membership lookup against
+    // `pageGroupChildren()` rather than the old prefix-walk-or-hash-
+    // lookup branch — top-level parents (snapping / tiling /
+    // animations) and virtual mid-level parents (animations-surfaces /
+    // animations-library) share the same code path now.
+    const auto it = pageGroupChildren().constFind(page);
+    if (it != pageGroupChildren().constEnd()) {
+        for (const QString& child : *it) {
+            if (m_dirtyPages.contains(child))
                 return true;
-        }
-    } else {
-        const auto& groups = virtualParentChildren();
-        const auto it = groups.constFind(page);
-        if (it != groups.constEnd()) {
-            for (const QString& child : *it) {
-                if (m_dirtyPages.contains(child))
-                    return true;
-            }
         }
     }
     return false;
