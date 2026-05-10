@@ -130,21 +130,13 @@ Item {
     }
 
     // ─── Panels ──────────────────────────────────────────────────────────
-    LeftPanel {
-        id: leftPanel
-
-        shellState: shellState
-    }
-
-    CenterPanel {
-        id: centerPanel
+    // Single continuous top panel with left/center/right anchored zones.
+    // One layer-shell surface, one exclusive zone, one shader.
+    TopPanel {
+        id: topPanel
 
         shellState: shellState
         clockText: clockProc.stdoutText.trim()
-    }
-
-    RightPanel {
-        shellState: shellState
         cpuPercent: cpuStat.percent
         memPercent: memInfo.percent
         batteryPercent: batteryFile.content.trim()
@@ -157,12 +149,12 @@ Item {
     // ─── Popups ──────────────────────────────────────────────────────────
     MenuPopup {
         shellState: shellState
-        anchorItem: leftPanel.menuAnchor
+        anchorItem: topPanel.menuAnchor
     }
 
     CalendarPopup {
         shellState: shellState
-        anchorItem: centerPanel.calendarAnchor
+        anchorItem: topPanel.calendarAnchor
     }
 
     // ─── Floating windows ────────────────────────────────────────────────
