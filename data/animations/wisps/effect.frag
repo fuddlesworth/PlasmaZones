@@ -38,21 +38,6 @@ layout(location = 0) out vec4 fragColor;
 #define uColor2         customColors[1].rgb
 #define uColor3         customColors[2].rgb
 
-// hash12 / tritone — BMW common.glsl:489 / :201 verbatim. Not hosted in
-// shared/ because no other PlasmaZones animation needs them yet.
-float hash12(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * .1031);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
-}
-
-vec3 tritone(float val, vec3 shadows, vec3 midtones, vec3 highlights) {
-  if (val < 0.5) {
-    return mix(shadows, midtones, smoothstep(0.0, 1.0, val * 2.0));
-  }
-  return mix(midtones, highlights, smoothstep(0.0, 1.0, val * 2.0 - 1.0));
-}
-
 const float WISPS_RADIUS    = 20.0;
 const float WISPS_SPEED     = 10.0;
 const float WISPS_SPACING   = 40.0 + WISPS_RADIUS;
