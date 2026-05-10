@@ -223,9 +223,6 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
         shaderItem->setY(anchor->y() - padH);
         shaderItem->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
     }
-    QVector4D structural = shaderItem->customParamAt(7);
-    structural.setX(static_cast<float>(pad));
-    shaderItem->setCustomParamAt(7, structural);
     if (shaderSource) {
         shaderSource->setWidth(w);
         shaderSource->setHeight(h);
@@ -758,20 +755,11 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     shaderItem->setY(shaderAnchor->y() - padH);
     shaderItem->setIResolution(QSizeF(shaderAnchor->width() + 2.0 * padW, shaderAnchor->height() + 2.0 * padH));
 
-    // Push the bounds-padding fraction into the structural slot
-    // customParams[7].x so opt-in shaders (e.g. morph) can remap
-    // vTexCoord → anchor-space without hardcoding a constant that
-    // can drift from metadata.json. This slot is reserved by
-    // SurfaceAnimator — `translateAnimationParams` fills user-declared
-    // parameters from customParams[0] up sequentially, and no current
-    // shader declares >24 float params, so customParams[7] (slots 28-31)
-    // is unused by the user-parameter mapping. Documented in
-    // libs/phosphor-rendering/include/PhosphorRendering/ShaderEffect.h
-    // (customParams8 Q_PROPERTY). Note: writes the CLAMPED pad (above)
-    // so the shader's UV remap matches the clamped geometry.
-    QVector4D structuralParams = shaderItem->customParamAt(7);
-    structuralParams.setX(static_cast<float>(pad));
-    shaderItem->setCustomParamAt(7, structuralParams);
+    // No more customParams[7].x structural write: morph and broken-glass
+    // (the only consumers) were ported to read the pad implicitly via
+    // `iAnchorPosInFbo / iResolution`. customParams[7] is now a regular
+    // user-parameter slot like the other seven, available for any future
+    // shader pack that declares >24 float params.
 
     // Build the geometry-sync lambda + its dependencies.
     //
