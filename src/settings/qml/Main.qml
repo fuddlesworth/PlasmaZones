@@ -8,11 +8,6 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 ApplicationWindow {
-    // Stay on the current activePage when popping to an
-    // intermediate parent — the leaf the user came from is
-    // more useful context than re-anchoring on the virtual
-    // category they just stepped out of.
-
     id: window
 
     // Expose the layout context menu so Loader-loaded pages can connect to its signals
@@ -385,15 +380,15 @@ ApplicationWindow {
 
             }
         } else {
-            // Disable drill-in when we're inlining nested
-            // matches below (the user can click those
-            // directly), mirroring the main-mode pattern.
-
             // Back-row label is the CURRENT mode's display label
             // (so a sub-sidebar "Surfaces" reads "← Surfaces"). The
             // mode may live in `_mainItems` (top-level parents like
             // "animations") or inside another `_childItems` entry
             // (intermediate parents like "animations-surfaces").
+            // Search-mode entries that have nested matches inlined
+            // below have their drill-in disabled at append time so
+            // the user clicks the leaves directly, mirroring the
+            // main-mode search pattern.
             let parentLabel = _modeLabel(_sidebarMode);
             // Back button row (always visible)
             sidebarModel.append({
@@ -498,7 +493,12 @@ ApplicationWindow {
     // (animations → animations-surfaces → animations-windows).
     function _parentLabel() {
         let mode = _sidebarMode;
-        while (_parentMode[mode])mode = _parentMode[mode]
+        // Walk up the lineage chain; bounded by the depth of
+        // `_parentMode` (currently at most 1 hop, but the loop is
+        // future-proof if a deeper hierarchy is added). Use an
+        // explicit body so qmlformat doesn't strip the loop into a
+        // single hard-to-read line.
+        while (_parentMode[mode] !== undefined)mode = _parentMode[mode]
         return _modeLabel(mode);
     }
 
@@ -556,16 +556,17 @@ ApplicationWindow {
     // `animations-surfaces` → `animations`) drill back to the
     // intermediate parent; everything else returns to "main" with the
     // current parent highlighted as `activePage`. When popping back
-    // into a still-virtual parent (one whose entries are all sub-
-    // categories themselves), `activePage` is left untouched so the
-    // user's last-visited leaf stays visible until they pick another.
+    // into an intermediate (still-virtual) parent, `activePage` is
+    // left untouched (empty pendingPage) so the leaf the user came
+    // from stays visible until they pick another — re-anchoring on
+    // the virtual category they just stepped out of would be less
+    // useful context.
     function _drillOut() {
-        let target = _parentMode[_sidebarMode] || "main";
+        const target = _parentMode[_sidebarMode] || "main";
+        const popToMain = target === "main";
+        const pendingPage = popToMain ? (_sidebarMode !== "main" ? _sidebarMode : "overview") : "";
         sidebarTransition.pendingMode = target;
-        if (target === "main")
-            sidebarTransition.pendingPage = _sidebarMode !== "main" ? _sidebarMode : "overview";
-        else
-            sidebarTransition.pendingPage = "";
+        sidebarTransition.pendingPage = pendingPage;
         sidebarTransition.restart();
     }
 
