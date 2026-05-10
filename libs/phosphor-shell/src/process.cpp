@@ -170,6 +170,12 @@ void Process::stopProcess()
             m_process->waitForFinished(kKillTimeoutMs);
         }
     }
+    // Reset the stateful UTF-8 decoders here too: state-after-stop must
+    // be clean so any path that mutates m_command without going through
+    // startProcess (or that calls startProcess directly) doesn't drag
+    // a partial-codepoint remnant from the previous run into the next.
+    m_stdoutDecoder.resetState();
+    m_stderrDecoder.resetState();
 }
 
 void Process::onReadyReadStdout()

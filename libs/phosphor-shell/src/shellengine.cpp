@@ -186,6 +186,11 @@ void ShellEngine::onFileChanged()
     // line silently returns undefined and the example settings panel
     // would render blank after every hot reload.
     m_engine->rootContext()->setContextProperty(QStringLiteral("Environment"), new Environment(m_engine.get()));
+    // No qmlRegisterType call here: those are PROCESS-global, set up
+    // once in load() at startup. A new QQmlEngine sees the existing
+    // registrations and resolves "Phosphor.Shell" types correctly. If
+    // a future Qt scopes registrations per-engine, this assumption
+    // would need revisiting — current Qt 6.x keeps the registry global.
 
     QQmlComponent component(m_engine.get(), m_shellUrl, QQmlComponent::PreferSynchronous);
     if (component.isError()) {
@@ -412,13 +417,18 @@ void ShellEngine::materializePanels()
         // no-op-equivalent because m_rootObject still holds the QML root
         // (the wrapping Item), not this panel.
         if (panel == rootPanel) {
-            m_rootObject.release();
+            // m_rootRef tracks the live root via QPointer regardless of
+            // unique_ptr ownership, so we discard the released raw
+            // pointer — explicit (void) silences any [[nodiscard]] from
+            // a hardened C++23 stdlib build.
+            (void)m_rootObject.release();
         }
         cfg.contentItem = std::unique_ptr<QQuickItem>(panel);
 
         // Pass nullptr as parent — m_surfaces (vector of unique_ptr) is
         // the single owner. Passing `this` would double-own (QObject parent
         // + unique_ptr) and double-free during ~ShellEngine.
+        const bool wasRootPanel = (panel == rootPanel);
         auto* surface = m_deps.surfaceFactory->create(std::move(cfg), nullptr);
         if (surface) {
             surface->show();
@@ -435,6 +445,21 @@ void ShellEngine::materializePanels()
             }
         } else {
             qCWarning(lcShellEngine) << "Failed to create surface for PanelWindow";
+            // For child panels we soldier on — losing one panel still
+            // leaves a usable shell. For the ROOT panel, the cfg.contentItem
+            // destructor has already deleted the QML root and m_rootRef
+            // QPointer auto-cleared. m_rootObject was released
+            // up-front so there's nothing to roll back, but every later
+            // step (PersistentProperties scan, hot-reload save/restore)
+            // would silently no-op against the null root. Fail loudly
+            // and tear down what we've built so the embedder can react
+            // (retry, fallback, exit) instead of running headless.
+            if (wasRootPanel) {
+                qCCritical(lcShellEngine) << "Root panel surface creation failed — aborting load";
+                m_surfaces.clear();
+                Q_EMIT failed(QStringLiteral("Failed to create surface for root PanelWindow"));
+                return;
+            }
         }
     }
 

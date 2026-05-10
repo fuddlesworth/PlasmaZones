@@ -38,10 +38,14 @@ int FloatingWindow::windowWidth() const
 
 void FloatingWindow::setWindowWidth(int width)
 {
-    if (m_windowWidth == width) {
+    // Clamp to >= 1 — Wayland surface protocols reject 0-dim surfaces,
+    // negative width has no meaning, and QWindow::setWidth would itself
+    // assert in debug builds. Symmetric with PopupWindow / PanelWindow.
+    const int clamped = qMax(1, width);
+    if (m_windowWidth == clamped) {
         return;
     }
-    m_windowWidth = width;
+    m_windowWidth = clamped;
     if (m_window) {
         m_window->setWidth(m_windowWidth);
     }
@@ -55,10 +59,11 @@ int FloatingWindow::windowHeight() const
 
 void FloatingWindow::setWindowHeight(int height)
 {
-    if (m_windowHeight == height) {
+    const int clamped = qMax(1, height);
+    if (m_windowHeight == clamped) {
         return;
     }
-    m_windowHeight = height;
+    m_windowHeight = clamped;
     if (m_window) {
         m_window->setHeight(m_windowHeight);
     }

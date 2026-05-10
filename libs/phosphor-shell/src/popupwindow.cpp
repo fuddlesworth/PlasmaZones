@@ -48,10 +48,13 @@ int PopupWindow::popupWidth() const
 
 void PopupWindow::setPopupWidth(int width)
 {
-    if (m_popupWidth == width) {
+    // Clamp to >= 1 — Wayland surface protocols reject 0-dim surfaces,
+    // and a negative width has no meaning.
+    const int clamped = qMax(1, width);
+    if (m_popupWidth == clamped) {
         return;
     }
-    m_popupWidth = width;
+    m_popupWidth = clamped;
     Q_EMIT popupWidthChanged();
     if (m_popupWindow) {
         m_popupWindow->setWidth(m_popupWidth);
@@ -65,10 +68,11 @@ int PopupWindow::popupHeight() const
 
 void PopupWindow::setPopupHeight(int height)
 {
-    if (m_popupHeight == height) {
+    const int clamped = qMax(1, height);
+    if (m_popupHeight == clamped) {
         return;
     }
-    m_popupHeight = height;
+    m_popupHeight = clamped;
     Q_EMIT popupHeightChanged();
     if (m_popupWindow) {
         m_popupWindow->setHeight(m_popupHeight);
@@ -206,10 +210,13 @@ void PopupWindow::showPopup()
     }
 
     // xdg_positioner.set_anchor_rect requires the rect to lie within the
-    // parent surface's logical bounds; an out-of-bounds rect is a
-    // protocol error that drops the wl_display connection. Clamp our
-    // gap-extended rect to the parent QQuickWindow's content bounds
-    // (which equals the parent surface for layer-shell parents).
+    // parent surface's logical bounds AND be non-empty; an out-of-bounds
+    // or zero-area rect is a protocol error that drops the wl_display
+    // connection. Clamp our gap-extended rect to the parent QQuickWindow's
+    // content bounds (which equals the parent surface for layer-shell
+    // parents). If the anchor item is fully off-surface and BOTH the
+    // gap-extended and unextended rects collapse to empty, abort the
+    // show — sending an empty positioner would kill the connection.
     if (auto* parentWindow = m_anchor->window()) {
         const QRect surfaceBounds(0, 0, parentWindow->width(), parentWindow->height());
         anchorRect = anchorRect.intersected(surfaceBounds);
@@ -217,6 +224,15 @@ void PopupWindow::showPopup()
             // Fall back to the un-extended anchor rect — better to lose
             // the gap than to send an invalid positioner.
             anchorRect = computeAnchorRect().intersected(surfaceBounds);
+        }
+        if (anchorRect.isEmpty()) {
+            qCWarning(lcPopup) << "Cannot show popup: anchor item is off-surface (computed rect empty); "
+                                  "skipping show to avoid xdg-positioner protocol error";
+            // Roll the visibility flag back so a subsequent
+            // setPopupVisible(true) re-attempts cleanly. We don't emit
+            // popupVisibleChanged again — caller already saw `true`.
+            m_popupVisible = false;
+            return;
         }
     }
 
@@ -276,8 +292,22 @@ void PopupWindow::reapplyIfVisible()
     // Hide+show cycle re-creates the xdg-popup with a fresh positioner.
     // The QQuickWindow itself is reused (children stay parented to its
     // contentItem); only the wl_surface role/positioner is replayed.
+    //
+    // Capture the focused item before hiding so we can restore focus
+    // after the show — without this a TextField / SpinBox / Button that
+    // had keyboard focus would lose it whenever the popup re-applies
+    // its positioner (e.g. anchor moves while the popup is open).
+    QPointer<QQuickItem> focusedBefore(m_popupWindow->activeFocusItem());
     hidePopup();
     showPopup();
+    // Only restore focus if showPopup actually succeeded — the off-
+    // surface guard in showPopup rolls m_popupVisible back to false
+    // and returns without making the popup visible. forceActiveFocus
+    // on an item under a hidden window would just queue focus on a
+    // surface the user can't see.
+    if (m_popupVisible && focusedBefore) {
+        focusedBefore->forceActiveFocus();
+    }
 }
 
 } // namespace PhosphorShell

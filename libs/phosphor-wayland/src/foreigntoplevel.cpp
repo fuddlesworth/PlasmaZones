@@ -67,9 +67,18 @@ public:
     static struct wl_output* outputForScreen(QScreen* screen);
 
     // ─── Protocol event handlers ────────────────────────────────────────
+    //
+    // Every handler must null-check `data`: ~ForeignToplevelManager nulls
+    // the per-handle user_data via `wl_proxy_set_user_data(handle, nullptr)`
+    // before destroying the handle, so any in-flight queued event for that
+    // handle that hasn't dispatched yet lands here with data == nullptr.
+    // Without the guard we'd dereference freed Private memory.
 
     static void handleTitle(void* data, struct zwlr_foreign_toplevel_handle_v1*, const char* title)
     {
+        if (!data) {
+            return;
+        }
         auto* self = static_cast<Private*>(data);
         const QString s = QString::fromUtf8(title);
         if (self->pendingTitle != s) {
@@ -80,6 +89,9 @@ public:
 
     static void handleAppId(void* data, struct zwlr_foreign_toplevel_handle_v1*, const char* appId)
     {
+        if (!data) {
+            return;
+        }
         auto* self = static_cast<Private*>(data);
         const QString s = QString::fromUtf8(appId);
         if (self->pendingAppId != s) {
@@ -90,6 +102,9 @@ public:
 
     static void handleOutputEnter(void* data, struct zwlr_foreign_toplevel_handle_v1*, struct wl_output* output)
     {
+        if (!data) {
+            return;
+        }
         auto* self = static_cast<Private*>(data);
         QScreen* screen = screenForOutput(output);
         if (!screen) {
@@ -112,6 +127,9 @@ public:
 
     static void handleOutputLeave(void* data, struct zwlr_foreign_toplevel_handle_v1*, struct wl_output* output)
     {
+        if (!data) {
+            return;
+        }
         auto* self = static_cast<Private*>(data);
         QScreen* screen = screenForOutput(output);
         if (!screen) {
@@ -128,6 +146,9 @@ public:
 
     static void handleState(void* data, struct zwlr_foreign_toplevel_handle_v1*, struct wl_array* state)
     {
+        if (!data) {
+            return;
+        }
         auto* self = static_cast<Private*>(data);
         bool max = false, min = false, act = false, full = false;
         // Defensive: a misbehaving compositor can send a wl_array whose
@@ -174,6 +195,9 @@ public:
 
     static void handleDone(void* data, struct zwlr_foreign_toplevel_handle_v1*)
     {
+        if (!data) {
+            return;
+        }
         auto* self = static_cast<Private*>(data);
         if (self->titleDirty) {
             self->title = self->pendingTitle;
@@ -314,6 +338,9 @@ struct wl_output* ForeignToplevel::Private::outputForScreen(QScreen* screen)
 void ForeignToplevel::Private::handleParent(void* data, struct zwlr_foreign_toplevel_handle_v1*,
                                             struct zwlr_foreign_toplevel_handle_v1* parent)
 {
+    if (!data) {
+        return;
+    }
     auto* self = static_cast<Private*>(data);
     ForeignToplevel* parentObj = nullptr;
     if (parent && self->manager) {
@@ -327,6 +354,9 @@ void ForeignToplevel::Private::handleParent(void* data, struct zwlr_foreign_topl
 
 void ForeignToplevel::Private::handleClosed(void* data, struct zwlr_foreign_toplevel_handle_v1*)
 {
+    if (!data) {
+        return;
+    }
     auto* self = static_cast<Private*>(data);
     self->closed = true;
     // Detach from manager FIRST so any closedChanged listener iterating
@@ -343,6 +373,13 @@ void ForeignToplevel::Private::handleClosed(void* data, struct zwlr_foreign_topl
         // event-loop pass — eagerly clearing + emitting parentToplevelChanged
         // closes the gap.
         //
+        // Snapshot the toplevel set before the loop so emitting
+        // parentToplevelChanged on a sibling can't synchronously mutate
+        // the source hash mid-iteration (a slot might call manager->stop()
+        // or destruct the manager from a Q_INVOKABLE chain). Wayland is
+        // single-threaded by Qt's dispatcher so no concurrent mutation,
+        // but synchronous re-entry from QML JS slots is allowed.
+        //
         // Edge case worth noting but not fixing: pendingParent can point
         // to us if a reparent batch hasn't yet hit `done`. We clear
         // pendingParent and reset parentDirty, which DROPS that in-flight
@@ -351,7 +388,8 @@ void ForeignToplevel::Private::handleClosed(void* data, struct zwlr_foreign_topl
         // a deleteLater'd object. The compositor is expected to issue
         // `done` after a coherent reparent, so a closed event arriving
         // mid-batch implies the batch was already invalidated.
-        for (ForeignToplevel* sibling : std::as_const(self->manager->d->toplevels)) {
+        const auto siblings = self->manager->d->toplevels.values();
+        for (ForeignToplevel* sibling : siblings) {
             if (!sibling) {
                 continue;
             }
@@ -454,6 +492,13 @@ ForeignToplevelManager::~ForeignToplevelManager()
             continue;
         }
         if (tl->d->handle) {
+            // Symmetric with the manager-proxy nulling above: clear the
+            // per-handle listener data before destroying so any in-flight
+            // event (queued before destroy round-trips) lands on null
+            // and our handlers can null-check rather than dereference
+            // a freed Private. Each handle's `add_listener` was set to
+            // tl->d (a raw Private*) in handleToplevel.
+            wl_proxy_set_user_data(reinterpret_cast<wl_proxy*>(tl->d->handle), nullptr);
             zwlr_foreign_toplevel_handle_v1_destroy(tl->d->handle);
             tl->d->handle = nullptr;
         }

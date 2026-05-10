@@ -600,7 +600,7 @@ public:
 
     Status status() const
     {
-        return m_status;
+        return m_status.load(std::memory_order_acquire);
     }
     QString errorLog() const
     {
@@ -638,6 +638,13 @@ Q_SIGNALS:
     void wallpaperTextureChanged();
     void useWallpaperChanged();
     void useDepthBufferChanged();
+    /// Emitted when status() transitions. May be raised on the render
+    /// thread under Qt's threaded render loop (setStatus is called from
+    /// updatePaintNode). Connect with Qt::AutoConnection or
+    /// Qt::QueuedConnection only — Qt::DirectConnection from a slot on
+    /// another thread will run that slot on the render thread, which is
+    /// almost always wrong (V4 / QML JS / most app code is GUI-thread-
+    /// only).
     void statusChanged();
     void errorLogChanged();
 
@@ -805,7 +812,14 @@ private:
     std::shared_ptr<PhosphorShaders::IUniformExtension> m_uniformExtension;
 
     // ── Status ───────────────────────────────────────────────────────
-    Status m_status = Status::Null;
+    // Atomic because setStatus is called from updatePaintNode (render
+    // thread under threaded render loop) while onPlayingTick reads it on
+    // the GUI thread. A torn read would only matter at status
+    // transitions, but the gate at `m_status != Status::Ready` would
+    // skip-or-tick spuriously around the boundary. Acquire/release
+    // semantics suffice — there's no associated data we need to publish
+    // alongside.
+    std::atomic<Status> m_status{Status::Null};
     QString m_errorLog;
 
     // ── Render node tracking ─────────────────────────────────────────

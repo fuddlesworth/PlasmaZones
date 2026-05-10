@@ -38,6 +38,7 @@ inline constexpr const char* DesiredHeight = "_ps_desired_height";
 class PHOSPHORWAYLAND_EXPORT LayerSurface : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(LayerSurface)
 
     Q_PROPERTY(Layer layer READ layer WRITE setLayer NOTIFY layerChanged)
     Q_PROPERTY(Anchors anchors READ anchors WRITE setAnchors NOTIFY anchorsChanged)

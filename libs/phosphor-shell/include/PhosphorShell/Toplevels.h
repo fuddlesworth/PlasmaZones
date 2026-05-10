@@ -104,10 +104,12 @@ class PHOSPHORSHELL_EXPORT Toplevels : public QObject
 {
     Q_OBJECT
 
-    /// Snapshot list of currently-live toplevels. Suitable for one-shot
-    /// reads, but binding `Repeater { model: Toplevels.toplevels }` to
-    /// it rebuilds every delegate on every change — use `model` instead
-    /// for incremental updates.
+    /// Snapshot list of currently-live toplevels. Useful for one-shot
+    /// reads (`const list = Toplevels.toplevels`). DO NOT bind a
+    /// Repeater or ListView's `model:` to this property — every change
+    /// re-evaluates the QList and resets every delegate, including
+    /// hover state, scroll position, and any per-delegate state. Bind
+    /// `model: Toplevels.model` for incremental add/remove updates.
     Q_PROPERTY(QList<PhosphorWayland::ForeignToplevel*> toplevels READ toplevels NOTIFY toplevelsChanged)
     /// Incrementally-updating model — emits begin/endInsertRows and
     /// begin/endRemoveRows so consumers patch the delta instead of

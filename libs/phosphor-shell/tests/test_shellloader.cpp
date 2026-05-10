@@ -35,6 +35,18 @@ private Q_SLOTS:
         QVERIFY(loader.shellConfigDir().isEmpty());
     }
 
+    void testRejectsBareForwardSlash()
+    {
+        // Distinct from the traversal test: "foo/bar" exercises the
+        // forward-slash branch without also touching the dotdot branch,
+        // so a future refactor that drops the slash check (but keeps
+        // the dotdot check) would surface here rather than hide behind
+        // testRejectsPathTraversal's combined coverage.
+        ShellLoader loader(QStringLiteral("foo/bar"));
+        QVERIFY(loader.resolve().isEmpty());
+        QVERIFY(loader.shellConfigDir().isEmpty());
+    }
+
     void testRejectsAbsolutePath()
     {
         ShellLoader loader(QStringLiteral("/etc"));

@@ -129,7 +129,14 @@ LayerShellWindow::~LayerShellWindow()
     // Deregister the global-removed callback to prevent UAF — if the compositor
     // removes the global after this window is destroyed, the lambda would fire
     // with a dangling `this` pointer.
-    if (m_integration && m_globalRemovedCallbackId != 0) {
+    //
+    // m_integration is a raw pointer (LayerShellIntegration is not a
+    // QObject so QPointer doesn't apply). Compare against the live
+    // singleton to defend against the integration having been destroyed
+    // before this window — under normal Qt QPA teardown the integration
+    // outlives windows, but a defensive check costs nothing and surfaces
+    // any future ordering regression as a quiet skip rather than UAF.
+    if (m_integration && m_integration == LayerShellIntegration::instance() && m_globalRemovedCallbackId != 0) {
         m_integration->removeGlobalRemovedCallback(m_globalRemovedCallbackId);
     }
     // Safe even after handleClosed() — that path nulls m_layerSurface after

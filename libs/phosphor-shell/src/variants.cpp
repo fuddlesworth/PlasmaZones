@@ -171,7 +171,12 @@ void Variants::onRowsMoved(const QModelIndex& sourceParent, int sourceStart, int
     if (destRow > sourceEnd) {
         insertAt -= moving.size();
     }
-    insertAt = qBound(0, insertAt, m_instances.size());
+    // Q_ASSERT (not qBound) — Qt's beginMoveRows validates destRow before
+    // emitting rowsMoved, so an out-of-range value here means the model
+    // is buggy. Surfacing that loudly is more useful than silently
+    // clamping to a coherent-looking-but-wrong index.
+    Q_ASSERT_X(insertAt >= 0 && insertAt <= m_instances.size(), "Variants::onRowsMoved",
+               "destRow out of range — source model emitted rowsMoved with invalid destination");
     for (int i = 0; i < moving.size(); ++i) {
         m_instances.insert(insertAt + i, moving.at(i));
     }

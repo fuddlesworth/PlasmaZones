@@ -41,8 +41,16 @@ QObject* ShellGlobal::singleton(const QString& reloadId) const
 
 void ShellGlobal::registerSingleton(const QString& reloadId, PersistentProperties* props)
 {
-    if (m_singletons.contains(reloadId) && m_singletons.value(reloadId).data() != props) {
-        qCWarning(lcShellGlobal) << "Replacing existing singleton for reloadId" << reloadId;
+    if (m_singletons.contains(reloadId)) {
+        // Suppress the warning when the prior occupant was destroyed
+        // (QPointer auto-cleared to null) — a re-registration after
+        // hot-reload destruction is the expected case, not a conflict.
+        // Only warn when an actual live PersistentProperties is being
+        // displaced by a different live one, which shouldn't happen.
+        const auto* existing = m_singletons.value(reloadId).data();
+        if (existing && existing != props) {
+            qCWarning(lcShellGlobal) << "Replacing existing singleton for reloadId" << reloadId;
+        }
     }
     m_singletons.insert(reloadId, QPointer<PersistentProperties>(props));
 }

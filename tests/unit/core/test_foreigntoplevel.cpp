@@ -68,21 +68,33 @@ private Q_SLOTS:
         // deleteLater() on each in the destructor. With an empty hash that's
         // a no-op, but we still want the destructor to exit cleanly without
         // touching the LayerShellIntegration singleton.
-        {
+        //
+        // Construct/destruct in a loop so an unwind crash, leaked global
+        // singleton interaction, or double-destroy of integration state
+        // would surface as a test failure rather than the test passing
+        // by virtue of having "completed" — `QVERIFY(true)` would let
+        // any of those slip through.
+        for (int i = 0; i < 4; ++i) {
             ForeignToplevelManager manager;
-            Q_UNUSED(manager)
+            QCOMPARE(manager.toplevels().size(), 0);
         }
-        // If we got here, dtor did not crash.
-        QVERIFY(true);
+        // No assertion needed past the loop — if we reached here every
+        // iteration's ctor and dtor ran successfully.
     }
 
     void testManager_destructsCleanly_afterStop()
     {
-        ForeignToplevelManager manager;
-        manager.stop();
-        // dtor after stop() should still be safe — both paths null the
-        // protocol-side manager pointer differently.
-        QVERIFY(true);
+        // stop() then destruct, repeated, exercises both the stopped-then-
+        // destroyed path and confirms the integration singleton survives
+        // multiple manager teardowns. A real bug here (e.g. clearing
+        // integration state on first stop) would crash on the second
+        // iteration's stop() rather than at QVERIFY(true).
+        for (int i = 0; i < 4; ++i) {
+            ForeignToplevelManager manager;
+            manager.stop();
+            manager.stop(); // idempotency
+            QCOMPARE(manager.toplevels().size(), 0);
+        }
     }
 };
 

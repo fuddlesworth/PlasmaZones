@@ -100,12 +100,21 @@ void PersistentProperties::restoreState(const QVariantMap& state)
     // refusing to set unknown properties prevents a corrupt or hostile
     // state file from creating arbitrary dynamic properties on this
     // QQuickItem (some of which collide with Qt internals).
+    //
+    // Cache the reloadId metaobject index for symmetric skipping with
+    // saveState — a hand-edited or corrupt state file could otherwise
+    // overwrite the live reloadId and break the singleton registry.
+    static const int reloadIdIndex = PersistentProperties::staticMetaObject.indexOfProperty("reloadId");
     const QMetaObject* meta = metaObject();
     for (auto it = state.cbegin(); it != state.cend(); ++it) {
         const QByteArray name = it.key().toUtf8();
         const int index = meta->indexOfProperty(name.constData());
         if (index < 0) {
             qCDebug(lcPersist) << "Ignoring unknown property in saved state:" << it.key();
+            continue;
+        }
+        if (index == reloadIdIndex) {
+            qCDebug(lcPersist) << "Ignoring reloadId in saved state — it identifies the slot, not its content";
             continue;
         }
         const QMetaProperty prop = meta->property(index);

@@ -69,6 +69,7 @@ void FileView::setInterval(int interval)
     if (m_interval == interval) {
         return;
     }
+    const int previous = m_interval;
     m_interval = interval;
     Q_EMIT intervalChanged();
 
@@ -78,6 +79,13 @@ void FileView::setInterval(int interval)
             m_watcher = nullptr;
         }
         setupTimer();
+        // Switching from 0 (watcher mode) to N>0 (poll mode) without
+        // an immediate read would leave the consumer with stale
+        // content for the first interval window. Read once now so the
+        // transition is visible.
+        if (previous == 0 && !m_path.isEmpty()) {
+            readFile();
+        }
     } else {
         m_timer->stop();
         setupWatcher();

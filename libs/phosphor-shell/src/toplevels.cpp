@@ -20,9 +20,24 @@ ToplevelListModel::ToplevelListModel(ForeignToplevelManager* manager, QObject* p
     : QAbstractListModel(parent)
     , m_manager(manager)
 {
+    // Wayland protocol bindings dispatch on the GUI thread via Qt's
+    // QWaylandDisplay; constructing this model anywhere else races
+    // against the manager's signal emissions and the seeding read of
+    // toplevels(). Catch misuse hard rather than silently corrupt.
+    Q_ASSERT_X(qApp && QThread::currentThread() == qApp->thread(), "ToplevelListModel",
+               "must be constructed on the GUI thread");
+
     if (!m_manager) {
         return;
     }
+    // Connect FIRST, then seed — if a toplevel were added between
+    // construction and the seed read, the listener catches it. The
+    // duplicate-rows defense in onToplevelAdded is unnecessary because
+    // the manager's add signal is GUI-thread-synchronous: a `toplevel`
+    // event in flight cannot run while we're inside this constructor.
+    connect(m_manager.data(), &ForeignToplevelManager::toplevelAdded, this, &ToplevelListModel::onToplevelAdded);
+    connect(m_manager.data(), &ForeignToplevelManager::toplevelRemoved, this, &ToplevelListModel::onToplevelRemoved);
+
     // Seed with the toplevels already known to the manager — the manager
     // is process-wide and may have been collecting toplevels before the
     // first per-engine model was constructed.
@@ -31,9 +46,6 @@ ToplevelListModel::ToplevelListModel(ForeignToplevelManager* manager, QObject* p
     for (auto* tl : seed) {
         m_rows.append(QPointer<ForeignToplevel>(tl));
     }
-
-    connect(m_manager.data(), &ForeignToplevelManager::toplevelAdded, this, &ToplevelListModel::onToplevelAdded);
-    connect(m_manager.data(), &ForeignToplevelManager::toplevelRemoved, this, &ToplevelListModel::onToplevelRemoved);
 }
 
 ToplevelListModel::~ToplevelListModel() = default;

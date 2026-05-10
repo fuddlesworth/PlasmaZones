@@ -6,14 +6,15 @@
 include(CMakeFindDependencyMacro)
 
 find_dependency(Qt6 6.6 COMPONENTS Core Gui Quick Qml)
-# Pin Phosphor* deps to the producing tree's major version so a downstream
-# that finds an incompatible newer/older sibling lib fails fast rather
-# than silently linking a mismatched ABI. Each Phosphor* lib publishes
-# a SameMajorVersion ConfigVersion file (see their CMakeLists), so this
-# pin is honoured by find_package's version-compatibility machinery.
-find_dependency(PhosphorLayer @PHOSPHORSHELL_VERSION@ CONFIG)
-find_dependency(PhosphorRendering @PHOSPHORSHELL_VERSION@ CONFIG)
-find_dependency(PhosphorWayland @PHOSPHORSHELL_VERSION@ CONFIG)
+# No version pin on the Phosphor* siblings: they version independently
+# and substituting PHOSPHORSHELL_VERSION here would reject any sibling
+# released at a different version even though the ABIs are compatible.
+# Each lib publishes its own SameMajorVersion ConfigVersion file —
+# downstreams that want strict pinning add explicit `find_package`
+# calls before find_package(PhosphorShell).
+find_dependency(PhosphorLayer CONFIG)
+find_dependency(PhosphorRendering CONFIG)
+find_dependency(PhosphorWayland CONFIG)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorShellTargets.cmake")
 

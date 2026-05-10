@@ -33,10 +33,14 @@ int PanelWindow::thickness() const
 
 void PanelWindow::setThickness(int thickness)
 {
-    if (m_thickness == thickness) {
+    // Clamp to [1, INT_MAX]. Wayland rejects 0×N surfaces, and a negative
+    // thickness has no meaningful interpretation — silently coercing to
+    // 1 px is safer than passing nonsense to the layer-shell protocol.
+    const int clamped = qMax(1, thickness);
+    if (m_thickness == clamped) {
         return;
     }
-    m_thickness = thickness;
+    m_thickness = clamped;
     Q_EMIT thicknessChanged();
 }
 

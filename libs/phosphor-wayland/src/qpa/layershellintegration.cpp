@@ -139,9 +139,13 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
 {
     auto* self = static_cast<LayerShellIntegration*>(data);
     if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0) {
-        // Only bind once — if a compositor advertises the global multiple times,
-        // ignore subsequent advertisements to avoid leaking the first binding.
-        if (self->m_layerShell) {
+        // Reject only if we already have a LIVE binding. After a global
+        // removal (compositor restart), m_layerShell is left stale-but-
+        // non-null because existing LayerShellWindow surfaces still
+        // reference it; we keep it alive solely so the destructor can
+        // wl_proxy_destroy it once those surfaces close. A re-advertised
+        // global at that point is a legitimate rebind, not a duplicate.
+        if (self->m_layerShell && self->m_globalAvailable) {
             qCDebug(lcLayerShellIntegration) << "Ignoring duplicate zwlr_layer_shell_v1 global (id" << id << ")";
             return;
         }
@@ -153,6 +157,19 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         //   v5: set_exclusive_edge
         static constexpr uint32_t kMaxVersion = 5;
         uint32_t bindVersion = qMin(version, kMaxVersion);
+        if (self->m_layerShell) {
+            // Stale proxy from a removed global. The compositor sends
+            // closed events on the surfaces; existing LayerShellWindow
+            // instances null their own m_layerSurface in handleClosed
+            // and will naturally die on the next configure. Drop our
+            // reference to the dead proxy so wl_registry_bind below
+            // gives us a fresh one. We don't wl_proxy_destroy here
+            // because callbacks may still be in-flight on the original
+            // proxy — libwayland will reclaim it when the wl_display
+            // tears down or when we explicitly destroy at shutdown.
+            qCInfo(lcLayerShellIntegration) << "Re-binding zwlr_layer_shell_v1 after global re-advertisement";
+            self->m_layerShell = nullptr;
+        }
         self->m_layerShell = static_cast<struct zwlr_layer_shell_v1*>(
             wl_registry_bind(registry, id, &zwlr_layer_shell_v1_interface, bindVersion));
         self->m_layerShellId = id;
@@ -160,8 +177,9 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         self->m_globalAvailable = true;
         qCDebug(lcLayerShellIntegration).nospace() << "Bound zwlr_layer_shell_v1 v" << bindVersion;
     } else if (strcmp(interface, wp_single_pixel_buffer_manager_v1_interface.name) == 0) {
-        if (self->m_singlePixelBufferManager)
+        if (self->m_singlePixelBufferManager && self->m_singlePixelBufferAvailable)
             return;
+        self->m_singlePixelBufferManager = nullptr;
         static constexpr uint32_t kMaxVersion = 1;
         uint32_t bindVersion = qMin(version, kMaxVersion);
         self->m_singlePixelBufferManager = static_cast<struct wp_single_pixel_buffer_manager_v1*>(
@@ -170,8 +188,9 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         self->m_singlePixelBufferAvailable = true;
         qCDebug(lcLayerShellIntegration).nospace() << "Bound wp_single_pixel_buffer_manager_v1 v" << bindVersion;
     } else if (strcmp(interface, ext_idle_notifier_v1_interface.name) == 0) {
-        if (self->m_idleNotifier)
+        if (self->m_idleNotifier && self->m_idleNotifierAvailable)
             return;
+        self->m_idleNotifier = nullptr;
         static constexpr uint32_t kMaxVersion = 1;
         uint32_t bindVersion = qMin(version, kMaxVersion);
         self->m_idleNotifier = static_cast<struct ext_idle_notifier_v1*>(
@@ -180,8 +199,9 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         self->m_idleNotifierAvailable = true;
         qCDebug(lcLayerShellIntegration).nospace() << "Bound ext_idle_notifier_v1 v" << bindVersion;
     } else if (strcmp(interface, xdg_toplevel_drag_manager_v1_interface.name) == 0) {
-        if (self->m_toplevelDragManager)
+        if (self->m_toplevelDragManager && self->m_toplevelDragManagerAvailable)
             return;
+        self->m_toplevelDragManager = nullptr;
         static constexpr uint32_t kMaxVersion = 1;
         uint32_t bindVersion = qMin(version, kMaxVersion);
         self->m_toplevelDragManager = static_cast<struct xdg_toplevel_drag_manager_v1*>(
@@ -190,8 +210,9 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         self->m_toplevelDragManagerAvailable = true;
         qCDebug(lcLayerShellIntegration).nospace() << "Bound xdg_toplevel_drag_manager_v1 v" << bindVersion;
     } else if (strcmp(interface, zwlr_foreign_toplevel_manager_v1_interface.name) == 0) {
-        if (self->m_foreignToplevelManager)
+        if (self->m_foreignToplevelManager && self->m_foreignToplevelManagerAvailable)
             return;
+        self->m_foreignToplevelManager = nullptr;
         // Maximum protocol version we bind:
         //   v1: base (title/app_id/state/output_enter/output_leave/done events;
         //       set_maximized/unset_maximized/set_minimized/unset_minimized/

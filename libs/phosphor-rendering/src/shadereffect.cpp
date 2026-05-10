@@ -409,7 +409,7 @@ void ShaderEffect::onPlayingTick()
     // two consecutive frames) instead of a huge one (the time since the
     // item was last visible — which would produce a giant iTime jump
     // and a visible animation skip on re-show).
-    if (!isVisible() || width() <= 0 || height() <= 0 || m_status != Status::Ready) {
+    if (!isVisible() || width() <= 0 || height() <= 0 || m_status.load(std::memory_order_acquire) != Status::Ready) {
         m_playingLastFrameSeconds = now;
         return;
     }
@@ -1259,10 +1259,12 @@ void ShaderEffect::setError(const QString& error)
 
 void ShaderEffect::setStatus(Status newStatus)
 {
-    if (m_status != newStatus) {
-        m_status = newStatus;
-        Q_EMIT statusChanged();
+    Status expected = m_status.load(std::memory_order_acquire);
+    if (expected == newStatus) {
+        return;
     }
+    m_status.store(newStatus, std::memory_order_release);
+    Q_EMIT statusChanged();
 }
 
 // ============================================================================
@@ -1457,9 +1459,10 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     }
 
     // ── Update status from node state ────────────────────────────────
-    if (node->isShaderReady() && m_status != Status::Ready) {
+    const Status currentStatus = m_status.load(std::memory_order_acquire);
+    if (node->isShaderReady() && currentStatus != Status::Ready) {
         setStatus(Status::Ready);
-    } else if (!node->shaderError().isEmpty() && m_status != Status::Error) {
+    } else if (!node->shaderError().isEmpty() && currentStatus != Status::Error) {
         setError(node->shaderError());
     }
 
