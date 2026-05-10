@@ -8,12 +8,10 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 ApplicationWindow {
-    // Collect every leaf descendant of @p parentName whose label matches
-    // @p searchText, prefixing nested labels with their immediate parent
-    // ("Surfaces / Windows") so the search hit is unambiguous when the
-    // grandparent has multiple intermediate categories. Walks one extra
-    // level deep to support the three-tier Animations layout (top-level
-    // → Surfaces|Library → leaf page).
+    // Stay on the current activePage when popping to an
+    // intermediate parent — the leaf the user came from is
+    // more useful context than re-anchoring on the virtual
+    // category they just stepped out of.
 
     id: window
 
@@ -281,11 +279,14 @@ ApplicationWindow {
         "portrait": i18n("Portrait (9:16)")
     })
 
-    // When an intermediate parent's OWN label matches the query (e.g.
-    // searching "surfaces"), every leaf under it is included unfiltered
-    // so the user sees the full set of pages they were navigating
-    // toward — otherwise typing the category name would yield empty
-    // results because the parent itself is a virtual non-leaf.
+    // Walk @p parentName's descendants and return every leaf whose label
+    // matches @p searchText. Nested labels are prefixed with their
+    // immediate parent ("Surfaces / Windows") so a search hit is
+    // unambiguous when multiple intermediate categories live under the
+    // same grandparent. When an intermediate parent's OWN label matches
+    // the query (e.g. searching "surfaces"), every leaf under it is
+    // included unfiltered — otherwise typing a category name would yield
+    // empty results because the parent itself is a virtual non-leaf.
     function _collectMatchingDescendants(parentName, searchText) {
         let out = [];
         let children = _childItems[parentName] || [];
@@ -384,6 +385,10 @@ ApplicationWindow {
 
             }
         } else {
+            // Disable drill-in when we're inlining nested
+            // matches below (the user can click those
+            // directly), mirroring the main-mode pattern.
+
             // Back-row label is the CURRENT mode's display label
             // (so a sub-sidebar "Surfaces" reads "← Surfaces"). The
             // mode may live in `_mainItems` (top-level parents like
@@ -406,10 +411,6 @@ ApplicationWindow {
                 let child = children[i];
                 let childDivider = child.hasDividerAfter || false;
                 if (searchText) {
-                    // Disable drill-in when we're inlining nested
-                    // matches below (the user can click those
-                    // directly), mirroring the main-mode pattern.
-
                     // Search inside a sub-sidebar matches the entry's
                     // own label OR (when it's an intermediate parent)
                     // any grand-child label. Without the recursion,
@@ -497,9 +498,7 @@ ApplicationWindow {
     // (animations → animations-surfaces → animations-windows).
     function _parentLabel() {
         let mode = _sidebarMode;
-        while (_parentMode[mode])
-            mode = _parentMode[mode];
-
+        while (_parentMode[mode])mode = _parentMode[mode]
         return _modeLabel(mode);
     }
 
@@ -566,10 +565,6 @@ ApplicationWindow {
         if (target === "main")
             sidebarTransition.pendingPage = _sidebarMode !== "main" ? _sidebarMode : "overview";
         else
-            // Stay on the current activePage when popping to an
-            // intermediate parent — the leaf the user came from is
-            // more useful context than re-anchoring on the virtual
-            // category they just stepped out of.
             sidebarTransition.pendingPage = "";
         sidebarTransition.restart();
     }
