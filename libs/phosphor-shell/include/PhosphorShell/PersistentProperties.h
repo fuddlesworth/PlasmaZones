@@ -22,10 +22,10 @@ public:
     explicit PersistentProperties(QQuickItem* parent = nullptr);
     ~PersistentProperties() override;
 
-    QString reloadId() const;
+    [[nodiscard]] QString reloadId() const;
     void setReloadId(const QString& id);
 
-    QVariantMap saveState() const;
+    [[nodiscard]] QVariantMap saveState() const;
     void restoreState(const QVariantMap& state);
 
 Q_SIGNALS:

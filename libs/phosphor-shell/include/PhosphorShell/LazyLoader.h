@@ -40,17 +40,17 @@ public:
     explicit LazyLoader(QQuickItem* parent = nullptr);
     ~LazyLoader() override;
 
-    bool active() const;
+    [[nodiscard]] bool active() const;
     void setActive(bool active);
 
-    QQmlComponent* sourceComponent() const;
+    [[nodiscard]] QQmlComponent* sourceComponent() const;
     void setSourceComponent(QQmlComponent* component);
 
-    QUrl source() const;
+    [[nodiscard]] QUrl source() const;
     void setSource(const QUrl& source);
 
-    QQuickItem* item() const;
-    Status status() const;
+    [[nodiscard]] QQuickItem* item() const;
+    [[nodiscard]] Status status() const;
 
 Q_SIGNALS:
     void activeChanged();

@@ -37,18 +37,18 @@ public:
     explicit Process(QObject* parent = nullptr);
     ~Process() override;
 
-    QStringList command() const;
+    [[nodiscard]] QStringList command() const;
     void setCommand(const QStringList& command);
 
-    bool running() const;
+    [[nodiscard]] bool running() const;
     void setRunning(bool running);
 
-    int interval() const;
+    [[nodiscard]] int interval() const;
     void setInterval(int interval);
 
-    QString stdoutText() const;
-    QString stderrText() const;
-    int exitCode() const;
+    [[nodiscard]] QString stdoutText() const;
+    [[nodiscard]] QString stderrText() const;
+    [[nodiscard]] int exitCode() const;
 
 Q_SIGNALS:
     void commandChanged();

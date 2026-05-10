@@ -6,7 +6,9 @@
   framework wrapping inner surfaces. Corner radii scale proportionally
   to the outer badge so the inner rings feel like the same shape family.
 -->
-<svg width="1024" height="1024" viewBox="96 96 832 832" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="1024" height="1024" viewBox="96 96 832 832" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">PhosphorShell</title>
+  <desc id="desc">Three nested rounded rectangles in a gradient stroke, the "shell" motif of the PhosphorShell library — a containment framework wrapping inner surfaces.</desc>
   <defs>
     <linearGradient id="gBorder" x1="120" y1="120" x2="904" y2="904" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#22D3EE"/>

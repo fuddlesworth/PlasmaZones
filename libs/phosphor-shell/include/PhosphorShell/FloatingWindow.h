@@ -31,16 +31,16 @@ public:
     explicit FloatingWindow(QQuickItem* parent = nullptr);
     ~FloatingWindow() override;
 
-    QString title() const;
+    [[nodiscard]] QString title() const;
     void setTitle(const QString& title);
 
-    int windowWidth() const;
+    [[nodiscard]] int windowWidth() const;
     void setWindowWidth(int width);
 
-    int windowHeight() const;
+    [[nodiscard]] int windowHeight() const;
     void setWindowHeight(int height);
 
-    bool isWindowVisible() const;
+    [[nodiscard]] bool isWindowVisible() const;
     void setWindowVisible(bool visible);
 
 Q_SIGNALS:

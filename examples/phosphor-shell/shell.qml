@@ -31,20 +31,71 @@ Item {
         interval: 10000
     }
 
-    Process {
-        id: cpuProc
+    // CPU + memory readouts via /proc — avoids a `sh -c` subprocess
+    // every 2-5s (which over a session is hundreds of fork/exec
+    // pairs). A FileView re-reads the kernel-exported file in-process
+    // at the interval; onContentChanged parses and deltas the values.
+    FileView {
+        id: cpuStat
 
-        command: ["sh", "-c", "grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf \"%.0f\", usage}'"]
-        running: true
+        // Cumulative jiffies from the last snapshot (idle + total) for
+        // delta computation between intervals.
+        property int prevIdle: 0
+        property int prevTotal: 0
+        // Computed % usage, exposed as a string for the panel binding.
+        property string percent: "0"
+
+        path: "/proc/stat"
         interval: 2000
+        onContentChanged: {
+            // First line: "cpu  user nice system idle iowait irq softirq steal guest guest_nice"
+            const line = content.split('\n')[0];
+            if (!line.startsWith('cpu '))
+                return ;
+
+            const fields = line.trim().split(/\s+/).slice(1).map((s) => {
+                return parseInt(s, 10);
+            });
+            // idle = idle + iowait (matches the original awk formula).
+            const idle = fields[3] + (fields[4] || 0);
+            let total = 0;
+            for (const f of fields) {
+                total += f;
+            }
+            if (prevTotal > 0) {
+                const dTotal = total - prevTotal;
+                const dIdle = idle - prevIdle;
+                if (dTotal > 0)
+                    percent = Math.round((1 - dIdle / dTotal) * 100).toString();
+
+            }
+            prevIdle = idle;
+            prevTotal = total;
+        }
     }
 
-    Process {
-        id: memProc
+    FileView {
+        id: memInfo
 
-        command: ["sh", "-c", "free | awk '/Mem:/ {printf \"%.0f\", $3/$2*100}'"]
-        running: true
+        property string percent: "0"
+
+        path: "/proc/meminfo"
         interval: 5000
+        onContentChanged: {
+            let total = 0;
+            let available = 0;
+            for (const line of content.split('\n')) {
+                if (line.startsWith('MemTotal:')) {
+                    total = parseInt(line.split(/\s+/)[1], 10);
+                } else if (line.startsWith('MemAvailable:')) {
+                    available = parseInt(line.split(/\s+/)[1], 10);
+                    break;
+                }
+            }
+            if (total > 0)
+                percent = Math.round((1 - available / total) * 100).toString();
+
+        }
     }
 
     FileView {
@@ -76,8 +127,8 @@ Item {
 
     RightPanel {
         shellState: shellState
-        cpuPercent: cpuProc.stdoutText.trim()
-        memPercent: memProc.stdoutText.trim()
+        cpuPercent: cpuStat.percent
+        memPercent: memInfo.percent
         batteryPercent: batteryFile.content.trim()
         batteryVisible: batteryFile.exists
     }

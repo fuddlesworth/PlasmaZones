@@ -112,10 +112,11 @@ public:
     [[nodiscard]] ForeignToplevel* parentToplevel() const;
     [[nodiscard]] bool isClosed() const;
 
-    /// Request the compositor focus this toplevel. Defaults to the seat
-    /// the consumer's connection is bound to (typically the only seat on
-    /// single-user systems). Pass an explicit `wl_seat*` (cast to void*)
-    /// for multi-seat installations; null = default seat.
+    /// Request the compositor focus this toplevel. Always uses the first
+    /// seat returned by Qt's QtWaylandClient::QWaylandDisplay (typically
+    /// the only seat on single-user systems). Multi-seat selection is not
+    /// currently exposed — adding a `QObject* seat` parameter would be a
+    /// future API extension if a real consumer needs it.
     Q_INVOKABLE void activate();
 
     /// Request the compositor close this toplevel. Equivalent to clicking
@@ -126,8 +127,10 @@ public:
     Q_INVOKABLE void setMaximized(bool maximized);
     Q_INVOKABLE void setMinimized(bool minimized);
     /// Toggle fullscreen on the given output (null = compositor's choice).
-    /// Requires zwlr_foreign_toplevel_manager_v1 version >= 2; on older
-    /// compositors this is silently a no-op.
+    /// `output` is silently ignored when `fullscreen=false` — the protocol
+    /// has separate set/unset requests and `unset_fullscreen` carries no
+    /// output argument. Requires zwlr_foreign_toplevel_manager_v1 version
+    /// >= 2; on older compositors this is silently a no-op.
     Q_INVOKABLE void setFullscreen(bool fullscreen, QScreen* output = nullptr);
 
     /// Tell the compositor where on screen this toplevel's representation

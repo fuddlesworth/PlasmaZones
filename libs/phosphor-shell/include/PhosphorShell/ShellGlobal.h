@@ -31,10 +31,10 @@ public:
     explicit ShellGlobal(QObject* parent = nullptr);
     ~ShellGlobal() override;
 
-    ScreenModel* screens() const;
+    [[nodiscard]] ScreenModel* screens() const;
     void setScreenModel(ScreenModel* model);
 
-    Q_INVOKABLE QObject* singleton(const QString& reloadId) const;
+    Q_INVOKABLE [[nodiscard]] QObject* singleton(const QString& reloadId) const;
     void registerSingleton(const QString& reloadId, PersistentProperties* props);
     void clearSingletons();
 

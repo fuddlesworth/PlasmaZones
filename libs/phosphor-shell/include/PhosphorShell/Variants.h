@@ -33,10 +33,10 @@ public:
     explicit Variants(QQuickItem* parent = nullptr);
     ~Variants() override;
 
-    QAbstractListModel* model() const;
+    [[nodiscard]] QAbstractListModel* model() const;
     void setModel(QAbstractListModel* model);
 
-    QQmlComponent* delegate() const;
+    [[nodiscard]] QQmlComponent* delegate() const;
     void setDelegate(QQmlComponent* delegate);
 
 Q_SIGNALS:

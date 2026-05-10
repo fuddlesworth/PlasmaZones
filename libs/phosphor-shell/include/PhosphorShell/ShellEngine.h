@@ -46,7 +46,7 @@ public:
     ~ShellEngine() override;
 
     bool load(const QUrl& shellUrl);
-    QQmlEngine* engine() const;
+    [[nodiscard]] QQmlEngine* engine() const;
 
 Q_SIGNALS:
     void loaded();

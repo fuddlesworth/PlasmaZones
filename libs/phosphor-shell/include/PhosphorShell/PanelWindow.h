@@ -60,31 +60,31 @@ public:
     explicit PanelWindow(QQuickItem* parent = nullptr);
     ~PanelWindow() override;
 
-    Edge edge() const;
+    [[nodiscard]] Edge edge() const;
     void setEdge(Edge edge);
 
-    int thickness() const;
+    [[nodiscard]] int thickness() const;
     void setThickness(int thickness);
 
-    QScreen* screen() const;
+    [[nodiscard]] QScreen* screen() const;
     void setScreen(QScreen* screen);
 
-    Layer layer() const;
+    [[nodiscard]] Layer layer() const;
     void setLayer(Layer layer);
 
-    int exclusiveZone() const;
+    [[nodiscard]] int exclusiveZone() const;
     void setExclusiveZone(int zone);
 
-    bool exclusiveZoneEnabled() const;
+    [[nodiscard]] bool exclusiveZoneEnabled() const;
     void setExclusiveZoneEnabled(bool enabled);
 
-    Alignment alignment() const;
+    [[nodiscard]] Alignment alignment() const;
     void setAlignment(Alignment alignment);
 
-    int panelLength() const;
+    [[nodiscard]] int panelLength() const;
     void setPanelLength(int length);
 
-    QMargins margins() const;
+    [[nodiscard]] QMargins margins() const;
     void setMargins(const QMargins& margins);
 
 Q_SIGNALS:

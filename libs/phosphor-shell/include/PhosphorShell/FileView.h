@@ -30,15 +30,15 @@ public:
     explicit FileView(QObject* parent = nullptr);
     ~FileView() override;
 
-    QString path() const;
+    [[nodiscard]] QString path() const;
     void setPath(const QString& path);
 
-    QString content() const;
+    [[nodiscard]] QString content() const;
 
-    int interval() const;
+    [[nodiscard]] int interval() const;
     void setInterval(int interval);
 
-    bool exists() const;
+    [[nodiscard]] bool exists() const;
 
 Q_SIGNALS:
     void pathChanged();

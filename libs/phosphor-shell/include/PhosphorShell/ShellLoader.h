@@ -15,8 +15,8 @@ class PHOSPHORSHELL_EXPORT ShellLoader
 public:
     explicit ShellLoader(const QString& shellName = QStringLiteral("phosphor-shell"));
 
-    QUrl resolve() const;
-    QString shellConfigDir() const;
+    [[nodiscard]] QUrl resolve() const;
+    [[nodiscard]] QString shellConfigDir() const;
 
 private:
     QString m_shellName;

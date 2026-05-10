@@ -58,7 +58,7 @@ public:
     ~Toplevels() override;
 
     /// QML-singleton factory hook.
-    static Toplevels* create(QQmlEngine* engine, QJSEngine* scriptEngine);
+    [[nodiscard]] static Toplevels* create(QQmlEngine* engine, QJSEngine* scriptEngine);
 
     [[nodiscard]] QList<PhosphorWayland::ForeignToplevel*> toplevels() const;
     [[nodiscard]] bool isSupported() const;

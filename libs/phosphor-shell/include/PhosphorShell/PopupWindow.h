@@ -42,22 +42,22 @@ public:
     explicit PopupWindow(QQuickItem* parent = nullptr);
     ~PopupWindow() override;
 
-    QQuickItem* anchor() const;
+    [[nodiscard]] QQuickItem* anchor() const;
     void setAnchor(QQuickItem* anchor);
 
-    int popupWidth() const;
+    [[nodiscard]] int popupWidth() const;
     void setPopupWidth(int width);
 
-    int popupHeight() const;
+    [[nodiscard]] int popupHeight() const;
     void setPopupHeight(int height);
 
-    PopupEdge popupEdge() const;
+    [[nodiscard]] PopupEdge popupEdge() const;
     void setPopupEdge(PopupEdge edge);
 
-    int gap() const;
+    [[nodiscard]] int gap() const;
     void setGap(int gap);
 
-    bool isPopupVisible() const;
+    [[nodiscard]] bool isPopupVisible() const;
     void setPopupVisible(bool visible);
 
 Q_SIGNALS:
