@@ -112,7 +112,14 @@ void main() {
     float angle        = customParams[0].y;
     float tintOpacity  = customParams[0].z > 0.0 ? customParams[0].z : 0.7;
     float frostAmount  = customParams[0].w > 0.0 ? customParams[0].w : 0.1;
-    float radius       = customParams[1].x > 0.0 ? customParams[1].x : 0.0;
+    // Lower-clamp at 1.0: the standard rounded-box SDF
+    //   length(max(abs(p) - b + r, 0)) - r
+    // degenerates at r == 0 — interior fragments return SDF=0 (not
+    // negative), so the `1 - smoothstep(-1, 0, dist)` mask zeroes the
+    // whole panel out. r=1 gives a sharp-looking corner at one pixel
+    // (visually indistinguishable from "no rounding" at typical panel
+    // thickness) and keeps the SDF properly negative on the interior.
+    float radius       = max(1.0, customParams[1].x);
     float frostScale   = customParams[1].y > 0.0 ? customParams[1].y : 24.0;
     float screenHeight = customParams[2].x > 0.0 ? customParams[2].x : iResolution.y;
     float blurRadius   = customParams[2].y > 0.0 ? customParams[2].y : 8.0;
