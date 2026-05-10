@@ -9,10 +9,20 @@
 // alpha so the compositor's behind-color shows. Pre-multiplied alpha
 // output. SDF mask uses hard cutoff to avoid fringe.
 //
-// customParams[0]: x=speed           y=baseAngle      z=tintOpacity    w=frostAmount
-// customParams[1]: x=cornerRadius    y=frostScale
-// customParams[2]: x=panelToScreenH  y=blurRadius
-// customParams[3]: x=shadowFraction  y=shadowOpacity
+// customParams[0]: x=speed             y=baseAngle      z=tintOpacity    w=frostAmount
+// customParams[1]: x=cornerRadius      y=frostScale
+// customParams[2]: x=panelToScreenH    y=blurRadius
+// customParams[3]: x=shadowFraction    y=shadowOpacity
+// customParams[4]: x=cornerCarveFraction
+//   - cornerCarveFraction: radius of the concave quarter-arc carved
+//     into each bottom corner of the visible panel, expressed as a
+//     fraction of total surface height (DPR-independent). 0 disables
+//     the carve. Each carve is a quarter-circle with its center
+//     INWARD by `carveRadius` pixels in both axes from the panel's
+//     bottom corner; fragments inside the carve's bounding box that
+//     fall OUTSIDE the arc become transparent so the wallpaper /
+//     compositor background bleeds through, producing the
+//     Quickshell/Noctalia "desktop wraps around the panel" look.
 //   - panelToScreenH: DPR-INDEPENDENT ratio of the panel's TOTAL
 //     surface height (visible + shadow strip) over the screen's
 //     height, both measured in the SAME unit system (logical or
@@ -145,6 +155,10 @@ void main() {
     // (0..1). 0 disables the shadow branch entirely.
     float shadowFraction = clamp(customParams[3].x, 0.0, 1.0);
     float shadowOpacity  = customParams[3].y > 0.0 ? customParams[3].y : 0.5;
+    // cornerCarveFraction: radius of the concave corner carve as a
+    // fraction of surface height. Hard-clamp to 0..0.5 so the carve
+    // can never eat the whole panel.
+    float cornerCarveFraction = clamp(customParams[4].x, 0.0, 0.5);
 
     // Convert from Qt RHI's Y-up viewport coords (uv.y=0 at visual
     // BOTTOM, uv.y=1 at visual TOP) to top-down "panel surface" coords
@@ -170,6 +184,38 @@ void main() {
     // `Screen.devicePixelRatio` and the actual rendering DPR can't
     // misplace the split.
     float shadowStartV = 1.0 - shadowFraction;
+
+    // ─── Concave corner carve ─────────────────────────────────────────
+    // Two quarter-arcs carved out of the visible panel's bottom-left
+    // and bottom-right corners (Top-edge assumption — matches the
+    // shadow-zone orientation above). The arc center sits INWARD by
+    // `carveRpx` from each corner; fragments inside the corner
+    // bounding box that fall outside the arc get their alpha zeroed
+    // so the wallpaper bleeds through, producing the curvy "desktop
+    // wraps around the panel" outline.
+    //
+    // Carve mask: 1 = fully carved (transparent), 0 = fully solid.
+    // Applied as a multiplier on the final alpha at the end of main().
+    // Smoothstep AA on the arc boundary uses ±0.5 px around the radius
+    // so the curve isn't pixelated.
+    float carveAlpha = 0.0;
+    if (cornerCarveFraction > 0.001) {
+        vec2 vPx = visualUv * iResolution;
+        float panelBottomYPx = iResolution.y * shadowStartV;
+        float carveRpx = cornerCarveFraction * iResolution.y;
+        // Bottom-left
+        if (vPx.x < carveRpx && vPx.y > panelBottomYPx - carveRpx && vPx.y < panelBottomYPx) {
+            vec2 arcCenter = vec2(carveRpx, panelBottomYPx - carveRpx);
+            float d = length(vPx - arcCenter);
+            carveAlpha = max(carveAlpha, smoothstep(carveRpx - 0.5, carveRpx + 0.5, d));
+        }
+        // Bottom-right
+        if (vPx.x > iResolution.x - carveRpx && vPx.y > panelBottomYPx - carveRpx && vPx.y < panelBottomYPx) {
+            vec2 arcCenter = vec2(iResolution.x - carveRpx, panelBottomYPx - carveRpx);
+            float d = length(vPx - arcCenter);
+            carveAlpha = max(carveAlpha, smoothstep(carveRpx - 0.5, carveRpx + 0.5, d));
+        }
+    }
 
     // SDF rounded rectangle mask for the SURFACE — gives AA at all
     // four edges of the wl_surface. The shadow branch below already
@@ -292,6 +338,14 @@ void main() {
         finalAlpha = tintOpacity * mask;
     }
 
+    // Apply the concave-corner carve. carveAlpha is 1 in fully-carved
+    // fragments and 0 elsewhere, so (1 - carveAlpha) scales the
+    // output to 0 inside the carved region. Multiplied as a single
+    // factor on the final premultiplied output, both RGB and alpha
+    // drop together — the carved pixel becomes vec4(0) and the
+    // compositor blends whatever's behind through.
+    float carveMul = 1.0 - carveAlpha;
+
     // Pre-multiplied alpha output: RGB * alpha before output
-    fragColor = vec4(finalRgb * finalAlpha, finalAlpha) * qt_Opacity;
+    fragColor = vec4(finalRgb * finalAlpha, finalAlpha) * qt_Opacity * carveMul;
 }

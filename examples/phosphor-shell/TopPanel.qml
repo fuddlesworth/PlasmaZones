@@ -36,6 +36,10 @@ PanelWindow {
     // independent). The shader uses 1 - shadowFraction as the
     // panel/shadow split position in surface-local UV.
     readonly property real shadowFraction: root.shadowSize / Math.max(root.thickness + root.shadowSize, 1)
+    // Concave corner carve radius as fraction of total surface height
+    // — Quickshell/Noctalia inner-curves at the panel-to-desktop
+    // boundary. 0 = sharp 90° corners.
+    readonly property real cornerCarveFraction: root.cornerCarveRadius / Math.max(root.thickness + root.shadowSize, 1)
 
     edge: PanelWindow.Top
     thickness: 38
@@ -44,6 +48,11 @@ PanelWindow {
     // `thickness` so other windows tile right under the panel and the
     // shadow visually darkens their top edge.
     shadowSize: 14
+    // Concave inner curves at the panel's bottom-left / bottom-right
+    // corners — wallpaper "flows around" the panel instead of meeting
+    // it at a hard 90°. Roughly 1/4..1/3 of thickness looks natural;
+    // 12 px on a 38 px panel sits in the middle of that range.
+    cornerCarveRadius: 12
     alignment: PanelWindow.Fill
     exclusiveZoneEnabled: true
 
@@ -100,6 +109,7 @@ PanelWindow {
         //   customParams2: cornerRadius / frostScale
         //   customParams3: panelToScreenH / blurRadius
         //   customParams4: shadowFraction / shadowOpacity
+        //   customParams5: cornerCarveFraction
         shaderParams: {
             "customParams1_x": 1.2,
             "customParams1_y": 0,
@@ -110,7 +120,8 @@ PanelWindow {
             "customParams3_x": root.panelToScreenH,
             "customParams3_y": 8,
             "customParams4_x": root.shadowFraction,
-            "customParams4_y": 0.5
+            "customParams4_y": 0.5,
+            "customParams5_x": root.cornerCarveFraction
         }
         // Catppuccin mocha mauve → macchiato sky.
         customColor1: "#cba6f7"

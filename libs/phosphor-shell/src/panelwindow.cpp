@@ -61,6 +61,27 @@ void PanelWindow::setShadowSize(int size)
     Q_EMIT shadowSizeChanged();
 }
 
+int PanelWindow::cornerCarveRadius() const
+{
+    return m_cornerCarveRadius;
+}
+
+void PanelWindow::setCornerCarveRadius(int radius)
+{
+    // Clamp to [0, INT_MAX]. 0 = sharp corners (default). The shader
+    // additionally clamps to half the surface height so the carve
+    // can't eat the whole panel, but we don't enforce that here
+    // because PanelWindow doesn't know the surface size at write
+    // time (it depends on thickness + shadowSize, which the property
+    // setters don't coordinate).
+    const int clamped = qMax(0, radius);
+    if (m_cornerCarveRadius == clamped) {
+        return;
+    }
+    m_cornerCarveRadius = clamped;
+    Q_EMIT cornerCarveRadiusChanged();
+}
+
 QScreen* PanelWindow::screen() const
 {
     return m_screen;

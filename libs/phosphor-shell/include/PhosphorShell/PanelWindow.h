@@ -30,6 +30,19 @@ class PHOSPHORSHELL_EXPORT PanelWindow : public QQuickItem
     /// rendering the shadow in that extra strip — PanelWindow only
     /// hands it the surface space.
     Q_PROPERTY(int shadowSize READ shadowSize WRITE setShadowSize NOTIFY shadowSizeChanged)
+    /// Radius (logical pixels) of the concave quarter-arc carved into
+    /// each corner of the visible panel where the panel meets the
+    /// desktop area. 0 disables the carve. Larger values eat further
+    /// into the panel, so reasonable choices are roughly 1/4 .. 1/3
+    /// of `thickness`. The carve is rendered by the shader as an
+    /// alpha cutout — the panel's wl_surface remains rectangular and
+    /// the compositor blends whatever's behind the carved region
+    /// (wallpaper / other windows) into the cutout pixels, giving
+    /// the "desktop flows around the panel" look popularised by
+    /// Quickshell/Noctalia shells. Which corners are carved depends
+    /// on the panel's edge: Top → bottom-left + bottom-right; the
+    /// shader is responsible for matching the panel's orientation.
+    Q_PROPERTY(int cornerCarveRadius READ cornerCarveRadius WRITE setCornerCarveRadius NOTIFY cornerCarveRadiusChanged)
     Q_PROPERTY(QScreen* screen READ screen WRITE setScreen NOTIFY screenChanged)
     Q_PROPERTY(Layer layer READ layer WRITE setLayer NOTIFY layerChanged)
     Q_PROPERTY(int exclusiveZone READ exclusiveZone WRITE setExclusiveZone NOTIFY exclusiveZoneChanged)
@@ -76,6 +89,9 @@ public:
     [[nodiscard]] int shadowSize() const;
     void setShadowSize(int size);
 
+    [[nodiscard]] int cornerCarveRadius() const;
+    void setCornerCarveRadius(int radius);
+
     [[nodiscard]] QScreen* screen() const;
     void setScreen(QScreen* screen);
 
@@ -101,6 +117,7 @@ Q_SIGNALS:
     void edgeChanged();
     void thicknessChanged();
     void shadowSizeChanged();
+    void cornerCarveRadiusChanged();
     void screenChanged();
     void layerChanged();
     void exclusiveZoneChanged();
@@ -113,6 +130,7 @@ private:
     Edge m_edge = Top;
     int m_thickness = 32;
     int m_shadowSize = 0;
+    int m_cornerCarveRadius = 0;
     // QPointer so monitor hot-unplug doesn't leave us with a dangling
     // QScreen pointer. ScreenManager owns QScreen lifetimes externally.
     QPointer<QScreen> m_screen;
