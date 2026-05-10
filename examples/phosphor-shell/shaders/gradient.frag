@@ -17,12 +17,14 @@
 //   - cornerCarveFraction: radius of the concave quarter-arc carved
 //     into each bottom corner of the visible panel, expressed as a
 //     fraction of total surface height (DPR-independent). 0 disables
-//     the carve. Each carve is a quarter-circle with its center
-//     INWARD by `carveRadius` pixels in both axes from the panel's
-//     bottom corner; fragments inside the carve's bounding box that
-//     fall OUTSIDE the arc become transparent so the wallpaper /
-//     compositor background bleeds through, producing the
-//     Quickshell/Noctalia "desktop wraps around the panel" look.
+//     the carve. Each carve replaces the panel's straight bottom-
+//     corner with a quarter-circle whose center is INWARD by
+//     `carveRadius` pixels in both axes. The drop-shadow follows the
+//     SAME curve — the shader computes a single signed-distance field
+//     from the carved outline and uses it for both panel rendering and
+//     shadow falloff, so the corner curve doesn't leave a rectangular
+//     shadow strip behind. Produces the Quickshell/Noctalia "desktop
+//     wraps around the panel" look.
 //   - panelToScreenH: DPR-INDEPENDENT ratio of the panel's TOTAL
 //     surface height (visible + shadow strip) over the screen's
 //     height, both measured in the SAME unit system (logical or
@@ -184,72 +186,76 @@ void main() {
     // `Screen.devicePixelRatio` and the actual rendering DPR can't
     // misplace the split.
     float shadowStartV = 1.0 - shadowFraction;
-
-    // ─── Concave corner carve ─────────────────────────────────────────
-    // Two quarter-arcs carved out of the visible panel's bottom-left
-    // and bottom-right corners (Top-edge assumption — matches the
-    // shadow-zone orientation above). The arc center sits INWARD by
-    // `carveRpx` from each corner; fragments inside the corner
-    // bounding box that fall outside the arc get their alpha zeroed
-    // so the wallpaper bleeds through, producing the curvy "desktop
-    // wraps around the panel" outline.
-    //
-    // Carve mask: 1 = fully carved (transparent), 0 = fully solid.
-    // Applied as a multiplier on the final alpha at the end of main().
-    // Smoothstep AA on the arc boundary uses ±0.5 px around the radius
-    // so the curve isn't pixelated.
-    float carveAlpha = 0.0;
-    if (cornerCarveFraction > 0.001) {
-        vec2 vPx = visualUv * iResolution;
-        float panelBottomYPx = iResolution.y * shadowStartV;
-        float carveRpx = cornerCarveFraction * iResolution.y;
-        // Bottom-left
-        if (vPx.x < carveRpx && vPx.y > panelBottomYPx - carveRpx && vPx.y < panelBottomYPx) {
-            vec2 arcCenter = vec2(carveRpx, panelBottomYPx - carveRpx);
-            float d = length(vPx - arcCenter);
-            carveAlpha = max(carveAlpha, smoothstep(carveRpx - 0.5, carveRpx + 0.5, d));
-        }
-        // Bottom-right
-        if (vPx.x > iResolution.x - carveRpx && vPx.y > panelBottomYPx - carveRpx && vPx.y < panelBottomYPx) {
-            vec2 arcCenter = vec2(iResolution.x - carveRpx, panelBottomYPx - carveRpx);
-            float d = length(vPx - arcCenter);
-            carveAlpha = max(carveAlpha, smoothstep(carveRpx - 0.5, carveRpx + 0.5, d));
-        }
-    }
+    float panelBottomYPx = iResolution.y * shadowStartV;
 
     // SDF rounded rectangle mask for the SURFACE — gives AA at all
-    // four edges of the wl_surface. The shadow branch below already
-    // tapers its own alpha so the SDF AA only contributes at the
-    // very corners.
+    // four outer edges of the wl_surface. Cheap to always evaluate.
     vec2 center = iResolution.xy * 0.5;
     vec2 halfSize = iResolution.xy * 0.5;
     float dist = roundedBoxSDF(fragCoord - center, halfSize, radius);
-    float mask = 1.0 - smoothstep(-1.0, 0.0, dist);
-    if (mask <= 0.0) {
+    float surfaceMask = 1.0 - smoothstep(-1.0, 0.0, dist);
+    if (surfaceMask <= 0.0) {
         fragColor = vec4(0.0);
         return;
     }
 
-    // ─── Shadow strip ─────────────────────────────────────────────────
-    // Quadratic alpha falloff: strongest at the panel-bottom edge
-    // (right after shadowStartV), fading to 0 at the surface-bottom
-    // edge. RGB is black; the compositor blends this over whatever's
-    // behind, producing a real darken-the-region-below-the-panel
-    // shadow.
-    if (shadowFraction > 0.001 && visualUv.y > shadowStartV) {
-        float shadowSpan = 1.0 - shadowStartV;
-        float t = (visualUv.y - shadowStartV) / max(shadowSpan, 0.001);
-        // Quadratic falloff SHAPE — peaks at 1.0 at the panel-bottom
-        // edge and decays to 0 at the far end. Previous formulation
-        // multiplied the falloff INTO the opacity then squared the
-        // whole thing, giving peak alpha = opacity² (≈0.20 at
-        // opacity=0.45) — way too subtle to read as a drop shadow.
+    // ─── Distance from the carved panel outline ───────────────────────
+    // Single signed-distance field for the panel's bottom edge,
+    // measured in pixels. Negative => inside panel. Positive => below
+    // the outline (shadow region). Crucially this is a CONTINUOUS
+    // field across the bottom corners: in the middle the outline is
+    // the horizontal line y=panelBottomYPx, and in each corner column
+    // the outline becomes the quarter-arc of radius `carveRpx`
+    // centred inward. The shadow rendering reads this same value so
+    // the shadow follows the curve at the corners instead of leaving
+    // a rectangular strip behind a curved panel edge.
+    vec2 vPx = visualUv * iResolution;
+    float carveRpx = cornerCarveFraction * iResolution.y;
+    float distFromOutline;
+    if (carveRpx > 0.5 && vPx.y > panelBottomYPx - carveRpx) {
+        // Bottom-left arc
+        if (vPx.x < carveRpx) {
+            vec2 arcCenter = vec2(carveRpx, panelBottomYPx - carveRpx);
+            distFromOutline = length(vPx - arcCenter) - carveRpx;
+        }
+        // Bottom-right arc
+        else if (vPx.x > iResolution.x - carveRpx) {
+            vec2 arcCenter = vec2(iResolution.x - carveRpx, panelBottomYPx - carveRpx);
+            distFromOutline = length(vPx - arcCenter) - carveRpx;
+        }
+        // Middle column — flat bottom edge
+        else {
+            distFromOutline = vPx.y - panelBottomYPx;
+        }
+    } else {
+        // Above the carve band (or carve disabled): always the flat
+        // horizontal bottom edge.
+        distFromOutline = vPx.y - panelBottomYPx;
+    }
+
+    // ─── Shadow region (below the carved outline) ─────────────────────
+    // distFromOutline > 0.5 — fully outside the panel, can skip the
+    // expensive panel-material work. The 0.5-px slack lets the panel
+    // branch handle outline AA on the inside.
+    float shadowSizePx = iResolution.y - panelBottomYPx;
+    if (distFromOutline > 0.5) {
+        if (shadowFraction <= 0.001 || shadowSizePx <= 0.0 || distFromOutline >= shadowSizePx) {
+            fragColor = vec4(0.0);
+            return;
+        }
+        float t = distFromOutline / shadowSizePx;
         float falloff = 1.0 - t;
         falloff *= falloff;
-        float a = shadowOpacity * falloff * mask;
+        float a = shadowOpacity * falloff * surfaceMask;
         fragColor = vec4(0.0, 0.0, 0.0, a) * qt_Opacity;
         return;
     }
+
+    // Save mask for the panel branch below — both surface AA and a
+    // 0.5-px smoothstep across the outline so the curved edge is AA'd
+    // against the shadow / wallpaper underneath.
+    float outlineFade = 1.0 - smoothstep(-0.5, 0.5, distFromOutline);
+    float mask = surfaceMask * outlineFade;
 
     // Remap visualUv.y to "panel-local" coordinates [0..1] so the
     // gradient direction rotates around the centre of the VISIBLE
@@ -338,14 +344,9 @@ void main() {
         finalAlpha = tintOpacity * mask;
     }
 
-    // Apply the concave-corner carve. carveAlpha is 1 in fully-carved
-    // fragments and 0 elsewhere, so (1 - carveAlpha) scales the
-    // output to 0 inside the carved region. Multiplied as a single
-    // factor on the final premultiplied output, both RGB and alpha
-    // drop together — the carved pixel becomes vec4(0) and the
-    // compositor blends whatever's behind through.
-    float carveMul = 1.0 - carveAlpha;
-
-    // Pre-multiplied alpha output: RGB * alpha before output
-    fragColor = vec4(finalRgb * finalAlpha, finalAlpha) * qt_Opacity * carveMul;
+    // Pre-multiplied alpha output: RGB * alpha before output. `mask`
+    // already folds in the carved-outline AA via outlineFade, so the
+    // panel material naturally fades to 0 across the curved edge and
+    // the shadow region below picks up from there.
+    fragColor = vec4(finalRgb * finalAlpha, finalAlpha) * qt_Opacity;
 }

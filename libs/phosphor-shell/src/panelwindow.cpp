@@ -96,18 +96,18 @@ void PanelWindow::setScreen(QScreen* screen)
     Q_EMIT screenChanged();
 }
 
-PanelWindow::Layer PanelWindow::layer() const
+PanelWindow::Layer PanelWindow::panelLayer() const
 {
     return m_layer;
 }
 
-void PanelWindow::setLayer(Layer layer)
+void PanelWindow::setPanelLayer(Layer layer)
 {
     if (m_layer == layer) {
         return;
     }
     m_layer = layer;
-    Q_EMIT layerChanged();
+    Q_EMIT panelLayerChanged();
 }
 
 int PanelWindow::exclusiveZone() const

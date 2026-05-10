@@ -44,7 +44,12 @@ class PHOSPHORSHELL_EXPORT PanelWindow : public QQuickItem
     /// shader is responsible for matching the panel's orientation.
     Q_PROPERTY(int cornerCarveRadius READ cornerCarveRadius WRITE setCornerCarveRadius NOTIFY cornerCarveRadiusChanged)
     Q_PROPERTY(QScreen* screen READ screen WRITE setScreen NOTIFY screenChanged)
-    Q_PROPERTY(Layer layer READ layer WRITE setLayer NOTIFY layerChanged)
+    // `panelLayer` rather than `layer` — QQuickItem already exposes a
+    // FINAL `layer` group property (the cached-rendering layer accessed
+    // as `Item.layer.enabled`), and shadowing it triggered a
+    // `qt.qml.propertyCache: Final member layer is overridden` warning
+    // on every panel construction. Renaming avoids the collision.
+    Q_PROPERTY(Layer panelLayer READ panelLayer WRITE setPanelLayer NOTIFY panelLayerChanged)
     Q_PROPERTY(int exclusiveZone READ exclusiveZone WRITE setExclusiveZone NOTIFY exclusiveZoneChanged)
     Q_PROPERTY(bool exclusiveZoneEnabled READ exclusiveZoneEnabled WRITE setExclusiveZoneEnabled NOTIFY
                    exclusiveZoneEnabledChanged)
@@ -95,8 +100,8 @@ public:
     [[nodiscard]] QScreen* screen() const;
     void setScreen(QScreen* screen);
 
-    [[nodiscard]] Layer layer() const;
-    void setLayer(Layer layer);
+    [[nodiscard]] Layer panelLayer() const;
+    void setPanelLayer(Layer layer);
 
     [[nodiscard]] int exclusiveZone() const;
     void setExclusiveZone(int zone);
@@ -119,7 +124,7 @@ Q_SIGNALS:
     void shadowSizeChanged();
     void cornerCarveRadiusChanged();
     void screenChanged();
-    void layerChanged();
+    void panelLayerChanged();
     void exclusiveZoneChanged();
     void exclusiveZoneEnabledChanged();
     void alignmentChanged();

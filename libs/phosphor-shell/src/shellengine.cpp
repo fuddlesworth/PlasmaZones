@@ -363,7 +363,7 @@ void ShellEngine::materializePanels()
         role = role.withAnchors(anchors).withScopePrefix(QStringLiteral("phosphor-shell"));
         role = role.withKeyboard(PhosphorLayer::KeyboardInteractivity::OnDemand);
 
-        switch (panel->layer()) {
+        switch (panel->panelLayer()) {
         case PanelWindow::LayerBackground:
             role = role.withLayer(PhosphorLayer::Layer::Background);
             break;
