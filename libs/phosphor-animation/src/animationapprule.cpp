@@ -126,10 +126,14 @@ std::optional<AnimationAppRule> AnimationAppRule::fromJson(const QJsonObject& ob
     case Kind::Shader: {
         r.effectId = obj.value(kKeyEffectId).toString();
         // Distinguish "field absent" (legitimate — no params override)
-        // from "field present but malformed" (silent coercion to empty
-        // map would hide a config bug). `toObject()` returns an empty
-        // object for any non-object JSON value, so the explicit type
-        // check has to happen on the QJsonValue before coercing.
+        // from "field present but malformed" so the latter surfaces a
+        // diagnostic instead of silently absorbing a config bug. We
+        // still coerce malformed payloads to an empty map (rather than
+        // dropping the rule) because `effectId` may carry a meaningful
+        // override on its own — the rule is functional with empty
+        // params, just without per-effect tuning. `toObject()` returns
+        // an empty object for any non-object JSON value, so the
+        // explicit type check happens on the QJsonValue.
         const auto paramsValue = obj.value(kKeyShaderParams);
         if (!paramsValue.isUndefined() && !paramsValue.isNull() && !paramsValue.isObject()) {
             qCWarning(lcRules) << "shaderParams present but not an object — coercing to empty map."

@@ -104,6 +104,31 @@ private Q_SLOTS:
         QCOMPARE(*roundTripped, r);
     }
 
+    void testTimingRule_negativeDuration_normalisesToZeroOnRoundTrip()
+    {
+        // The header documents `durationMs <= 0` as the "inherit
+        // per-event default" sentinel and that negatives are accepted
+        // on read but emitted as the absent-key form via toJson — so
+        // an in-memory negative value normalises to 0 on the next
+        // save/load cycle. Pin that contract so a regression that
+        // started persisting negatives (or rejecting them outright)
+        // would be caught.
+        AnimationAppRule r;
+        r.classPattern = QStringLiteral("foo");
+        r.eventPath = QStringLiteral("window.open");
+        r.kind = AnimationAppRule::Kind::Timing;
+        r.curve = QStringLiteral("ease-out");
+        r.durationMs = -5;
+
+        const auto json = r.toJson();
+        QVERIFY2(!json.contains(QLatin1String("durationMs")),
+                 "negative durationMs must NOT serialise (sentinel-equivalent to 0)");
+
+        const auto roundTripped = AnimationAppRule::fromJson(json);
+        QVERIFY(roundTripped.has_value());
+        QCOMPARE(roundTripped->durationMs, 0);
+    }
+
     void testFromJson_strict_dropsUnknownKind()
     {
         // Direct callers of rule-level fromJson now get the same

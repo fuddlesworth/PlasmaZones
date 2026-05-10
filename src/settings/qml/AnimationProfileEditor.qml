@@ -216,8 +216,6 @@ ColumnLayout {
         // Hidden entirely in per-event-card mode (the card's master
         // override toggle gates the whole timing section).
         CheckBox {
-            id: curveOverrideCheck
-
             Layout.fillWidth: true
             visible: root.showOverrideCheckboxes
             text: i18n("Override curve")

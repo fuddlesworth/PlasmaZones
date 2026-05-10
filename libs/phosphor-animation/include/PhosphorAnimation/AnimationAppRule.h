@@ -112,6 +112,18 @@ struct PHOSPHORANIMATION_EXPORT AnimationAppRule
     /// the list-level loader already applies, so a typo in `kind`
     /// can't silently materialise as an engaged-empty-effectId Shader
     /// rule that would block animations for matching windows.
+    ///
+    /// The `kind` field is parsed case-insensitively on read (so
+    /// `"Shader"`, `"shader"`, `"SHADER"` all map to `Kind::Shader`)
+    /// and emitted lowercase via `toJson` — direct round-trip is
+    /// stable for the canonical form, but hand-edited capitalised
+    /// values normalise on first save.
+    ///
+    /// The `durationMs` Timing-kind sentinel covers `<= 0` — negative
+    /// values are accepted on read but emit as the absent-key form
+    /// via `toJson`, so a negative in-memory value will round-trip
+    /// through disk as 0. Callers should normalise to 0 if they want
+    /// strict equality across a save/load cycle.
     static std::optional<AnimationAppRule> fromJson(const QJsonObject& obj);
 };
 
@@ -137,6 +149,12 @@ public:
     {
         return m_rules.isEmpty();
     }
+    /// Random-access read. Out-of-range indices return a default-
+    /// constructed `AnimationAppRule` (empty pattern + empty event)
+    /// and log a warning — the empty fields cause the resolver
+    /// short-circuits to skip the entry, so the worst observable
+    /// effect is a "ghost" empty rule in any UI binding that doesn't
+    /// itself bounds-check. Prefer `entries()` for iteration.
     AnimationAppRule at(int index) const;
     QList<AnimationAppRule> entries() const
     {

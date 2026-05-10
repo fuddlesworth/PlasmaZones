@@ -168,7 +168,7 @@ private Q_SLOTS:
         QCOMPARE(profile.effectiveEffectId(), QStringLiteral("popin"));
     }
 
-    void testShader_emptyEverything_returnsEmptyProfile()
+    void testShader_emptyRulesAndTree_returnsLibraryDefault()
     {
         const auto profile = resolveAnimationShaderProfile(AnimationAppRuleList{}, ShaderProfileTree{},
                                                            QStringLiteral("Firefox"), QStringLiteral("window.open"));

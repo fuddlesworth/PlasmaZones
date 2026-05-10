@@ -13,7 +13,13 @@ namespace PhosphorAnimationShaders {
 ShaderProfile resolveAnimationShaderProfile(const AnimationAppRuleList& rules, const ShaderProfileTree& tree,
                                             const QString& windowClass, const QString& eventPath)
 {
-    if (!windowClass.isEmpty()) {
+    // Empty-input short-circuit at the resolver layer — the header
+    // contract documents this for both empty windowClass and empty
+    // eventPath. The inner `firstMatchOfKind` happens to also reject
+    // empty eventPath as defence in depth, but enforcing the contract
+    // here ensures a future refactor that drops the inner guard
+    // doesn't silently regress this path's documented behaviour.
+    if (!windowClass.isEmpty() && !eventPath.isEmpty()) {
         if (const auto rule = rules.resolveShader(windowClass, eventPath)) {
             ShaderProfile profile;
             // Engaged-empty effectId is the rule's "block the per-event
@@ -30,7 +36,10 @@ ShaderProfile resolveAnimationShaderProfile(const AnimationAppRuleList& rules, c
 int resolveAnimationDuration(const AnimationAppRuleList& rules, const QString& windowClass, const QString& eventPath,
                              int defaultDurationMs)
 {
-    if (windowClass.isEmpty()) {
+    // Same contract symmetry as the shader resolver above — empty
+    // windowClass OR empty eventPath both short-circuit to the
+    // caller's default per the header doc.
+    if (windowClass.isEmpty() || eventPath.isEmpty()) {
         return defaultDurationMs;
     }
     const auto rule = rules.resolveTiming(windowClass, eventPath);
@@ -55,7 +64,10 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const AnimationAppRuleL
                                                          const QString& windowClass, const QString& eventPath,
                                                          const PhosphorAnimation::CurveRegistry& curveRegistry)
 {
-    if (windowClass.isEmpty()) {
+    // Mirror the shader/duration resolvers: empty windowClass OR
+    // empty eventPath short-circuits to the base profile per the
+    // header doc.
+    if (windowClass.isEmpty() || eventPath.isEmpty()) {
         return base;
     }
     const auto rule = rules.resolveTiming(windowClass, eventPath);

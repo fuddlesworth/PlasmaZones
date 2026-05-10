@@ -297,13 +297,29 @@ private Q_SLOTS:
 
     void setAppRule_outOfRange_returnsFalse()
     {
+        // Cover all three out-of-range branches the controller's
+        // index check rejects: empty-list (size==0), negative index
+        // on a populated list, and index>=size on a populated list.
+        // The asymmetric coverage that only tested the empty-list
+        // branch couldn't catch a regression that flipped the bounds
+        // check on populated lists.
         IsolatedConfigGuard guard;
         Settings settings;
         AnimationsPageController c(nullptr, &settings);
 
-        QVERIFY(!c.setAppRule(
-            0,
-            makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
+        const auto rule =
+            makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"));
+
+        // Size==0 case: any non-negative index is out-of-range.
+        QVERIFY(!c.setAppRule(0, rule));
+
+        // Populated-list cases: seed one entry, then assert both
+        // ends of the index range fail.
+        QVERIFY(c.addAppRule(rule));
+        QVERIFY(!c.setAppRule(-1, rule));
+        QVERIFY(!c.setAppRule(1, rule));
+        // The seeded rule must survive every rejected setAppRule.
+        QCOMPARE(c.appRules().size(), 1);
     }
 
     void setAppRule_invalidRule_returnsFalse()
