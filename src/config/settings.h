@@ -186,6 +186,19 @@ public:
     Q_PROPERTY(
         int minimumWindowHeight READ minimumWindowHeight WRITE setMinimumWindowHeight NOTIFY minimumWindowHeightChanged)
 
+    // Animation window filtering — separate group from snapping/tiling
+    // exclusions so the two filter sets can diverge.
+    Q_PROPERTY(bool animationExcludeTransientWindows READ animationExcludeTransientWindows WRITE
+                   setAnimationExcludeTransientWindows NOTIFY animationExcludeTransientWindowsChanged)
+    Q_PROPERTY(int animationMinimumWindowWidth READ animationMinimumWindowWidth WRITE setAnimationMinimumWindowWidth
+                   NOTIFY animationMinimumWindowWidthChanged)
+    Q_PROPERTY(int animationMinimumWindowHeight READ animationMinimumWindowHeight WRITE setAnimationMinimumWindowHeight
+                   NOTIFY animationMinimumWindowHeightChanged)
+    Q_PROPERTY(QStringList animationExcludedApplications READ animationExcludedApplications WRITE
+                   setAnimationExcludedApplications NOTIFY animationExcludedApplicationsChanged)
+    Q_PROPERTY(QStringList animationExcludedWindowClasses READ animationExcludedWindowClasses WRITE
+                   setAnimationExcludedWindowClasses NOTIFY animationExcludedWindowClassesChanged)
+
     // PhosphorZones::Zone Selector
     Q_PROPERTY(bool zoneSelectorEnabled READ zoneSelectorEnabled WRITE setZoneSelectorEnabled NOTIFY
                    zoneSelectorEnabledChanged)
@@ -616,6 +629,23 @@ public:
     void setMinimumWindowWidth(int width) override;
     int minimumWindowHeight() const override;
     void setMinimumWindowHeight(int height) override;
+
+    // Animation window filtering — same shape as snapping/tiling
+    // exclusions but stored under `Animations.WindowFiltering`.
+    bool animationExcludeTransientWindows() const override;
+    void setAnimationExcludeTransientWindows(bool exclude) override;
+    int animationMinimumWindowWidth() const override;
+    void setAnimationMinimumWindowWidth(int width) override;
+    int animationMinimumWindowHeight() const override;
+    void setAnimationMinimumWindowHeight(int height) override;
+    QStringList animationExcludedApplications() const override;
+    void setAnimationExcludedApplications(const QStringList& apps) override;
+    Q_INVOKABLE void addAnimationExcludedApplication(const QString& app);
+    Q_INVOKABLE void removeAnimationExcludedApplicationAt(int index);
+    QStringList animationExcludedWindowClasses() const override;
+    void setAnimationExcludedWindowClasses(const QStringList& classes) override;
+    Q_INVOKABLE void addAnimationExcludedWindowClass(const QString& cls);
+    Q_INVOKABLE void removeAnimationExcludedWindowClassAt(int index);
 
     // PhosphorZones::Zone Selector — PhosphorConfig::Store-backed.
     bool zoneSelectorEnabled() const override;
@@ -1062,6 +1092,22 @@ private:
     /// the legacy single-modifier key.
     void writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
                           TriggerListSignalFn specificSignal);
+
+    /// Member-function-pointer alias for a no-arg NOTIFY signal passed into
+    /// @ref writeCommaList — the canonical setter for comma-joined string-
+    /// list config values.
+    using CommaListSignalFn = void (Settings::*)();
+
+    /// Shared setter for QStringList settings that round-trip through the
+    /// store as a comma-joined QString. Performs the same canonicalisation
+    /// + post-write read-back compare the open-coded list setters use, so
+    /// `addX` / `removeXAt` helpers can reuse the dedupe + signal-on-real-
+    /// change semantics without duplicating the body. New list settings
+    /// should call this; pre-existing list setters (`setExcludedApplications`
+    /// / `setExcludedWindowClasses`, the snap-assist trigger ones) keep
+    /// their open-coded form to avoid touching established code paths.
+    void writeCommaList(const QString& group, const QString& key, const QStringList& list,
+                        CommaListSignalFn specificSignal);
 
     /// Member-function-pointer alias for the three per-mode disable NOTIFY
     /// signals passed into @ref writeDisableList. The signals carry the mode
