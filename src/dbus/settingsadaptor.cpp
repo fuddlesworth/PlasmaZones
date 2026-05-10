@@ -497,10 +497,14 @@ void SettingsAdaptor::initializeRegistry()
                 QJsonDocument(concrete->shaderProfileTree().toJson()).toJson(QJsonDocument::Compact));
         };
         m_setters[QStringLiteral("shaderProfileTree")] = [concrete](const QVariant& v) -> bool {
-            const QString raw = v.toString();
+            // Gate on UTF-8 byte length, not QString::size() — for
+            // multi-byte payloads the latter undercounts and a 64 KiB
+            // wire frame can encode to substantially more bytes
+            // on disk / on the bus.
+            const QByteArray raw = v.toString().toUtf8();
             if (raw.size() > kMaxShaderProfileTreeBytes)
                 return false;
-            const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8());
+            const QJsonDocument doc = QJsonDocument::fromJson(raw);
             if (!doc.isObject())
                 return false;
             concrete->setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
@@ -517,10 +521,11 @@ void SettingsAdaptor::initializeRegistry()
                 QJsonDocument(concrete->animationAppRules().toJson()).toJson(QJsonDocument::Compact));
         };
         m_setters[QStringLiteral("animationAppRules")] = [concrete](const QVariant& v) -> bool {
-            const QString raw = v.toString();
+            // Same UTF-8-byte gate rationale as shaderProfileTree above.
+            const QByteArray raw = v.toString().toUtf8();
             if (raw.size() > kMaxAnimationAppRulesBytes)
                 return false;
-            const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8());
+            const QJsonDocument doc = QJsonDocument::fromJson(raw);
             if (!doc.isArray())
                 return false;
             concrete->setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array()));

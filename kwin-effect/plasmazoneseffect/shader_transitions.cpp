@@ -1165,13 +1165,15 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // tree fallthrough (the user's "no animation for this app on this
     // event" sentinel).
     const QString windowClass = window->windowClass();
-    const auto profile = PhosphorAnimationShaders::resolveAnimationShaderProfile(
-        m_shaderManager.m_animationAppRules, m_shaderManager.m_shaderProfileTree, windowClass, profilePath);
+    const auto& appRules = m_shaderManager.appRules();
+    const auto& profileTree = m_shaderManager.profileTree();
+    const auto profile =
+        PhosphorAnimationShaders::resolveAnimationShaderProfile(appRules, profileTree, windowClass, profilePath);
     // Resolve duration through the rule cascade too — a Timing rule for
     // the same (class, event) bumps a per-event default. A rule with
     // durationMs == 0 is the inherit sentinel and falls through.
-    const int effectiveDurationMs = PhosphorAnimationShaders::resolveAnimationDuration(
-        m_shaderManager.m_animationAppRules, windowClass, profilePath, durationMs);
+    const int effectiveDurationMs =
+        PhosphorAnimationShaders::resolveAnimationDuration(appRules, windowClass, profilePath, durationMs);
     if (profile.effectiveEffectId().isEmpty()) {
         // Default-state path: a fresh user with no shader overrides
         // anywhere in the tree resolves every event to empty effectId,
@@ -1181,15 +1183,13 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         // overrides (so an empty resolve here is genuinely surprising —
         // the documented prune / D-Bus-race scenarios), otherwise
         // demote to DEBUG.
-        if (m_shaderManager.m_shaderProfileTree.overriddenPaths().isEmpty()
-            && m_shaderManager.m_animationAppRules.isEmpty()) {
+        if (profileTree.overriddenPaths().isEmpty() && appRules.isEmpty()) {
             qCDebug(lcEffect) << "tryBeginShader[" << profilePath
                               << "]: no shader assigned (tree empty — default state)";
         } else {
             qCWarning(lcEffect) << "tryBeginShader[" << profilePath
                                 << "]: no shader assigned (cascade returned empty effectId, tree size="
-                                << m_shaderManager.m_shaderProfileTree.overriddenPaths().size()
-                                << " rules=" << m_shaderManager.m_animationAppRules.size() << ")";
+                                << profileTree.overriddenPaths().size() << " rules=" << appRules.size() << ")";
         }
         return;
     }
@@ -1227,11 +1227,10 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
         this, QStringLiteral("shaderProfileTree"), [this](const QVariant& v) {
             const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
             if (doc.isObject()) {
-                m_shaderManager.m_shaderProfileTree =
-                    PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
-                qCDebug(lcEffect) << "loadShaderProfileFromDbus: tree loaded with"
-                                  << m_shaderManager.m_shaderProfileTree.overriddenPaths().size()
-                                  << "overrides — paths=" << m_shaderManager.m_shaderProfileTree.overriddenPaths();
+                auto& tree = m_shaderManager.profileTree();
+                tree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
+                qCDebug(lcEffect) << "loadShaderProfileFromDbus: tree loaded with" << tree.overriddenPaths().size()
+                                  << "overrides — paths=" << tree.overriddenPaths();
             } else {
                 qCWarning(lcEffect) << "Failed to parse shaderProfileTree from D-Bus — not a JSON object";
             }
@@ -1244,10 +1243,9 @@ void PlasmaZonesEffect::loadAnimationAppRulesFromDbus()
         this, QStringLiteral("animationAppRules"), [this](const QVariant& v) {
             const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
             if (doc.isArray()) {
-                m_shaderManager.m_animationAppRules =
-                    PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array());
-                qCDebug(lcEffect) << "loadAnimationAppRulesFromDbus: loaded"
-                                  << m_shaderManager.m_animationAppRules.size() << "rules";
+                auto& rules = m_shaderManager.appRules();
+                rules = PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array());
+                qCDebug(lcEffect) << "loadAnimationAppRulesFromDbus: loaded" << rules.size() << "rules";
             } else {
                 qCWarning(lcEffect) << "Failed to parse animationAppRules from D-Bus — not a JSON array";
             }

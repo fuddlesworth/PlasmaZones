@@ -1104,21 +1104,38 @@ PhosphorAnimationShaders::AnimationAppRuleList Settings::animationAppRules() con
 
 void Settings::setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules)
 {
-    // Skip the write when the new list equals the persisted one
-    // (mirrors the dirty-check pattern used by every other setter
-    // here so a no-op `setX(currentX)` from a binding loop doesn't
-    // emit changed signals or mark the config dirty).
-    const auto previous = animationAppRules();
-    if (previous == rules)
-        return;
-
-    QVariantList raw;
+    // Mirror the canonicalisation pattern used by `setShaderProfileTree`
+    // — compare the on-disk RAW form against the canonical
+    // round-tripped form. Catches two cases the simple "previous == rules"
+    // shortcut misses:
+    //
+    //   1. Hand-edited / corrupted on-disk entries that
+    //      `AnimationAppRule::fromJson` silently drops at read time. The
+    //      in-memory `previous` would then equal `rules` even though the
+    //      on-disk file still contains the bogus entry — so the simple
+    //      compare leaves stale junk on disk forever instead of cleaning
+    //      it up on the next save (asymmetric with `setShaderProfileTree`
+    //      which prunes-and-compares on both sides).
+    //
+    //   2. Schema-version drifts where `toJson()` emits the same logical
+    //      list in a slightly different on-disk shape (e.g. key ordering,
+    //      omitted-empty-fields convention) — the canonical-vs-raw
+    //      compare detects that delta and rewrites the file once,
+    //      whereas the simple compare would miss it.
+    //
+    // Build the canonical raw form once and reuse it for both the
+    // change-detection compare AND the actual write — no double-encode.
+    QVariantList canonical;
     const auto arr = rules.toJson();
-    raw.reserve(arr.size());
+    canonical.reserve(arr.size());
     for (const auto& v : arr) {
-        raw.append(v.toObject().toVariantMap());
+        canonical.append(v.toObject().toVariantMap());
     }
-    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey(), raw);
+    const auto storedRaw =
+        m_store->read<QVariantList>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey());
+    if (storedRaw == canonical)
+        return;
+    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey(), canonical);
     Q_EMIT animationAppRulesChanged();
     Q_EMIT settingsChanged();
 }

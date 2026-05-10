@@ -119,7 +119,11 @@ SettingsFlickable {
     }
 
     /// Reset the editor's working state to library defaults so
-    /// consecutive adds open with a known starting point.
+    /// consecutive adds open with a known starting point. The kind
+    /// radio is also reset back to Shader so a user adding several
+    /// timing rules in a row doesn't get a surprising kind switch on
+    /// reopen — symmetry with the other working-state fields, all of
+    /// which are reset to their defaults.
     function _resetEditor() {
         profileEditor.timingMode = CurvePresets.timingModeEasing;
         profileEditor.duration = CurvePresets.defaultDurationMs;
@@ -133,6 +137,7 @@ SettingsFlickable {
         });
         profileEditor.overrideCurve = true;
         profileEditor.overrideDuration = true;
+        shaderKindRadio.checked = true;
     }
 
     contentHeight: mainCol.implicitHeight
@@ -257,6 +262,7 @@ SettingsFlickable {
                         checked: true
                         ToolTip.text: i18n("Replace the per-event shader effect for matching windows. Empty effect blocks the default.")
                         ToolTip.visible: hovered
+                        Accessible.name: text
                     }
 
                     RadioButton {
@@ -265,6 +271,7 @@ SettingsFlickable {
                         text: i18n("Motion timing")
                         ToolTip.text: i18n("Override the curve and duration for the matching windows' motion.")
                         ToolTip.visible: hovered
+                        Accessible.name: text
                     }
 
                 }
@@ -294,7 +301,14 @@ SettingsFlickable {
                     // switch and on successful Add.
                     enableLocking: true
                     enableRandomize: true
-                    eventLabel: i18nc("placeholder used in the curve dialog title for app-rule curves", "this rule")
+                    // Surface the (pattern, event) the rule will match
+                    // in the curve-editor dialog title so the user
+                    // doesn't have to alt-tab between the dialog and
+                    // the form to remember which rule they're editing.
+                    // Falls back to a generic placeholder until both
+                    // axes are filled — opening the dialog before then
+                    // is rare but not impossible.
+                    eventLabel: (patternField.text.length > 0 && (eventCombo.currentValue || "").length > 0) ? i18nc("rule context shown in curve-dialog title — pattern + event-path", "%1 on %2", patternField.text, root._eventLabel(eventCombo.currentValue)) : i18nc("placeholder used in the curve dialog title for app-rule curves", "this rule")
                     availableShaders: root.shadersList || []
                     // Param-write signals fold mutations back into the
                     // editor's own `shaderParams` map. The per-event
@@ -315,27 +329,22 @@ SettingsFlickable {
                         }
                         profileEditor.shaderEffectId = id;
                     }
-                    onLockToggleRequested: function(paramId, locked) {
-                        profileEditor.lockedShaderParams = profileEditor.lockedAfterToggle(paramId, locked);
-                    }
-                    onLockAllToggleRequested: function(locked) {
-                        profileEditor.lockedShaderParams = profileEditor.lockedAfterAllToggle(locked);
-                    }
-                    onRandomizeRequested: {
-                        // The roll honours the lock map — locked
-                        // params are kept at their current values,
-                        // unlocked ones are re-rolled within their
-                        // schema-declared ranges. The merged map
-                        // becomes the new working state.
-                        profileEditor.shaderParams = profileEditor.randomizedShaderParams();
-                    }
+                    // Lock + randomize handlers are unnecessary here —
+                    // AnimationProfileEditor self-updates `lockedShaderParams`
+                    // and `shaderParams` before emitting, so the
+                    // staging-only App Rules editor doesn't need any
+                    // explicit write-back. Subscribe only to
+                    // `shaderParamWriteRequested` for per-param edits
+                    // since param mutations need to be merged into the
+                    // working `shaderParams` map (the editor cannot do
+                    // that itself without owning the merge semantics).
                     onShaderParamWriteRequested: function(effectId, paramId, value) {
                         if (effectId !== profileEditor.shaderEffectId)
                             return ;
 
-                        var next = ({
+                        const next = Object.assign({
+                        }, profileEditor.shaderParams || {
                         });
-                        for (var k in profileEditor.shaderParams) next[k] = profileEditor.shaderParams[k]
                         next[paramId] = value;
                         profileEditor.shaderParams = next;
                     }

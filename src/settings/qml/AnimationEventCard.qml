@@ -546,14 +546,19 @@ Item {
                 onShaderParamWriteRequested: function(effectId, paramId, value) {
                     root._writeShaderParam(effectId, paramId, value);
                 }
-                onLockToggleRequested: function(paramId, locked) {
-                    root.lockedShaderParams = editor.lockedAfterToggle(paramId, locked);
-                }
-                onLockAllToggleRequested: function(locked) {
-                    root.lockedShaderParams = editor.lockedAfterAllToggle(locked);
-                }
-                onRandomizeRequested: {
-                    var rolled = editor.randomizedShaderParams();
+                // Lock-toggle handlers are no-ops here —
+                // AnimationProfileEditor self-updates its own
+                // `lockedShaderParams` (which is aliased onto this
+                // card's `lockedShaderParams`) before emitting, so a
+                // re-assign here would be idempotent. The signals
+                // remain connect-free until / unless the lock state
+                // becomes persistent (today it's working-state only).
+                onRandomizeRequested: function(rolled) {
+                    // Editor already staged `rolled` onto its
+                    // `shaderParams`; this card's persistence is
+                    // through the controller, so route the rolled map
+                    // through the batch writer (single setShaderOverride
+                    // call carrying every roll).
                     root._writeAllShaderParams(root.currentShaderEffectId, rolled);
                 }
             }

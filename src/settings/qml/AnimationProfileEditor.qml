@@ -138,14 +138,23 @@ ColumnLayout {
     /// snapshot the effect at user-action time and skip late writes
     /// against a stale effect.
     signal shaderParamWriteRequested(string effectId, string paramId, var value)
-    /// Lock toolbar affordances (per-event card only).
+    /// Lock toolbar affordances. The editor self-updates
+    /// `lockedShaderParams` before emitting these — consumers only need
+    /// to subscribe if they want to persist the lock state somewhere
+    /// (the per-event card writes to controller; App Rules holds it in
+    /// the working set). Both signals fire AFTER the editor's own
+    /// state mutation, so a consumer reading `lockedShaderParams` in
+    /// the handler sees the post-toggle map.
     signal lockToggleRequested(string paramId, bool locked)
     signal lockAllToggleRequested(bool locked)
-    /// Randomize all params — caller computes the rolled values via
-    /// `paramEditor.computeRandomized()` (forwarded through the
-    /// dialog reference returned by this signal handler is awkward;
-    /// the consumer instead invokes `randomizeAndWrite()` directly).
-    signal randomizeRequested()
+    /// Randomize all params. Same self-update contract as the lock
+    /// signals: the editor rolls a new map (honouring the lock set)
+    /// and assigns it to `shaderParams` BEFORE emitting. The signal
+    /// payload carries the rolled map so a consumer that wants to
+    /// persist (per-event card → controller) doesn't have to re-read
+    /// the editor's state — staging-only consumers (App Rules) can
+    /// ignore the signal entirely.
+    signal randomizeRequested(var rolled)
 
     // ── Helpers ─────────────────────────────────────────────────────
     /// "Easing · Cubic In-Out" / "Spring · Snappy" (or "Custom").
@@ -393,12 +402,27 @@ ColumnLayout {
             root.shaderParamWriteRequested(root.shaderEffectId, paramId, value);
         }
         onLockToggled: function(paramId, locked) {
+            // Editor owns `lockedShaderParams` — self-update before
+            // emitting so subscribers reading the property see the
+            // post-toggle map. Consumers that just want to persist the
+            // lock state (per-event card) connect to the signal; pure
+            // staging consumers (App Rules) need no handler at all.
+            root.lockedShaderParams = paramEditor.lockedAfterToggle(paramId, locked);
             root.lockToggleRequested(paramId, locked);
         }
         onLockAllRequested: function(lock) {
+            root.lockedShaderParams = paramEditor.lockedAfterAllToggle(lock);
             root.lockAllToggleRequested(lock);
         }
-        onRandomizeRequested: root.randomizeRequested()
+        onRandomizeRequested: {
+            // Roll once, stage on the editor (so the UI updates), and
+            // emit with the rolled map so a persisting consumer can
+            // batch the per-param writes through a single controller
+            // call without re-rolling.
+            const rolled = paramEditor.computeRandomized();
+            root.shaderParams = rolled;
+            root.randomizeRequested(rolled);
+        }
         onRequestColorPicker: function(paramId, paramName, current) {
             colorDialog.effectId = root.shaderEffectId;
             colorDialog.paramId = paramId;

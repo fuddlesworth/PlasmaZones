@@ -607,12 +607,23 @@ bool AnimationsPageController::clearOverride(const QString& path)
     QFile file(filePath);
     if (!file.exists())
         return false;
+    // Mirror setOverride's snapshot-rollback symmetry: capture whether
+    // this call is the first to touch the file, snapshot, and on
+    // remove() failure roll the snapshot back so hasPendingChanges()
+    // doesn't report a phantom pending edit pointing at a file the
+    // user never actually touched (the unsaved-changes badge would
+    // light up and Discard would write the original content back over
+    // an unchanged original — harmless but confusing UX).
+    const bool firstSnapshot = !m_pendingFileSnapshots.contains(filePath);
     if (!snapshotFileIfFirst(filePath)) {
         qCWarning(lcConfig) << "clearOverride: refusing to delete" << filePath << "without a recoverable snapshot";
         return false;
     }
-    if (!file.remove())
+    if (!file.remove()) {
+        if (firstSnapshot)
+            m_pendingFileSnapshots.remove(filePath);
         return false;
+    }
     Q_EMIT overrideChanged(path);
     if (wasPending != hasPendingChanges())
         Q_EMIT pendingChangesChanged();

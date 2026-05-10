@@ -187,7 +187,10 @@ private Q_SLOTS:
         QCOMPARE(c.appRules().size(), 1);
         QCOMPARE(c.appRules().first().toMap().value(QStringLiteral("classPattern")).toString(),
                  QStringLiteral("spotify"));
-        QVERIFY2(spy.count() >= 1, "removeAppRule MUST emit pendingChangesChanged");
+        // Exactly-once contract — the sibling `*_noOp_doesNotEmitPendingChanges`
+        // / `*_sameIndex_isNoOp` tests assert zero, so a regression that
+        // double-emitted would still pass a `>=1` check.
+        QCOMPARE(spy.count(), 1);
     }
 
     void removeAppRule_outOfRange_returnsFalse()
@@ -234,7 +237,7 @@ private Q_SLOTS:
         QVERIFY(c.moveAppRule(1, 0));
         QCOMPARE(c.appRules().first().toMap().value(QStringLiteral("classPattern")).toString(),
                  QStringLiteral("spotify"));
-        QVERIFY2(spy.count() >= 1, "moveAppRule MUST emit pendingChangesChanged");
+        QCOMPARE(spy.count(), 1);
     }
 
     void moveAppRule_sameIndex_isNoOp()
@@ -422,7 +425,7 @@ private Q_SLOTS:
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QVERIFY(c.addAppRule(
             makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
-        QVERIFY2(spy.count() >= 1, "addAppRule MUST emit pendingChangesChanged");
+        QCOMPARE(spy.count(), 1);
     }
 
     void appRulesChanged_forwardsFromSettings()
@@ -450,7 +453,7 @@ private Q_SLOTS:
         QVERIFY(list.append(rule));
         settings.setAnimationAppRules(list);
 
-        QVERIFY2(spy.count() >= 1, "appRulesChanged MUST be forwarded from ISettings::animationAppRulesChanged");
+        QCOMPARE(spy.count(), 1);
     }
 
     // ── Event dropdown surface ────────────────────────────────────────

@@ -151,6 +151,23 @@ private Q_SLOTS:
         QCOMPARE(profile.effectiveEffectId(), QStringLiteral("popin"));
     }
 
+    void testShader_emptyEventPath_fallsThroughToTreeDefault()
+    {
+        // Empty eventPath means no rule can exact-match (rules require
+        // a non-empty path at insert time). The cascade hands the empty
+        // path to `ShaderProfileTree::resolve(QString())` which walks an
+        // empty parent chain and surfaces the library default. Mirrors
+        // `testDuration_emptyWindowClass_returnsDefault` and
+        // `testMotionProfile_emptyWindowClass_returnsBaseUnchanged` so
+        // each resolver has the same empty-input shape pinned by tests.
+        AnimationAppRuleList rules;
+        rules.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
+        const auto tree = treeWithBaseline(QStringLiteral("popin"));
+
+        const auto profile = resolveAnimationShaderProfile(rules, tree, QStringLiteral("Firefox"), QString());
+        QCOMPARE(profile.effectiveEffectId(), QStringLiteral("popin"));
+    }
+
     void testShader_emptyEverything_returnsEmptyProfile()
     {
         const auto profile = resolveAnimationShaderProfile(AnimationAppRuleList{}, ShaderProfileTree{},
@@ -260,6 +277,35 @@ private Q_SLOTS:
         tiny.append(timingRule(QStringLiteral("firefox"), QStringLiteral("window.open"), 1));
         QCOMPARE(resolveAnimationDuration(tiny, QStringLiteral("Firefox"), QStringLiteral("window.open"), 200),
                  MinAnimationDurationMs);
+    }
+
+    void testMotionProfile_outOfRangeRule_isClampedToDaemonEnvelope()
+    {
+        // The motion-profile cascade must apply the SAME clamp as the
+        // shader-side `resolveAnimationDuration` — the inline comment
+        // in `animationappruleresolver.cpp` calls this an explicit
+        // shader-vs-motion sync invariant. Without this test, a
+        // regression that drops the qBound() on the motion path would
+        // pass the shader-side clamp test alone and ship a duration-
+        // unbounded animator profile to `WindowAnimator::startAnimation`.
+        using PhosphorAnimation::Limits::MaxAnimationDurationMs;
+        using PhosphorAnimation::Limits::MinAnimationDurationMs;
+        CurveRegistry registry;
+        Profile base;
+        base.duration = 250.0;
+        base.curve = registry.create(QStringLiteral("0.42,0.0,0.58,1.0"));
+
+        AnimationAppRuleList huge;
+        huge.append(timingRule(QStringLiteral("firefox"), QStringLiteral("window.move"), 999999));
+        const auto outHuge = resolveAnimationMotionProfile(huge, base, QStringLiteral("Firefox"),
+                                                           QStringLiteral("window.move"), registry);
+        QCOMPARE(outHuge.duration, double(MaxAnimationDurationMs));
+
+        AnimationAppRuleList tiny;
+        tiny.append(timingRule(QStringLiteral("firefox"), QStringLiteral("window.move"), 1));
+        const auto outTiny = resolveAnimationMotionProfile(tiny, base, QStringLiteral("Firefox"),
+                                                           QStringLiteral("window.move"), registry);
+        QCOMPARE(outTiny.duration, double(MinAnimationDurationMs));
     }
 
     // ── Motion-profile cascade ────────────────────────────────────────

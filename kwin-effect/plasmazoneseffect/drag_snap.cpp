@@ -468,9 +468,10 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         const auto& baseProfile = m_windowAnimator->profile();
         const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
         PhosphorAnimation::Profile motionProfile;
-        if (!m_shaderManager.m_animationAppRules.isEmpty()) {
-            motionProfile = PhosphorAnimationShaders::resolveAnimationMotionProfile(
-                m_shaderManager.m_animationAppRules, baseProfile, windowClass, profilePath, m_curveRegistry);
+        const auto& appRules = m_shaderManager.appRules();
+        if (!appRules.isEmpty()) {
+            motionProfile = PhosphorAnimationShaders::resolveAnimationMotionProfile(appRules, baseProfile, windowClass,
+                                                                                    profilePath, m_curveRegistry);
             if (motionProfile != baseProfile)
                 motionOverridePtr = &motionProfile;
         }
@@ -509,8 +510,15 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             // for matching windows; engaged-empty rule effectId blocks
             // the tree fallthrough. Reuse the `windowClass` local from
             // above instead of re-calling `window->windowClass()`.
+            // Note: the snap shader path leaves durationMs at zero on
+            // purpose (see ShaderTransition docstring in types.h:126-136
+            // and paint_pipeline.cpp:155-170) — paintWindow rides the
+            // WindowAnimator's timeline. The Timing-rule duration
+            // override is honoured transitively via `motionProfile`
+            // above (driving the animator's duration), so the shader
+            // still terminates with the rule-overridden snap motion.
             const auto shaderProfile = PhosphorAnimationShaders::resolveAnimationShaderProfile(
-                m_shaderManager.m_animationAppRules, m_shaderManager.m_shaderProfileTree, windowClass, profilePath);
+                appRules, m_shaderManager.profileTree(), windowClass, profilePath);
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
                 beginShaderTransition(window, shaderProfile);
             }
