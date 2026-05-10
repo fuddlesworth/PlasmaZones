@@ -114,7 +114,7 @@ public:
 
     /// Anchor (card) pixel size in logical pixels. Decoupled from
     /// `iResolution` because Qt auto-resets iResolution to the shader
-    /// item's bounds on any geometry event — for a `boundsExtent: parent`
+    /// item's bounds on any geometry event — for a `fboExtentKind: parent`
     /// shader item that auto-reset would clobber any anchor-size override.
     /// Pushed alongside `iSurfaceScreenPos` from `syncShaderGeometryNow`.
     void setIAnchorSize(const QSizeF& size)

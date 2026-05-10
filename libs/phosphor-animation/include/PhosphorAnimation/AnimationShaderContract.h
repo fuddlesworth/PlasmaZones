@@ -238,9 +238,9 @@ inline constexpr const char* kISurfaceScreenPos = "iSurfaceScreenPos";
 
 /// `vec2 iAnchorSize` — captured anchor (card) pixel size in logical
 /// pixels. Decoupled from `iResolution` so vertex shaders can rely on
-/// it under any boundsExtent; `iResolution` is auto-reset by Qt to the
+/// it under any fboExtentKind; `iResolution` is auto-reset by Qt to the
 /// shader item's bounds on every geometry event and would otherwise
-/// clobber any anchor-size override on a `boundsExtent: parent` item.
+/// clobber any anchor-size override on a `fboExtentKind: parent` item.
 /// Daemon-side written via `AnimationUniformExtension`; kwin-effect
 /// uses classic-GL `setUniform`.
 inline constexpr const char* kIAnchorSize = "iAnchorSize";

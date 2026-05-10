@@ -130,7 +130,7 @@ private Q_SLOTS:
         original.bufferFilter = QStringLiteral("linear");
         original.bufferFilters = {QStringLiteral("nearest"), QStringLiteral("linear")};
         original.useDepthBuffer = true;
-        original.boundsPadding = 0.25;
+        original.fboExtentRing = 0.25;
 
         const AnimationShaderEffect restored = AnimationShaderEffect::fromJson(original.toJson());
         QCOMPARE(restored, original);
