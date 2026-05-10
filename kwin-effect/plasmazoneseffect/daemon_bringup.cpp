@@ -509,6 +509,28 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedAnimationStaggerInterval = qBound(PhosphorAnimation::Limits::MinAnimationStaggerIntervalMs, v.toInt(),
                                                   PhosphorAnimation::Limits::MaxAnimationStaggerIntervalMs);
     });
+
+    // Animation window filtering — independent of the snapping/tiling
+    // exclusions cached above. Used by `shouldAnimateWindow()` to gate
+    // the animation cascade; class-pattern rules override the filter
+    // at the resolver layer so a targeted rule can re-enable animation
+    // for an otherwise-excluded app.
+    loadSettingAsync(QStringLiteral("animationExcludeTransientWindows"), [this](const QVariant& v) {
+        m_animationExcludeTransientWindows = v.toBool();
+    });
+    loadSettingAsync(QStringLiteral("animationMinimumWindowWidth"), [this](const QVariant& v) {
+        m_animationMinWindowWidth = v.toInt();
+    });
+    loadSettingAsync(QStringLiteral("animationMinimumWindowHeight"), [this](const QVariant& v) {
+        m_animationMinWindowHeight = v.toInt();
+    });
+    loadSettingAsync(QStringLiteral("animationExcludedApplications"), [this](const QVariant& v) {
+        m_animationExcludedApplications = v.toStringList();
+    });
+    loadSettingAsync(QStringLiteral("animationExcludedWindowClasses"), [this](const QVariant& v) {
+        m_animationExcludedWindowClasses = v.toStringList();
+    });
+
     loadShaderProfileFromDbus();
     loadAnimationAppRulesFromDbus();
     loadShaderRegistryFromDbus();

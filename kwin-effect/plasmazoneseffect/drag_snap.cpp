@@ -428,7 +428,13 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     // the window visually from its old position/size to the new one using
     // translate + scale in paintWindow(). This follows the standard KDE
     // effect pattern — effects are visual overlays, never per-frame moveResize.
-    if (!skipAnimation && !allowDuringDrag && m_windowAnimator->isEnabled()) {
+    //
+    // `shouldAnimateWindow` adds the user's per-animation Window
+    // Filtering gate (transient / min-size / app / class) and lets a
+    // class-pattern AnimationAppRule override the filter when the
+    // rule's classPattern matches. Falling through to the non-animated
+    // path just runs the moveResize without the snap motion / shader.
+    if (!skipAnimation && !allowDuringDrag && m_windowAnimator->isEnabled() && shouldAnimateWindow(window)) {
         const QRectF targetFrame(geo);
 
         // Bail before any work when the in-flight animation already

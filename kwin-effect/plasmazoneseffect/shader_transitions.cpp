@@ -1159,6 +1159,17 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
         return;
     }
+    // Window-filtering gate. `shouldAnimateWindow` honours the user's
+    // Animations.WindowFiltering exclusions (transient / min-size /
+    // app / class) AND lets a class-pattern AnimationAppRule override
+    // the filter when the rule's classPattern substring-matches the
+    // window's class. Skipping this for shader transitions only would
+    // leave the motion-side cascade in `applySnapGeometry` doing its
+    // own check; both call sites gate identically so the filter is a
+    // single concept across the two paths.
+    if (!shouldAnimateWindow(window)) {
+        return;
+    }
     // Cascade: AnimationAppRule (per-window-class) → ShaderProfileTree
     // (per-event default). The rule layer wins for matching windows;
     // an engaged-empty effectId on the rule deliberately blocks the

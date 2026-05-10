@@ -433,6 +433,18 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("minimumWindowWidth", minimumWindowWidth, setMinimumWindowWidth)
     REGISTER_INT_SETTING("minimumWindowHeight", minimumWindowHeight, setMinimumWindowHeight)
 
+    // Animation window filtering — exposed on the same getSetting/setSetting
+    // wire as the snapping/tiling exclusions but stored independently so a
+    // user can disable animations for an app while still snapping it.
+    REGISTER_BOOL_SETTING("animationExcludeTransientWindows", animationExcludeTransientWindows,
+                          setAnimationExcludeTransientWindows)
+    REGISTER_INT_SETTING("animationMinimumWindowWidth", animationMinimumWindowWidth, setAnimationMinimumWindowWidth)
+    REGISTER_INT_SETTING("animationMinimumWindowHeight", animationMinimumWindowHeight, setAnimationMinimumWindowHeight)
+    REGISTER_STRINGLIST_SETTING("animationExcludedApplications", animationExcludedApplications,
+                                setAnimationExcludedApplications)
+    REGISTER_STRINGLIST_SETTING("animationExcludedWindowClasses", animationExcludedWindowClasses,
+                                setAnimationExcludedWindowClasses)
+
     // PhosphorZones::Zone selector settings
     REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)
     REGISTER_INT_SETTING("zoneSelectorTriggerDistance", zoneSelectorTriggerDistance, setZoneSelectorTriggerDistance)

@@ -227,6 +227,24 @@ private:
     bool isTileableWindow(KWin::EffectWindow* w) const;
 
     /**
+     * @brief Animation-side window filter.
+     *
+     * Returns true when @p w should animate, false when the user's
+     * animation Window Filtering settings exclude it. Mirrors the
+     * snapping/tiling Exclusions but pulls from the separate
+     * `Animations.WindowFiltering` cache so the two filter sets can
+     * diverge.
+     *
+     * A class-pattern AnimationAppRule whose pattern substring-matches
+     * the window's class OVERRIDES the filter — the rule's intent is
+     * "this app animates with this profile" so it wins regardless of
+     * the otherwise-broader exclusion. Empty windowClass falls
+     * through to the filter (no rule can match an unidentified
+     * window).
+     */
+    bool shouldAnimateWindow(KWin::EffectWindow* w) const;
+
+    /**
      * @brief Reject Plasma shell layer-shell surfaces by window class.
      *
      * On Wayland, KDE notification popups, system tray overlays, the emoji
@@ -588,6 +606,20 @@ private:
     // the startup race window.
     int m_cachedMinWindowWidth = 200;
     int m_cachedMinWindowHeight = 150;
+
+    // Animation window filtering — separate cache from the snapping/tiling
+    // exclusions because the user can opt for divergent filter sets. The
+    // filter gates the animation cascade BEFORE rule resolution, but a
+    // class-pattern rule whose pattern matches the window's class
+    // overrides the filter (so a user can disable animations broadly via
+    // an app exclusion AND still keep one class animated through a
+    // targeted rule). Defaults are permissive (no filter) until D-Bus
+    // populates them; matches the per-key defaults in ConfigDefaults.
+    bool m_animationExcludeTransientWindows = false;
+    int m_animationMinWindowWidth = 0;
+    int m_animationMinWindowHeight = 0;
+    QStringList m_animationExcludedApplications;
+    QStringList m_animationExcludedWindowClasses;
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end

@@ -139,6 +139,75 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
     return true;
 }
 
+bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return false;
+    }
+
+    const QString windowClass = w->windowClass();
+
+    // Override path: an app rule whose classPattern substring-matches
+    // the window's class signals deliberate user intent to animate this
+    // app, so the rule wins over the broader filter. Same case-insensitive
+    // substring match the AnimationAppRuleList resolver uses, so the
+    // override scope mirrors the per-rule match contract exactly.
+    if (!windowClass.isEmpty()) {
+        for (const auto& rule : m_shaderManager.appRules().entries()) {
+            if (!rule.classPattern.isEmpty() && windowClass.contains(rule.classPattern, Qt::CaseInsensitive)) {
+                return true;
+            }
+        }
+    }
+
+    // Transient-window filter — covers dialogs / popups / tooltips /
+    // dropdowns / menus / utility windows. Mirrors the snapping
+    // exclusion's transient bucket, plus the popup-window family that
+    // KWin distinguishes (PopupMenu, DropdownMenu, Tooltip) so a user
+    // who wants the popup category animated can still opt out of these
+    // sub-types via the toggle.
+    if (m_animationExcludeTransientWindows) {
+        if (w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
+            || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor()) {
+            return false;
+        }
+    }
+
+    // Min-size filter — windows narrower or shorter than the threshold
+    // are excluded. Zero (the default) disables each axis independently
+    // so a user can set just one bound. Frame geometry is the user-
+    // facing rect (includes server-side decoration); the daemon uses
+    // the same rect for its snapping min-size gate.
+    const QRectF frame = w->frameGeometry();
+    if (m_animationMinWindowWidth > 0 && frame.width() < m_animationMinWindowWidth) {
+        return false;
+    }
+    if (m_animationMinWindowHeight > 0 && frame.height() < m_animationMinWindowHeight) {
+        return false;
+    }
+
+    // User-configured exclusion lists — substring-matched against the
+    // window's appName (desktopFileName) and class. Matches the
+    // shouldHandleWindow contract exactly so a user familiar with the
+    // snapping Exclusions UX gets the same behaviour for animations.
+    if (!m_animationExcludedApplications.isEmpty() || !m_animationExcludedWindowClasses.isEmpty()) {
+        KWin::Window* kw = w->window();
+        const QString appName = kw ? kw->desktopFileName() : QString();
+        for (const QString& excluded : m_animationExcludedApplications) {
+            if (!excluded.isEmpty() && appName.contains(excluded, Qt::CaseInsensitive)) {
+                return false;
+            }
+        }
+        for (const QString& excluded : m_animationExcludedWindowClasses) {
+            if (!excluded.isEmpty() && windowClass.contains(excluded, Qt::CaseInsensitive)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 bool PlasmaZonesEffect::isTileableWindow(KWin::EffectWindow* w) const
 {
     // Reject menus, popups, tooltips, modals, and transient children.
