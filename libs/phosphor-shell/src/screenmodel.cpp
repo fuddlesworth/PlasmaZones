@@ -14,6 +14,7 @@ ScreenModel::ScreenModel(PhosphorLayer::IScreenProvider* provider, QObject* pare
     : QAbstractListModel(parent)
     , m_provider(provider)
 {
+    Q_ASSERT_X(m_provider, "ScreenModel", "IScreenProvider must not be null");
     m_screens = m_provider->screens();
 
     connect(m_provider->notifier(), &PhosphorLayer::ScreenProviderNotifier::screensChanged, this,

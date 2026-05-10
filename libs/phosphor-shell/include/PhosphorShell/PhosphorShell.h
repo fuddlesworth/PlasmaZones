@@ -15,4 +15,5 @@
 #include <PhosphorShell/ShellEngine.h>
 #include <PhosphorShell/ShellGlobal.h>
 #include <PhosphorShell/ShellLoader.h>
+#include <PhosphorShell/Toplevels.h>
 #include <PhosphorShell/Variants.h>

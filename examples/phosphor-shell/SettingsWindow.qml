@@ -98,6 +98,7 @@ FloatingWindow {
 
                     anchors.fill: parent
                     hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: root.shellState.settingsOpen = false
                 }
 
