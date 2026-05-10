@@ -147,6 +147,11 @@ void Process::startProcess()
         m_stderr.clear();
         Q_EMIT stderrTextChanged();
     }
+    // Reset the stateful decoders too, otherwise a partial UTF-8
+    // sequence left over from the previous run would corrupt the
+    // first character of the new run's output.
+    m_stdoutDecoder.resetState();
+    m_stderrDecoder.resetState();
 
     const QString program = m_command.first();
     const QStringList args = m_command.mid(1);
@@ -172,15 +177,19 @@ void Process::onReadyReadStdout()
     // Append, don't replace — readyReadStandardOutput can fire multiple
     // times per invocation, and replacing would lose all but the last
     // chunk. trimToCap keeps memory bounded for chatty long-running
-    // children (interval=0 stream subscriptions).
-    m_stdout.append(QString::fromUtf8(m_process->readAllStandardOutput()));
+    // children (interval=0 stream subscriptions). The QStringDecoder
+    // retains any trailing partial UTF-8 sequence so a codepoint
+    // straddling two chunk boundaries decodes correctly when the next
+    // chunk arrives — using QString::fromUtf8 per chunk would emit
+    // U+FFFD on both halves.
+    m_stdout.append(m_stdoutDecoder.decode(m_process->readAllStandardOutput()));
     trimToCap(m_stdout);
     Q_EMIT stdoutTextChanged();
 }
 
 void Process::onReadyReadStderr()
 {
-    m_stderr.append(QString::fromUtf8(m_process->readAllStandardError()));
+    m_stderr.append(m_stderrDecoder.decode(m_process->readAllStandardError()));
     trimToCap(m_stderr);
     Q_EMIT stderrTextChanged();
 }
@@ -197,16 +206,18 @@ void Process::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
     }
 
     // Drain any final stdout/stderr that arrived between the last
-    // readyRead and finished.
+    // readyRead and finished. Use the same stateful decoders so any
+    // partial sequence the previous chunk left behind is consumed and
+    // emitted as the proper codepoint here at end-of-stream.
     const QByteArray remainingOut = m_process->readAllStandardOutput();
     if (!remainingOut.isEmpty()) {
-        m_stdout.append(QString::fromUtf8(remainingOut));
+        m_stdout.append(m_stdoutDecoder.decode(remainingOut));
         trimToCap(m_stdout);
         Q_EMIT stdoutTextChanged();
     }
     const QByteArray remainingErr = m_process->readAllStandardError();
     if (!remainingErr.isEmpty()) {
-        m_stderr.append(QString::fromUtf8(remainingErr));
+        m_stderr.append(m_stderrDecoder.decode(remainingErr));
         trimToCap(m_stderr);
         Q_EMIT stderrTextChanged();
     }

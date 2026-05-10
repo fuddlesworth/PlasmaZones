@@ -49,17 +49,24 @@ PanelWindow {
         rightPadding: 12
 
         Repeater {
-            model: Toplevels.toplevels
+            // `Toplevels.model` is a real QAbstractListModel that emits
+            // begin/endInsertRows / RemoveRows on change, so the Repeater
+            // patches one delegate in/out per add/remove. Binding to
+            // `Toplevels.toplevels` (the QList) would re-evaluate the
+            // whole list and rebuild every delegate on every change.
+            model: Toplevels.model
 
             delegate: Rectangle {
-                required property var modelData // PhosphorWayland::ForeignToplevel*
+                // `toplevel` is the role exposed by ToplevelListModel
+                // (PhosphorWayland::ForeignToplevel*).
+                required property var toplevel
 
                 anchors.verticalCenter: parent.verticalCenter
                 width: Math.min(180, Math.max(60, taskLabel.implicitWidth + 24))
                 height: 32
                 radius: 6
-                color: modelData.activated ? "#89b4fa" : (taskMouse.containsMouse ? "#45475a" : "#313244")
-                opacity: modelData.minimized ? 0.5 : 1
+                color: toplevel.activated ? "#89b4fa" : (taskMouse.containsMouse ? "#45475a" : "#313244")
+                opacity: toplevel.minimized ? 0.5 : 1
 
                 Text {
                     id: taskLabel
@@ -69,10 +76,10 @@ PanelWindow {
                     width: parent.width - 16
                     elide: Text.ElideRight
                     horizontalAlignment: Text.AlignHCenter
-                    text: modelData.title || modelData.appId || "(unnamed)"
-                    color: modelData.activated ? "#1e1e2e" : "#cdd6f4"
+                    text: toplevel.title || toplevel.appId || "(unnamed)"
+                    color: toplevel.activated ? "#1e1e2e" : "#cdd6f4"
                     font.pixelSize: 11
-                    font.weight: modelData.activated ? Font.Medium : Font.Normal
+                    font.weight: toplevel.activated ? Font.Medium : Font.Normal
                 }
 
                 MouseArea {
@@ -82,16 +89,16 @@ PanelWindow {
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                     Accessible.role: Accessible.Button
-                    Accessible.name: modelData.title || modelData.appId || "(unnamed window)"
-                    Accessible.description: modelData.activated ? "Minimize window" : "Activate window"
+                    Accessible.name: toplevel.title || toplevel.appId || "(unnamed window)"
+                    Accessible.description: toplevel.activated ? "Minimize window" : "Activate window"
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.MiddleButton) {
-                            modelData.close();
-                        } else if (modelData.activated) {
-                            modelData.setMinimized(true);
+                            toplevel.close();
+                        } else if (toplevel.activated) {
+                            toplevel.setMinimized(true);
                         } else {
-                            modelData.setMinimized(false);
-                            modelData.activate();
+                            toplevel.setMinimized(false);
+                            toplevel.activate();
                         }
                     }
                 }

@@ -12,6 +12,93 @@ namespace PhosphorShell {
 using PhosphorWayland::ForeignToplevel;
 using PhosphorWayland::ForeignToplevelManager;
 
+// =====================================================================
+// ToplevelListModel
+// =====================================================================
+
+ToplevelListModel::ToplevelListModel(ForeignToplevelManager* manager, QObject* parent)
+    : QAbstractListModel(parent)
+    , m_manager(manager)
+{
+    if (!m_manager) {
+        return;
+    }
+    // Seed with the toplevels already known to the manager — the manager
+    // is process-wide and may have been collecting toplevels before the
+    // first per-engine model was constructed.
+    const auto seed = m_manager->toplevels();
+    m_rows.reserve(seed.size());
+    for (auto* tl : seed) {
+        m_rows.append(QPointer<ForeignToplevel>(tl));
+    }
+
+    connect(m_manager.data(), &ForeignToplevelManager::toplevelAdded, this, &ToplevelListModel::onToplevelAdded);
+    connect(m_manager.data(), &ForeignToplevelManager::toplevelRemoved, this, &ToplevelListModel::onToplevelRemoved);
+}
+
+ToplevelListModel::~ToplevelListModel() = default;
+
+int ToplevelListModel::rowCount(const QModelIndex& parent) const
+{
+    if (parent.isValid()) {
+        return 0;
+    }
+    return m_rows.size();
+}
+
+QVariant ToplevelListModel::data(const QModelIndex& index, int role) const
+{
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size()) {
+        return {};
+    }
+    if (role != ToplevelRole) {
+        return {};
+    }
+    // QPointer auto-clears if the toplevel was destroyed between the
+    // model emitting endRemoveRows and a delegate reading data() on
+    // a stale row index — return nullptr rather than dangling.
+    return QVariant::fromValue(m_rows.at(index.row()).data());
+}
+
+QHash<int, QByteArray> ToplevelListModel::roleNames() const
+{
+    return {
+        {ToplevelRole, "toplevel"},
+    };
+}
+
+void ToplevelListModel::onToplevelAdded(ForeignToplevel* toplevel)
+{
+    if (!toplevel) {
+        return;
+    }
+    const int row = m_rows.size();
+    beginInsertRows({}, row, row);
+    m_rows.append(QPointer<ForeignToplevel>(toplevel));
+    endInsertRows();
+}
+
+void ToplevelListModel::onToplevelRemoved(ForeignToplevel* toplevel)
+{
+    if (!toplevel) {
+        return;
+    }
+    // Linear scan — toplevel counts are bounded by what fits on screen
+    // (typically <50 even on heavy desktops), so O(n) per remove is fine.
+    for (int row = 0; row < m_rows.size(); ++row) {
+        if (m_rows.at(row).data() == toplevel) {
+            beginRemoveRows({}, row, row);
+            m_rows.removeAt(row);
+            endRemoveRows();
+            return;
+        }
+    }
+}
+
+// =====================================================================
+// Toplevels (singleton facade)
+// =====================================================================
+
 ForeignToplevelManager* Toplevels::sharedManager()
 {
     // GUI-thread-only contract: ForeignToplevelManager binds Wayland
@@ -39,6 +126,10 @@ Toplevels::Toplevels(QObject* parent)
     : QObject(parent)
 {
     auto* mgr = sharedManager();
+    // Always create the model — even when mgr is null (offscreen tests,
+    // unsupported compositor). An empty model is friendlier to QML
+    // bindings than a null pointer.
+    m_model = new ToplevelListModel(mgr, this);
     if (mgr) {
         connect(mgr, &ForeignToplevelManager::toplevelAdded, this, &Toplevels::toplevelsChanged);
         connect(mgr, &ForeignToplevelManager::toplevelRemoved, this, &Toplevels::toplevelsChanged);
@@ -62,6 +153,11 @@ QList<ForeignToplevel*> Toplevels::toplevels() const
 {
     auto* mgr = sharedManager();
     return mgr ? mgr->toplevels() : QList<ForeignToplevel*>{};
+}
+
+QAbstractListModel* Toplevels::model() const
+{
+    return m_model;
 }
 
 bool Toplevels::isSupported() const

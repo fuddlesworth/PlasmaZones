@@ -7,6 +7,7 @@
 
 #include <QObject>
 #include <QProcess>
+#include <QStringConverter>
 #include <QStringList>
 #include <QtQml/qqmlregistration.h>
 
@@ -78,6 +79,13 @@ private:
     int m_interval = 0;
     QString m_stdout;
     QString m_stderr;
+    // Stateful UTF-8 → UTF-16 decoders that retain partial multi-byte
+    // sequences across `readyRead*` chunk boundaries. Without this, a
+    // codepoint that straddles two read chunks (common at 4 KiB
+    // boundaries for non-ASCII output) would decode to U+FFFD on each
+    // side. Reset on each new process invocation.
+    QStringDecoder m_stdoutDecoder{QStringConverter::Utf8};
+    QStringDecoder m_stderrDecoder{QStringConverter::Utf8};
     int m_exitCode = 0;
     QProcess::ExitStatus m_exitStatus = QProcess::NormalExit;
     QProcess* m_process = nullptr;
