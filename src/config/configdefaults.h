@@ -486,49 +486,6 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Animation Window Filtering Settings
-    //
-    // Mirrors the snapping/tiling Exclusion settings but lives in its own
-    // `Animations.WindowFiltering` group so a user can disable animations
-    // for an app while still snapping it (or vice versa). The defaults
-    // are deliberately permissive — every window animates unless the
-    // user opts in to a filter — because animations don't have the
-    // user-data-loss risk that drives the conservative snapping defaults.
-    // App rules with a matching classPattern override the filter at the
-    // resolver layer, so a class-targeted rule can re-enable animations
-    // for an otherwise-excluded app.
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    static bool animationExcludeTransientWindows()
-    {
-        return false;
-    }
-    static int animationMinimumWindowWidth()
-    {
-        return 0;
-    }
-    static constexpr int animationMinimumWindowWidthMin()
-    {
-        return 0;
-    }
-    static constexpr int animationMinimumWindowWidthMax()
-    {
-        return 2000;
-    }
-    static int animationMinimumWindowHeight()
-    {
-        return 0;
-    }
-    static constexpr int animationMinimumWindowHeightMin()
-    {
-        return 0;
-    }
-    static constexpr int animationMinimumWindowHeightMax()
-    {
-        return 2000;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // PhosphorZones::Zone Selector Settings
     // ═══════════════════════════════════════════════════════════════════════════
 

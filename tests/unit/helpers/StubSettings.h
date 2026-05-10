@@ -442,78 +442,6 @@ public:
     void setMinimumWindowHeight(int) override
     {
     }
-
-    // Animation window filtering — pure-stub no-op accessors backed by
-    // m_animation* state so tests that exercise the filter cascade can
-    // round-trip values through the stub without involving the real
-    // PhosphorConfig::Store. Mirrors `setAnimationAppRules`'s
-    // value-changed-guarded emit pattern.
-    bool animationExcludeTransientWindows() const override
-    {
-        return m_animationExcludeTransientWindows;
-    }
-    void setAnimationExcludeTransientWindows(bool exclude) override
-    {
-        if (m_animationExcludeTransientWindows == exclude) {
-            return;
-        }
-        m_animationExcludeTransientWindows = exclude;
-        Q_EMIT animationExcludeTransientWindowsChanged();
-        Q_EMIT settingsChanged();
-    }
-    int animationMinimumWindowWidth() const override
-    {
-        return m_animationMinimumWindowWidth;
-    }
-    void setAnimationMinimumWindowWidth(int width) override
-    {
-        if (m_animationMinimumWindowWidth == width) {
-            return;
-        }
-        m_animationMinimumWindowWidth = width;
-        Q_EMIT animationMinimumWindowWidthChanged();
-        Q_EMIT settingsChanged();
-    }
-    int animationMinimumWindowHeight() const override
-    {
-        return m_animationMinimumWindowHeight;
-    }
-    void setAnimationMinimumWindowHeight(int height) override
-    {
-        if (m_animationMinimumWindowHeight == height) {
-            return;
-        }
-        m_animationMinimumWindowHeight = height;
-        Q_EMIT animationMinimumWindowHeightChanged();
-        Q_EMIT settingsChanged();
-    }
-    QStringList animationExcludedApplications() const override
-    {
-        return m_animationExcludedApplications;
-    }
-    void setAnimationExcludedApplications(const QStringList& apps) override
-    {
-        if (m_animationExcludedApplications == apps) {
-            return;
-        }
-        m_animationExcludedApplications = apps;
-        Q_EMIT animationExcludedApplicationsChanged();
-        Q_EMIT settingsChanged();
-    }
-    QStringList animationExcludedWindowClasses() const override
-    {
-        return m_animationExcludedWindowClasses;
-    }
-    void setAnimationExcludedWindowClasses(const QStringList& classes) override
-    {
-        if (m_animationExcludedWindowClasses == classes) {
-            return;
-        }
-        m_animationExcludedWindowClasses = classes;
-        Q_EMIT animationExcludedWindowClassesChanged();
-        Q_EMIT settingsChanged();
-    }
-
     // IZoneSelectorSettings
     bool zoneSelectorEnabled() const override
     {
@@ -892,11 +820,6 @@ private:
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
     PhosphorAnimationShaders::AnimationAppRuleList m_animationAppRules;
-    bool m_animationExcludeTransientWindows = false;
-    int m_animationMinimumWindowWidth = 0;
-    int m_animationMinimumWindowHeight = 0;
-    QStringList m_animationExcludedApplications;
-    QStringList m_animationExcludedWindowClasses;
 };
 
 } // namespace PlasmaZones
