@@ -68,8 +68,8 @@ void main() {
   // narrow smoothstep band (same pattern as morph/effect.frag), so the
   // warped silhouette stays the size BMW intended without altering the
   // scale/squish/tilt motion math.
-  vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), coords);
-  vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), coords);
+  vec2 insideLo = smoothstep(vec2(-0.005), vec2(0.0), coords);
+  vec2 insideHi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.005), coords);
   float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
 
   vec4 oColor = getInputColor(coords) * mask;
