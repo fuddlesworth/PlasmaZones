@@ -4,7 +4,7 @@
     "description": "Scale-from-center pop-in with overshoot and opacity fade",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Scale",
+    "category": "Slide",
     "fragmentShader": "effect.frag",
     "parameters": [
         {
