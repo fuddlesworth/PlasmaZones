@@ -58,6 +58,19 @@ float hash12(vec2 p) {
     return fract((p3.x + p3.y) * p3.z);
 }
 
+// Local off-window-clipping variant of `bmw_compat.glsl`'s `getInputColor`.
+// The y-rescale and x-displacement below push sample coords outside [0, 1]
+// at boundary fragments, and `uTexture0` is clamp-to-edge — the typical
+// edge alpha is 0 (window shadow / rounded corners) so samples beyond the
+// surface produce a grey-transparent border. Returning vec4(0.0) outside
+// [0, 1] crops cleanly to transparent. Same pattern as broken-glass.
+vec4 getClippedInputColor(vec2 coords) {
+    if (coords.x < 0.0 || coords.x > 1.0 || coords.y < 0.0 || coords.y > 1.0) {
+        return vec4(0.0);
+    }
+    return getInputColor(coords);
+}
+
 const float BLUR_WIDTH = 0.01;  // Width of the gradients.
 const float TB_TIME    = 0.7;   // Relative time for the top/bottom animation.
 const float LR_TIME    = 0.4;   // Relative time for the left/right animation.
@@ -92,7 +105,7 @@ void main() {
 
   // Apply the noise as x displacement for every line.
   float xPos  = clamp(coords.x - displace * noise * noise, 0.0, 1.0);
-  vec4 oColor = getInputColor(vec2(xPos, coords.y));
+  vec4 oColor = getClippedInputColor(vec2(xPos, coords.y));
 
   // Mix in some random interference lines.
   vec3 interference          = uColor.rgb * hash12(vec2(yPos * time));
@@ -111,8 +124,8 @@ void main() {
 
   // Shift green/blue channels.
   float offset = 0.1 * noise * displace;
-  oColor.g     = mix(oColor.g, getInputColor(vec2(xPos + offset, coords.y)).g, 0.25);
-  oColor.b     = mix(oColor.b, getInputColor(vec2(xPos - offset, coords.y)).b, 0.25);
+  oColor.g     = mix(oColor.g, getClippedInputColor(vec2(xPos + offset, coords.y)).g, 0.25);
+  oColor.b     = mix(oColor.b, getClippedInputColor(vec2(xPos - offset, coords.y)).b, 0.25);
 
   // Now hide the window according to the TV effect.
 

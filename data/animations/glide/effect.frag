@@ -60,7 +60,19 @@ void main() {
   // Move texture coordinate center to corner again.
   coords = coords * 0.5 + 0.5;
 
-  vec4 oColor = getInputColor(coords);
+  // Boundary mask: with default uScale=0.95 (and uSquish/uTilt non-zero),
+  // the inverse-warped sample UV at corner fragments lands ~5% past the
+  // [0,1] bounds. A clamp-to-edge sample would smear the edge column/row
+  // outward — visible as a dim border + perceived 5% shrink of the
+  // surface. Crop cleanly to transparent across the [0,1] edge with a
+  // narrow smoothstep band (same pattern as morph/effect.frag), so the
+  // warped silhouette stays the size BMW intended without altering the
+  // scale/squish/tilt motion math.
+  vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), coords);
+  vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), coords);
+  float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
+
+  vec4 oColor = getInputColor(coords) * mask;
 
   // Dissolve window.
   oColor.a = oColor.a * (uForOpening ? uProgress : pow(1.0 - uProgress, 2.0));

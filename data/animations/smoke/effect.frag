@@ -104,7 +104,16 @@ void main() {
                        sm_fbm(uv * 2.0 + 4.0 * wq + vec2(8.3, 2.8)));
         vec2 warped_uv = uv + (wr - 0.5) * distort_strength;
 
-        vec4 color = texture(uTexture0, warped_uv);
+        // Soft inside-mask. The distortion above pushes UVs slightly past
+        // [0, 1] at boundary fragments, and `uTexture0` is clamp-to-edge —
+        // the typical edge alpha is 0 (window shadow / rounded corners) so
+        // samples beyond the surface produce a grey-transparent border.
+        // Fade to zero across a tight 0.005-wide band at each edge so the
+        // warped silhouette crops cleanly. Same pattern as morph/plasma-flow.
+        vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), warped_uv);
+        vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), warped_uv);
+        float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
+        vec4 color = texture(uTexture0, warped_uv) * mask;
 
         float tail = smoothstep(1.0, 0.8, p);
         result = color * remain * tail;
@@ -131,7 +140,16 @@ void main() {
                        sm_fbm(uv * 2.0 + 4.0 * wq + vec2(8.3, 2.8)));
         vec2 warped_uv = uv + (wr - 0.5) * distort_strength;
 
-        vec4 color = texture(uTexture0, warped_uv);
+        // Soft inside-mask. The distortion above pushes UVs slightly past
+        // [0, 1] at boundary fragments, and `uTexture0` is clamp-to-edge —
+        // the typical edge alpha is 0 (window shadow / rounded corners) so
+        // samples beyond the surface produce a grey-transparent border.
+        // Fade to zero across a tight 0.005-wide band at each edge so the
+        // warped silhouette crops cleanly. Same pattern as morph/plasma-flow.
+        vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), warped_uv);
+        vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), warped_uv);
+        float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
+        vec4 color = texture(uTexture0, warped_uv) * mask;
 
         result = color * reveal;
     }
