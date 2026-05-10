@@ -20,33 +20,28 @@
 #define warpStrength  customParams[0].x
 #define warpFrequency customParams[0].y
 
-// Bounds-padding fraction supplied by SurfaceAnimator from
-// AnimationShaderEffect::boundsPadding (metadata.json). Single source of
-// truth — this slot is filled by surfaceanimator.cpp's attachShaderToAnchor
-// at leg start. No hardcoded constant means the GLSL value can never drift
-// from metadata.json. customParams[7] is reserved for SurfaceAnimator's
-// structural data (see ShaderEffect.h customParams8 Q_PROPERTY); no
-// user-declared parameter in any shipping shader reaches this slot
-// (translateAnimationParams fills from customParams[0] up).
-//
-// Kwin-effect path: plasmazoneseffect.cpp doesn't expand the redirected
-// window's geometry by `boundsPadding`, so the slot reads 0 and the UV
-// remap below collapses to identity (k=1, anchorUv=vTexCoord). That's
-// the correct behaviour on kwin — without geometry expansion there's
-// no padding region to remap into, so the warp simply samples the
-// un-padded surface directly.
-#define boundsPadding customParams[7].x
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 void main()
 {
-    // Remap padded vTexCoord → anchor-space UV. Anchor occupies the
-    // central region [pad/(1+2pad), (1+pad)/(1+2pad)] of the padded
-    // shaderItem; anchorUv = uv*(1+2pad) - pad ∈ [-pad, 1+pad].
-    float k = 1.0 + 2.0 * boundsPadding;
-    vec2 anchorUv = vTexCoord * k - boundsPadding;
+    // Remap padded vTexCoord → anchor-space UV. SurfaceAnimator expands
+    // the shaderItem QUAD by the metadata's `boundsPadding` value and
+    // pushes `iAnchorPosInFbo` = (padW, padH) plus `iAnchorSize` = the
+    // captured-anchor pixel size, with Qt auto-deriving `iResolution`
+    // from the padded shaderItem bounds. The unified remap below
+    // produces the same anchorUv range as the previous `vTexCoord *
+    // (1+2pad) - pad` form (`[-pad, 1+pad]` for `boundsPadding=0.5`)
+    // without depending on the structural `customParams[7].x` slot.
+    //
+    // Kwin-effect path: until refactor Phase 7 wires quad expansion on
+    // kwin, `iAnchorPosInFbo` reads (0, 0) by GL default-uniform spec
+    // and `iAnchorSize == iResolution == window size`. The remap
+    // collapses to identity (anchorUv == vTexCoord) — same behaviour
+    // as the previous `customParams[7].x = 0` fallback path.
+    vec2 anchorTopLeftUv = iAnchorPosInFbo / iResolution;
+    vec2 anchorSizeUv = iAnchorSize / iResolution;
+    vec2 anchorUv = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;
 
     // Envelope peaks at iTime == 0.5 (mid-transition) and returns to
     // 0 at the endpoints — same shape as glitch, gives both show and

@@ -18,10 +18,12 @@
 // PADDING=0.5) so shards can fly past the original window bounds. We
 // match that on PlasmaZones via the `boundsPadding` mechanism: metadata
 // declares `"boundsPadding": 0.5`, SurfaceAnimator expands the
-// shaderItem QUAD accordingly and writes the fraction into
-// customParams[7].x. The morph-style UV remap below converts the padded
-// vTexCoord back into anchor-space coords ∈ [-0.5, 1.5], which is
-// exactly what BMW's `iTexCoord*2 - 0.5` produced upstream.
+// shaderItem QUAD accordingly and the runtime pushes the anchor's
+// region inside the padded FBO via `iAnchorPosInFbo` (= (padW, padH))
+// alongside `iAnchorSize` and Qt-auto-derived `iResolution`. The
+// `anchorRemap` helper below converts the padded vTexCoord back into
+// anchor-space coords (-0.5..1.5 for pad=0.5), exactly what BMW's
+// `iTexCoord*2 - 0.5` produced upstream.
 //
 // `bmw_compat.glsl`'s default `getInputColor` only divides by alpha —
 // it does NOT clip — so an off-window sample on a clamp-to-edge
@@ -47,14 +49,29 @@ layout(location = 0) out vec4 fragColor;
 #define uBlowForce  customParams[0].y
 #define uGravity    customParams[0].z
 
-// Bounds-padding fraction supplied by SurfaceAnimator from
-// AnimationShaderEffect::boundsPadding (metadata.json `"boundsPadding": 0.5`).
-// See morph/effect.frag for the same contract — customParams[7].x is the
-// reserved structural slot. With boundsPadding=0.5 the UV remap below
-// produces anchorUv ∈ [-0.5, 1.5], reproducing BMW's `coords =
-// iTexCoord*ACTOR_SCALE - PADDING` (ACTOR_SCALE=2, PADDING=0.5) without
-// hardcoding the constants on the GLSL side.
-#define boundsPadding customParams[7].x
+// Anchor's region inside the shader FBO. SurfaceAnimator expands the
+// shaderItem QUAD by metadata.json's `boundsPadding` value (Phase 3+
+// replaces that with the unified `fboExtent` grammar); the runtime then
+// pushes `iAnchorPosInFbo` = (padW, padH) and `iAnchorSize` = the
+// captured-anchor pixel size, while Qt auto-derives `iResolution` from
+// the padded shaderItem bounds. The remap below converts the padded
+// `iTexCoord` (0..1 over the expanded FBO) back into anchor-space coords
+// (-pad..1+pad over the original anchor), reproducing BMW's
+// `iTexCoord*ACTOR_SCALE - PADDING` without hardcoding the constants.
+// With pad=0.5 (ACTOR_SCALE=2 equivalent) the coords land in [-0.5, 1.5]
+// exactly as BMW's broken-glass.frag expects.
+//
+// Kwin-effect path (until refactor Phase 7 wires quad expansion on
+// kwin): `iAnchorPosInFbo` reads (0, 0) by GL default-uniform spec and
+// `iAnchorSize` equals `iResolution` (the window itself), so
+// `anchorTopLeftUv = 0` and `anchorSizeUv = 1` and the remap collapses
+// to identity — coords == iTexCoord. Same behaviour as the previous
+// `customParams[7].x = 0` fallback path on kwin.
+vec2 anchorRemap(vec2 uv) {
+    vec2 anchorTopLeftUv = iAnchorPosInFbo / iResolution;
+    vec2 anchorSizeUv = iAnchorSize / iResolution;
+    return (uv - anchorTopLeftUv) / anchorSizeUv;
+}
 
 // uSeed (BMW: per-leg `Math.random()`) is computed once at the top of
 // `main()` from `hash22(iSurfaceScreenPos.xy)` and bound to a local
@@ -91,12 +108,12 @@ void main() {
   for (float i = 0.0; i < SHARD_LAYERS; ++i) {
 
     // To enable drawing shards outside of the window bounds, SurfaceAnimator
-    // expands the shaderItem QUAD by `boundsPadding` (metadata.json: 0.5).
-    // Here we remap the padded vTexCoord back into anchor-space so the
-    // window gets drawn at the correct position; coords ∈ [-pad, 1+pad]
-    // reproduces BMW's `iTexCoord * ACTOR_SCALE - PADDING` for pad=0.5.
-    float k = 1.0 + 2.0 * boundsPadding;
-    vec2 coords = iTexCoord.st * k - boundsPadding;
+    // expands the shaderItem QUAD by metadata's `boundsPadding` (0.5). The
+    // helper above turns the padded `iTexCoord` back into anchor-space coords
+    // (-0.5..1.5 for pad=0.5), reproducing BMW's `iTexCoord*ACTOR_SCALE -
+    // PADDING` from `iAnchorPosInFbo` / `iAnchorSize` / `iResolution`
+    // instead of from the structural `customParams[7].x` slot.
+    vec2 coords = anchorRemap(iTexCoord.st);
 
     // Scale and rotate around our epicenter.
     coords -= uEpicenter;

@@ -177,11 +177,11 @@ private:
     struct alignas(16) AnimationExtensionData
     {
         float iSurfaceScreenPos[4]; // offset 0  (16 bytes) — UBO offset 672 = 0 + sizeof(BaseUniforms)
-        float iAnchorSize[2];       // offset 16 (8 bytes)  — UBO offset 688
-        float iAnchorPosInFbo[2];   // offset 24 (8 bytes)  — UBO offset 696. Anchor's top-left
-                                    //   position inside the shader item's FBO, in logical pixels.
-                                    //   See setIAnchorPosInFbo's docstring for the per-extent math
-                                    //   contract this enables.
+        float iAnchorSize[2]; // offset 16 (8 bytes)  — UBO offset 688
+        float iAnchorPosInFbo[2]; // offset 24 (8 bytes)  — UBO offset 696. Anchor's top-left
+                                  //   position inside the shader item's FBO, in logical pixels.
+                                  //   See setIAnchorPosInFbo's docstring for the per-extent math
+                                  //   contract this enables.
     };
     static_assert(sizeof(AnimationExtensionData) == 32,
                   "AnimationExtensionData must be exactly 32 bytes — std140 trailing pad to 16-aligned");
