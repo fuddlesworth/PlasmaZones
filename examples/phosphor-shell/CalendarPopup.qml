@@ -21,28 +21,36 @@ PopupWindow {
     gap: 8
     popupVisible: shellState.calendarOpen
 
-    // Backdrop — opaque base + frosted shader on top, in case the shader
-    // is still warming when the popup maps.
-    Rectangle {
-        anchors.fill: parent
-        color: "#1e1e2e"
-        radius: 14
-        border.color: "#313244"
-        border.width: 1
-    }
-
+    // Backdrop — frosted-glass shader only. An opaque base Rectangle
+    // used to live here as a "shader still warming" fallback, but it
+    // composited UNDER the 85%-opaque shader and the popup ended up
+    // looking like a solid dark-blue block with the wallpaper
+    // completely masked. The shader compiles synchronously by the
+    // time the popup maps, so the fallback wasn't paying for itself.
     ShaderBackground {
         anchors.fill: parent
         playing: root.popupVisible
         shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
         shaderParams: {
-            "tintOpacity": 0.85,
-            "noiseAmount": 0.12,
+            "tintOpacity": 0.55,
+            "noiseAmount": 0.14,
             "noiseScale": 22,
             "animSpeed": 0.4,
             "cornerRadius": 14
         }
         customColor1: "#1e1e2e"
+    }
+
+    // Hairline border — kept as a Qt Quick Rectangle (not part of the
+    // shader) because the shader's SDF mask AA already handles the
+    // corner rounding. The translucent border just defines the popup
+    // edge against busy wallpapers.
+    Rectangle {
+        anchors.fill: parent
+        color: "transparent"
+        radius: 14
+        border.color: "#80a6adc8"
+        border.width: 1
     }
 
     // Calendar content — scale + opacity Behaviors give the visible
