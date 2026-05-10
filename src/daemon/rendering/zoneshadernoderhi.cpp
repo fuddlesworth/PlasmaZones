@@ -5,7 +5,50 @@
 
 #include <PhosphorRendering/ShaderCompiler.h>
 
+#include <QDir>
+#include <QFileInfo>
 #include <QStandardPaths>
+
+namespace {
+
+void appendUniquePath(QStringList& paths, const QString& path)
+{
+    if (!path.isEmpty() && QDir(path).exists() && !paths.contains(path)) {
+        paths.append(path);
+    }
+}
+
+QStringList trustedShaderRoots()
+{
+    return QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"),
+                                     QStandardPaths::LocateDirectory);
+}
+
+QStringList expandShaderIncludePaths(const QStringList& inputPaths)
+{
+    QStringList expanded;
+
+    // Trusted PlasmaZones shader roots first. This ensures shared/common.glsl
+    // resolves consistently for bundled, dev-prefix, system, and user shader roots.
+    for (const QString& root : trustedShaderRoots()) {
+        appendUniquePath(expanded, root + QStringLiteral("/shared"));
+        appendUniquePath(expanded, root);
+    }
+
+    // Preserve caller-provided include paths, but do not infer arbitrary parent
+    // directories from them.
+    for (const QString& path : inputPaths) {
+        const QFileInfo info(path);
+        const QString dir = info.isFile() ? info.absolutePath() : info.absoluteFilePath();
+
+        appendUniquePath(expanded, dir + QStringLiteral("/shared"));
+        appendUniquePath(expanded, dir);
+    }
+
+    return expanded;
+}
+
+} // namespace
 
 namespace PlasmaZones {
 
@@ -18,24 +61,9 @@ warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPa
         return result;
     }
 
-    // Caller-provided include paths are authoritative when supplied (the daemon
-    // hands us ShaderRegistry::searchPaths(), which exactly matches what the
-    // render path uses). When omitted, fall back to the well-known system data
-    // dirs — this avoids the previous heuristic of "parent of the shader's
-    // parent dir", which silently broke for shaders not nested two levels
-    // deep under a recognised root.
-    QStringList paths = includePaths;
-    if (paths.isEmpty()) {
-        const QStringList systemShaderDirs =
-            QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"),
-                                      QStandardPaths::LocateDirectory);
-        for (const QString& dir : systemShaderDirs) {
-            if (!paths.contains(dir))
-                paths.append(dir);
-        }
-    }
+    const QStringList expandedPaths = expandShaderIncludePaths(includePaths);
 
-    return PhosphorRendering::warmShaderBakeCacheForPaths(vertexPath, fragmentPath, paths);
+    return PhosphorRendering::warmShaderBakeCacheForPaths(vertexPath, fragmentPath, expandedPaths);
 }
 
 } // namespace PlasmaZones

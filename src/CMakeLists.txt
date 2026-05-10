@@ -312,6 +312,8 @@ set(plasmazones_rendering_SRCS
 
 add_library(plasmazones_rendering SHARED ${plasmazones_rendering_SRCS})
 
+set_target_properties(plasmazones_rendering PROPERTIES UNITY_BUILD OFF)
+
 generate_export_header(plasmazones_rendering
     EXPORT_FILE_NAME plasmazones_rendering_export.h
     EXPORT_MACRO_NAME PLASMAZONES_RENDERING_EXPORT

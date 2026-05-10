@@ -172,6 +172,7 @@ void ScreenManager::refreshVirtualConfigs(const QHash<QString, VirtualScreenConf
 QStringList ScreenManager::effectiveScreenIds() const
 {
     PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
+
     if (!m_effectiveScreenIdsDirty) {
         return m_cachedEffectiveScreenIds;
     }

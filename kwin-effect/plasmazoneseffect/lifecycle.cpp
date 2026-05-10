@@ -597,6 +597,26 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     qCInfo(lcEffect) << "initialized: C++ effect with D-Bus support and mouseChanged connection";
 }
 
+void PlasmaZonesEffect::clearDaemonCompositorState()
+{
+    qCInfo(lcEffect) << "Clearing daemon compositor drag/overlay state before effect shutdown";
+
+    auto sendNoReply = [](const QString& interfaceName, const QString& methodName) {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            PhosphorProtocol::Service::Name,
+            PhosphorProtocol::Service::ObjectPath,
+            interfaceName,
+            methodName);
+        QDBusConnection::sessionBus().send(msg);
+    };
+
+    sendNoReply(PhosphorProtocol::Service::Interface::WindowDrag,
+                QStringLiteral("clearForCompositorReconnect"));
+
+    sendNoReply(PhosphorProtocol::Service::Interface::Overlay,
+                QStringLiteral("hideOverlay"));
+}
+
 PlasmaZonesEffect::~PlasmaZonesEffect()
 {
     // Sever the registry's `effectsChanged` connection BEFORE anything
@@ -627,6 +647,10 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // not raced against member destruction.
     m_shaderManager.m_textureLoaderPool.waitForDone();
     m_shaderManager.m_textureLoadsInFlight.clear();
+
+    // Clear daemon-side drag/overlay state while the effect is still alive,
+    // but only after the destructor's local UAF-prevention guards have run.
+    clearDaemonCompositorState();
 
     // Restore borderless and monocle-maximized windows so they recover properly.
     // Guard against compositor teardown — effects may outlive the stacking order.
