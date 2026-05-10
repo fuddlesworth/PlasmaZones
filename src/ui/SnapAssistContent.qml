@@ -125,14 +125,11 @@ Item {
                 readonly property real flowSpacing: Math.max(2, Math.min(8, zoneSize * 0.02))
                 readonly property int itemsPerRow: Math.max(1, Math.floor((availableWidth + flowSpacing) / (cardTotalWidth + flowSpacing)))
                 // Width sized to exactly one row's worth of content so
-                // Flow wraps at the right item count and the natural
-                // `anchors.centerIn` lands on the visual centre of the
-                // zone. The previous leftPadding-as-centering hack
-                // worked only when `Flow.leftPadding` actually shifted
-                // children rightward; on Qt 6 the combination of
-                // `anchors.horizontalCenter` + explicit `width` +
-                // `leftPadding` was producing right-aligned cards
-                // instead of centred ones.
+                // Flow wraps at the right item count. Paired with the
+                // explicit `x` / `y` centring math below, this gives
+                // the cards a stable width to centre against without
+                // depending on Flow's `implicitWidth` (which fluctuates
+                // with child layout passes).
                 readonly property real contentWidth: {
                     var n = root.candidates.length;
                     if (n <= 0)
@@ -146,7 +143,7 @@ Item {
                 // the Flow's `implicitHeight` is `0` until its
                 // Repeater-spawned card delegates lay out, and the
                 // anchor resolves once at first paint with that 0
-                // height — leaving the Flow stuck at parent's `(0, 0)`
+                // height, leaving the Flow stuck at parent's `(0, 0)`
                 // even after children populate. Computing `x`/`y`
                 // directly from `contentWidth` / `implicitHeight`
                 // re-evaluates whenever the implicit dimensions

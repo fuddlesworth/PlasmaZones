@@ -553,7 +553,7 @@ bool Daemon::init()
     // on the first OSD; every subsequent OSD show animates correctly
     // because the cache is now warm.
     //
-    // Shares m_shaderBakePool with the zone-shader warm-bake — the
+    // Shares m_shaderBakePool with the zone-shader warm-bake. The
     // pool is single-threaded (QShaderBaker / glslang isn't thread-
     // safe), so animation and zone bakes serialise without interfering.
     //
@@ -563,7 +563,7 @@ bool Daemon::init()
     // and the bake worker resolves it identically to the render-
     // thread load path. The vertex-path fallback (default
     // `shared/animation.vert` when an effect doesn't ship its own)
-    // also mirrors the runtime — otherwise the warm-baked entry's
+    // also mirrors the runtime, otherwise the warm-baked entry's
     // cache key would differ from what runtime queries.
     if (m_animationShaderRegistry) {
         auto scheduleWarmForAnimEffect = [this,

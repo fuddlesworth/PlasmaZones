@@ -787,20 +787,20 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // into the UBO; without this seed the first frame samples zeros at
     // offsets 672/688 and a fly-in / slide vert reads
     // `screenW = max(0, 1) = 1`, collapsing `clearancePx` to a single
-    // pixel — the card snaps to its rest position with no slide-in.
+    // pixel, so the card snaps to its rest position with no slide-in.
     // Hide legs hide this because they reuse iSurfaceScreenPos values
     // populated by the show leg's later geometry signals.
     //
-    // For the persistent-anchor case (zone selector / snap-assist /
+    // For the persistent-anchor case (zone selector, snap-assist,
     // layout picker pre-warmed PopupFrames), this also seeds the
-    // shader item's size — width/height stays default-zero otherwise
+    // shader item's size: width/height stays default-zero otherwise
     // and the rendered surface collapses to a point for the leg.
     syncGeometry();
 
     // setSourceItem wires up FBO sampling and triggers the shader
-    // effect's first sync into the scene graph. Setting it LAST —
+    // effect's first sync into the scene graph. Setting it LAST,
     // after all initial uniforms, custom params, geometry, AND the
-    // post-syncGeometry extension push — guarantees that the shader's
+    // post-syncGeometry extension push, guarantees that the shader's
     // first painted frame sees a fully-initialised state. Mirrors the
     // setITime ordering rationale above: any state mutation after
     // setSourceItem could race the first paint and produce a visible

@@ -185,8 +185,8 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     }
 
     // Resize the shell window to the target screen geometry (matches
-    // OSD path's sizeOsdToScreen). The shell is shared with OSD /
-    // selector / picker slots — sizing it to anything other than the
+    // OSD path's sizeOsdToScreen). The shell is shared with OSD,
+    // selector, and picker slots: sizing it to anything other than the
     // VS rect would shift their positioning to physical-screen
     // coordinates, so the snap-assist path holds to the same per-VS
     // sizing the rest of the shell uses.

@@ -120,7 +120,7 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
     // overlay surface that renders snap-assist is anchored to the VS
     // top-left, so emitting zone coordinates relative to anything
     // other than the VS rect produces zone rectangles wider than the
-    // surface — manifesting as "zone right edge clipped flat without
+    // surface, manifesting as "zone right edge clipped flat without
     // a rounded corner" because the visible content can't extend past
     // the surface's bounds.
     //
@@ -128,18 +128,17 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
     // `availableAreaToOverlayCoordinates(geom, screen->geometry())`
     // computed against the PHYSICAL screen, so a layout assigned to
     // a smaller VS produced zones sized for the full monitor.
-    const QRect physGeom = screen->geometry();
     QRect scopeGeom = m_screenManager ? m_screenManager->screenGeometry(screenId) : QRect();
     if (!scopeGeom.isValid()) {
-        scopeGeom = physGeom;
+        scopeGeom = screen->geometry();
     }
     const QRect scopeAvailGeom = m_screenManager ? m_screenManager->actualAvailableGeometry(screen) : scopeGeom;
     const QRect availForLayout =
         scopeAvailGeom.intersected(scopeGeom).isEmpty() ? scopeGeom : scopeAvailGeom.intersected(scopeGeom);
 
-    // No `LayoutComputeService::recalculateSync` here — that mutates the
-    // shared layout's cached zone geometries to whatever rect we pass,
-    // which clobbers OSD / main-overlay consumers reading
+    // No `LayoutComputeService::recalculateSync` here. That call mutates
+    // the shared layout's cached zone geometries to whatever rect we
+    // pass, which clobbers OSD / main-overlay consumers reading
     // `zone->geometry()` against the last compute pass. The VS-aware
     // `getZoneGeometryWithGaps(mgr, zone, scopeGeom, availForLayout, …)`
     // overload below computes from `zone->relativeGeometry()` against
@@ -164,7 +163,7 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
         if (occupied.contains(zone->id())) {
             continue;
         }
-        // VS-aware overload — uses the explicit scopeGeom rect for
+        // VS-aware overload: uses the explicit scopeGeom rect for
         // layout maths instead of pulling QScreen::geometry() (which
         // is always physical).
         QRectF geom = PhosphorZones::GeometryUtils::getZoneGeometryWithGaps(
