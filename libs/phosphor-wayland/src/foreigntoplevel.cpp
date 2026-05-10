@@ -130,7 +130,13 @@ public:
     {
         auto* self = static_cast<Private*>(data);
         bool max = false, min = false, act = false, full = false;
-        // wl_array of uint32_t state values
+        // Defensive: a misbehaving compositor can send a wl_array whose
+        // size isn't a multiple of sizeof(uint32_t) — walk only complete
+        // entries to avoid reading past the buffer end.
+        if (state->size % sizeof(uint32_t) != 0) {
+            qCWarning(lcForeignToplevel) << "Compositor sent malformed state array; ignoring";
+            return;
+        }
         const uint32_t* values = static_cast<const uint32_t*>(state->data);
         const size_t count = state->size / sizeof(uint32_t);
         for (size_t i = 0; i < count; ++i) {

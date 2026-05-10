@@ -160,8 +160,17 @@ void ShellEngine::setupWatcher()
 
 void ShellEngine::onScreensChanged()
 {
-    qCInfo(lcShellEngine) << "Screen topology changed, reloading shell...";
-    onFileChanged();
+    // Coalesce bursts of screen-topology events (KVM switches, lid toggles,
+    // and DPMS wake-ups can fire screensChanged several times in quick
+    // succession). Routing through the same debounce timer that handles
+    // file-change reloads avoids tearing down the engine more than once
+    // per topology transition.
+    qCInfo(lcShellEngine) << "Screen topology changed, scheduling shell reload";
+    if (m_reloadTimer) {
+        m_reloadTimer->start();
+    } else {
+        onFileChanged();
+    }
 }
 
 void ShellEngine::onFileChanged()

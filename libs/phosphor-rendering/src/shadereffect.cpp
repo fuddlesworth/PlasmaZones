@@ -382,6 +382,22 @@ void ShaderEffect::onPlayingTick()
     if (!m_playing) {
         return;
     }
+    // Skip the per-frame property pump for invisible / off-screen / zero-
+    // sized items. afterFrameEnd fires on EVERY rendered frame of the host
+    // window, so without this gate every playing ShaderEffect on the
+    // window pays the setITime/setITimeDelta/setIFrame/3×update cost
+    // even when nothing is visible. The visual side-effect of skipping is
+    // that animation appears frozen while the item is hidden — which is
+    // the desired behaviour: an invisible animation should not consume
+    // wall-clock progress.
+    if (!isVisible() || width() <= 0 || height() <= 0) {
+        return;
+    }
+    // No point pumping a shader that failed to compile — saves a per-frame
+    // update() that the scene graph would just discard.
+    if (m_status == Status::Error) {
+        return;
+    }
     // QElapsedTimer wall-clock seconds — monotonic, immune to NTP jumps.
     // Static so cross-instance timestamps stay consistent (multiple
     // playing shaders all read off the same monotonic clock).

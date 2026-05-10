@@ -62,12 +62,11 @@ float voronoi(vec2 p) {
     for (int y = -1; y <= 1; y++) {
         for (int x = -1; x <= 1; x++) {
             vec2 neighbor = vec2(float(x), float(y));
-            vec2 point = hash(i + neighbor) * vec2(hash(i + neighbor + vec2(37.0, 59.0)));
-            // Use a stable 2D hash for the cell point
+            // Stable 2D hash for the cell point.
             vec2 cellId = i + neighbor;
             float h1 = hash(cellId);
             float h2 = hash(cellId + vec2(127.1, 311.7));
-            point = vec2(h1, h2);
+            vec2 point = vec2(h1, h2);
             vec2 diff = neighbor + point - f;
             float dist = dot(diff, diff);
             if (dist < minDist) {
@@ -92,6 +91,14 @@ float frostedTexture(vec2 p, float time) {
 }
 
 void main() {
+    // Guard against zero iResolution at shader cold-start (the panel may
+    // not have been sized yet when the first frame is composited). Without
+    // this the fragCoord/iResolution divide produces NaN and the SDF mask
+    // path collapses to undefined behaviour.
+    if (iResolution.x <= 0.0 || iResolution.y <= 0.0) {
+        fragColor = vec4(0.0);
+        return;
+    }
     vec2 fragCoord = gl_FragCoord.xy;
     vec2 uv = fragCoord / iResolution.xy;
 

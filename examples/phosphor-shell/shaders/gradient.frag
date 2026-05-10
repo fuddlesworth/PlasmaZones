@@ -40,12 +40,11 @@ float roundedBoxSDF(vec2 p, vec2 b, float r) {
     return length(max(d, 0.0)) - r;
 }
 
-// Attempt a smooth easing for animation (sine-based, continuous)
-float easeInOut(float t) {
-    return 0.5 - 0.5 * cos(t * 3.14159265);
-}
-
 void main() {
+    if (iResolution.x <= 0.0 || iResolution.y <= 0.0) {
+        fragColor = vec4(0.0);
+        return;
+    }
     vec2 fragCoord = gl_FragCoord.xy;
     vec2 uv = fragCoord / iResolution.xy;
 
