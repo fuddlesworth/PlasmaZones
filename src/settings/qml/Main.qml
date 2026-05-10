@@ -8,6 +8,15 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 ApplicationWindow {
+    // Cached breadcrumb segment list for the current navigation
+    // state. Rendered as `[top-parent] › [intermediate] › … ›
+    // [current page]` with every non-leaf segment navigable; current-
+    // mode segment is not clickable since it's where the user already
+    // is. For 2-level navigation the chain has two entries (parent +
+    // page); for the 3-level Animations layout it has three (top-parent
+    // + intermediate-parent + page). In main mode the chain collapses
+    // to just the current page name.
+
     id: window
 
     // Expose the layout context menu so Loader-loaded pages can connect to its signals
@@ -295,6 +304,50 @@ ApplicationWindow {
         }
         return out;
     }
+    // Hard depth ceiling for any walk through `_parentMode` /
+    // `_childItems` — guards against a malformed map (cyclic lineage,
+    // self-referencing parent) producing an infinite loop. Today's
+    // tree never exceeds 2 hops; 16 is an order of magnitude headroom
+    // for any plausible future structure.
+    readonly property int _maxNavDepth: 16
+    // Cached as a `readonly property var` so the Repeater's `model`
+    // and per-delegate separator-visibility binding share a single
+    // computation. Reading `_sidebarMode` and `activePage` inside
+    // the IIFE registers the binding's reactivity dependencies.
+    readonly property var _breadcrumbModel: {
+        if (_sidebarMode === "main") {
+            const activeName = settingsController.activePage;
+            return [{
+                "name": activeName,
+                "label": _modeLabel(activeName),
+                "clickable": false
+            }];
+        }
+        // Walk the parent chain top-down with an explicit depth
+        // bound; `_parentMode[mode]` returning undefined terminates
+        // the walk normally, the bound is belt-and-braces against a
+        // future cyclic map.
+        let chain = [];
+        let mode = _sidebarMode;
+        for (let depth = 0; depth < _maxNavDepth && mode !== undefined; depth++) {
+            chain.unshift(mode);
+            mode = _parentMode[mode];
+        }
+        let segments = [];
+        for (let i = 0; i < chain.length; i++) {
+            segments.push({
+                "name": chain[i],
+                "label": _modeLabel(chain[i]),
+                "clickable": chain[i] !== _sidebarMode
+            });
+        }
+        segments.push({
+            "name": settingsController.activePage,
+            "label": _subPageLabel(settingsController.activePage),
+            "clickable": false
+        });
+        return segments;
+    }
 
     // Walk @p parentName's descendants and return every leaf whose label
     // matches @p searchText. Nested labels are prefixed with their
@@ -496,49 +549,6 @@ ApplicationWindow {
         return label !== undefined ? label : name;
     }
 
-    // Build the breadcrumb segment list for the current navigation
-    // state. Each entry carries `name`, `label`, and `clickable`.
-    // Rendered as `[top-parent] › [intermediate] › … › [current page]`
-    // with every non-leaf segment navigable; current-mode segment is
-    // not clickable since it's where the user already is. For 2-level
-    // navigation the chain has two entries (parent + page); for the
-    // 3-level Animations layout it has three (top-parent +
-    // intermediate-parent + page). In main mode the chain collapses
-    // to just the current page name.
-    function _breadcrumbSegments() {
-        if (_sidebarMode === "main") {
-            const activeName = settingsController.activePage;
-            return [{
-                "name": activeName,
-                "label": _modeLabel(activeName),
-                "clickable": false
-            }];
-        }
-        // Walk the parent chain top-down, then push the active page.
-        // `_parentMode` returns undefined at the top, terminating the
-        // walk. Bounded by tree depth, so a small constant.
-        let chain = [];
-        let mode = _sidebarMode;
-        while (mode !== undefined) {
-            chain.unshift(mode);
-            mode = _parentMode[mode];
-        }
-        let segments = [];
-        for (let i = 0; i < chain.length; i++) {
-            segments.push({
-                "name": chain[i],
-                "label": _modeLabel(chain[i]),
-                "clickable": chain[i] !== _sidebarMode
-            });
-        }
-        segments.push({
-            "name": settingsController.activePage,
-            "label": _subPageLabel(settingsController.activePage),
-            "clickable": false
-        });
-        return segments;
-    }
-
     // Navigate to the breadcrumb segment named @p name. Top-level
     // modes pop to main with that parent name as `activePage` (so the
     // sidebar highlights it); sub-modes pop directly into that
@@ -579,14 +589,21 @@ ApplicationWindow {
     // drilling into "animations" lands on "General", and a future
     // bucket whose immediate children are ALL `hasChildren` still
     // resolves a real leaf instead of showing the LayoutsPage
-    // fallback). Returns true when a transition was kicked off.
-    function _firstLeafOf(parentName) {
+    // fallback). The optional @p depth parameter is incremented on
+    // each recursive call and short-circuits at `_maxNavDepth` to
+    // guard against a cyclic `_childItems` map producing a stack
+    // overflow.
+    function _firstLeafOf(parentName, depth) {
+        const next = depth === undefined ? 0 : depth;
+        if (next >= _maxNavDepth)
+            return "";
+
         let children = _childItems[parentName] || [];
         for (let i = 0; i < children.length; i++) {
             if (!children[i].hasChildren)
                 return children[i].name;
 
-            const nested = _firstLeafOf(children[i].name);
+            const nested = _firstLeafOf(children[i].name, next + 1);
             if (nested.length > 0)
                 return nested;
 
@@ -1314,13 +1331,14 @@ ApplicationWindow {
                         spacing: Kirigami.Units.smallSpacing
 
                         // Render every lineage segment + a separator
-                        // between them. Reading `_sidebarMode` and
-                        // `activePage` inside `_breadcrumbSegments` is
-                        // what makes this binding reactive \u2014 those
-                        // property reads register dependencies for the
-                        // function-call binding.
+                        // between them. The `_breadcrumbModel` cached
+                        // property holds the precomputed segment list
+                        // and re-evaluates only when its inputs
+                        // (`_sidebarMode`, `activePage`) change — far
+                        // cheaper than calling `_breadcrumbSegments()`
+                        // once per delegate per binding fire.
                         Repeater {
-                            model: window._breadcrumbSegments()
+                            model: window._breadcrumbModel
 
                             delegate: Row {
                                 required property int index
@@ -1348,7 +1366,7 @@ ApplicationWindow {
                                 }
 
                                 Label {
-                                    visible: index < window._breadcrumbSegments().length - 1
+                                    visible: index < window._breadcrumbModel.length - 1
                                     text: "\u203A"
                                     opacity: 0.5
                                 }

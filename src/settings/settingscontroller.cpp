@@ -849,8 +849,9 @@ bool SettingsController::isPageDirty(const QString& page) const
     // lookup branch — top-level parents (snapping / tiling /
     // animations) and virtual mid-level parents (animations-surfaces /
     // animations-library) share the same code path now.
-    const auto it = pageGroupChildren().constFind(page);
-    if (it != pageGroupChildren().constEnd()) {
+    const auto& groups = pageGroupChildren();
+    const auto it = groups.constFind(page);
+    if (it != groups.constEnd()) {
         for (const QString& child : *it) {
             if (m_dirtyPages.contains(child))
                 return true;
