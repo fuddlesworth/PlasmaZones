@@ -45,9 +45,20 @@ void main() {
     float ring3 = sin((d - front + 0.16) * 80.0) * exp(-abs(d - front + 0.16) * 10.0) * 0.4;
     float ripple = (ring1 + ring2 + ring3) * rippleStrength * (1.0 - p * 0.5);
     vec2 dir = (d > 0.001) ? normalize(c) : vec2(0.0);
-    vec2 distorted = clamp(uv + dir * ripple, vec2(0.0), vec2(1.0));
+    vec2 distorted = uv + dir * ripple;
 
-    vec4 win = texture(uTexture0, distorted);
+    // Soft inside-mask. The ripple above pushes UVs past [0, 1] at boundary
+    // fragments, and `uTexture0` is clamp-to-edge — the typical edge alpha
+    // is 0 (window shadow / rounded corners) so samples beyond the surface
+    // produce a grey-transparent border. The previous hard clamp pulled the
+    // same edge texel for every off-surface fragment, which still smeared
+    // the transparent edge. Fade to zero across a tight 0.005-wide band at
+    // each edge so the rippled silhouette crops cleanly. Same pattern as
+    // morph/plasma-flow.
+    vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), distorted);
+    vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), distorted);
+    float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
+    vec4 win = texture(uTexture0, distorted) * mask;
 
     float reveal = smoothstep(0.05, -0.02, d - front);
     vec4 mixed = win * reveal;

@@ -53,7 +53,18 @@ void main() {
         float scale = mix(1.0, 1.0 - scaleAmount, p);
         vec2 scaled_uv = (uv - center) / scale + center;
 
-        vec4 color = texture(uTexture0, scaled_uv);
+        // Soft inside-mask. With scale < 1 the inverse-scaled UVs reach
+        // beyond [0, 1] at boundary fragments (default scaleAmount=0.05
+        // → scaled_uv ∈ ~[-0.026, 1.026] at corners), and `uTexture0` is
+        // clamp-to-edge — the typical edge alpha is 0 (window shadow /
+        // rounded corners) so samples beyond the surface produce a
+        // grey-transparent border. Fade to zero across a tight 0.005-wide
+        // band at each edge so the scaled silhouette crops cleanly. Same
+        // pattern as morph/plasma-flow.
+        vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), scaled_uv);
+        vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), scaled_uv);
+        float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
+        vec4 color = texture(uTexture0, scaled_uv) * mask;
 
         float alpha = smoothstep(1.0 - revealStart, 1.0 - revealEnd, p);
 
@@ -68,7 +79,18 @@ void main() {
         float scale = mix(1.0 - scaleAmount, 1.0, p);
         vec2 scaled_uv = (uv - center) / scale + center;
 
-        vec4 color = texture(uTexture0, scaled_uv);
+        // Soft inside-mask. With scale < 1 the inverse-scaled UVs reach
+        // beyond [0, 1] at boundary fragments (default scaleAmount=0.05
+        // → scaled_uv ∈ ~[-0.026, 1.026] at corners), and `uTexture0` is
+        // clamp-to-edge — the typical edge alpha is 0 (window shadow /
+        // rounded corners) so samples beyond the surface produce a
+        // grey-transparent border. Fade to zero across a tight 0.005-wide
+        // band at each edge so the scaled silhouette crops cleanly. Same
+        // pattern as morph/plasma-flow.
+        vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), scaled_uv);
+        vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), scaled_uv);
+        float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
+        vec4 color = texture(uTexture0, scaled_uv) * mask;
 
         float alpha = smoothstep(revealStart, revealEnd, p);
 
