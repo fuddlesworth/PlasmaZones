@@ -522,6 +522,25 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
          {},
          clampInt(CD::minimumWindowHeightMin(), CD::minimumWindowHeightMax())},
     };
+
+    // Animation window filtering — same key shapes as the Exclusions
+    // group above but stored independently so a user can disable
+    // animations for an app while still snapping it (or vice versa).
+    schema.groups[CD::animationsWindowFilteringGroup()] = {
+        {CD::applicationsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::windowClassesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::transientWindowsKey(), CD::animationExcludeTransientWindows(), QMetaType::Bool},
+        {CD::minimumWindowWidthKey(),
+         CD::animationMinimumWindowWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::animationMinimumWindowWidthMin(), CD::animationMinimumWindowWidthMax())},
+        {CD::minimumWindowHeightKey(),
+         CD::animationMinimumWindowHeight(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::animationMinimumWindowHeightMin(), CD::animationMinimumWindowHeightMax())},
+    };
 }
 
 // ─── Display ────────────────────────────────────────────────────────────────

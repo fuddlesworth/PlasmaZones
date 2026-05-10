@@ -76,6 +76,9 @@ public:
     // snapping. v3 schema; in v2 these were under Snapping.Behavior.Display.
     PZ_CONFIG_GROUP(displayGroup, "Display")
 
+    // Animations sub-groups
+    PZ_CONFIG_GROUP(animationsWindowFilteringGroup, "Animations.WindowFiltering")
+
     // Tiling sub-groups
     PZ_CONFIG_GROUP(tilingAppearanceGroup, "Tiling.Appearance")
     PZ_CONFIG_GROUP(tilingAlgorithmGroup, "Tiling.Algorithm")
