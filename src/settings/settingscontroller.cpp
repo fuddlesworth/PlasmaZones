@@ -571,6 +571,33 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     return redirects;
 }
 
+const QHash<QString, QSet<QString>>& SettingsController::virtualParentChildren()
+{
+    // Mid-level virtual parents whose children DON'T share their name
+    // prefix. The QML sidebar nests animations leaves under "Surfaces"
+    // and "Library" virtual rows for visual grouping, but the leaf
+    // page names stayed flat (`animations-windows` etc.) so existing
+    // page IDs / persisted-config / D-Bus traffic don't churn. The
+    // dirty-state propagation needs the explicit child set because the
+    // prefix walk used for top-level parents (`animations-windows`
+    // starts with `animations-`) misses the virtual layer
+    // (`animations-windows` does NOT start with `animations-surfaces-`).
+    //
+    // Keep this mapping in sync with the matching `_childItems` keys
+    // in src/settings/qml/Main.qml.
+    static const QHash<QString, QSet<QString>> children{
+        {QStringLiteral("animations-surfaces"),
+         {QStringLiteral("animations-windows"), QStringLiteral("animations-zones"),
+          QStringLiteral("animations-notifications"), QStringLiteral("animations-popups"),
+          QStringLiteral("animations-panels"), QStringLiteral("animations-workspaces"),
+          QStringLiteral("animations-widgets")}},
+        {QStringLiteral("animations-library"),
+         {QStringLiteral("animations-presets"), QStringLiteral("animations-motionsets"),
+          QStringLiteral("animations-shaders")}},
+    };
+    return children;
+}
+
 const QSet<QString>& SettingsController::validPageNames()
 {
     // Keep in sync with _pageComponents in Main.qml — every entry here must
@@ -803,13 +830,33 @@ bool SettingsController::isPageDirty(const QString& page) const
 {
     if (m_dirtyPages.contains(page))
         return true;
-    // Parent category: dirty if any child page is dirty. The redirect map
-    // lists parents → first child, so every key here is a parent category.
+    // Parent category: dirty if any child page is dirty. Two paths:
+    //
+    //   1. Top-level parents (snapping / tiling / animations) where every
+    //      child page name is `<parent>-<leaf>` — the prefix walk is
+    //      cheap and avoids enumerating every child explicitly.
+    //
+    //   2. Mid-level virtual parents (animations-surfaces /
+    //      animations-library) whose children inherit the GRANDPARENT's
+    //      name prefix (e.g. `animations-surfaces` wraps
+    //      `animations-windows`, NOT `animations-surfaces-windows`). The
+    //      prefix walk would miss those, so look up the explicit child
+    //      set instead. Keep the mapping in sync with QML's
+    //      `_childItems` virtual-parent buckets in Main.qml.
     if (parentPageRedirects().contains(page)) {
         const QString prefix = page + QStringLiteral("-");
         for (const QString& dirty : m_dirtyPages) {
             if (dirty.startsWith(prefix))
                 return true;
+        }
+    } else {
+        const auto& groups = virtualParentChildren();
+        const auto it = groups.constFind(page);
+        if (it != groups.constEnd()) {
+            for (const QString& child : *it) {
+                if (m_dirtyPages.contains(child))
+                    return true;
+            }
         }
     }
     return false;

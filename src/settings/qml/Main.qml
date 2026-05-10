@@ -8,6 +8,13 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 ApplicationWindow {
+    // Collect every leaf descendant of @p parentName whose label matches
+    // @p searchText, prefixing nested labels with their immediate parent
+    // ("Surfaces / Windows") so the search hit is unambiguous when the
+    // grandparent has multiple intermediate categories. Walks one extra
+    // level deep to support the three-tier Animations layout (top-level
+    // → Surfaces|Library → leaf page).
+
     id: window
 
     // Expose the layout context menu so Loader-loaded pages can connect to its signals
@@ -20,7 +27,12 @@ ApplicationWindow {
     // Close-without-save guard
     property bool _closeConfirmed: false
     // ── Drill-down sidebar state ─────────────────────────────────────
-    // "main" = top-level list; otherwise the parent name (e.g. "snapping")
+    // "main" = top-level list; any other value names the currently-
+    // displayed parent. Top-level parents (e.g. "snapping", "tiling",
+    // "animations") and mid-level virtual parents registered in
+    // `_parentMode` (e.g. "animations-surfaces", "animations-library")
+    // are both valid values; `_drillOut` walks the lineage one level
+    // at a time using `_parentMode`.
     property string _sidebarMode: "main"
     // Main sidebar items
     readonly property var _mainItems: [{
@@ -269,19 +281,20 @@ ApplicationWindow {
         "portrait": i18n("Portrait (9:16)")
     })
 
-    // Collect every leaf descendant of @p parentName whose label matches
-    // @p searchText, prefixing nested labels with their immediate parent
-    // ("Surfaces / Windows") so the search hit is unambiguous when the
-    // grandparent has multiple intermediate categories. Walks one extra
-    // level deep to support the three-tier Animations layout (top-level
-    // → Surfaces|Library → leaf page).
+    // When an intermediate parent's OWN label matches the query (e.g.
+    // searching "surfaces"), every leaf under it is included unfiltered
+    // so the user sees the full set of pages they were navigating
+    // toward — otherwise typing the category name would yield empty
+    // results because the parent itself is a virtual non-leaf.
     function _collectMatchingDescendants(parentName, searchText) {
         let out = [];
         let children = _childItems[parentName] || [];
         for (let j = 0; j < children.length; j++) {
             let child = children[j];
             if (child.hasChildren) {
-                let nested = _collectMatchingDescendants(child.name, searchText);
+                let intermediateMatches = child.label.toLowerCase().indexOf(searchText) >= 0;
+                let nestedQuery = intermediateMatches ? "" : searchText;
+                let nested = _collectMatchingDescendants(child.name, nestedQuery);
                 for (let k = 0; k < nested.length; k++) {
                     out.push({
                         "name": nested[k].name,
@@ -290,7 +303,7 @@ ApplicationWindow {
                         "hasDividerAfter": false
                     });
                 }
-            } else if (child.label.toLowerCase().indexOf(searchText) >= 0) {
+            } else if (searchText === "" || child.label.toLowerCase().indexOf(searchText) >= 0) {
                 out.push(child);
             }
         }
@@ -390,15 +403,52 @@ ApplicationWindow {
             // Child items
             let children = _childItems[_sidebarMode] || [];
             for (let i = 0; i < children.length; i++) {
-                if (searchText && children[i].label.toLowerCase().indexOf(searchText) < 0)
-                    continue;
+                let child = children[i];
+                let childDivider = child.hasDividerAfter || false;
+                if (searchText) {
+                    // Disable drill-in when we're inlining nested
+                    // matches below (the user can click those
+                    // directly), mirroring the main-mode pattern.
 
-                let childDivider = children[i].hasDividerAfter || false;
+                    // Search inside a sub-sidebar matches the entry's
+                    // own label OR (when it's an intermediate parent)
+                    // any grand-child label. Without the recursion,
+                    // searching "windows" from inside the Animations
+                    // sub-sidebar would silently miss it because
+                    // Windows lives one level deeper under Surfaces —
+                    // a regression compared with the prior flat layout.
+                    let ownMatch = child.label.toLowerCase().indexOf(searchText) >= 0;
+                    let nestedMatches = child.hasChildren ? _collectMatchingDescendants(child.name, searchText) : [];
+                    if (!ownMatch && nestedMatches.length === 0)
+                        continue;
+
+                    sidebarModel.append({
+                        "name": child.name,
+                        "label": child.label,
+                        "iconName": child.iconName,
+                        "hasChildren": nestedMatches.length === 0 && (child.hasChildren || false),
+                        "isBackButton": false,
+                        "hasDividerAfter": false,
+                        "isDivider": false
+                    });
+                    for (let j = 0; j < nestedMatches.length; j++) {
+                        sidebarModel.append({
+                            "name": nestedMatches[j].name,
+                            "label": "  " + nestedMatches[j].label,
+                            "iconName": nestedMatches[j].iconName,
+                            "hasChildren": false,
+                            "isBackButton": false,
+                            "hasDividerAfter": false,
+                            "isDivider": false
+                        });
+                    }
+                    continue;
+                }
                 sidebarModel.append({
-                    "name": children[i].name,
-                    "label": children[i].label,
-                    "iconName": children[i].iconName,
-                    "hasChildren": children[i].hasChildren || false,
+                    "name": child.name,
+                    "label": child.label,
+                    "iconName": child.iconName,
+                    "hasChildren": child.hasChildren || false,
                     "isBackButton": false,
                     "hasDividerAfter": false,
                     "isDivider": false
@@ -447,9 +497,7 @@ ApplicationWindow {
     // (animations → animations-surfaces → animations-windows).
     function _parentLabel() {
         let mode = _sidebarMode;
-        while (_parentMode[mode])
-            mode = _parentMode[mode];
-
+        while (_parentMode[mode])mode = _parentMode[mode]
         return _modeLabel(mode);
     }
 
@@ -467,16 +515,6 @@ ApplicationWindow {
             }
         }
         return _modeLabel(pageName);
-    }
-
-    // Helper: find a main-item label by name
-    function _mainItemLabel(pageName) {
-        for (let i = 0; i < _mainItems.length; i++) {
-            if (_mainItems[i].name === pageName)
-                return _mainItems[i].label;
-
-        }
-        return pageName;
     }
 
     // Drill into a parent category. Selects the first leaf child
@@ -521,15 +559,16 @@ ApplicationWindow {
     // categories themselves), `activePage` is left untouched so the
     // user's last-visited leaf stays visible until they pick another.
     function _drillOut() {
+        // Stay on the current activePage when popping to an
+        // intermediate parent — the leaf the user came from is
+        // more useful context than re-anchoring on the virtual
+        // category they just stepped out of.
+
         let target = _parentMode[_sidebarMode] || "main";
         sidebarTransition.pendingMode = target;
         if (target === "main")
             sidebarTransition.pendingPage = _sidebarMode !== "main" ? _sidebarMode : "overview";
         else
-            // Stay on the current activePage when popping to an
-            // intermediate parent — the leaf the user came from is
-            // more useful context than re-anchoring on the virtual
-            // category they just stepped out of.
             sidebarTransition.pendingPage = "";
         sidebarTransition.restart();
     }
@@ -779,8 +818,14 @@ ApplicationWindow {
                                 window._drillIn(name);
                                 return ;
                             }
-                            // If selecting an inline search result child, clear search and drill into parent
-                            if (sidebarSearch.text.length > 0 && _sidebarMode === "main") {
+                            // If selecting an inline search result, clear
+                            // the search, drill into the leaf's actual
+                            // parent (could be a different sub-sidebar
+                            // bucket), and activate the leaf. The lookup
+                            // walks every `_childItems` bucket so it
+                            // handles top-level search hits AND nested
+                            // matches inlined inside a sub-sidebar.
+                            if (sidebarSearch.text.length > 0) {
                                 let parents = Object.keys(_childItems);
                                 for (let p = 0; p < parents.length; p++) {
                                     let children = _childItems[parents[p]];
@@ -1199,7 +1244,7 @@ ApplicationWindow {
                                 if (window._sidebarMode !== "main")
                                     return window._subPageLabel(settingsController.activePage);
 
-                                return window._mainItemLabel(settingsController.activePage);
+                                return window._modeLabel(settingsController.activePage);
                             }
                             opacity: 0.5
                         }

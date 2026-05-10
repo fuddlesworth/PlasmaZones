@@ -121,6 +121,12 @@ public:
 
     static const QSet<QString>& validPageNames();
     static const QHash<QString, QString>& parentPageRedirects();
+    /// Mid-level virtual parents (e.g. `animations-surfaces`) whose
+    /// children don't share the parent's name prefix. Drives the
+    /// dirty-state propagation in `isPageDirty` since the prefix walk
+    /// used for top-level parents would miss these. Keep in sync with
+    /// the QML `_childItems` virtual-parent buckets in Main.qml.
+    static const QHash<QString, QSet<QString>>& virtualParentChildren();
 
     bool needsSave() const
     {
