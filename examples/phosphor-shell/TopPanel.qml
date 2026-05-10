@@ -47,16 +47,26 @@ PanelWindow {
         // Voronoi cells per panel width.
         // Blur radius in wallpaper pixels — 8 gives a soft but
         // recognisable backdrop on a 1080p+ wallpaper.
-
-        anchors.fill: parent
-        playing: root.visible
-        shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
         // Bind the desktop wallpaper as a sampler at SRB slot 11 so the
         // shader can read it via `uniform sampler2D uWallpaper`. The
         // service decodes the image off the GUI thread; while the load
         // is in flight, `image` is null and the shader's textureSize-
         // based check falls back to the gradient-only path.
-        useWallpaper: PhosphorShell.wallpaper.available
+
+        anchors.fill: parent
+        playing: root.visible
+        shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
+        // useWallpaper MUST stay true regardless of whether a real
+        // wallpaper is loaded yet: gradient.frag declares binding 11
+        // unconditionally, and toggling useWallpaper drops that slot
+        // from the SRB. A pipeline whose shader uses a binding the SRB
+        // doesn't bind silently fails to draw — which is what makes
+        // the whole panel invisible during the cold-start window
+        // before the async wallpaper load completes. Keeping it true
+        // means the renderer's 1×1 transparent fallback fills the
+        // slot, and the shader's `textureSize > 1` check selects the
+        // correct visual path data-driven from the texture size.
+        useWallpaper: true
         wallpaperTexture: PhosphorShell.wallpaper.image
         //   customParams1: speed / baseAngle / tintOpacity / frostAmount
         //   customParams2: cornerRadius / frostScale
