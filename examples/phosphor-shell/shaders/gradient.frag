@@ -146,6 +146,22 @@ void main() {
     float shadowFraction = clamp(customParams[3].x, 0.0, 1.0);
     float shadowOpacity  = customParams[3].y > 0.0 ? customParams[3].y : 0.5;
 
+    // Convert from Qt RHI's Y-up viewport coords (uv.y=0 at visual
+    // BOTTOM, uv.y=1 at visual TOP) to top-down "panel surface" coords
+    // (visualUv.y=0 at visual TOP, visualUv.y=1 at visual BOTTOM)
+    // matching QML's QQuickItem coord system. All Y-asymmetric logic
+    // below (shadow split, wallpaper-strip sampling, panel-local
+    // gradient remap) uses visualUv instead of raw uv — without this
+    // flip the shadow strip rendered at the visual TOP of the surface
+    // (under the panel's text content) instead of the visual BOTTOM
+    // where it belongs, and the wallpaper strip sampled upside-down
+    // within the panel.
+    //
+    // Symmetric logic (SDF rounded-box mask, gradient direction
+    // rotation centred on 0.5, voronoi grain) can use either uv or
+    // visualUv — they're identical under the y-flip.
+    vec2 visualUv = vec2(uv.x, 1.0 - uv.y);
+
     // Split the surface into the visible panel region (top) and the
     // drop-shadow strip (bottom). shadowFraction==0 collapses this to
     // "everything is panel" — shadowStartV becomes 1.0 and the shadow
@@ -174,9 +190,9 @@ void main() {
     // edge. RGB is black; the compositor blends this over whatever's
     // behind, producing a real darken-the-region-below-the-panel
     // shadow.
-    if (shadowFraction > 0.001 && uv.y > shadowStartV) {
+    if (shadowFraction > 0.001 && visualUv.y > shadowStartV) {
         float shadowSpan = 1.0 - shadowStartV;
-        float t = (uv.y - shadowStartV) / max(shadowSpan, 0.001);
+        float t = (visualUv.y - shadowStartV) / max(shadowSpan, 0.001);
         // Quadratic falloff SHAPE — peaks at 1.0 at the panel-bottom
         // edge and decays to 0 at the far end. Previous formulation
         // multiplied the falloff INTO the opacity then squared the
@@ -189,12 +205,13 @@ void main() {
         return;
     }
 
-    // Remap uv.y to "panel-local" coordinates [0..1] so the gradient
-    // direction rotates around the centre of the VISIBLE panel rather
-    // than the centre of the (shadow-extended) surface. Wallpaper
-    // sampling still uses the raw `uv` because the wallpaper's screen
-    // y position is a function of the surface y, not panel-local y.
-    vec2 panelUv = vec2(uv.x, uv.y / max(shadowStartV, 0.001));
+    // Remap visualUv.y to "panel-local" coordinates [0..1] so the
+    // gradient direction rotates around the centre of the VISIBLE
+    // panel rather than the centre of the (shadow-extended) surface.
+    // visualUv.y is already in top-down convention, so the panel zone
+    // is [0, shadowStartV] and dividing by shadowStartV gives a clean
+    // 0..1 panel-local range.
+    vec2 panelUv = vec2(visualUv.x, visualUv.y / max(shadowStartV, 0.001));
 
     // ─── Wallpaper backdrop (blurred top strip) ───────────────────────
     // Auto-detect availability: the wallpaper sampler is bound to a 1×1
@@ -207,11 +224,15 @@ void main() {
         hasWallpaper = true;
         // Panel UV → screen UV. Panel is at the top of the screen
         // spanning full width, so screenU == panelU and screenV ramps
-        // 0 .. (panel total height / screen height) as panel UV ramps
-        // 0 .. 1. The ratio is passed DPR-independently via
-        // panelToScreenH so we don't have to reconcile QML's
-        // Screen.devicePixelRatio with the panel's actual rendering DPR.
-        vec2 screenUv = vec2(uv.x, uv.y * panelToScreenH);
+        // 0 .. (panel total height / screen height) as VISUAL panel y
+        // ramps 0 .. 1. Using visualUv (top-down) here means the top
+        // of the panel samples the top of the wallpaper — the
+        // alternative (raw uv from Y-up viewport) would sample the
+        // wallpaper UPSIDE-DOWN within the panel strip. The ratio is
+        // passed DPR-independently via panelToScreenH so we don't
+        // have to reconcile QML's Screen.devicePixelRatio with the
+        // panel's actual rendering DPR.
+        vec2 screenUv = vec2(visualUv.x, visualUv.y * panelToScreenH);
         // Screen UV → wallpaper UV. KDE / GNOME / Hyprland default to
         // "scaled and cropped" wallpaper positioning; emulate center-
         // crop fit so the on-screen pixel maps to the right wallpaper
