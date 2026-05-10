@@ -746,24 +746,7 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     structuralParams.setX(static_cast<float>(pad));
     shaderItem->setCustomParamAt(7, structuralParams);
 
-    // setSourceItem is what wires up FBO sampling and triggers the
-    // shader effect's first sync into the scene graph. Setting it
-    // LAST — after all initial uniforms, custom params, and geometry
-    // are in place — guarantees that the shader's first painted frame
-    // sees a fully-initialised state. Mirrors the setITime ordering
-    // rationale above: any property set after setSourceItem could
-    // race the first paint and produce a visible flash with default-
-    // valued uniforms (boundsPadding=0 collapses the morph remap
-    // regardless of the metadata; un-translated shaderParameters
-    // leaves user uniforms at -1 sentinel; pre-padding geometry would
-    // clip rippled silhouettes).
-    if (shaderSource) {
-        shaderItem->setSourceItem(shaderSource);
-    }
-
-    // Sync geometry if anchor resizes mid-transition. iResolution stays
-    // in logical units (animation shaders derive UV from `vTexCoord`).
-    // Padding around the shader effect tracks the anchor's live size.
+    // Build the geometry-sync lambda + its dependencies.
     //
     // The lambda re-runs the same parent-margin clamp the initial-attach
     // block above does. Anchor x/y/w/h can change mid-leg (parent-layout
@@ -796,6 +779,40 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
         syncShaderGeometryNow(anchorPtr.data(), shaderItemPtr.data(), shaderSourcePtr.data(), *requestedPadPtr,
                               *boundsExtentPtr);
     };
+
+    // Seed the boundsExtent-dependent shader item geometry AND the
+    // animation-extension uniforms (iSurfaceScreenPos, iAnchorSize)
+    // BEFORE `setSourceItem` wires up the first paint. The render
+    // thread's first prepare() copies the extension's m_data verbatim
+    // into the UBO; without this seed the first frame samples zeros at
+    // offsets 672/688 and a fly-in / slide vert reads
+    // `screenW = max(0, 1) = 1`, collapsing `clearancePx` to a single
+    // pixel — the card snaps to its rest position with no slide-in.
+    // Hide legs hide this because they reuse iSurfaceScreenPos values
+    // populated by the show leg's later geometry signals.
+    //
+    // For the persistent-anchor case (zone selector / snap-assist /
+    // layout picker pre-warmed PopupFrames), this also seeds the
+    // shader item's size — width/height stays default-zero otherwise
+    // and the rendered surface collapses to a point for the leg.
+    syncGeometry();
+
+    // setSourceItem wires up FBO sampling and triggers the shader
+    // effect's first sync into the scene graph. Setting it LAST —
+    // after all initial uniforms, custom params, geometry, AND the
+    // post-syncGeometry extension push — guarantees that the shader's
+    // first painted frame sees a fully-initialised state. Mirrors the
+    // setITime ordering rationale above: any state mutation after
+    // setSourceItem could race the first paint and produce a visible
+    // flash with default-valued uniforms (boundsPadding=0 collapses
+    // the morph remap regardless of the metadata; un-translated
+    // shaderParameters leaves user uniforms at -1 sentinel; pre-
+    // padding geometry would clip rippled silhouettes; un-seeded
+    // iSurfaceScreenPos collapses fly-in's slide to a snap).
+    if (shaderSource) {
+        shaderItem->setSourceItem(shaderSource);
+    }
+
     // Connect to all four geometry signals — anchor x/y can shift mid-leg
     // when sibling visibility flips trigger parent layout reflow (we hide
     // visible siblings below; QML Row/ColumnLayout re-pack on visible
@@ -815,16 +832,6 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     QObject::connect(shaderAnchor, &QQuickItem::heightChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::xChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::yChanged, shaderItem, syncGeometry);
-
-    // Seed the boundsExtent-dependent shader item geometry once
-    // unconditionally. The signal-driven lambda above only fires on
-    // subsequent anchor geometry changes; for surfaces where the anchor
-    // is persistent across show/hide cycles (zone selector / snap-assist /
-    // layout picker — pre-warmed PopupFrames with constant width/height),
-    // the lambda would never fire post-attach and the shader item's
-    // size would stay at its default-constructed zero, collapsing the
-    // rendered surface to a point for the leg's duration.
-    syncGeometry();
 
     // Hide visible decorator siblings — see `hideAnchorSiblings` for the
     // rationale (Qt 6 MultiEffect can't sample our shader item as source).

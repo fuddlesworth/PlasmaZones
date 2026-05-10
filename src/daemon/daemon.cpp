@@ -543,6 +543,89 @@ bool Daemon::init()
         scheduleWarmForShader(info);
     }
 
+    // Warm-bake ANIMATION shaders (fly-in / dissolve / etc.) the same
+    // way zone shaders are warmed above. Without this, the first OSD
+    // show after a fresh daemon start hits a cold cache: QShaderBaker
+    // compiles the animation shader synchronously on the render thread
+    // during the first frame, and the AV's animation duration (e.g.
+    // 500 ms) can elapse before the shader is ready to paint. The
+    // observed symptom: card "pops in" at rest with no slide animation
+    // on the first OSD; every subsequent OSD show animates correctly
+    // because the cache is now warm.
+    //
+    // Shares m_shaderBakePool with the zone-shader warm-bake — the
+    // pool is single-threaded (QShaderBaker / glslang isn't thread-
+    // safe), so animation and zone bakes serialise without interfering.
+    //
+    // Include-path resolution mirrors surfaceanimator.cpp:1358-1361:
+    // every animation search-path's `/shared` subdir is added so an
+    // effect's vert / frag can `#include <animation_uniforms.glsl>`
+    // and the bake worker resolves it identically to the render-
+    // thread load path. The vertex-path fallback (default
+    // `shared/animation.vert` when an effect doesn't ship its own)
+    // also mirrors the runtime — otherwise the warm-baked entry's
+    // cache key would differ from what runtime queries.
+    if (m_animationShaderRegistry) {
+        auto scheduleWarmForAnimEffect = [this,
+                                          registryPtr = QPointer<PhosphorAnimationShaders::AnimationShaderRegistry>(
+                                              m_animationShaderRegistry.get())](
+                                             const PhosphorAnimationShaders::AnimationShaderEffect& info) {
+            if (!info.isValid() || info.fragmentShaderPath.isEmpty() || !QFile::exists(info.fragmentShaderPath)) {
+                return;
+            }
+            PhosphorAnimationShaders::AnimationShaderRegistry* reg = registryPtr.data();
+            if (!reg) {
+                return;
+            }
+            QString vertPath = info.vertexShaderPath;
+            QStringList includePaths;
+            for (const QString& sp : reg->searchPaths()) {
+                const QString sharedDir = sp + QStringLiteral("/shared");
+                if (QDir(sharedDir).exists()) {
+                    includePaths.append(sharedDir);
+                    if (vertPath.isEmpty()) {
+                        const QString sharedVert = sharedDir + QStringLiteral("/animation.vert");
+                        if (QFile::exists(sharedVert)) {
+                            vertPath = sharedVert;
+                        }
+                    }
+                }
+            }
+            if (vertPath.isEmpty() || !QFile::exists(vertPath)) {
+                return;
+            }
+            const QString effectId = info.id;
+            auto* watcher = new QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>(this);
+            connect(watcher, &QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>::finished, this,
+                    [watcher, effectId]() {
+                        const PhosphorRendering::WarmShaderBakeResult r = watcher->result();
+                        if (!r.success) {
+                            qCWarning(lcDaemon) << "Animation shader bake: failed for" << effectId << r.errorMessage;
+                        }
+                        watcher->deleteLater();
+                    });
+            watcher->setFuture(
+                QtConcurrent::run(&m_shaderBakePool, [vertPath, fragPath = info.fragmentShaderPath, includePaths]() {
+                    return warmShaderBakeCacheForPaths(vertPath, fragPath, includePaths);
+                }));
+        };
+        connect(m_animationShaderRegistry.get(), &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged,
+                this, [this, scheduleWarmForAnimEffect]() {
+                    if (!m_animationShaderRegistry) {
+                        return;
+                    }
+                    const QList<PhosphorAnimationShaders::AnimationShaderEffect> effects =
+                        m_animationShaderRegistry->availableEffects();
+                    for (const PhosphorAnimationShaders::AnimationShaderEffect& info : effects) {
+                        scheduleWarmForAnimEffect(info);
+                    }
+                });
+        for (const PhosphorAnimationShaders::AnimationShaderEffect& info :
+             m_animationShaderRegistry->availableEffects()) {
+            scheduleWarmForAnimEffect(info);
+        }
+    }
+
     // Wire the level-1 (global) cascade tier as two pass-through
     // providers — snap default layout id and autotile default algorithm
     // id — symmetric in shape and each gated on its own enabled flag.

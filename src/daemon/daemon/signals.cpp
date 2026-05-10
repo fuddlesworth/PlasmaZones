@@ -515,6 +515,21 @@ void Daemon::connectLayoutSignals()
                 if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
                 }
+                // Suppress during startup — mirrors the algorithmChanged gate above.
+                // `loadState()` from finalizeStartup() synchronously emits
+                // `layoutApplied` per screen as layouts get assigned, and
+                // finalizeStartup() is the authoritative startup-OSD path
+                // (it calls `showOsdForAllScreens`). Letting this handler also
+                // fire double-queues a show on every screen: the first OSD
+                // begins its fly-in shader leg, the second show immediately
+                // cancels that AV via `cancelTrackingFor → parkShaderForReuse`
+                // and re-enters via the reuse path. The user sees the slide
+                // animation get nuked mid-flight and visually perceives "show
+                // doesn't animate" — only the hide leg (no duplicate) plays
+                // cleanly.
+                if (!m_running) {
+                    return;
+                }
                 // Defer OSD display (same rationale as autotileApplied — first-time
                 // QML compilation of the passive shell blocks the event loop
                 // ~100-300ms). Capture layout ID (not raw pointer) to avoid
