@@ -1,0 +1,19 @@
+{
+    "id": "polar-function",
+    "name": "Polar Function",
+    "description": "Polar petal reveal — n-fold cosine radial mask grows outward with progress.",
+    "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
+    "version": "1.0",
+    "category": "Tile",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "segmentsParam",
+            "name": "Segments",
+            "type": "int",
+            "default": 5,
+            "min": 2,
+            "max": 16
+        }
+    ]
+}

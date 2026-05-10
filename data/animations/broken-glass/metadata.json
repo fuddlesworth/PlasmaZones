@@ -1,0 +1,42 @@
+{
+    "id": "broken-glass",
+    "name": "Broken Glass",
+    "description": "Surface shatters into glass shards that fly apart.",
+    "author": "PlasmaZones (ported from Burn-My-Windows by Simon Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
+    "version": "1.0",
+    "category": "Particle",
+    "fragmentShader": "effect.frag",
+    "boundsPadding": 0.5,
+    "parameters": [
+        {
+            "id": "uShardScale",
+            "name": "Shard Scale",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.2,
+            "max": 5.0
+        },
+        {
+            "id": "uBlowForce",
+            "name": "Blow Force",
+            "type": "float",
+            "default": 0.5,
+            "min": -2.0,
+            "max": 2.0
+        },
+        {
+            "id": "uGravity",
+            "name": "Gravity",
+            "type": "float",
+            "default": -1.0,
+            "min": -2.0,
+            "max": 2.0
+        }
+    ],
+    "textures": [
+        {
+            "path": "shards.png",
+            "wrap": "repeat"
+        }
+    ]
+}

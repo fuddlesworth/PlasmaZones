@@ -1,0 +1,27 @@
+{
+    "id": "soft-warp-fade",
+    "name": "Soft Warp Fade",
+    "description": "Subtle noise warp combined with eased fade — a gentle, organic transition.",
+    "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
+    "version": "1.0",
+    "category": "Fade",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "warpStrength",
+            "name": "Warp Strength",
+            "type": "float",
+            "default": 0.025,
+            "min": 0.0,
+            "max": 0.1
+        },
+        {
+            "id": "noiseScale",
+            "name": "Noise Scale",
+            "type": "float",
+            "default": 3.0,
+            "min": 1.0,
+            "max": 10.0
+        }
+    ]
+}
