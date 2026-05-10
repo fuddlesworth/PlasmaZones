@@ -114,6 +114,37 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
         return {};
     }
 
+    // Resolve the SCOPE the layout was authored for. For a virtual
+    // screen the scope is the VS sub-rect within the physical monitor;
+    // for a non-VS screenId it's the physical screen's geometry. The
+    // overlay surface that renders snap-assist is anchored to the VS
+    // top-left, so emitting zone coordinates relative to anything
+    // other than the VS rect produces zone rectangles wider than the
+    // surface — manifesting as "zone right edge clipped flat without
+    // a rounded corner" because the visible content can't extend past
+    // the surface's bounds.
+    //
+    // Pre-fix path: `getZoneGeometryWithGaps(mgr, zone, screen, …)` +
+    // `availableAreaToOverlayCoordinates(geom, screen->geometry())`
+    // computed against the PHYSICAL screen, so a layout assigned to
+    // a smaller VS produced zones sized for the full monitor.
+    const QRect physGeom = screen->geometry();
+    QRect scopeGeom = m_screenManager ? m_screenManager->screenGeometry(screenId) : QRect();
+    if (!scopeGeom.isValid()) {
+        scopeGeom = physGeom;
+    }
+    const QRect scopeAvailGeom = m_screenManager ? m_screenManager->actualAvailableGeometry(screen) : scopeGeom;
+    const QRect availForLayout =
+        scopeAvailGeom.intersected(scopeGeom).isEmpty() ? scopeGeom : scopeAvailGeom.intersected(scopeGeom);
+
+    // No `LayoutComputeService::recalculateSync` here — that mutates the
+    // shared layout's cached zone geometries to whatever rect we pass,
+    // which clobbers OSD / main-overlay consumers reading
+    // `zone->geometry()` against the last compute pass. The VS-aware
+    // `getZoneGeometryWithGaps(mgr, zone, scopeGeom, availForLayout, …)`
+    // overload below computes from `zone->relativeGeometry()` against
+    // the explicit `scopeGeom` rect, so it doesn't need the cache primed.
+
     // Screen-filtered + desktop-filtered occupancy — without the screen filter,
     // zones occupied on screen A appear occupied on screen B when both use the
     // same layout (same zone IDs). Without the desktop filter, windows parked on
@@ -133,10 +164,16 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
         if (occupied.contains(zone->id())) {
             continue;
         }
-        QRectF geom = PhosphorZones::GeometryUtils::getZoneGeometryWithGaps(m_screenManager, zone, screen, zp, og,
-                                                                            !layout->useFullScreenGeometry(), screenId);
+        // VS-aware overload — uses the explicit scopeGeom rect for
+        // layout maths instead of pulling QScreen::geometry() (which
+        // is always physical).
+        QRectF geom = PhosphorZones::GeometryUtils::getZoneGeometryWithGaps(
+            m_screenManager, zone, scopeGeom, availForLayout, zp, og, !layout->useFullScreenGeometry(), screenId);
+        // Translate to overlay-local coords against the SCOPE (VS or
+        // physical) origin so zone.x = 0 lines up with the snap-assist
+        // surface's top-left anchor.
         QRect overlayGeom =
-            PhosphorGeometry::snapToRect(PhosphorGeometry::availableAreaToOverlayCoordinates(geom, screen->geometry()));
+            PhosphorGeometry::snapToRect(PhosphorGeometry::availableAreaToOverlayCoordinates(geom, scopeGeom));
 
         PhosphorProtocol::EmptyZoneEntry entry;
         entry.zoneId = zone->id().toString();

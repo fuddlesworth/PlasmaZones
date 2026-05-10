@@ -26,7 +26,10 @@ import org.phosphor.animation
 Item {
     id: root
 
-    /// shaderAnchor for SurfaceAnimator.
+    /// shaderAnchor for SurfaceAnimator. The shell wl_surface is sized
+    /// to the VS rect (see `OverlayService::showSnapAssist`), so this
+    /// item filling the surface naturally scopes the per-event
+    /// transition shader's FBO + animation runway to the VS bounds.
     property bool shaderAnchor: true
     property var emptyZones: []
     property var candidates: []
@@ -117,28 +120,43 @@ Item {
                     var scaledSize = baseSize * Math.max(root.minFontScale, Math.min(1, scaleFactor));
                     return Math.max(root.minFontPx, Math.round(scaledSize));
                 }
-                readonly property real flowWidth: zoneContainer.width - Kirigami.Units.smallSpacing * 2
+                readonly property real availableWidth: zoneContainer.width - Kirigami.Units.smallSpacing * 2
                 readonly property real cardTotalWidth: cardWidth + Kirigami.Units.smallSpacing * 2
                 readonly property real flowSpacing: Math.max(2, Math.min(8, zoneSize * 0.02))
-                readonly property int itemsPerRow: Math.max(1, Math.floor((flowWidth + flowSpacing) / (cardTotalWidth + flowSpacing)))
+                readonly property int itemsPerRow: Math.max(1, Math.floor((availableWidth + flowSpacing) / (cardTotalWidth + flowSpacing)))
+                // Width sized to exactly one row's worth of content so
+                // Flow wraps at the right item count and the natural
+                // `anchors.centerIn` lands on the visual centre of the
+                // zone. The previous leftPadding-as-centering hack
+                // worked only when `Flow.leftPadding` actually shifted
+                // children rightward; on Qt 6 the combination of
+                // `anchors.horizontalCenter` + explicit `width` +
+                // `leftPadding` was producing right-aligned cards
+                // instead of centred ones.
                 readonly property real contentWidth: {
                     var n = root.candidates.length;
                     if (n <= 0)
                         return 0;
 
-                    var perRow = itemsPerRow;
-                    if (n <= perRow)
-                        return n * cardTotalWidth + (n - 1) * flowSpacing;
-
+                    var perRow = Math.min(n, itemsPerRow);
                     return perRow * cardTotalWidth + (perRow - 1) * flowSpacing;
                 }
-                readonly property real centerPadding: Math.max(0, (flowWidth - contentWidth) / 2)
 
-                width: flowWidth
-                leftPadding: centerPadding
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.top: parent.top
-                anchors.topMargin: Math.max(Kirigami.Units.smallSpacing, (zoneContainer.height - candidateFlow.implicitHeight) / 2)
+                // Explicit centring math instead of `anchors.centerIn`:
+                // the Flow's `implicitHeight` is `0` until its
+                // Repeater-spawned card delegates lay out, and the
+                // anchor resolves once at first paint with that 0
+                // height — leaving the Flow stuck at parent's `(0, 0)`
+                // even after children populate. Computing `x`/`y`
+                // directly from `contentWidth` / `implicitHeight`
+                // re-evaluates whenever the implicit dimensions
+                // settle, so the cards always land at the zone's
+                // visual centre. Same approach the rest of the
+                // overlay code uses for size-binding-driven
+                // centring (see ZoneOverlayContent's preview cards).
+                x: (zoneContainer.width - width) / 2
+                y: (zoneContainer.height - implicitHeight) / 2
+                width: contentWidth
                 spacing: flowSpacing
 
                 Repeater {
