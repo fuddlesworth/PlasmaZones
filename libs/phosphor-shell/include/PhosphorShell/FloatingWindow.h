@@ -9,6 +9,8 @@
 #include <QString>
 #include <QtQml/qqmlregistration.h>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 class QQuickWindow;
 QT_END_NAMESPACE
@@ -47,14 +49,18 @@ Q_SIGNALS:
     void windowHeightChanged();
     void windowVisibleChanged();
 
+protected:
+    void itemChange(ItemChange change, const ItemChangeData& value) override;
+
 private:
     void ensureWindow();
+    void reparentChildToWindow(QQuickItem* child);
 
     QString m_title;
     int m_windowWidth = 400;
     int m_windowHeight = 300;
     bool m_windowVisible = false;
-    QQuickWindow* m_window = nullptr;
+    std::unique_ptr<QQuickWindow> m_window;
 };
 
 } // namespace PhosphorShell

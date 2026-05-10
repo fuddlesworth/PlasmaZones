@@ -5,8 +5,12 @@
 
 #include <PhosphorShell/phosphorshell_export.h>
 
+#include <QPointer>
 #include <QQuickItem>
+#include <QRect>
 #include <QtQml/qqmlregistration.h>
+
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 class QQuickWindow;
@@ -64,18 +68,24 @@ Q_SIGNALS:
     void gapChanged();
     void popupVisibleChanged();
 
+protected:
+    void itemChange(ItemChange change, const ItemChangeData& value) override;
+
 private:
     void showPopup();
     void hidePopup();
     QRect computeAnchorRect() const;
+    void reparentChildToWindow(QQuickItem* child);
 
-    QQuickItem* m_anchor = nullptr;
+    // Externally owned anchor item — QPointer lets us detect destruction
+    // (the QML author may delete the anchor while the popup is alive).
+    QPointer<QQuickItem> m_anchor;
     int m_popupWidth = 200;
     int m_popupHeight = 200;
     PopupEdge m_popupEdge = Below;
     int m_gap = 4;
     bool m_popupVisible = false;
-    QQuickWindow* m_popupWindow = nullptr;
+    std::unique_ptr<QQuickWindow> m_popupWindow;
 };
 
 } // namespace PhosphorShell

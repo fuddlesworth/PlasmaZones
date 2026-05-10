@@ -750,6 +750,16 @@ private:
         if (auto* win = qobject_cast<QQuickWindow*>(root)) {
             m_window = win;
 
+            // Same QTBUG-118604 mitigation as the wrapper-window path
+            // (ensureWrapperWindow): clear Qt's implicit min/max sizing so
+            // configure-driven resizes from the compositor aren't clamped
+            // against the contentItem's implicit bounds. Without this, a
+            // QML Window root with implicit-sized content silently caps
+            // every layer-shell configure to that initial size.
+            constexpr int kQtWindowSizeMax = (1 << 24) - 1;
+            win->setMinimumSize(QSize(0, 0));
+            win->setMaximumSize(QSize(kQtWindowSizeMax, kQtWindowSizeMax));
+
             // Dynamic-property writes (setProperty) for anything
             // windowProperties contains that is NOT declared via QML
             // `property`. setInitialProperties above handles QML-declared

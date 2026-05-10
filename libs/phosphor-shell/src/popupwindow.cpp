@@ -17,7 +17,10 @@ PopupWindow::PopupWindow(QQuickItem* parent)
 
 PopupWindow::~PopupWindow()
 {
+    // Hide first so the compositor sees a clean unmap before the wl_surface
+    // is destroyed by ~QQuickWindow.
     hidePopup();
+    // unique_ptr destructor reclaims m_popupWindow.
 }
 
 QQuickItem* PopupWindow::anchor() const
@@ -129,13 +132,13 @@ void PopupWindow::showPopup()
     }
 
     if (!m_popupWindow) {
-        m_popupWindow = new QQuickWindow();
+        m_popupWindow = std::make_unique<QQuickWindow>();
         m_popupWindow->setFlag(Qt::Popup);
         m_popupWindow->setColor(Qt::transparent);
 
         const auto children = childItems();
         for (QQuickItem* child : children) {
-            child->setParentItem(m_popupWindow->contentItem());
+            reparentChildToWindow(child);
         }
     }
 
@@ -186,6 +189,21 @@ void PopupWindow::showPopup()
         break;
     }
 
+    // xdg_positioner.set_anchor_rect requires the rect to lie within the
+    // parent surface's logical bounds; an out-of-bounds rect is a
+    // protocol error that drops the wl_display connection. Clamp our
+    // gap-extended rect to the parent QQuickWindow's content bounds
+    // (which equals the parent surface for layer-shell parents).
+    if (auto* parentWindow = m_anchor->window()) {
+        const QRect surfaceBounds(0, 0, parentWindow->width(), parentWindow->height());
+        anchorRect = anchorRect.intersected(surfaceBounds);
+        if (anchorRect.isEmpty()) {
+            // Fall back to the un-extended anchor rect — better to lose
+            // the gap than to send an invalid positioner.
+            anchorRect = computeAnchorRect().intersected(surfaceBounds);
+        }
+    }
+
     m_popupWindow->setProperty("_q_waylandPopupAnchorRect", anchorRect);
     // Pass as uint — Qt's xdg-shell plugin reads these via QVariant::toUInt
     // and uses the value as a Qt::Edges-indexed jump-table key. Passing as
@@ -214,6 +232,24 @@ void PopupWindow::hidePopup()
         m_popupWindow->hide();
         qCDebug(lcPopup) << "Popup hidden";
     }
+}
+
+void PopupWindow::itemChange(ItemChange change, const ItemChangeData& value)
+{
+    // Late-added children (created after the popup window has been
+    // materialised) need to be migrated to the popup's contentItem,
+    // otherwise they'd live on the PopupWindow QQuickItem and never
+    // appear inside the floating popup surface. Same pattern as
+    // FloatingWindow::itemChange.
+    if (change == ItemChildAddedChange && m_popupWindow && value.item) {
+        reparentChildToWindow(value.item);
+    }
+    QQuickItem::itemChange(change, value);
+}
+
+void PopupWindow::reparentChildToWindow(QQuickItem* child)
+{
+    child->setParentItem(m_popupWindow->contentItem());
 }
 
 } // namespace PhosphorShell

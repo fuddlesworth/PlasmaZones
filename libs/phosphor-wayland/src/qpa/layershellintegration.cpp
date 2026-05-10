@@ -29,10 +29,17 @@ LayerShellIntegration::LayerShellIntegration() = default;
 LayerShellIntegration::~LayerShellIntegration()
 {
     if (m_foreignToplevelManager) {
-        // The protocol's stop() request asks the compositor to stop sending
-        // toplevel events; the manager proxy can then be destroyed client-side.
+        // wlr-foreign-toplevel-management has no destroy request — the
+        // protocol's lifecycle is: client sends stop() → compositor
+        // responds with `finished` (a destructor event) → libwayland frees
+        // the proxy. Calling wl_proxy_destroy ourselves between stop()
+        // and the eventual `finished` is a use-after-free on whichever
+        // side dispatches first. We send stop() and let the proxy be
+        // reclaimed by libwayland's destructor handling for the
+        // `finished` event; the wl_display teardown that runs
+        // immediately after this destructor wipes everything anyway.
         zwlr_foreign_toplevel_manager_v1_stop(m_foreignToplevelManager);
-        wl_proxy_destroy(reinterpret_cast<struct wl_proxy*>(m_foreignToplevelManager));
+        m_foreignToplevelManager = nullptr;
     }
     if (m_toplevelDragManager) {
         xdg_toplevel_drag_manager_v1_destroy(m_toplevelDragManager);

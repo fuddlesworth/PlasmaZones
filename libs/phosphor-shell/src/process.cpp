@@ -8,6 +8,13 @@
 
 namespace PhosphorShell {
 
+namespace {
+// SIGTERM grace period before SIGKILL on shutdown — gives the child a
+// chance to flush and clean up tempfiles.
+constexpr int kTerminateGraceMs = 200;
+constexpr int kKillTimeoutMs = 100;
+} // namespace
+
 Process::Process(QObject* parent)
     : QObject(parent)
     , m_process(new QProcess(this))
@@ -80,12 +87,12 @@ void Process::setInterval(int interval)
     Q_EMIT intervalChanged();
 }
 
-QString Process::stdoutStr() const
+QString Process::stdoutText() const
 {
     return m_stdout;
 }
 
-QString Process::stderrStr() const
+QString Process::stderrText() const
 {
     return m_stderr;
 }
@@ -101,6 +108,17 @@ void Process::startProcess()
         return;
     }
 
+    // Reset accumulated output for the new run so consumers see only this
+    // invocation's output, not stale bytes from the previous run.
+    if (!m_stdout.isEmpty()) {
+        m_stdout.clear();
+        Q_EMIT stdoutTextChanged();
+    }
+    if (!m_stderr.isEmpty()) {
+        m_stderr.clear();
+        Q_EMIT stderrTextChanged();
+    }
+
     const QString program = m_command.first();
     const QStringList args = m_command.mid(1);
     m_process->start(program, args);
@@ -110,31 +128,47 @@ void Process::stopProcess()
 {
     m_timer->stop();
     if (m_process->state() != QProcess::NotRunning) {
-        m_process->kill();
-        m_process->waitForFinished(100);
+        // Try graceful SIGTERM first so the child can release tempfiles,
+        // sockets, and any other resources before being force-killed.
+        m_process->terminate();
+        if (!m_process->waitForFinished(kTerminateGraceMs)) {
+            m_process->kill();
+            m_process->waitForFinished(kKillTimeoutMs);
+        }
     }
 }
 
 void Process::onReadyReadStdout()
 {
-    m_stdout = QString::fromUtf8(m_process->readAllStandardOutput());
-    Q_EMIT stdoutChanged();
+    // Append, don't replace — readyReadStandardOutput can fire multiple
+    // times per invocation, and replacing would lose all but the last
+    // chunk.
+    m_stdout.append(QString::fromUtf8(m_process->readAllStandardOutput()));
+    Q_EMIT stdoutTextChanged();
 }
 
 void Process::onReadyReadStderr()
 {
-    m_stderr = QString::fromUtf8(m_process->readAllStandardError());
-    Q_EMIT stderrChanged();
+    m_stderr.append(QString::fromUtf8(m_process->readAllStandardError()));
+    Q_EMIT stderrTextChanged();
 }
 
 void Process::onProcessFinished(int exitCode)
 {
     m_exitCode = exitCode;
+    Q_EMIT exitCodeChanged();
 
-    const QByteArray remaining = m_process->readAllStandardOutput();
-    if (!remaining.isEmpty()) {
-        m_stdout = QString::fromUtf8(remaining);
-        Q_EMIT stdoutChanged();
+    // Drain any final stdout/stderr that arrived between the last
+    // readyRead and finished.
+    const QByteArray remainingOut = m_process->readAllStandardOutput();
+    if (!remainingOut.isEmpty()) {
+        m_stdout.append(QString::fromUtf8(remainingOut));
+        Q_EMIT stdoutTextChanged();
+    }
+    const QByteArray remainingErr = m_process->readAllStandardError();
+    if (!remainingErr.isEmpty()) {
+        m_stderr.append(QString::fromUtf8(remainingErr));
+        Q_EMIT stderrTextChanged();
     }
 
     Q_EMIT finished(exitCode);

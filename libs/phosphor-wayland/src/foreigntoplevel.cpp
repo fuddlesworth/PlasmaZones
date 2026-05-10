@@ -310,15 +310,20 @@ void ForeignToplevel::Private::handleClosed(void* data, struct zwlr_foreign_topl
 {
     auto* self = static_cast<Private*>(data);
     self->closed = true;
-    Q_EMIT self->owner->closedChanged();
-    // Detach from manager; emit removed and schedule destruction.
+    // Detach from manager FIRST so any closedChanged listener iterating
+    // manager->toplevels() does not still see this entry (consistent
+    // observer state). Manager pointer is QPointer-guarded — it may have
+    // been destroyed mid-event-dispatch during teardown.
     if (self->manager) {
         self->manager->d->toplevels.remove(self->handle);
-        Q_EMIT self->manager->toplevelRemoved(self->owner);
     }
     if (self->handle) {
         zwlr_foreign_toplevel_handle_v1_destroy(self->handle);
         self->handle = nullptr;
+    }
+    Q_EMIT self->owner->closedChanged();
+    if (self->manager) {
+        Q_EMIT self->manager->toplevelRemoved(self->owner);
     }
     self->owner->deleteLater();
 }
@@ -362,14 +367,17 @@ ForeignToplevelManager::~ForeignToplevelManager()
 
     // But we DO need to destroy our per-toplevel handles since the listener
     // data pointers (raw Private*) become dangling after we go away.
+    // Use synchronous delete (not deleteLater) — at process shutdown the
+    // QCoreApplication event loop may already be gone, in which case
+    // deleteLater queues into a sink and the objects leak with a Qt
+    // warning. The toplevels are unparented and accessed by no other
+    // code path at this point so synchronous teardown is safe.
     for (ForeignToplevel* tl : std::as_const(d->toplevels)) {
         if (tl && tl->d->handle) {
             zwlr_foreign_toplevel_handle_v1_destroy(tl->d->handle);
             tl->d->handle = nullptr;
         }
-        if (tl) {
-            tl->deleteLater();
-        }
+        delete tl;
     }
     d->toplevels.clear();
 }

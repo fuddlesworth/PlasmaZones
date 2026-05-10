@@ -69,7 +69,7 @@ private:
     std::unique_ptr<QQmlEngine> m_engine;
     std::unique_ptr<QObject> m_rootObject;
     Deps m_deps;
-    std::vector<PhosphorLayer::Surface*> m_surfaces;
+    std::vector<std::unique_ptr<PhosphorLayer::Surface>> m_surfaces;
     QFileSystemWatcher* m_watcher = nullptr;
     QTimer* m_reloadTimer = nullptr;
     ScreenModel* m_screenModel = nullptr;

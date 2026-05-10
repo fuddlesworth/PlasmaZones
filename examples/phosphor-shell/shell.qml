@@ -71,13 +71,13 @@ Item {
         id: centerPanel
 
         shellState: shellState
-        clockText: clockProc.stdout.trim()
+        clockText: clockProc.stdoutText.trim()
     }
 
     RightPanel {
         shellState: shellState
-        cpuPercent: cpuProc.stdout.trim()
-        memPercent: memProc.stdout.trim()
+        cpuPercent: cpuProc.stdoutText.trim()
+        memPercent: memProc.stdoutText.trim()
         batteryPercent: batteryFile.content.trim()
         batteryVisible: batteryFile.exists
     }

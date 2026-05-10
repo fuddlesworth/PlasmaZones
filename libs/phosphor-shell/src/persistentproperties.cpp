@@ -3,10 +3,43 @@
 
 #include <PhosphorShell/PersistentProperties.h>
 
+#include <QLoggingCategory>
 #include <QMetaObject>
 #include <QMetaProperty>
 
+Q_LOGGING_CATEGORY(lcPersist, "phosphorshell.persist")
+
 namespace PhosphorShell {
+
+namespace {
+
+// Whitelist QMetaTypes that survive a round-trip through QVariantMap →
+// JSON (the persistence backend). Anything else is silently dropped at
+// save time so we never persist unserialisable handles, QObject*, etc.
+bool isJsonSerializable(int typeId)
+{
+    switch (typeId) {
+    case QMetaType::Bool:
+    case QMetaType::Int:
+    case QMetaType::UInt:
+    case QMetaType::LongLong:
+    case QMetaType::ULongLong:
+    case QMetaType::Double:
+    case QMetaType::Float:
+    case QMetaType::QString:
+    case QMetaType::QStringList:
+    case QMetaType::QVariantList:
+    case QMetaType::QVariantMap:
+    case QMetaType::QDate:
+    case QMetaType::QTime:
+    case QMetaType::QDateTime:
+        return true;
+    default:
+        return false;
+    }
+}
+
+} // namespace
 
 PersistentProperties::PersistentProperties(QQuickItem* parent)
     : QQuickItem(parent)
@@ -41,7 +74,13 @@ QVariantMap PersistentProperties::saveState() const
         if (qstrcmp(prop.name(), "reloadId") == 0) {
             continue;
         }
-        state.insert(QString::fromUtf8(prop.name()), prop.read(this));
+        const QVariant value = prop.read(this);
+        if (!isJsonSerializable(value.metaType().id())) {
+            qCDebug(lcPersist) << "Skipping non-JSON-serialisable property" << prop.name() << "of type"
+                               << value.typeName();
+            continue;
+        }
+        state.insert(QString::fromUtf8(prop.name()), value);
     }
 
     return state;
@@ -49,8 +88,29 @@ QVariantMap PersistentProperties::saveState() const
 
 void PersistentProperties::restoreState(const QVariantMap& state)
 {
+    // Validate every key against the running metaObject before writing —
+    // refusing to set unknown properties prevents a corrupt or hostile
+    // state file from creating arbitrary dynamic properties on this
+    // QQuickItem (some of which collide with Qt internals).
+    const QMetaObject* meta = metaObject();
     for (auto it = state.cbegin(); it != state.cend(); ++it) {
-        setProperty(it.key().toUtf8().constData(), it.value());
+        const QByteArray name = it.key().toUtf8();
+        const int index = meta->indexOfProperty(name.constData());
+        if (index < 0) {
+            qCDebug(lcPersist) << "Ignoring unknown property in saved state:" << it.key();
+            continue;
+        }
+        const QMetaProperty prop = meta->property(index);
+        // Only restore if the saved value's type is convertible to the
+        // declared property type — silently dropping mismatches avoids
+        // setting QString("...") on a `property int` etc.
+        QVariant value = it.value();
+        if (!value.convert(prop.metaType())) {
+            qCDebug(lcPersist) << "Type mismatch restoring" << it.key() << "—"
+                               << "saved" << it.value().typeName() << "vs declared" << prop.typeName();
+            continue;
+        }
+        prop.write(this, value);
     }
 }
 

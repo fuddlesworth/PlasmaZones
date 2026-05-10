@@ -98,9 +98,17 @@ public:
         // zwlr_layer_surface_v1::set_size. Forward to the underlying window
         // so callers that exercise the desired-size path on the toplevel
         // transport still get the resize they asked for.
-        if (m_window && !size.isEmpty()) {
-            m_window->resize(size);
+        if (!m_window || size.isEmpty()) {
+            return;
         }
+        // QTBUG-118604: QWindow::resize silently clamps to setMinimumSize /
+        // setMaximumSize. The wrapper-window path in PhosphorLayer::Surface
+        // clears those constraints; do the same here so the xdg fallback
+        // doesn't silently honour stale min/max set by Qt internals.
+        constexpr int kQtWindowSizeMax = (1 << 24) - 1;
+        m_window->setMinimumSize(QSize(0, 0));
+        m_window->setMaximumSize(QSize(kQtWindowSizeMax, kQtWindowSizeMax));
+        m_window->resize(size);
     }
 
 private:

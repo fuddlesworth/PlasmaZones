@@ -1,21 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Calendar popup — riceability test for animation shader framework.
 
 import Phosphor.Shell 1.0
 import QtQuick
 
-// Click the clock → MonthGrid pops in via a transition shader sampling
-// a layered offscreen texture of the calendar content. Demonstrates
-// four parts of the framework working together:
-//   1. PopupWindow anchored to a panel item via Wayland xdg-popup
-//   2. ShaderBackground.playing=true for the continuous frosted backdrop
-//   3. Animation-shader pack (data/animations/popin) consumed at the
-//      QML level via ShaderBackground.sourceItem + iTime keyframing —
-//      same shader source the kwin-effect's SurfaceAnimator uses for
-//      window transitions, here driving a popup transition instead.
-//   4. Layer-enabled QML capture (calendarSource.layer.enabled) feeds
-//      the transition shader its uTexture0 sample.
+// Calendar popup — click the clock → MonthGrid scales/fades in via QML
+// scale + opacity Behaviors with an OutBack-overshoot easing. Demonstrates
+// PopupWindow anchored to a panel item via Wayland xdg-popup with the
+// frosted-glass shader for the backdrop.
 PopupWindow {
     id: root
 
@@ -53,11 +45,8 @@ PopupWindow {
         customColor1: "#1e1e2e"
     }
 
-    // Calendar content (animated via popin shader transition). Wrapped
-    // in scale + opacity Behaviors driven by the same 0→1 keyframe as
-    // the popin shader uses, so even if the shader overlay below is
-    // held back by texture-provider warmup the user sees the popup
-    // actually arrive. The shader overlay adds bouncy zoom on top.
+    // Calendar content — scale + opacity Behaviors give the visible
+    // "pop in" transition (OutBack easing for the bounce).
     Item {
         id: calendarSource
 

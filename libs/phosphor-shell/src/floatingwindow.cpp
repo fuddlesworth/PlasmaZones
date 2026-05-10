@@ -12,10 +12,7 @@ FloatingWindow::FloatingWindow(QQuickItem* parent)
 {
 }
 
-FloatingWindow::~FloatingWindow()
-{
-    delete m_window;
-}
+FloatingWindow::~FloatingWindow() = default; // unique_ptr cleans up m_window
 
 QString FloatingWindow::title() const
 {
@@ -90,19 +87,38 @@ void FloatingWindow::setWindowVisible(bool visible)
     Q_EMIT windowVisibleChanged();
 }
 
+void FloatingWindow::itemChange(ItemChange change, const ItemChangeData& value)
+{
+    // QML children declared on the FloatingWindow before ensureWindow() runs
+    // are reparented into m_window's contentItem when the window is created.
+    // Children added LATER (e.g. via dynamic creation, Loader, or after
+    // first show) need to be migrated as well, otherwise they live on the
+    // FloatingWindow QQuickItem and are never visible in the floating
+    // surface. itemChange catches both first-add and runtime adds.
+    if (change == ItemChildAddedChange && m_window && value.item) {
+        reparentChildToWindow(value.item);
+    }
+    QQuickItem::itemChange(change, value);
+}
+
+void FloatingWindow::reparentChildToWindow(QQuickItem* child)
+{
+    child->setParentItem(m_window->contentItem());
+}
+
 void FloatingWindow::ensureWindow()
 {
     if (m_window) {
         return;
     }
 
-    m_window = new QQuickWindow();
+    m_window = std::make_unique<QQuickWindow>();
     m_window->setTitle(m_title);
     m_window->resize(m_windowWidth, m_windowHeight);
 
     const auto children = childItems();
     for (QQuickItem* child : children) {
-        child->setParentItem(m_window->contentItem());
+        reparentChildToWindow(child);
     }
 }
 

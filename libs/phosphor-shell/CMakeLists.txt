@@ -28,6 +28,12 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Quick Qml)
 if(NOT TARGET PhosphorLayer::PhosphorLayer)
     find_package(PhosphorLayer CONFIG REQUIRED)
 endif()
+if(NOT TARGET PhosphorRendering::PhosphorRendering)
+    find_package(PhosphorRendering CONFIG REQUIRED)
+endif()
+if(NOT TARGET PhosphorWayland::PhosphorWayland)
+    find_package(PhosphorWayland CONFIG REQUIRED)
+endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -113,6 +119,7 @@ target_link_libraries(PhosphorShell
         Qt6::Qml
         PhosphorLayer::PhosphorLayer
         PhosphorRendering::PhosphorRendering
+        PhosphorWayland::PhosphorWayland
 )
 
 set_target_properties(PhosphorShell PROPERTIES

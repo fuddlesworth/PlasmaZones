@@ -126,11 +126,10 @@ QQmlEngine* ShellEngine::engine() const
 
 void ShellEngine::teardown()
 {
-    for (auto* surface : m_surfaces) {
+    for (auto& surface : m_surfaces) {
         surface->hide();
-        delete surface;
     }
-    m_surfaces.clear();
+    m_surfaces.clear(); // unique_ptr destructors run, no manual delete
     m_rootObject.reset();
     m_engine.reset();
 }
@@ -174,6 +173,12 @@ void ShellEngine::onFileChanged()
 
     m_engine = std::make_unique<QQmlEngine>(this);
     m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
+    // Re-bind the Environment singleton on the new engine. The previous
+    // engine's Environment instance was destroyed with the old engine; QML
+    // looking up `Environment.get(...)` on a fresh engine without this
+    // line silently returns undefined and the example settings panel
+    // would render blank after every hot reload.
+    m_engine->rootContext()->setContextProperty(QStringLiteral("Environment"), new Environment(m_engine.get()));
 
     QQmlComponent component(m_engine.get(), m_shellUrl, QQmlComponent::PreferSynchronous);
     if (component.isError()) {
@@ -192,10 +197,13 @@ void ShellEngine::onFileChanged()
     materializePanels();
     restorePersistentState();
 
-    // Re-arm the file watch (editors that save via atomic rename invalidate the old watch)
-    const QString filePath = m_shellUrl.toLocalFile();
-    if (!m_watcher->files().contains(filePath)) {
-        m_watcher->addPath(filePath);
+    // Re-arm the file watch (editors that save via atomic rename invalidate the old watch).
+    // Guard m_watcher: setupWatcher() may not have run yet if initial load failed.
+    if (m_watcher) {
+        const QString filePath = m_shellUrl.toLocalFile();
+        if (!m_watcher->files().contains(filePath)) {
+            m_watcher->addPath(filePath);
+        }
     }
 
     qCInfo(lcShellEngine) << "Reload complete," << m_surfaces.size() << "panel(s)";
@@ -352,6 +360,16 @@ void ShellEngine::materializePanels()
         panel->setWidth(panelSize.width());
         panel->setHeight(panelSize.height());
 
+        // Detach panel from its QML parent BEFORE wrapping in unique_ptr.
+        // findChildren returned panel through its QObject parent chain, so
+        // both the QML root AND the unique_ptr would otherwise own it; if
+        // surfaceFactory->create() returns null below, the unique_ptr
+        // destructs and deletes panel, then m_rootObject.reset() during
+        // teardown would double-free. Surface re-parents panel to the
+        // wrapper QQuickWindow on success (surface.cpp:644).
+        panel->setParent(nullptr);
+        panel->setParentItem(nullptr);
+
         PhosphorLayer::SurfaceConfig cfg;
         cfg.role = role;
         cfg.contentItem = std::unique_ptr<QQuickItem>(panel);
@@ -360,10 +378,13 @@ void ShellEngine::materializePanels()
         cfg.marginsOverride = layerMargins;
         cfg.debugName = QStringLiteral("phosphor-shell-panel");
 
-        auto* surface = m_deps.surfaceFactory->create(std::move(cfg), this);
+        // Pass nullptr as parent — m_surfaces (vector of unique_ptr) is
+        // the single owner. Passing `this` would double-own (QObject parent
+        // + unique_ptr) and double-free during ~ShellEngine.
+        auto* surface = m_deps.surfaceFactory->create(std::move(cfg), nullptr);
         if (surface) {
             surface->show();
-            m_surfaces.push_back(surface);
+            m_surfaces.emplace_back(surface);
             qCDebug(lcShellEngine) << "Created panel surface on edge" << panel->edge() << "alignment"
                                    << panel->alignment() << "size" << panelSize;
 

@@ -162,7 +162,13 @@ void LayerShellWindow::applyConfigure()
     // effect: the buffer Qt is about to paint now matches the surface size we
     // ack to the compositor. Acking earlier (in handleConfigure) attached the
     // previous frame's buffer to the new-size surface — visually broken.
-    if (m_hasPendingConfigure && m_pendingWidth > 0 && m_pendingHeight > 0) {
+    // Accept any configure with at least one non-zero axis. The compositor
+    // legitimately sends (W, 0) for a horizontally-anchored surface where
+    // it controls only the width axis — requiring BOTH > 0 would drop the
+    // configure entirely and leave the surface permanently un-acked
+    // (subsequent configures keep being treated as pending). computeConfigureSize
+    // handles the per-axis fallback to qwindow's current size.
+    if (m_hasPendingConfigure && (m_pendingWidth > 0 || m_pendingHeight > 0)) {
         QWindow* qwindow = m_waylandWindow->window();
         if (qwindow) {
             const QSize newSize = computeConfigureSize(m_pendingWidth, m_pendingHeight);
@@ -460,14 +466,15 @@ void LayerShellWindow::handleClosed(void* data, struct zwlr_layer_surface_v1* su
     // Safety: close() may re-enter applyProperties() or setWindowGeometry() via
     // signal cascades, but those methods early-return when m_layerSurface is null.
     self->m_wlSurface = nullptr;
+    // Capture qwindow + null self->m_waylandWindow BEFORE qwindow->close().
+    // qwindow->close() can synchronously trigger ~QWaylandWindow which
+    // deletes `this` (the shell surface), so any access to `self` after
+    // close() would be a use-after-free.
     QWindow* qwindow = self->m_waylandWindow->window();
+    self->m_waylandWindow = nullptr;
     if (qwindow) {
         qwindow->close();
     }
-    // Prevent stale access to the QWaylandWindow during Qt teardown —
-    // signal cascades from close() may reference m_waylandWindow after
-    // the underlying object is deleted.
-    self->m_waylandWindow = nullptr;
 }
 
 void LayerShellWindow::attachPopup(QtWaylandClient::QWaylandShellSurface* popup)

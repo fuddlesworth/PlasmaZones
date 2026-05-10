@@ -6,6 +6,7 @@
 #include <PhosphorShell/phosphorshell_export.h>
 
 #include <QMargins>
+#include <QPointer>
 #include <QQuickItem>
 #include <QtQml/qqmlregistration.h>
 
@@ -100,11 +101,19 @@ Q_SIGNALS:
 private:
     Edge m_edge = Top;
     int m_thickness = 32;
-    QScreen* m_screen = nullptr;
+    // QPointer so monitor hot-unplug doesn't leave us with a dangling
+    // QScreen pointer. ScreenManager owns QScreen lifetimes externally.
+    QPointer<QScreen> m_screen;
     Layer m_layer = LayerTop;
+    // -1 sentinel: "no explicit override, derive from alignment"
+    //  0 sentinel: "auto-fit to content via implicitWidth/Height"
+    // >0:         "explicit pin in screen-axis pixels"
     int m_exclusiveZone = -1;
     bool m_exclusiveZoneEnabled = true;
     Alignment m_alignment = Fill;
+    // -1 sentinel: "fill the screen-aligned axis (Fill alignment)"
+    //  0 sentinel: "auto-fit to root item's implicitWidth/Height"
+    // >0:         "explicit pin in screen-axis pixels"
     int m_panelLength = -1;
     QMargins m_margins;
 };

@@ -6,11 +6,15 @@
 #include <PhosphorShell/phosphorshell_export.h>
 
 #include <QList>
+#include <QPointer>
 #include <QQuickItem>
 #include <QtQml/qqmlregistration.h>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 class QAbstractListModel;
+class QModelIndex;
 class QQmlComponent;
 QT_END_NAMESPACE
 
@@ -43,13 +47,20 @@ private Q_SLOTS:
     void onRowsInserted(const QModelIndex& parent, int first, int last);
     void onRowsRemoved(const QModelIndex& parent, int first, int last);
     void onModelReset();
+    void onDataChanged(const QModelIndex& topLeft, const QModelIndex& bottomRight, const QList<int>& roles);
 
 private:
     void rebuild();
     void clear();
+    void refreshInstanceData(int row);
+    QVariantMap buildModelData(int row) const;
 
-    QAbstractListModel* m_model = nullptr;
-    QQmlComponent* m_delegate = nullptr;
+    // QPointer so external destruction (model swapped out, delegate
+    // component reloaded) doesn't leave us with dangling pointers.
+    QPointer<QAbstractListModel> m_model;
+    QPointer<QQmlComponent> m_delegate;
+    // Each entry holds the delegate-instantiated object. We own them and
+    // delete via deleteLater() in clear() to be safe inside QML callstacks.
     QList<QObject*> m_instances;
 };
 

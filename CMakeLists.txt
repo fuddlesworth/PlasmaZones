@@ -486,13 +486,27 @@ install(FILES
     icons/hicolor/scalable/apps/plasmazones.svg
     icons/hicolor/scalable/apps/plasmazones-editor.svg
     icons/hicolor/scalable/apps/plasmazones-settings.svg
+    icons/hicolor/scalable/apps/phosphor-shell.svg
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
 )
 install(FILES
     icons/hicolor-light/scalable/apps/plasmazones.svg
     icons/hicolor-light/scalable/apps/plasmazones-editor.svg
     icons/hicolor-light/scalable/apps/plasmazones-settings.svg
+    icons/hicolor-light/scalable/apps/phosphor-shell.svg
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
+)
+
+# Install the example phosphor-shell QML/shaders so the executable has a
+# working default to fall back on when no user shell.qml exists yet.
+# ShellLoader::resolve() probes both GenericConfigLocation (~/.config) and
+# GenericDataLocation (this DATADIR install) so the executable runs out of
+# the box on a fresh install.
+install(DIRECTORY examples/phosphor-shell/
+    DESTINATION ${KDE_INSTALL_DATADIR}/phosphor-shell
+    FILES_MATCHING
+        PATTERN "*.qml"
+        PATTERN "*.frag"
 )
 
 # Custom uninstall target that cleans up directories properly

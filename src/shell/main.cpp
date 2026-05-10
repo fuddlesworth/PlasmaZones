@@ -38,7 +38,13 @@ int main(int argc, char* argv[])
     PhosphorShell::ShellLoader loader;
     const QUrl shellUrl = loader.resolve();
     if (shellUrl.isEmpty()) {
-        qCCritical(lcShell) << "No shell.qml found. Searched:" << loader.shellConfigDir();
+        const QString configDir = loader.shellConfigDir();
+        qCCritical(lcShell).noquote() << "No shell.qml found.\n"
+                                      << "  Searched:    " << configDir << "\n"
+                                      << "               and ${XDG_DATA_DIRS}/phosphor-shell/\n\n"
+                                      << "  To get started, copy the bundled example:\n"
+                                      << "    mkdir -p" << configDir << "\n"
+                                      << "    cp -r /usr/share/phosphor-shell/* " << configDir;
         return 1;
     }
 

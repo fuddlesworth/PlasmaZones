@@ -5,6 +5,10 @@
 #include <PhosphorShell/PersistentProperties.h>
 #include <PhosphorShell/ScreenModel.h>
 
+#include <QLoggingCategory>
+
+Q_LOGGING_CATEGORY(lcShellGlobal, "phosphorshell.shellglobal")
+
 namespace PhosphorShell {
 
 ShellGlobal::ShellGlobal(QObject* parent)
@@ -16,22 +20,31 @@ ShellGlobal::~ShellGlobal() = default;
 
 ScreenModel* ShellGlobal::screens() const
 {
-    return m_screens;
+    return m_screens.data();
 }
 
 void ShellGlobal::setScreenModel(ScreenModel* model)
 {
+    if (m_screens.data() == model) {
+        return;
+    }
     m_screens = model;
+    Q_EMIT screensChanged();
 }
 
 QObject* ShellGlobal::singleton(const QString& reloadId) const
 {
-    return m_singletons.value(reloadId, nullptr);
+    // QPointer<PersistentProperties> auto-clears on QObject destruction;
+    // value() returns the (possibly null) wrapped pointer.
+    return m_singletons.value(reloadId).data();
 }
 
 void ShellGlobal::registerSingleton(const QString& reloadId, PersistentProperties* props)
 {
-    m_singletons.insert(reloadId, props);
+    if (m_singletons.contains(reloadId) && m_singletons.value(reloadId).data() != props) {
+        qCWarning(lcShellGlobal) << "Replacing existing singleton for reloadId" << reloadId;
+    }
+    m_singletons.insert(reloadId, QPointer<PersistentProperties>(props));
 }
 
 void ShellGlobal::clearSingletons()

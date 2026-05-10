@@ -24,9 +24,14 @@ class PHOSPHORSHELL_EXPORT Process : public QObject
     Q_PROPERTY(QStringList command READ command WRITE setCommand NOTIFY commandChanged)
     Q_PROPERTY(bool running READ running WRITE setRunning NOTIFY runningChanged)
     Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
-    Q_PROPERTY(QString stdout READ stdoutStr NOTIFY stdoutChanged)
-    Q_PROPERTY(QString stderr READ stderrStr NOTIFY stderrChanged)
-    Q_PROPERTY(int exitCode READ exitCode NOTIFY finished)
+    // Property names are `stdoutText` / `stderrText` — `stdout` and `stderr`
+    // are macros in <cstdio>, and any TU that transitively includes <cstdio>
+    // before this header would have moc see `Q_PROPERTY(QString (*) ...)`
+    // and fail to compile. The defensive rename keeps the QML name distinct
+    // from the macro.
+    Q_PROPERTY(QString stdoutText READ stdoutText NOTIFY stdoutTextChanged)
+    Q_PROPERTY(QString stderrText READ stderrText NOTIFY stderrTextChanged)
+    Q_PROPERTY(int exitCode READ exitCode NOTIFY exitCodeChanged)
 
 public:
     explicit Process(QObject* parent = nullptr);
@@ -41,16 +46,17 @@ public:
     int interval() const;
     void setInterval(int interval);
 
-    QString stdoutStr() const;
-    QString stderrStr() const;
+    QString stdoutText() const;
+    QString stderrText() const;
     int exitCode() const;
 
 Q_SIGNALS:
     void commandChanged();
     void runningChanged();
     void intervalChanged();
-    void stdoutChanged();
-    void stderrChanged();
+    void stdoutTextChanged();
+    void stderrTextChanged();
+    void exitCodeChanged();
     void finished(int exitCode);
 
 private Q_SLOTS:

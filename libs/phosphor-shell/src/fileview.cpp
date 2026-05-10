@@ -10,6 +10,14 @@
 
 namespace PhosphorShell {
 
+namespace {
+// Cap on file content read size — defensive against being pointed at a
+// huge file (or /dev/zero) by a malicious or buggy QML config. 16 MiB is
+// well above the typical /proc, /sys, and config file size, but small
+// enough to keep memory bounded if something goes wrong.
+constexpr qint64 kMaxFileBytes = 16 * 1024 * 1024;
+} // namespace
+
 FileView::FileView(QObject* parent)
     : QObject(parent)
     , m_timer(new QTimer(this))
@@ -29,6 +37,11 @@ void FileView::setPath(const QString& path)
 {
     if (m_path == path) {
         return;
+    }
+    // Drop any previously-watched path so the watcher doesn't accumulate
+    // notifications for files we no longer care about.
+    if (m_watcher && !m_watcher->files().isEmpty()) {
+        m_watcher->removePaths(m_watcher->files());
     }
     m_path = path;
     Q_EMIT pathChanged();
@@ -60,8 +73,10 @@ void FileView::setInterval(int interval)
     Q_EMIT intervalChanged();
 
     if (m_interval > 0) {
-        delete m_watcher;
-        m_watcher = nullptr;
+        if (m_watcher) {
+            m_watcher->deleteLater();
+            m_watcher = nullptr;
+        }
         setupTimer();
     } else {
         m_timer->stop();
@@ -96,7 +111,9 @@ void FileView::readFile()
         return;
     }
 
-    const QString newContent = QString::fromUtf8(file.readAll());
+    // Bounded read — protects against /dev/zero, multi-GB logs, etc.
+    const QByteArray bytes = file.read(kMaxFileBytes);
+    const QString newContent = QString::fromUtf8(bytes);
     if (newContent != m_content) {
         m_content = newContent;
         Q_EMIT contentChanged();

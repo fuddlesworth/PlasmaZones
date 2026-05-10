@@ -43,7 +43,9 @@ LazyLoader::LazyLoader(QQuickItem* parent)
 LazyLoader::~LazyLoader()
 {
     unload();
-    delete m_ownedComponent;
+    // m_ownedComponent is parented to `this` at construction (line in
+    // startLoading), so QObject's parent destructor will reclaim it.
+    // Manual delete here would double-free.
 }
 
 bool LazyLoader::active() const
@@ -142,6 +144,12 @@ void LazyLoader::startLoading()
     m_status = Loading;
     Q_EMIT statusChanged();
 
+    // Cancel any in-flight incubation before deleting — clear() blocks
+    // until the QQmlIncubator is no longer in Loading state, preventing a
+    // race where statusChanged() fires on a freed incubator.
+    if (m_incubator) {
+        m_incubator->clear();
+    }
     delete m_incubator;
     m_incubator = new LazyIncubator(this);
 
@@ -151,11 +159,14 @@ void LazyLoader::startLoading()
 
 void LazyLoader::unload()
 {
-    delete m_incubator;
-    m_incubator = nullptr;
+    if (m_incubator) {
+        m_incubator->clear();
+        delete m_incubator;
+        m_incubator = nullptr;
+    }
 
     if (m_item) {
-        delete m_item;
+        m_item->deleteLater();
         m_item = nullptr;
         Q_EMIT itemChanged();
     }
