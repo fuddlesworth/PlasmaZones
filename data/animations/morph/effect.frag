@@ -73,8 +73,8 @@ void main()
     // aliased on smooth warps. A 0.005-wide smoothstep band fades to
     // transparent across the [0,1] edge — narrow enough to be invisible
     // on small windows (~1 texel at 200 px), still smooth at 4K.
-    vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), sampleUv);
-    vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), sampleUv);
+    vec2 insideLo = smoothstep(vec2(-0.005), vec2(0.0), sampleUv);
+    vec2 insideHi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.005), sampleUv);
     float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
     fragColor = texture(uTexture0, sampleUv) * mask;
 }
