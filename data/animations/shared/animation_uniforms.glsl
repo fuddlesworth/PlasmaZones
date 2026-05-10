@@ -110,6 +110,18 @@ uniform vec4 iSurfaceScreenPos;
 // FBO read this for the card's pixel dimensions; iResolution still
 // carries the FBO size as usual.
 uniform vec2 iAnchorSize;
+// Anchor's top-left position inside the shader item's FBO, in logical
+// pixels. Combined with `iAnchorSize` and `iResolution`, shaders compute
+// the anchor's UV region inside the FBO:
+//   vec2 anchorTopLeftUv = iAnchorPosInFbo / iResolution;
+//   vec2 anchorSizeUv    = iAnchorSize    / iResolution;
+//   vec2 anchorUv        = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;
+// This generalises the previous `customParams[7].x` ring-padding remap
+// (morph, broken-glass) and the parent-extent vertex remap (fly-in)
+// onto one contract that works for any FBO size the runtime allocates.
+// Reads (0, 0) on the kwin-effect path until Phase 7 of the unification
+// refactor wires it through paint_pipeline.cpp.
+uniform vec2 iAnchorPosInFbo;
 
 // uTexture0 — redirected window content (the surface the shader is
 // transitioning). Auto-bound by the runtime: KWin's OffscreenEffect
@@ -204,8 +216,15 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              override under boundsExtent=parent.
                                  //              Vertex shaders that need the captured
                                  //              card's pixel dimensions read this.
-    // implicit 8-byte trailing pad — std140 rounds the struct end up
-    // to a 16-byte boundary, total 704 bytes.
+    vec2 iAnchorPosInFbo;        // offset 696 (8 bytes) — anchor's top-left position
+                                 //              inside the shader item's FBO, in
+                                 //              logical pixels. Lets shaders compute
+                                 //              the anchor's UV region for vTexCoord
+                                 //              -> anchor-space remap (replaces the
+                                 //              old customParams[7].x ring-padding
+                                 //              fraction). Total struct size 704 bytes;
+                                 //              std140 trailing pad is now zero bytes
+                                 //              because the field fills it exactly.
 };
 
 layout(binding = 7) uniform sampler2D uTexture0;

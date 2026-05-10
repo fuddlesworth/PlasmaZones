@@ -237,6 +237,33 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
     if (auto* ext = animExtensionFor(shaderItem)) {
         ext->setIAnchorSize(QSizeF(w, h));
 
+        // iAnchorPosInFbo: anchor's top-left position inside the shader
+        // item's FBO. shaderItem is parented to `anchor->parentItem()`
+        // (see attachShaderToAnchor), so anchor->x()/y() and
+        // shaderItem->x()/y() are both in the parent's coord system;
+        // the subtraction gives anchor's position relative to
+        // shaderItem's top-left, which IS the FBO origin (the FBO
+        // covers shaderItem's bounds 1:1 via QQuickShaderEffectSource).
+        //
+        // Resolves identically across the three extent modes:
+        //   Anchor (no pad): shaderItem at (anchor.x, anchor.y),
+        //     diff = (0, 0). Anchor fills the FBO.
+        //   Anchor + ring:   shaderItem at (anchor.x - padW,
+        //     anchor.y - padH), diff = (padW, padH). Anchor centred
+        //     in padded FBO.
+        //   Parent / surface: shaderItem at (0, 0), diff =
+        //     (anchor.x, anchor.y) in parent's coords. For OSD /
+        //     popup chains with anchors.fill ancestors, parent's
+        //     coords == scene coords, so this matches the legacy
+        //     mapToScene value.
+        //
+        // Shaders that need to remap vTexCoord into anchor-space UV:
+        //   anchorUv = (vTexCoord - iAnchorPosInFbo/iResolution)
+        //            * (iResolution/iAnchorSize)
+        // collapses to identity when iAnchorPosInFbo = 0 and
+        // iAnchorSize = iResolution (default Anchor-extent case).
+        ext->setIAnchorPosInFbo(QPointF(anchor->x() - shaderItem->x(), anchor->y() - shaderItem->y()));
+
         // iSurfaceScreenPos describes where the card sits within its
         // *playing field* and how big that field is. The "playing field"
         // on the daemon path is the wl_surface (= the window's logical
