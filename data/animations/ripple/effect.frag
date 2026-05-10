@@ -51,7 +51,8 @@ void main() {
         vec2 offset = dir * (sin(p * dist * rippleAmplitude - p * rippleSpeed + seed) + 0.5) / 30.0;
 
         vec2 wuv = uv + offset * intensity;
-        vec4 color = texture(uTexture0, wuv);
+        // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+        vec4 color = texture(uTexture0, wuv) * boundaryMask(wuv);
 
         float alpha = smoothstep(1.0, 0.5, p);
         result = color * alpha;
@@ -71,7 +72,8 @@ void main() {
         vec2 offset = dir * (sin(p * dist * rippleAmplitude - p * rippleSpeed + seed) + 0.5) / 30.0;
 
         vec2 wuv = uv + offset * intensity;
-        vec4 color = texture(uTexture0, wuv);
+        // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+        vec4 color = texture(uTexture0, wuv) * boundaryMask(wuv);
 
         float alpha = smoothstep(0.0, 0.3, p);
         result = color * alpha;

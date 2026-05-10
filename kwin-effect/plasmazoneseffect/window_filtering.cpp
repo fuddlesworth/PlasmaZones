@@ -111,15 +111,8 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
     if (!m_excludedApplications.isEmpty() || !m_excludedWindowClasses.isEmpty()) {
         KWin::Window* kw = w->window();
         const QString appName = kw ? kw->desktopFileName() : QString();
-        for (const QString& excluded : m_excludedApplications) {
-            if (!excluded.isEmpty() && appName.contains(excluded, Qt::CaseInsensitive)) {
-                return false;
-            }
-        }
-        for (const QString& excluded : m_excludedWindowClasses) {
-            if (!excluded.isEmpty() && windowClass.contains(excluded, Qt::CaseInsensitive)) {
-                return false;
-            }
+        if (matchesExclusionLists(appName, windowClass, m_excludedApplications, m_excludedWindowClasses)) {
+            return false;
         }
     }
 
@@ -134,6 +127,97 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
     if (w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isOnScreenDisplay()
         || w->isModal() || w->isPopupWindow()) {
         return false;
+    }
+
+    return true;
+}
+
+bool PlasmaZonesEffect::matchesExclusionLists(const QString& appName, const QString& windowClass,
+                                              const QStringList& apps, const QStringList& classes)
+{
+    for (const QString& excluded : apps) {
+        if (!excluded.isEmpty() && appName.contains(excluded, Qt::CaseInsensitive)) {
+            return true;
+        }
+    }
+    for (const QString& excluded : classes) {
+        if (!excluded.isEmpty() && windowClass.contains(excluded, Qt::CaseInsensitive)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return false;
+    }
+
+    const QString windowClass = w->windowClass();
+
+    // Rule-override path. ANY AnimationAppRule whose classPattern
+    // substring-matches the window's class signals deliberate user
+    // intent to animate this app — kind (Shader vs Timing) and
+    // eventPath are not narrowed here because the user's act of
+    // creating a class-targeted rule is itself the opt-in signal.
+    // Empty `windowClass` short-circuits (no rule can match an
+    // unidentified window) and an empty rule list short-circuits
+    // (no override possible) so the default-state path pays just
+    // two pointer reads. Same case-insensitive substring rule
+    // `AnimationAppRuleList::firstMatchOfKind` uses, so the override
+    // scope mirrors the per-rule match contract exactly.
+    if (!windowClass.isEmpty()) {
+        const auto& rules = m_shaderManager.appRules();
+        if (!rules.isEmpty()) {
+            for (const auto& rule : rules.entries()) {
+                if (!rule.classPattern.isEmpty() && windowClass.contains(rule.classPattern, Qt::CaseInsensitive)) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Transient-window filter — covers dialogs / popups / tooltips /
+    // dropdowns / menus / utility windows. Mirrors the snapping
+    // exclusion's transient bucket, plus the popup-window family that
+    // KWin distinguishes (PopupMenu, DropdownMenu, Tooltip) so a user
+    // who wants the popup category animated can still opt out of these
+    // sub-types via the toggle.
+    if (m_animationExcludeTransientWindows) {
+        if (w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
+            || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor()) {
+            return false;
+        }
+    }
+
+    // Min-size filter — windows narrower or shorter than the threshold
+    // are excluded. Zero (the default) disables each axis independently
+    // so a user can set just one bound. Frame geometry is read live —
+    // during minimize/close lifecycle a window may already be collapsed
+    // when this fires, which is acceptable: the user opted into the
+    // size threshold so a transient sub-threshold frame should suppress
+    // the animation consistently with explicit-size cases.
+    const QRectF frame = w->frameGeometry();
+    if (m_animationMinWindowWidth > 0 && frame.width() < m_animationMinWindowWidth) {
+        return false;
+    }
+    if (m_animationMinWindowHeight > 0 && frame.height() < m_animationMinWindowHeight) {
+        return false;
+    }
+
+    // User-configured exclusion lists — substring-matched via the
+    // shared `matchesExclusionLists` helper that `shouldHandleWindow`
+    // also uses, so the animation and snapping filter sets stay in
+    // lockstep on match semantics even though their lists are
+    // independent.
+    if (!m_animationExcludedApplications.isEmpty() || !m_animationExcludedWindowClasses.isEmpty()) {
+        KWin::Window* kw = w->window();
+        const QString appName = kw ? kw->desktopFileName() : QString();
+        if (matchesExclusionLists(appName, windowClass, m_animationExcludedApplications,
+                                  m_animationExcludedWindowClasses)) {
+            return false;
+        }
     }
 
     return true;

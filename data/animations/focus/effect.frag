@@ -51,14 +51,27 @@ float easeInOutSine(float t) {
   return -0.5 * (cos(3.141592653589793 * t) - 1.0);
 }
 
-// BMW common.glsl verbatim — radial Poisson-style blur. Samples in
+// BMW common.glsl — radial Poisson-style blur. Samples in
 // `directions` evenly-spaced angles around a circle, each with
 // `samples` taps along the radius (intensity-weighted toward the
 // centre). `uSize` is supplied by `<bmw_compat.glsl>` and converts
 // the pixel-space `radius` into texCoord space.
+//
+// PlasmaZones tweak vs upstream: BMW divides the accumulator by the
+// fixed total tap count (`samples * directions`). On the daemon /
+// kwin-effect path `uTexture0` is a finite, non-tiling surface; taps
+// whose `uv + offset` falls outside [0, 1] return either clamp-to-edge
+// or transparent. Either way, including those taps in the average
+// dims the visible blur near the surface boundary (the reported
+// "edges fade out" artefact at default uBlurAmount=50). We instead
+// accumulate a `weight` that counts only the in-bounds taps and
+// normalise by that — equivalent to BMW upstream when the entire
+// blur kernel lies inside the window, and a clean reconstruction
+// when it doesn't.
 vec4 getBlurredInputColor(vec2 uv, float radius, float samples) {
   // Initialize the color accumulator to zero.
   vec4 color = vec4(0.0);
+  float weight = 0.0;
 
   // Define a constant for 2 * PI (tau), which represents a full circle in radians.
   const float tau = 6.28318530718;
@@ -74,14 +87,23 @@ vec4 getBlurredInputColor(vec2 uv, float radius, float samples) {
       // The (1.0 - s) term ensures more sampling occurs closer to the center.
       vec2 offset = vec2(cos(d), sin(d)) * radius * (1.0 - s) / uSize;
 
-      // Add the sampled color at the offset position to the accumulator.
-      color += getInputColor(uv + offset);
+      // Add the sampled color at the offset position to the accumulator,
+      // but only count the tap toward the average if it lies inside the
+      // surface's [0, 1] uv range — see header note above.
+      vec2 sampleUv = uv + offset;
+      if (sampleUv.x >= 0.0 && sampleUv.x <= 1.0 &&
+          sampleUv.y >= 0.0 && sampleUv.y <= 1.0) {
+        color += getInputColor(sampleUv);
+        weight += 1.0;
+      }
     }
   }
 
-  // Normalize the accumulated color by dividing by the total number of samples
-  // and directions to ensure the result is averaged.
-  return color / samples / directions;
+  // Normalize the accumulated color by the in-bounds tap count so an
+  // off-window kernel doesn't dim the result toward zero. `max(weight, 1.0)`
+  // guards against the (geometrically impossible at radius >= 0) zero-tap
+  // case so the divide can't produce a NaN.
+  return color / max(weight, 1.0);
 }
 
 void main() {

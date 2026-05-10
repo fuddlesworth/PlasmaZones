@@ -229,6 +229,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::shadersGroup(), // "Shaders"
         ConfigDefaults::shortcutsGroup(), // "Shortcuts" — covers Shortcuts.Global + Shortcuts.Tiling
         ConfigDefaults::animationsGroup(), // "Animations"
+        ConfigDefaults::animationsWindowFilteringGroup(), // "Animations.WindowFiltering"
         ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
         ConfigDefaults::orderingGroup(), // "Ordering"
     };
@@ -820,21 +821,36 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     // atomically (the daemon's fan-out hook) get one signal per call.
     Q_EMIT animationProfileChanged();
 
-    // Per-field: only emit when the effective value actually differs.
-    if (qRound(profile.effectiveDuration()) != prevDuration) {
+    // Per-field: only emit when the post-write OBSERVABLE differs from
+    // the pre-write observable. Compare against `animationProfile()`
+    // re-read post-write — NOT against `profile.effective*()` (the
+    // incoming arg), because `merged` preserves prev's values for any
+    // field the caller left unset. With the incoming `profile` having
+    // all-unset fields, `profile.effective*()` returns library
+    // defaults; comparing those against `prev*` would fire spurious
+    // signals even though the on-disk value is unchanged. Cache the
+    // post-write Profile in one read instead of paying a JSON parse +
+    // CurveRegistry resolve per field.
+    const auto next = animationProfile();
+    if (qRound(next.effectiveDuration()) != prevDuration) {
         Q_EMIT animationDurationChanged();
     }
-    const QString newCurveWire = profile.curve ? profile.curve->toString() : ConfigDefaults::animationEasingCurve();
+    // `animationEasingCurve()` reads the curve directly off the merged
+    // JSON blob (preserving any unresolved raw spec) — distinct from
+    // `next.curve->toString()` which could lose detail when the curve
+    // failed to resolve through `CurveRegistry::tryCreate`. The wire
+    // form is what disk-level equality tracks.
+    const QString newCurveWire = animationEasingCurve();
     if (newCurveWire != prevCurveWire) {
         Q_EMIT animationEasingCurveChanged();
     }
-    if (profile.effectiveMinDistance() != prevMinDistance) {
+    if (next.effectiveMinDistance() != prevMinDistance) {
         Q_EMIT animationMinDistanceChanged();
     }
-    if (static_cast<int>(profile.effectiveSequenceMode()) != prevSequenceMode) {
+    if (static_cast<int>(next.effectiveSequenceMode()) != prevSequenceMode) {
         Q_EMIT animationSequenceModeChanged();
     }
-    if (profile.effectiveStaggerInterval() != prevStaggerInterval) {
+    if (next.effectiveStaggerInterval() != prevStaggerInterval) {
         Q_EMIT animationStaggerIntervalChanged();
     }
 
@@ -1063,6 +1079,85 @@ void Settings::setShaderProfileTreeJson(const QString& json)
         return;
     }
     setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
+}
+
+PhosphorAnimationShaders::AnimationAppRuleList Settings::animationAppRules() const
+{
+    const auto raw =
+        m_store->read<QVariantList>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey());
+    QJsonArray arr;
+    for (const auto& v : raw) {
+        // Stored entries arrive as `QVariantMap`s when the JSON backend
+        // round-trips. Convert each back into `QJsonObject` for the
+        // typed `fromJson` consumer; non-map entries are dropped here.
+        // Use the strict `typeId()` check rather than `canConvert<>`
+        // because `canConvert<QVariantMap>()` returns true for plain
+        // QStrings too — `toMap()` would then build an empty
+        // QVariantMap and we'd round-trip that into an empty
+        // QJsonObject for the rule loader to drop at its own gate.
+        // The strict check skips the wasted QJsonObject construction.
+        if (v.typeId() == QMetaType::QVariantMap) {
+            arr.append(QJsonObject::fromVariantMap(v.toMap()));
+        }
+    }
+    return PhosphorAnimationShaders::AnimationAppRuleList::fromJson(arr);
+}
+
+void Settings::setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules)
+{
+    // Mirror the canonicalisation pattern used by `setShaderProfileTree`
+    // — compare the on-disk RAW form against the canonical
+    // round-tripped form. Catches two cases the simple "previous == rules"
+    // shortcut misses:
+    //
+    //   1. Hand-edited / corrupted on-disk entries that
+    //      `AnimationAppRule::fromJson` silently drops at read time. The
+    //      in-memory `previous` would then equal `rules` even though the
+    //      on-disk file still contains the bogus entry — so the simple
+    //      compare leaves stale junk on disk forever instead of cleaning
+    //      it up on the next save (asymmetric with `setShaderProfileTree`
+    //      which prunes-and-compares on both sides).
+    //
+    //   2. Schema-version drifts where `toJson()` emits the same logical
+    //      list in a slightly different on-disk shape (e.g. key ordering,
+    //      omitted-empty-fields convention) — the canonical-vs-raw
+    //      compare detects that delta and rewrites the file once,
+    //      whereas the simple compare would miss it.
+    //
+    // Build the canonical raw form once and reuse it for both the
+    // change-detection compare AND the actual write — no double-encode.
+    QVariantList canonical;
+    const auto arr = rules.toJson();
+    canonical.reserve(arr.size());
+    for (const auto& v : arr) {
+        canonical.append(v.toObject().toVariantMap());
+    }
+    const auto storedRaw =
+        m_store->read<QVariantList>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey());
+    if (storedRaw == canonical)
+        return;
+    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey(), canonical);
+    Q_EMIT animationAppRulesChanged();
+    Q_EMIT settingsChanged();
+}
+
+QString Settings::animationAppRulesJson() const
+{
+    return QString::fromUtf8(QJsonDocument(animationAppRules().toJson()).toJson(QJsonDocument::Compact));
+}
+
+void Settings::setAnimationAppRulesJson(const QString& json)
+{
+    if (json.isEmpty()) {
+        setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList{});
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isArray()) {
+        qCWarning(lcConfig) << "setAnimationAppRulesJson: malformed JSON (expected array), ignoring";
+        return;
+    }
+    setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array()));
 }
 
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
@@ -1463,6 +1558,97 @@ PZ_STORE_SET_INT(setMinimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, 
 PZ_STORE_GET(int, minimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, int)
 PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, minimumWindowHeightChanged)
 
+// ── Animation Window Filtering (PhosphorConfig::Store-backed) ──────────────
+//
+// Mirrors the Exclusions block above but lives in
+// `Animations.WindowFiltering` so animation-time filtering is independent
+// of snapping/tiling exclusions. Scalar accessors use the same macro
+// pattern; the QStringList accessors mirror the comma-list canonicalisation
+// trick from `setExcludedApplications` (post-write read-back so addX /
+// removeXAt don't fire spurious signals on no-op writes).
+
+PZ_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
+PZ_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
+                  animationExcludeTransientWindowsChanged)
+PZ_STORE_GET(int, animationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey, int)
+PZ_STORE_SET_INT(setAnimationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey,
+                 animationMinimumWindowWidthChanged)
+PZ_STORE_GET(int, animationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey, int)
+PZ_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey,
+                 animationMinimumWindowHeightChanged)
+
+QStringList Settings::animationExcludedApplications() const
+{
+    return parseCommaList(
+        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey()));
+}
+
+void Settings::setAnimationExcludedApplications(const QStringList& apps)
+{
+    writeCommaList(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey(), apps,
+                   &Settings::animationExcludedApplicationsChanged);
+}
+
+void Settings::addAnimationExcludedApplication(const QString& app)
+{
+    const QString trimmed = app.trimmed();
+    if (trimmed.isEmpty()) {
+        return;
+    }
+    QStringList list = animationExcludedApplications();
+    if (list.contains(trimmed)) {
+        return;
+    }
+    list.append(trimmed);
+    setAnimationExcludedApplications(list);
+}
+
+void Settings::removeAnimationExcludedApplicationAt(int index)
+{
+    QStringList list = animationExcludedApplications();
+    if (index < 0 || index >= list.size()) {
+        return;
+    }
+    list.removeAt(index);
+    setAnimationExcludedApplications(list);
+}
+
+QStringList Settings::animationExcludedWindowClasses() const
+{
+    return parseCommaList(
+        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey()));
+}
+
+void Settings::setAnimationExcludedWindowClasses(const QStringList& classes)
+{
+    writeCommaList(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey(), classes,
+                   &Settings::animationExcludedWindowClassesChanged);
+}
+
+void Settings::addAnimationExcludedWindowClass(const QString& cls)
+{
+    const QString trimmed = cls.trimmed();
+    if (trimmed.isEmpty()) {
+        return;
+    }
+    QStringList list = animationExcludedWindowClasses();
+    if (list.contains(trimmed)) {
+        return;
+    }
+    list.append(trimmed);
+    setAnimationExcludedWindowClasses(list);
+}
+
+void Settings::removeAnimationExcludedWindowClassAt(int index)
+{
+    QStringList list = animationExcludedWindowClasses();
+    if (index < 0 || index >= list.size()) {
+        return;
+    }
+    list.removeAt(index);
+    setAnimationExcludedWindowClasses(list);
+}
+
 // ── PhosphorZones::Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
 // Three enum-ints exposed via both the typed setter and an Int adapter for
 // QML binding. Stored as int, the schema clamps the range.
@@ -1613,6 +1799,29 @@ void Settings::writeTriggerList(const QString& group, const QString& key, const 
     Q_EMIT settingsChanged();
 }
 
+void Settings::writeCommaList(const QString& group, const QString& key, const QStringList& list,
+                              CommaListSignalFn specificSignal)
+{
+    // Pre-write snapshot + post-write read-back. The schema's
+    // `canonicalCommaList` validator may trim / dedupe the joined
+    // string, so two writes that look different in memory can
+    // canonicalise to the same on-disk value — emitting in that case
+    // would dirty the page on a no-op. Pre-write equality alone would
+    // miss canonicalisation no-ops; post-write equality alone would
+    // miss the case where the list ends up identical because the
+    // validator collapsed it. Compare both sides of the round-trip so
+    // the signal fires only when the persisted value actually
+    // changed.
+    const QString before = m_store->read<QString>(group, key);
+    m_store->write(group, key, list.join(QLatin1Char(',')));
+    const QString after = m_store->read<QString>(group, key);
+    if (before == after) {
+        return;
+    }
+    Q_EMIT(this->*specificSignal)();
+    Q_EMIT settingsChanged();
+}
+
 QVariantList Settings::dragActivationTriggers() const
 {
     return m_store->readVariant(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey()).toList();
@@ -1699,9 +1908,10 @@ QVariantList Settings::zoneSpanTriggers() const
     // ZoneSpanModifier but leaves Triggers untouched should report the
     // edited modifier through zoneSpanTriggers(), not the compiled default.
     //
-    // hasKey and zoneSpanModifier() both open a JsonGroup — JsonBackend
-    // enforces a single active group at a time, so sample the modifier
-    // BEFORE grabbing the hasKey group.
+    // hasKey and zoneSpanModifier() both open a JsonGroup, and
+    // JsonBackend enforces a single active group at a time. Scope the
+    // hasKey group in its own block so it's released before
+    // zoneSpanModifier() opens the next one.
     bool hasTriggers = false;
     {
         auto g = m_configBackend->group(ConfigDefaults::snappingBehaviorZoneSpanGroup());

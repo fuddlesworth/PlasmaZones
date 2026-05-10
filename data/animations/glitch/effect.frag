@@ -15,6 +15,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define intensity customParams[0].x
@@ -23,11 +24,6 @@
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
-
-float hash(vec2 p)
-{
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-}
 
 void main()
 {
@@ -65,11 +61,11 @@ void main()
     // tick BACKWARDS through the same bucket sequence on hide and
     // produce a visible reverse-replay rather than a fresh jitter
     // pattern.
-    float blockNoise = hash(block + floor(float(iFrame) * 0.1));
+    float blockNoise = niriHash(block + floor(float(iFrame) * 0.1));
 
     float displacement = 0.0;
     if (blockNoise > (1.0 - strength * 0.5)) {
-        displacement = (hash(block * 2.0) - 0.5) * strength * 0.2;
+        displacement = (niriHash(block * 2.0) - 0.5) * strength * 0.2;
     }
 
     vec2 uvR = uv + vec2(displacement + rgbSplit * strength, 0.0);

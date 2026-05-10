@@ -76,6 +76,9 @@ public:
     // snapping. v3 schema; in v2 these were under Snapping.Behavior.Display.
     PZ_CONFIG_GROUP(displayGroup, "Display")
 
+    // Animations sub-groups
+    PZ_CONFIG_GROUP(animationsWindowFilteringGroup, "Animations.WindowFiltering")
+
     // Tiling sub-groups
     PZ_CONFIG_GROUP(tilingAppearanceGroup, "Tiling.Appearance")
     PZ_CONFIG_GROUP(tilingAlgorithmGroup, "Tiling.Algorithm")
@@ -402,6 +405,12 @@ public:
     // selection layered alongside the motion Profile (separate tree,
     // same dot-path namespace — see design doc decision AA).
     PZ_CONFIG_KEY(shaderProfileTreeKey, "ShaderProfileTree")
+
+    // Animation App Rules — ordered list of per-window-class shader/
+    // timing overrides, layered on top of `ShaderProfileTree`. Stored
+    // in the same `Animations` group as the rest of the animation
+    // settings so a single config-section read covers everything.
+    PZ_CONFIG_KEY(animationAppRulesKey, "AnimationAppRules")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Global

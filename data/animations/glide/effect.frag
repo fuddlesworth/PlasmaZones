@@ -25,6 +25,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -60,7 +61,8 @@ void main() {
   // Move texture coordinate center to corner again.
   coords = coords * 0.5 + 0.5;
 
-  vec4 oColor = getInputColor(coords);
+  // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+  vec4 oColor = getInputColor(coords) * boundaryMask(coords);
 
   // Dissolve window.
   oColor.a = oColor.a * (uForOpening ? uProgress : pow(1.0 - uProgress, 2.0));

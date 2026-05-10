@@ -221,6 +221,47 @@ float simplex3DFractal(vec3 m) {
            0.0666667 * simplex3D(8.0 * m);
 }
 
+// ── hash12: BMW common.glsl:489 verbatim ────────────────────────────
+// 1D hash from vec2 input using BMW's IQ-style `fract(p3 * 0.1031)`
+// chain (distinct from `noise.glsl::niriHash`'s `sin(dot(...))`
+// pattern). Used by aura-glow, tv-glitch, and wisps; lifted to
+// remove the per-shader duplicates.
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+// ── tritone: BMW common.glsl:201 verbatim ───────────────────────────
+// Maps val ∈ [0, 1] to a 3-color gradient (shadows → midtones →
+// highlights). Used by incinerate and wisps for fire/wisp colour
+// ramps; lifted to remove the per-shader duplicates.
+vec3 tritone(float val, vec3 shadows, vec3 midtones, vec3 highlights) {
+    if (val < 0.5) {
+        return mix(shadows, midtones, smoothstep(0.0, 1.0, val * 2.0));
+    }
+    return mix(midtones, highlights, smoothstep(0.0, 1.0, val * 2.0 - 1.0));
+}
+
+// ── Off-window-clipping variant of getInputColor ────────────────────
+// Returns vec4(0) when coords falls outside [0, 1] before delegating
+// to getInputColor. Used by broken-glass (where the BMW actor-scale
+// math pushes shard sample UVs past the anchor's bounds) and
+// tv-glitch (where the vertical scale offsets sampled rows past the
+// bottom). Both ports previously defined this helper inline; lifted
+// here for DRY. The hard clip is intentional — bmw_compat's
+// getInputColor reads premultiplied uTexture0 and a clamp-to-edge
+// sampler would smear transparent edge pixels onto displaced
+// fragments. Soft-mask alternatives (see noise.glsl::boundaryMask)
+// do the same job with an antialiased edge for shaders that prefer
+// a smooth crop.
+vec4 getClippedInputColor(vec2 coords) {
+    if (coords.x < 0.0 || coords.x > 1.0 || coords.y < 0.0 || coords.y > 1.0) {
+        return vec4(0.0);
+    }
+    return getInputColor(coords);
+}
+
 // ── Edge masks: BMW common.glsl:403, 423, 432 verbatim ──────────────
 float getEdgeMask(vec2 uv, vec2 maxUV, float fadeWidth) {
     float mask = 1.0;

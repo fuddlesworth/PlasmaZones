@@ -562,13 +562,65 @@ void SettingsController::markWhatsNewSeen()
 const QHash<QString, QString>& SettingsController::parentPageRedirects()
 {
     // Parent sidebar categories have no QML component — resolve them to their
-    // first child so D-Bus / CLI callers get a sensible result.
+    // first child so D-Bus / CLI / Q_INVOKABLE callers get a sensible result.
+    // Includes both top-level parents AND mid-level virtual parents
+    // (`animations-surfaces`, `animations-library`) so any of those names
+    // passed via `--page` or D-Bus lands on a real leaf instead of triggering
+    // the generic "Unknown settings page" warning.
     static const QHash<QString, QString> redirects{
         {QStringLiteral("snapping"), QStringLiteral("snapping-appearance")},
         {QStringLiteral("tiling"), QStringLiteral("tiling-appearance")},
         {QStringLiteral("animations"), QStringLiteral("animations-general")},
+        {QStringLiteral("animations-surfaces"), QStringLiteral("animations-windows")},
+        {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
     };
     return redirects;
+}
+
+const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
+{
+    // Single source of truth: parent name → set of leaf child page
+    // names. Used by `isPageDirty` to propagate dirty state from a
+    // leaf to any group it belongs to. Covers both top-level parents
+    // (snapping / tiling / animations) AND mid-level virtual parents
+    // (animations-surfaces / animations-library) whose children don't
+    // share their name prefix — the explicit set sidesteps the
+    // asymmetry between prefix-walk and direct membership lookup.
+    //
+    // The "animations" entry is built at static-init by unioning the
+    // virtual sub-buckets (`animations-surfaces`, `animations-library`)
+    // with the leaves that hang directly off `animations` (general,
+    // app-rules). Without this, a future leaf added to a virtual
+    // parent only would silently miss the top-level dirty propagation.
+    //
+    // Keep the per-group leaf lists in sync with the matching
+    // `_childItems` entries in src/settings/qml/Main.qml.
+    static const QSet<QString> kAnimationsSurfacesChildren{
+        QStringLiteral("animations-windows"),       QStringLiteral("animations-zones"),
+        QStringLiteral("animations-notifications"), QStringLiteral("animations-popups"),
+        QStringLiteral("animations-panels"),        QStringLiteral("animations-workspaces"),
+        QStringLiteral("animations-widgets")};
+    static const QSet<QString> kAnimationsLibraryChildren{QStringLiteral("animations-presets"),
+                                                          QStringLiteral("animations-motionsets"),
+                                                          QStringLiteral("animations-shaders")};
+    static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-general"),
+                                                         QStringLiteral("animations-app-rules")};
+    static const QSet<QString> kAnimationsAllLeaves =
+        kAnimationsDirectChildren + kAnimationsSurfacesChildren + kAnimationsLibraryChildren;
+    static const QHash<QString, QSet<QString>> groups{
+        {QStringLiteral("snapping"),
+         {QStringLiteral("snapping-appearance"), QStringLiteral("snapping-effects"), QStringLiteral("snapping-shaders"),
+          QStringLiteral("snapping-behavior"), QStringLiteral("snapping-zoneselector"),
+          QStringLiteral("snapping-assignments"), QStringLiteral("snapping-apprules"),
+          QStringLiteral("snapping-ordering"), QStringLiteral("snapping-shortcuts")}},
+        {QStringLiteral("tiling"),
+         {QStringLiteral("tiling-appearance"), QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm"),
+          QStringLiteral("tiling-assignments"), QStringLiteral("tiling-ordering"), QStringLiteral("tiling-shortcuts")}},
+        {QStringLiteral("animations"), kAnimationsAllLeaves},
+        {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
+        {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
+    };
+    return groups;
 }
 
 const QSet<QString>& SettingsController::validPageNames()
@@ -600,6 +652,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("virtualscreens"),
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),
+        QStringLiteral("animations-app-rules"),
         QStringLiteral("animations-zones"),
         QStringLiteral("animations-notifications"),
         QStringLiteral("animations-popups"),
@@ -745,9 +798,16 @@ void SettingsController::defaults()
     DaemonDBus::notifyReload();
 
     // Defaults is a global action — mark every valid page dirty so the
-    // unsaved indicator appears next to each of them.
-    m_dirtyPages = validPageNames();
-    Q_EMIT dirtyPagesChanged();
+    // unsaved indicator appears next to each of them. Guard the emit
+    // on actual change so a back-to-back `defaults()` (or one called
+    // when state already matches the post-defaults set) doesn't fire
+    // a spurious `dirtyPagesChanged`, matching the emit-on-change
+    // discipline used by `setNeedsSave` everywhere else in this file.
+    const QSet<QString>& fullSet = validPageNames();
+    if (m_dirtyPages != fullSet) {
+        m_dirtyPages = fullSet;
+        Q_EMIT dirtyPagesChanged();
+    }
 }
 
 void SettingsController::launchEditor()
@@ -802,12 +862,17 @@ bool SettingsController::isPageDirty(const QString& page) const
 {
     if (m_dirtyPages.contains(page))
         return true;
-    // Parent category: dirty if any child page is dirty. The redirect map
-    // lists parents → first child, so every key here is a parent category.
-    if (parentPageRedirects().contains(page)) {
-        const QString prefix = page + QStringLiteral("-");
-        for (const QString& dirty : m_dirtyPages) {
-            if (dirty.startsWith(prefix))
+    // Parent / virtual-parent category: dirty if any child leaf in
+    // the group is dirty. Single direct-membership lookup against
+    // `pageGroupChildren()` rather than the old prefix-walk-or-hash-
+    // lookup branch — top-level parents (snapping / tiling /
+    // animations) and virtual mid-level parents (animations-surfaces /
+    // animations-library) share the same code path now.
+    const auto& groups = pageGroupChildren();
+    const auto it = groups.constFind(page);
+    if (it != groups.constEnd()) {
+        for (const QString& child : *it) {
+            if (m_dirtyPages.contains(child))
                 return true;
         }
     }

@@ -49,15 +49,6 @@ layout(location = 0) out vec4 fragColor;
 // a per-leg duration uniform to derive the BMW-equivalent value.
 #define uDuration 0.75
 
-// hash12: BMW common.glsl:489 verbatim. Used for per-line interference.
-// Kept as a local function rather than promoted to noise.glsl to
-// keep the LGPL-2.1 noise header BMW-helper-free.
-float hash12(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * .1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
-}
-
 const float BLUR_WIDTH = 0.01;  // Width of the gradients.
 const float TB_TIME    = 0.7;   // Relative time for the top/bottom animation.
 const float LR_TIME    = 0.4;   // Relative time for the left/right animation.
@@ -92,7 +83,7 @@ void main() {
 
   // Apply the noise as x displacement for every line.
   float xPos  = clamp(coords.x - displace * noise * noise, 0.0, 1.0);
-  vec4 oColor = getInputColor(vec2(xPos, coords.y));
+  vec4 oColor = getClippedInputColor(vec2(xPos, coords.y));
 
   // Mix in some random interference lines.
   vec3 interference          = uColor.rgb * hash12(vec2(yPos * time));
@@ -111,8 +102,8 @@ void main() {
 
   // Shift green/blue channels.
   float offset = 0.1 * noise * displace;
-  oColor.g     = mix(oColor.g, getInputColor(vec2(xPos + offset, coords.y)).g, 0.25);
-  oColor.b     = mix(oColor.b, getInputColor(vec2(xPos - offset, coords.y)).b, 0.25);
+  oColor.g     = mix(oColor.g, getClippedInputColor(vec2(xPos + offset, coords.y)).g, 0.25);
+  oColor.b     = mix(oColor.b, getClippedInputColor(vec2(xPos - offset, coords.y)).b, 0.25);
 
   // Now hide the window according to the TV effect.
 

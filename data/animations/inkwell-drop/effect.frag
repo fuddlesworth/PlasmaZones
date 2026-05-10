@@ -20,6 +20,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define impactX        customParams[0].x
@@ -45,9 +46,10 @@ void main() {
     float ring3 = sin((d - front + 0.16) * 80.0) * exp(-abs(d - front + 0.16) * 10.0) * 0.4;
     float ripple = (ring1 + ring2 + ring3) * rippleStrength * (1.0 - p * 0.5);
     vec2 dir = (d > 0.001) ? normalize(c) : vec2(0.0);
-    vec2 distorted = clamp(uv + dir * ripple, vec2(0.0), vec2(1.0));
+    vec2 distorted = uv + dir * ripple;
 
-    vec4 win = texture(uTexture0, distorted);
+    // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+    vec4 win = texture(uTexture0, distorted) * boundaryMask(distorted);
 
     float reveal = smoothstep(0.05, -0.02, d - front);
     vec4 mixed = win * reveal;

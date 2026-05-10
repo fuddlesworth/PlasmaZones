@@ -229,6 +229,42 @@ private:
     bool isTileableWindow(KWin::EffectWindow* w) const;
 
     /**
+     * @brief Animation-side window filter.
+     *
+     * Returns true when @p w should animate, false when the user's
+     * animation Window Filtering settings exclude it. Mirrors the
+     * snapping/tiling Exclusions but pulls from the separate
+     * `Animations.WindowFiltering` cache so the two filter sets can
+     * diverge.
+     *
+     * A class-pattern AnimationAppRule of ANY kind whose pattern
+     * substring-matches the window's class OVERRIDES the filter —
+     * the existence of even one targeted rule signals deliberate
+     * user intent to animate this app, regardless of which event the
+     * cascade is firing for or whether the rule is Shader / Timing.
+     * Same case-insensitive substring match the
+     * `AnimationAppRuleList::firstMatchOfKind` resolver uses, so the
+     * override scope mirrors the per-rule match contract exactly.
+     * Empty windowClass falls through to the filter (no rule can
+     * match an unidentified window).
+     */
+    bool shouldAnimateWindow(KWin::EffectWindow* w) const;
+
+    /**
+     * @brief Substring exclusion-list match helper.
+     *
+     * Returns true when @p appName or @p windowClass matches any
+     * non-empty entry in @p apps or @p classes (case-insensitive
+     * substring). Shared between `shouldHandleWindow` (snapping/
+     * tiling Exclusions) and `shouldAnimateWindow` (animation
+     * filtering) — both filter sets use identical match semantics
+     * but persist their lists independently, so the loops are the
+     * same shape with different inputs.
+     */
+    static bool matchesExclusionLists(const QString& appName, const QString& windowClass, const QStringList& apps,
+                                      const QStringList& classes);
+
+    /**
      * @brief Reject Plasma shell layer-shell surfaces by window class.
      *
      * On Wayland, KDE notification popups, system tray overlays, the emoji
@@ -507,6 +543,7 @@ private:
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false);
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();
+    void loadAnimationAppRulesFromDbus();
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                 bool reverse = false, bool holdCloseGrab = false);
@@ -589,6 +626,20 @@ private:
     // the startup race window.
     int m_cachedMinWindowWidth = 200;
     int m_cachedMinWindowHeight = 150;
+
+    // Animation window filtering — separate cache from the snapping/tiling
+    // exclusions because the user can opt for divergent filter sets. The
+    // filter gates the animation cascade BEFORE rule resolution, but a
+    // class-pattern rule whose pattern matches the window's class
+    // overrides the filter (so a user can disable animations broadly via
+    // an app exclusion AND still keep one class animated through a
+    // targeted rule). Defaults are permissive (no filter) until D-Bus
+    // populates them; matches the per-key defaults in ConfigDefaults.
+    bool m_animationExcludeTransientWindows = false;
+    int m_animationMinWindowWidth = 0;
+    int m_animationMinWindowHeight = 0;
+    QStringList m_animationExcludedApplications;
+    QStringList m_animationExcludedWindowClasses;
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end

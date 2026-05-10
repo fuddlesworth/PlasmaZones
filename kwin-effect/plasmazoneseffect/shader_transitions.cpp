@@ -4,6 +4,10 @@
 #include "../plasmazoneseffect.h"
 #include "shader_internal.h"
 
+#include "../windowanimator.h"
+
+#include <PhosphorAnimation/AnimationAppRule.h>
+#include <PhosphorAnimation/AnimationAppRuleResolver.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ShaderProfile.h>
@@ -41,8 +45,6 @@
 #include <memory>
 #include <unordered_set>
 #include <utility>
-
-#include "../windowanimator.h"
 
 namespace PlasmaZones {
 
@@ -1135,6 +1137,18 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
                                                bool reverse, bool holdCloseGrab)
 {
     if (!window || durationMs <= 0) {
+        // Defensive guard. The current call sites all pass
+        // `animationDurationMs()` which the daemon-bringup loader
+        // clamps to `[MinAnimationDurationMs, MaxAnimationDurationMs]`
+        // = [50, 2000], so 0 cannot reach this code through normal
+        // flow. The authoritative no-animations gate is
+        // `m_windowAnimator->isEnabled()` checked just below — that
+        // covers the user-toggled case. This guard exists to fail
+        // closed if a future programmatic call site bypasses the
+        // clamp; a Timing AnimationAppRule intentionally cannot
+        // rescue a 0/negative duration since the value is treated as
+        // "caller didn't supply one" rather than the "inherit
+        // per-event default" sentinel that the rule layer recognises.
         return;
     }
     // Fast-path early-out on the global animations toggle. The
@@ -1145,7 +1159,32 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
         return;
     }
-    const auto profile = m_shaderManager.m_shaderProfileTree.resolve(profilePath);
+    // Window-filtering gate. `shouldAnimateWindow` honours the user's
+    // Animations.WindowFiltering exclusions (transient / min-size /
+    // app / class) AND lets a class-pattern AnimationAppRule override
+    // the filter when the rule's classPattern substring-matches the
+    // window's class. Skipping this for shader transitions only would
+    // leave the motion-side cascade in `applySnapGeometry` doing its
+    // own check; both call sites gate identically so the filter is a
+    // single concept across the two paths.
+    if (!shouldAnimateWindow(window)) {
+        return;
+    }
+    // Cascade: AnimationAppRule (per-window-class) → ShaderProfileTree
+    // (per-event default). The rule layer wins for matching windows;
+    // an engaged-empty effectId on the rule deliberately blocks the
+    // tree fallthrough (the user's "no animation for this app on this
+    // event" sentinel).
+    const QString windowClass = window->windowClass();
+    const auto& appRules = m_shaderManager.appRules();
+    const auto& profileTree = m_shaderManager.profileTree();
+    const auto profile =
+        PhosphorAnimationShaders::resolveAnimationShaderProfile(appRules, profileTree, windowClass, profilePath);
+    // Resolve duration through the rule cascade too — a Timing rule for
+    // the same (class, event) bumps a per-event default. A rule with
+    // durationMs == 0 is the inherit sentinel and falls through.
+    const int effectiveDurationMs =
+        PhosphorAnimationShaders::resolveAnimationDuration(appRules, windowClass, profilePath, durationMs);
     if (profile.effectiveEffectId().isEmpty()) {
         // Default-state path: a fresh user with no shader overrides
         // anywhere in the tree resolves every event to empty effectId,
@@ -1155,17 +1194,17 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         // overrides (so an empty resolve here is genuinely surprising —
         // the documented prune / D-Bus-race scenarios), otherwise
         // demote to DEBUG.
-        if (m_shaderManager.m_shaderProfileTree.overriddenPaths().isEmpty()) {
+        if (profileTree.overriddenPaths().isEmpty() && appRules.isEmpty()) {
             qCDebug(lcEffect) << "tryBeginShader[" << profilePath
                               << "]: no shader assigned (tree empty — default state)";
         } else {
             qCWarning(lcEffect) << "tryBeginShader[" << profilePath
-                                << "]: no shader assigned (tree-resolve returned empty effectId, tree size="
-                                << m_shaderManager.m_shaderProfileTree.overriddenPaths().size() << ")";
+                                << "]: no shader assigned (cascade returned empty effectId, tree size="
+                                << profileTree.overriddenPaths().size() << " rules=" << appRules.size() << ")";
         }
         return;
     }
-    beginShaderTransition(window, profile, durationMs, reverse, holdCloseGrab);
+    beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab);
     // Capture the just-installed transition's generation so the deferred
     // teardown bails if a successor has replaced us by the time the timer
     // fires. Without this, two events overlapping on the same window
@@ -1178,7 +1217,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     }
     const quint64 myGeneration = it->second.generation;
     QPointer<KWin::EffectWindow> safeWindow(window);
-    QTimer::singleShot(durationMs, this, [this, safeWindow, myGeneration]() {
+    QTimer::singleShot(effectiveDurationMs, this, [this, safeWindow, myGeneration]() {
         // Two-tier guard: QPointer catches QObject destruction,
         // endShaderTransition's isDeleted() catches KWin's deletion-animation phase
         if (!safeWindow) {
@@ -1199,13 +1238,27 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
         this, QStringLiteral("shaderProfileTree"), [this](const QVariant& v) {
             const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
             if (doc.isObject()) {
-                m_shaderManager.m_shaderProfileTree =
-                    PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
-                qCDebug(lcEffect) << "loadShaderProfileFromDbus: tree loaded with"
-                                  << m_shaderManager.m_shaderProfileTree.overriddenPaths().size()
-                                  << "overrides — paths=" << m_shaderManager.m_shaderProfileTree.overriddenPaths();
+                auto& tree = m_shaderManager.profileTree();
+                tree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
+                qCDebug(lcEffect) << "loadShaderProfileFromDbus: tree loaded with" << tree.overriddenPaths().size()
+                                  << "overrides — paths=" << tree.overriddenPaths();
             } else {
                 qCWarning(lcEffect) << "Failed to parse shaderProfileTree from D-Bus — not a JSON object";
+            }
+        });
+}
+
+void PlasmaZonesEffect::loadAnimationAppRulesFromDbus()
+{
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(
+        this, QStringLiteral("animationAppRules"), [this](const QVariant& v) {
+            const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+            if (doc.isArray()) {
+                auto& rules = m_shaderManager.appRules();
+                rules = PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array());
+                qCDebug(lcEffect) << "loadAnimationAppRulesFromDbus: loaded" << rules.size() << "rules";
+            } else {
+                qCWarning(lcEffect) << "Failed to parse animationAppRules from D-Bus — not a JSON array";
             }
         });
 }

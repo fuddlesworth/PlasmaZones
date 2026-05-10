@@ -3,11 +3,8 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
-import org.plasmazones.common as PZCommon
 
 /**
  * @brief Reusable card for per-event animation configuration.
@@ -33,6 +30,12 @@ import org.plasmazones.common as PZCommon
  *   - collapsible: bool — header click collapses the body
  */
 Item {
+    // Both the curve editor and the colour picker now live inside the
+    // shared `AnimationProfileEditor`. Removing them from this file
+    // keeps the dialog ownership in one place — when the editor is
+    // hidden (override toggle off + shader leg unsupported) so are
+    // its dialogs. The card no longer hosts any dialogs of its own.
+
     id: root
 
     required property string eventPath
@@ -49,34 +52,23 @@ Item {
     // independently across timing-mode toggles so the user doesn't
     // lose their easing curve when previewing spring physics.
     property bool overrideEnabled: false
-    property int currentTimingMode: CurvePresets.timingModeEasing
-    property int currentDuration: CurvePresets.defaultDurationMs
-    property string currentEasingCurve: CurvePresets.defaultEasingCurve
-    property real currentSpringOmega: CurvePresets.defaultSpringOmega
-    property real currentSpringZeta: CurvePresets.defaultSpringZeta
-    // ── Shader assignment (independent of timing override) ──────────
-    // Per-event shader override is independent of the motion override
-    // toggle: a user can pick a shader for an event without overriding
-    // its timing. Persistence routes through Settings::shaderProfile-
-    // Tree (NOT the Profile-loader pipeline), so signal handling for
-    // refreshes is separate.
-    property string currentShaderEffectId: ""
-    // Initialized from Q_INVOKABLE resolvedShaderProfile() — refresh on
-    // shaderProfileChanged via the Connections block at the bottom.
-    property var currentShaderParams: ({
-    })
-    /// Per-card lock state for the parameter editor's lock + randomize
-    /// toolbar. UI affordance only — not persisted. Cleared on shader
-    /// switch in `refreshShaderFromTree` (same-named ids in different
-    /// shader schemas are unrelated).
-    property var lockedShaderParams: ({
-    })
-    readonly property string currentCurveString: {
-        if (currentTimingMode === CurvePresets.timingModeSpring)
-            return "spring:" + currentSpringOmega.toFixed(2) + "," + currentSpringZeta.toFixed(2);
-
-        return currentEasingCurve;
-    }
+    // ── Editor-owned working state (proxied via aliases) ────────────
+    // The shared `AnimationProfileEditor` (declared inside the card's
+    // body below) owns the timing + shader working state and the
+    // dialogs / widgets that drive them. This card's existing logic
+    // (`refreshFromTree`, `commitOverride`, `_writeShaderParam`, ...)
+    // reads / writes these properties unchanged — the aliases keep
+    // those call sites working while collapsing the per-event editor
+    // body into a single shared component.
+    property alias currentTimingMode: editor.timingMode
+    property alias currentDuration: editor.duration
+    property alias currentEasingCurve: editor.easingCurve
+    property alias currentSpringOmega: editor.springOmega
+    property alias currentSpringZeta: editor.springZeta
+    property alias currentShaderEffectId: editor.shaderEffectId
+    property alias currentShaderParams: editor.shaderParams
+    property alias lockedShaderParams: editor.lockedShaderParams
+    readonly property alias currentCurveString: editor.curveString
     // Cached resolved-profile lookup. The C++ Q_INVOKABLE walks the
     // parent chain on every call; before this cache, the inheritance-
     // banner Label re-evaluated `inheritSummaryText()` on every
@@ -390,6 +382,22 @@ Item {
         // cards (popup, window, osd, etc.) so a single
         // OFF toggle on the parent disables every descendant
         // that doesn't have its own override.
+        // ── Shared timing + shader editor body ────────────────────
+        // All the inline timing controls (curve thumbnail,
+        // Customize… button, timing-mode combo, duration slider)
+        // and shader controls (picker + parameter editor + color
+        // dialog + curve dialog) used to live here. They've been
+        // hoisted into the reusable `AnimationProfileEditor` so
+        // both this card and the App Rules page can share one
+        // implementation. See `AnimationProfileEditor.qml`.
+        // The editor's working-state properties (timingMode,
+        // duration, easingCurve, springOmega, springZeta,
+        // shaderEffectId, shaderParams, lockedShaderParams) are
+        // exposed back through this card via property aliases at
+        // the top of the file, so `refreshFromTree`,
+        // `commitOverride`, `_writeShaderParam`, and the
+        // controller signal handlers continue to read and write
+        // through the same names as before.
 
         id: card
 
@@ -473,326 +481,90 @@ Item {
                 color: Kirigami.Theme.disabledTextColor
             }
 
-            // ── Override controls ─────────────────────────────────────
-            ColumnLayout {
-                visible: root.alwaysEnabled || root.overrideEnabled
-                spacing: Kirigami.Units.smallSpacing
-
-                // Curve summary row: thumbnail + description + "Customize…"
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.largeSpacing
-
-                    CurveThumbnail {
-                        id: curveThumbnail
-
-                        implicitWidth: Kirigami.Units.gridUnit * 6
-                        implicitHeight: Kirigami.Units.gridUnit * 4
-                        curve: root.currentEasingCurve
-                        timingMode: root.currentTimingMode
-                        omega: root.currentSpringOmega
-                        zeta: root.currentSpringZeta
-                        onClicked: curveDialog.open()
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Math.round(Kirigami.Units.smallSpacing / 2)
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: root.summaryDescription()
-                            elide: Text.ElideRight
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: root.summarySecondary()
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
-                            color: Kirigami.Theme.disabledTextColor
-                            elide: Text.ElideRight
-                        }
-
-                    }
-
-                    Button {
-                        text: i18n("Customize…")
-                        icon.name: "configure"
-                        Accessible.name: i18n("Customize curve for %1", root.eventLabel)
-                        onClicked: curveDialog.open()
-                    }
-
-                }
-
-                SettingsSeparator {
-                }
-
-                // ── Timing mode ───────────────────────────────────────
-                SettingsRow {
-                    title: i18n("Timing mode")
-
-                    WideComboBox {
-                        id: timingModeCombo
-
-                        Accessible.name: i18n("Timing mode")
-                        model: [i18n("Easing"), i18n("Spring")]
-                        currentIndex: root.currentTimingMode
-                        onActivated: function(index) {
-                            root.currentTimingMode = index;
-                            root.commitOverride();
-                        }
-                    }
-
-                }
-
-                // ── Duration (easing only — spring derives its own settle) ─
-                SettingsSeparator {
-                    visible: root.currentTimingMode === CurvePresets.timingModeEasing
-                }
-
-                SettingsRow {
-                    visible: root.currentTimingMode === CurvePresets.timingModeEasing
-                    title: i18n("Duration")
-
-                    SettingsSlider {
-                        from: settingsController.generalPage.animationDurationMin
-                        to: settingsController.generalPage.animationDurationMax
-                        stepSize: 10
-                        valueSuffix: " ms"
-                        Accessible.name: i18n("Animation duration")
-                        labelWidth: Kirigami.Units.gridUnit * 4
-                        value: root.currentDuration
-                        onMoved: function(value) {
-                            root.currentDuration = Math.round(value);
-                            root.commitOverride();
-                        }
-                    }
-
-                }
-
-            }
-
-            SettingsSeparator {
-                visible: root._shaderLegSupported
-            }
-
-            SettingsRow {
-                visible: root._shaderLegSupported
-                title: i18n("Shader effect")
-                description: i18n("Apply a shader transition to this event")
-
-                PZCommon.ShaderPickerButton {
-                    // "None" semantically means "no shader runs
-                    // at this event" — write the engaged-empty
-                    // sentinel (`setShaderOverride(path, "")`)
-                    // so it BLOCKS inheritance from an ancestor.
-                    // Without this, picking None on a child
-                    // event whose parent ("All Window Events"
-                    // etc.) has a shader assigned was a no-op:
-                    // clearShaderOverride would just remove a
-                    // direct override that doesn't exist, and
-                    // the parent's shader would keep cascading
-                    // down — directly contradicting the user's
-                    // pick.
-                    // refresh handled by onShaderProfileChanged broadcast handler
-
-                    // `availableShaderEffects()` is a Q_INVOKABLE — QML's
-                    // binding engine can't observe internal state of an
-                    // opaque function call. The card's root-level
-                    // `_shaderRegistryRev` (ticked on `shaderEffectsChanged`)
-                    // is the dependency that makes this binding reactive
-                    // (mirrors the stickyHandlingCombo pattern in
-                    // SnappingBehaviorPage).
-                    id: shaderPicker
-
-                    readonly property var _effects: {
-                        // Tracked dependency: re-evaluate when the registry
-                        // signals shaderEffectsChanged (ticks _shaderRegistryRev).
-                        // `void()` makes the discard intent explicit and stops
-                        // any future code formatter / linter from flagging the
-                        // bare expression as a dead statement.
-                        void (root._shaderRegistryRev);
-                        return settingsController.animationsPage.availableShaderEffects();
-                    }
-
-                    // The picker provides its own `Accessible.name` derived
-                    // from the current selection's display text — leaving it
-                    // overrides that with a generic label and loses the
-                    // "currently selected: X" context for screen readers.
-                    Layout.fillWidth: true
-                    shaders: _effects
-                    currentShaderId: root.currentShaderEffectId
-                    // Explicit empty `noneShaderId` — the picker emits
-                    // `shaderSelected("")` for the synthetic None entry, so
-                    // `id.length === 0` below is the canonical clear-check.
-                    // Pinning the prop to "" defends against any future
-                    // default change in the shared component.
-                    noneShaderId: ""
-                    includeNoneEntry: true
-                    placeholderText: i18nc("@action:button", "Select shader…")
-                    onShaderSelected: function(id) {
-                        // Coerce undefined / null to "" so the empty-id
-                        // check below doesn't throw on a model that
-                        // emits a non-string sentinel for a cleared
-                        // selection.
-                        var sid = id || "";
-                        var rawShader = settingsController.animationsPage.rawShaderProfile(root.eventPath);
-                        var directEffectId = (rawShader && typeof rawShader.effectId === "string") ? rawShader.effectId : "";
-                        if (sid.length === 0) {
-                            // Skip the write when the path already holds
-                            // the engaged-empty sentinel (directEffectId
-                            // === "" AND there's a direct override).
-                            // Engaged-empty serialises with effectId
-                            // present-but-empty, so rawShader will be
-                            // truthy with effectId = "".
-                            var alreadyDisabled = rawShader && typeof rawShader.effectId === "string" && rawShader.effectId === "";
-                            if (alreadyDisabled)
-                                return ;
-
-                            settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
-                            }));
-                            // refresh handled by onShaderProfileChanged broadcast handler
-                            return ;
-                        }
-                        // No-op when the user re-picks the value already
-                        // sitting at this path's DIRECT override. Compare
-                        // against the raw direct override (NOT the
-                        // resolved/inherited value): if the parent has
-                        // shader X and the child is currently inheriting
-                        // it, picking X explicitly on the child is the
-                        // user "promoting" the inherited value to a
-                        // direct override at this path — that intent must
-                        // produce a real write so a future parent change
-                        // doesn't silently move the child off X.
-                        if (sid === directEffectId)
-                            return ;
-
-                        // Switching to a DIFFERENT effect (or promoting an
-                        // inherited value to a direct override): drop the
-                        // previous effect's parameter map — the new
-                        // effect's schema is unrelated, so carrying old
-                        // keys persists dead values on disk that the
-                        // daemon can't validate.
-                        settingsController.animationsPage.setShaderOverride(root.eventPath, sid, ({
-                        }));
-                    }
-                }
-
-            }
-
-            // Inline parameter editor surfaces only when an effect is
-            // assigned and that effect declares parameters. Shared with
-            // the editor's ShaderSettingsDialog — same row delegates,
-            // same accordion behaviour, but with locking/randomize/image
-            // disabled since animation packs don't use those affordances.
-            PZCommon.ShaderParameterEditor {
-                id: animationParamEditor
-
-                // `shaderParameters()` is a Q_INVOKABLE — invalidate the
-                // schema on registry mutations via the card's shared
-                // `_shaderRegistryRev` tick. `currentShaderEffectId` is
-                // already a tracked dependency through the binding body,
-                // so a shader switch reloads the schema automatically.
-                readonly property var _paramSchema: {
-                    root._shaderRegistryRev; // dependency for reactivity
-                    return root.currentShaderEffectId.length > 0 ? settingsController.animationsPage.shaderParameters(root.currentShaderEffectId) : [];
-                }
+            // Section visibility splits the per-axis behaviour the
+            // inline layout used to encode: the timing section only
+            // surfaces when the master override toggle is on, while
+            // the shader section is visible whenever the event
+            // supports a shader leg (independent of the timing
+            // override — picking a shader doesn't require enabling
+            // the timing override).
+            AnimationProfileEditor {
+                id: editor
 
                 Layout.fillWidth: true
-                visible: root._shaderLegSupported && root.currentShaderEffectId.length > 0 && _paramSchema.length > 0
-                parameters: _paramSchema
-                currentValues: root.currentShaderParams
-                lockedParams: root.lockedShaderParams
+                eventLabel: root.eventLabel
+                shaderLegSupported: root._shaderLegSupported
+                showTimingSection: root.alwaysEnabled || root.overrideEnabled
+                registryRevision: root._shaderRegistryRev
                 enableLocking: true
                 enableRandomize: true
-                enableGroups: true
                 enableImage: false
-                compact: true
-                onValueChanged: function(paramId, value) {
-                    root._writeShaderParam(root.currentShaderEffectId, paramId, value);
+                // Live commit on any timing-axis change — the slider's
+                // 30 Hz drag fires `valueChanged` on every move, which
+                // routes through `commitOverride()` to write the
+                // merged Profile JSON exactly the way the inline
+                // version did.
+                onValueChanged: {
+                    if (root.alwaysEnabled || root.overrideEnabled)
+                        root.commitOverride();
+
                 }
-                onLockToggled: function(paramId, locked) {
-                    root.lockedShaderParams = animationParamEditor.lockedAfterToggle(paramId, locked);
+                // Picker model fed via the registry-tick dependency
+                // so the binding re-evaluates on
+                // `shaderEffectsChanged`.
+                availableShaders: {
+                    void (root._shaderRegistryRev);
+                    return settingsController.animationsPage.availableShaderEffects();
                 }
-                onLockAllRequested: function(lock) {
-                    root.lockedShaderParams = animationParamEditor.lockedAfterAllToggle(lock);
+                onShaderEffectActivated: function(id) {
+                    var sid = id || "";
+                    var rawShader = settingsController.animationsPage.rawShaderProfile(root.eventPath);
+                    var directEffectId = (rawShader && typeof rawShader.effectId === "string") ? rawShader.effectId : "";
+                    if (sid.length === 0) {
+                        // "None" picks the engaged-empty inheritance-
+                        // blocking sentinel. Skip the write when the
+                        // path already holds it.
+                        var alreadyDisabled = rawShader && typeof rawShader.effectId === "string" && rawShader.effectId === "";
+                        if (alreadyDisabled)
+                            return ;
+
+                        settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
+                        }));
+                        return ;
+                    }
+                    // No-op when the user re-picks the value already
+                    // sitting at this path's DIRECT override.
+                    if (sid === directEffectId)
+                        return ;
+
+                    // Switching effect (or promoting an inherited
+                    // value to a direct override): drop the previous
+                    // effect's parameter map.
+                    settingsController.animationsPage.setShaderOverride(root.eventPath, sid, ({
+                    }));
                 }
-                onRandomizeRequested: {
-                    var rolled = animationParamEditor.computeRandomized();
+                onShaderParamWriteRequested: function(effectId, paramId, value) {
+                    root._writeShaderParam(effectId, paramId, value);
+                }
+                // Lock-toggle handlers are no-ops here —
+                // AnimationProfileEditor self-updates its own
+                // `lockedShaderParams` (which is aliased onto this
+                // card's `lockedShaderParams`) before emitting, so a
+                // re-assign here would be idempotent. The signals
+                // remain connect-free until / unless the lock state
+                // becomes persistent (today it's working-state only).
+                onRandomizeRequested: function(rolled) {
+                    // Editor already staged `rolled` onto its
+                    // `shaderParams`; this card's persistence is
+                    // through the controller, so route the rolled map
+                    // through the batch writer (single setShaderOverride
+                    // call carrying every roll).
                     root._writeAllShaderParams(root.currentShaderEffectId, rolled);
-                }
-                onRequestColorPicker: function(paramId, paramName, current) {
-                    // Snapshot the effect id at dialog-open time so the
-                    // accept handler writes back to the SAME effect even
-                    // if the registry refreshes mid-pick.
-                    animationColorDialog.effectId = root.currentShaderEffectId;
-                    animationColorDialog.paramId = paramId;
-                    animationColorDialog.paramName = paramName;
-                    animationColorDialog.selectedColor = current;
-                    animationColorDialog.open();
                 }
             }
 
         }
 
-    }
-
-    // Pop the editor as a window-level dialog so it doesn't get clipped
-    // by the scrolling Flickable that hosts the card. Fall back to
-    // `root` (the card itself) when the Window context is unavailable
-    // — `null` was attempted first but Popup with `parent: null` emits
-    // "Popup must be attached to a window" warnings on `open()` and
-    // refuses to render. The `root` fallback path is reachable only
-    // during teardown / early init, before the QML Window context is
-    // established. The Flickable clip bug returns IF a user opens the
-    // dialog before the window context resolves, which in practice
-    // never happens because the dialog is opened from a button click
-    // (Customize…) well after Component.onCompleted. This is a
-    // documented "fail visible" trade-off: the visible-but-clipped
-    // failure mode is easier to diagnose than the silent no-render
-    // `null` failure if the path is ever taken.
-    CurveEditorDialog {
-        id: curveDialog
-
-        parent: root.Window.window ? root.Window.window.contentItem : root
-        eventLabel: root.eventLabel
-        timingMode: root.currentTimingMode
-        easingCurve: root.currentEasingCurve
-        springOmega: root.currentSpringOmega
-        springZeta: root.currentSpringZeta
-        onCurveApplied: function(curve) {
-            root.currentEasingCurve = curve;
-            root.currentTimingMode = CurvePresets.timingModeEasing;
-            root.commitOverride();
-        }
-        onSpringApplied: function(omega, zeta) {
-            root.currentSpringOmega = omega;
-            root.currentSpringZeta = zeta;
-            root.currentTimingMode = CurvePresets.timingModeSpring;
-            root.commitOverride();
-        }
-    }
-
-    // QtQuick.Dialogs.ColorDialog is a wrapper around the OS-native color
-    // picker — it runs in its own platform window, not as a QML overlay,
-    // so the in-QML use-after-free class that bites visual Kirigami
-    // dialogs (CurveEditorDialog, the editor's image FileDialog) does
-    // not apply here. No `parent:` assignment is needed (or accepted —
-    // ColorDialog has no `parent` property).
-    ColorDialog {
-        id: animationColorDialog
-
-        property string effectId: ""
-        property string paramId: ""
-        property string paramName: ""
-
-        title: paramName.length > 0 ? i18nc("@title:window", "Choose %1", paramName) : i18nc("@title:window", "Pick color")
-        onAccepted: {
-            if (animationColorDialog.paramId === "" || animationColorDialog.effectId === "")
-                return ;
-
-            root._writeShaderParam(animationColorDialog.effectId, animationColorDialog.paramId, selectedColor.toString());
-        }
     }
 
 }

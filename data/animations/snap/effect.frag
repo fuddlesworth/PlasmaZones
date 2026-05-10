@@ -42,10 +42,6 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-float sn_hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-}
-
 void main() {
     vec4 result;
     if (iIsReversed != 0) {
@@ -55,7 +51,7 @@ void main() {
         float seed = surfaceSeed() * 100.0;
 
         float num_layers = 10.0;
-        float pixel_layer = floor(sn_hash(floor(uv * max(iAnchorSize, vec2(1.0))) + seed) * num_layers);
+        float pixel_layer = floor(niriHash(floor(uv * max(iAnchorSize, vec2(1.0))) + seed) * num_layers);
 
         vec4 inner = vec4(0.0);
         vec2 target = vec2(targetX, targetY);
@@ -69,13 +65,14 @@ void main() {
 
             float layer_alpha = 1.0 - smoothstep(0.3, 0.85, layer_p);
 
-            float lh = sn_hash(vec2(layer + 0.5, seed));
+            float lh = niriHash(vec2(layer + 0.5, seed));
             vec2 layer_target = target + vec2((-0.5 + lh) * layerSpread, (-0.5 + lh) * layerSpread * 0.5);
 
             float converge = t * 0.92;
             vec2 sample_uv = (uv - layer_target * converge) / (1.0 - converge);
 
-            vec4 color = texture(uTexture0, sample_uv);
+            // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+            vec4 color = texture(uTexture0, sample_uv) * boundaryMask(sample_uv);
 
             float belongs = step(abs(pixel_layer - layer), 0.5);
             inner += color * belongs * layer_alpha;
@@ -95,7 +92,7 @@ void main() {
         float rp = 1.0 - p;
 
         float num_layers = 10.0;
-        float pixel_layer = floor(sn_hash(floor(uv * max(iAnchorSize, vec2(1.0))) + seed) * num_layers);
+        float pixel_layer = floor(niriHash(floor(uv * max(iAnchorSize, vec2(1.0))) + seed) * num_layers);
 
         vec4 inner = vec4(0.0);
         vec2 target = vec2(targetX, targetY);
@@ -109,13 +106,14 @@ void main() {
 
             float layer_alpha = 1.0 - smoothstep(0.3, 0.85, layer_p);
 
-            float lh = sn_hash(vec2(layer + 0.5, seed));
+            float lh = niriHash(vec2(layer + 0.5, seed));
             vec2 layer_target = target + vec2((-0.5 + lh) * layerSpread, (-0.5 + lh) * layerSpread * 0.5);
 
             float converge = t * 0.92;
             vec2 sample_uv = (uv - layer_target * converge) / (1.0 - converge);
 
-            vec4 color = texture(uTexture0, sample_uv);
+            // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+            vec4 color = texture(uTexture0, sample_uv) * boundaryMask(sample_uv);
 
             float belongs = step(abs(pixel_layer - layer), 0.5);
             inner += color * belongs * layer_alpha;

@@ -15,6 +15,7 @@
 #include "enums.h"
 #include "settings_interfaces.h"
 
+#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include <QColor>
@@ -109,6 +110,25 @@ public:
     virtual void setAnimationStaggerInterval(int ms) = 0;
     virtual PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const = 0;
     virtual void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) = 0;
+    virtual PhosphorAnimationShaders::AnimationAppRuleList animationAppRules() const = 0;
+    virtual void setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules) = 0;
+
+    // Animation window filtering — gates animations BEFORE the app-rule
+    // cascade. A class-pattern rule whose pattern matches the window's
+    // class overrides the filter at the resolver layer, so users can
+    // re-enable animations for a specific app even when it'd otherwise
+    // be excluded. Mirrors the snapping/tiling Exclusion settings but
+    // lives in its own namespace so the two filter sets can diverge.
+    virtual bool animationExcludeTransientWindows() const = 0;
+    virtual void setAnimationExcludeTransientWindows(bool exclude) = 0;
+    virtual int animationMinimumWindowWidth() const = 0;
+    virtual void setAnimationMinimumWindowWidth(int width) = 0;
+    virtual int animationMinimumWindowHeight() const = 0;
+    virtual void setAnimationMinimumWindowHeight(int height) = 0;
+    virtual QStringList animationExcludedApplications() const = 0;
+    virtual void setAnimationExcludedApplications(const QStringList& apps) = 0;
+    virtual QStringList animationExcludedWindowClasses() const = 0;
+    virtual void setAnimationExcludedWindowClasses(const QStringList& classes) = 0;
 
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
@@ -276,6 +296,16 @@ Q_SIGNALS:
     void excludeTransientWindowsChanged();
     void minimumWindowWidthChanged();
     void minimumWindowHeightChanged();
+    // Animation window filtering — paired with the virtuals at the top
+    // of this interface. Same shape as the snapping/tiling exclusion
+    // signals; lives in its own change-set so animation-only consumers
+    // (the kwin-effect, the AnimationsPageController) don't have to
+    // discriminate when filtering NOTIFY traffic.
+    void animationExcludeTransientWindowsChanged();
+    void animationMinimumWindowWidthChanged();
+    void animationMinimumWindowHeightChanged();
+    void animationExcludedApplicationsChanged();
+    void animationExcludedWindowClassesChanged();
     void zoneSelectorEnabledChanged();
     void zoneSelectorTriggerDistanceChanged();
     void zoneSelectorPositionChanged();
@@ -412,6 +442,7 @@ Q_SIGNALS:
     void animationSequenceModeChanged();
     void animationStaggerIntervalChanged();
     void shaderProfileTreeChanged();
+    void animationAppRulesChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();

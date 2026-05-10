@@ -97,9 +97,12 @@ const QString WidgetPulseSlow = QStringLiteral("widget.pulse.slow");
 
 QStringList allBuiltInPaths()
 {
-    // Ordered to match taxonomy tree walk — category root, then leaves.
-    // Useful as-is for settings UI that renders an indented list.
-    return {
+    // Cache as a function-local static — the path list is compile-time
+    // stable, so reconstructing it on every call is wasteful for the
+    // settings UI that iterates this list multiple times. QStringList
+    // is implicitly shared, so the return-by-value just increments the
+    // refcount instead of copying every QString.
+    static const QStringList kAllPaths = {
         Global,
         Window,
         WindowOpen,
@@ -135,6 +138,7 @@ QStringList allBuiltInPaths()
         PopupLayoutPickerHide,
         PopupSnapAssist,
         PopupSnapAssistShow,
+        PopupSnapAssistHide,
         Panel,
         PanelSlideIn,
         PanelSlideOut,
@@ -168,6 +172,7 @@ QStringList allBuiltInPaths()
         WidgetPulseFast,
         WidgetPulseSlow,
     };
+    return kAllPaths;
 }
 
 QString parentPath(const QString& path)

@@ -30,6 +30,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define scaleAmount  customParams[0].x
@@ -53,7 +54,8 @@ void main() {
         float scale = mix(1.0, 1.0 - scaleAmount, p);
         vec2 scaled_uv = (uv - center) / scale + center;
 
-        vec4 color = texture(uTexture0, scaled_uv);
+        // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+        vec4 color = texture(uTexture0, scaled_uv) * boundaryMask(scaled_uv);
 
         float alpha = smoothstep(1.0 - revealStart, 1.0 - revealEnd, p);
 
@@ -68,7 +70,8 @@ void main() {
         float scale = mix(1.0 - scaleAmount, 1.0, p);
         vec2 scaled_uv = (uv - center) / scale + center;
 
-        vec4 color = texture(uTexture0, scaled_uv);
+        // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+        vec4 color = texture(uTexture0, scaled_uv) * boundaryMask(scaled_uv);
 
         float alpha = smoothstep(revealStart, revealEnd, p);
 
