@@ -53,6 +53,19 @@ std::optional<AnimationAppRule::Kind> kindFromString(const QString& s)
     return std::nullopt;
 }
 
+bool patternMatches(const QString& pattern, const QString& windowClass)
+{
+    // Belt-and-braces empty-pattern guard. `append` and `fromJson`
+    // both reject empty patterns at insertion time AND the resolvers
+    // short-circuit on empty windowClass before calling here, so this
+    // can only fire if a future call site bypasses both layers — but
+    // a "match every window" rule is dangerous enough that the cost
+    // of the extra branch is worth the safety property.
+    if (pattern.isEmpty())
+        return false;
+    return windowClass.contains(pattern, Qt::CaseInsensitive);
+}
+
 } // namespace
 
 bool AnimationAppRule::operator==(const AnimationAppRule& other) const noexcept
@@ -110,10 +123,21 @@ std::optional<AnimationAppRule> AnimationAppRule::fromJson(const QJsonObject& ob
         return std::nullopt;
     r.kind = *parsedKind;
     switch (r.kind) {
-    case Kind::Shader:
+    case Kind::Shader: {
         r.effectId = obj.value(kKeyEffectId).toString();
-        r.shaderParams = obj.value(kKeyShaderParams).toObject().toVariantMap();
+        // Distinguish "field absent" (legitimate — no params override)
+        // from "field present but malformed" (silent coercion to empty
+        // map would hide a config bug). `toObject()` returns an empty
+        // object for any non-object JSON value, so the explicit type
+        // check has to happen on the QJsonValue before coercing.
+        const auto paramsValue = obj.value(kKeyShaderParams);
+        if (!paramsValue.isUndefined() && !paramsValue.isNull() && !paramsValue.isObject()) {
+            qCWarning(lcRules) << "shaderParams present but not an object — coercing to empty map."
+                               << "classPattern:" << r.classPattern << "eventPath:" << r.eventPath;
+        }
+        r.shaderParams = paramsValue.toObject().toVariantMap();
         break;
+    }
     case Kind::Timing:
         r.curve = obj.value(kKeyCurve).toString();
         r.durationMs = obj.value(kKeyDurationMs).toInt(0);
@@ -181,21 +205,6 @@ void AnimationAppRuleList::move(int from, int to)
     m_rules.move(from, to);
 }
 
-namespace {
-bool patternMatches(const QString& pattern, const QString& windowClass)
-{
-    // Belt-and-braces empty-pattern guard. `append` and `fromJson`
-    // both reject empty patterns at insertion time AND the resolvers
-    // short-circuit on empty windowClass before calling here, so this
-    // can only fire if a future call site bypasses both layers — but
-    // a "match every window" rule is dangerous enough that the cost
-    // of the extra branch is worth the safety property.
-    if (pattern.isEmpty())
-        return false;
-    return windowClass.contains(pattern, Qt::CaseInsensitive);
-}
-} // namespace
-
 std::optional<AnimationAppRule> AnimationAppRuleList::firstMatchOfKind(AnimationAppRule::Kind kind,
                                                                        const QString& windowClass,
                                                                        const QString& eventPath) const
@@ -245,9 +254,17 @@ AnimationAppRuleList AnimationAppRuleList::fromJson(const QJsonArray& arr)
         // through `append()` so any future strengthening of append's
         // validation (dedup, normalisation) automatically applies to
         // the JSON load path.
-        const auto rule = AnimationAppRule::fromJson(v.toObject());
+        const auto raw = v.toObject();
+        const auto rule = AnimationAppRule::fromJson(raw);
         if (!rule) {
-            qCWarning(lcRules) << "Dropping malformed rule from JSON";
+            // Surface the offending tuple so an operator triaging a
+            // user-reported "rules vanished after restart" can grep
+            // their journal for the dropped pattern instead of
+            // diffing JSON snapshots by hand.
+            qCWarning(lcRules) << "Dropping malformed rule from JSON. classPattern:"
+                               << raw.value(kKeyClassPattern).toString()
+                               << "eventPath:" << raw.value(kKeyEventPath).toString()
+                               << "kind:" << raw.value(kKeyKind).toString();
             continue;
         }
         // Honour append's bool return so any future strengthening of

@@ -229,6 +229,26 @@ bool AnimationsPageController::isValidEventPath(const QString& path) const
     return kKnownPathSet.contains(path);
 }
 
+bool AnimationsPageController::isValidAppRuleEventPath(const QString& path) const
+{
+    // App rules match on `(windowClass, eventPath)` and the resolver
+    // does an exact-string match on eventPath at runtime. Non-window
+    // events (`popup.show`, `osd.hide`, etc.) have no window-class to
+    // match against, so a rule referencing them would round-trip
+    // through the list, occupy a UI row, and never fire. The Add Rule
+    // dropdown already filters to window.* concrete leaves; this gate
+    // mirrors that filter at the controller boundary so programmatic
+    // Q_INVOKABLE callers can't bypass the UI restriction.
+    //
+    // The bare `"window"` parent path is also rejected — the cascade
+    // resolver does exact-match, so even though the path is in the
+    // built-in catalogue it can never be matched by any event the
+    // kwin-effect emits (those always use leaves like `window.open`).
+    if (!isValidEventPath(path))
+        return false;
+    return path.startsWith(QLatin1String("window."));
+}
+
 // ─── Pending-changes snapshot machinery ────────────────────────────────
 
 bool AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
@@ -1162,7 +1182,7 @@ bool AnimationsPageController::addAppRule(const QVariantMap& rule)
     const auto parsed = appRuleFromVariantMap(
         rule,
         [this](const QString& p) {
-            return isValidEventPath(p);
+            return isValidAppRuleEventPath(p);
         },
         [this](const QString& id) {
             // Mirror `setShaderOverride`'s readiness gate: when the
@@ -1181,7 +1201,16 @@ bool AnimationsPageController::addAppRule(const QVariantMap& rule)
         return false;
     }
     auto rules = m_settings->animationAppRules();
-    rules.append(*parsed);
+    if (!rules.append(*parsed)) {
+        // The list-side validation rejected the rule even though
+        // `appRuleFromVariantMap` accepted it. Today this is
+        // unreachable (both gates check empty pattern / event), but a
+        // future strengthening of `AnimationAppRuleList::append`
+        // (dedup, normalisation) would surface here as a silent
+        // dirty-bit flip without this guard.
+        qCWarning(lcConfig) << "addAppRule: list rejected validated rule" << rule;
+        return false;
+    }
     m_settings->setAnimationAppRules(rules);
     m_appRulesDirty = true;
     Q_EMIT pendingChangesChanged();
@@ -1200,7 +1229,7 @@ bool AnimationsPageController::setAppRule(int index, const QVariantMap& rule)
     const auto parsed = appRuleFromVariantMap(
         rule,
         [this](const QString& p) {
-            return isValidEventPath(p);
+            return isValidAppRuleEventPath(p);
         },
         [this](const QString& id) {
             // Mirror `setShaderOverride`'s readiness gate: when the
@@ -1228,7 +1257,18 @@ bool AnimationsPageController::setAppRule(int index, const QVariantMap& rule)
         return true;
     }
     entries[index] = *parsed;
-    rules.setEntries(entries);
+    const int accepted = rules.setEntries(entries);
+    if (accepted != entries.size()) {
+        // List-side validation dropped one or more entries during
+        // the bulk replace. Today this is unreachable on a single-
+        // slot edit (the only validation drops empty pattern/event,
+        // both already filtered by `appRuleFromVariantMap`), but a
+        // future strengthening of `setEntries` would otherwise
+        // silently shrink the user's list.
+        qCWarning(lcConfig) << "setAppRule: list silently dropped" << (entries.size() - accepted)
+                            << "entries during write — refusing to commit a partial list";
+        return false;
+    }
     m_settings->setAnimationAppRules(rules);
     m_appRulesDirty = true;
     Q_EMIT pendingChangesChanged();

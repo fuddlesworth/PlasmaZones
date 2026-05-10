@@ -118,7 +118,12 @@ ColumnLayout {
     }
 
     // ── Signals ─────────────────────────────────────────────────────
-    /// Emitted on any tracked field change (timing OR shader).
+    /// Emitted on a tracked TIMING-axis change (mode / curve string /
+    /// duration / spring params). Shader-axis mutations route through
+    /// the dedicated `shaderEffectActivated` and
+    /// `shaderParamWriteRequested` signals instead, so consumers can
+    /// distinguish a curve edit from a shader switch (which carries
+    /// side-effects like dropping the previous effect's params).
     /// Per-event card connects this to its imperative commit path;
     /// App Rules leaves it disconnected (commits on Add click).
     signal valueChanged()

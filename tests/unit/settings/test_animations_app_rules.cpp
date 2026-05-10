@@ -20,6 +20,8 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <PhosphorAnimation/AnimationAppRule.h>
+
 #include "config/settings.h"
 #include "settings/animationspagecontroller.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -177,10 +179,15 @@ private Q_SLOTS:
             makeShaderRuleMap(QStringLiteral("spotify"), QStringLiteral("window.open"), QStringLiteral("popin"))));
         QCOMPARE(c.appRules().size(), 2);
 
+        // Spy AFTER the seed adds so only the remove fires the signal —
+        // a regression where remove silently no-ops would still leave
+        // the post-spy count at zero, distinct from the seed-add noise.
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QVERIFY(c.removeAppRule(0));
         QCOMPARE(c.appRules().size(), 1);
         QCOMPARE(c.appRules().first().toMap().value(QStringLiteral("classPattern")).toString(),
                  QStringLiteral("spotify"));
+        QVERIFY2(spy.count() >= 1, "removeAppRule MUST emit pendingChangesChanged");
     }
 
     void removeAppRule_outOfRange_returnsFalse()
@@ -218,9 +225,16 @@ private Q_SLOTS:
         QVERIFY(c.addAppRule(
             makeShaderRuleMap(QStringLiteral("spotify"), QStringLiteral("window.open"), QStringLiteral("popin"))));
 
+        // Spy AFTER the seed adds so the assertion exercises the move
+        // path alone — a regression where reorder silently committed
+        // the new ordering without flipping the dirty bit (i.e. a
+        // file-write that bypassed the pending-changes journal) would
+        // pass the content check but fail the signal check.
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QVERIFY(c.moveAppRule(1, 0));
         QCOMPARE(c.appRules().first().toMap().value(QStringLiteral("classPattern")).toString(),
                  QStringLiteral("spotify"));
+        QVERIFY2(spy.count() >= 1, "moveAppRule MUST emit pendingChangesChanged");
     }
 
     void moveAppRule_sameIndex_isNoOp()
@@ -318,6 +332,41 @@ private Q_SLOTS:
                  QStringLiteral("firefox"));
     }
 
+    void appRule_nonWindowEventPath_isRejected()
+    {
+        // The Add Rule dropdown only surfaces `window.<leaf>` events,
+        // but `ProfilePaths::allBuiltInPaths()` ALSO contains
+        // `popup.*` / `osd.*` / `window` (the bare parent). A rule
+        // referencing any of those would round-trip into the JSON
+        // store, occupy a UI row, and never fire (the cascade
+        // resolver does exact-match on the leaf path the kwin-effect
+        // emits). The controller boundary must reject them so a
+        // programmatic Q_INVOKABLE caller can't bypass the dropdown.
+        IsolatedConfigGuard guard;
+        Settings settings;
+        AnimationsPageController c(nullptr, &settings);
+
+        // Bare `"window"` parent — present in allBuiltInPaths(), but
+        // not surfaced by the dropdown's `!isCategory` filter.
+        QVERIFY(!c.addAppRule(
+            makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window"), QStringLiteral("dissolve"))));
+        QCOMPARE(c.appRules(), QVariantList{});
+
+        // popup.* — present in allBuiltInPaths(), but not a window event.
+        QVERIFY(!c.addAppRule(
+            makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("popup.show"), QStringLiteral("dissolve"))));
+        QCOMPARE(c.appRules(), QVariantList{});
+
+        // setAppRule path must reject the same way to preserve the
+        // invariant on the replace-in-place call.
+        QVERIFY(c.addAppRule(
+            makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
+        QVERIFY(!c.setAppRule(
+            0, makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("popup.show"), QStringLiteral("dissolve"))));
+        QCOMPARE(c.appRules().first().toMap().value(QStringLiteral("eventPath")).toString(),
+                 QStringLiteral("window.open"));
+    }
+
     void appRule_unknownEventPath_isRejected()
     {
         // The page-level event combo only offers valid paths, but
@@ -378,13 +427,29 @@ private Q_SLOTS:
 
     void appRulesChanged_forwardsFromSettings()
     {
+        // Drive Settings directly — `addAppRule` flows through the
+        // controller's own write path, which calls
+        // `setAnimationAppRules` and would emit appRulesChanged via
+        // any forwarding wire OR via a direct emit inside the
+        // controller. Mutating Settings out-of-band is the only way
+        // to assert the forwarding wire itself is intact (a regression
+        // that broke the `connect()` would still pass an addAppRule-
+        // driven version of this test).
         IsolatedConfigGuard guard;
         Settings settings;
         AnimationsPageController c(nullptr, &settings);
 
         QSignalSpy spy(&c, &AnimationsPageController::appRulesChanged);
-        QVERIFY(c.addAppRule(
-            makeShaderRuleMap(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
+
+        PhosphorAnimationShaders::AnimationAppRuleList list;
+        PhosphorAnimationShaders::AnimationAppRule rule;
+        rule.classPattern = QStringLiteral("firefox");
+        rule.eventPath = QStringLiteral("window.open");
+        rule.kind = PhosphorAnimationShaders::AnimationAppRule::Kind::Shader;
+        rule.effectId = QStringLiteral("dissolve");
+        QVERIFY(list.append(rule));
+        settings.setAnimationAppRules(list);
+
         QVERIFY2(spy.count() >= 1, "appRulesChanged MUST be forwarded from ISettings::animationAppRulesChanged");
     }
 

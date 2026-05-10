@@ -35,10 +35,12 @@ namespace PhosphorAnimationShaders {
  *      (event leaf → category → baseline → library default).
  *
  * Empty `windowClass` short-circuits to step 2 (no rule can match an
- * unidentified window). Empty `eventPath` is forwarded to the tree
- * unchanged — `ShaderProfile`'s empty-effectId handling at the
- * consumer's side stays the same as the current direct-tree-resolve
- * behaviour.
+ * unidentified window — and `AnimationAppRuleList::resolveShader`
+ * also returns nullopt on empty windowClass as a defence in depth).
+ * Empty `eventPath` skips the rule walk (no rule's eventPath can
+ * exact-match an empty string) and is forwarded to
+ * `ShaderProfileTree::resolve(QString())`, which walks an empty
+ * parent chain back to the baseline + library defaults.
  */
 PHOSPHORANIMATION_EXPORT ShaderProfile resolveAnimationShaderProfile(const AnimationAppRuleList& rules,
                                                                      const ShaderProfileTree& tree,
@@ -62,6 +64,9 @@ PHOSPHORANIMATION_EXPORT ShaderProfile resolveAnimationShaderProfile(const Anima
  *
  *   2. The caller-provided @p defaultDurationMs (typically the global
  *      `Settings::animationDuration` or a per-event-derived value).
+ *
+ * Empty `windowClass` or empty `eventPath` short-circuits to step 2
+ * — no rule can match either case, so the caller's default applies.
  *
  * The curve override on a `Timing` rule is intentionally not surfaced
  * here — curve cascades through the motion `ProfileTree`, which is a
@@ -91,11 +96,12 @@ PHOSPHORANIMATION_EXPORT int resolveAnimationDuration(const AnimationAppRuleList
  *   2. The caller-provided @p base profile (typically the
  *      `WindowAnimator`'s configured global profile).
  *
- * Empty @p windowClass short-circuits to the base profile. Callers
- * pass the returned profile into the snap-animation startup as a
- * per-call override rather than mutating the animator's global
- * profile, so adjacent windows on the same compositor still animate
- * with the global curve.
+ * Empty @p windowClass or empty @p eventPath short-circuits to the
+ * base profile — no rule can match either case. Callers pass the
+ * returned profile into the snap-animation startup as a per-call
+ * override rather than mutating the animator's global profile, so
+ * adjacent windows on the same compositor still animate with the
+ * global curve.
  */
 PHOSPHORANIMATION_EXPORT PhosphorAnimation::Profile
 resolveAnimationMotionProfile(const AnimationAppRuleList& rules, const PhosphorAnimation::Profile& base,

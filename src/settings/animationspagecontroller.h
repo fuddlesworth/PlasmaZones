@@ -430,6 +430,14 @@ private:
     /// profiles directory.
     bool isValidEventPath(const QString& path) const;
 
+    /// Stricter gate for `AnimationAppRule::eventPath`. Returns true
+    /// only for window-leaf paths (`window.open`, `window.close`,
+    /// etc.) — the same set `animationAppRuleEvents()` surfaces in
+    /// the QML dropdown. Rejects non-window events and the bare
+    /// `"window"` parent (the cascade resolver does exact-match, so
+    /// the parent path can never fire).
+    bool isValidAppRuleEventPath(const QString& path) const;
+
     /// Capture @p filePath's current content into the snapshot if not
     /// already snapshotted. Called by every file-mutating method just
     /// before the write/delete so revert can put it back.
