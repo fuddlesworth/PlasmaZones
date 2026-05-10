@@ -546,8 +546,21 @@ void Daemon::connectLayoutSignals()
             [this](const QString& algorithmName, int windowCount) {
                 Q_UNUSED(windowCount)
                 // Dismiss snap assist — autotile mode replaces snapping entirely
-                if (m_overlayService->isSnapAssistVisible()) {
+                if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
+                }
+                // Suppress during startup. Mirrors the algorithmChanged and
+                // layoutApplied gates above. `loadState()` from finalizeStartup()
+                // synchronously emits `autotileApplied` per screen as layouts get
+                // assigned for autotile-mode entries, and finalizeStartup() is the
+                // authoritative startup-OSD path (it calls `showOsdForAllScreens`).
+                // Without this gate, autotile users would hit the same first-OSD
+                // double-queue that the layoutApplied gate fixes for snap-mode
+                // users: the first OSD begins its fly-in shader leg, the second
+                // show cancels that AV via cancelTrackingFor + parkShaderForReuse,
+                // and the slide-in animation gets nuked mid-flight.
+                if (!m_running) {
+                    return;
                 }
                 // Defer OSD display so QML window creation (first-time ~100-300ms for
                 // NotificationOverlay.qml compilation + scene graph) doesn't block the
