@@ -229,6 +229,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::shadersGroup(), // "Shaders"
         ConfigDefaults::shortcutsGroup(), // "Shortcuts" — covers Shortcuts.Global + Shortcuts.Tiling
         ConfigDefaults::animationsGroup(), // "Animations"
+        ConfigDefaults::animationsWindowFilteringGroup(), // "Animations.WindowFiltering"
         ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
         ConfigDefaults::orderingGroup(), // "Ordering"
     };
@@ -1557,6 +1558,97 @@ PZ_STORE_SET_INT(setMinimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, 
 PZ_STORE_GET(int, minimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, int)
 PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, minimumWindowHeightChanged)
 
+// ── Animation Window Filtering (PhosphorConfig::Store-backed) ──────────────
+//
+// Mirrors the Exclusions block above but lives in
+// `Animations.WindowFiltering` so animation-time filtering is independent
+// of snapping/tiling exclusions. Scalar accessors use the same macro
+// pattern; the QStringList accessors mirror the comma-list canonicalisation
+// trick from `setExcludedApplications` (post-write read-back so addX /
+// removeXAt don't fire spurious signals on no-op writes).
+
+PZ_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
+PZ_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
+                  animationExcludeTransientWindowsChanged)
+PZ_STORE_GET(int, animationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey, int)
+PZ_STORE_SET_INT(setAnimationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey,
+                 animationMinimumWindowWidthChanged)
+PZ_STORE_GET(int, animationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey, int)
+PZ_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey,
+                 animationMinimumWindowHeightChanged)
+
+QStringList Settings::animationExcludedApplications() const
+{
+    return parseCommaList(
+        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey()));
+}
+
+void Settings::setAnimationExcludedApplications(const QStringList& apps)
+{
+    writeCommaList(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey(), apps,
+                   &Settings::animationExcludedApplicationsChanged);
+}
+
+void Settings::addAnimationExcludedApplication(const QString& app)
+{
+    const QString trimmed = app.trimmed();
+    if (trimmed.isEmpty()) {
+        return;
+    }
+    QStringList list = animationExcludedApplications();
+    if (list.contains(trimmed)) {
+        return;
+    }
+    list.append(trimmed);
+    setAnimationExcludedApplications(list);
+}
+
+void Settings::removeAnimationExcludedApplicationAt(int index)
+{
+    QStringList list = animationExcludedApplications();
+    if (index < 0 || index >= list.size()) {
+        return;
+    }
+    list.removeAt(index);
+    setAnimationExcludedApplications(list);
+}
+
+QStringList Settings::animationExcludedWindowClasses() const
+{
+    return parseCommaList(
+        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey()));
+}
+
+void Settings::setAnimationExcludedWindowClasses(const QStringList& classes)
+{
+    writeCommaList(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey(), classes,
+                   &Settings::animationExcludedWindowClassesChanged);
+}
+
+void Settings::addAnimationExcludedWindowClass(const QString& cls)
+{
+    const QString trimmed = cls.trimmed();
+    if (trimmed.isEmpty()) {
+        return;
+    }
+    QStringList list = animationExcludedWindowClasses();
+    if (list.contains(trimmed)) {
+        return;
+    }
+    list.append(trimmed);
+    setAnimationExcludedWindowClasses(list);
+}
+
+void Settings::removeAnimationExcludedWindowClassAt(int index)
+{
+    QStringList list = animationExcludedWindowClasses();
+    if (index < 0 || index >= list.size()) {
+        return;
+    }
+    list.removeAt(index);
+    setAnimationExcludedWindowClasses(list);
+}
+
 // ── PhosphorZones::Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
 // Three enum-ints exposed via both the typed setter and an Int adapter for
 // QML binding. Stored as int, the schema clamps the range.
@@ -1700,6 +1792,29 @@ void Settings::writeTriggerList(const QString& group, const QString& key, const 
     const QVariantList before = m_store->readVariant(group, key).toList();
     m_store->write(group, key, triggers.mid(0, MaxTriggersPerAction));
     const QVariantList after = m_store->readVariant(group, key).toList();
+    if (before == after) {
+        return;
+    }
+    Q_EMIT(this->*specificSignal)();
+    Q_EMIT settingsChanged();
+}
+
+void Settings::writeCommaList(const QString& group, const QString& key, const QStringList& list,
+                              CommaListSignalFn specificSignal)
+{
+    // Pre-write snapshot + post-write read-back. The schema's
+    // `canonicalCommaList` validator may trim / dedupe the joined
+    // string, so two writes that look different in memory can
+    // canonicalise to the same on-disk value — emitting in that case
+    // would dirty the page on a no-op. Pre-write equality alone would
+    // miss canonicalisation no-ops; post-write equality alone would
+    // miss the case where the list ends up identical because the
+    // validator collapsed it. Compare both sides of the round-trip so
+    // the signal fires only when the persisted value actually
+    // changed.
+    const QString before = m_store->read<QString>(group, key);
+    m_store->write(group, key, list.join(QLatin1Char(',')));
+    const QString after = m_store->read<QString>(group, key);
     if (before == after) {
         return;
     }
