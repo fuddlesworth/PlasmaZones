@@ -49,28 +49,6 @@ layout(location = 0) out vec4 fragColor;
 // a per-leg duration uniform to derive the BMW-equivalent value.
 #define uDuration 0.75
 
-// hash12: BMW common.glsl:489 verbatim. Used for per-line interference.
-// Kept as a local function rather than promoted to noise.glsl to
-// keep the LGPL-2.1 noise header BMW-helper-free.
-float hash12(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * .1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
-}
-
-// Local off-window-clipping variant of `bmw_compat.glsl`'s `getInputColor`.
-// The y-rescale and x-displacement below push sample coords outside [0, 1]
-// at boundary fragments, and `uTexture0` is clamp-to-edge — the typical
-// edge alpha is 0 (window shadow / rounded corners) so samples beyond the
-// surface produce a grey-transparent border. Returning vec4(0.0) outside
-// [0, 1] crops cleanly to transparent. Same pattern as broken-glass.
-vec4 getClippedInputColor(vec2 coords) {
-    if (coords.x < 0.0 || coords.x > 1.0 || coords.y < 0.0 || coords.y > 1.0) {
-        return vec4(0.0);
-    }
-    return getInputColor(coords);
-}
-
 const float BLUR_WIDTH = 0.01;  // Width of the gradients.
 const float TB_TIME    = 0.7;   // Relative time for the top/bottom animation.
 const float LR_TIME    = 0.4;   // Relative time for the left/right animation.
