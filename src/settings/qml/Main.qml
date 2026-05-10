@@ -8,6 +8,15 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 ApplicationWindow {
+    // Cached breadcrumb segment list for the current navigation
+    // state. Rendered as `[top-parent] › [intermediate] › … ›
+    // [current page]` with every non-leaf segment navigable; current-
+    // mode segment is not clickable since it's where the user already
+    // is. For 2-level navigation the chain has two entries (parent +
+    // page); for the 3-level Animations layout it has three (top-parent
+    // + intermediate-parent + page). In main mode the chain collapses
+    // to just the current page name.
+
     id: window
 
     // Expose the layout context menu so Loader-loaded pages can connect to its signals
@@ -20,7 +29,12 @@ ApplicationWindow {
     // Close-without-save guard
     property bool _closeConfirmed: false
     // ── Drill-down sidebar state ─────────────────────────────────────
-    // "main" = top-level list; otherwise the parent name (e.g. "snapping")
+    // "main" = top-level list; any other value names the currently-
+    // displayed parent. Top-level parents (e.g. "snapping", "tiling",
+    // "animations") and mid-level virtual parents registered in
+    // `_parentMode` (e.g. "animations-surfaces", "animations-library")
+    // are both valid values; `_drillOut` walks the lineage one level
+    // at a time using `_parentMode`.
     property string _sidebarMode: "main"
     // Main sidebar items
     readonly property var _mainItems: [{
@@ -155,16 +169,27 @@ ApplicationWindow {
         "animations": [{
             "name": "animations-general",
             "label": i18n("General"),
-            "iconName": "configure",
-            "hasDividerAfter": true
-        }, {
-            "name": "animations-windows",
-            "label": i18n("Windows"),
-            "iconName": "window-new"
+            "iconName": "configure"
         }, {
             "name": "animations-app-rules",
             "label": i18n("App Rules"),
-            "iconName": "application-x-executable"
+            "iconName": "application-x-executable",
+            "hasDividerAfter": true
+        }, {
+            "name": "animations-surfaces",
+            "label": i18n("Surfaces"),
+            "iconName": "preferences-desktop-multimedia",
+            "hasChildren": true
+        }, {
+            "name": "animations-library",
+            "label": i18n("Library"),
+            "iconName": "folder-open",
+            "hasChildren": true
+        }],
+        "animations-surfaces": [{
+            "name": "animations-windows",
+            "label": i18n("Windows"),
+            "iconName": "window-new"
         }, {
             "name": "animations-zones",
             "label": i18n("Zones"),
@@ -188,9 +213,9 @@ ApplicationWindow {
         }, {
             "name": "animations-widgets",
             "label": i18n("Widgets"),
-            "iconName": "preferences-desktop-theme",
-            "hasDividerAfter": true
-        }, {
+            "iconName": "preferences-desktop-theme"
+        }],
+        "animations-library": [{
             "name": "animations-presets",
             "label": i18n("Presets"),
             "iconName": "bookmarks"
@@ -203,6 +228,14 @@ ApplicationWindow {
             "label": i18n("Shaders"),
             "iconName": "preferences-desktop-display"
         }]
+    })
+    // Map from sub-mode → its parent mode. Modes not listed here drill
+    // back to "main". Lets `_drillOut` pop one level instead of always
+    // returning to the top, so `animations-surfaces` → `animations` →
+    // `main` works as three discrete steps.
+    readonly property var _parentMode: ({
+        "animations-surfaces": "animations",
+        "animations-library": "animations"
     })
     // Page component map -- loaded on demand by Loader
     readonly property var _pageComponents: ({
@@ -249,6 +282,104 @@ ApplicationWindow {
         "super-ultrawide": i18n("Super-Ultrawide (32:9)"),
         "portrait": i18n("Portrait (9:16)")
     })
+    // Flat name → label map computed once from `_mainItems` and
+    // every `_childItems` bucket. Drives `_modeLabel` and the
+    // breadcrumb so resolving a label is a single hash lookup
+    // instead of nested-loop scans on every binding re-evaluation.
+    // Property is `readonly` so QML caches the value at startup;
+    // both source maps are also `readonly`, so the index never goes
+    // stale.
+    readonly property var _labelByName: {
+        let out = ({
+        });
+        for (let i = 0; i < _mainItems.length; i++) {
+            out[_mainItems[i].name] = _mainItems[i].label;
+        }
+        const buckets = Object.keys(_childItems);
+        for (let b = 0; b < buckets.length; b++) {
+            const entries = _childItems[buckets[b]];
+            for (let e = 0; e < entries.length; e++) {
+                out[entries[e].name] = entries[e].label;
+            }
+        }
+        return out;
+    }
+    // Hard depth ceiling for any walk through `_parentMode` /
+    // `_childItems` — guards against a malformed map (cyclic lineage,
+    // self-referencing parent) producing an infinite loop. Today's
+    // tree never exceeds 2 hops; 16 is an order of magnitude headroom
+    // for any plausible future structure.
+    readonly property int _maxNavDepth: 16
+    // Cached as a `readonly property var` so the Repeater's `model`
+    // and per-delegate separator-visibility binding share a single
+    // computation. Reading `_sidebarMode` and `activePage` inside
+    // the IIFE registers the binding's reactivity dependencies.
+    readonly property var _breadcrumbModel: {
+        if (_sidebarMode === "main") {
+            const activeName = settingsController.activePage;
+            return [{
+                "name": activeName,
+                "label": _modeLabel(activeName),
+                "clickable": false
+            }];
+        }
+        // Walk the parent chain top-down with an explicit depth
+        // bound; `_parentMode[mode]` returning undefined terminates
+        // the walk normally, the bound is belt-and-braces against a
+        // future cyclic map.
+        let chain = [];
+        let mode = _sidebarMode;
+        for (let depth = 0; depth < _maxNavDepth && mode !== undefined; depth++) {
+            chain.unshift(mode);
+            mode = _parentMode[mode];
+        }
+        let segments = [];
+        for (let i = 0; i < chain.length; i++) {
+            segments.push({
+                "name": chain[i],
+                "label": _modeLabel(chain[i]),
+                "clickable": chain[i] !== _sidebarMode
+            });
+        }
+        segments.push({
+            "name": settingsController.activePage,
+            "label": _subPageLabel(settingsController.activePage),
+            "clickable": false
+        });
+        return segments;
+    }
+
+    // Walk @p parentName's descendants and return every leaf whose label
+    // matches @p searchText. Nested labels are prefixed with their
+    // immediate parent ("Surfaces / Windows") so a search hit is
+    // unambiguous when multiple intermediate categories live under the
+    // same grandparent. When an intermediate parent's OWN label matches
+    // the query (e.g. searching "surfaces"), every leaf under it is
+    // included unfiltered — otherwise typing a category name would yield
+    // empty results because the parent itself is a virtual non-leaf.
+    function _collectMatchingDescendants(parentName, searchText) {
+        let out = [];
+        let children = _childItems[parentName] || [];
+        for (let j = 0; j < children.length; j++) {
+            let child = children[j];
+            if (child.hasChildren) {
+                let intermediateMatches = child.label.toLowerCase().indexOf(searchText) >= 0;
+                let nestedQuery = intermediateMatches ? "" : searchText;
+                let nested = _collectMatchingDescendants(child.name, nestedQuery);
+                for (let k = 0; k < nested.length; k++) {
+                    out.push({
+                        "name": nested[k].name,
+                        "label": child.label + " / " + nested[k].label,
+                        "iconName": nested[k].iconName,
+                        "hasDividerAfter": false
+                    });
+                }
+            } else if (searchText === "" || child.label.toLowerCase().indexOf(searchText) >= 0) {
+                out.push(child);
+            }
+        }
+        return out;
+    }
 
     function _rebuildSidebar() {
         sidebarModel.clear();
@@ -257,17 +388,12 @@ ApplicationWindow {
             for (let i = 0; i < _mainItems.length; i++) {
                 let item = _mainItems[i];
                 if (searchText) {
-                    // Search both item label and children labels
+                    // Search the item label and walk every descendant
+                    // (children + grand-children) so a Surfaces leaf
+                    // like "Windows" still surfaces under the
+                    // top-level Animations entry.
                     let itemMatches = item.label.toLowerCase().indexOf(searchText) >= 0;
-                    let matchingChildren = [];
-                    if (item.hasChildren) {
-                        let children = _childItems[item.name] || [];
-                        for (let j = 0; j < children.length; j++) {
-                            if (children[j].label.toLowerCase().indexOf(searchText) >= 0)
-                                matchingChildren.push(children[j]);
-
-                        }
-                    }
+                    let matchingChildren = item.hasChildren ? _collectMatchingDescendants(item.name, searchText) : [];
                     if (!itemMatches && matchingChildren.length === 0)
                         continue;
 
@@ -286,12 +412,13 @@ ApplicationWindow {
                         let childDivider = matchingChildren[j].hasDividerAfter || false;
                         sidebarModel.append({
                             "name": matchingChildren[j].name,
-                            "label": "  " + matchingChildren[j].label,
+                            "label": matchingChildren[j].label,
                             "iconName": matchingChildren[j].iconName,
                             "hasChildren": false,
                             "isBackButton": false,
                             "hasDividerAfter": false,
-                            "isDivider": false
+                            "isDivider": false,
+                            "isSearchChild": true
                         });
                         if (childDivider)
                             sidebarModel.append({
@@ -329,14 +456,16 @@ ApplicationWindow {
 
             }
         } else {
-            // Find parent label
-            let parentLabel = _sidebarMode;
-            for (let i = 0; i < _mainItems.length; i++) {
-                if (_mainItems[i].name === _sidebarMode) {
-                    parentLabel = _mainItems[i].label;
-                    break;
-                }
-            }
+            // Back-row label is the CURRENT mode's display label
+            // (so a sub-sidebar "Surfaces" reads "← Surfaces"). The
+            // mode may live in `_mainItems` (top-level parents like
+            // "animations") or inside another `_childItems` entry
+            // (intermediate parents like "animations-surfaces").
+            // Search-mode entries that have nested matches inlined
+            // below have their drill-in disabled at append time so
+            // the user clicks the leaves directly, mirroring the
+            // main-mode search pattern.
+            let parentLabel = _modeLabel(_sidebarMode);
             // Back button row (always visible)
             sidebarModel.append({
                 "name": "__back__",
@@ -350,15 +479,49 @@ ApplicationWindow {
             // Child items
             let children = _childItems[_sidebarMode] || [];
             for (let i = 0; i < children.length; i++) {
-                if (searchText && children[i].label.toLowerCase().indexOf(searchText) < 0)
-                    continue;
+                let child = children[i];
+                let childDivider = child.hasDividerAfter || false;
+                if (searchText) {
+                    // Search inside a sub-sidebar matches the entry's
+                    // own label OR (when it's an intermediate parent)
+                    // any grand-child label. Without the recursion,
+                    // searching "windows" from inside the Animations
+                    // sub-sidebar would silently miss it because
+                    // Windows lives one level deeper under Surfaces —
+                    // a regression compared with the prior flat layout.
+                    let ownMatch = child.label.toLowerCase().indexOf(searchText) >= 0;
+                    let nestedMatches = child.hasChildren ? _collectMatchingDescendants(child.name, searchText) : [];
+                    if (!ownMatch && nestedMatches.length === 0)
+                        continue;
 
-                let childDivider = children[i].hasDividerAfter || false;
+                    sidebarModel.append({
+                        "name": child.name,
+                        "label": child.label,
+                        "iconName": child.iconName,
+                        "hasChildren": nestedMatches.length === 0 && (child.hasChildren || false),
+                        "isBackButton": false,
+                        "hasDividerAfter": false,
+                        "isDivider": false
+                    });
+                    for (let j = 0; j < nestedMatches.length; j++) {
+                        sidebarModel.append({
+                            "name": nestedMatches[j].name,
+                            "label": nestedMatches[j].label,
+                            "iconName": nestedMatches[j].iconName,
+                            "hasChildren": false,
+                            "isBackButton": false,
+                            "hasDividerAfter": false,
+                            "isDivider": false,
+                            "isSearchChild": true
+                        });
+                    }
+                    continue;
+                }
                 sidebarModel.append({
-                    "name": children[i].name,
-                    "label": children[i].label,
-                    "iconName": children[i].iconName,
-                    "hasChildren": false,
+                    "name": child.name,
+                    "label": child.label,
+                    "iconName": child.iconName,
+                    "hasChildren": child.hasChildren || false,
                     "isBackButton": false,
                     "hasDividerAfter": false,
                     "isDivider": false
@@ -378,46 +541,80 @@ ApplicationWindow {
         }
     }
 
-    // Helper: find the parent label for the current sidebar mode
-    function _parentLabel() {
-        for (let i = 0; i < _mainItems.length; i++) {
-            if (_mainItems[i].name === _sidebarMode)
-                return _mainItems[i].label;
-
-        }
-        return _sidebarMode;
+    // Returns the display label for any node by name. Falls back to
+    // the raw name so a missing entry shows up visibly in the UI
+    // rather than silently collapsing to an empty string.
+    function _modeLabel(name) {
+        const label = _labelByName[name];
+        return label !== undefined ? label : name;
     }
 
-    // Helper: find a subpage label by name
+    // Navigate to the breadcrumb segment named @p name. Top-level
+    // modes pop to main with that parent name as `activePage` (so the
+    // sidebar highlights it); sub-modes pop directly into that
+    // intermediate sub-sidebar. Both go through the same fade
+    // transition as a back-button click for visual continuity.
+    function _navigateToBreadcrumbSegment(name) {
+        for (let i = 0; i < _mainItems.length; i++) {
+            if (_mainItems[i].name === name) {
+                sidebarTransition.pendingMode = "main";
+                sidebarTransition.pendingPage = name;
+                sidebarTransition.restart();
+                return ;
+            }
+        }
+        sidebarTransition.pendingMode = name;
+        sidebarTransition.pendingPage = "";
+        sidebarTransition.restart();
+    }
+
+    // Helper: find a subpage label by name. Searches the current
+    // mode's child list first (fast path) then falls back to the
+    // whole tree so a stale `activePage` from a different mode still
+    // resolves to a readable label in the breadcrumb.
     function _subPageLabel(pageName) {
         let children = _childItems[_sidebarMode];
-        if (!children)
-            return pageName;
+        if (children) {
+            for (let i = 0; i < children.length; i++) {
+                if (children[i].name === pageName)
+                    return children[i].label;
 
+            }
+        }
+        return _modeLabel(pageName);
+    }
+
+    // Drill into a parent category and select the first reachable
+    // leaf (recursing through intermediate categories so e.g.
+    // drilling into "animations" lands on "General", and a future
+    // bucket whose immediate children are ALL `hasChildren` still
+    // resolves a real leaf instead of showing the LayoutsPage
+    // fallback). The optional @p depth parameter is incremented on
+    // each recursive call and short-circuits at `_maxNavDepth` to
+    // guard against a cyclic `_childItems` map producing a stack
+    // overflow.
+    function _firstLeafOf(parentName, depth) {
+        const next = depth === undefined ? 0 : depth;
+        if (next >= _maxNavDepth)
+            return "";
+
+        let children = _childItems[parentName] || [];
         for (let i = 0; i < children.length; i++) {
-            if (children[i].name === pageName)
-                return children[i].label;
+            if (!children[i].hasChildren)
+                return children[i].name;
+
+            const nested = _firstLeafOf(children[i].name, next + 1);
+            if (nested.length > 0)
+                return nested;
 
         }
-        return pageName;
+        return "";
     }
 
-    // Helper: find a main-item label by name
-    function _mainItemLabel(pageName) {
-        for (let i = 0; i < _mainItems.length; i++) {
-            if (_mainItems[i].name === pageName)
-                return _mainItems[i].label;
-
-        }
-        return pageName;
-    }
-
-    // Drill into a parent category and select the first child
     function _drillIn(parentName) {
-        let children = _childItems[parentName];
-        let firstChild = (children && children.length > 0) ? children[0].name : "";
+        const firstLeaf = _firstLeafOf(parentName);
         sidebarTransition.pendingMode = parentName;
-        sidebarTransition.pendingPage = firstChild;
+        sidebarTransition.pendingPage = firstLeaf;
         sidebarTransition.restart();
     }
 
@@ -435,10 +632,21 @@ ApplicationWindow {
         layoutContextMenu.showForLayout(layout);
     }
 
-    // Return to the main sidebar list, selecting the parent category
+    // Pop one level. Sub-modes registered in `_parentMode` (e.g.
+    // `animations-surfaces` → `animations`) drill back to the
+    // intermediate parent; everything else returns to "main" with the
+    // current parent highlighted as `activePage`. When popping back
+    // into an intermediate (still-virtual) parent, `activePage` is
+    // left untouched (empty pendingPage) so the leaf the user came
+    // from stays visible until they pick another — re-anchoring on
+    // the virtual category they just stepped out of would be less
+    // useful context.
     function _drillOut() {
-        sidebarTransition.pendingMode = "main";
-        sidebarTransition.pendingPage = _sidebarMode !== "main" ? _sidebarMode : "overview";
+        const target = _parentMode[_sidebarMode] || "main";
+        const popToMain = target === "main";
+        const pendingPage = popToMain ? (_sidebarMode !== "main" ? _sidebarMode : "overview") : "";
+        sidebarTransition.pendingMode = target;
+        sidebarTransition.pendingPage = pendingPage;
         sidebarTransition.restart();
     }
 
@@ -466,19 +674,33 @@ ApplicationWindow {
         }
         // Build initial sidebar
         _rebuildSidebar();
-        // If the active page is a child of a category, drill in
+        // If the active page is a child of a category, drill in. Skip
+        // intermediate (`hasChildren: true`) entries so a stale
+        // `activePage = "animations-surfaces"` doesn't masquerade as a
+        // valid restored leaf — the virtual parent name only ever
+        // means "show this sub-sidebar", and there's no QML component
+        // for it in `_pageComponents`. The drill-in transition picks a
+        // real leaf for the user when one of those names round-trips
+        // through stored state.
         let page = settingsController.activePage;
         let parents = Object.keys(_childItems);
         for (let p = 0; p < parents.length; p++) {
             let children = _childItems[parents[p]];
             for (let c = 0; c < children.length; c++) {
-                if (children[c].name === page) {
+                if (children[c].name === page && !children[c].hasChildren) {
                     _sidebarMode = parents[p];
                     _rebuildSidebar();
                     return ;
                 }
             }
         }
+        // Stale activePage is a virtual parent (e.g. saved as
+        // "animations-surfaces") — treat it as a drill-in request so
+        // the user lands on a real leaf instead of seeing the silent
+        // LayoutsPage fallback.
+        if (_childItems[page])
+            _drillIn(page);
+
     }
 
     // Auto-drill-out if feature disabled while viewing its subpages
@@ -657,6 +879,13 @@ ApplicationWindow {
                         required property bool isBackButton
                         required property bool hasDividerAfter
                         required property bool isDivider
+                        // Inline search-result rows under their parent
+                        // carry an `isSearchChild` role; rows without
+                        // it (most of the model) get `false` here via
+                        // the truthy coercion. Reading through `model.`
+                        // rather than as a required property avoids
+                        // forcing every append site to set the role.
+                        readonly property bool isSearchChild: model.isSearchChild === true
                         readonly property bool isActive: {
                             if (isBackButton)
                                 return false;
@@ -687,8 +916,14 @@ ApplicationWindow {
                                 window._drillIn(name);
                                 return ;
                             }
-                            // If selecting an inline search result child, clear search and drill into parent
-                            if (sidebarSearch.text.length > 0 && _sidebarMode === "main") {
+                            // If selecting an inline search result, clear
+                            // the search, drill into the leaf's actual
+                            // parent (could be a different sub-sidebar
+                            // bucket), and activate the leaf. The lookup
+                            // walks every `_childItems` bucket so it
+                            // handles top-level search hits AND nested
+                            // matches inlined inside a sub-sidebar.
+                            if (sidebarSearch.text.length > 0) {
                                 let parents = Object.keys(_childItems);
                                 for (let p = 0; p < parents.length; p++) {
                                     let children = _childItems[parents[p]];
@@ -705,8 +940,27 @@ ApplicationWindow {
                             }
                             settingsController.activePage = name;
                         }
-                        leftPadding: window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing
+                        leftPadding: {
+                            const base = window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing;
+                            // Inline search-result rows nest under
+                            // their parent — bump leftPadding by an
+                            // iconSize-equivalent so the indent reads
+                            // as hierarchy. Theme-aware via
+                            // `Kirigami.Units` and RTL-correct because
+                            // `leftPadding` flips with layoutDirection.
+                            return base + (navDelegate.isSearchChild ? Kirigami.Units.iconSizes.small : 0);
+                        }
                         rightPadding: window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing
+                        // Strip the "Surfaces / Windows" prefix from
+                        // the Accessible.name so screen readers
+                        // announce the leaf cleanly without the
+                        // visual-hierarchy decoration. The full
+                        // composed label still drives the visible
+                        // Label and ToolTip below.
+                        Accessible.name: {
+                            const slashIdx = navDelegate.label.lastIndexOf(" / ");
+                            return slashIdx >= 0 ? navDelegate.label.substring(slashIdx + 3) : navDelegate.label;
+                        }
                         ToolTip.visible: window.sidebarCompact && navDelegate.hovered
                         ToolTip.text: label
                         ToolTip.delay: 300
@@ -1076,40 +1330,49 @@ ApplicationWindow {
                     Row {
                         spacing: Kirigami.Units.smallSpacing
 
-                        // Parent name (clickable when drilled in)
-                        Label {
-                            visible: window._sidebarMode !== "main"
-                            text: window._parentLabel()
-                            opacity: parentMouse.containsMouse ? 0.8 : 0.5
-                            font.underline: parentMouse.containsMouse
+                        // Render every lineage segment + a separator
+                        // between them. The `_breadcrumbModel` cached
+                        // property holds the precomputed segment list
+                        // and re-evaluates only when its inputs
+                        // (`_sidebarMode`, `activePage`) change — far
+                        // cheaper than calling `_breadcrumbSegments()`
+                        // once per delegate per binding fire.
+                        Repeater {
+                            model: window._breadcrumbModel
 
-                            MouseArea {
-                                id: parentMouse
+                            delegate: Row {
+                                required property int index
+                                required property var modelData
 
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: window._drillOut()
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Label {
+                                    text: modelData.label
+                                    opacity: modelData.clickable && segmentMouse.containsMouse ? 0.8 : 0.5
+                                    font.underline: modelData.clickable && segmentMouse.containsMouse
+                                    Accessible.name: modelData.label
+                                    Accessible.role: modelData.clickable ? Accessible.Link : Accessible.StaticText
+
+                                    MouseArea {
+                                        id: segmentMouse
+
+                                        anchors.fill: parent
+                                        hoverEnabled: modelData.clickable
+                                        enabled: modelData.clickable
+                                        cursorShape: modelData.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                        onClicked: window._navigateToBreadcrumbSegment(modelData.name)
+                                    }
+
+                                }
+
+                                Label {
+                                    visible: index < window._breadcrumbModel.length - 1
+                                    text: "\u203A"
+                                    opacity: 0.5
+                                }
+
                             }
 
-                        }
-
-                        // Separator
-                        Label {
-                            visible: window._sidebarMode !== "main"
-                            text: "\u203A"
-                            opacity: 0.5
-                        }
-
-                        // Current page name
-                        Label {
-                            text: {
-                                if (window._sidebarMode !== "main")
-                                    return window._subPageLabel(settingsController.activePage);
-
-                                return window._mainItemLabel(settingsController.activePage);
-                            }
-                            opacity: 0.5
                         }
 
                     }
