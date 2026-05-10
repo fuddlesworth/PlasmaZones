@@ -13,6 +13,30 @@ namespace {
 // chance to flush and clean up tempfiles.
 constexpr int kTerminateGraceMs = 200;
 constexpr int kKillTimeoutMs = 100;
+// Cap on accumulated stdout/stderr buffer size. A long-running interval=0
+// child with chatty output would otherwise grow the QString without
+// bound; for the panel-style consumers this exposes (tail-style reads),
+// keeping the most-recent ~1 MiB is plenty and bounds memory.
+constexpr int kMaxBufferChars = 1024 * 1024;
+// When the cap is exceeded, drop the oldest 1/4 so we don't trim on
+// every chunk arrival.
+constexpr int kBufferTrimChars = kMaxBufferChars / 4;
+
+void trimToCap(QString& buf)
+{
+    if (buf.size() <= kMaxBufferChars) {
+        return;
+    }
+    int cut = buf.size() - kBufferTrimChars;
+    // Surrogate-pair safety: kBufferTrimChars is a fixed UTF-16 code-unit
+    // count, so the boundary can land mid-surrogate. If the kept tail
+    // would start on a low surrogate, advance one unit so the resulting
+    // string begins at a clean code point.
+    if (cut < buf.size() && buf.at(cut).isLowSurrogate()) {
+        ++cut;
+    }
+    buf.remove(0, cut);
+}
 } // namespace
 
 Process::Process(QObject* parent)
@@ -147,14 +171,17 @@ void Process::onReadyReadStdout()
 {
     // Append, don't replace — readyReadStandardOutput can fire multiple
     // times per invocation, and replacing would lose all but the last
-    // chunk.
+    // chunk. trimToCap keeps memory bounded for chatty long-running
+    // children (interval=0 stream subscriptions).
     m_stdout.append(QString::fromUtf8(m_process->readAllStandardOutput()));
+    trimToCap(m_stdout);
     Q_EMIT stdoutTextChanged();
 }
 
 void Process::onReadyReadStderr()
 {
     m_stderr.append(QString::fromUtf8(m_process->readAllStandardError()));
+    trimToCap(m_stderr);
     Q_EMIT stderrTextChanged();
 }
 
@@ -174,11 +201,13 @@ void Process::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
     const QByteArray remainingOut = m_process->readAllStandardOutput();
     if (!remainingOut.isEmpty()) {
         m_stdout.append(QString::fromUtf8(remainingOut));
+        trimToCap(m_stdout);
         Q_EMIT stdoutTextChanged();
     }
     const QByteArray remainingErr = m_process->readAllStandardError();
     if (!remainingErr.isEmpty()) {
         m_stderr.append(QString::fromUtf8(remainingErr));
+        trimToCap(m_stderr);
         Q_EMIT stderrTextChanged();
     }
 

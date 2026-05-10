@@ -33,7 +33,7 @@ PopupWindow {
 
     ShaderBackground {
         anchors.fill: parent
-        playing: true
+        playing: root.popupVisible
         shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
         shaderParams: {
             "tintOpacity": 0.85,
@@ -93,6 +93,8 @@ PopupWindow {
 
                         anchors.fill: parent
                         hoverEnabled: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Previous month"
                         onClicked: {
                             let d = new Date(calendarSource.displayDate);
                             d.setMonth(d.getMonth() - 1);
@@ -131,6 +133,8 @@ PopupWindow {
 
                         anchors.fill: parent
                         hoverEnabled: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Next month"
                         onClicked: {
                             let d = new Date(calendarSource.displayDate);
                             d.setMonth(d.getMonth() + 1);
@@ -180,8 +184,14 @@ PopupWindow {
                     delegate: Item {
                         required property int index
                         // Day 0 = first cell = first day of week containing the 1st.
+                        // Anchor every Date to noon to avoid DST off-by-one
+                        // boundary flicker: at midnight on a spring-forward
+                        // day, `setDate` may shift across the DST boundary
+                        // and `getDate()` then reflects the wrong month for
+                        // the leading cell.
                         readonly property date cellDate: {
                             let firstOfMonth = new Date(calendarSource.displayDate);
+                            firstOfMonth.setHours(12, 0, 0, 0);
                             firstOfMonth.setDate(1);
                             let firstDow = firstOfMonth.getDay();
                             let d = new Date(firstOfMonth);

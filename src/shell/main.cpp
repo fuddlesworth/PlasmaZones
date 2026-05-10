@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
                                       << "  Searched:    " << configDir << "\n"
                                       << "               and ${XDG_DATA_DIRS}/phosphor-shell/\n\n"
                                       << "  To get started, copy the bundled example:\n"
-                                      << "    mkdir -p" << configDir << "\n"
+                                      << "    mkdir -p " << configDir << "\n"
                                       << "    cp -r /usr/share/phosphor-shell/* " << configDir;
         return 1;
     }

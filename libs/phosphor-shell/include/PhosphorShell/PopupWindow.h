@@ -72,7 +72,7 @@ protected:
 private:
     void showPopup();
     void hidePopup();
-    QRect computeAnchorRect() const;
+    [[nodiscard]] QRect computeAnchorRect() const;
     void reparentChildToWindow(QQuickItem* child);
     /// Re-apply the xdg-positioner / size when a live property change
     /// requires re-showing the popup (anchor, edge, gap, geometry only

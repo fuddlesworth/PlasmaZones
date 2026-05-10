@@ -5,6 +5,7 @@
 
 #include <QCoreApplication>
 #include <QQmlEngine>
+#include <QThread>
 
 namespace PhosphorShell {
 
@@ -13,6 +14,15 @@ using PhosphorWayland::ForeignToplevelManager;
 
 ForeignToplevelManager* Toplevels::sharedManager()
 {
+    // GUI-thread-only contract: ForeignToplevelManager binds Wayland
+    // protocol globals through QPA, which lives on the main thread.
+    // The function-static singleton is not protected by a mutex, so a
+    // worker-thread caller would race on the unguarded check. Assert
+    // rather than try to support multi-thread access — the underlying
+    // protocol bindings would also misbehave.
+    Q_ASSERT_X(qApp && QThread::currentThread() == qApp->thread(), "Toplevels::sharedManager",
+               "must be called from the GUI thread");
+
     // Process-wide singleton. Parent to qApp so the manager is destroyed
     // exactly once, at QCoreApplication teardown — never during a hot-
     // reload's engine swap. Two managers cannot coexist because the

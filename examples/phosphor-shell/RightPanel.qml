@@ -26,7 +26,7 @@ PanelWindow {
 
     ShaderBackground {
         anchors.fill: parent
-        playing: true
+        playing: root.visible
         shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
         shaderParams: {
             "tintOpacity": 0.85,
@@ -88,7 +88,11 @@ PanelWindow {
         Row {
             spacing: 4
             anchors.verticalCenter: parent.verticalCenter
-            visible: root.batteryVisible
+            // Both gates: the file must exist AND the read must have
+            // produced a value. FileView.exists can flicker true during
+            // cold-start before the read completes; without the length
+            // check the row would briefly render a bare "%" sign.
+            visible: root.batteryVisible && root.batteryPercent.length > 0
 
             Text {
                 text: "BAT"
@@ -125,6 +129,8 @@ PanelWindow {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
+                Accessible.role: Accessible.Button
+                Accessible.name: root.shellState.settingsOpen ? "Close settings" : "Open settings"
                 onClicked: root.shellState.settingsOpen = !root.shellState.settingsOpen
             }
 

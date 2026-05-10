@@ -43,6 +43,7 @@ class ForeignToplevel;
 class PHOSPHORWAYLAND_EXPORT ForeignToplevelManager : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(ForeignToplevelManager)
 
 public:
     explicit ForeignToplevelManager(QObject* parent = nullptr);

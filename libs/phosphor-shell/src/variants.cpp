@@ -86,12 +86,7 @@ void Variants::onRowsInserted(const QModelIndex& parent, int first, int last)
 {
     Q_UNUSED(parent)
 
-    if (!m_delegate || !m_model) {
-        return;
-    }
-
-    auto* engine = qmlEngine(this);
-    if (!engine) {
+    if (!m_delegate || !m_model || !qmlEngine(this)) {
         return;
     }
 
@@ -101,8 +96,14 @@ void Variants::onRowsInserted(const QModelIndex& parent, int first, int last)
 
         auto* obj = m_delegate->create(context);
         if (!obj) {
-            qCWarning(lcVariants) << "Failed to create instance for row" << row;
+            qCWarning(lcVariants) << "Failed to create instance for row" << row << "— inserting null placeholder"
+                                  << "to keep m_instances index-aligned with the model";
             delete context;
+            // Insert a nullptr placeholder so subsequent index math
+            // (insert at row N, takeAt row N during remove) stays in
+            // sync with the model. clear() / takeAt() / refresh paths
+            // null-check before dereferencing.
+            m_instances.insert(row, nullptr);
             continue;
         }
 
@@ -129,8 +130,12 @@ void Variants::onRowsRemoved(const QModelIndex& parent, int first, int last)
         if (row < m_instances.size()) {
             // deleteLater() is safer than delete inside QML signal stacks —
             // the model row may be referenced by in-flight QML expressions.
-            m_instances.takeAt(row)->deleteLater();
-            qCDebug(lcVariants) << "Destroyed instance for row" << row;
+            // Null-check guards the placeholder slots inserted by
+            // onRowsInserted when a delegate failed to instantiate.
+            if (auto* obj = m_instances.takeAt(row)) {
+                obj->deleteLater();
+                qCDebug(lcVariants) << "Destroyed instance for row" << row;
+            }
         }
     }
 
@@ -171,6 +176,13 @@ void Variants::onRowsMoved(const QModelIndex& sourceParent, int sourceStart, int
         m_instances.insert(insertAt + i, moving.at(i));
     }
 
+    // Refresh range: every row whose model index is now different from
+    // its captured modelData. Both move directions are covered because
+    //   - downward move (insertAt > sourceStart): rows in
+    //     [sourceStart, insertAt+moving.size()-1] all shifted; qMax
+    //     picks the larger upper bound.
+    //   - upward move (insertAt < sourceStart): rows in
+    //     [insertAt, sourceEnd] shifted; qMax(sourceEnd, ...) wins.
     const int firstAffected = qMin(sourceStart, insertAt);
     const int lastAffected = qMin(qMax(sourceEnd, insertAt + moving.size() - 1), m_instances.size() - 1);
     for (int row = firstAffected; row <= lastAffected; ++row) {
@@ -203,6 +215,8 @@ void Variants::refreshInstanceData(int row)
     }
     QObject* obj = m_instances.at(row);
     if (!obj) {
+        // Placeholder slot from a failed delegate creation; nothing to
+        // refresh.
         return;
     }
     QQmlContext* context = QQmlEngine::contextForObject(obj);
@@ -216,12 +230,7 @@ void Variants::rebuild()
 {
     clear();
 
-    if (!m_model || !m_delegate) {
-        return;
-    }
-
-    auto* engine = qmlEngine(this);
-    if (!engine) {
+    if (!m_model || !m_delegate || !qmlEngine(this)) {
         return;
     }
 
@@ -233,8 +242,10 @@ void Variants::rebuild()
 
         auto* obj = m_delegate->create(context);
         if (!obj) {
-            qCWarning(lcVariants) << "Failed to create instance for row" << row;
+            qCWarning(lcVariants) << "Failed to create instance for row" << row << "— appending null placeholder"
+                                  << "to keep m_instances index-aligned with the model";
             delete context;
+            m_instances.append(nullptr);
             continue;
         }
 
@@ -251,6 +262,8 @@ void Variants::clear()
         if (obj) {
             obj->deleteLater();
         }
+        // nullptr entries are placeholders from failed delegate creation
+        // — nothing to delete.
     }
     m_instances.clear();
 }

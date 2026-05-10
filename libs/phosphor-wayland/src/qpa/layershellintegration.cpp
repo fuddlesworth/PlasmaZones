@@ -151,8 +151,8 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         //   v3: destroy request
         //   v4: on_demand keyboard interactivity
         //   v5: set_exclusive_edge
-        static constexpr uint32_t kMaxBindVersion = 5;
-        uint32_t bindVersion = qMin(version, kMaxBindVersion);
+        static constexpr uint32_t kMaxVersion = 5;
+        uint32_t bindVersion = qMin(version, kMaxVersion);
         self->m_layerShell = static_cast<struct zwlr_layer_shell_v1*>(
             wl_registry_bind(registry, id, &zwlr_layer_shell_v1_interface, bindVersion));
         self->m_layerShellId = id;

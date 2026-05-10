@@ -125,7 +125,11 @@ void LazyLoader::startLoading()
         if (!engine) {
             return;
         }
+        // Null first so a failed `new` (extreme, but possible under OOM)
+        // doesn't leave a dangling pointer that the dtor / next call
+        // would try to delete twice.
         delete m_ownedComponent;
+        m_ownedComponent = nullptr;
         m_ownedComponent = new QQmlComponent(engine, m_source, QQmlComponent::Asynchronous, this);
         component = m_ownedComponent;
     }

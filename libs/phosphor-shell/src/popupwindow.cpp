@@ -5,6 +5,7 @@
 
 #include <QLoggingCategory>
 #include <QQuickWindow>
+#include <QtMath>
 
 Q_LOGGING_CATEGORY(lcPopup, "phosphorshell.popup")
 
@@ -132,7 +133,11 @@ QRect PopupWindow::computeAnchorRect() const
     }
 
     const QPointF scenePos = m_anchor->mapToScene(QPointF(0, 0));
-    return QRect(scenePos.toPoint(), QSize(static_cast<int>(m_anchor->width()), static_cast<int>(m_anchor->height())));
+    // qCeil instead of static_cast<int> — truncation can produce a sub-
+    // pixel anchor rect that misses the actual anchor's right/bottom edge,
+    // which makes the xdg-positioner snap the popup against the wrong
+    // edge for fractional-DPI items.
+    return QRect(scenePos.toPoint(), QSize(qCeil(m_anchor->width()), qCeil(m_anchor->height())));
 }
 
 void PopupWindow::showPopup()

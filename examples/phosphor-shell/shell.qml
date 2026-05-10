@@ -26,9 +26,13 @@ Item {
     Process {
         id: clockProc
 
+        // 1 s interval so minute boundaries don't lag by up to the
+        // sample period. The cost is one fork/exec per second, which is
+        // a known trade-off documented in the FileView replacement
+        // pattern below.
         command: ["date", "+%H:%M · %a %b %d"]
         running: true
-        interval: 10000
+        interval: 1000
     }
 
     // CPU + memory readouts via /proc — avoids a `sh -c` subprocess
@@ -39,9 +43,12 @@ Item {
         id: cpuStat
 
         // Cumulative jiffies from the last snapshot (idle + total) for
-        // delta computation between intervals.
-        property int prevIdle: 0
-        property int prevTotal: 0
+        // delta computation between intervals. `real` (double) — `int`
+        // is 32-bit signed in QML, and on a multi-core box at 100Hz the
+        // total jiffies cross INT32_MAX in days, after which assignment
+        // truncates and the next delta is bogus.
+        property real prevIdle: 0
+        property real prevTotal: 0
         // Computed % usage, exposed as a string for the panel binding.
         property string percent: "0"
 
@@ -56,12 +63,23 @@ Item {
             const fields = line.trim().split(/\s+/).slice(1).map((s) => {
                 return parseInt(s, 10);
             });
+            // Defensive: a kernel that doesn't expose the expected layout
+            // (exotic arch, namespaced /proc) leaves NaN in `fields[3]`,
+            // which propagates and parks `prevTotal` at NaN forever.
+            if (fields.length < 4 || !Number.isFinite(fields[3]))
+                return ;
+
             // idle = idle + iowait (matches the original awk formula).
             const idle = fields[3] + (fields[4] || 0);
             let total = 0;
             for (const f of fields) {
-                total += f;
+                if (Number.isFinite(f))
+                    total += f;
+
             }
+            if (!Number.isFinite(idle) || !Number.isFinite(total))
+                return ;
+
             if (prevTotal > 0) {
                 const dTotal = total - prevTotal;
                 const dIdle = idle - prevIdle;
@@ -92,7 +110,7 @@ Item {
                     break;
                 }
             }
-            if (total > 0)
+            if (Number.isFinite(total) && Number.isFinite(available) && total > 0)
                 percent = Math.round((1 - available / total) * 100).toString();
 
         }

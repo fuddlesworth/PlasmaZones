@@ -72,8 +72,10 @@ QVariantMap PersistentProperties::saveState() const
     // author who shadows the name with their own `property string reloadId`
     // — perfectly legal, lands at a different metaobject index — still
     // gets persisted. Skipping by name would silently drop the user's
-    // property in addition to ours.
-    const int reloadIdIndex = PersistentProperties::staticMetaObject.indexOfProperty("reloadId");
+    // property in addition to ours. Cached as `static const` because the
+    // C++ class's metaobject is fixed at compile time; resolving on every
+    // save is wasted work in tight save loops.
+    static const int reloadIdIndex = PersistentProperties::staticMetaObject.indexOfProperty("reloadId");
 
     for (int i = offset; i < meta->propertyCount(); ++i) {
         if (i == reloadIdIndex) {

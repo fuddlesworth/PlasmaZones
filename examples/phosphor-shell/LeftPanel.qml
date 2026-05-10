@@ -25,7 +25,7 @@ PanelWindow {
 
     ShaderBackground {
         anchors.fill: parent
-        playing: true
+        playing: root.visible
         shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
         shaderParams: {
             "tintOpacity": 0.85,
@@ -68,6 +68,8 @@ PanelWindow {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
+                Accessible.role: Accessible.Button
+                Accessible.name: root.shellState.menuOpen ? "Close menu" : "Open menu"
                 onClicked: root.shellState.menuOpen = !root.shellState.menuOpen
             }
 
@@ -80,6 +82,10 @@ PanelWindow {
             Repeater {
                 model: 5
 
+                // NOTE: this example uses indices for "workspaces" which is
+                // pedagogical only — production shells should bind to
+                // compositor-provided workspace IDs (per the project's
+                // "Zone IDs, never indices" rule).
                 Rectangle {
                     required property int index
 
@@ -90,6 +96,8 @@ PanelWindow {
 
                     MouseArea {
                         anchors.fill: parent
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Switch to workspace " + (parent.index + 1)
                         onClicked: root.shellState.activeWorkspace = parent.index
                     }
 

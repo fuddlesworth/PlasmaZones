@@ -220,6 +220,14 @@ public:
     static void handleToplevel(void* data, struct zwlr_foreign_toplevel_manager_v1*,
                                struct zwlr_foreign_toplevel_handle_v1* handle)
     {
+        // Manager dtor sets user_data to nullptr before destroying its
+        // Private — any event still in flight after that point lands here
+        // with a null pointer. Destroy the orphan handle to avoid a leak,
+        // then bail (no Private to dispatch into).
+        if (!data) {
+            zwlr_foreign_toplevel_handle_v1_destroy(handle);
+            return;
+        }
         auto* self = static_cast<Private*>(data);
         if (self->stopped) {
             // We told the compositor to stop, but in-flight events may still
@@ -256,11 +264,16 @@ public:
 
     static void handleFinished(void* data, struct zwlr_foreign_toplevel_manager_v1*)
     {
+        // Same dangling-listener guard as handleToplevel: if the manager's
+        // Private has already been destroyed, `data` was set to nullptr
+        // and there's nothing left to mark stopped. The proxy itself is
+        // owned by LayerShellIntegration and will be reclaimed by the
+        // wl_display teardown.
+        if (!data) {
+            return;
+        }
         auto* self = static_cast<Private*>(data);
         self->stopped = true;
-        // Compositor confirmed our stop request — manager proxy is no longer
-        // valid. We don't destroy here because the LayerShellIntegration
-        // owns the proxy lifetime; just stop tracking.
     }
 };
 
@@ -322,6 +335,40 @@ void ForeignToplevel::Private::handleClosed(void* data, struct zwlr_foreign_topl
     // been destroyed mid-event-dispatch during teardown.
     if (self->manager) {
         self->manager->d->toplevels.remove(self->handle);
+
+        // Notify any sibling toplevel whose parentToplevel referenced us.
+        // QPointer<ForeignToplevel> in pendingParent / parentToplevel will
+        // auto-clear once the deleteLater() below actually runs, but QML
+        // bindings can still see the stale pointer between now and that
+        // event-loop pass — eagerly clearing + emitting parentToplevelChanged
+        // closes the gap.
+        //
+        // Edge case worth noting but not fixing: pendingParent can point
+        // to us if a reparent batch hasn't yet hit `done`. We clear
+        // pendingParent and reset parentDirty, which DROPS that in-flight
+        // batch. That's the correct outcome — the parent (us) is gone, so
+        // promoting pendingParent at done would just bind the sibling to
+        // a deleteLater'd object. The compositor is expected to issue
+        // `done` after a coherent reparent, so a closed event arriving
+        // mid-batch implies the batch was already invalidated.
+        for (ForeignToplevel* sibling : std::as_const(self->manager->d->toplevels)) {
+            if (!sibling) {
+                continue;
+            }
+            auto& sd = *sibling->d;
+            bool changed = false;
+            if (sd.parentToplevel.data() == self->owner) {
+                sd.parentToplevel.clear();
+                changed = true;
+            }
+            if (sd.pendingParent.data() == self->owner) {
+                sd.pendingParent.clear();
+                sd.parentDirty = false;
+            }
+            if (changed) {
+                Q_EMIT sibling->parentToplevelChanged();
+            }
+        }
     }
     if (self->handle) {
         zwlr_foreign_toplevel_handle_v1_destroy(self->handle);
@@ -371,21 +418,47 @@ ForeignToplevelManager::~ForeignToplevelManager()
     // tear down the global, breaking subsequent ForeignToplevelManager
     // instances. The integration's destructor stops the manager instead.
 
-    // But we DO need to destroy our per-toplevel handles since the listener
-    // data pointers (raw Private*) become dangling after we go away.
-    // Use synchronous delete (not deleteLater) — at process shutdown the
-    // QCoreApplication event loop may already be gone, in which case
-    // deleteLater queues into a sink and the objects leak with a Qt
-    // warning. The toplevels are unparented and accessed by no other
-    // code path at this point so synchronous teardown is safe.
+    // Sever the listener's data pointer FIRST. The static handlers
+    // (handleToplevel / handleFinished) read `data` and our null-checks
+    // there bail out cleanly, so any event that arrives between now and
+    // the proxy's eventual reclamation by wl_display teardown can't
+    // dereference our about-to-be-freed Private. Without this, the
+    // `finished` event the integration's stop() solicits could land on
+    // dangling memory if it arrives after we go away.
+    if (auto* integration = LayerShellIntegration::instance()) {
+        if (auto* manager = integration->foreignToplevelManager()) {
+            wl_proxy_set_user_data(reinterpret_cast<wl_proxy*>(manager), nullptr);
+        }
+    }
+
+    // Destroy the per-toplevel handles synchronously. Use `delete` (not
+    // deleteLater) — at process shutdown the QCoreApplication event loop
+    // may already be gone, in which case deleteLater queues into a sink
+    // and the objects leak with a Qt warning.
+    //
+    // QPointer snapshot defends against the case where a consumer slot
+    // queued a `deleteLater()` on a toplevel before we got here: that
+    // toplevel may already be in the QObject deferred-delete sink, and
+    // `delete tl` would race with the pending DeferredDelete event.
+    // Each QPointer auto-clears the moment the QObject is destroyed,
+    // so we delete only entries that are still alive.
+    QList<QPointer<ForeignToplevel>> snapshot;
+    snapshot.reserve(d->toplevels.size());
     for (ForeignToplevel* tl : std::as_const(d->toplevels)) {
-        if (tl && tl->d->handle) {
+        snapshot.append(QPointer<ForeignToplevel>(tl));
+    }
+    d->toplevels.clear();
+    for (auto& tlp : snapshot) {
+        ForeignToplevel* tl = tlp.data();
+        if (!tl) {
+            continue;
+        }
+        if (tl->d->handle) {
             zwlr_foreign_toplevel_handle_v1_destroy(tl->d->handle);
             tl->d->handle = nullptr;
         }
         delete tl;
     }
-    d->toplevels.clear();
 }
 
 bool ForeignToplevelManager::isSupported()

@@ -102,12 +102,15 @@ public:
             return;
         }
         // QTBUG-118604: QWindow::resize silently clamps to setMinimumSize /
-        // setMaximumSize. The wrapper-window path in PhosphorLayer::Surface
-        // clears those constraints; do the same here so the xdg fallback
-        // doesn't silently honour stale min/max set by Qt internals.
-        constexpr int kQtWindowSizeMax = (1 << 24) - 1;
-        m_window->setMinimumSize(QSize(0, 0));
-        m_window->setMaximumSize(QSize(kQtWindowSizeMax, kQtWindowSizeMax));
+        // setMaximumSize. Clear those constraints ONCE per transport so a
+        // consumer that legitimately sets its own min/max bounds on the
+        // QQuickWindow afterwards isn't clobbered on every resize.
+        if (!m_clampCleared) {
+            constexpr int kQtWindowSizeMax = (1 << 24) - 1;
+            m_window->setMinimumSize(QSize(0, 0));
+            m_window->setMaximumSize(QSize(kQtWindowSizeMax, kQtWindowSizeMax));
+            m_clampCleared = true;
+        }
         m_window->resize(size);
     }
 
@@ -115,6 +118,7 @@ private:
     QPointer<QQuickWindow> m_window;
     mutable bool m_everConfigured = false; ///< Latched true on first isVisible()
     bool m_warnedKeyboardExclusive = false; ///< Latched true after first Exclusive-keyboard warning
+    bool m_clampCleared = false; ///< Latched true after first setDesiredSize clears Qt min/max
 };
 
 // ── Transport ──────────────────────────────────────────────────────────

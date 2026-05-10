@@ -149,12 +149,11 @@ void ShellEngine::setupWatcher()
     const QString dir = QFileInfo(filePath).absolutePath();
     m_watcher->addPath(dir);
 
-    connect(m_watcher, &QFileSystemWatcher::fileChanged, this, [this]() {
+    auto kickReload = [this]() {
         m_reloadTimer->start();
-    });
-    connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, [this]() {
-        m_reloadTimer->start();
-    });
+    };
+    connect(m_watcher, &QFileSystemWatcher::fileChanged, this, kickReload);
+    connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, kickReload);
 
     qCDebug(lcShellEngine) << "Watching for changes:" << filePath;
 }
@@ -165,13 +164,11 @@ void ShellEngine::onScreensChanged()
     // and DPMS wake-ups can fire screensChanged several times in quick
     // succession). Routing through the same debounce timer that handles
     // file-change reloads avoids tearing down the engine more than once
-    // per topology transition.
+    // per topology transition. m_reloadTimer is created unconditionally
+    // in the constructor and lives as long as `this`, so no null-guard
+    // is needed.
     qCDebug(lcShellEngine) << "Screen topology changed, scheduling shell reload";
-    if (m_reloadTimer) {
-        m_reloadTimer->start();
-    } else {
-        onFileChanged();
-    }
+    m_reloadTimer->start();
 }
 
 void ShellEngine::onFileChanged()
@@ -217,7 +214,7 @@ void ShellEngine::onFileChanged()
         }
     }
 
-    qCDebug(lcShellEngine) << "Reload complete," << m_surfaces.size() << "panel(s)";
+    qCDebug(lcShellEngine) << "Reload complete," << m_surfaces.size() << "surface(s)";
     Q_EMIT reloaded();
 }
 
@@ -233,7 +230,7 @@ static PhosphorLayer::Anchor edgeToAnchor(PanelWindow::Edge edge)
     case PanelWindow::Right:
         return PhosphorLayer::Anchor::Right;
     }
-    return PhosphorLayer::Anchor::Top;
+    Q_UNREACHABLE_RETURN(PhosphorLayer::Anchor::Top);
 }
 
 void ShellEngine::materializePanels()
@@ -255,7 +252,12 @@ void ShellEngine::materializePanels()
                                      << " value (0 = auto-fit, >0 = explicit pin) or change alignment to Fill";
         }
         QScreen* targetScreen = panel->screen() ? panel->screen() : m_deps.screenProvider->primary();
-        const QSize screenSize = targetScreen ? targetScreen->size() : QSize(1920, 1080);
+        if (!targetScreen) {
+            qCWarning(lcShellEngine) << "Skipping PanelWindow: no screen available "
+                                     << "(neither panel.screen nor screenProvider.primary())";
+            continue;
+        }
+        const QSize screenSize = targetScreen->size();
         const bool horizontal = (panel->edge() == PanelWindow::Top || panel->edge() == PanelWindow::Bottom);
         const PhosphorLayer::Anchor primaryAnchor = edgeToAnchor(panel->edge());
 
@@ -381,21 +383,38 @@ void ShellEngine::materializePanels()
         // both the QML root AND the unique_ptr would otherwise own it; if
         // surfaceFactory->create() returns null below, the unique_ptr
         // destructs and deletes panel, then m_rootObject.reset() during
-        // teardown would double-free. Surface re-parents panel to the
-        // wrapper QQuickWindow on success (surface.cpp:644).
+        // teardown would double-free. Surface re-parents panel to its
+        // wrapper QQuickWindow on success.
         // Order: clear visual parent BEFORE QObject parent so QQuickItem's
         // visual-parent bookkeeping doesn't observe a transient QObject-
         // parent mismatch (matches Qt practice elsewhere in the codebase).
         panel->setParentItem(nullptr);
         panel->setParent(nullptr);
 
+        // Build the SurfaceConfig FIRST, then atomically transfer ownership.
+        // Constructing cfg before the release keeps panel owned by
+        // m_rootObject across any throwing operations on cfg's other
+        // fields (role, debugName, etc.) — only the unique_ptr move is
+        // noexcept, so we can pair `release()` and `cfg.contentItem =`
+        // adjacently without an exception window in between.
         PhosphorLayer::SurfaceConfig cfg;
         cfg.role = role;
-        cfg.contentItem = std::unique_ptr<QQuickItem>(panel);
         cfg.screen = targetScreen;
         cfg.initialSize = panelSize;
         cfg.marginsOverride = layerMargins;
         cfg.debugName = QStringLiteral("phosphor-shell-panel");
+
+        // Hand off rootPanel ownership in one noexcept step:
+        // unique_ptr::release returns a raw pointer and clears its source;
+        // the unique_ptr ctor that takes a raw pointer is also noexcept.
+        // No exception can fire between these two lines, so the panel is
+        // never orphaned. For non-rootPanel iterations the release is a
+        // no-op-equivalent because m_rootObject still holds the QML root
+        // (the wrapping Item), not this panel.
+        if (panel == rootPanel) {
+            m_rootObject.release();
+        }
+        cfg.contentItem = std::unique_ptr<QQuickItem>(panel);
 
         // Pass nullptr as parent — m_surfaces (vector of unique_ptr) is
         // the single owner. Passing `this` would double-own (QObject parent
@@ -420,22 +439,18 @@ void ShellEngine::materializePanels()
     }
 
     m_shellGlobal->clearSingletons();
-    const auto persists = m_rootObject->findChildren<PersistentProperties*>();
-    for (auto* p : persists) {
-        if (!p->reloadId().isEmpty()) {
-            m_shellGlobal->registerSingleton(p->reloadId(), p);
+    // Use m_rootRef rather than m_rootObject. The loop above releases
+    // m_rootObject when the QML root is a PanelWindow (Surface takes
+    // ownership via cfg.contentItem). m_rootRef (QPointer) still tracks
+    // the live root regardless of which path we took, so findChildren
+    // works for both rootPanel and Item-rooted shells.
+    if (m_rootRef) {
+        const auto persists = m_rootRef->findChildren<PersistentProperties*>();
+        for (auto* p : persists) {
+            if (!p->reloadId().isEmpty()) {
+                m_shellGlobal->registerSingleton(p->reloadId(), p);
+            }
         }
-    }
-
-    if (rootPanel) {
-        // Surface (cfg.contentItem) took ownership of the root panel and
-        // re-parented it to the wrapper QQuickWindow. Release our
-        // unique_ptr to avoid double-freeing the same QObject during
-        // teardown when the wrapper window deletes its child first and
-        // m_rootObject.reset() would then call delete on a dangling
-        // pointer. m_rootRef (QPointer) still tracks the live root for
-        // savePersistentState / restorePersistentState scans.
-        m_rootObject.release();
     }
 }
 

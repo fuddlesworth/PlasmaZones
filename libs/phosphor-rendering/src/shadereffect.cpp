@@ -385,30 +385,35 @@ void ShaderEffect::onPlayingTick()
     if (!m_playing) {
         return;
     }
-    // Skip the per-frame property pump for invisible / off-screen / zero-
-    // sized items. afterFrameEnd fires on EVERY rendered frame of the host
-    // window, so without this gate every playing ShaderEffect on the
-    // window pays the setITime/setITimeDelta/setIFrame/3×update cost
-    // even when nothing is visible. The visual side-effect of skipping is
-    // that animation appears frozen while the item is hidden — which is
-    // the desired behaviour: an invisible animation should not consume
-    // wall-clock progress.
-    if (!isVisible() || width() <= 0 || height() <= 0) {
-        return;
-    }
-    // No point pumping a shader that failed to compile — saves a per-frame
-    // update() that the scene graph would just discard.
-    if (m_status == Status::Error) {
-        return;
-    }
     // QElapsedTimer wall-clock seconds — monotonic, immune to NTP jumps.
-    // Static so cross-instance timestamps stay consistent (multiple
-    // playing shaders all read off the same monotonic clock).
+    // Static across this TU because nsecsElapsed() needs a fixed start
+    // anchor; the monotonic value is read into a per-instance baseline
+    // (m_playingLastFrameSeconds) so each instance's delta is fully
+    // independent of every other.
     static QElapsedTimer s_clock;
     if (!s_clock.isValid()) {
         s_clock.start();
     }
     const qreal now = s_clock.nsecsElapsed() * 1e-9;
+
+    // Skip the per-frame property pump for invisible / off-screen /
+    // zero-sized items, and for shaders that aren't ready (compile
+    // failure, still loading, no source set). afterAnimating fires on
+    // EVERY frame of the host window, so without these gates every
+    // playing ShaderEffect on the window pays setITime / setITimeDelta /
+    // setIFrame / 3×update cost regardless. The visual side-effect of
+    // skipping is that animation appears frozen — desired behaviour.
+    //
+    // Crucially, update m_playingLastFrameSeconds even on the skip path
+    // so the next visible tick computes a SMALL delta (the time between
+    // two consecutive frames) instead of a huge one (the time since the
+    // item was last visible — which would produce a giant iTime jump
+    // and a visible animation skip on re-show).
+    if (!isVisible() || width() <= 0 || height() <= 0 || m_status != Status::Ready) {
+        m_playingLastFrameSeconds = now;
+        return;
+    }
+
     const qreal delta = (m_playingLastFrameSeconds > 0.0) ? (now - m_playingLastFrameSeconds) : 0.0;
     m_playingLastFrameSeconds = now;
 

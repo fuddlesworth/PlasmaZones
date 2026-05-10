@@ -78,8 +78,10 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     /// shader without committing to wall-clock pacing.
     ///
     /// Toggling at runtime is supported. While true, the manual setters
-    /// for iTime/iTimeDelta/iFrame become advisory — the next frame will
-    /// overwrite them with the auto-ticked value.
+    /// for iTime/iTimeDelta/iFrame are additive: the next frame's tick
+    /// adds the wall-clock delta to whatever value is currently stored,
+    /// so a manual write is preserved as a baseline rather than
+    /// overwritten. iFrame is incremented by 1 per tick.
     Q_PROPERTY(bool playing READ isPlaying WRITE setPlaying NOTIFY playingChanged FINAL)
 
     // ── Shader source ────────────────────────────────────────────────

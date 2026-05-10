@@ -9,6 +9,25 @@ PopupWindow {
 
     required property var shellState
     required property var anchorItem
+    // Menu items hoisted to a property so the binding is evaluated once,
+    // not every time the Repeater re-runs the inline literal — re-running
+    // would rebuild every delegate and reset hover state.
+    readonly property var menuItems: [{
+        "name": "Terminal",
+        "icon": ">"
+    }, {
+        "name": "Files",
+        "icon": "📁"
+    }, {
+        "name": "Browser",
+        "icon": "🌐"
+    }, {
+        "name": "Editor",
+        "icon": "✎"
+    }, {
+        "name": "Settings",
+        "icon": "⚙"
+    }]
 
     anchor: anchorItem
     popupEdge: PopupWindow.Below
@@ -39,24 +58,9 @@ PopupWindow {
             }
 
             Repeater {
-                model: [{
-                    "name": "Terminal",
-                    "icon": ">"
-                }, {
-                    "name": "Files",
-                    "icon": "📁"
-                }, {
-                    "name": "Browser",
-                    "icon": "🌐"
-                }, {
-                    "name": "Editor",
-                    "icon": "✎"
-                }, {
-                    "name": "Settings",
-                    "icon": "⚙"
-                }]
+                model: root.menuItems
 
-                Rectangle {
+                delegate: Rectangle {
                     required property var modelData
 
                     width: parent.width
@@ -89,6 +93,8 @@ PopupWindow {
 
                         anchors.fill: parent
                         hoverEnabled: true
+                        Accessible.role: Accessible.MenuItem
+                        Accessible.name: modelData.name
                         onClicked: root.shellState.menuOpen = false
                     }
 

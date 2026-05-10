@@ -22,7 +22,12 @@ PanelWindow {
 
     ShaderBackground {
         anchors.fill: parent
-        playing: true
+        // Stop ticking when the panel is hidden (Toplevels not supported,
+        // or the wayland surface isn't visible). ShaderEffect already
+        // gates per-frame work on isVisible/zero-size, but unbinding
+        // playing here also short-circuits the afterAnimating connection
+        // and avoids dirtying the scene at all.
+        playing: root.visible
         shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
         shaderParams: {
             "tintOpacity": 0.8,
@@ -76,6 +81,9 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                    Accessible.role: Accessible.Button
+                    Accessible.name: modelData.title || modelData.appId || "(unnamed window)"
+                    Accessible.description: modelData.activated ? "Minimize window" : "Activate window"
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.MiddleButton) {
                             modelData.close();

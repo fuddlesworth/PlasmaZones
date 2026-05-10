@@ -38,28 +38,38 @@ FloatingWindow {
             }
 
             Column {
+                id: envCol
+
+                // Environment.get returns "" for unset vars; the helper
+                // below prints "(unset)" so missing env vars don't render
+                // as a literal "User: undefined" / "User: " string.
+                function envOr(name) {
+                    var v = Environment.get(name);
+                    return (v === undefined || v === "") ? "(unset)" : v;
+                }
+
                 spacing: 8
 
                 Text {
-                    text: "Host: " + root.hostname
+                    text: "Host: " + (root.hostname || "(unknown)")
                     color: "#a6adc8"
                     font.pixelSize: 13
                 }
 
                 Text {
-                    text: "User: " + Environment.get("USER")
+                    text: "User: " + envCol.envOr("USER")
                     color: "#a6adc8"
                     font.pixelSize: 13
                 }
 
                 Text {
-                    text: "Shell: " + Environment.get("SHELL")
+                    text: "Shell: " + envCol.envOr("SHELL")
                     color: "#a6adc8"
                     font.pixelSize: 13
                 }
 
                 Text {
-                    text: "Desktop: " + Environment.get("XDG_CURRENT_DESKTOP")
+                    text: "Desktop: " + envCol.envOr("XDG_CURRENT_DESKTOP")
                     color: "#a6adc8"
                     font.pixelSize: 13
                 }
@@ -99,6 +109,8 @@ FloatingWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Close settings window"
                     onClicked: root.shellState.settingsOpen = false
                 }
 

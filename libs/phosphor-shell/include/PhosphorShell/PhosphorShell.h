@@ -3,6 +3,18 @@
 
 #pragma once
 
+/**
+ * @file PhosphorShell.h
+ * @brief Umbrella include for the PhosphorShell library — a Quickshell-
+ *        style declarative QML framework for layer-shell desktop shells.
+ *
+ * Pulls in every public type (PanelWindow, PopupWindow, FloatingWindow,
+ * ShellEngine, ShellLoader, Variants, LazyLoader, Process, FileView,
+ * PersistentProperties, Environment, ShellGlobal, ScreenModel,
+ * Toplevels). Consumers that only need a subset should include the
+ * specific headers directly to keep compile times down.
+ */
+
 #include <PhosphorShell/Environment.h>
 #include <PhosphorShell/FileView.h>
 #include <PhosphorShell/FloatingWindow.h>
