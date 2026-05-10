@@ -197,23 +197,34 @@ ColumnLayout {
         // The override-curve checkbox sits on the same row so the
         // user can disable the override without losing their working
         // state.
+        // Curve override checkbox — own row in App Rules mode so it
+        // doesn't crowd the curve summary preview / button below.
+        // Hidden entirely in per-event-card mode (the card's master
+        // override toggle gates the whole timing section).
+        CheckBox {
+            id: curveOverrideCheck
+
+            Layout.fillWidth: true
+            visible: root.showOverrideCheckboxes
+            text: i18n("Override curve")
+            checked: root.overrideCurve
+            onToggled: {
+                root.overrideCurve = checked;
+                root.valueChanged();
+            }
+            ToolTip.text: i18n("When off, the per-event default curve is used.")
+            ToolTip.visible: hovered
+        }
+
+        // Curve summary row: thumbnail + description + Customize…
+        // Dimmed when the override is off so the user can still see
+        // the inherited preview without it competing for visual
+        // weight with the active controls.
         RowLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.largeSpacing
-
-            CheckBox {
-                id: curveOverrideCheck
-
-                visible: root.showOverrideCheckboxes
-                text: i18n("Override curve")
-                checked: root.overrideCurve
-                onToggled: {
-                    root.overrideCurve = checked;
-                    root.valueChanged();
-                }
-                ToolTip.text: i18n("When off, the per-event default curve is used.")
-                ToolTip.visible: hovered
-            }
+            opacity: (!root.showOverrideCheckboxes || root.overrideCurve) ? 1 : 0.5
+            enabled: !root.showOverrideCheckboxes || root.overrideCurve
 
             CurveThumbnail {
                 id: curveThumbnail
@@ -224,12 +235,7 @@ ColumnLayout {
                 timingMode: root.timingMode
                 omega: root.springOmega
                 zeta: root.springZeta
-                opacity: (!root.showOverrideCheckboxes || root.overrideCurve) ? 1 : 0.5
-                onClicked: {
-                    if (!root.showOverrideCheckboxes || root.overrideCurve)
-                        curveDialog.open();
-
-                }
+                onClicked: curveDialog.open()
             }
 
             ColumnLayout {
@@ -240,7 +246,6 @@ ColumnLayout {
                     Layout.fillWidth: true
                     text: root.summaryDescription()
                     elide: Text.ElideRight
-                    opacity: (!root.showOverrideCheckboxes || root.overrideCurve) ? 1 : 0.5
                 }
 
                 Label {
@@ -249,7 +254,6 @@ ColumnLayout {
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     color: Kirigami.Theme.disabledTextColor
                     elide: Text.ElideRight
-                    opacity: (!root.showOverrideCheckboxes || root.overrideCurve) ? 1 : 0.5
                 }
 
             }
@@ -257,7 +261,6 @@ ColumnLayout {
             Button {
                 text: i18n("Customize…")
                 icon.name: "configure"
-                enabled: !root.showOverrideCheckboxes || root.overrideCurve
                 Accessible.name: root.eventLabel.length > 0 ? i18n("Customize curve for %1", root.eventLabel) : i18n("Customize curve")
                 onClicked: curveDialog.open()
             }
@@ -289,24 +292,25 @@ ColumnLayout {
             visible: root.timingMode === CurvePresets.timingModeEasing
         }
 
+        // Duration override checkbox — same own-row layout as the
+        // curve override above. Hidden in per-event-card mode.
+        CheckBox {
+            Layout.fillWidth: true
+            visible: root.showOverrideCheckboxes && root.timingMode === CurvePresets.timingModeEasing
+            text: i18n("Override duration")
+            checked: root.overrideDuration
+            onToggled: {
+                root.overrideDuration = checked;
+                root.valueChanged();
+            }
+            ToolTip.text: i18n("When off, the per-event default duration is used.")
+            ToolTip.visible: hovered
+        }
+
         SettingsRow {
             visible: root.timingMode === CurvePresets.timingModeEasing
             title: i18n("Duration")
-
-            // Override-duration checkbox in App Rules mode; in
-            // per-event card mode this collapses to invisible and the
-            // slider is always live.
-            CheckBox {
-                visible: root.showOverrideCheckboxes
-                text: i18n("Override")
-                checked: root.overrideDuration
-                onToggled: {
-                    root.overrideDuration = checked;
-                    root.valueChanged();
-                }
-                ToolTip.text: i18n("When off, the per-event default duration is used.")
-                ToolTip.visible: hovered
-            }
+            enabled: !root.showOverrideCheckboxes || root.overrideDuration
 
             SettingsSlider {
                 from: 50
@@ -316,7 +320,6 @@ ColumnLayout {
                 Accessible.name: i18n("Animation duration")
                 labelWidth: Kirigami.Units.gridUnit * 4
                 value: root.duration
-                enabled: !root.showOverrideCheckboxes || root.overrideDuration
                 onMoved: function(value) {
                     root.duration = Math.round(value);
                     root.valueChanged();
