@@ -4,6 +4,7 @@
 #include <PhosphorShell/ShellGlobal.h>
 #include <PhosphorShell/PersistentProperties.h>
 #include <PhosphorShell/ScreenModel.h>
+#include <PhosphorShell/WallpaperService.h>
 
 #include <QLoggingCategory>
 
@@ -13,6 +14,7 @@ namespace PhosphorShell {
 
 ShellGlobal::ShellGlobal(QObject* parent)
     : QObject(parent)
+    , m_wallpaper(new WallpaperService(this))
 {
 }
 
@@ -30,6 +32,11 @@ void ShellGlobal::setScreenModel(ScreenModel* model)
     }
     m_screens = model;
     Q_EMIT screensChanged();
+}
+
+WallpaperService* ShellGlobal::wallpaper() const
+{
+    return m_wallpaper;
 }
 
 QObject* ShellGlobal::singleton(const QString& reloadId) const

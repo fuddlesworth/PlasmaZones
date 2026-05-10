@@ -29,3 +29,4 @@
 #include <PhosphorShell/ShellLoader.h>
 #include <PhosphorShell/Toplevels.h>
 #include <PhosphorShell/Variants.h>
+#include <PhosphorShell/WallpaperService.h>

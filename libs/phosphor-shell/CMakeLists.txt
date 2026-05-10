@@ -31,6 +31,9 @@ endif()
 if(NOT TARGET PhosphorRendering::PhosphorRendering)
     find_package(PhosphorRendering CONFIG REQUIRED)
 endif()
+if(NOT TARGET PhosphorShaders::PhosphorShaders)
+    find_package(PhosphorShaders CONFIG REQUIRED)
+endif()
 if(NOT TARGET PhosphorWayland::PhosphorWayland)
     find_package(PhosphorWayland CONFIG REQUIRED)
 endif()
@@ -57,6 +60,7 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/FloatingWindow.h
     include/PhosphorShell/LazyLoader.h
     include/PhosphorShell/Toplevels.h
+    include/PhosphorShell/WallpaperService.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -78,6 +82,7 @@ set(phosphorshell_SRCS
     src/floatingwindow.cpp
     src/lazyloader.cpp
     src/toplevels.cpp
+    src/wallpaperservice.cpp
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -119,6 +124,7 @@ target_link_libraries(PhosphorShell
         Qt6::Qml
         PhosphorLayer::PhosphorLayer
         PhosphorRendering::PhosphorRendering
+        PhosphorShaders::PhosphorShaders
         PhosphorWayland::PhosphorWayland
 )
 

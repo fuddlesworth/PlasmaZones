@@ -5,6 +5,7 @@
 
 import Phosphor.Shell 1.0
 import QtQuick
+import QtQuick.Window
 
 // Trade-off vs the three-panel layout: one exclusive zone, one shader,
 // one wl_surface — cheaper for the compositor. Anchors don't reserve
@@ -23,6 +24,11 @@ PanelWindow {
     required property string memPercent
     required property string batteryPercent
     required property bool batteryVisible
+    // Screen height in PHYSICAL pixels — gradient.frag needs this to
+    // map the panel's UV (which spans 38 px) to the wallpaper's UV
+    // (which spans the screen's height). iResolution in the shader is
+    // already physical-pixel scaled by DPR, so we multiply here too.
+    readonly property real screenHeightPx: Screen.height * Screen.devicePixelRatio
 
     edge: PanelWindow.Top
     thickness: 38
@@ -30,13 +36,40 @@ PanelWindow {
     exclusiveZoneEnabled: true
 
     ShaderBackground {
+        // Canonical slot-keyed names — `setShaderParams` only honours
+        // `customParams<N>_<x|y|z|w>` and `customColor<N>` keys.
+        // Friendly names like "speed" would be silently dropped.
+        // 0.55 leaves enough wallpaper visible to read the
+        // mauve→sky gradient as a tint rather than an opaque wash.
+        // Subtle crystalline grain. Higher reads as static noise;
+        // lower and the panel looks plastic against the wallpaper.
+        // No corner radius for a continuous screen-spanning panel.
+        // Voronoi cells per panel width.
+        // Blur radius in wallpaper pixels — 8 gives a soft but
+        // recognisable backdrop on a 1080p+ wallpaper.
+
         anchors.fill: parent
         playing: root.visible
         shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
+        // Bind the desktop wallpaper as a sampler at SRB slot 11 so the
+        // shader can read it via `uniform sampler2D uWallpaper`. The
+        // service decodes the image off the GUI thread; while the load
+        // is in flight, `image` is null and the shader's textureSize-
+        // based check falls back to the gradient-only path.
+        useWallpaper: PhosphorShell.wallpaper.available
+        wallpaperTexture: PhosphorShell.wallpaper.image
+        //   customParams1: speed / baseAngle / tintOpacity / frostAmount
+        //   customParams2: cornerRadius / frostScale
+        //   customParams3: screenHeight / blurRadius
         shaderParams: {
-            "speed": 1.2,
-            "angle": 0,
-            "cornerRadius": 0
+            "customParams1_x": 1.2,
+            "customParams1_y": 0,
+            "customParams1_z": 0.55,
+            "customParams1_w": 0.08,
+            "customParams2_x": 0,
+            "customParams2_y": 24,
+            "customParams3_x": root.screenHeightPx,
+            "customParams3_y": 8
         }
         // Catppuccin mocha mauve → macchiato sky.
         customColor1: "#cba6f7"
