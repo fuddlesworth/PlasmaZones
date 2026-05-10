@@ -14,17 +14,23 @@
 // to BMW's). See bmw_compat.glsl header for the BMW-to-PlasmaZones
 // uniform-name remap.
 //
-// Note on actor scale: BMW grows the actor by 2x so shards can fly past
-// the original window bounds. PlasmaZones' runtime does not double the
-// quad, so the shard math produces `coords` outside [0, 1] for shards
-// in the outer half of the cascade. `bmw_compat.glsl`'s default
-// `getInputColor` only divides by alpha — it does NOT clip — so an
-// off-window sample on a clamp-to-edge `uTexture0` would smear edge
-// pixels (visible artefact for opaque-edged windows like terminals or
-// most app chrome). We therefore override `getInputColor` locally to
-// return `vec4(0.0)` outside [0, 1], matching the matrix.frag pattern
-// (matrix/effect.frag:196-205). The cascade still reads as a shatter;
-// shards beyond the window crop cleanly to transparent.
+// Note on actor scale: BMW grows the actor by 2x (ACTOR_SCALE=2.0,
+// PADDING=0.5) so shards can fly past the original window bounds. We
+// match that on PlasmaZones via the `boundsPadding` mechanism: metadata
+// declares `"boundsPadding": 0.5`, SurfaceAnimator expands the
+// shaderItem QUAD accordingly and writes the fraction into
+// customParams[7].x. The morph-style UV remap below converts the padded
+// vTexCoord back into anchor-space coords ∈ [-0.5, 1.5], which is
+// exactly what BMW's `iTexCoord*2 - 0.5` produced upstream.
+//
+// `bmw_compat.glsl`'s default `getInputColor` only divides by alpha —
+// it does NOT clip — so an off-window sample on a clamp-to-edge
+// `uTexture0` would smear edge pixels (visible artefact for opaque-
+// edged windows like terminals or most app chrome). We therefore
+// override `getInputColor` locally to return `vec4(0.0)` outside
+// [0, 1], matching the matrix.frag pattern (matrix/effect.frag:196-205).
+// The cascade still reads as a shatter; shards beyond the window crop
+// cleanly to transparent.
 
 #version 450
 
@@ -40,6 +46,15 @@ layout(location = 0) out vec4 fragColor;
 #define uShardScale customParams[0].x
 #define uBlowForce  customParams[0].y
 #define uGravity    customParams[0].z
+
+// Bounds-padding fraction supplied by SurfaceAnimator from
+// AnimationShaderEffect::boundsPadding (metadata.json `"boundsPadding": 0.5`).
+// See morph/effect.frag for the same contract — customParams[7].x is the
+// reserved structural slot. With boundsPadding=0.5 the UV remap below
+// produces anchorUv ∈ [-0.5, 1.5], reproducing BMW's `coords =
+// iTexCoord*ACTOR_SCALE - PADDING` (ACTOR_SCALE=2, PADDING=0.5) without
+// hardcoding the constants on the GLSL side.
+#define boundsPadding customParams[7].x
 
 // uSeed (BMW: per-leg `Math.random()`) is computed once at the top of
 // `main()` from `hash22(iSurfaceScreenPos.xy)` and bound to a local
@@ -58,8 +73,6 @@ layout(location = 0) out vec4 fragColor;
 #define uShardTexture uTexture1
 
 const float SHARD_LAYERS = 5.0;
-const float ACTOR_SCALE  = 2.0;
-const float PADDING      = ACTOR_SCALE / 2.0 - 0.5;
 
 // Local off-window-clipping variant of `bmw_compat.glsl`'s
 // `getInputColor`. The shim's default samples uTexture0 directly,
@@ -90,10 +103,13 @@ void main() {
   // Draw the individual shard layers.
   for (float i = 0.0; i < SHARD_LAYERS; ++i) {
 
-    // To enable drawing shards outside of the window bounds, the actor was scaled
-    // by ACTOR_SCALE. Here we scale and move the texture coordinates so that the
-    // window gets drawn at the correct position again.
-    vec2 coords = iTexCoord.st * ACTOR_SCALE - PADDING;
+    // To enable drawing shards outside of the window bounds, SurfaceAnimator
+    // expands the shaderItem QUAD by `boundsPadding` (metadata.json: 0.5).
+    // Here we remap the padded vTexCoord back into anchor-space so the
+    // window gets drawn at the correct position; coords ∈ [-pad, 1+pad]
+    // reproduces BMW's `iTexCoord * ACTOR_SCALE - PADDING` for pad=0.5.
+    float k = 1.0 + 2.0 * boundsPadding;
+    vec2 coords = iTexCoord.st * k - boundsPadding;
 
     // Scale and rotate around our epicenter.
     coords -= uEpicenter;

@@ -75,7 +75,18 @@ void main() {
             float converge = t * 0.92;
             vec2 sample_uv = (uv - layer_target * converge) / (1.0 - converge);
 
-            vec4 color = texture(uTexture0, sample_uv);
+            // Boundary mask — at peak `converge=0.92` the divide stretches
+            // sample_uv up to 12.5×, easily reaching off-window pixels
+            // (rounded corners, shadows) which sample as alpha=0. That makes
+            // the layer's contribution vanish exactly where it should be
+            // visible. Same soft-mask pattern morph/effect.frag uses to fade
+            // out-of-bounds samples to transparent without a hard 1-texel
+            // discontinuity.
+            vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), sample_uv);
+            vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), sample_uv);
+            float boundsMask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
+
+            vec4 color = texture(uTexture0, sample_uv) * boundsMask;
 
             float belongs = step(abs(pixel_layer - layer), 0.5);
             inner += color * belongs * layer_alpha;
@@ -115,7 +126,13 @@ void main() {
             float converge = t * 0.92;
             vec2 sample_uv = (uv - layer_target * converge) / (1.0 - converge);
 
-            vec4 color = texture(uTexture0, sample_uv);
+            // Boundary mask — see close-leg branch above for rationale.
+            // Same divide produces the same UV stretch on the open leg.
+            vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), sample_uv);
+            vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), sample_uv);
+            float boundsMask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
+
+            vec4 color = texture(uTexture0, sample_uv) * boundsMask;
 
             float belongs = step(abs(pixel_layer - layer), 0.5);
             inner += color * belongs * layer_alpha;

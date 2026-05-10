@@ -52,7 +52,17 @@ void main() {
     float intensity = sin(p * 3.14159) * plasmaIntensity;
     vec2 distorted = uv + flow * intensity;
 
-    vec4 win = texture(uTexture0, distorted);
+    // Soft inside-mask. The distortion above pushes UVs slightly past
+    // [0, 1] at boundary fragments (default intensity ±0.09 at peak),
+    // and `uTexture0` is clamp-to-edge — the typical edge alpha is 0
+    // (window shadow / rounded corners) so samples beyond the surface
+    // produce a grey-transparent border. Fade to zero across a tight
+    // 0.005-wide band at each edge so the warped silhouette crops
+    // cleanly without smearing edge pixels. Same pattern as morph.
+    vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), distorted);
+    vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), distorted);
+    float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
+    vec4 win = texture(uTexture0, distorted) * mask;
 
     float reveal = smoothstep(0.2, 0.8, p);
     fragColor = win * reveal;
