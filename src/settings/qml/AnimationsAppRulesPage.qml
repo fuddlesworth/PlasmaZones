@@ -3,7 +3,9 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as PZCommon
 
@@ -89,6 +91,60 @@ SettingsFlickable {
     /// react when this card opens the dialog. Mirrors the same pattern
     /// `AppRulesCard.qml` uses for snap rules.
     property bool _pickerOpenedByUs: false
+    // ── Shader-rule working state ───────────────────────────────────
+    /// The shader-parameter overrides the user has dialled in for the
+    /// currently-picked effect. Bound through `ShaderParameterEditor`
+    /// below; the schema (parameter list + types) comes from
+    /// `settingsController.animationsPage.shaderParameters(effectId)`,
+    /// the current values live here. Persisted into the rule's
+    /// `shaderParams` map on Add. Reset on shader switch (different
+    /// effects use different parameter ids).
+    property var currentShaderParams: ({
+    })
+    /// Bumped on `shaderEffectsChanged` so any binding that reads
+    /// `shaderParameters(effectId)` re-evaluates when a pack is
+    /// dropped / removed mid-session. Same pattern as
+    /// `AnimationEventCard::_shaderRegistryRev`.
+    property int _shaderRegistryRev: 0
+    // ── Timing-rule working state ───────────────────────────────────
+    /// Mirrors the per-event editor's state shape so the same widgets
+    /// (CurveThumbnail, CurveEditorDialog) can drive the rule form
+    /// without users having to type curve specifiers by hand.
+    property int currentTimingMode: CurvePresets.timingModeEasing
+    property int currentDuration: CurvePresets.defaultDurationMs
+    property string currentEasingCurve: CurvePresets.defaultEasingCurve
+    property real currentSpringOmega: CurvePresets.defaultSpringOmega
+    property real currentSpringZeta: CurvePresets.defaultSpringZeta
+    /// Inheritance opt-out flags — when off, the rule writes the
+    /// engaged-empty / zero sentinel for that axis so the resolver
+    /// falls through to the per-event default. When on, the working
+    /// state above is committed.
+    property bool overrideCurve: true
+    property bool overrideDuration: true
+    /// Composes the curve-string wire format the rule schema expects,
+    /// matching `AnimationEventCard::currentCurveString`.
+    readonly property string currentCurveString: {
+        if (currentTimingMode === CurvePresets.timingModeSpring)
+            return "spring:" + currentSpringOmega.toFixed(2) + "," + currentSpringZeta.toFixed(2);
+
+        return currentEasingCurve;
+    }
+
+    /// "Easing — Cubic In-Out" / "Spring — Snappy" (or "Custom").
+    function _curveSummary() {
+        if (currentTimingMode === CurvePresets.timingModeSpring) {
+            var si = CurvePresets.springPresetIndex(currentSpringOmega, currentSpringZeta);
+            if (si >= 0)
+                return i18n("Spring · %1", CurvePresets.springPresets[si].label);
+
+            return i18n("Spring · Custom");
+        }
+        var idx = CurvePresets.findIndices(currentEasingCurve);
+        if (idx.styleIndex >= 0)
+            return CurvePresets.easingStyles[idx.styleIndex].label + " · " + CurvePresets.easingDirections[idx.dirIndex].label;
+
+        return i18n("Easing · Custom");
+    }
 
     function _eventLabel(eventPath) {
         // Prefer the localised label; fall back to the controller's
@@ -126,7 +182,10 @@ SettingsFlickable {
     function _ruleSummary(rule) {
         if (rule.kind === root.kindTiming) {
             var duration = rule.durationMs > 0 ? i18n("%1 ms", rule.durationMs) : i18n("default duration");
-            var curve = rule.curve && rule.curve.length > 0 ? rule.curve : i18n("default curve");
+            // Render the curve via `CurvePresets.curveDisplayName` so
+            // "0.33,1.00,0.68,1.00" surfaces as "Cubic In-Out" instead
+            // of the raw spec.
+            var curve = rule.curve && rule.curve.length > 0 ? CurvePresets.curveDisplayName(rule.curve) : i18n("default curve");
             return i18n("Timing: %1, %2", curve, duration);
         }
         return i18n("Shader: %1", _shaderName(rule.effectId));
@@ -146,8 +205,11 @@ SettingsFlickable {
         function onShaderEffectsChanged() {
             // Refresh the shader catalogue so a newly-installed pack
             // appears in the per-rule picker without the user having
-            // to leave and re-open the page.
+            // to leave and re-open the page. Also bump
+            // `_shaderRegistryRev` so the parameter editor's schema
+            // binding re-evaluates against the new effect set.
             root.shadersList = settingsController.animationsPage.availableShaderEffects();
+            root._shaderRegistryRev += 1;
         }
 
         target: settingsController.animationsPage
@@ -276,87 +338,221 @@ SettingsFlickable {
 
                 }
 
-                // Shader payload row — visible when Shader kind selected.
-                RowLayout {
+                // Shader payload — visible when Shader kind selected.
+                ColumnLayout {
                     Layout.fillWidth: true
                     Layout.margins: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
                     visible: shaderKindRadio.checked
 
-                    Label {
-                        text: i18n("Shader:")
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label {
+                            text: i18n("Shader:")
+                        }
+
+                        PZCommon.ShaderPickerButton {
+                            id: shaderPicker
+
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 16
+                            shaders: root.shadersList || []
+                            currentShaderId: ""
+                            noneShaderId: ""
+                            includeNoneEntry: true
+                            noneText: i18nc("@item:inlistbox", "(no shader)")
+                            placeholderText: i18nc("@action:button", "Pick shader…")
+                            onShaderSelected: function(id) {
+                                // Switching effects clears the
+                                // working parameter map — same-named
+                                // ids in different shader schemas are
+                                // unrelated, mirroring
+                                // AnimationEventCard's behaviour.
+                                if (id !== shaderPicker.currentShaderId)
+                                    root.currentShaderParams = ({
+                                });
+
+                                shaderPicker.currentShaderId = id;
+                            }
+                        }
+
                     }
 
-                    PZCommon.ShaderPickerButton {
-                        id: shaderPicker
+                    // Inline shader-parameter editor — same widget the
+                    // per-event card uses, with locking / randomize /
+                    // image affordances disabled (rule context doesn't
+                    // need them). Surfaces only when the picked effect
+                    // has parameters.
+                    PZCommon.ShaderParameterEditor {
+                        id: shaderParamEditor
 
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 16
-                        shaders: root.shadersList || []
-                        currentShaderId: ""
-                        noneShaderId: ""
-                        includeNoneEntry: true
-                        noneText: i18nc("@item:inlistbox", "(no shader)")
-                        placeholderText: i18nc("@action:button", "Pick shader…")
-                        onShaderSelected: function(id) {
-                            shaderPicker.currentShaderId = id;
+                        readonly property var _paramSchema: {
+                            root._shaderRegistryRev; // dependency for reactivity
+                            return shaderPicker.currentShaderId.length > 0 ? settingsController.animationsPage.shaderParameters(shaderPicker.currentShaderId) : [];
+                        }
+
+                        Layout.fillWidth: true
+                        visible: shaderPicker.currentShaderId.length > 0 && _paramSchema.length > 0
+                        parameters: _paramSchema
+                        currentValues: root.currentShaderParams
+                        enableLocking: false
+                        enableRandomize: false
+                        enableGroups: true
+                        enableImage: false
+                        compact: true
+                        onValueChanged: function(paramId, value) {
+                            // QML / JS map mutation: copy-then-write so
+                            // the engine sees the property change and
+                            // re-evaluates the editor's currentValues
+                            // binding.
+                            var next = ({
+                            });
+                            for (var k in root.currentShaderParams) next[k] = root.currentShaderParams[k]
+                            next[paramId] = value;
+                            root.currentShaderParams = next;
+                        }
+                        onRequestColorPicker: function(paramId, paramName, current) {
+                            ruleColorDialog.paramId = paramId;
+                            ruleColorDialog.paramName = paramName;
+                            ruleColorDialog.selectedColor = current;
+                            ruleColorDialog.open();
                         }
                     }
 
                 }
 
-                // Timing payload row — visible when Timing kind selected.
-                RowLayout {
+                // Timing payload — visible when Timing kind selected.
+                // Mirrors `AnimationEventCard`'s curve / duration UX so
+                // users can pick presets via the same CurveEditorDialog
+                // instead of typing curve specifiers by hand.
+                ColumnLayout {
                     Layout.fillWidth: true
                     Layout.margins: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
                     visible: timingKindRadio.checked
 
-                    Label {
-                        text: i18n("Curve:")
-                    }
-
-                    TextField {
-                        id: curveField
-
+                    // Curve override — checkbox gates the editor and
+                    // controls whether the saved rule sets the curve
+                    // axis or leaves it for the per-event default.
+                    RowLayout {
                         Layout.fillWidth: true
-                        placeholderText: i18n("e.g., 0.42,0.0,0.58,1.0   or   spring:30,0.7   (blank = inherit)")
-                        Accessible.name: i18n("Curve specifier (blank to inherit per-event default)")
+                        spacing: Kirigami.Units.largeSpacing
+
+                        CheckBox {
+                            id: curveOverrideCheck
+
+                            text: i18n("Override curve")
+                            checked: root.overrideCurve
+                            onToggled: root.overrideCurve = checked
+                            ToolTip.text: i18n("When off, matching windows use the per-event default curve.")
+                            ToolTip.visible: hovered
+                        }
+
+                        // Curve summary row — same widget set as the
+                        // per-event editor: thumbnail preview + textual
+                        // description + Customize… button. Disabled
+                        // when "Override curve" is off.
+                        CurveThumbnail {
+                            id: ruleCurveThumbnail
+
+                            implicitWidth: Kirigami.Units.gridUnit * 6
+                            implicitHeight: Kirigami.Units.gridUnit * 4
+                            curve: root.currentEasingCurve
+                            timingMode: root.currentTimingMode
+                            omega: root.currentSpringOmega
+                            zeta: root.currentSpringZeta
+                            opacity: root.overrideCurve ? 1 : 0.5
+                            onClicked: {
+                                if (root.overrideCurve)
+                                    ruleCurveDialog.open();
+
+                            }
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: root._curveSummary()
+                            elide: Text.ElideRight
+                            opacity: root.overrideCurve ? 1 : 0.5
+                        }
+
+                        Button {
+                            text: i18n("Customize…")
+                            icon.name: "configure"
+                            enabled: root.overrideCurve
+                            Accessible.name: i18n("Customize curve for the new rule")
+                            onClicked: ruleCurveDialog.open()
+                        }
+
                     }
 
-                    Label {
-                        text: i18n("Duration:")
+                    // Timing-mode toggle — only meaningful when curve
+                    // override is on, since it picks which working-
+                    // state axis (easing vs spring) feeds
+                    // currentCurveString.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.largeSpacing
+                        enabled: root.overrideCurve
+
+                        Label {
+                            text: i18n("Timing mode:")
+                        }
+
+                        ComboBox {
+                            id: timingModeCombo
+
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+                            model: [i18n("Easing"), i18n("Spring")]
+                            currentIndex: root.currentTimingMode
+                            onActivated: function(index) {
+                                root.currentTimingMode = index;
+                            }
+                            Accessible.name: i18n("Timing mode for the rule's curve")
+                        }
+
                     }
 
-                    SpinBox {
-                        id: durationSpin
+                    // Duration override — independent of curve override
+                    // so a rule can change the duration without
+                    // touching the curve and vice versa. Spring mode
+                    // derives its own settle time, so the slider is
+                    // hidden in that case (matches AnimationEventCard).
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.largeSpacing
+                        visible: !root.overrideCurve || root.currentTimingMode === CurvePresets.timingModeEasing
 
-                        from: 0
-                        to: 60000
-                        stepSize: 50
-                        value: 0
-                        editable: true
-                        Accessible.name: i18n("Duration in milliseconds (zero inherits per-event default)")
-                        textFromValue: function(value, locale) {
-                            if (value === 0)
-                                return i18n("inherit");
+                        CheckBox {
+                            id: durationOverrideCheck
 
-                            return i18n("%1 ms", value);
+                            text: i18n("Override duration")
+                            checked: root.overrideDuration
+                            onToggled: root.overrideDuration = checked
+                            ToolTip.text: i18n("When off, matching windows use the per-event default duration.")
+                            ToolTip.visible: hovered
                         }
-                        // Pair with valueFromText so editing the
-                        // textual sentinel "inherit" back into the
-                        // spinbox correctly resolves to 0 — without
-                        // this, Qt's default numeric parser falls
-                        // back to 0 only by coincidence (the textual
-                        // and numeric sentinels happen to collide).
-                        // Anything that doesn't parse as a positive
-                        // integer is treated as inherit (0).
-                        valueFromText: function(text, locale) {
-                            if (text.trim() === i18n("inherit"))
-                                return 0;
 
-                            var parsed = parseInt(text, 10);
-                            return isNaN(parsed) || parsed < 0 ? 0 : parsed;
+                        Slider {
+                            id: durationSlider
+
+                            Layout.fillWidth: true
+                            from: 50
+                            to: 2000
+                            stepSize: 10
+                            value: root.currentDuration
+                            enabled: root.overrideDuration
+                            onMoved: root.currentDuration = value
+                            Accessible.name: i18n("Animation duration in milliseconds")
                         }
+
+                        Label {
+                            text: i18n("%1 ms", Math.round(root.currentDuration))
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                            opacity: root.overrideDuration ? 1 : 0.5
+                        }
+
                     }
 
                 }
@@ -377,14 +573,14 @@ SettingsFlickable {
                         icon.name: "list-add"
                         // For shader-kind, allow empty effectId (the
                         // explicit-block sentinel) — only require a
-                        // pattern. For timing-kind, require either a
-                        // non-empty curve or a non-zero duration so the
-                        // rule actually overrides something. The
+                        // pattern. For timing-kind, require at least
+                        // one of curve / duration to actually be
+                        // overridden so the rule does something. The
                         // event-combo gate guards against a future
                         // empty `eventsList` (e.g. taxonomy refactor)
                         // building rules with empty `eventPath` that
                         // the controller would silently reject.
-                        enabled: patternField.text.length > 0 && (eventCombo.currentValue || "").length > 0 && (shaderKindRadio.checked || curveField.text.length > 0 || durationSpin.value > 0)
+                        enabled: patternField.text.length > 0 && (eventCombo.currentValue || "").length > 0 && (shaderKindRadio.checked || root.overrideCurve || root.overrideDuration)
                         ToolTip.text: i18n("Append the rule to the list")
                         ToolTip.visible: hovered
                         onClicked: {
@@ -395,16 +591,36 @@ SettingsFlickable {
                             if (shaderKindRadio.checked) {
                                 rule.kind = root.kindShader;
                                 rule.effectId = shaderPicker.currentShaderId || "";
+                                // Snapshot the working parameter map
+                                // — empty when the effect has no
+                                // params or the user kept defaults.
+                                rule.shaderParams = root.currentShaderParams;
                             } else {
                                 rule.kind = root.kindTiming;
-                                rule.curve = curveField.text;
-                                rule.durationMs = durationSpin.value;
+                                // Empty curve / zero duration are the
+                                // documented inherit sentinels — when
+                                // the user turned the override off,
+                                // we send the sentinel so the resolver
+                                // falls through to the per-event
+                                // default on that axis.
+                                rule.curve = root.overrideCurve ? root.currentCurveString : "";
+                                rule.durationMs = root.overrideDuration ? root.currentDuration : 0;
                             }
                             if (settingsController.animationsPage.addAppRule(rule)) {
                                 patternField.clear();
                                 shaderPicker.currentShaderId = "";
-                                curveField.clear();
-                                durationSpin.value = 0;
+                                root.currentShaderParams = ({
+                                });
+                                // Reset timing state to library defaults
+                                // so consecutive adds open with a known
+                                // starting point.
+                                root.currentTimingMode = CurvePresets.timingModeEasing;
+                                root.currentDuration = CurvePresets.defaultDurationMs;
+                                root.currentEasingCurve = CurvePresets.defaultEasingCurve;
+                                root.currentSpringOmega = CurvePresets.defaultSpringOmega;
+                                root.currentSpringZeta = CurvePresets.defaultSpringZeta;
+                                root.overrideCurve = true;
+                                root.overrideDuration = true;
                                 // Reset the event combo to the first
                                 // entry so consecutive adds open with
                                 // a known starting point instead of
@@ -547,6 +763,53 @@ SettingsFlickable {
 
         }
 
+    }
+
+    // Pop the curve editor as a window-level dialog so it doesn't get
+    // clipped by the host SettingsFlickable. Same parent fallback the
+    // per-event card uses (`AnimationEventCard.qml`): real Window when
+    // available, the page itself otherwise during early init.
+    CurveEditorDialog {
+        id: ruleCurveDialog
+
+        parent: root.Window.window ? root.Window.window.contentItem : root
+        eventLabel: i18nc("placeholder used in the curve dialog title for app-rule curves", "this rule")
+        timingMode: root.currentTimingMode
+        easingCurve: root.currentEasingCurve
+        springOmega: root.currentSpringOmega
+        springZeta: root.currentSpringZeta
+        onCurveApplied: function(curve) {
+            root.currentEasingCurve = curve;
+            root.currentTimingMode = CurvePresets.timingModeEasing;
+        }
+        onSpringApplied: function(omega, zeta) {
+            root.currentSpringOmega = omega;
+            root.currentSpringZeta = zeta;
+            root.currentTimingMode = CurvePresets.timingModeSpring;
+        }
+    }
+
+    // Native color picker for `ShaderParameterEditor`'s color-typed
+    // parameter rows. Same wiring as `AnimationEventCard.qml` —
+    // ColorDialog runs in its own platform window so no `parent`
+    // assignment is needed (and none is accepted).
+    ColorDialog {
+        id: ruleColorDialog
+
+        property string paramId: ""
+        property string paramName: ""
+
+        title: paramName.length > 0 ? i18nc("@title:window", "Choose %1", paramName) : i18nc("@title:window", "Pick color")
+        onAccepted: {
+            if (ruleColorDialog.paramId === "")
+                return ;
+
+            var next = ({
+            });
+            for (var k in root.currentShaderParams) next[k] = root.currentShaderParams[k]
+            next[ruleColorDialog.paramId] = selectedColor.toString();
+            root.currentShaderParams = next;
+        }
     }
 
 }
