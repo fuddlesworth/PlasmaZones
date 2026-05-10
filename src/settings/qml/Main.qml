@@ -497,7 +497,9 @@ ApplicationWindow {
     // (animations → animations-surfaces → animations-windows).
     function _parentLabel() {
         let mode = _sidebarMode;
-        while (_parentMode[mode])mode = _parentMode[mode]
+        while (_parentMode[mode])
+            mode = _parentMode[mode];
+
         return _modeLabel(mode);
     }
 
@@ -559,16 +561,15 @@ ApplicationWindow {
     // categories themselves), `activePage` is left untouched so the
     // user's last-visited leaf stays visible until they pick another.
     function _drillOut() {
-        // Stay on the current activePage when popping to an
-        // intermediate parent — the leaf the user came from is
-        // more useful context than re-anchoring on the virtual
-        // category they just stepped out of.
-
         let target = _parentMode[_sidebarMode] || "main";
         sidebarTransition.pendingMode = target;
         if (target === "main")
             sidebarTransition.pendingPage = _sidebarMode !== "main" ? _sidebarMode : "overview";
         else
+            // Stay on the current activePage when popping to an
+            // intermediate parent — the leaf the user came from is
+            // more useful context than re-anchoring on the virtual
+            // category they just stepped out of.
             sidebarTransition.pendingPage = "";
         sidebarTransition.restart();
     }
