@@ -7,6 +7,6 @@
     "category": "Slide",
     "fragmentShader": "effect.frag",
     "vertexShader": "effect.vert",
-    "boundsExtent": "parent",
+    "fboExtent": "surface",
     "parameters": []
 }
