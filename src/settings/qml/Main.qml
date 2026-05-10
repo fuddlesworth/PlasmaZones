@@ -492,12 +492,13 @@ ApplicationWindow {
     // reads "Animations › Windows" even when the user is three deep
     // (animations → animations-surfaces → animations-windows).
     function _parentLabel() {
+        // Walk up the lineage chain to the top-level mode. Bounded by
+        // the depth of `_parentMode` (currently at most 1 hop, but
+        // the loop is future-proof if a deeper hierarchy is added).
+        // `!== undefined` rather than truthy-coercion so a parent
+        // registered as the empty string would still terminate
+        // correctly (defensive — current data has no such entries).
         let mode = _sidebarMode;
-        // Walk up the lineage chain; bounded by the depth of
-        // `_parentMode` (currently at most 1 hop, but the loop is
-        // future-proof if a deeper hierarchy is added). Use an
-        // explicit body so qmlformat doesn't strip the loop into a
-        // single hard-to-read line.
         while (_parentMode[mode] !== undefined)mode = _parentMode[mode]
         return _modeLabel(mode);
     }
