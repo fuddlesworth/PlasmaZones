@@ -235,14 +235,32 @@ private:
      * `Animations.WindowFiltering` cache so the two filter sets can
      * diverge.
      *
-     * A class-pattern AnimationAppRule whose pattern substring-matches
-     * the window's class OVERRIDES the filter — the rule's intent is
-     * "this app animates with this profile" so it wins regardless of
-     * the otherwise-broader exclusion. Empty windowClass falls
-     * through to the filter (no rule can match an unidentified
-     * window).
+     * A class-pattern AnimationAppRule of ANY kind whose pattern
+     * substring-matches the window's class OVERRIDES the filter —
+     * the existence of even one targeted rule signals deliberate
+     * user intent to animate this app, regardless of which event the
+     * cascade is firing for or whether the rule is Shader / Timing.
+     * Same case-insensitive substring match the
+     * `AnimationAppRuleList::firstMatchOfKind` resolver uses, so the
+     * override scope mirrors the per-rule match contract exactly.
+     * Empty windowClass falls through to the filter (no rule can
+     * match an unidentified window).
      */
     bool shouldAnimateWindow(KWin::EffectWindow* w) const;
+
+    /**
+     * @brief Substring exclusion-list match helper.
+     *
+     * Returns true when @p appName or @p windowClass matches any
+     * non-empty entry in @p apps or @p classes (case-insensitive
+     * substring). Shared between `shouldHandleWindow` (snapping/
+     * tiling Exclusions) and `shouldAnimateWindow` (animation
+     * filtering) — both filter sets use identical match semantics
+     * but persist their lists independently, so the loops are the
+     * same shape with different inputs.
+     */
+    static bool matchesExclusionLists(const QString& appName, const QString& windowClass, const QStringList& apps,
+                                      const QStringList& classes);
 
     /**
      * @brief Reject Plasma shell layer-shell surfaces by window class.

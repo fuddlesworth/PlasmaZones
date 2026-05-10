@@ -518,11 +518,17 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("animationExcludeTransientWindows"), [this](const QVariant& v) {
         m_animationExcludeTransientWindows = v.toBool();
     });
+    // Clamp on the effect side as a defence-in-depth — the daemon's
+    // schema validator already bounds these to [0, 2000], but a
+    // malformed reply (`toInt()` returning 0 on a non-int variant or
+    // a negative value from an out-of-spec callsite) would otherwise
+    // silently disable / invert the min-size gate. Kept symmetric with
+    // `animationDuration`'s `qBound` clamp above.
     loadSettingAsync(QStringLiteral("animationMinimumWindowWidth"), [this](const QVariant& v) {
-        m_animationMinWindowWidth = v.toInt();
+        m_animationMinWindowWidth = qBound(0, v.toInt(), 2000);
     });
     loadSettingAsync(QStringLiteral("animationMinimumWindowHeight"), [this](const QVariant& v) {
-        m_animationMinWindowHeight = v.toInt();
+        m_animationMinWindowHeight = qBound(0, v.toInt(), 2000);
     });
     loadSettingAsync(QStringLiteral("animationExcludedApplications"), [this](const QVariant& v) {
         m_animationExcludedApplications = v.toStringList();

@@ -111,15 +111,8 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
     if (!m_excludedApplications.isEmpty() || !m_excludedWindowClasses.isEmpty()) {
         KWin::Window* kw = w->window();
         const QString appName = kw ? kw->desktopFileName() : QString();
-        for (const QString& excluded : m_excludedApplications) {
-            if (!excluded.isEmpty() && appName.contains(excluded, Qt::CaseInsensitive)) {
-                return false;
-            }
-        }
-        for (const QString& excluded : m_excludedWindowClasses) {
-            if (!excluded.isEmpty() && windowClass.contains(excluded, Qt::CaseInsensitive)) {
-                return false;
-            }
+        if (matchesExclusionLists(appName, windowClass, m_excludedApplications, m_excludedWindowClasses)) {
+            return false;
         }
     }
 
@@ -139,6 +132,22 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
     return true;
 }
 
+bool PlasmaZonesEffect::matchesExclusionLists(const QString& appName, const QString& windowClass,
+                                              const QStringList& apps, const QStringList& classes)
+{
+    for (const QString& excluded : apps) {
+        if (!excluded.isEmpty() && appName.contains(excluded, Qt::CaseInsensitive)) {
+            return true;
+        }
+    }
+    for (const QString& excluded : classes) {
+        if (!excluded.isEmpty() && windowClass.contains(excluded, Qt::CaseInsensitive)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
 {
     if (!w) {
@@ -147,15 +156,24 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
 
     const QString windowClass = w->windowClass();
 
-    // Override path: an app rule whose classPattern substring-matches
-    // the window's class signals deliberate user intent to animate this
-    // app, so the rule wins over the broader filter. Same case-insensitive
-    // substring match the AnimationAppRuleList resolver uses, so the
-    // override scope mirrors the per-rule match contract exactly.
+    // Rule-override path. ANY AnimationAppRule whose classPattern
+    // substring-matches the window's class signals deliberate user
+    // intent to animate this app — kind (Shader vs Timing) and
+    // eventPath are not narrowed here because the user's act of
+    // creating a class-targeted rule is itself the opt-in signal.
+    // Empty `windowClass` short-circuits (no rule can match an
+    // unidentified window) and an empty rule list short-circuits
+    // (no override possible) so the default-state path pays just
+    // two pointer reads. Same case-insensitive substring rule
+    // `AnimationAppRuleList::firstMatchOfKind` uses, so the override
+    // scope mirrors the per-rule match contract exactly.
     if (!windowClass.isEmpty()) {
-        for (const auto& rule : m_shaderManager.appRules().entries()) {
-            if (!rule.classPattern.isEmpty() && windowClass.contains(rule.classPattern, Qt::CaseInsensitive)) {
-                return true;
+        const auto& rules = m_shaderManager.appRules();
+        if (!rules.isEmpty()) {
+            for (const auto& rule : rules.entries()) {
+                if (!rule.classPattern.isEmpty() && windowClass.contains(rule.classPattern, Qt::CaseInsensitive)) {
+                    return true;
+                }
             }
         }
     }
@@ -175,9 +193,11 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
 
     // Min-size filter — windows narrower or shorter than the threshold
     // are excluded. Zero (the default) disables each axis independently
-    // so a user can set just one bound. Frame geometry is the user-
-    // facing rect (includes server-side decoration); the daemon uses
-    // the same rect for its snapping min-size gate.
+    // so a user can set just one bound. Frame geometry is read live —
+    // during minimize/close lifecycle a window may already be collapsed
+    // when this fires, which is acceptable: the user opted into the
+    // size threshold so a transient sub-threshold frame should suppress
+    // the animation consistently with explicit-size cases.
     const QRectF frame = w->frameGeometry();
     if (m_animationMinWindowWidth > 0 && frame.width() < m_animationMinWindowWidth) {
         return false;
@@ -186,22 +206,17 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
         return false;
     }
 
-    // User-configured exclusion lists — substring-matched against the
-    // window's appName (desktopFileName) and class. Matches the
-    // shouldHandleWindow contract exactly so a user familiar with the
-    // snapping Exclusions UX gets the same behaviour for animations.
+    // User-configured exclusion lists — substring-matched via the
+    // shared `matchesExclusionLists` helper that `shouldHandleWindow`
+    // also uses, so the animation and snapping filter sets stay in
+    // lockstep on match semantics even though their lists are
+    // independent.
     if (!m_animationExcludedApplications.isEmpty() || !m_animationExcludedWindowClasses.isEmpty()) {
         KWin::Window* kw = w->window();
         const QString appName = kw ? kw->desktopFileName() : QString();
-        for (const QString& excluded : m_animationExcludedApplications) {
-            if (!excluded.isEmpty() && appName.contains(excluded, Qt::CaseInsensitive)) {
-                return false;
-            }
-        }
-        for (const QString& excluded : m_animationExcludedWindowClasses) {
-            if (!excluded.isEmpty() && windowClass.contains(excluded, Qt::CaseInsensitive)) {
-                return false;
-            }
+        if (matchesExclusionLists(appName, windowClass, m_animationExcludedApplications,
+                                  m_animationExcludedWindowClasses)) {
+            return false;
         }
     }
 

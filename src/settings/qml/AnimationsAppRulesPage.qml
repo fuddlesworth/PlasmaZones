@@ -188,6 +188,12 @@ SettingsFlickable {
     WindowPickerDialog {
         id: filterPickerDialog
 
+        // `true` routes the next pick to the Excluded Applications
+        // list; `false` routes it to the Excluded Window Classes
+        // list. Each of the two ExclusionListCards below sets this
+        // before opening the dialog so a single shared dialog can
+        // serve both lists without two separate window-picker
+        // instances.
         property bool forApps: true
 
         appSettings: settingsController
@@ -225,7 +231,7 @@ SettingsFlickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
-            text: i18n("Animations skipped for filtered windows. Specific App Rules below override these filters — a rule whose pattern matches a window will animate it even when the filter excludes it.")
+            text: i18n("Animations are skipped for filtered windows. Specific App Rules below override these filters: a rule whose pattern matches a window will animate it even when the filter excludes it.")
             visible: true
         }
 
@@ -258,7 +264,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Minimum window width")
-                    description: appSettings.animationMinimumWindowWidth === 0 ? i18n("Disabled — no width threshold") : i18n("Windows narrower than this will not animate")
+                    description: appSettings.animationMinimumWindowWidth === 0 ? i18n("Disabled. No width threshold.") : i18n("Windows narrower than this will not animate")
 
                     SettingsSpinBox {
                         from: 0
@@ -268,10 +274,10 @@ SettingsFlickable {
                         unitText: ""
                         Accessible.name: i18n("Minimum window width for animations")
                         onValueModified: (value) => {
-                            return appSettings.animationMinimumWindowWidth = value;
+                            appSettings.animationMinimumWindowWidth = value;
                         }
                         textFromValue: function(value) {
-                            return value === 0 ? i18n("Off") : value + " px";
+                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
                         }
                     }
 
@@ -282,7 +288,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Minimum window height")
-                    description: appSettings.animationMinimumWindowHeight === 0 ? i18n("Disabled — no height threshold") : i18n("Windows shorter than this will not animate")
+                    description: appSettings.animationMinimumWindowHeight === 0 ? i18n("Disabled. No height threshold.") : i18n("Windows shorter than this will not animate")
 
                     SettingsSpinBox {
                         from: 0
@@ -292,10 +298,10 @@ SettingsFlickable {
                         unitText: ""
                         Accessible.name: i18n("Minimum window height for animations")
                         onValueModified: (value) => {
-                            return appSettings.animationMinimumWindowHeight = value;
+                            appSettings.animationMinimumWindowHeight = value;
                         }
                         textFromValue: function(value) {
-                            return value === 0 ? i18n("Off") : value + " px";
+                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
                         }
                     }
 

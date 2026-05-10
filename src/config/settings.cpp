@@ -1585,17 +1585,8 @@ QStringList Settings::animationExcludedApplications() const
 
 void Settings::setAnimationExcludedApplications(const QStringList& apps)
 {
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey());
-    m_store->write(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey(),
-                   apps.join(QLatin1Char(',')));
-    const QString after =
-        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT animationExcludedApplicationsChanged();
-    Q_EMIT settingsChanged();
+    writeCommaList(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey(), apps,
+                   &Settings::animationExcludedApplicationsChanged);
 }
 
 void Settings::addAnimationExcludedApplication(const QString& app)
@@ -1630,17 +1621,8 @@ QStringList Settings::animationExcludedWindowClasses() const
 
 void Settings::setAnimationExcludedWindowClasses(const QStringList& classes)
 {
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey());
-    m_store->write(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey(),
-                   classes.join(QLatin1Char(',')));
-    const QString after =
-        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT animationExcludedWindowClassesChanged();
-    Q_EMIT settingsChanged();
+    writeCommaList(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey(), classes,
+                   &Settings::animationExcludedWindowClassesChanged);
 }
 
 void Settings::addAnimationExcludedWindowClass(const QString& cls)
@@ -1810,6 +1792,29 @@ void Settings::writeTriggerList(const QString& group, const QString& key, const 
     const QVariantList before = m_store->readVariant(group, key).toList();
     m_store->write(group, key, triggers.mid(0, MaxTriggersPerAction));
     const QVariantList after = m_store->readVariant(group, key).toList();
+    if (before == after) {
+        return;
+    }
+    Q_EMIT(this->*specificSignal)();
+    Q_EMIT settingsChanged();
+}
+
+void Settings::writeCommaList(const QString& group, const QString& key, const QStringList& list,
+                              CommaListSignalFn specificSignal)
+{
+    // Pre-write snapshot + post-write read-back. The schema's
+    // `canonicalCommaList` validator may trim / dedupe the joined
+    // string, so two writes that look different in memory can
+    // canonicalise to the same on-disk value — emitting in that case
+    // would dirty the page on a no-op. Pre-write equality alone would
+    // miss canonicalisation no-ops; post-write equality alone would
+    // miss the case where the list ends up identical because the
+    // validator collapsed it. Compare both sides of the round-trip so
+    // the signal fires only when the persisted value actually
+    // changed.
+    const QString before = m_store->read<QString>(group, key);
+    m_store->write(group, key, list.join(QLatin1Char(',')));
+    const QString after = m_store->read<QString>(group, key);
     if (before == after) {
         return;
     }
