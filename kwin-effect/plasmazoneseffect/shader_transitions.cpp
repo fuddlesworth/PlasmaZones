@@ -690,6 +690,8 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kISurfaceScreenPos);
         cached.iAnchorSizeLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAnchorSize);
+        cached.iAnchorPosInFboLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAnchorPosInFbo);
         // Cache element locations for the per-effect declared parameter
         // slots: `customParams[0..kMaxCustomParams-1]` for float / int /
         // bool params, and `customColors[0..kMaxCustomColors-1]` for color

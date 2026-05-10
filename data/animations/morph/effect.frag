@@ -34,11 +34,15 @@ void main()
     // (1+2pad) - pad` form (`[-pad, 1+pad]` for `boundsPadding=0.5`)
     // without depending on the structural `customParams[7].x` slot.
     //
-    // Kwin-effect path: until refactor Phase 7 wires quad expansion on
-    // kwin, `iAnchorPosInFbo` reads (0, 0) by GL default-uniform spec
-    // and `iAnchorSize == iResolution == window size`. The remap
-    // collapses to identity (anchorUv == vTexCoord) — same behaviour
-    // as the previous `customParams[7].x = 0` fallback path.
+    // Kwin-effect path: `iAnchorPosInFbo` is explicitly pushed as
+    // (0, 0) by paint_pipeline.cpp (the OffscreenEffect FBO covers
+    // window frameGeometry 1:1, so anchor IS the FBO origin), and
+    // `iAnchorSize == iResolution == window size`. The remap
+    // collapses to identity (anchorUv == vTexCoord), same visual
+    // behaviour as the pre-refactor `customParams[7].x = 0` path.
+    // Actor-expansion parity with BMW (rendering past frameGeometry
+    // bounds on kwin) is a deferred follow-up and would change this
+    // push to (padW, padH) without touching the shader source.
     vec2 anchorTopLeftUv = iAnchorPosInFbo / iResolution;
     vec2 anchorSizeUv = iAnchorSize / iResolution;
     vec2 anchorUv = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;

@@ -61,12 +61,16 @@ layout(location = 0) out vec4 fragColor;
 // With pad=0.5 (ACTOR_SCALE=2 equivalent) the coords land in [-0.5, 1.5]
 // exactly as BMW's broken-glass.frag expects.
 //
-// Kwin-effect path (until refactor Phase 7 wires quad expansion on
-// kwin): `iAnchorPosInFbo` reads (0, 0) by GL default-uniform spec and
-// `iAnchorSize` equals `iResolution` (the window itself), so
-// `anchorTopLeftUv = 0` and `anchorSizeUv = 1` and the remap collapses
-// to identity — coords == iTexCoord. Same behaviour as the previous
-// `customParams[7].x = 0` fallback path on kwin.
+// Kwin-effect path: paint_pipeline.cpp explicitly pushes
+// `iAnchorPosInFbo = (0, 0)` (no actor expansion on kwin: the
+// OffscreenEffect FBO covers window frameGeometry 1:1, so anchor IS
+// the FBO origin), and `iAnchorSize` equals `iResolution` (the window
+// itself), so `anchorTopLeftUv = 0` and `anchorSizeUv = 1` and the
+// remap collapses to identity — coords == iTexCoord. Same visual
+// behaviour as the previous `customParams[7].x = 0` fallback path.
+// BMW-style shards-flying-past-window-bounds parity is a deferred
+// follow-up (needs OffscreenEffect FBO sizing work) and would change
+// the kwin push to (padW, padH) without touching this shader source.
 vec2 anchorRemap(vec2 uv) {
     vec2 anchorTopLeftUv = iAnchorPosInFbo / iResolution;
     vec2 anchorSizeUv = iAnchorSize / iResolution;

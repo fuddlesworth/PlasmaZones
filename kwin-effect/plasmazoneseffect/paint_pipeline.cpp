@@ -376,6 +376,25 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     shader->setUniform(cached->iAnchorSizeLoc,
                                        QVector2D(static_cast<float>(geo.width()), static_cast<float>(geo.height())));
                 }
+                if (cached->iAnchorPosInFboLoc >= 0) {
+                    // The OffscreenEffect's redirected FBO covers the
+                    // window's frameGeometry 1:1 — no actor expansion on
+                    // kwin (yet; a future PR could grow the FBO and push
+                    // (padW, padH) here to match BMW's actor-expansion
+                    // approach). Anchor occupies the entire FBO, so its
+                    // top-left position inside the FBO is (0, 0).
+                    //
+                    // With (0, 0) here plus iAnchorSize == iResolution
+                    // above, the unified anchor-space remap collapses to
+                    // identity:
+                    //   anchorTopLeftUv = (0, 0) / FBO   = (0, 0)
+                    //   anchorSizeUv    = window / FBO   = (1, 1)
+                    //   anchorUv        = vTexCoord - 0  = vTexCoord
+                    // Same behaviour as the pre-refactor
+                    // `customParams[7].x = 0` fallback that morph + broken-
+                    // glass documented as the kwin path.
+                    shader->setUniform(cached->iAnchorPosInFboLoc, QVector2D(0.0f, 0.0f));
+                }
                 for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
                     const int loc = cached->customParamsLoc[slot];
                     if (loc < 0)

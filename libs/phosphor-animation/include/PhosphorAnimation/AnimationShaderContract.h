@@ -240,10 +240,27 @@ inline constexpr const char* kISurfaceScreenPos = "iSurfaceScreenPos";
 /// pixels. Decoupled from `iResolution` so vertex shaders can rely on
 /// it under any fboExtentKind; `iResolution` is auto-reset by Qt to the
 /// shader item's bounds on every geometry event and would otherwise
-/// clobber any anchor-size override on a `fboExtentKind: parent` item.
+/// clobber any anchor-size override on a `fboExtentKind: Surface` item.
 /// Daemon-side written via `AnimationUniformExtension`; kwin-effect
 /// uses classic-GL `setUniform`.
 inline constexpr const char* kIAnchorSize = "iAnchorSize";
+
+/// `vec2 iAnchorPosInFbo` — anchor's top-left position inside the FBO,
+/// in logical pixels. Combined with `iAnchorSize` and `iResolution`,
+/// shaders compute the anchor's UV region for `vTexCoord` →
+/// anchor-space remap (used by morph + broken-glass; previously did
+/// this via `customParams[7].x` which is no longer reserved):
+///   vec2 anchorTopLeftUv = iAnchorPosInFbo / iResolution;
+///   vec2 anchorSizeUv    = iAnchorSize    / iResolution;
+///   vec2 anchorUv        = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;
+/// Daemon-side written via `AnimationUniformExtension`; kwin-effect
+/// uses classic-GL `setUniform`. On kwin the value is (0, 0) today
+/// (the OffscreenEffect FBO covers the window's frameGeometry 1:1,
+/// no actor expansion), which makes the anchor-space remap collapse
+/// to identity — equivalent to the pre-refactor `customParams[7].x = 0`
+/// fallback that morph documented as the kwin path. A future actor-
+/// expansion PR would push (padW, padH) instead.
+inline constexpr const char* kIAnchorPosInFbo = "iAnchorPosInFbo";
 
 /// Maximum number of user-declared textures per animation effect.
 ///
