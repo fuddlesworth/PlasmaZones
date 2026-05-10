@@ -61,16 +61,17 @@ layout(location = 0) out vec4 fragColor;
 // With pad=0.5 (ACTOR_SCALE=2 equivalent) the coords land in [-0.5, 1.5]
 // exactly as BMW's broken-glass.frag expects.
 //
-// Kwin-effect path: paint_pipeline.cpp explicitly pushes
-// `iAnchorPosInFbo = (0, 0)` (no actor expansion on kwin: the
-// OffscreenEffect FBO covers window frameGeometry 1:1, so anchor IS
-// the FBO origin), and `iAnchorSize` equals `iResolution` (the window
-// itself), so `anchorTopLeftUv = 0` and `anchorSizeUv = 1` and the
-// remap collapses to identity — coords == iTexCoord. Same visual
-// behaviour as the previous `customParams[7].x = 0` fallback path.
-// BMW-style shards-flying-past-window-bounds parity is a deferred
-// follow-up (needs OffscreenEffect FBO sizing work) and would change
-// the kwin push to (padW, padH) without touching this shader source.
+// Kwin-effect path: actor expansion is implemented at quad-construction
+// time. PlasmaZonesEffect::apply() (paint_pipeline.cpp) rebuilds the
+// window's quads at `(1+2·ring) × frame` with texCoord remapped to
+// `[-ring, 1+ring]`, so `iTexCoord` already arrives in anchor-space.
+// `iAnchorPosInFbo` is pushed as (0, 0) and `iAnchorSize == iResolution`,
+// so the unified remap math collapses to coords == iTexCoord — same
+// `[-ring, 1+ring]` range the daemon path produces. The
+// `getInputColor` override below crops samples outside [0, 1] to
+// transparent so the redirected texture's clamp-to-edge wrap mode
+// doesn't smear edge pixels into the ring. BMW visual parity (shards
+// flying past the natural frame) now works on both runtimes.
 vec2 anchorRemap(vec2 uv) {
     vec2 anchorTopLeftUv = iAnchorPosInFbo / iResolution;
     vec2 anchorSizeUv = iAnchorSize / iResolution;

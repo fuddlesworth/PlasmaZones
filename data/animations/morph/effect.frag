@@ -34,15 +34,15 @@ void main()
     // (1+2pad) - pad` form (`[-pad, 1+pad]` for `boundsPadding=0.5`)
     // without depending on the structural `customParams[7].x` slot.
     //
-    // Kwin-effect path: `iAnchorPosInFbo` is explicitly pushed as
-    // (0, 0) by paint_pipeline.cpp (the OffscreenEffect FBO covers
-    // window frameGeometry 1:1, so anchor IS the FBO origin), and
-    // `iAnchorSize == iResolution == window size`. The remap
-    // collapses to identity (anchorUv == vTexCoord), same visual
-    // behaviour as the pre-refactor `customParams[7].x = 0` path.
-    // Actor-expansion parity with BMW (rendering past frameGeometry
-    // bounds on kwin) is a deferred follow-up and would change this
-    // push to (padW, padH) without touching the shader source.
+    // Kwin-effect path: actor expansion is implemented at quad-
+    // construction time. PlasmaZonesEffect::apply() (paint_pipeline.cpp)
+    // rebuilds the window's quads at `(1+2·ring) × frame` size and
+    // remaps the texCoord to `[-ring, 1+ring]`, so `vTexCoord` already
+    // arrives in anchor-space coordinates. iAnchorPosInFbo is pushed as
+    // (0, 0) and iAnchorSize == iResolution, so the math collapses to
+    // anchorUv == vTexCoord — same `[-ring, 1+ring]` range the daemon
+    // path produces via uniform-driven remap. Different runtime
+    // mechanism, same shader source.
     vec2 anchorTopLeftUv = iAnchorPosInFbo / iResolution;
     vec2 anchorSizeUv = iAnchorSize / iResolution;
     vec2 anchorUv = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;

@@ -209,6 +209,20 @@ struct ShaderTransition
     /// no-op, and clearing it on a deleted window lets KWin proceed with
     /// final destruction.
     bool closeGrabHeld = false;
+    /// FBO-extent ring fraction copied from the resolved effect's
+    /// `AnimationShaderEffect::fboExtentRing`. When > 0, the `apply()`
+    /// override rebuilds the window's quads to render the redirected
+    /// texture at `(1 + 2·ring) * windowFrame` size with texCoord range
+    /// `[-ring, 1+ring]`, giving the shader room to draw past the
+    /// window's natural bounds (BMW's actor-expansion model). The
+    /// `prePaintWindow` paint-region expansion and the `paint_pipeline`
+    /// uniform pushes (`iAnchorPosInFbo`, `iResolution`, `iAnchorSize`)
+    /// all read this value to stay consistent with the quad rebuild.
+    /// Zero ring (the 53-of-56 default-shader case + the
+    /// `fboExtent: "surface"` fly-in case which uses MVP translation
+    /// instead of actor expansion) leaves the quads untouched, so the
+    /// expansion is opt-in per effect metadata.
+    qreal fboExtentRing = 0.0;
 };
 
 /// Pre-computed snap restore target for a pending app

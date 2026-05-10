@@ -760,6 +760,15 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     const auto& cachedEntry = cacheIt->second;
     ShaderTransition transition;
     transition.cached = &cachedEntry;
+    // Carry the effect's FBO-extent ring fraction so the apply() override
+    // can rebuild quads at expanded size and the per-frame uniform push
+    // can adjust iAnchorPosInFbo / iResolution. Only meaningful when
+    // `fboExtentKind == Anchor` and ring > 0; surface-extent effects
+    // (fly-in) use MVP translation instead and leave this at 0.
+    transition.fboExtentRing =
+        (eff.fboExtentKind == PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind::Anchor)
+        ? eff.fboExtentRing
+        : 0.0;
 
     // Translate the friendly parameter map (e.g. {"direction": 1,
     // "parallax": 0.2}) to slot keys, then pack each

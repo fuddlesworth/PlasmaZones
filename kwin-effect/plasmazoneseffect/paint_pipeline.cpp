@@ -113,6 +113,24 @@ void PlasmaZonesEffect::postPaintScreen()
                     if (repaintRect.isEmpty()) {
                         repaintRect = w->frameGeometry().toAlignedRect();
                     }
+                    // Actor-expansion: when the active transition declares
+                    // a non-zero `fboExtentRing`, the apply() override
+                    // renders the redirected texture over a region
+                    // `(1 + 2·ring) × frame` instead of the natural frame.
+                    // Without growing the repaint rect to match, KWin's
+                    // damage tracking would clip the visible result back
+                    // to the natural expanded rect (shadow extents only)
+                    // and the BMW-style shards-past-window-bounds visual
+                    // would be cropped flat at the shadow edge.
+                    if (transition.fboExtentRing > 0.0) {
+                        const QRectF geo = w->frameGeometry();
+                        const qreal padW = transition.fboExtentRing * geo.width();
+                        const qreal padH = transition.fboExtentRing * geo.height();
+                        const QRect ringRect =
+                            QRectF(geo.x() - padW, geo.y() - padH, geo.width() + 2.0 * padW, geo.height() + 2.0 * padH)
+                                .toAlignedRect();
+                        repaintRect = repaintRect.united(ringRect);
+                    }
                     w->addLayerRepaint(repaintRect);
                 }
             }
@@ -132,7 +150,13 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // shader leg's iTime advance even when the underlying window content
         // hasn't changed (lifecycle-event shaders need this — without the
         // transformed flag, paintWindow only fires on actual window damage).
-        data.setTransformed();
+        //
+        // Damage-region expansion for actor-expansion transitions lives
+        // in `prePaintScreen`'s addLayerRepaint loop (see the ringRect
+        // block there). prePaintWindow doesn't drive that on KWin 6;
+        // `WindowPrePaintData::devicePaint` is the dirty region in
+        // device coords and isn't the right surface for declaring "I
+        // want to paint this many pixels past the natural frame".
     }
 
     OffscreenEffect::prePaintWindow(view, w, data, presentTime);
@@ -377,22 +401,26 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                                        QVector2D(static_cast<float>(geo.width()), static_cast<float>(geo.height())));
                 }
                 if (cached->iAnchorPosInFboLoc >= 0) {
-                    // The OffscreenEffect's redirected FBO covers the
-                    // window's frameGeometry 1:1 — no actor expansion on
-                    // kwin (yet; a future PR could grow the FBO and push
-                    // (padW, padH) here to match BMW's actor-expansion
-                    // approach). Anchor occupies the entire FBO, so its
-                    // top-left position inside the FBO is (0, 0).
-                    //
-                    // With (0, 0) here plus iAnchorSize == iResolution
-                    // above, the unified anchor-space remap collapses to
-                    // identity:
-                    //   anchorTopLeftUv = (0, 0) / FBO   = (0, 0)
-                    //   anchorSizeUv    = window / FBO   = (1, 1)
-                    //   anchorUv        = vTexCoord - 0  = vTexCoord
-                    // Same behaviour as the pre-refactor
-                    // `customParams[7].x = 0` fallback that morph + broken-
-                    // glass documented as the kwin path.
+                    // Always (0, 0) on the kwin path, even when the active
+                    // transition declares `fboExtentRing > 0`. Reason:
+                    // actor expansion on kwin is done at quad-construction
+                    // time (apply() in paint_pipeline.cpp) by remapping
+                    // the expanded quad's `texCoord` to `[-ring, 1+ring]`,
+                    // so the fragment shader already receives `vTexCoord`
+                    // in anchor-space coordinates. iAnchorSize == iResolution
+                    // (both = window frame size) so the shader's unified
+                    // remap math collapses to identity:
+                    //   anchorTopLeftUv = (0, 0) / frame  = (0, 0)
+                    //   anchorSizeUv    = frame  / frame  = (1, 1)
+                    //   anchorUv        = vTexCoord - 0   = vTexCoord
+                    // and vTexCoord arrives in `[-ring, 1+ring]` from the
+                    // expanded quad, giving the BMW-style anchor-space
+                    // range morph + broken-glass expect. The daemon path
+                    // uses different uniform values (iAnchorPosInFbo =
+                    // (padW, padH), iResolution = expanded size) to
+                    // produce the same anchor-space range from a `[0, 1]`
+                    // vTexCoord — different runtime mechanism, same shader
+                    // source.
                     shader->setUniform(cached->iAnchorPosInFboLoc, QVector2D(0.0f, 0.0f));
                 }
                 for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
@@ -547,6 +575,64 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     }
 
     OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+}
+
+void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data,
+                              KWin::WindowQuadList& quads)
+{
+    // Match BMW's "grow the actor" approach when the active transition's
+    // effect declares `fboExtent: "anchor+N"`. The redirected texture
+    // (allocated by OffscreenEffect::redirect at window-frame size) gets
+    // sampled by an expanded quad with `texCoord` spanning [-ring, 1+ring]
+    // — the central [0..1] sub-region maps to the captured window content
+    // and the surrounding ring lets the shader render past the natural
+    // frame. Morph and broken-glass already guard their out-of-anchor
+    // samples (boundaryMask / getInputColor override → vec4(0)), so the
+    // edge texels don't smear when the redirected texture's clamp-to-edge
+    // wrap mode hits.
+    //
+    // For ring == 0 (53-of-56 default-shader case, plus the fly-in
+    // surface-extent case that uses MVP translation instead of actor
+    // expansion), pass through to the base implementation which leaves
+    // `quads` as the natural single-quad-over-frameGeometry mesh.
+    if (!window) {
+        OffscreenEffect::apply(window, mask, data, quads);
+        return;
+    }
+    const auto it = m_shaderManager.m_shaderTransitions.find(window);
+    if (it == m_shaderManager.m_shaderTransitions.end() || it->second.fboExtentRing <= 0.0) {
+        OffscreenEffect::apply(window, mask, data, quads);
+        return;
+    }
+
+    const qreal ring = it->second.fboExtentRing;
+    const QRectF geo = window->frameGeometry();
+    const qreal frameW = geo.width();
+    const qreal frameH = geo.height();
+    if (frameW < 1.0 || frameH < 1.0) {
+        OffscreenEffect::apply(window, mask, data, quads);
+        return;
+    }
+    const qreal padW = ring * frameW;
+    const qreal padH = ring * frameH;
+
+    // Replace the (potentially multi-quad) input mesh with a single quad
+    // covering the expanded region. Vertex positions are in window-local
+    // coords (KWin's MVP matrix translates to screen position downstream),
+    // so subtracting padW/padH from the natural frame origin shifts the
+    // top-left into negative window-local space — exactly the "render
+    // past the frame" semantic. Texture coordinates follow the same
+    // ring convention so the captured-window texture (`uTexture0` on
+    // KWin) lands in the central [0..1] region, matching what the
+    // shader's `anchorUv` remap recovers via the unified
+    // `iAnchorPosInFbo / iResolution / iAnchorSize` math.
+    KWin::WindowQuad expanded;
+    expanded[0] = KWin::WindowVertex(-padW, -padH, -ring, -ring); // TL
+    expanded[1] = KWin::WindowVertex(frameW + padW, -padH, 1.0 + ring, -ring); // TR
+    expanded[2] = KWin::WindowVertex(frameW + padW, frameH + padH, 1.0 + ring, 1.0 + ring); // BR
+    expanded[3] = KWin::WindowVertex(-padW, frameH + padH, -ring, 1.0 + ring); // BL
+    quads.clear();
+    quads.append(expanded);
 }
 
 } // namespace PlasmaZones
