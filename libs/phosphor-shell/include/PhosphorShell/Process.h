@@ -6,11 +6,11 @@
 #include <PhosphorShell/phosphorshell_export.h>
 
 #include <QObject>
+#include <QProcess>
 #include <QStringList>
 #include <QtQml/qqmlregistration.h>
 
 QT_BEGIN_NAMESPACE
-class QProcess;
 class QTimer;
 QT_END_NAMESPACE
 
@@ -19,7 +19,6 @@ namespace PhosphorShell {
 class PHOSPHORSHELL_EXPORT Process : public QObject
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(Process)
 
     Q_PROPERTY(QStringList command READ command WRITE setCommand NOTIFY commandChanged)
     Q_PROPERTY(bool running READ running WRITE setRunning NOTIFY runningChanged)
@@ -32,6 +31,10 @@ class PHOSPHORSHELL_EXPORT Process : public QObject
     Q_PROPERTY(QString stdoutText READ stdoutText NOTIFY stdoutTextChanged)
     Q_PROPERTY(QString stderrText READ stderrText NOTIFY stderrTextChanged)
     Q_PROPERTY(int exitCode READ exitCode NOTIFY exitCodeChanged)
+    /// Last process exit status (NormalExit / CrashExit). A child that
+    /// segfaults emits exitCode=0+CrashExit on Linux; without this
+    /// property consumers see exitCode=0 and assume success.
+    Q_PROPERTY(QProcess::ExitStatus exitStatus READ exitStatus NOTIFY exitStatusChanged)
 
 public:
     explicit Process(QObject* parent = nullptr);
@@ -49,6 +52,7 @@ public:
     [[nodiscard]] QString stdoutText() const;
     [[nodiscard]] QString stderrText() const;
     [[nodiscard]] int exitCode() const;
+    [[nodiscard]] QProcess::ExitStatus exitStatus() const;
 
 Q_SIGNALS:
     void commandChanged();
@@ -57,10 +61,11 @@ Q_SIGNALS:
     void stdoutTextChanged();
     void stderrTextChanged();
     void exitCodeChanged();
-    void finished(int exitCode);
+    void exitStatusChanged();
+    void finished(int exitCode, QProcess::ExitStatus exitStatus);
 
 private Q_SLOTS:
-    void onProcessFinished(int exitCode);
+    void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void onReadyReadStdout();
     void onReadyReadStderr();
 
@@ -74,6 +79,7 @@ private:
     QString m_stdout;
     QString m_stderr;
     int m_exitCode = 0;
+    QProcess::ExitStatus m_exitStatus = QProcess::NormalExit;
     QProcess* m_process = nullptr;
     QTimer* m_timer = nullptr;
 };

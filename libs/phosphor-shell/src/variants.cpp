@@ -43,6 +43,7 @@ void Variants::setModel(QAbstractListModel* model)
     if (m_model) {
         connect(m_model.data(), &QAbstractListModel::rowsInserted, this, &Variants::onRowsInserted);
         connect(m_model.data(), &QAbstractListModel::rowsRemoved, this, &Variants::onRowsRemoved);
+        connect(m_model.data(), &QAbstractListModel::rowsMoved, this, &Variants::onRowsMoved);
         connect(m_model.data(), &QAbstractListModel::modelReset, this, &Variants::onModelReset);
         connect(m_model.data(), &QAbstractListModel::dataChanged, this, &Variants::onDataChanged);
     }
@@ -136,6 +137,43 @@ void Variants::onRowsRemoved(const QModelIndex& parent, int first, int last)
     // Surviving instances at indices >= first now correspond to lower
     // model indices — refresh their modelData.
     for (int row = first; row < m_instances.size(); ++row) {
+        refreshInstanceData(row);
+    }
+}
+
+void Variants::onRowsMoved(const QModelIndex& sourceParent, int sourceStart, int sourceEnd,
+                           const QModelIndex& destParent, int destRow)
+{
+    Q_UNUSED(sourceParent)
+    Q_UNUSED(destParent)
+
+    // Move the range [sourceStart..sourceEnd] to land at destRow in the
+    // post-move indexing (Qt's beginMoveRows convention). We mirror the
+    // movement in m_instances so each delegate follows its row, then
+    // refresh modelData on every shifted entry so the captured row index
+    // matches the model's new layout.
+    if (sourceStart < 0 || sourceEnd < sourceStart || sourceEnd >= m_instances.size()) {
+        return;
+    }
+
+    QList<QObject*> moving;
+    moving.reserve(sourceEnd - sourceStart + 1);
+    for (int i = sourceEnd; i >= sourceStart; --i) {
+        moving.prepend(m_instances.takeAt(i));
+    }
+
+    int insertAt = destRow;
+    if (destRow > sourceEnd) {
+        insertAt -= moving.size();
+    }
+    insertAt = qBound(0, insertAt, m_instances.size());
+    for (int i = 0; i < moving.size(); ++i) {
+        m_instances.insert(insertAt + i, moving.at(i));
+    }
+
+    const int firstAffected = qMin(sourceStart, insertAt);
+    const int lastAffected = qMin(qMax(sourceEnd, insertAt + moving.size() - 1), m_instances.size() - 1);
+    for (int row = firstAffected; row <= lastAffected; ++row) {
         refreshInstanceData(row);
     }
 }

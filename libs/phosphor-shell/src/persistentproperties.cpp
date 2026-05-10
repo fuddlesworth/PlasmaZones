@@ -68,12 +68,18 @@ QVariantMap PersistentProperties::saveState() const
     QVariantMap state;
     const QMetaObject* meta = metaObject();
     const int offset = QQuickItem::staticMetaObject.propertyCount();
+    // Resolve the C++ `reloadId` Q_PROPERTY by index (not by name) so a QML
+    // author who shadows the name with their own `property string reloadId`
+    // — perfectly legal, lands at a different metaobject index — still
+    // gets persisted. Skipping by name would silently drop the user's
+    // property in addition to ours.
+    const int reloadIdIndex = PersistentProperties::staticMetaObject.indexOfProperty("reloadId");
 
     for (int i = offset; i < meta->propertyCount(); ++i) {
-        const QMetaProperty prop = meta->property(i);
-        if (qstrcmp(prop.name(), "reloadId") == 0) {
+        if (i == reloadIdIndex) {
             continue;
         }
+        const QMetaProperty prop = meta->property(i);
         const QVariant value = prop.read(this);
         if (!isJsonSerializable(value.metaType().id())) {
             qCDebug(lcPersist) << "Skipping non-JSON-serialisable property" << prop.name() << "of type"

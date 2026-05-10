@@ -124,7 +124,11 @@ void FileView::onFileChanged()
 {
     readFile();
 
-    if (m_watcher && !m_watcher->files().contains(m_path)) {
+    // Editors that save via atomic-rename (vim, most IDEs) invalidate the
+    // watch on the original inode. Re-add the path — but only if it now
+    // exists on disk. Otherwise QFileSystemWatcher::addPath silently fails
+    // and we'd burn a watcher slot on every fire for a file that's gone.
+    if (m_watcher && !m_watcher->files().contains(m_path) && QFileInfo::exists(m_path)) {
         m_watcher->addPath(m_path);
     }
 }

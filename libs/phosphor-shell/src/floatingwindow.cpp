@@ -114,6 +114,10 @@ void FloatingWindow::ensureWindow()
 
     m_window = std::make_unique<QQuickWindow>();
     m_window->setTitle(m_title);
+    // Match PopupWindow's transparent default — frosted/rounded shell
+    // elements expect to draw their own background. A consumer that
+    // wants opaque can set a Rectangle with a solid color anyway.
+    m_window->setColor(Qt::transparent);
     m_window->resize(m_windowWidth, m_windowHeight);
 
     const auto children = childItems();

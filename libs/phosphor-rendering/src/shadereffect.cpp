@@ -367,11 +367,14 @@ void ShaderEffect::updatePlayingConnection()
         // will re-call us when the item gets a window.
         return;
     }
-    // afterFrameEnd fires once per rendered frame on the GUI thread (Qt 6),
-    // ideal for advancing per-frame uniforms. beforeRendering would fire on
-    // the render thread and force us to thread-marshal every tick.
-    m_playingConnection =
-        QObject::connect(w, &QQuickWindow::afterFrameEnd, this, &ShaderEffect::onPlayingTick, Qt::DirectConnection);
+    // afterAnimating fires once per frame on the GUI thread, immediately
+    // before the render thread is asked to synchronize. That's the right
+    // place to advance per-frame uniforms — the values we set here land in
+    // the next sync without thread-marshalling. afterFrameEnd would fire on
+    // the render thread under Qt's threaded render loop, and emitting our
+    // *Changed signals from there could trigger QML JS bindings on the
+    // wrong thread (V4 is GUI-thread-only).
+    m_playingConnection = QObject::connect(w, &QQuickWindow::afterAnimating, this, &ShaderEffect::onPlayingTick);
     // Kick a first frame so the shader paints the new state immediately
     // (otherwise it'd wait until something else dirties the scene).
     update();

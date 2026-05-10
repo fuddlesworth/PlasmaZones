@@ -8,7 +8,6 @@
 #include <QMargins>
 #include <QPointer>
 #include <QQuickItem>
-#include <QtQml/qqmlregistration.h>
 
 QT_BEGIN_NAMESPACE
 class QScreen;
@@ -19,7 +18,6 @@ namespace PhosphorShell {
 class PHOSPHORSHELL_EXPORT PanelWindow : public QQuickItem
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(PanelWindow)
 
     Q_PROPERTY(Edge edge READ edge WRITE setEdge NOTIFY edgeChanged)
     Q_PROPERTY(int thickness READ thickness WRITE setThickness NOTIFY thicknessChanged)

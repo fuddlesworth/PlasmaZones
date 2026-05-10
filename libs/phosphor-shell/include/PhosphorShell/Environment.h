@@ -7,15 +7,15 @@
 
 #include <QObject>
 #include <QString>
-#include <QtQml/qqmlregistration.h>
 
 namespace PhosphorShell {
 
+// Exposed to QML as a context property (`Environment`) by ShellEngine —
+// not registered as a QML singleton. Q_INVOKABLE methods are still
+// callable from QML through the context-property pointer.
 class PHOSPHORSHELL_EXPORT Environment : public QObject
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(Environment)
-    QML_SINGLETON
 
 public:
     explicit Environment(QObject* parent = nullptr);

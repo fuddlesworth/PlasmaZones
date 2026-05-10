@@ -9,18 +9,18 @@
 #include <QObject>
 #include <QPointer>
 #include <QString>
-#include <QtQml/qqmlregistration.h>
 
 namespace PhosphorShell {
 
 class PersistentProperties;
 class ScreenModel;
 
+// Exposed to QML as a context property (`PhosphorShell`) by ShellEngine —
+// not registered as a QML singleton. Q_INVOKABLE methods and Q_PROPERTYs
+// are still accessible through the context-property reference.
 class PHOSPHORSHELL_EXPORT ShellGlobal : public QObject
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(PhosphorShell)
-    QML_SINGLETON
 
     // NOTIFY (not CONSTANT) — `screens` is set lazily by ShellEngine after
     // engine construction (setScreenModel). A CONSTANT property would let

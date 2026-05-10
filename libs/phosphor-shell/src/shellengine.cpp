@@ -112,6 +112,7 @@ bool ShellEngine::load(const QUrl& shellUrl)
         Q_EMIT failed(errors);
         return false;
     }
+    m_rootRef = m_rootObject.get();
 
     materializePanels();
     setupWatcher();
@@ -165,7 +166,7 @@ void ShellEngine::onScreensChanged()
     // succession). Routing through the same debounce timer that handles
     // file-change reloads avoids tearing down the engine more than once
     // per topology transition.
-    qCInfo(lcShellEngine) << "Screen topology changed, scheduling shell reload";
+    qCDebug(lcShellEngine) << "Screen topology changed, scheduling shell reload";
     if (m_reloadTimer) {
         m_reloadTimer->start();
     } else {
@@ -175,7 +176,7 @@ void ShellEngine::onScreensChanged()
 
 void ShellEngine::onFileChanged()
 {
-    qCInfo(lcShellEngine) << "Shell config changed, reloading...";
+    qCDebug(lcShellEngine) << "Shell config changed, reloading...";
 
     savePersistentState();
     teardown();
@@ -202,6 +203,7 @@ void ShellEngine::onFileChanged()
         Q_EMIT failed(component.errorString());
         return;
     }
+    m_rootRef = m_rootObject.get();
 
     materializePanels();
     restorePersistentState();
@@ -215,7 +217,7 @@ void ShellEngine::onFileChanged()
         }
     }
 
-    qCInfo(lcShellEngine) << "Reload complete," << m_surfaces.size() << "panel(s)";
+    qCDebug(lcShellEngine) << "Reload complete," << m_surfaces.size() << "panel(s)";
     Q_EMIT reloaded();
 }
 
@@ -247,6 +249,11 @@ void ShellEngine::materializePanels()
     panels.append(children);
 
     for (PanelWindow* panel : panels) {
+        if (panel->alignment() != PanelWindow::Fill && panel->panelLength() < 0) {
+            qCWarning(lcShellEngine) << "PanelWindow has alignment=" << panel->alignment()
+                                     << "but panelLength=-1 (Fill) — set panelLength to a non-negative"
+                                     << " value (0 = auto-fit, >0 = explicit pin) or change alignment to Fill";
+        }
         QScreen* targetScreen = panel->screen() ? panel->screen() : m_deps.screenProvider->primary();
         const QSize screenSize = targetScreen ? targetScreen->size() : QSize(1920, 1080);
         const bool horizontal = (panel->edge() == PanelWindow::Top || panel->edge() == PanelWindow::Bottom);
@@ -376,8 +383,11 @@ void ShellEngine::materializePanels()
         // destructs and deletes panel, then m_rootObject.reset() during
         // teardown would double-free. Surface re-parents panel to the
         // wrapper QQuickWindow on success (surface.cpp:644).
-        panel->setParent(nullptr);
+        // Order: clear visual parent BEFORE QObject parent so QQuickItem's
+        // visual-parent bookkeeping doesn't observe a transient QObject-
+        // parent mismatch (matches Qt practice elsewhere in the codebase).
         panel->setParentItem(nullptr);
+        panel->setParent(nullptr);
 
         PhosphorLayer::SurfaceConfig cfg;
         cfg.role = role;
@@ -415,6 +425,17 @@ void ShellEngine::materializePanels()
         if (!p->reloadId().isEmpty()) {
             m_shellGlobal->registerSingleton(p->reloadId(), p);
         }
+    }
+
+    if (rootPanel) {
+        // Surface (cfg.contentItem) took ownership of the root panel and
+        // re-parented it to the wrapper QQuickWindow. Release our
+        // unique_ptr to avoid double-freeing the same QObject during
+        // teardown when the wrapper window deletes its child first and
+        // m_rootObject.reset() would then call delete on a dangling
+        // pointer. m_rootRef (QPointer) still tracks the live root for
+        // savePersistentState / restorePersistentState scans.
+        m_rootObject.release();
     }
 }
 
@@ -495,12 +516,17 @@ void ShellEngine::installDynamicAutoFit(PanelWindow* panel, PhosphorLayer::Surfa
 
 void ShellEngine::savePersistentState()
 {
-    if (!m_rootObject) {
+    // Use m_rootRef (non-owning QPointer) instead of m_rootObject because the
+    // root may have been a PanelWindow whose ownership was transferred to a
+    // Surface in materializePanels — m_rootObject is then released, but the
+    // QObject is still alive (parented to the wrapper window) and m_rootRef
+    // still tracks it.
+    if (!m_rootRef) {
         return;
     }
 
     m_persistentState.clear();
-    const auto persists = m_rootObject->findChildren<PersistentProperties*>();
+    const auto persists = m_rootRef->findChildren<PersistentProperties*>();
     for (const auto* p : persists) {
         if (!p->reloadId().isEmpty()) {
             m_persistentState[p->reloadId()] = p->saveState();
@@ -511,11 +537,11 @@ void ShellEngine::savePersistentState()
 
 void ShellEngine::restorePersistentState()
 {
-    if (!m_rootObject || m_persistentState.isEmpty()) {
+    if (!m_rootRef || m_persistentState.isEmpty()) {
         return;
     }
 
-    const auto persists = m_rootObject->findChildren<PersistentProperties*>();
+    const auto persists = m_rootRef->findChildren<PersistentProperties*>();
     for (auto* p : persists) {
         if (m_persistentState.contains(p->reloadId())) {
             p->restoreState(m_persistentState[p->reloadId()]);

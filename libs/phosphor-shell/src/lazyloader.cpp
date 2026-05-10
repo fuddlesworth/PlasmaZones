@@ -70,12 +70,12 @@ void LazyLoader::setActive(bool active)
 
 QQmlComponent* LazyLoader::sourceComponent() const
 {
-    return m_sourceComponent;
+    return m_sourceComponent.data();
 }
 
 void LazyLoader::setSourceComponent(QQmlComponent* component)
 {
-    if (m_sourceComponent == component) {
+    if (m_sourceComponent.data() == component) {
         return;
     }
     m_sourceComponent = component;
@@ -108,7 +108,7 @@ void LazyLoader::setSource(const QUrl& source)
 
 QQuickItem* LazyLoader::item() const
 {
-    return m_item;
+    return m_item.data();
 }
 
 LazyLoader::Status LazyLoader::status() const
@@ -118,7 +118,7 @@ LazyLoader::Status LazyLoader::status() const
 
 void LazyLoader::startLoading()
 {
-    QQmlComponent* component = m_sourceComponent;
+    QQmlComponent* component = m_sourceComponent.data();
 
     if (!component && !m_source.isEmpty()) {
         auto* engine = qmlEngine(this);
@@ -167,7 +167,7 @@ void LazyLoader::unload()
 
     if (m_item) {
         m_item->deleteLater();
-        m_item = nullptr;
+        m_item.clear();
         Q_EMIT itemChanged();
     }
 
@@ -184,17 +184,23 @@ void LazyLoader::onIncubatorReady()
     }
 
     auto* obj = m_incubator->object();
-    m_item = qobject_cast<QQuickItem*>(obj);
+    auto* item = qobject_cast<QQuickItem*>(obj);
 
-    if (m_item) {
-        m_item->setParentItem(this);
+    if (item) {
+        m_item = item;
+        item->setParentItem(this);
         m_status = Ready;
         Q_EMIT itemChanged();
         Q_EMIT statusChanged();
         Q_EMIT loaded();
         qCDebug(lcLazyLoader) << "Loaded item";
     } else {
-        delete obj;
+        // deleteLater is safer than direct delete inside an incubator
+        // status callback — the incubator infrastructure may still
+        // reference the object on the way out of statusChanged.
+        if (obj) {
+            obj->deleteLater();
+        }
         m_status = Error;
         Q_EMIT statusChanged();
         qCWarning(lcLazyLoader) << "Incubated object is not a QQuickItem";

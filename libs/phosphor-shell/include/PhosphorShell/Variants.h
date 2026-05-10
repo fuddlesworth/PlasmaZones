@@ -8,7 +8,6 @@
 #include <QList>
 #include <QPointer>
 #include <QQuickItem>
-#include <QtQml/qqmlregistration.h>
 
 #include <memory>
 
@@ -23,7 +22,6 @@ namespace PhosphorShell {
 class PHOSPHORSHELL_EXPORT Variants : public QQuickItem
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(Variants)
     Q_CLASSINFO("DefaultProperty", "delegate")
 
     Q_PROPERTY(QAbstractListModel* model READ model WRITE setModel NOTIFY modelChanged)
@@ -46,6 +44,8 @@ Q_SIGNALS:
 private Q_SLOTS:
     void onRowsInserted(const QModelIndex& parent, int first, int last);
     void onRowsRemoved(const QModelIndex& parent, int first, int last);
+    void onRowsMoved(const QModelIndex& sourceParent, int sourceStart, int sourceEnd, const QModelIndex& destParent,
+                     int destRow);
     void onModelReset();
     void onDataChanged(const QModelIndex& topLeft, const QModelIndex& bottomRight, const QList<int>& roles);
 

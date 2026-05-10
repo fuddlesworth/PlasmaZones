@@ -11,8 +11,6 @@
 #include <QObject>
 #include <QtQml/qqmlregistration.h>
 
-#include <memory>
-
 namespace PhosphorShell {
 
 /**
@@ -44,11 +42,13 @@ namespace PhosphorShell {
  * empty placeholder. KWin and the wlroots family (sway, Hyprland, Niri,
  * river, labwc) all support it.
  */
+// Registered as a QML singleton imperatively in ShellEngine::load() via
+// `qmlRegisterSingletonType<Toplevels>(..., &Toplevels::create)`. The
+// QML_NAMED_ELEMENT / QML_SINGLETON macros would only be honoured by
+// `qt_add_qml_module`, which the build doesn't use.
 class PHOSPHORSHELL_EXPORT Toplevels : public QObject
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(Toplevels)
-    QML_SINGLETON
 
     Q_PROPERTY(QList<PhosphorWayland::ForeignToplevel*> toplevels READ toplevels NOTIFY toplevelsChanged)
     Q_PROPERTY(bool supported READ isSupported CONSTANT)
@@ -67,7 +67,12 @@ Q_SIGNALS:
     void toplevelsChanged();
 
 private:
-    std::unique_ptr<PhosphorWayland::ForeignToplevelManager> m_manager;
+    /// Process-wide ForeignToplevelManager. Lazily constructed on first
+    /// access and parented to qApp so it dies at process exit. Sharing
+    /// across engines avoids two protocol bindings to the same global
+    /// (which the wlroots protocol does not support — see
+    /// `ForeignToplevelManager` docs: "Construct one per process").
+    static PhosphorWayland::ForeignToplevelManager* sharedManager();
 };
 
 } // namespace PhosphorShell

@@ -7,7 +7,6 @@
 
 #include <QAbstractListModel>
 #include <QList>
-#include <QtQml/qqmlregistration.h>
 
 QT_BEGIN_NAMESPACE
 class QScreen;
@@ -19,11 +18,12 @@ class IScreenProvider;
 
 namespace PhosphorShell {
 
+// Not registered with QML directly — exposed via `PhosphorShell.screens`
+// (the ShellGlobal context-property). Construction is internal to
+// ShellEngine; QML can read it as a model but cannot instantiate it.
 class PHOSPHORSHELL_EXPORT ScreenModel : public QAbstractListModel
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(ScreenModel)
-    QML_UNCREATABLE("ScreenModel is accessed via PhosphorShell.screens")
 
 public:
     enum Role {
@@ -44,6 +44,7 @@ public:
 
 private Q_SLOTS:
     void onScreensChanged();
+    void onPrimaryScreenChanged();
 
 private:
     PhosphorLayer::IScreenProvider* m_provider;

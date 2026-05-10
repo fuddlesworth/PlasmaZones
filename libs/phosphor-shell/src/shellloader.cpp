@@ -5,6 +5,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QLatin1String>
 #include <QLoggingCategory>
 #include <QStandardPaths>
 
@@ -56,7 +57,12 @@ QUrl ShellLoader::resolve() const
     searched.append(dataPaths);
 
     for (const QString& basePath : std::as_const(searched)) {
-        const QString candidate = basePath + QLatin1Char('/') + m_shellName + QLatin1String("/shell.qml");
+        // QDir::filePath joins normally and collapses any trailing slash on
+        // basePath, avoiding `/foo//phosphor-shell/shell.qml`. The filesystem
+        // tolerates the doubled slash but it leaks into log output and
+        // breaks symbolic comparisons of the resolved path.
+        const QString shellDir = QDir(basePath).filePath(m_shellName);
+        const QString candidate = QDir(shellDir).filePath(QStringLiteral("shell.qml"));
         if (QFileInfo::exists(candidate)) {
             return QUrl::fromLocalFile(candidate);
         }
@@ -70,7 +76,7 @@ QString ShellLoader::shellConfigDir() const
     if (m_shellName.isEmpty()) {
         return {};
     }
-    return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QLatin1Char('/') + m_shellName;
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)).filePath(m_shellName);
 }
 
 } // namespace PhosphorShell

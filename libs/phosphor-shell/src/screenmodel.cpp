@@ -19,6 +19,13 @@ ScreenModel::ScreenModel(PhosphorLayer::IScreenProvider* provider, QObject* pare
 
     connect(m_provider->notifier(), &PhosphorLayer::ScreenProviderNotifier::screensChanged, this,
             &ScreenModel::onScreensChanged);
+    // The provider's screensChanged signal fires for set / geometry changes
+    // but not for a primary-screen swap on the same set. KDE allows changing
+    // primary at runtime; without listening to QGuiApplication directly,
+    // bindings on IsPrimaryRole would stay stale.
+    if (qGuiApp) {
+        connect(qGuiApp, &QGuiApplication::primaryScreenChanged, this, &ScreenModel::onPrimaryScreenChanged);
+    }
 }
 
 ScreenModel::~ScreenModel() = default;
@@ -77,6 +84,18 @@ void ScreenModel::onScreensChanged()
     beginResetModel();
     m_screens = newScreens;
     endResetModel();
+}
+
+void ScreenModel::onPrimaryScreenChanged()
+{
+    // Emit dataChanged for IsPrimaryRole across the whole model. Cheap —
+    // primary changes are rare (user-initiated KCM action), and a targeted
+    // scan to find old/new primary indices would still re-evaluate the
+    // same N bindings.
+    if (m_screens.isEmpty()) {
+        return;
+    }
+    Q_EMIT dataChanged(index(0), index(m_screens.size() - 1), {IsPrimaryRole});
 }
 
 } // namespace PhosphorShell

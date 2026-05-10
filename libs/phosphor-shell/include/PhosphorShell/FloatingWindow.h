@@ -7,7 +7,6 @@
 
 #include <QQuickItem>
 #include <QString>
-#include <QtQml/qqmlregistration.h>
 
 #include <memory>
 
@@ -20,7 +19,6 @@ namespace PhosphorShell {
 class PHOSPHORSHELL_EXPORT FloatingWindow : public QQuickItem
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(FloatingWindow)
 
     Q_PROPERTY(QString title READ title WRITE setTitle NOTIFY titleChanged)
     Q_PROPERTY(int windowWidth READ windowWidth WRITE setWindowWidth NOTIFY windowWidthChanged)

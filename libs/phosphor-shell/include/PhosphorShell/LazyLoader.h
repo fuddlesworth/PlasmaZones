@@ -5,9 +5,9 @@
 
 #include <PhosphorShell/phosphorshell_export.h>
 
+#include <QPointer>
 #include <QQuickItem>
 #include <QUrl>
-#include <QtQml/qqmlregistration.h>
 
 QT_BEGIN_NAMESPACE
 class QQmlComponent;
@@ -19,7 +19,6 @@ namespace PhosphorShell {
 class PHOSPHORSHELL_EXPORT LazyLoader : public QQuickItem
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(LazyLoader)
 
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(
@@ -68,10 +67,14 @@ private:
     void onIncubatorReady();
 
     bool m_active = false;
-    QQmlComponent* m_sourceComponent = nullptr;
+    // QPointer because the component is externally owned by the QML
+    // scene — a parent reload that destroys the source component must
+    // not leave us with a dangling pointer that startLoading would
+    // dereference on the next active toggle.
+    QPointer<QQmlComponent> m_sourceComponent;
     QQmlComponent* m_ownedComponent = nullptr;
     QUrl m_source;
-    QQuickItem* m_item = nullptr;
+    QPointer<QQuickItem> m_item;
     QQmlIncubator* m_incubator = nullptr;
     Status m_status = Null;
 };

@@ -7,6 +7,7 @@
 
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 #include <QSize>
 #include <QUrl>
 #include <QVariantMap>
@@ -68,6 +69,12 @@ private:
     QUrl m_shellUrl;
     std::unique_ptr<QQmlEngine> m_engine;
     std::unique_ptr<QObject> m_rootObject;
+    // Non-owning observer of the QML root. When the root is a PanelWindow,
+    // ownership transfers to a Surface and m_rootObject is released — but
+    // findChildren scans (PersistentProperties save/restore) still need a
+    // pointer to walk the tree. QPointer auto-clears when the wrapper
+    // window destroys the root.
+    QPointer<QObject> m_rootRef;
     Deps m_deps;
     std::vector<std::unique_ptr<PhosphorLayer::Surface>> m_surfaces;
     QFileSystemWatcher* m_watcher = nullptr;

@@ -7,7 +7,6 @@
 
 #include <QObject>
 #include <QString>
-#include <QtQml/qqmlregistration.h>
 
 QT_BEGIN_NAMESPACE
 class QFileSystemWatcher;
@@ -19,7 +18,6 @@ namespace PhosphorShell {
 class PHOSPHORSHELL_EXPORT FileView : public QObject
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(FileView)
 
     Q_PROPERTY(QString path READ path WRITE setPath NOTIFY pathChanged)
     Q_PROPERTY(QString content READ content NOTIFY contentChanged)

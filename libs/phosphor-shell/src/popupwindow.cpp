@@ -35,6 +35,9 @@ void PopupWindow::setAnchor(QQuickItem* anchor)
     }
     m_anchor = anchor;
     Q_EMIT anchorChanged();
+    // Re-issue the xdg-positioner. The positioner can only be set at
+    // xdg-popup creation time, so a live anchor change requires hide+show.
+    reapplyIfVisible();
 }
 
 int PopupWindow::popupWidth() const
@@ -49,6 +52,9 @@ void PopupWindow::setPopupWidth(int width)
     }
     m_popupWidth = width;
     Q_EMIT popupWidthChanged();
+    if (m_popupWindow) {
+        m_popupWindow->setWidth(m_popupWidth);
+    }
 }
 
 int PopupWindow::popupHeight() const
@@ -63,6 +69,9 @@ void PopupWindow::setPopupHeight(int height)
     }
     m_popupHeight = height;
     Q_EMIT popupHeightChanged();
+    if (m_popupWindow) {
+        m_popupWindow->setHeight(m_popupHeight);
+    }
 }
 
 PopupWindow::PopupEdge PopupWindow::popupEdge() const
@@ -77,6 +86,7 @@ void PopupWindow::setPopupEdge(PopupEdge edge)
     }
     m_popupEdge = edge;
     Q_EMIT popupEdgeChanged();
+    reapplyIfVisible();
 }
 
 int PopupWindow::gap() const
@@ -91,6 +101,7 @@ void PopupWindow::setGap(int gap)
     }
     m_gap = gap;
     Q_EMIT gapChanged();
+    reapplyIfVisible();
 }
 
 bool PopupWindow::isPopupVisible() const
@@ -250,6 +261,18 @@ void PopupWindow::itemChange(ItemChange change, const ItemChangeData& value)
 void PopupWindow::reparentChildToWindow(QQuickItem* child)
 {
     child->setParentItem(m_popupWindow->contentItem());
+}
+
+void PopupWindow::reapplyIfVisible()
+{
+    if (!m_popupVisible || !m_popupWindow) {
+        return;
+    }
+    // Hide+show cycle re-creates the xdg-popup with a fresh positioner.
+    // The QQuickWindow itself is reused (children stay parented to its
+    // contentItem); only the wl_surface role/positioner is replayed.
+    hidePopup();
+    showPopup();
 }
 
 } // namespace PhosphorShell

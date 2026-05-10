@@ -102,6 +102,11 @@ int Process::exitCode() const
     return m_exitCode;
 }
 
+QProcess::ExitStatus Process::exitStatus() const
+{
+    return m_exitStatus;
+}
+
 void Process::startProcess()
 {
     if (m_command.isEmpty()) {
@@ -153,10 +158,16 @@ void Process::onReadyReadStderr()
     Q_EMIT stderrTextChanged();
 }
 
-void Process::onProcessFinished(int exitCode)
+void Process::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
-    m_exitCode = exitCode;
-    Q_EMIT exitCodeChanged();
+    if (m_exitCode != exitCode) {
+        m_exitCode = exitCode;
+        Q_EMIT exitCodeChanged();
+    }
+    if (m_exitStatus != exitStatus) {
+        m_exitStatus = exitStatus;
+        Q_EMIT exitStatusChanged();
+    }
 
     // Drain any final stdout/stderr that arrived between the last
     // readyRead and finished.
@@ -171,7 +182,7 @@ void Process::onProcessFinished(int exitCode)
         Q_EMIT stderrTextChanged();
     }
 
-    Q_EMIT finished(exitCode);
+    Q_EMIT finished(exitCode, exitStatus);
 
     if (m_running && m_interval > 0) {
         m_timer->start(m_interval);

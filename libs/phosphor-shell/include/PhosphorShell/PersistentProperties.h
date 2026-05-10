@@ -7,14 +7,12 @@
 
 #include <QQuickItem>
 #include <QVariantMap>
-#include <QtQml/qqmlregistration.h>
 
 namespace PhosphorShell {
 
 class PHOSPHORSHELL_EXPORT PersistentProperties : public QQuickItem
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(PersistentProperties)
 
     Q_PROPERTY(QString reloadId READ reloadId WRITE setReloadId NOTIFY reloadIdChanged)
 

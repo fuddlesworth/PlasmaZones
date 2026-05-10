@@ -8,7 +8,6 @@
 #include <QPointer>
 #include <QQuickItem>
 #include <QRect>
-#include <QtQml/qqmlregistration.h>
 
 #include <memory>
 
@@ -21,7 +20,6 @@ namespace PhosphorShell {
 class PHOSPHORSHELL_EXPORT PopupWindow : public QQuickItem
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(PopupWindow)
 
     Q_PROPERTY(QQuickItem* anchor READ anchor WRITE setAnchor NOTIFY anchorChanged)
     Q_PROPERTY(int popupWidth READ popupWidth WRITE setPopupWidth NOTIFY popupWidthChanged)
@@ -76,6 +74,10 @@ private:
     void hidePopup();
     QRect computeAnchorRect() const;
     void reparentChildToWindow(QQuickItem* child);
+    /// Re-apply the xdg-positioner / size when a live property change
+    /// requires re-showing the popup (anchor, edge, gap, geometry only
+    /// take effect at popup creation time per xdg-shell semantics).
+    void reapplyIfVisible();
 
     // Externally owned anchor item — QPointer lets us detect destruction
     // (the QML author may delete the anchor while the popup is alive).
