@@ -5,6 +5,7 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
+#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
@@ -260,6 +261,11 @@ public:
     // dirty-tracking / notifyReload plumbing).
     Q_PROPERTY(QString shaderProfileTreeJson READ shaderProfileTreeJson WRITE setShaderProfileTreeJson NOTIFY
                    shaderProfileTreeChanged)
+    /// Animation App Rules (per-window-class overrides) — mirrors the
+    /// ShaderProfileTree storage pattern: typed C++ list for engine
+    /// consumers, JSON string facade for the meta-object loop.
+    Q_PROPERTY(QString animationAppRulesJson READ animationAppRulesJson WRITE setAnimationAppRulesJson NOTIFY
+                   animationAppRulesChanged)
 
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
@@ -764,6 +770,16 @@ public:
     /// loop in SettingsController catches it.
     QString shaderProfileTreeJson() const;
     void setShaderProfileTreeJson(const QString& json);
+
+    /// Animation App Rules — ordered list of per-window-class
+    /// shader/timing overrides. Consumed by the kwin-effect's window-
+    /// event dispatcher (Phase 2) before falling through to the
+    /// shaderProfileTree per-event default.
+    PhosphorAnimationShaders::AnimationAppRuleList animationAppRules() const override;
+    void setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules) override;
+    /// String facade — same rationale as `shaderProfileTreeJson` above.
+    QString animationAppRulesJson() const;
+    void setAnimationAppRulesJson(const QString& json);
 
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;

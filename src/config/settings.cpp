@@ -820,21 +820,36 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     // atomically (the daemon's fan-out hook) get one signal per call.
     Q_EMIT animationProfileChanged();
 
-    // Per-field: only emit when the effective value actually differs.
-    if (qRound(profile.effectiveDuration()) != prevDuration) {
+    // Per-field: only emit when the post-write OBSERVABLE differs from
+    // the pre-write observable. Compare against `animationProfile()`
+    // re-read post-write — NOT against `profile.effective*()` (the
+    // incoming arg), because `merged` preserves prev's values for any
+    // field the caller left unset. With the incoming `profile` having
+    // all-unset fields, `profile.effective*()` returns library
+    // defaults; comparing those against `prev*` would fire spurious
+    // signals even though the on-disk value is unchanged. Cache the
+    // post-write Profile in one read instead of paying a JSON parse +
+    // CurveRegistry resolve per field.
+    const auto next = animationProfile();
+    if (qRound(next.effectiveDuration()) != prevDuration) {
         Q_EMIT animationDurationChanged();
     }
-    const QString newCurveWire = profile.curve ? profile.curve->toString() : ConfigDefaults::animationEasingCurve();
+    // `animationEasingCurve()` reads the curve directly off the merged
+    // JSON blob (preserving any unresolved raw spec) — distinct from
+    // `next.curve->toString()` which could lose detail when the curve
+    // failed to resolve through `CurveRegistry::tryCreate`. The wire
+    // form is what disk-level equality tracks.
+    const QString newCurveWire = animationEasingCurve();
     if (newCurveWire != prevCurveWire) {
         Q_EMIT animationEasingCurveChanged();
     }
-    if (profile.effectiveMinDistance() != prevMinDistance) {
+    if (next.effectiveMinDistance() != prevMinDistance) {
         Q_EMIT animationMinDistanceChanged();
     }
-    if (static_cast<int>(profile.effectiveSequenceMode()) != prevSequenceMode) {
+    if (static_cast<int>(next.effectiveSequenceMode()) != prevSequenceMode) {
         Q_EMIT animationSequenceModeChanged();
     }
-    if (profile.effectiveStaggerInterval() != prevStaggerInterval) {
+    if (next.effectiveStaggerInterval() != prevStaggerInterval) {
         Q_EMIT animationStaggerIntervalChanged();
     }
 
@@ -1063,6 +1078,85 @@ void Settings::setShaderProfileTreeJson(const QString& json)
         return;
     }
     setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
+}
+
+PhosphorAnimationShaders::AnimationAppRuleList Settings::animationAppRules() const
+{
+    const auto raw =
+        m_store->read<QVariantList>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey());
+    QJsonArray arr;
+    for (const auto& v : raw) {
+        // Stored entries arrive as `QVariantMap`s when the JSON backend
+        // round-trips. Convert each back into `QJsonObject` for the
+        // typed `fromJson` consumer; non-map entries are dropped here.
+        // Use the strict `typeId()` check rather than `canConvert<>`
+        // because `canConvert<QVariantMap>()` returns true for plain
+        // QStrings too — `toMap()` would then build an empty
+        // QVariantMap and we'd round-trip that into an empty
+        // QJsonObject for the rule loader to drop at its own gate.
+        // The strict check skips the wasted QJsonObject construction.
+        if (v.typeId() == QMetaType::QVariantMap) {
+            arr.append(QJsonObject::fromVariantMap(v.toMap()));
+        }
+    }
+    return PhosphorAnimationShaders::AnimationAppRuleList::fromJson(arr);
+}
+
+void Settings::setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules)
+{
+    // Mirror the canonicalisation pattern used by `setShaderProfileTree`
+    // — compare the on-disk RAW form against the canonical
+    // round-tripped form. Catches two cases the simple "previous == rules"
+    // shortcut misses:
+    //
+    //   1. Hand-edited / corrupted on-disk entries that
+    //      `AnimationAppRule::fromJson` silently drops at read time. The
+    //      in-memory `previous` would then equal `rules` even though the
+    //      on-disk file still contains the bogus entry — so the simple
+    //      compare leaves stale junk on disk forever instead of cleaning
+    //      it up on the next save (asymmetric with `setShaderProfileTree`
+    //      which prunes-and-compares on both sides).
+    //
+    //   2. Schema-version drifts where `toJson()` emits the same logical
+    //      list in a slightly different on-disk shape (e.g. key ordering,
+    //      omitted-empty-fields convention) — the canonical-vs-raw
+    //      compare detects that delta and rewrites the file once,
+    //      whereas the simple compare would miss it.
+    //
+    // Build the canonical raw form once and reuse it for both the
+    // change-detection compare AND the actual write — no double-encode.
+    QVariantList canonical;
+    const auto arr = rules.toJson();
+    canonical.reserve(arr.size());
+    for (const auto& v : arr) {
+        canonical.append(v.toObject().toVariantMap());
+    }
+    const auto storedRaw =
+        m_store->read<QVariantList>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey());
+    if (storedRaw == canonical)
+        return;
+    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey(), canonical);
+    Q_EMIT animationAppRulesChanged();
+    Q_EMIT settingsChanged();
+}
+
+QString Settings::animationAppRulesJson() const
+{
+    return QString::fromUtf8(QJsonDocument(animationAppRules().toJson()).toJson(QJsonDocument::Compact));
+}
+
+void Settings::setAnimationAppRulesJson(const QString& json)
+{
+    if (json.isEmpty()) {
+        setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList{});
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isArray()) {
+        qCWarning(lcConfig) << "setAnimationAppRulesJson: malformed JSON (expected array), ignoring";
+        return;
+    }
+    setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array()));
 }
 
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
@@ -1699,9 +1793,10 @@ QVariantList Settings::zoneSpanTriggers() const
     // ZoneSpanModifier but leaves Triggers untouched should report the
     // edited modifier through zoneSpanTriggers(), not the compiled default.
     //
-    // hasKey and zoneSpanModifier() both open a JsonGroup — JsonBackend
-    // enforces a single active group at a time, so sample the modifier
-    // BEFORE grabbing the hasKey group.
+    // hasKey and zoneSpanModifier() both open a JsonGroup, and
+    // JsonBackend enforces a single active group at a time. Scope the
+    // hasKey group in its own block so it's released before
+    // zoneSpanModifier() opens the next one.
     bool hasTriggers = false;
     {
         auto g = m_configBackend->group(ConfigDefaults::snappingBehaviorZoneSpanGroup());

@@ -118,14 +118,16 @@ bool WindowAnimator::hasAnimation(KWin::EffectWindow* handle) const
     return m_animations.contains(handle);
 }
 
-bool WindowAnimator::startAnimation(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame)
+bool WindowAnimator::startAnimation(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame,
+                                    const PhosphorAnimation::Profile* profileOverride)
 {
-    const auto r = startAnimationWithResult(handle, oldFrame, newFrame);
+    const auto r = startAnimationWithResult(handle, oldFrame, newFrame, profileOverride);
     return r == PhosphorAnimation::StartResult::Accepted || r == PhosphorAnimation::StartResult::AcceptedThenRemoved;
 }
 
-PhosphorAnimation::StartResult WindowAnimator::startAnimationWithResult(KWin::EffectWindow* handle,
-                                                                        const QRectF& oldFrame, const QRectF& newFrame)
+PhosphorAnimation::StartResult
+WindowAnimator::startAnimationWithResult(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame,
+                                         const PhosphorAnimation::Profile* profileOverride)
 {
     using PhosphorAnimation::StartResult;
 
@@ -142,7 +144,16 @@ PhosphorAnimation::StartResult WindowAnimator::startAnimationWithResult(KWin::Ef
     }
 
     PhosphorAnimation::SnapPolicy::SnapParams params;
-    params.profile = m_profile;
+    // Per-call profile override — used by the AnimationAppRule cascade to
+    // apply a curve / duration override for one animation without mutating
+    // m_profile. The override is already curve-resolved through CurveRegistry
+    // by the caller and clamped here through the same path as m_profile.
+    if (profileOverride) {
+        params.profile = *profileOverride;
+        clampProfile(params.profile);
+    } else {
+        params.profile = m_profile;
+    }
     params.retargetPolicy = m_retargetPolicy;
     const auto spec = PhosphorAnimation::SnapPolicy::createSnapSpec(oldFrame, newFrame, params, clk);
     if (!spec) {

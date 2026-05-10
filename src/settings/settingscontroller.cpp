@@ -600,6 +600,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("virtualscreens"),
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),
+        QStringLiteral("animations-app-rules"),
         QStringLiteral("animations-zones"),
         QStringLiteral("animations-notifications"),
         QStringLiteral("animations-popups"),

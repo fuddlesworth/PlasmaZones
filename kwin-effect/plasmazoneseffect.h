@@ -505,6 +505,7 @@ private:
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false);
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();
+    void loadAnimationAppRulesFromDbus();
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                 bool reverse = false, bool holdCloseGrab = false);

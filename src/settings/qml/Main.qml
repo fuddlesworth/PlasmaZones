@@ -162,6 +162,10 @@ ApplicationWindow {
             "label": i18n("Windows"),
             "iconName": "window-new"
         }, {
+            "name": "animations-app-rules",
+            "label": i18n("App Rules"),
+            "iconName": "application-x-executable"
+        }, {
             "name": "animations-zones",
             "label": i18n("Zones"),
             "iconName": "view-grid"
@@ -226,6 +230,7 @@ ApplicationWindow {
         "about": "AboutPage.qml",
         "animations-general": "AnimationsGeneralPage.qml",
         "animations-windows": "AnimationsWindowsPage.qml",
+        "animations-app-rules": "AnimationsAppRulesPage.qml",
         "animations-zones": "AnimationsZonesPage.qml",
         "animations-notifications": "AnimationsNotificationsPage.qml",
         "animations-popups": "AnimationsPopupsPage.qml",

@@ -25,8 +25,10 @@ namespace PlasmaZones {
  */
 class StubSettings : public ISettings, public PhosphorEngine::ISnapSettings
 {
-    // No Q_OBJECT — this stub has no signals/slots of its own.
-    // ISettings::Q_OBJECT provides the meta-object system integration.
+    // No Q_OBJECT — this stub defines no NEW signals/slots; ISettings's
+    // meta-object is reused for the inherited signal emits (e.g.
+    // `animationAppRulesChanged`, `renderingBackendChanged`,
+    // `settingsChanged`) that the setters trigger directly.
 
 public:
     explicit StubSettings(QObject* parent = nullptr)
@@ -655,6 +657,18 @@ public:
     void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree&) override
     {
     }
+    PhosphorAnimationShaders::AnimationAppRuleList animationAppRules() const override
+    {
+        return m_animationAppRules;
+    }
+    void setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules) override
+    {
+        if (m_animationAppRules == rules)
+            return;
+        m_animationAppRules = rules;
+        Q_EMIT animationAppRulesChanged();
+        Q_EMIT settingsChanged();
+    }
 
     // Autotile decoration settings (ISettings)
     bool autotileFocusFollowsMouse() const override
@@ -805,6 +819,7 @@ private:
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
+    PhosphorAnimationShaders::AnimationAppRuleList m_animationAppRules;
 };
 
 } // namespace PlasmaZones
