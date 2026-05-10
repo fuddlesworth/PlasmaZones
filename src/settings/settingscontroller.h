@@ -121,6 +121,14 @@ public:
 
     static const QSet<QString>& validPageNames();
     static const QHash<QString, QString>& parentPageRedirects();
+    /// Parent name → set of leaf child page names. Covers top-level
+    /// sidebar parents (snapping / tiling / animations) AND mid-level
+    /// virtual parents (animations-surfaces / animations-library)
+    /// whose children don't share their name prefix. Drives the
+    /// dirty-state propagation in `isPageDirty` via direct-membership
+    /// lookup. Keep in sync with the QML `_childItems` buckets in
+    /// Main.qml.
+    static const QHash<QString, QSet<QString>>& pageGroupChildren();
 
     bool needsSave() const
     {

@@ -567,6 +567,25 @@ target_link_libraries(test_animations_shader_overrides
 )
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
 
+# Companion test executable: app-rule list CRUD end-to-end. Same split
+# rationale as test_animations_shader_overrides — keep each test file
+# under the project's <800-line guideline.
+add_executable(test_animations_app_rules
+    settings/test_animations_app_rules.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+)
+target_link_libraries(test_animations_app_rules
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        PhosphorAnimation::PhosphorAnimation
+        plasmazones_core
+)
+add_test(NAME test_animations_app_rules COMMAND test_animations_app_rules)
+
 # Validation methods on D-Bus struct types — pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,
 # ApplySnap zoneId, TileRequestEntry tiled/floating size semantics, etc.)

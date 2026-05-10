@@ -3,12 +3,18 @@
 
 #include "../plasmazoneseffect.h"
 
+#include "../autotilehandler.h"
+#include "../navigationhandler.h"
+#include "../screenchangehandler.h"
+#include "../snapassisthandler.h"
+#include "../windowanimator.h"
+
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WireTypes.h>
-#include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>
 #include <core/output.h>
@@ -31,12 +37,6 @@
 #include <algorithm>
 #include <memory>
 #include <utility>
-
-#include "../autotilehandler.h"
-#include "../navigationhandler.h"
-#include "../screenchangehandler.h"
-#include "../snapassisthandler.h"
-#include "../windowanimator.h"
 
 namespace PlasmaZones {
 
@@ -510,6 +510,7 @@ void PlasmaZonesEffect::loadCachedSettings()
                                                   PhosphorAnimation::Limits::MaxAnimationStaggerIntervalMs);
     });
     loadShaderProfileFromDbus();
+    loadAnimationAppRulesFromDbus();
     loadShaderRegistryFromDbus();
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
         m_cachedToggleActivation = v.toBool();

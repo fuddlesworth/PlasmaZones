@@ -14,6 +14,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define warpStrength  customParams[0].x
@@ -68,13 +69,6 @@ void main()
     // the rippled silhouette room to extend OUTSIDE the original
     // anchor rectangle without clipping.
     vec2 sampleUv = anchorUv - warp;
-    // Soft inside-mask. A hard `if (outside) return vec4(0)` produces a
-    // 1-texel discontinuity at the warp silhouette boundary, visibly
-    // aliased on smooth warps. A 0.005-wide smoothstep band fades to
-    // transparent across the [0,1] edge — narrow enough to be invisible
-    // on small windows (~1 texel at 200 px), still smooth at 4K.
-    vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), sampleUv);
-    vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), sampleUv);
-    float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
-    fragColor = texture(uTexture0, sampleUv) * mask;
+    // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+    fragColor = texture(uTexture0, sampleUv) * boundaryMask(sampleUv);
 }

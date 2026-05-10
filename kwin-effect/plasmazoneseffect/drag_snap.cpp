@@ -3,6 +3,12 @@
 
 #include "../plasmazoneseffect.h"
 
+#include "../autotilehandler.h"
+#include "../dragtracker.h"
+#include "../snapassisthandler.h"
+#include "../windowanimator.h"
+
+#include <PhosphorAnimation/AnimationAppRuleResolver.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -21,11 +27,6 @@
 #include <QTimer>
 
 #include <memory>
-
-#include "../autotilehandler.h"
-#include "../dragtracker.h"
-#include "../snapassisthandler.h"
-#include "../windowanimator.h"
 
 namespace PlasmaZones {
 
@@ -430,6 +431,17 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     if (!skipAnimation && !allowDuringDrag && m_windowAnimator->isEnabled()) {
         const QRectF targetFrame(geo);
 
+        // Bail before any work when the in-flight animation already
+        // targets this frame — saves both the moveResize signal
+        // emission AND the rule resolve on rapid retargets to the same
+        // zone. Pre-Pass-2 the moveResize ran first and was redundant
+        // here (kwin's moveResize is internally a no-op when geometry
+        // already matches, but still pays signal-dispatch cost on the
+        // hot path of rapid drag retargets).
+        if (m_windowAnimator->hasAnimation(window) && m_windowAnimator->isAnimatingToTarget(window, targetFrame)) {
+            return; // Already animating to this target
+        }
+
         // Apply final geometry immediately — client starts re-rendering at new size.
         // Do this before touching the animator so the controller's
         // downstream bounds / padding queries see the updated
@@ -439,10 +451,32 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             kw->moveResize(targetFrame);
         }
 
+        // AnimationAppRule motion-cascade: a Timing rule for this
+        // (windowClass, eventPath) replaces the global animator profile's
+        // curve / duration for THIS animation only. No rule → resolver
+        // returns the base profile unchanged and no override is passed,
+        // preserving the historical fast-path. Retarget intentionally does
+        // not re-apply the cascade — once an animation is in flight, it
+        // stays on the curve that started it for visual continuity.
+        //
+        // Empty-rule-list short-circuit: when the user has no app rules
+        // configured (the default-state case for most users), skip both
+        // the resolver call AND the deep `Profile::operator!=` (which
+        // walks `curve->equals` virtual + 5 std::optional comparisons)
+        // — the cost is paid on every animated snap otherwise.
+        const QString windowClass = window->windowClass();
+        const auto& baseProfile = m_windowAnimator->profile();
+        const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
+        PhosphorAnimation::Profile motionProfile;
+        const auto& appRules = m_shaderManager.appRules();
+        if (!appRules.isEmpty()) {
+            motionProfile = PhosphorAnimationShaders::resolveAnimationMotionProfile(appRules, baseProfile, windowClass,
+                                                                                    profilePath, m_curveRegistry);
+            if (motionProfile != baseProfile)
+                motionOverridePtr = &motionProfile;
+        }
+
         if (m_windowAnimator->hasAnimation(window)) {
-            if (m_windowAnimator->isAnimatingToTarget(window, targetFrame)) {
-                return; // Already animating to this target
-            }
             // Capture the displaced animation's endpoints before retarget
             // modifies or deletes the entry. On a rapid reversal where
             // advance() hasn't ticked, m_current still equals m_from
@@ -465,14 +499,26 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
                 // returns false and no animation plays — correct, since
                 // there's no visual distance to cover.
                 const QRectF animFrom = (displacedTarget != targetFrame) ? displacedTarget : visualPos;
-                m_windowAnimator->startAnimation(window, animFrom, targetFrame);
+                m_windowAnimator->startAnimation(window, animFrom, targetFrame, motionOverridePtr);
             }
         } else {
-            m_windowAnimator->startAnimation(window, QRectF(oldFrame), targetFrame);
+            m_windowAnimator->startAnimation(window, QRectF(oldFrame), targetFrame, motionOverridePtr);
         }
 
         if (m_windowAnimator->hasAnimation(window)) {
-            const auto shaderProfile = m_shaderManager.m_shaderProfileTree.resolve(profilePath);
+            // Same cascade as tryBeginShaderForEvent: rule layer wins
+            // for matching windows; engaged-empty rule effectId blocks
+            // the tree fallthrough. Reuse the `windowClass` local from
+            // above instead of re-calling `window->windowClass()`.
+            // Note: the snap shader path leaves durationMs at zero on
+            // purpose (see ShaderTransition docstring in types.h:126-136
+            // and paint_pipeline.cpp:155-170) — paintWindow rides the
+            // WindowAnimator's timeline. The Timing-rule duration
+            // override is honoured transitively via `motionProfile`
+            // above (driving the animator's duration), so the shader
+            // still terminates with the rule-overridden snap motion.
+            const auto shaderProfile = PhosphorAnimationShaders::resolveAnimationShaderProfile(
+                appRules, m_shaderManager.profileTree(), windowClass, profilePath);
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
                 beginShaderTransition(window, shaderProfile);
             }

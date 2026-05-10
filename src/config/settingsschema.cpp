@@ -262,10 +262,12 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema)
 void appendAnimationsSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
-    // Schema construction runs at Settings init time — before the daemon
-    // wires its per-process CurveRegistry. Use a local static fallback
-    // that auto-registers builtins (spring, cubic-bezier, elastic, bounce)
-    // so the default Profile JSON resolves correctly.
+    // Default-Profile JSON resolution needs a CurveRegistry. The daemon's
+    // per-process registry is wired at startup (`daemon/main.cpp`), but
+    // standalone settings / unit tests construct Settings without injecting
+    // one — for those paths we fall back to this function-local static that
+    // auto-registers the builtins (spring, cubic-bezier, elastic, bounce).
+    // The static persists across Settings re-construction.
     static PhosphorAnimation::CurveRegistry sSchemaRegistry;
     schema.groups[CD::animationsGroup()] = {
         {CD::enabledKey(), CD::animationsEnabled(), QMetaType::Bool},
@@ -275,6 +277,11 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
         // by Store::read's legacy-string fallback on first load.
         {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QVariantMap},
         {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QVariantMap},
+        // AnimationAppRules persists as an ordered JSON array (each
+        // element a rule object). Stored under the same Animations
+        // group so the on-disk layout keeps everything animation-
+        // related in one section.
+        {CD::animationAppRulesKey(), CD::animationAppRules(), QMetaType::QVariantList},
     };
 }
 

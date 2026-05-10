@@ -20,6 +20,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define blobScale    customParams[0].x
@@ -30,23 +31,11 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-float is_hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-}
-
-float is_noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(is_hash(i), is_hash(i + vec2(1.0, 0.0)), f.x),
-               mix(is_hash(i + vec2(0.0, 1.0)), is_hash(i + vec2(1.0, 1.0)), f.x), f.y);
-}
-
 float is_fbm(vec2 p) {
     float v = 0.0;
     float amp = 0.5;
     for (int i = 0; i < 5; i++) {
-        v += amp * is_noise(p);
+        v += amp * niriNoise(p);
         p *= 2.1;
         amp *= 0.5;
     }

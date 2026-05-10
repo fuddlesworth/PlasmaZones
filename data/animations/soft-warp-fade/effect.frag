@@ -17,12 +17,13 @@
 // niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
 // == texture coords here), so the matrix multiply is dropped and
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
-// rewritten to `texture` (GLSL 4.50 core) inline. Niri's `swf_hash` and
-// `swf_noise` helpers lift to file scope unchanged.
+// rewritten to `texture` (GLSL 4.50 core) inline. Niri's `swf_hash` /
+// `swf_noise` helpers come from `<noise.glsl>` as `niriHash` / `niriNoise`.
 
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define warpStrength customParams[0].x
@@ -31,18 +32,6 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-float swf_hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-}
-
-float swf_noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(swf_hash(i), swf_hash(i + vec2(1.0, 0.0)), f.x),
-               mix(swf_hash(i + vec2(0.0, 1.0)), swf_hash(i + vec2(1.0, 1.0)), f.x), f.y);
-}
-
 void main() {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
@@ -50,21 +39,13 @@ void main() {
 
     float strength = sin(p * 3.14159) * warpStrength;
     vec2 warp = vec2(
-        swf_noise(uv * noiseScale + vec2(0.0, p * 0.5)),
-        swf_noise(uv * noiseScale + vec2(p * 0.5, 0.0))
+        niriNoise(uv * noiseScale + vec2(0.0, p * 0.5)),
+        niriNoise(uv * noiseScale + vec2(p * 0.5, 0.0))
     ) - 0.5;
     vec2 warped = uv + warp * strength;
 
-    // Soft inside-mask. The warp above pushes UVs slightly past [0, 1] at
-    // boundary fragments, and `uTexture0` is clamp-to-edge — the typical
-    // edge alpha is 0 (window shadow / rounded corners) so samples beyond
-    // the surface produce a grey-transparent border. Fade to zero across
-    // a tight 0.005-wide band at each edge so the warped silhouette crops
-    // cleanly. Same pattern as morph/plasma-flow.
-    vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), warped);
-    vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), warped);
-    float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
-    vec4 win = texture(uTexture0, warped) * mask;
+    // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+    vec4 win = texture(uTexture0, warped) * boundaryMask(warped);
 
     float t = smoothstep(0.05, 0.95, p);
     t = t * t * (3.0 - 2.0 * t);

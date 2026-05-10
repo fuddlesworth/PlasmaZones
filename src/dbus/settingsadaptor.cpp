@@ -5,6 +5,7 @@
 #include "../core/interfaces.h"
 #include "../config/settings.h" // For concrete Settings type
 #include "../core/dbusvariantutils.h"
+#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
@@ -21,6 +22,7 @@ namespace PlasmaZones {
 
 namespace {
 constexpr qsizetype kMaxShaderProfileTreeBytes = 64 * 1024;
+constexpr qsizetype kMaxAnimationAppRulesBytes = 64 * 1024;
 }
 
 SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry, QObject* parent)
@@ -495,16 +497,41 @@ void SettingsAdaptor::initializeRegistry()
                 QJsonDocument(concrete->shaderProfileTree().toJson()).toJson(QJsonDocument::Compact));
         };
         m_setters[QStringLiteral("shaderProfileTree")] = [concrete](const QVariant& v) -> bool {
-            const QString raw = v.toString();
+            // Gate on UTF-8 byte length, not QString::size() — for
+            // multi-byte payloads the latter undercounts and a 64 KiB
+            // wire frame can encode to substantially more bytes
+            // on disk / on the bus.
+            const QByteArray raw = v.toString().toUtf8();
             if (raw.size() > kMaxShaderProfileTreeBytes)
                 return false;
-            const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8());
+            const QJsonDocument doc = QJsonDocument::fromJson(raw);
             if (!doc.isObject())
                 return false;
             concrete->setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
             return true;
         };
         m_schemas[QStringLiteral("shaderProfileTree")] = QStringLiteral("string");
+
+        // Animation app rules: ordered JSON array round-trip — the wire
+        // shape mirrors `Settings::animationAppRulesJson`. Same byte cap
+        // as the profile tree since both blobs share the same per-user
+        // upper bound (dozens of overrides at most).
+        m_getters[QStringLiteral("animationAppRules")] = [concrete]() {
+            return QString::fromUtf8(
+                QJsonDocument(concrete->animationAppRules().toJson()).toJson(QJsonDocument::Compact));
+        };
+        m_setters[QStringLiteral("animationAppRules")] = [concrete](const QVariant& v) -> bool {
+            // Same UTF-8-byte gate rationale as shaderProfileTree above.
+            const QByteArray raw = v.toString().toUtf8();
+            if (raw.size() > kMaxAnimationAppRulesBytes)
+                return false;
+            const QJsonDocument doc = QJsonDocument::fromJson(raw);
+            if (!doc.isArray())
+                return false;
+            concrete->setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array()));
+            return true;
+        };
+        m_schemas[QStringLiteral("animationAppRules")] = QStringLiteral("string");
     }
 
     // Phase 6: shader search paths (read-only, for KWin effect registry population).

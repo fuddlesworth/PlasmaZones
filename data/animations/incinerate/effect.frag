@@ -39,15 +39,6 @@ layout(location = 0) out vec4 fragColor;
 // the body samples .rgb. The .a channel is unused.
 #define uColor          customColors[0].rgb
 
-// tritone — BMW common.glsl:201 verbatim. Not hosted in shared/ because
-// no other PlasmaZones animation needs it yet.
-vec3 tritone(float val, vec3 shadows, vec3 midtones, vec3 highlights) {
-  if (val < 0.5) {
-    return mix(shadows, midtones, smoothstep(0.0, 1.0, val * 2.0));
-  }
-  return mix(midtones, highlights, smoothstep(0.0, 1.0, val * 2.0 - 1.0));
-}
-
 // This maps a given value in [0..1] to a color from the rgba color ramp
 // [transparent black ... semi-transparent uColor ... opaque white].
 vec4 getFireColor(float val) {

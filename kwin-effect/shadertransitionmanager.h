@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ShaderProfile.h>
@@ -78,6 +79,15 @@ public:
     const PhosphorAnimationShaders::ShaderProfileTree& profileTree() const
     {
         return m_shaderProfileTree;
+    }
+
+    PhosphorAnimationShaders::AnimationAppRuleList& appRules()
+    {
+        return m_animationAppRules;
+    }
+    const PhosphorAnimationShaders::AnimationAppRuleList& appRules() const
+    {
+        return m_animationAppRules;
     }
 
     // NOTE: Shader transition methods (beginShaderTransition, endShaderTransition,
@@ -201,6 +211,7 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════
     PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
+    PhosphorAnimationShaders::AnimationAppRuleList m_animationAppRules;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Texture Cache

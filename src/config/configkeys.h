@@ -403,6 +403,12 @@ public:
     // same dot-path namespace — see design doc decision AA).
     PZ_CONFIG_KEY(shaderProfileTreeKey, "ShaderProfileTree")
 
+    // Animation App Rules — ordered list of per-window-class shader/
+    // timing overrides, layered on top of `ShaderProfileTree`. Stored
+    // in the same `Animations` group as the rest of the animation
+    // settings so a single config-section read covers everything.
+    PZ_CONFIG_KEY(animationAppRulesKey, "AnimationAppRules")
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Global
     // ═══════════════════════════════════════════════════════════════════════════

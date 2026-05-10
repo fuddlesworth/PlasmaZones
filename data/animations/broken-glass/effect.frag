@@ -74,19 +74,6 @@ layout(location = 0) out vec4 fragColor;
 
 const float SHARD_LAYERS = 5.0;
 
-// Local off-window-clipping variant of `bmw_compat.glsl`'s
-// `getInputColor`. The shim's default samples uTexture0 directly,
-// which on a clamp-to-edge sampler smears edge pixels for shards
-// flying past the original window bounds. Returning vec4(0.0) outside
-// [0, 1] crops cleanly to transparent so the cascade reads as a
-// shatter, not a streaked smear. Same pattern as matrix/effect.frag.
-vec4 getClippedInputColor(vec2 coords) {
-    if (coords.x < 0.0 || coords.x > 1.0 || coords.y < 0.0 || coords.y > 1.0) {
-        return vec4(0.0);
-    }
-    return getInputColor(coords);
-}
-
 void main() {
   // Hoist the per-instance hash so we don't recompute it 5×SHARD_LAYERS
   // times per fragment in the loop below.

@@ -40,26 +40,11 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-float sm_hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-}
-
-float sm_noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    float a = sm_hash(i);
-    float b = sm_hash(i + vec2(1.0, 0.0));
-    float c = sm_hash(i + vec2(0.0, 1.0));
-    float d = sm_hash(i + vec2(1.0, 1.0));
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
 float sm_fbm(vec2 p) {
     float v = 0.0;
     float amp = 0.5;
     for (int i = 0; i < 6; i++) {
-        v += amp * sm_noise(p);
+        v += amp * niriNoise(p);
         p *= 2.0;
         amp *= 0.5;
     }
@@ -104,16 +89,8 @@ void main() {
                        sm_fbm(uv * 2.0 + 4.0 * wq + vec2(8.3, 2.8)));
         vec2 warped_uv = uv + (wr - 0.5) * distort_strength;
 
-        // Soft inside-mask. The distortion above pushes UVs slightly past
-        // [0, 1] at boundary fragments, and `uTexture0` is clamp-to-edge —
-        // the typical edge alpha is 0 (window shadow / rounded corners) so
-        // samples beyond the surface produce a grey-transparent border.
-        // Fade to zero across a tight 0.005-wide band at each edge so the
-        // warped silhouette crops cleanly. Same pattern as morph/plasma-flow.
-        vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), warped_uv);
-        vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), warped_uv);
-        float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
-        vec4 color = texture(uTexture0, warped_uv) * mask;
+        // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+        vec4 color = texture(uTexture0, warped_uv) * boundaryMask(warped_uv);
 
         float tail = smoothstep(1.0, 0.8, p);
         result = color * remain * tail;
@@ -140,16 +117,8 @@ void main() {
                        sm_fbm(uv * 2.0 + 4.0 * wq + vec2(8.3, 2.8)));
         vec2 warped_uv = uv + (wr - 0.5) * distort_strength;
 
-        // Soft inside-mask. The distortion above pushes UVs slightly past
-        // [0, 1] at boundary fragments, and `uTexture0` is clamp-to-edge —
-        // the typical edge alpha is 0 (window shadow / rounded corners) so
-        // samples beyond the surface produce a grey-transparent border.
-        // Fade to zero across a tight 0.005-wide band at each edge so the
-        // warped silhouette crops cleanly. Same pattern as morph/plasma-flow.
-        vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), warped_uv);
-        vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), warped_uv);
-        float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
-        vec4 color = texture(uTexture0, warped_uv) * mask;
+        // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+        vec4 color = texture(uTexture0, warped_uv) * boundaryMask(warped_uv);
 
         result = color * reveal;
     }

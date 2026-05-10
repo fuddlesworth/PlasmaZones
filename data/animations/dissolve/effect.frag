@@ -15,6 +15,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define grain    customParams[0].x  // noise cell size in normalised UV units
@@ -23,11 +24,6 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-float hash(vec2 p)
-{
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-}
-
 void main()
 {
     // UV from the vertex stage; gl_FragCoord/iResolution overshoots [0,1]
@@ -35,7 +31,7 @@ void main()
     vec2 uv = vTexCoord;
     float cellSize = max(grain, 0.01);
     vec2 cell = floor(uv / cellSize);
-    float noise = hash(cell);
+    float noise = niriHash(cell);
 
     // iTime is the per-leg [0,1] progress driven by SurfaceAnimator's
     // shaderTime AnimatedValue. Compare per-cell noise against it with

@@ -223,6 +223,26 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
 {
     Q_ASSERT_X(backend != nullptr, "PhosphorConfig::Store", "backend must not be null");
 
+#ifndef QT_NO_DEBUG
+    // Debug-only schema invariant: when a KeyDef declares both
+    // `expectedType` AND a non-Invalid `defaultValue`, the default's
+    // typeId must match `expectedType`. A mismatch silently routes
+    // reads through the wrong branch of `readVariantAs`'s switch,
+    // producing surprising effective values; the assertion turns the
+    // latent bug into a fail-fast at Store construction.
+    for (auto groupIt = d->schema.groups.constBegin(); groupIt != d->schema.groups.constEnd(); ++groupIt) {
+        for (const auto& def : groupIt.value()) {
+            if (def.expectedType == QMetaType::UnknownType || !def.defaultValue.isValid())
+                continue;
+            Q_ASSERT_X(def.defaultValue.typeId() == int(def.expectedType), "PhosphorConfig::Store",
+                       qPrintable(QStringLiteral("Schema KeyDef [%1.%2]: defaultValue typeId %3 != expectedType %4")
+                                      .arg(groupIt.key(), def.key)
+                                      .arg(def.defaultValue.typeId())
+                                      .arg(int(def.expectedType))));
+        }
+    }
+#endif
+
     // Path resolver: install via the backend's polymorphic hook. Backends
     // without a resolver concept (QSettingsBackend) inherit the no-op
     // default, so the call is cheap and safe.
@@ -554,6 +574,31 @@ QVariantMap readTyped<QVariantMap>(IGroup& g, const KeyDef& def)
     // parse result.
     return QVariantMap{};
 }
+template<>
+QVariantList readTyped<QVariantList>(IGroup& g, const KeyDef& def)
+{
+    // Absent key → schema default. Same absent-vs-malformed split as the
+    // typed QVariantMap reader: callers (Settings layer) need to tell
+    // "user never wrote this" from "stored blob is corrupt" so they can
+    // substitute library/project defaults on corruption instead of stamping
+    // schema defaults back over the user's data.
+    if (!g.hasKey(def.key)) {
+        return def.defaultValue.toList();
+    }
+    const QJsonValue v = g.readJson(def.key);
+    if (v.isArray()) {
+        return v.toArray().toVariantList();
+    }
+    const QString raw = g.readString(def.key);
+    if (!raw.isEmpty()) {
+        QJsonParseError err;
+        const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8(), &err);
+        if (err.error == QJsonParseError::NoError && doc.isArray()) {
+            return doc.array().toVariantList();
+        }
+    }
+    return QVariantList{};
+}
 
 template<typename T>
 T readDeclared(const Schema& schema, IBackend* backend, const QString& group, const QString& key, T fallback)
@@ -606,6 +651,12 @@ template<>
 QVariantMap Store::read<QVariantMap>(const QString& group, const QString& key) const
 {
     return readDeclared<QVariantMap>(d->schema, d->backend, group, key, QVariantMap{});
+}
+
+template<>
+QVariantList Store::read<QVariantList>(const QString& group, const QString& key) const
+{
+    return readDeclared<QVariantList>(d->schema, d->backend, group, key, QVariantList{});
 }
 
 // The explicit specializations above ARE the definitions — no separate

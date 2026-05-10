@@ -76,4 +76,54 @@ float surfaceSeed() {
     return fract(sin(dot(iSurfaceScreenPos.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
+// niri-style 1D hash from vec2: the classic `fract(sin(dot(p,
+// (127.1, 311.7))) * 43758.5453)` pattern. Used by the niri-derived
+// ports for per-cell / per-instance pseudo-random in [0, 1). Lifted
+// from the file-scope copies that previously lived in dissolve,
+// glitch, ink-splash, plasma-flow, smoke, snap, and soft-warp-fade
+// — all bit-equivalent except for sub-ULP variance in the
+// constant's last decimals (43758.5453 vs 43758.5453123, identical
+// in float32). Other niri ports keep their own hashes when the
+// constants are deliberately different (crosshatch, randomsquares
+// use (12.9898, 78.233); static-fade uses unique magic constants;
+// perlin pre-mods the dot product). Voronoi-shatter's vs_hash2
+// returns vec2 and stays local.
+float niriHash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+// niri-style bilinear value noise on niriHash (smooth-step interp
+// at integer lattice corners). Used by the 4 niri ports that need
+// procedural noise — plasma-flow, soft-warp-fade, ink-splash,
+// smoke. Identical body across all four; lifting deduplicates ~10
+// lines per shader. Perlin's perlin_noise stays local because it
+// uses an alternative bilinear formulation tied to perlin_random's
+// non-shareable hash.
+float niriNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(niriHash(i),                    niriHash(i + vec2(1.0, 0.0)), f.x),
+               mix(niriHash(i + vec2(0.0, 1.0)),   niriHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+// Boundary mask for shaders that displace sample UVs. Returns 1.0
+// when uv is fully within [0, 1] and fades to 0 over a 0.005-wide
+// band placed JUST OUTSIDE the [0, 1] boundary. uTexture0's
+// clamp-to-edge sampler would otherwise smear transparent
+// window-edge pixels (alpha = 0 from rounded corners / drop
+// shadows) into the rendered output, producing a grey-transparent
+// border around the warped silhouette.
+//
+// Bands sit OUTSIDE [0, 1] so identity sampling (sample_uv ∈
+// [0, 1]) gets mask = 1 everywhere — no inner-edge alpha clipping.
+// Used by morph, popin, fade, inkwell-drop, plasma-flow, ripple,
+// smoke, snap, soft-warp-fade, and glide. See PR #425 for the
+// inside-vs-outside-band fix history.
+float boundaryMask(vec2 uv) {
+    vec2 lo = smoothstep(vec2(-0.005), vec2(0.0),   uv);
+    vec2 hi = vec2(1.0) - smoothstep(vec2(1.0),     vec2(1.005), uv);
+    return lo.x * lo.y * hi.x * hi.y;
+}
+
 #endif

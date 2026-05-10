@@ -51,16 +51,8 @@ void main() {
         vec2 offset = dir * (sin(p * dist * rippleAmplitude - p * rippleSpeed + seed) + 0.5) / 30.0;
 
         vec2 wuv = uv + offset * intensity;
-        // Soft inside-mask. The displacement above pushes UVs slightly past
-        // [0, 1] at boundary fragments, and `uTexture0` is clamp-to-edge —
-        // the typical edge alpha is 0 (window shadow / rounded corners) so
-        // samples beyond the surface produce a grey-transparent border.
-        // Fade to zero across a tight 0.005-wide band at each edge so the
-        // warped silhouette crops cleanly. Same pattern as morph/plasma-flow.
-        vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), wuv);
-        vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), wuv);
-        float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
-        vec4 color = texture(uTexture0, wuv) * mask;
+        // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+        vec4 color = texture(uTexture0, wuv) * boundaryMask(wuv);
 
         float alpha = smoothstep(1.0, 0.5, p);
         result = color * alpha;
@@ -80,16 +72,8 @@ void main() {
         vec2 offset = dir * (sin(p * dist * rippleAmplitude - p * rippleSpeed + seed) + 0.5) / 30.0;
 
         vec2 wuv = uv + offset * intensity;
-        // Soft inside-mask. The displacement above pushes UVs slightly past
-        // [0, 1] at boundary fragments, and `uTexture0` is clamp-to-edge —
-        // the typical edge alpha is 0 (window shadow / rounded corners) so
-        // samples beyond the surface produce a grey-transparent border.
-        // Fade to zero across a tight 0.005-wide band at each edge so the
-        // warped silhouette crops cleanly. Same pattern as morph/plasma-flow.
-        vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), wuv);
-        vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), wuv);
-        float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
-        vec4 color = texture(uTexture0, wuv) * mask;
+        // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+        vec4 color = texture(uTexture0, wuv) * boundaryMask(wuv);
 
         float alpha = smoothstep(0.0, 0.3, p);
         result = color * alpha;
