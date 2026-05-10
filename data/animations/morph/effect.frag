@@ -47,6 +47,16 @@ void main()
     vec2 anchorSizeUv = iAnchorSize / iResolution;
     vec2 anchorUv = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;
 
+    // Effective ring fraction — same value the runtime baked into the
+    // FBO layout, recovered from the uniform ratio so the shader and
+    // the runtime can't drift. `anchorTopLeftUv = ring / (1 + 2·ring)`,
+    // solve for ring: ring = anchorTopLeftUv / anchorSizeUv = (padW /
+    // FBO) / (anchorW / FBO) = padW / anchorW. Independent per-axis.
+    // Zero on the kwin path (anchorTopLeftUv == 0) and on the daemon
+    // path with zero ring; the depth-fade math below collapses to a
+    // straight-through alpha=1 in either case.
+    vec2 ring = anchorTopLeftUv / anchorSizeUv;
+
     // Envelope peaks at iTime == 0.5 (mid-transition) and returns to
     // 0 at the endpoints — same shape as glitch, gives both show and
     // hide a "warp peak then settle" feel.
@@ -60,14 +70,34 @@ void main()
         cos(anchorUv.x * freq * 6.28318 + iTime * 6.28318) * strength
     );
 
-    // Geometry-warp: at output anchorUv, sample BACK from where the
-    // warp would have displaced it (first-order inverse). Points whose
-    // pre-image falls outside [0,1] represent areas of the warped
-    // silhouette outside the anchor's content — emit transparent.
-    // Padding on shaderItem + matching padding on the surface give
-    // the rippled silhouette room to extend OUTSIDE the original
-    // anchor rectangle without clipping.
-    vec2 sampleUv = anchorUv - warp;
-    // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-    fragColor = texture(uTexture0, sampleUv) * boundaryMask(sampleUv);
+    // Sample with `sampleUv` clamped to the anchor's natural UV range.
+    // For fragments inside the anchor's `[0, 1]` square, this lets the
+    // warp ripple the content as before (backward warp). For fragments
+    // in the ring (`anchorUv` outside `[0, 1]`), the clamp pulls the
+    // sample from the anchor's edge so the ring gets a warp-displaced
+    // copy of the silhouette boundary — without this clamp, the
+    // previous `boundaryMask`-based variant zeroed every fragment
+    // beyond `warpStrength` distance into the ring (default
+    // warpStrength = 0.1 left 80% of a `fboExtent: "anchor+0.5"` ring
+    // blank, the visible "morph hits an edge at ~10% of the way out"
+    // symptom).
+    vec2 sampleUv = clamp(anchorUv - warp, vec2(0.0), vec2(1.0));
+
+    // Ring-depth fade: alpha 1 inside the anchor, smoothly down to 0
+    // at the outer ring edge. Without this, the clamped sample above
+    // would smear the anchor's edge texel uniformly across the entire
+    // ring (the "edge-smear past warp" symptom that the original
+    // boundaryMask was preventing). The smoothstep falls off over the
+    // full ring width on each axis so a `ring = 0.5` extent fades
+    // gracefully from anchor edge to FBO edge.
+    //
+    // Depth = how far the fragment sits OUTSIDE `[0, 1]` on each axis,
+    // normalised by the ring fraction on that axis. ring.x can be 0
+    // (no padding on this axis) — guard the division.
+    vec2 ringEpsilon = max(ring, vec2(1.0e-4));
+    vec2 outsideAnchor = max(-anchorUv, anchorUv - vec2(1.0));
+    vec2 depth = clamp(outsideAnchor / ringEpsilon, vec2(0.0), vec2(1.0));
+    float ringAlpha = (1.0 - smoothstep(0.0, 1.0, depth.x)) * (1.0 - smoothstep(0.0, 1.0, depth.y));
+
+    fragColor = texture(uTexture0, sampleUv) * ringAlpha;
 }
