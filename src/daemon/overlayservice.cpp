@@ -837,9 +837,21 @@ void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen, cons
 
 void OverlayService::handleScreenAdded(QScreen* screen)
 {
-    if (!m_visible || !screen) {
+    if (!screen) {
         return;
     }
+
+    // Always attempt to recreate overlay windows for reconnected screens,
+    // even when m_visible is false. This handles monitor power-cycle recovery:
+    // screenRemoved clears m_notificationCreationFailed sentinels, so when the
+    // screen comes back we must retry shell creation. If m_visible is true the
+    // existing path also shows the overlay; if false we just ensure the
+    // windows exist so the next showAtPosition call finds them ready.
+    const bool wasVisible = m_visible;
+    if (!wasVisible) {
+        m_visible = true; // transient — initializeOverlay may set it false again
+    }
+
     const QString physScreenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
 
     auto* mgr = m_screenManager;
@@ -877,6 +889,13 @@ void OverlayService::handleScreenAdded(QScreen* screen)
                 }
             }
         }
+    }
+
+    // Restore m_visible if the caller wasn't already in a visible state and
+    // no overlay windows were actually created (transport unavailable, etc.).
+    if (!wasVisible && !m_visible) {
+        qCDebug(lcOverlay) << "handleScreenAdded: no overlay windows created for" << physScreenId
+                           << "— transport may be unavailable";
     }
 }
 

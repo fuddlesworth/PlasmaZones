@@ -74,6 +74,11 @@ void ScreenManager::start()
         }
     }
 
+    // Initial population changes the effective screen set. Ensure the first
+    // effectiveScreenIds() call after start() rebuilds instead of returning a
+    // stale empty cache.
+    m_effectiveScreenIdsDirty = true;
+
     if (m_cfg.panelSource) {
         connect(m_cfg.panelSource, &IPanelSource::panelOffsetsChanged, this, &ScreenManager::onPanelOffsetsChanged);
         connect(m_cfg.panelSource, &IPanelSource::requeryCompleted, this, &ScreenManager::onPanelRequeryCompleted);
