@@ -353,6 +353,7 @@ add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutoti
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
+add_subdirectory(libs/phosphor-services)    # DBus + platform-integration primitives (SNI tray, dbusmenu, future: notifications/MPRIS/UPower)
 
 # Source directories
 add_subdirectory(src)
