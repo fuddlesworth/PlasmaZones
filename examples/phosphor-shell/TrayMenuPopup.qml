@@ -17,69 +17,78 @@ import QtQuick
 // `openFor` snapshots the delegate's dbus service + menu path, calls
 // AboutToShow on the dbusmenu root, and maps the popup.
 PopupWindow {
+    // popupVisible is driven imperatively by menuModel.valid
+    // (Connections handler). We deliberately don't bind it as a
+    // QML expression — earlier rev bound popupVisible to service
+    // / menuPath / valid AND wrote those properties back in the
+    // close() handler, which Qt's binding system flagged as a
+    // loop (popupVisible → onPopupVisibleChanged → close →
+    // service = "" → popupVisible re-eval). Imperative drive
+    // breaks the cycle without losing any behaviour.
+
     id: root
 
     required property var shellState
-    /// Currently-bound dbusmenu source. Set via openFor() — clearing
-    /// these collapses the model and unmaps the popup.
-    property string service: ""
-    property string menuPath: ""
     /// Root id within the dbusmenu tree. 0 = the top of the tree;
     /// cascaded children pass the parent row's id here.
     property int rootId: 0
 
     /// Open the popup anchored to a tray delegate. `delegate` must
     /// expose `dbusService` and `menuPath` (the tray Repeater
-    /// delegates do).
+    /// delegates do). The popup mounts ONLY after the menu model
+    /// reaches `valid` state — see the Connections block below.
     function openFor(delegate) {
         anchor = delegate;
-        service = delegate.dbusService;
-        menuPath = delegate.menuPath;
         rootId = 0;
+        menuModel.service = delegate.dbusService;
+        menuModel.path = delegate.menuPath;
         menuModel.aboutToShow();
-    }
-
-    function close() {
-        menuModel.aboutToHide();
-        service = "";
-        menuPath = "";
     }
 
     popupEdge: PopupWindow.Below
     popupWidth: 240
     popupHeight: Math.min(420, Math.max(40, menuList.contentHeight + 16))
     gap: 4
-    // Gate on menuModel.valid in addition to having a non-empty
-    // service/path: the model only flips valid → true after a
-    // SUCCESSFUL GetLayout. Failed loads leave it false and the
-    // popup never maps in the first place, so the user sees nothing
-    // instead of a fast flash-then-vanish (which was what the
-    // earlier "open then auto-close on loadFailed" path produced).
-    popupVisible: root.service.length > 0 && root.menuPath.length > 0 && menuModel.valid
-    // Dismiss-on-outside-click. Wayland popups grab input by default
-    // when they map; clicking outside the popup surface fires the
-    // compositor's "popup dismissed" signal, which PopupWindow
-    // surfaces as popupVisible flipping to false. We mirror it back
-    // through onPopupVisibleChanged so the QML state stays consistent.
+    popupVisible: false
+    // Compositor dismisses the popup on outside-click via the Wayland
+    // popup-grab protocol — that flips popupVisible to false from
+    // C++. We notify the model so its AboutToHide / Event "closed"
+    // bookkeeping stays correct. No service-clearing here (that's
+    // what caused the binding loop). Next openFor() reassigns
+    // service / path cleanly.
     onPopupVisibleChanged: {
-        if (!popupVisible && service.length > 0)
-            close();
+        if (!popupVisible)
+            menuModel.aboutToHide();
 
     }
 
     DBusMenuModel {
         id: menuModel
 
-        service: root.service
-        path: root.menuPath
         rootId: root.rootId
-        // App misbehaviour — some SNI items advertise a Menu path
-        // that's broken (wrong object, wrong signature, doesn't exist).
-        // Rather than leave an empty floating popup taking input
-        // grab, dismiss it. The user can still left-click the icon
-        // to call Activate (the app's "primary action" handler) — for
-        // most apps that's what they actually want anyway.
-        onLoadFailed: root.close()
+    }
+
+    // Imperative show/hide driven off the model — no popupVisible
+    // binding, no binding-loop hazard.
+    Connections {
+        // Show when (and only when) the model successfully loads. The
+        // valid signal also fires the OTHER direction (true → false)
+        // when buildProxy() clears between menu opens; in that
+        // direction we want popup to stay hidden until the next
+        // GetLayout completes.
+        function onValidChanged() {
+            root.popupVisible = menuModel.valid;
+        }
+
+        // App-side menu broken (wrong path, wrong interface): stay
+        // hidden. menuModel.valid is already false here so this is
+        // belt-and-braces, but explicit is better for the case where
+        // a late LayoutUpdated signal toggles validity unexpectedly.
+        function onLoadFailed() {
+            root.popupVisible = false;
+        }
+
+        target: menuModel
     }
 
     Rectangle {

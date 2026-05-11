@@ -100,28 +100,17 @@ QString shortcutFromProps(const QVariantMap& props)
     if (!raw.isValid()) {
         return {};
     }
-
-    // Iterate the outer + inner array via QDBusArgument — Qt
-    // doesn't auto-flatten `aas` to QStringList; that's why the
-    // earlier `toStringList()` always returned empty.
-    QList<QStringList> chords;
-    if (raw.canConvert<QDBusArgument>()) {
-        QDBusArgument outer = raw.value<QDBusArgument>();
-        outer.beginArray();
-        while (!outer.atEnd()) {
-            QStringList chord;
-            outer.beginArray();
-            while (!outer.atEnd()) {
-                QString part;
-                outer >> part;
-                chord.append(part);
-            }
-            outer.endArray();
-            chords.append(chord);
-        }
-        outer.endArray();
-    }
-    if (chords.isEmpty()) {
+    // Use qdbus_cast on the variant rather than manual
+    // QDBusArgument iteration: hand-rolling beginArray/endArray on
+    // a QDBusArgument obtained via `raw.value<QDBusArgument>()`
+    // triggers Qt 6's "write from a read-only object" diagnostic —
+    // the returned arg's internal state machine flips to read-only
+    // and beginArray() is overloaded as a write operation when no
+    // metatype id is supplied. qdbus_cast knows about both
+    // QList<T> and QStringList natively, so a single cast does the
+    // full demarshalling without that wrinkle.
+    const QList<QStringList> chords = qdbus_cast<QList<QStringList>>(raw);
+    if (chords.isEmpty() || chords.first().isEmpty()) {
         return {};
     }
 
