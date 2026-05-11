@@ -49,7 +49,8 @@ class PHOSPHORZONES_EXPORT LayoutRegistry : public IZoneLayoutRegistry
     Q_OBJECT
 
     Q_PROPERTY(int layoutCount READ layoutCount NOTIFY layoutsChanged)
-    Q_PROPERTY(Layout* activeLayout READ activeLayout NOTIFY activeLayoutChanged)
+    // `activeLayout` Q_PROPERTY moved to IZoneLayoutRegistry alongside its
+    // NOTIFY signal so the contract is visible to interface consumers.
     Q_PROPERTY(QString layoutDirectory READ layoutDirectory WRITE setLayoutDirectory NOTIFY layoutDirectoryChanged)
 
 public:
@@ -345,11 +346,12 @@ public:
     QJsonObject loadAutotileOverrides(const QString& algorithmId) const;
 
 Q_SIGNALS:
+    // layoutAdded / layoutRemoved / activeLayoutChanged / layoutAssigned are
+    // inherited from IZoneLayoutRegistry — declared on the interface so
+    // consumers that target the contract can connect without depending on
+    // the concrete class. Emit sites still live in this TU and reach the
+    // inherited signal via Q_OBJECT's metaobject chain.
     void layoutsChanged();
-    void layoutAdded(Layout* layout);
-    void layoutRemoved(Layout* layout);
-    void activeLayoutChanged(Layout* layout);
-    void layoutAssigned(const QString& screenId, int virtualDesktop, Layout* layout);
     void layoutDirectoryChanged();
     void layoutsLoaded();
     void layoutsSaved();

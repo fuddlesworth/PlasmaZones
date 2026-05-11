@@ -24,14 +24,13 @@
 #include <phosphorzones_export.h>
 
 #include <PhosphorLayoutApi/ILayoutSourceRegistry.h>
+#include <PhosphorZones/Layout.h>
 
 #include <QString>
 #include <QUuid>
 #include <QVector>
 
 namespace PhosphorZones {
-
-class Layout;
 
 /**
  * @brief Enumeration + mutation surface for the in-memory zone-layout
@@ -43,6 +42,13 @@ class Layout;
 class PHOSPHORZONES_EXPORT IZoneLayoutRegistry : public PhosphorLayout::ILayoutSourceRegistry
 {
     Q_OBJECT
+
+    // Live in the interface so QML-bound consumers can target the contract
+    // without depending on the concrete @ref LayoutRegistry. moc's NOTIFY
+    // check resolves the signal in the same class scope it sees the READ
+    // method, so the property + the signal must travel together.
+    Q_PROPERTY(Layout* activeLayout READ activeLayout NOTIFY activeLayoutChanged)
+
 public:
     explicit IZoneLayoutRegistry(QObject* parent = nullptr);
     ~IZoneLayoutRegistry() override;
@@ -78,6 +84,22 @@ public:
     virtual Layout* activeLayout() const = 0;
     virtual void setActiveLayout(Layout* layout) = 0;
     virtual void setActiveLayoutById(const QUuid& id) = 0;
+
+Q_SIGNALS:
+    // Catalog mutation. @c addLayout / @c duplicateLayout fire `layoutAdded`;
+    // @c removeLayout / @c removeLayoutById fire `layoutRemoved`.
+    void layoutAdded(Layout* layout);
+    void layoutRemoved(Layout* layout);
+
+    // Active-layout selection. Fires from @c setActiveLayout /
+    // @c setActiveLayoutById on every transition (no diff-guard; consumers
+    // dedupe if needed).
+    void activeLayoutChanged(Layout* layout);
+
+    // Per-(screen, desktop, activity) assignment churn. Consumers that
+    // care about cascade-resolved layout for a specific screen subscribe
+    // here and re-query via @c layoutForScreen on the concrete registry.
+    void layoutAssigned(const QString& screenId, int virtualDesktop, Layout* layout);
 };
 
 } // namespace PhosphorZones
