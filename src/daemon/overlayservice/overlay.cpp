@@ -622,6 +622,13 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     m_screenStates.erase(donor);
     auto inserted = m_screenStates.insert(newKey, std::move(state));
 
+    // Move the lib's ShellState entry under the new key so future
+    // ShellHost::stateFor(newKey) lookups reach the same heap object
+    // the borrowed pointer on PerScreenOverlayState::shell already
+    // points at. The heap object is unchanged — the rekey is a pure
+    // map-key swap; the borrowed pointer survives.
+    m_shellHost->rekey(oldKey, newKey);
+
     // The geometryChanged lambda captured the OLD sid by value. After the
     // state moved to newKey, the lambda's m_screenStates.find(oldSid) lookup
     // would return end() and silently drop every subsequent geometry update.
@@ -643,7 +650,7 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         // rendering across the full monitor. wlr-layer-shell v2+ allows
         // set_anchor / set_margin post-attach; push the corrected placement
         // through the mutable transport handle.
-        if (rekeyed.shell->shellSurface) {
+        if (rekeyed.shell && rekeyed.shell->shellSurface) {
             if (auto* handle = rekeyed.shell->shellSurface->transport()) {
                 const QRect targetVsGeom = resolveScreenGeometry(m_screenManager, newKey);
                 const auto placement = layerPlacementForVs(isVS ? targetVsGeom : QRect(), physScreen->geometry());

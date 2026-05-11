@@ -26,6 +26,9 @@ private Q_SLOTS:
     void removeStateClearsEntry();
     void screenIdsReflectsLiveEntries();
     void failureFlagToggles();
+    void rekeyReturnsFalseForSameKey();
+    void rekeyReturnsFalseWhenDonorAbsent();
+    void rekeyReturnsFalseWhenDonorHasNoLiveShell();
 };
 
 void TestOverlaySmoke::shellHostConstructsAndDestructs()
@@ -85,6 +88,28 @@ void TestOverlaySmoke::failureFlagToggles()
     QVERIFY(host.hasFailure(QStringLiteral("DP-1")));
     host.clearFailure(QStringLiteral("DP-1"));
     QVERIFY(!host.hasFailure(QStringLiteral("DP-1")));
+}
+
+void TestOverlaySmoke::rekeyReturnsFalseForSameKey()
+{
+    PhosphorOverlay::ShellHost host;
+    QCOMPARE(host.rekey(QStringLiteral("DP-1"), QStringLiteral("DP-1")), false);
+}
+
+void TestOverlaySmoke::rekeyReturnsFalseWhenDonorAbsent()
+{
+    PhosphorOverlay::ShellHost host;
+    QCOMPARE(host.rekey(QStringLiteral("never-seen"), QStringLiteral("HDMI-A-1")), false);
+}
+
+void TestOverlaySmoke::rekeyReturnsFalseWhenDonorHasNoLiveShell()
+{
+    PhosphorOverlay::ShellHost host;
+    // stateFor materializes a zeroed entry (shellSurface == nullptr).
+    // Rekey requires a live shell on the donor and must reject this case
+    // rather than silently moving an empty entry.
+    host.stateFor(QStringLiteral("DP-1"));
+    QCOMPARE(host.rekey(QStringLiteral("DP-1"), QStringLiteral("HDMI-A-1")), false);
 }
 
 QTEST_MAIN(TestOverlaySmoke)

@@ -110,6 +110,24 @@ public:
     /// No-op when the shell surface or window is not yet up.
     void syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing);
 
+    /// Move the ShellState entry from @p oldKey to @p newKey, preserving
+    /// the underlying heap-allocated state object (the borrowed pointer
+    /// stored on the consumer's parallel per-screen state stays valid).
+    /// Returns true on success; returns false when:
+    ///   - oldKey == newKey
+    ///   - oldKey has no live shell (no entry or shellSurface is nullptr)
+    ///   - newKey already has a LIVE entry (refuses to clobber); a stale
+    ///     zeroed entry under newKey is dropped to make room.
+    ///
+    /// Surface re-anchoring is the consumer's responsibility: the layer
+    /// surface's anchors / margins were baked in at attach time for
+    /// oldKey, so a flavor-changing rekey (e.g. physical → virtual
+    /// screen) requires the consumer to push corrected placement through
+    /// the surface transport after a successful @ref rekey. Consumers
+    /// that don't need re-anchoring (same-screen identifier drift) can
+    /// ignore the post-rekey step.
+    bool rekey(const QString& oldKey, const QString& newKey);
+
     /// Read-write accessor. Returns the existing ShellState for
     /// @p screenId, default-constructing one in place if absent so
     /// callers can populate fields without an explicit insert.

@@ -140,6 +140,34 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     }
 }
 
+bool ShellHost::rekey(const QString& oldKey, const QString& newKey)
+{
+    if (oldKey == newKey) {
+        return false;
+    }
+    auto donor = m_states.find(oldKey);
+    if (donor == m_states.end() || !donor.value()->shellSurface) {
+        return false;
+    }
+
+    // Drop a stale (non-live) entry under newKey before the move lands.
+    // Refuse to clobber a live one — the caller should not have selected
+    // this donor when the target slot is occupied.
+    auto existing = m_states.find(newKey);
+    if (existing != m_states.end()) {
+        if (existing.value()->shellSurface) {
+            return false;
+        }
+        delete existing.value();
+        m_states.erase(existing);
+    }
+
+    ShellState* state = donor.value();
+    m_states.erase(donor);
+    m_states.insert(newKey, state);
+    return true;
+}
+
 ShellState& ShellHost::stateFor(const QString& screenId)
 {
     return *ensureEntry(m_states, screenId);
