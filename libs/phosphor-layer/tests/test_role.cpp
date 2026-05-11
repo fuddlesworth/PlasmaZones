@@ -8,6 +8,38 @@
 
 using namespace PhosphorLayer;
 
+namespace {
+
+// Inline Role construction for the layer-only tests. The axis-2 Pattern
+// recipes (Hud, Modal, Wallpaper, …) live in the sibling library
+// `phosphor-shell-patterns`; this lib stays free of that dependency by
+// constructing test fixtures inline. The shapes here mirror what the
+// shell-patterns library returns for the equivalent named patterns.
+Role hudFixture()
+{
+    return Role{Layer::Overlay, AnchorAll, -1, KeyboardInteractivity::None, QMargins(), QStringLiteral("test-hud")};
+}
+
+Role modalFixture()
+{
+    return Role{Layer::Top, AnchorNone, -1, KeyboardInteractivity::Exclusive, QMargins(), QStringLiteral("test-modal")};
+}
+
+Role topPanelFixture()
+{
+    return Role{Layer::Top, Anchor::Top | Anchor::Left | Anchor::Right,
+                0,          KeyboardInteractivity::OnDemand,
+                QMargins(), QStringLiteral("test-top-panel")};
+}
+
+Role floatingFixture()
+{
+    return Role{
+        Layer::Overlay, AnchorNone, -1, KeyboardInteractivity::None, QMargins(), QStringLiteral("test-floating")};
+}
+
+} // namespace
+
 class TestRole : public QObject
 {
     Q_OBJECT
@@ -15,7 +47,7 @@ class TestRole : public QObject
 private Q_SLOTS:
     void fluentModifiersReturnCopies()
     {
-        const Role base = Roles::FullscreenOverlay;
+        const Role base = hudFixture();
         const Role modified = base.withLayer(Layer::Background);
         QCOMPARE(base.layer, Layer::Overlay); // base unchanged
         QCOMPARE(modified.layer, Layer::Background);
@@ -25,7 +57,8 @@ private Q_SLOTS:
 
     void fluentChainComposes()
     {
-        const Role r = Roles::CenteredModal.withLayer(Layer::Top)
+        const Role r = modalFixture()
+                           .withLayer(Layer::Top)
                            .withKeyboard(KeyboardInteractivity::Exclusive)
                            .withMargins(QMargins(10, 20, 30, 40))
                            .withScopePrefix(QStringLiteral("my-modal"));
@@ -33,58 +66,17 @@ private Q_SLOTS:
         QCOMPARE(r.keyboard, KeyboardInteractivity::Exclusive);
         QCOMPARE(r.defaultMargins, QMargins(10, 20, 30, 40));
         QCOMPARE(r.scopePrefix, QStringLiteral("my-modal"));
-        QCOMPARE(r.anchors, AnchorNone); // inherited from CenteredModal
-    }
-
-    void presetsCoverDocumentedVocabulary()
-    {
-        // FullscreenOverlay: every anchor, overlay layer, kbd none.
-        QCOMPARE(Roles::FullscreenOverlay.layer, Layer::Overlay);
-        QCOMPARE(Roles::FullscreenOverlay.anchors, AnchorAll);
-        QCOMPARE(Roles::FullscreenOverlay.keyboard, KeyboardInteractivity::None);
-        QCOMPARE(Roles::FullscreenOverlay.exclusiveZone, -1);
-
-        // TopPanel reserves exclusive zone via 0 + kbd on-demand
-        QCOMPARE(Roles::TopPanel.layer, Layer::Top);
-        QCOMPARE(Roles::TopPanel.exclusiveZone, 0);
-        QCOMPARE(Roles::TopPanel.keyboard, KeyboardInteractivity::OnDemand);
-        QVERIFY(Roles::TopPanel.anchors.testFlag(Anchor::Top));
-        QVERIFY(Roles::TopPanel.anchors.testFlag(Anchor::Left));
-        QVERIFY(Roles::TopPanel.anchors.testFlag(Anchor::Right));
-        QVERIFY(!Roles::TopPanel.anchors.testFlag(Anchor::Bottom));
-
-        // CenteredModal has no anchors (compositor centres) and exclusive kbd.
-        QCOMPARE(Roles::CenteredModal.anchors, AnchorNone);
-        QCOMPARE(Roles::CenteredModal.keyboard, KeyboardInteractivity::Exclusive);
-
-        // Background: bottom-most layer, all anchors, zone 0 so it doesn't
-        // shove other surfaces.
-        QCOMPARE(Roles::Background.layer, Layer::Background);
-        QCOMPARE(Roles::Background.anchors, AnchorAll);
-        QCOMPARE(Roles::Background.exclusiveZone, 0);
-    }
-
-    void scopePrefixIsPresetSpecific()
-    {
-        // Each preset has a distinct scope prefix so the compositor can
-        // namespace them independently.
-        QStringList prefixes{
-            Roles::FullscreenOverlay.scopePrefix, Roles::TopPanel.scopePrefix,   Roles::BottomPanel.scopePrefix,
-            Roles::LeftDock.scopePrefix,          Roles::RightDock.scopePrefix,  Roles::CenteredModal.scopePrefix,
-            Roles::CornerToast.scopePrefix,       Roles::Background.scopePrefix, Roles::FloatingOverlay.scopePrefix};
-        for (const auto& p : prefixes) {
-            QVERIFY2(!p.isEmpty(), qPrintable(QStringLiteral("Empty prefix: %1").arg(p)));
-        }
-        const QSet<QString> unique(prefixes.begin(), prefixes.end());
-        QCOMPARE(unique.size(), prefixes.size());
+        QCOMPARE(r.anchors, AnchorNone); // inherited from modal fixture
     }
 
     void equalityOperator()
     {
-        QCOMPARE(Roles::FullscreenOverlay, Roles::FullscreenOverlay);
-        QVERIFY(Roles::FullscreenOverlay != Roles::TopPanel);
-        const Role custom = Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("foo"));
-        QVERIFY(custom != Roles::FullscreenOverlay);
+        const Role a = hudFixture();
+        const Role b = hudFixture();
+        QCOMPARE(a, b);
+        QVERIFY(a != topPanelFixture());
+        const Role custom = a.withScopePrefix(QStringLiteral("foo"));
+        QVERIFY(custom != a);
     }
 
     void isValidRejectsMalformedRoles()
@@ -97,20 +89,20 @@ private Q_SLOTS:
         // Overlay layer + non-negative exclusive zone (zone is ignored by
         // the compositor for overlay, but accepting it silently is a
         // consumer trap).
-        Role overlayWithZone = Roles::FullscreenOverlay;
+        Role overlayWithZone = hudFixture();
         overlayWithZone.exclusiveZone = 0;
         QVERIFY(!overlayWithZone.isValid());
 
         // AnchorNone + non-zero default margins: margins have no referent
         // to offset from, so the compositor discards them. The role as a
         // whole is malformed.
-        Role floatingWithMargins = Roles::FloatingOverlay.withMargins(QMargins(10, 10, 10, 10));
+        Role floatingWithMargins = floatingFixture().withMargins(QMargins(10, 10, 10, 10));
         QVERIFY(!floatingWithMargins.isValid());
 
-        // Well-formed presets pass.
-        QVERIFY(Roles::FullscreenOverlay.isValid());
-        QVERIFY(Roles::CenteredModal.isValid());
-        QVERIFY(Roles::TopPanel.isValid());
+        // Well-formed fixtures pass.
+        QVERIFY(hudFixture().isValid());
+        QVERIFY(modalFixture().isValid());
+        QVERIFY(topPanelFixture().isValid());
     }
 
     void anchorFlagsCompose()

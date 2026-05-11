@@ -9,10 +9,7 @@
 # QWindow. The shader pipeline (BaseUniforms, IUniformExtension,
 # ShaderIncludeResolver, IWallpaperProvider, ShaderRegistry) lives
 # in the sibling `phosphor-shaders` library — this lib is now purely
-# the Wayland integration. Phase D of the architecture refactor
-# (docs/phosphor-architecture-refactor-plan.md) renames this lib to
-# `phosphor-wayland` once the only remaining consumer is the QPA
-# plugin + LayerSurface.
+# the Wayland integration.
 #
 # Can be built standalone or as a subdirectory of PlasmaZones.
 

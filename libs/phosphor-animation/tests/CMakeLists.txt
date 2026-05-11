@@ -136,6 +136,7 @@ function(pal_add_test _name)
             Qt6::Gui
             Qt6::Quick
             PhosphorAnimation::PhosphorAnimation
+            PhosphorShellPatterns::PhosphorShellPatterns
     )
     add_test(NAME ${_name} COMMAND ${_name})
     set_tests_properties(${_name} PROPERTIES

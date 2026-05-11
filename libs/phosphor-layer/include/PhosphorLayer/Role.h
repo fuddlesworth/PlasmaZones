@@ -63,12 +63,14 @@ Q_ENUM_NS(KeyboardInteractivity)
  * Role captures the wlr-layer-shell parameters that are immutable after
  * show() (layer, anchors, keyboard, scope) plus defaults for parameters
  * that are mutable (margins, exclusive zone). Consumers pick from the
- * library-provided @ref Roles presets or define their own.
+ * PhosphorShellPatterns library (axis-2 UI-pattern recipes) or define
+ * their own Role values directly.
  *
  * The fluent `withX()` modifiers return copies for composition:
  * @code
  *     inline const Role PzOverlay =
- *         Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("pz-overlay"));
+ *         PhosphorShellPatterns::Hud().withScopePrefix(
+ *             QStringLiteral("pz-overlay"));
  * @endcode
  */
 struct PHOSPHORLAYER_EXPORT Role
@@ -89,52 +91,22 @@ struct PHOSPHORLAYER_EXPORT Role
 
     /// @brief True if this Role is a semantically valid wlr-layer-shell configuration.
     /// False for combinations the protocol rejects (e.g. Overlay layer with a
-    /// positive exclusive zone — Overlay ignores zones so a non-negative value
-    /// is silently wasted) or that no compositor accepts (empty scopePrefix).
-    /// The factory calls this and refuses to create malformed surfaces.
+    /// positive exclusive zone, where Overlay ignores zones so a non-negative
+    /// value is silently wasted) or that no compositor accepts (empty
+    /// scopePrefix). The factory calls this and refuses to create malformed
+    /// surfaces.
     [[nodiscard]] bool isValid() const;
 
     friend bool operator==(const Role& a, const Role& b) = default;
 };
 
-// ── Library-provided presets (open vocabulary — extend via `withX()`) ──
-
-namespace Roles {
-
-/// Fullscreen click-through HUD on the Overlay layer. Typical for drag
-/// indicators, zone highlights, focus indicators.
-PHOSPHORLAYER_EXPORT extern const Role FullscreenOverlay;
-
-/// Horizontal panel anchored to the top edge, reserves space via exclusive
-/// zone. Keyboard OnDemand — receives focus when clicked.
-PHOSPHORLAYER_EXPORT extern const Role TopPanel;
-
-/// Mirror of TopPanel anchored to the bottom edge.
-PHOSPHORLAYER_EXPORT extern const Role BottomPanel;
-
-/// Vertical dock anchored to the left edge.
-PHOSPHORLAYER_EXPORT extern const Role LeftDock;
-
-/// Mirror of LeftDock.
-PHOSPHORLAYER_EXPORT extern const Role RightDock;
-
-/// Centred modal with exclusive keyboard grab. Typical for settings
-/// dialogs, confirmation prompts.
-PHOSPHORLAYER_EXPORT extern const Role CenteredModal;
-
-/// Corner-anchored transient display. Typical for notifications, OSDs.
-/// Defaults to top-right; combine with `withAnchors()` for other corners.
-PHOSPHORLAYER_EXPORT extern const Role CornerToast;
-
-/// Background layer wallpaper. Reserves space (exclusive zone 0) so other
-/// surfaces render on top.
-PHOSPHORLAYER_EXPORT extern const Role Background;
-
-/// Floating overlay with no anchors — client-positioned via margins or
-/// compositor hints. Typical for shader previews, tear-off windows.
-PHOSPHORLAYER_EXPORT extern const Role FloatingOverlay;
-
-} // namespace Roles
+// The legacy `Roles` namespace was removed in phase 1 of the surface
+// taxonomy refactor, and the axis-2 Patterns vocabulary was lifted into
+// its own sibling library `phosphor-shell-patterns` in phase 3. New
+// consumers should depend on PhosphorShellPatterns and use
+// `PhosphorShellPatterns::{Hud, Modal, Wallpaper, Floating, Panel(Edge),
+// Toast(Corner)}` rather than re-deriving Role values inline. See
+// `docs/surface-taxonomy-refactor-plan.md` for the migration map.
 
 } // namespace PhosphorLayer
 

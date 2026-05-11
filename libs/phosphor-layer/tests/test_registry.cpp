@@ -5,6 +5,7 @@
 
 #include "mocks/mockscreenprovider.h"
 #include "mocks/mocktransport.h"
+#include "mocks/testroles.h"
 
 #include <QGuiApplication>
 #include <QQuickItem>
@@ -21,7 +22,7 @@ private:
     SurfaceConfig makeConfig(QScreen* s)
     {
         SurfaceConfig c;
-        c.role = Roles::CornerToast;
+        c.role = Testing::makeToastTopRightRole();
         c.contentItem = std::make_unique<QQuickItem>();
         c.screen = s;
         c.debugName = QStringLiteral("toast-") + (s ? s->name() : QStringLiteral("none"));

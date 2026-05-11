@@ -336,6 +336,7 @@ add_subdirectory(libs/phosphor-zones)       # zone primitives + LayoutManager (d
 add_subdirectory(libs/phosphor-tiles)       # auto-tiling algorithm primitives (TilingAlgorithm, AlgorithmRegistry, SplitTree)
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
+add_subdirectory(libs/phosphor-shell-patterns) # UI-pattern recipes (axis 2) built on PhosphorLayer::Role
 add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry
 # PlasmaZones consumes the org.phosphor.animation QML module for shell
 # UI animations. PHOSPHOR_ANIMATION_QUICK is enabled before
