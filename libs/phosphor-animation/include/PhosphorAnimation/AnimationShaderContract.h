@@ -245,7 +245,7 @@ inline constexpr const char* kISurfaceScreenPos = "iSurfaceScreenPos";
 /// uses classic-GL `setUniform`.
 inline constexpr const char* kIAnchorSize = "iAnchorSize";
 
-/// `vec2 iAnchorPosInFbo` — anchor's top-left position inside the FBO,
+/// `vec2 iAnchorPosInFbo` is the anchor's top-left position inside the FBO,
 /// in logical pixels. Combined with `iAnchorSize` and `iResolution`,
 /// shaders compute the anchor's UV region for `vTexCoord` →
 /// anchor-space remap (used by morph + broken-glass; previously did
@@ -257,7 +257,7 @@ inline constexpr const char* kIAnchorSize = "iAnchorSize";
 /// uses classic-GL `setUniform`. On kwin the value is (0, 0) today
 /// (the OffscreenEffect FBO covers the window's frameGeometry 1:1,
 /// no actor expansion), which makes the anchor-space remap collapse
-/// to identity — equivalent to the pre-refactor `customParams[7].x = 0`
+/// to identity. Equivalent to the pre-refactor `customParams[7].x = 0`
 /// fallback that morph documented as the kwin path. A future actor-
 /// expansion PR would push (padW, padH) instead.
 inline constexpr const char* kIAnchorPosInFbo = "iAnchorPosInFbo";

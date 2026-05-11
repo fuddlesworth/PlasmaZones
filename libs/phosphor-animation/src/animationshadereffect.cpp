@@ -19,7 +19,7 @@ Q_LOGGING_CATEGORY(lcAnimationShader, "phosphoranimationshaders.effect")
 ///   * `"anchor"`            → Anchor, pad = 0
 ///   * `"anchor+0.5"`        → Anchor, pad = 0.5 (fraction form)
 ///   * `"anchor+50%"`        → Anchor, pad = 0.5 (percent form, identical effect)
-///   * `"surface"`           → Parent, pad = 0
+///   * `"surface"`           → Surface, pad = 0
 /// Padding is clamped to `[0, kMaxFboExtentRing]` at the parse boundary
 /// to mirror the legacy `fboExtentRing` read clamp.
 ///
@@ -75,7 +75,7 @@ bool parseFboExtent(const QString& raw, AnimationShaderEffect::FboExtentKind& ou
     }
     qCWarning(lcAnimationShader)
         << "AnimationShaderEffect::fromJson: unrecognised fboExtent" << raw
-        << "— accepted forms are \"anchor\", \"anchor+0.5\", \"anchor+50%\", \"surface\". Falling back to defaults.";
+        << "Accepted forms are \"anchor\", \"anchor+0.5\", \"anchor+50%\", \"surface\". Falling back to defaults.";
     return false;
 }
 
@@ -263,18 +263,18 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     }
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
 
-    // `fboExtent` (string) — single grammar replaces the previous split
+    // `fboExtent` (string). Single grammar replaces the previous split
     // `fboExtentKind` + `fboExtentRing` pair. Accepted forms (see
     // `parseFboExtent` for full details):
-    //   "anchor"        — Anchor extent, no padding (default)
-    //   "anchor+0.5"    — Anchor extent with ring-padding fraction
-    //   "anchor+50%"    — same, percent form
-    //   "surface"       — FBO fills the anchor's QQuickWindow content
+    //   "anchor"        is Anchor extent, no padding (default)
+    //   "anchor+0.5"    is Anchor extent with ring-padding fraction
+    //   "anchor+50%"    is the percent form
+    //   "surface"       fills the anchor's QQuickWindow content
     //                     root (= the wl_surface scene root on daemon)
     // Missing field falls through to the struct's defaults (Anchor,
     // pad=0); a recognised but malformed value (`parseFboExtent`
     // returns false) emits a journal warning and ALSO falls through to
-    // the defaults — same lenient pattern as the legacy split fields,
+    // the defaults. Same lenient pattern as the legacy split fields,
     // but typos now surface to the operator instead of being silent.
     // Per the project's no-legacy-shims rule, the prior `fboExtentRing`
     // / `fboExtentKind` JSON keys are NOT read here. Authored metadata

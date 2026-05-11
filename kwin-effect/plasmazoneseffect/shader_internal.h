@@ -16,7 +16,7 @@ namespace PlasmaZones::ShaderInternal {
 /// Inflate @p geo on every side by `ring * dimension` (BMW-style
 /// actor expansion). For `ring == 0.5` this returns the original
 /// rect inflated by half its width on left+right and half its height
-/// on top+bottom, total dimensions `2x` the original — matching
+/// on top+bottom, total dimensions `2x` the original, matching
 /// BMW's `ACTOR_SCALE = 2`.
 ///
 /// Single source of truth for the ring-rect math: `apply()` uses it

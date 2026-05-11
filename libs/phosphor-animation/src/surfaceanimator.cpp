@@ -91,7 +91,7 @@ constexpr qreal kMaxFboExtentRingFraction = PhosphorAnimationShaders::AnimationS
 ///      the CLIPPED viewport, shifting UV values relative to the item's
 ///      logical bounds. Morph then samples iChannel0 at wrong positions
 ///      ("rendered further down and smaller" symptom on tight popups).
-///   3. `kMaxFboExtentRingFraction` ceiling — stops a centred-in-huge-
+///   3. `kMaxFboExtentRingFraction` ceiling. Stops a centred-in-huge-
 ///      parent anchor from asking for a multi-GB FBO.
 ///
 /// Centralised here so the initial-attach and the live geometry-sync
@@ -113,7 +113,7 @@ inline qreal clampPaddingToParent(QQuickItem* anchor, qreal requestedPad)
         // would pinch `maxPadH` to a tiny fraction when the anchor sits
         // near its container's edge (morph on zoneSelector reported
         // ~3.7% pad because the PopupFrame's `anchor.y == 10` inside
-        // its container) — the visible "morph hits edge limits"
+        // its container), the visible "morph hits edge limits"
         // symptom. Qt scene graph items render past their QML parent's
         // bounds without explicit `clip: true`, so the only hard limit
         // is the surface FBO.
@@ -133,7 +133,7 @@ inline qreal clampPaddingToParent(QQuickItem* anchor, qreal requestedPad)
             const qreal frameH = clipFrame->height();
             const qreal anchorW = anchor->width();
             const qreal anchorH = anchor->height();
-            // Reject NaN derived from anchor/frame geometry — the input-
+            // Reject NaN derived from anchor/frame geometry. The input-
             // only NaN guard above doesn't catch the case where
             // `anchorPosInClipFrame.y()` is NaN (anchor mid-recompute,
             // layout binding partially evaluated), which would propagate
@@ -174,7 +174,7 @@ inline qreal sanitiseFboExtentRing(qreal requested)
 /// Apply the shader-item geometry derived from @p anchor + @p requestedPad.
 /// Centralises the math behind the per-leg syncGeometry lambda so the
 /// reuse path can re-fire it explicitly after a metadata hot-reload that
-/// changes `fboExtentRing` between legs — without it, the persistent
+/// changes `fboExtentRing` between legs. Without it, the persistent
 /// lambda only re-runs on the next anchor geometry signal, which for a
 /// static popup (snap-assist, OSD) may never come, leaving the shader
 /// rendered with the previous leg's pad until the anchor next moves or
@@ -187,19 +187,22 @@ inline qreal sanitiseFboExtentRing(qreal requested)
 ///     size. vTexCoord 0..1 maps the captured anchor texture 1:1 over
 ///     the FBO. Existing fragment-only shaders use this. Vertex-shader
 ///     effects that translate the quad (fly-in / slide) opt in to a
-///     `fboExtentRing` value > 0 in their metadata — the resulting
+///     `fboExtentRing` value > 0 in their metadata: the resulting
 ///     padded FBO gives them clip-space room to translate the rendered
 ///     card off the anchor's natural bounds without escaping the FBO.
-///   - Parent: item fills the anchor's parent item (the QML scene root
-///     in the screen-sized OSD / popup configurations). iResolution =
-///     anchor pixel size — NOT the FBO. The shader's vertex stage is
-///     responsible for remapping the standard (-1..1) clip-space quad
-///     onto the card's region within the parent-sized FBO. Pre-revert
-///     this was used by fly-in to get screen-scale travel via the now-
-///     removed iSurfaceScreenPos / iAnchorSize uniforms; kept for any
-///     consumer that wants the parent-sized FBO without depending on
-///     those uniforms (they'd have to thread their own positioning via
-///     customParams).
+///   - Surface: item fills the anchor's enclosing
+///     QQuickWindow::contentItem (the surface scene root, which equals
+///     the wl_surface logical size in the screen-sized OSD / popup
+///     configurations). Falls back to `anchor->parentItem()` when no
+///     QQuickWindow is reachable (headless tests, parentless anchors
+///     mid-construction). Qt's QQuickItem::geometryChange auto-resets
+///     iResolution to the shader item's bounds on every geometry
+///     event, so iResolution naturally tracks the FBO size. Used by
+///     vertex-shader effects (fly-in, slide) that need full-surface
+///     clip-space travel for their MVP translation; the shader's
+///     vertex stage remaps the standard (-1..1) clip-space quad onto
+///     the captured-anchor's region within the surface-sized FBO via
+///     iSurfaceScreenPos / iAnchorSize / iAnchorPosInFbo.
 inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderEffect* shaderItem,
                                   QQuickShaderEffectSource* shaderSource, qreal requestedPad,
                                   PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind extent)
@@ -220,7 +223,7 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
         // surface scene root), NOT the immediate QML parentItem. The
         // shader item is parented to anchor->parentItem() (see
         // attachShaderToAnchor), but Qt scene-graph items render past
-        // their QML parent's bounds without explicit `clip: true` —
+        // their QML parent's bounds without explicit `clip: true`,
         // the only hard clipping limit is the wl_surface FBO, which
         // matches the contentItem 1:1. Sizing to the immediate parent
         // would collapse Surface extent to a small inner container
@@ -232,7 +235,7 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
         // lookup converts via `parentItem->mapFromItem(sceneRoot)` to
         // express the scene-root origin in parentItem-local pixels.
         //
-        // iResolution naturally tracks the FBO size — Qt's
+        // iResolution naturally tracks the FBO size; Qt's
         // QQuickItem::geometryChange auto-resets it to the shader
         // item's bounds on every geometry event, so we DO NOT try to
         // override it to anchor size here; that override would silently
@@ -298,8 +301,9 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
         //   Anchor + ring:   shaderItem at (anchor.x - padW,
         //     anchor.y - padH), diff = (padW, padH). Anchor centred
         //     in padded FBO.
-        //   Parent / surface: shaderItem at (0, 0), diff =
-        //     (anchor.x, anchor.y) in parent's coords. For OSD /
+        //   Surface: shaderItem repositioned so its (0,0) corner sits
+        //     at the scene root in parentItem-local coords, diff =
+        //     (anchor.x, anchor.y) in parentItem's coords. For OSD /
         //     popup chains with anchors.fill ancestors, parent's
         //     coords == scene coords, so this matches the legacy
         //     mapToScene value.
@@ -314,7 +318,7 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
         // iSurfaceScreenPos describes where the card sits within its
         // *playing field* and how big that field is. The "playing field"
         // on the daemon path is the wl_surface (= the window's logical
-        // size = the anchor's parent for Parent-extent shaders): for a
+        // size = the anchor's parent for Surface-extent shaders): for a
         // virtual-screen popup the wl_surface IS the VS rect, so a
         // fly-in from "the nearest edge" naturally reads as flying in
         // from the VS's edge — which is what the user sees.
@@ -610,13 +614,13 @@ struct ShaderAttachResult
     /// non-stock QQuickItem subclass. Hide for now; the
     /// shadow-pop-in at teardown is the lesser evil.
     QList<QPointer<QQuickItem>> hiddenSiblings;
-    /// Live fboExtentRing — written here by attachShaderToAnchor at
+    /// Live fboExtentRing. Written here by attachShaderToAnchor at
     /// fresh attach, re-written by the reuse path on metadata hot-
     /// reload. The syncGeometry lambda captures this shared_ptr by
     /// value so it always re-reads the current value when anchor
     /// geometry signals fire mid-leg.
     std::shared_ptr<qreal> fboExtentRingPtr;
-    /// Live fboExtentKind — same lifecycle / hot-reload semantics as
+    /// Live fboExtentKind. Same lifecycle / hot-reload semantics as
     /// `fboExtentRingPtr`. Captured by the syncGeometry lambda so a
     /// metadata edit that flips an effect from Anchor to Surface (or
     /// vice versa) takes effect on the next geometry signal without
@@ -816,13 +820,13 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // The lambda re-runs the same parent-margin clamp the initial-attach
     // block above does. Anchor x/y/w/h can change mid-leg (parent-layout
     // reflow on sibling-hide; host's anchored layout re-evaluating on
-    // parent resize), and the clamp depends on the LIVE values — a
+    // parent resize), and the clamp depends on the LIVE values. A
     // fixed `pad` captured at attach time would let the shader item drift
     // past the parent's bounds again whenever the anchor moves toward an
     // edge, re-introducing the viewport-clipping vTexCoord shift the
-    // initial clamp avoids. Re-writes customParams[7].x with the
-    // recomputed pad so the shader's UV remap stays consistent with the
-    // updated geometry.
+    // initial clamp avoids. The recomputed pad propagates into
+    // `iAnchorPosInFbo` via `syncShaderGeometryNow`, keeping the
+    // shader's UV remap consistent with the updated geometry.
     //
     // shaderSource is captured as QPointer so that any teardown path that
     // destroys it independently of shaderItem (scene-graph rebuild,
@@ -999,7 +1003,7 @@ public:
         /// already-connected lambda picks up the new value on the
         /// next anchor geometry signal.
         std::shared_ptr<qreal> fboExtentRingPtr;
-        /// Same lifecycle as `fboExtentRingPtr` — shared with the
+        /// Same lifecycle as `fboExtentRingPtr`; shared with the
         /// syncGeometry lambda so a metadata hot-reload that flips
         /// fboExtentKind (Anchor ↔ Surface) takes effect on the next
         /// geometry signal without reattaching.

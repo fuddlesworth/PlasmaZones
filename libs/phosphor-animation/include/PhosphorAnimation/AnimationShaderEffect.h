@@ -134,12 +134,12 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// metadata grammar (see `parseFboExtent` in animationshadereffect.cpp).
     /// At `fboExtentRing = 0.5` the FBO is `(1+2·0.5) = 2x` the anchor
     /// on each axis, reproducing BMW's `ACTOR_SCALE=2, PADDING=0.5`
-    /// convention. Default 0.0 — FBO matches the anchor exactly.
+    /// convention. Default 0.0; FBO matches the anchor exactly.
     /// Shaders that opt in must remap `vTexCoord` through
     /// `iAnchorPosInFbo / iAnchorSize / iResolution` to recover anchor-
     /// space UV (see `data/animations/morph/effect.frag`).
     ///
-    /// Ignored when `fboExtentKind == Surface` — the FBO already covers
+    /// Ignored when `fboExtentKind == Surface`: the FBO already covers
     /// the entire surface and adding ring padding would push it past the
     /// rendering canvas.
     qreal fboExtentRing = 0.0;

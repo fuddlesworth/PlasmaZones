@@ -28,11 +28,11 @@
 // `bmw_compat.glsl`'s default `getInputColor` only divides by alpha,
 // it does NOT clip, so an off-window sample on a clamp-to-edge
 // `uTexture0` would smear edge pixels (visible artefact for opaque-
-// edged windows like terminals or most app chrome). We therefore
-// override `getInputColor` locally to return `vec4(0.0)` outside
-// [0, 1], matching the matrix.frag pattern (matrix/effect.frag:196-205).
-// The cascade still reads as a shatter; shards beyond the window crop
-// cleanly to transparent.
+// edged windows like terminals or most app chrome). The cascade
+// below calls the `getClippedInputColor` helper (defined in
+// bmw_compat.glsl) instead, which crops samples outside [0, 1] to
+// `vec4(0.0)` before delegating to `getInputColor`. Shards beyond
+// the window crop cleanly to transparent.
 
 #version 450
 
