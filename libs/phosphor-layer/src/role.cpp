@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorLayer/Role.h>
+#include <PhosphorLayer/Patterns.h>
 
 #include "internal.h"
 
@@ -114,5 +115,64 @@ const Role FloatingOverlay{
     Layer::Overlay, AnchorNone, -1, KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-floating")};
 
 } // namespace Roles
+
+// ── Pattern presets (axis-2 vocabulary) ────────────────────────────────
+// Aliases reuse the same Role values as the legacy Roles::* presets, so
+// runtime behaviour is unchanged. Phase 1 will migrate call sites and
+// drop the Roles:: spellings. See docs/surface-taxonomy-refactor-plan.md.
+
+namespace Patterns {
+
+const Role& Wallpaper = Roles::Background;
+const Role& Hud = Roles::FullscreenOverlay;
+const Role& Modal = Roles::CenteredModal;
+const Role& Floating = Roles::FloatingOverlay;
+
+Role Panel(Edge edge)
+{
+    switch (edge) {
+    case Edge::Top:
+        return Roles::TopPanel;
+    case Edge::Bottom:
+        return Roles::BottomPanel;
+    case Edge::Left:
+        return Roles::LeftDock;
+    case Edge::Right:
+        return Roles::RightDock;
+    }
+    // Unreachable for well-formed inputs; fall through to top edge so
+    // a malformed enum value still yields a usable panel.
+    return Roles::TopPanel;
+}
+
+Role Toast(Corner corner)
+{
+    // CornerToast bakes in Top|Right; rebuild the anchor combo for the
+    // other three corners. Scope prefix is rewritten to encode the
+    // corner so the surface name reflects which corner it lives in.
+    Anchors anchors;
+    QString prefix;
+    switch (corner) {
+    case Corner::TopLeft:
+        anchors = Anchor::Top | Anchor::Left;
+        prefix = QStringLiteral("pl-top-left-toast");
+        break;
+    case Corner::TopRight:
+        anchors = Anchor::Top | Anchor::Right;
+        prefix = QStringLiteral("pl-top-right-toast");
+        break;
+    case Corner::BottomLeft:
+        anchors = Anchor::Bottom | Anchor::Left;
+        prefix = QStringLiteral("pl-bottom-left-toast");
+        break;
+    case Corner::BottomRight:
+        anchors = Anchor::Bottom | Anchor::Right;
+        prefix = QStringLiteral("pl-bottom-right-toast");
+        break;
+    }
+    return Roles::CornerToast.withAnchors(anchors).withScopePrefix(prefix);
+}
+
+} // namespace Patterns
 
 } // namespace PhosphorLayer

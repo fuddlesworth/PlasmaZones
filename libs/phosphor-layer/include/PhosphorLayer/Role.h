@@ -98,40 +98,48 @@ struct PHOSPHORLAYER_EXPORT Role
 };
 
 // ── Library-provided presets (open vocabulary — extend via `withX()`) ──
+//
+// DEPRECATED: this namespace mixes axis 1 (compositor primitive) with
+// axis 2 (UI pattern). Prefer @ref Patterns (in `PhosphorLayer/Patterns.h`)
+// which exposes the same recipes under UI-pattern names. See
+// `docs/surface-taxonomy-refactor-plan.md` for the migration map.
 
 namespace Roles {
 
-/// Fullscreen click-through HUD on the Overlay layer. Typical for drag
-/// indicators, zone highlights, focus indicators.
+/// @deprecated Use @ref PhosphorLayer::Patterns::Hud.
+[[deprecated("use PhosphorLayer::Patterns::Hud")]]
 PHOSPHORLAYER_EXPORT extern const Role FullscreenOverlay;
 
-/// Horizontal panel anchored to the top edge, reserves space via exclusive
-/// zone. Keyboard OnDemand — receives focus when clicked.
+/// @deprecated Use @ref PhosphorLayer::Patterns::Panel with Edge::Top.
+[[deprecated("use PhosphorLayer::Patterns::Panel(Edge::Top)")]]
 PHOSPHORLAYER_EXPORT extern const Role TopPanel;
 
-/// Mirror of TopPanel anchored to the bottom edge.
+/// @deprecated Use @ref PhosphorLayer::Patterns::Panel with Edge::Bottom.
+[[deprecated("use PhosphorLayer::Patterns::Panel(Edge::Bottom)")]]
 PHOSPHORLAYER_EXPORT extern const Role BottomPanel;
 
-/// Vertical dock anchored to the left edge.
+/// @deprecated Use @ref PhosphorLayer::Patterns::Panel with Edge::Left.
+[[deprecated("use PhosphorLayer::Patterns::Panel(Edge::Left)")]]
 PHOSPHORLAYER_EXPORT extern const Role LeftDock;
 
-/// Mirror of LeftDock.
+/// @deprecated Use @ref PhosphorLayer::Patterns::Panel with Edge::Right.
+[[deprecated("use PhosphorLayer::Patterns::Panel(Edge::Right)")]]
 PHOSPHORLAYER_EXPORT extern const Role RightDock;
 
-/// Centred modal with exclusive keyboard grab. Typical for settings
-/// dialogs, confirmation prompts.
+/// @deprecated Use @ref PhosphorLayer::Patterns::Modal.
+[[deprecated("use PhosphorLayer::Patterns::Modal")]]
 PHOSPHORLAYER_EXPORT extern const Role CenteredModal;
 
-/// Corner-anchored transient display. Typical for notifications, OSDs.
-/// Defaults to top-right; combine with `withAnchors()` for other corners.
+/// @deprecated Use @ref PhosphorLayer::Patterns::Toast with a Corner.
+[[deprecated("use PhosphorLayer::Patterns::Toast(Corner::TopRight)")]]
 PHOSPHORLAYER_EXPORT extern const Role CornerToast;
 
-/// Background layer wallpaper. Reserves space (exclusive zone 0) so other
-/// surfaces render on top.
+/// @deprecated Use @ref PhosphorLayer::Patterns::Wallpaper.
+[[deprecated("use PhosphorLayer::Patterns::Wallpaper")]]
 PHOSPHORLAYER_EXPORT extern const Role Background;
 
-/// Floating overlay with no anchors — client-positioned via margins or
-/// compositor hints. Typical for shader previews, tear-off windows.
+/// @deprecated Use @ref PhosphorLayer::Patterns::Floating.
+[[deprecated("use PhosphorLayer::Patterns::Floating")]]
 PHOSPHORLAYER_EXPORT extern const Role FloatingOverlay;
 
 } // namespace Roles

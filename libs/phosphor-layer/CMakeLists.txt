@@ -75,6 +75,7 @@ set(phosphorlayer_SRCS
 set(phosphorlayer_public_HDRS
     include/PhosphorLayer/PhosphorLayer.h
     include/PhosphorLayer/Role.h
+    include/PhosphorLayer/Patterns.h
     include/PhosphorLayer/SurfaceConfig.h
     include/PhosphorLayer/Surface.h
     include/PhosphorLayer/SurfaceFactory.h
