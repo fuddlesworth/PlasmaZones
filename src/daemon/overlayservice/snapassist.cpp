@@ -317,6 +317,17 @@ void OverlayService::hideSnapAssist()
     m_snapAssistVisible = false;
     m_snapAssistScreenId.clear();
 
+    // Emit dismissed BEFORE hideSlot so listeners observe the same
+    // signal order regardless of whether hideSlot's completion runs
+    // synchronously (benign no-op path: lib's hideSlot fires the
+    // completion inline, which restores the zone-selector via
+    // onSnapAssistSlotHideCompleted) or asynchronously (animator's
+    // settle): in both cases "dismissed" arrives first.
+    //
+    // snapAssistDismissed → WindowDragAdaptor::onSnapAssistDismissed →
+    // unregisterCancelOverlayShortcut() (windowdragadaptor.cpp:82).
+    Q_EMIT snapAssistDismissed();
+
     auto stateIt = m_screenStates.find(screenId);
     if (stateIt != m_screenStates.end() && stateIt->shell && stateIt->shell->shellSurface()
         && stateIt->snapAssistSlot()) {
@@ -324,10 +335,6 @@ void OverlayService::hideSnapAssist()
             onSnapAssistSlotHideCompleted(effectiveId);
         });
     }
-
-    // snapAssistDismissed → WindowDragAdaptor::onSnapAssistDismissed →
-    // unregisterCancelOverlayShortcut() (windowdragadaptor.cpp:82).
-    Q_EMIT snapAssistDismissed();
 
     // Zone-selector restore is owned by onSnapAssistSlotHideCompleted —
     // it fires when the snap-assist slot has finished its hide
@@ -364,11 +371,8 @@ void OverlayService::onSnapAssistSlotHideCompleted(const QString& effectiveId)
     // this screen via hideZoneSelectorSlotOnScreen. Owns BOTH the
     // user-dismiss path (hideSnapAssist routes here) and the
     // cross-screen singleton-dismiss path in showSnapAssist's
-    // prev-screen branch. Restore the selector if the drag is
-    // still logically active.
-    if (m_zoneSelectorVisible && it->zoneSelectorPhysScreen && it->zoneSelectorGeometry.isValid()) {
-        showZoneSelectorSlotOnScreen(effectiveId, it->zoneSelectorPhysScreen, it->zoneSelectorGeometry);
-    }
+    // prev-screen branch.
+    restoreZoneSelectorAfterHide(effectiveId);
     syncPassiveShellSurfaceState(effectiveId);
 }
 
@@ -495,6 +499,12 @@ void OverlayService::hideLayoutPicker()
     m_layoutPickerVisible = false;
     m_layoutPickerScreenId.clear();
 
+    // Emit dismissed BEFORE hideSlot so listeners see "dismissed first,
+    // then completion" regardless of whether the completion runs
+    // synchronously (benign no-op) or asynchronously (animator settle).
+    // Mirrors hideSnapAssist's ordering.
+    Q_EMIT layoutPickerDismissed();
+
     auto stateIt = m_screenStates.find(screenId);
     if (stateIt != m_screenStates.end() && stateIt->shell && stateIt->shell->shellSurface()
         && stateIt->layoutPickerSlot()) {
@@ -506,8 +516,6 @@ void OverlayService::hideLayoutPicker()
     // Zone-selector restore is owned by onLayoutPickerSlotHideCompleted —
     // mirror of the snap-assist + OSD ownership pattern. The synchronous
     // fast-path raced the in-flight beginHide.
-
-    Q_EMIT layoutPickerDismissed();
 }
 
 bool OverlayService::isLayoutPickerVisible() const
@@ -525,11 +533,8 @@ void OverlayService::onLayoutPickerSlotHideCompleted(const QString& effectiveId)
     writeQmlProperty(it->layoutPickerSlot(), QStringLiteral("loaded"), false);
     // Symmetric restore — see onSnapAssistSlotHideCompleted /
     // onOsdSlotHideCompleted. The picker hid the zone-selector slot
-    // on show; restore it once the picker has finished its hide
-    // animation (drag may still be active).
-    if (m_zoneSelectorVisible && it->zoneSelectorPhysScreen && it->zoneSelectorGeometry.isValid()) {
-        showZoneSelectorSlotOnScreen(effectiveId, it->zoneSelectorPhysScreen, it->zoneSelectorGeometry);
-    }
+    // on show; restore it once the picker has finished its hide.
+    restoreZoneSelectorAfterHide(effectiveId);
     syncPassiveShellSurfaceState(effectiveId);
 }
 

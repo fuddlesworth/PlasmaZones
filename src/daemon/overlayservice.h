@@ -574,7 +574,8 @@ private:
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
-    PhosphorZones::IZoneLayoutRegistry* m_layoutManager = nullptr; ///< Borrowed; outlives service
+    PhosphorZones::IZoneLayoutRegistry* m_layoutManager =
+        nullptr; ///< Borrowed; nullable (setLayoutManager(nullptr) detaches)
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service
     ShaderRegistry* m_shaderRegistry = nullptr; ///< Borrowed; outlives service
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives service (optional)
@@ -709,14 +710,6 @@ private:
     // entry in the connection's slot table for the rest of the session).
     bool m_prepareForSleepConnected = false;
 
-    // Sticky per-screen passive-shell creation-failure flag now lives on
-    // the ShellHost (PhosphorOverlay::ShellHost::markFailure /
-    // clearFailure / hasFailure). The spam-guard in ensurePassiveShellFor
-    // logs once per screen regardless of which OSD path (layout-osd or
-    // navigation-osd) tried to bring the surface up. Cleared in
-    // destroyAllWindowsForPhysicalScreen when a hot-plug cycle reattaches
-    // the same physical monitor.
-
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
     QString m_lastNavigationActionKey; // "action:reason" composite key
     QString m_lastNavigationScreenId;
@@ -824,6 +817,15 @@ private:
     /// after a temporary slot-hide. Idempotent: bails when the slot is
     /// already visible.
     void showZoneSelectorSlotOnScreen(const QString& effectiveId, QScreen* physScreen, const QRect& targetGeom);
+
+    /// Conditionally restore the zone-selector slot on @p effectiveId
+    /// after a sibling slot finished hiding. Re-shows iff the drag is
+    /// still logically active (@c m_zoneSelectorVisible) AND the screen
+    /// retains its captured (physScreen, geometry) state. Centralizes
+    /// the symmetric restore pattern used by every slot-hide completion
+    /// (onOsdSlotHideCompleted, onSnapAssistSlotHideCompleted,
+    /// onLayoutPickerSlotHideCompleted).
+    void restoreZoneSelectorAfterHide(const QString& effectiveId);
 
     /// Drive the per-screen shell wl_surface map state from slot
     /// visibility. Shell uses keepMappedOnHide=true; Surface::show()

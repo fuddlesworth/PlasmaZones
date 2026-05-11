@@ -10,6 +10,7 @@
 
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/ILayoutSource.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
@@ -25,7 +26,6 @@
 #include <QJsonArray>
 #include <QRectF>
 #include <QUuid>
-#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorZones::LayoutUtils {
 

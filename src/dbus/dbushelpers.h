@@ -5,16 +5,16 @@
 
 #include "plasmazones_export.h"
 #include "../core/interfaces.h"
-#include <PhosphorZones/Layout.h>
-#include <PhosphorZones/Zone.h>
 #include "../core/utils.h"
 #include "../core/logging.h"
+#include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include <QRectF>
 #include <QScreen>
 #include <QUuid>
 #include <QString>
 #include <optional>
-#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace Phosphor::Screens {
 class ScreenManager;
@@ -172,8 +172,7 @@ PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::IZoneLayoutRegistry* mgr
                                          const QString& operation, LogCategory category)
 {
     // `activeLayout()` and `layouts()` are both on the interface — no
-    // need to require the concrete registry just to reach them. Callers
-    // pass `LayoutRegistry*` via implicit upcast.
+    // need to require the concrete registry just to reach them.
     auto uuidOpt = parseAndValidateUuid(zoneId, operation, category);
     if (!uuidOpt) {
         return nullptr;

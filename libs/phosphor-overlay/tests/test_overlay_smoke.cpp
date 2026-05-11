@@ -13,8 +13,10 @@
 //   - rekey happy path migrates the entry across keys, preserving the
 //     heap-allocated ShellState* so borrowed pointers stay valid.
 //
-// Tests that need a live shellSurface fake it via a friended test helper
-// (so we don't need a real Wayland transport in unit tests).
+// Tests that need a live shellSurface are deferred — the lib's
+// SurfaceFactory contract requires a real PhosphorLayer::Surface, which
+// in turn needs a Wayland transport. These tests focus on the lib-side
+// state-machine paths that don't depend on a live surface.
 
 #include <PhosphorOverlay/PhosphorOverlay.h>
 

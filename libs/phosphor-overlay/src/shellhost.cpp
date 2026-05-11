@@ -85,6 +85,12 @@ ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
 {
     auto it = m_states.find(screenId);
     if (it != m_states.end() && it.value()->m_shellSurface) {
+        // Refresh m_physScreen on the cached entry — a fast hot-plug
+        // cycle (monitor removed and re-added under the same key) can
+        // leave a stale QScreen* on the state object while the lib
+        // surface stays alive. Callers reading physScreen() rely on
+        // it tracking the most recent ensureShell call.
+        it.value()->m_physScreen = physScreen;
         return it.value();
     }
 
@@ -184,7 +190,8 @@ bool ShellHost::rekey(const QString& oldKey, const QString& newKey)
     // call (it was already there). Callers that distinguish "moved" from
     // "already there" should compare keys themselves before calling.
     if (oldKey == newKey) {
-        return m_states.contains(oldKey) && m_states.value(oldKey)->m_shellSurface != nullptr;
+        auto it = m_states.find(oldKey);
+        return it != m_states.end() && it.value()->m_shellSurface != nullptr;
     }
     auto donor = m_states.find(oldKey);
     if (donor == m_states.end() || !donor.value()->m_shellSurface) {
@@ -231,30 +238,38 @@ void ShellHost::hideSlot(const QString& screenId, const QString& slotKey, std::f
     // sentinels, restore sibling slot) still runs. Without this, a
     // dismiss called on an already-hidden slot leaves consumer parallel
     // state stuck "live" forever.
-    auto runCompletion = [&completion]() {
-        if (completion) {
-            auto cb = std::move(completion);
-            cb();
+    //
+    // Helper takes the callback by rvalue-ref so the move from the
+    // caller's `completion` is explicit at each early-return site —
+    // and the outer `completion` is left in a moved-from-but-still-
+    // destructible state for any subsequent reference (the function
+    // returns immediately after; the std::move(completion) on the
+    // animator-dispatch path below only runs when no early-return
+    // fired).
+    auto runCompletion = [](std::function<void()>&& cb) {
+        if (cb) {
+            auto local = std::move(cb);
+            local();
         }
     };
     auto it = m_states.find(screenId);
     if (it == m_states.end()) {
-        runCompletion();
+        runCompletion(std::move(completion));
         return;
     }
     auto& state = *it.value();
     if (!state.m_shellSurface) {
-        runCompletion();
+        runCompletion(std::move(completion));
         return;
     }
     auto slotIt = state.slots.constFind(slotKey);
     if (slotIt == state.slots.cend()) {
-        runCompletion();
+        runCompletion(std::move(completion));
         return;
     }
     auto* item = slotIt.value().item.data();
     if (!item || !item->isVisible()) {
-        runCompletion();
+        runCompletion(std::move(completion));
         return;
     }
     m_surfaceAnimator->beginHide(state.m_shellSurface, item, slotIt.value().role, std::move(completion));

@@ -617,10 +617,14 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         return false;
     }
 
-    // If a stale (empty) entry already exists under newKey, refuse the
-    // move when the daemon side already considers it live; otherwise
-    // wait until the lib confirms its own side before erasing — the
-    // lib's rekey is the authority on whether the move can land.
+    // If an entry already exists under newKey, refuse the move when the
+    // daemon side already considers it live. We do NOT mutate the
+    // daemon entry here — the lib's rekey is the authority on whether
+    // the move actually lands. Mutating before the lib call would leave
+    // a wrecked daemon entry on a lib-refusal path (e.g. a prior warm
+    // for OSD/snap-assist gave newKey a live lib shell that the daemon
+    // sees as "stale" via overlayPhysScreen == null but the lib refuses
+    // to clobber).
     auto existing = m_screenStates.find(newKey);
     if (existing != m_screenStates.end() && existing->overlayPhysScreen) {
         qCWarning(lcOverlay) << "rekeyOverlayState: refusing to clobber live entry under" << newKey << "with donor"
@@ -640,11 +644,16 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         return false;
     }
 
-    // Lib accepted — now safe to drop the daemon's stale newKey entry
-    // (lib already dropped its own) and move the donor's daemon state
-    // across. Iterators were not invalidated by the lib call (it only
-    // touches m_states, not m_screenStates).
+    // Lib accepted — the lib has either deleted its stale newKey entry
+    // (heap ShellState the daemon's `existing->shell` borrowed) or
+    // simply moved the donor across. The daemon's `existing->shell`
+    // pointer is now dangling iff the lib deleted; null it BEFORE the
+    // erase runs the daemon-side destructor (defense even though
+    // ~PerScreenOverlayState doesn't dereference shell today).
+    // Iterators on m_screenStates were not invalidated by the lib call
+    // (lib only touches m_states).
     if (existing != m_screenStates.end()) {
+        existing->shell = nullptr;
         m_screenStates.erase(existing);
     }
     PerScreenOverlayState state = std::move(donor.value());

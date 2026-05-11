@@ -66,7 +66,7 @@ The PZ-specific bits (zones, snap-assist, layout-picker, OSDs) are
 The library knows about *surfaces and slots*. It does not know about
 zones, layouts, or audio spectrums. PZ keeps the content vocabulary.
 
-## Original API sketch (NOT shipped — see Phase 2 for the final API)
+## Original API sketch (NOT shipped: see Phase 2 for the final API)
 
 This block is the pre-implementation sketch from the plan's early
 draft. The actual shipped surface is documented in the Phase 2 status
@@ -148,7 +148,7 @@ struct ContentDescriptor {
 ```
 
 (Sketch note: `SlotKey` was proposed as a strong-typed `quint32`
-newtype. As shipped, the lib uses plain `QString` keys — consumers
+newtype. As shipped, the lib uses plain `QString` keys: consumers
 define their own slot vocabulary via function-local-static accessors,
 e.g. PZ's `PzSlotKeys::Osd()` / `SnapAssist()` / etc. in
 `src/daemon/overlayservice/pz_slot_keys.h`. Third-party plugins mint
@@ -325,7 +325,7 @@ Sub-commits landed on this branch:
   lib owns the surface-mapped + input-region toggle mechanism.
 - **2.6**: Latent-bug fix from 2.4 design. `PerScreenOverlayState::shell`
   was an embedded `ShellState` value, but `ensureShell` populated only
-  the lib's parallel map — the embedded field stayed default-initialized.
+  the lib's parallel map: the embedded field stayed default-initialized.
   Switched to single source of truth: lib stores
   `QHash<QString, ShellState*>` (raw owning pointers, stable across
   rehashes); PZ state carries a borrowed pointer wired by the shim.
@@ -397,11 +397,11 @@ Sub-commits:
   completion callbacks).
 
 The "show side" of slot lifecycle (`beginShow` calls in
-`showZoneSelector` / `showSnapAssist` / etc.) stays in the daemon —
+`showZoneSelector` / `showSnapAssist` / etc.) stays in the daemon -
 each show path intermixes PZ content writes (mode toggles, loader
 re-instantiation, content-property pushes) with the
 animator-trigger boilerplate. The show side did not migrate in this
-PR — its content/mechanism interleaving makes a clean lift
+PR: its content/mechanism interleaving makes a clean lift
 significantly larger than the hide-side conversion landed in Phase 3.
 
 ### Phase 4 - Animator config wiring (DONE in this branch)
@@ -415,7 +415,7 @@ every consumer gets the same longest-prefix-lookup guarantee.
 
 The `build*Config` helpers (`buildOsdConfig`, `buildLayoutPickerConfig`,
 `buildZoneSelectorConfig`, `buildSnapAssistConfig`) stay in
-`animation_config.cpp` — they own the SHAPE of each config (curve
+`animation_config.cpp`: they own the SHAPE of each config (curve
 names, durations, shader paths) which is PZ-content. The plan-doc
 phrased this as "per-content ContentDescriptor builders inside the
 daemon"; in practice the existing build*Config functions are already
@@ -456,45 +456,45 @@ Three sub-commits:
 
 - **5.2**: Split `overlayservice.cpp` into three:
   - `overlayservice.cpp` (kept the ctor + dtor + small handlers): now
-    785 lines, under the 800-line cap.
+    795 lines, under the 800-line cap.
   - `overlayservice/priming.cpp` (new, 182 lines):
-    `primeSurfaceRenderPipeline` + `cancelSurfacePrime` — the
+    `primeSurfaceRenderPipeline` + `cancelSurfacePrime`: the
     RHI/Vulkan pipeline-warmup helpers.
-  - `overlayservice/screens.cpp` (new, 200 lines): screen-lifecycle
+  - `overlayservice/screens.cpp` (new, 220 lines): screen-lifecycle
     methods (`setupForScreen`, `removeScreen`, `assertWindowOnScreen`,
     `handleScreenAdded`, `destroyAllWindowsForPhysicalScreen`,
     `handleScreenRemoved`).
 
 - **5.3**: Extract the 8 daemon-to-ShellHost bridge methods from
   `osd.cpp` (where they accumulated during Phase 2-4) into a new
-  `overlayservice/shellhost_bridge.cpp` (249 lines). `osd.cpp` drops
-  from 889 to 693 lines, under the cap. OSD-specific show / dismiss
+  `overlayservice/shellhost_bridge.cpp` (274 lines). `osd.cpp` drops
+  from 889 to 691 lines, under the cap. OSD-specific show / dismiss
   paths stay in `osd.cpp`.
 
-Final TU sizes after Phase 5:
+Final TU sizes after Phase 5 (and pass-4/5 audit fixes):
 
 | File | Lines |
 |---|---|
-| `overlayservice.cpp` | 785 |
-| `overlayservice/osd.cpp` | 693 |
-| `overlayservice/overlay.cpp` | 864 |
-| `overlayservice/selector.cpp` | 726 |
-| `overlayservice/snapassist.cpp` | 566 |
-| `overlayservice/shader.cpp` | 555 |
+| `overlayservice.cpp` | 795 |
+| `overlayservice/osd.cpp` | 691 |
+| `overlayservice/overlay.cpp` | 893 |
+| `overlayservice/selector.cpp` | 748 |
+| `overlayservice/snapassist.cpp` | 578 |
+| `overlayservice/shader.cpp` | 557 |
 | `overlayservice/overlay_data.cpp` | 379 |
 | `overlayservice/animation_config.cpp` | 330 |
 | `overlayservice/settings.cpp` | 326 |
-| `overlayservice/lifecycle.cpp` | 311 |
-| `overlayservice/shellhost_bridge.cpp` | 249 |
-| `overlayservice/screens.cpp` | 200 |
+| `overlayservice/lifecycle.cpp` | 313 |
+| `overlayservice/shellhost_bridge.cpp` | 274 |
+| `overlayservice/screens.cpp` | 220 |
 | `overlayservice/priming.cpp` | 182 |
 | `overlayservice/selector_update.cpp` | 231 |
-| `overlayservice.h` | 1035 |
+| `overlayservice.h` | 1046 |
 
-`overlay.cpp` at 864 sits 64 lines over the 800-line cap — further
+`overlay.cpp` at 893 sits 93 lines over the 800-line cap: further
 fragmentation (e.g. lifting `rekeyOverlayState` and
 `validateScreenStateInvariant` into a separate TU) would hurt
-readability for a marginal win. The header at 1035 is dominated by
+readability for a marginal win. The header at 1046 is dominated by
 the still-large `OverlayService` class declaration; meaningful
 header shrinkage requires breaking up the class itself, which is
 beyond Phase 5's scope.
@@ -502,7 +502,7 @@ beyond Phase 5's scope.
 The plan-doc's other Phase 5 goals do NOT apply in practice:
   - "Files like `overlayservice/lifecycle.cpp` move into the library or
     get deleted." `lifecycle.cpp` is 311 lines of PZ-content
-    initialization (show / hide / setupZoneOverlay) — it's content,
+    initialization (show / hide / setupZoneOverlay): it's content,
     not mechanism, and stays in the daemon.
   - "Per-screen state moves to the library's ShellHost." Shell
     mechanism state already lives in `ShellState` (Phase 2.3-2.6);
@@ -521,7 +521,7 @@ The plan-doc's other Phase 5 goals do NOT apply in practice:
   external API surface.
 - This is also the seam Phosphor-as-standalone would consume.
 
-## Renames + new vocabulary (original sketch — actual mapping below)
+## Renames + new vocabulary (original sketch: actual mapping below)
 
 The first column shows the pre-extraction PZ names. The second column
 was the sketched target API; the third shows what actually shipped.

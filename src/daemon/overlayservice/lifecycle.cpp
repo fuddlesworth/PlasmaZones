@@ -143,8 +143,10 @@ void OverlayService::hide()
     // Stop shader animation
     stopShaderAnimation();
 
-    // Do NOT invalidate m_shaderTimer - keeps iTime continuous across show/hide
-    // so animations feel less predictable and don't restart
+    // Do NOT invalidate m_shaderTimer — keeping iTime continuous across
+    // show/hide cycles prevents the shader phase from restarting at 0
+    // on every re-show, which would make each show visually identical
+    // (cycle-restart) rather than continuing the animation in place.
 
     // Post-shell-migration: the shell wl_surface stays mapped across
     // hide/show cycles (its lifecycle is managed by destroyPassiveShell,

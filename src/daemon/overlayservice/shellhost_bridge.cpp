@@ -74,8 +74,16 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
         auto it = m_screenStates.find(effectiveId);
         return (it == m_screenStates.end()) ? nullptr : &it.value();
     }
+    // Only cache the borrowed shell pointer when it actually backs a
+    // live surface. When ensureShell returns a zeroed state (sticky
+    // failure or a self-teardown from wirePassiveShellSlots's null-
+    // shellWindow recovery), leave pzState.shell as its previous value
+    // (null on first encounter) so the implicit contract "non-null
+    // shell ⇒ live surface" holds for every downstream consumer.
     auto& pzState = m_screenStates[effectiveId];
-    pzState.shell = shellState;
+    if (shellState->shellSurface()) {
+        pzState.shell = shellState;
+    }
     return &pzState;
 }
 
@@ -90,12 +98,19 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
     auto* window = shellState.shellWindow();
     if (!window) {
         // QML hasn't materialized the wrapper window yet (async path).
-        // Mark this screen failed so the lib's ensureShell short-circuit
-        // doesn't keep returning a half-wired state forever. The next
-        // hot-plug clearFailure unblocks a clean re-create that should
-        // race the QML root load successfully on the second attempt.
+        // The lib's ensureShell already set shellState.m_shellSurface
+        // before invoking this callback; if we only called markFailure
+        // the next ensureShell would short-circuit on the live
+        // shellSurface BEFORE consulting the failure flag and return
+        // the same half-wired state forever.
+        //
+        // Tear down the shell synchronously (zeroes shellSurface so
+        // the next call falls through to the failure-flag check) AND
+        // mark the failure so subsequent attempts no-op until a
+        // hot-plug clearFailure unblocks a clean re-create.
         qCWarning(lcOverlay) << "wirePassiveShellSlots: shellWindow null at PostCreate for screen=" << screenId
-                             << "— marking failure so next attempt re-creates from scratch";
+                             << "— tearing down half-wired shell and marking failure";
+        m_shellHost->destroyShell(screenId);
         m_shellHost->markFailure(screenId);
         return;
     }

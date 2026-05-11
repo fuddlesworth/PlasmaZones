@@ -24,6 +24,7 @@
 
 #include <QCoreApplication>
 #include <QCursor>
+#include <QDBusConnection>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QQmlEngine>
@@ -419,15 +420,16 @@ OverlayService::~OverlayService()
     for (const QString& screenId : screenKeysAtShutdown) {
         m_shellHost->destroyShell(screenId);
     }
-    m_screenStates.clear();
 
-    // Explicit lib teardown BEFORE implicit member destruction, so
-    // ~ShellHost runs while every member it might re-enter through the
-    // PreDestroyCallback is still alive. The lib dtor gates the callback
-    // on a live shellSurface (skipping already-drained entries), so the
-    // loop above already neutered re-entry — this reset is defense in
-    // depth for any future code path that leaves a live shell behind.
+    // Explicit lib teardown BEFORE m_screenStates.clear() so the
+    // defense-in-depth PreDestroyCallback re-fire (for any live shell
+    // the drain loop above missed) can still touch its parallel
+    // per-screen state for cleanup. The lib dtor gates the callback on
+    // a live shellSurface (skipping already-drained entries), so the
+    // re-fire is a no-op in the steady state — but ordering matters if
+    // a future code path leaves a live shell behind.
     m_shellHost.reset();
+    m_screenStates.clear();
 
     // Singleton surfaces (layout picker, shader preview) are QObject
     // children of `this`, so the QObject parent-child system would

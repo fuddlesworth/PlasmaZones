@@ -139,18 +139,24 @@ void OverlayService::hideZoneSelector()
 
     // Selected zone NOT cleared here — drag-end snap path needs it.
     //
-    // Iterate every screen state and animate a slot-hide on each one
-    // whose zone selector slot is currently visible. Iterator-based
-    // iteration avoids the keys()-list materialisation + per-key
-    // operator[] re-lookup (which would default-insert if a key were
-    // ever absent — fragile invariant to rely on).
-    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+    // Snapshot keys before iterating so the completion lambda
+    // (potentially fired synchronously by ShellHost::hideSlot on a
+    // benign no-op path) cannot invalidate the loop's iterators by
+    // inserting into m_screenStates (rehash) via any indirect call
+    // path. operator[] on a key already present is safe; an insert is
+    // not. The snapshot makes the iteration robust against any future
+    // completion-path edits that may add screens.
+    const QStringList screenKeys = m_screenStates.keys();
+    for (const QString& screenId : screenKeys) {
+        auto it = m_screenStates.find(screenId);
+        if (it == m_screenStates.end()) {
+            continue;
+        }
         auto* slot = it->zoneSelectorSlot();
         if (!slot || !slot->isVisible()) {
             continue;
         }
         QMetaObject::invokeMethod(slot, "resetCursorState");
-        const QString screenId = it.key();
         m_shellHost->hideSlot(screenId, PzSlotKeys::ZoneSelector(), [this, screenId]() {
             onZoneSelectorSlotHideCompleted(screenId);
         });
@@ -582,6 +588,20 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(state->shell->shellSurface(), slot, PzRoles::ZoneSelector, []() { });
     syncPassiveShellSurfaceState(effectiveId);
+}
+
+void OverlayService::restoreZoneSelectorAfterHide(const QString& effectiveId)
+{
+    auto it = m_screenStates.find(effectiveId);
+    if (it == m_screenStates.end()) {
+        return;
+    }
+    // The drag may still be active (m_zoneSelectorVisible stays true
+    // across temporary slot-hides), and the screen may retain its
+    // captured (physScreen, geometry) — re-show in that case.
+    if (m_zoneSelectorVisible && it->zoneSelectorPhysScreen && it->zoneSelectorGeometry.isValid()) {
+        showZoneSelectorSlotOnScreen(effectiveId, it->zoneSelectorPhysScreen, it->zoneSelectorGeometry);
+    }
 }
 
 void OverlayService::onZoneSelectorSlotHideCompleted(const QString& effectiveId)

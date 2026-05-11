@@ -134,7 +134,7 @@ public:
     /// counterpart. Autotile-mode resolution is the autotile engine's
     /// job, driven by @ref assignmentIdForScreen returning an
     /// @c "autotile:<algo>" id from the level-1 cascade.
-    Layout* defaultLayout() const override;
+    Q_INVOKABLE Layout* defaultLayout() const override;
 
     /**
      * @brief Inject a callback that returns the user-configured default
@@ -237,7 +237,7 @@ public:
     /// context. @ref layoutForScreen already falls back to
     /// @ref defaultLayout internally when no explicit assignment matches,
     /// so this helper is a thin context-filling forwarder.
-    Layout* resolveLayoutForScreen(const QString& screenId) const override
+    Q_INVOKABLE Layout* resolveLayoutForScreen(const QString& screenId) const override
     {
         return layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
     }
@@ -257,8 +257,8 @@ public:
     /// cascade level misses AND both providers return empty. Callers
     /// that need to distinguish "stored" from "synthesized fallback"
     /// must pair this with @ref hasExplicitAssignment.
-    QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
-                                  const QString& activity = QString()) const override;
+    Q_INVOKABLE QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
+                                              const QString& activity = QString()) const override;
 
     /// Full entry for a (screen, desktop, activity) context. Shares
     /// the per-context cascade with @ref layoutForScreen up through
@@ -323,11 +323,11 @@ public:
 
     // ─── Context (desktop / activity) ─────────────────────────────────────
 
-    int currentVirtualDesktop() const override
+    Q_INVOKABLE int currentVirtualDesktop() const override
     {
         return m_currentVirtualDesktop;
     }
-    QString currentActivity() const override
+    Q_INVOKABLE QString currentActivity() const override
     {
         return m_currentActivity;
     }

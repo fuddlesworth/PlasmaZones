@@ -345,7 +345,7 @@ set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by QML 
 add_subdirectory(libs/phosphor-animation)   # unified animation library: motion runtime, QML module, shaders, layer
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
-add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mechanism (rides on layer/surfaces/animation/screens)
+add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mechanism (rides on layer/shell-patterns/surfaces/animation/screens)
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts (INTERFACE)
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management

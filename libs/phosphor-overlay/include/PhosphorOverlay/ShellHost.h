@@ -111,11 +111,22 @@ public:
 
     /// Idempotent: bring up (or return) the per-screen shell for
     /// @p screenId on @p physScreen. Returns a pointer to the ShellState
-    /// on success. Returns nullptr if no shell exists AND the factory
-    /// failed to create one (sticky-failure flag set automatically).
-    /// If a previous create attempt failed and the failure flag is still
-    /// set, returns the existing state (possibly with shellSurface=null)
-    /// or nullptr if no state was ever materialized.
+    /// on success. Returns nullptr when:
+    ///   - the factory is unset, or
+    ///   - the factory was called and returned nullptr (sticky-failure
+    ///     flag set automatically), AND no state object had been
+    ///     materialized for that screen before.
+    ///
+    /// When the sticky-failure flag is set and a state object already
+    /// exists (e.g. from a prior @ref stateFor or a previously-live
+    /// shell that was torn down), returns that existing state with
+    /// @c shellSurface() == nullptr. Callers that need to retry must
+    /// call @ref clearFailure first.
+    ///
+    /// On the cached-live path (state exists and @c shellSurface() is
+    /// non-null), the state's @c physScreen() is refreshed to the
+    /// argument so callers that read it always see the most recent
+    /// @c ensureShell call's value.
     ShellState* ensureShell(const QString& screenId, QScreen* physScreen);
 
     /// Tear down the shell for @p screenId. Fires the pre-destroy

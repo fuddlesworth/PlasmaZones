@@ -108,7 +108,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
     auto* state = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!state || !state->shell || !state->shell->shellWindow() || !state->osdSlot()) {
+    if (!state || !state->shell || !state->shell->shellWindow() || !state->shell->shellSurface() || !state->osdSlot()) {
         qCWarning(lcOverlay) << "Failed to get passive shell for layout OSD on screen=" << effectiveId;
         return false;
     }
@@ -476,15 +476,11 @@ void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
     writeQmlProperty(it->osdSlot(), QStringLiteral("mode"), QString());
     // Symmetric restore: layout/disabled/navigation OSD show paths
     // hid the zone-selector slot to keep it from peeking through the
-    // OSD card. The drag may still be active, so re-show the selector
-    // for the captured (physScreen, geometry) if those are still
-    // valid. snap-assist's onSnapAssistSlotHideCompleted does the
+    // OSD card. snap-assist's onSnapAssistSlotHideCompleted does the
     // analogous restore — keeping the symmetry in lock-step here
     // prevents a stuck-hidden selector after an OSD auto-dismiss
     // that fires mid-drag.
-    if (m_zoneSelectorVisible && it->zoneSelectorPhysScreen && it->zoneSelectorGeometry.isValid()) {
-        showZoneSelectorSlotOnScreen(effectiveId, it->zoneSelectorPhysScreen, it->zoneSelectorGeometry);
-    }
+    restoreZoneSelectorAfterHide(effectiveId);
     syncPassiveShellSurfaceState(effectiveId);
 }
 
@@ -567,7 +563,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // path; the dismiss path is QML → osdDismissRequested → animator
     // beginHide.
     auto* navState = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!navState || !navState->shell || !navState->shell->shellWindow() || !navState->osdSlot()) {
+    if (!navState || !navState->shell || !navState->shell->shellWindow() || !navState->shell->shellSurface()
+        || !navState->osdSlot()) {
         qCDebug(lcOverlay) << "No passive shell for navigation OSD on screen=" << effectiveId;
         return;
     }

@@ -69,8 +69,11 @@ public:
     /// @param layout Ownership transferred — the registry adopts @p layout
     ///               and is responsible for its lifetime from this call on.
     virtual void addLayout(Layout* layout) = 0;
-    /// @param layout Borrowed — caller retains ownership. Registry
-    ///               un-registers but does NOT delete.
+    /// @param layout Borrowed — caller hands the pointer in; the
+    ///               registry un-registers it and schedules deletion
+    ///               via @c deleteLater (matching how the registry
+    ///               adopted it in @ref addLayout). Callers must drop
+    ///               any other references before this call returns.
     virtual void removeLayout(Layout* layout) = 0;
     virtual void removeLayoutById(const QUuid& id) = 0;
     /// @param source Borrowed — caller retains ownership.
@@ -127,13 +130,18 @@ Q_SIGNALS:
     void layoutRemoved(Layout* layout);
 
     // Active-layout selection. Fires from @c setActiveLayout /
-    // @c setActiveLayoutById on every transition (no diff-guard; consumers
-    // dedupe if needed).
+    // @c setActiveLayoutById only when the active-layout pointer actually
+    // changes (concrete implementer guards with an equality check —
+    // matches the project rule "only emit signals when value actually
+    // changes").
     void activeLayoutChanged(Layout* layout);
 
-    // Per-(screen, desktop, activity) assignment churn. Consumers that
-    // care about cascade-resolved layout for a specific screen subscribe
-    // here and re-query via @c layoutForScreen on the concrete registry.
+    // Assignment churn. Fires when a (screenId, virtualDesktop)
+    // assignment changes; activity context is intentionally omitted
+    // from the signal — consumers that care about activity-keyed
+    // assignments re-query via @c layoutForScreen with their current
+    // activity. Concrete impl emits only on actual change (matches the
+    // project "emit only when value changes" rule).
     void layoutAssigned(const QString& screenId, int virtualDesktop, Layout* layout);
 };
 
