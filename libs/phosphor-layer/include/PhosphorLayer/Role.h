@@ -69,7 +69,7 @@ Q_ENUM_NS(KeyboardInteractivity)
  * The fluent `withX()` modifiers return copies for composition:
  * @code
  *     inline const Role PzOverlay =
- *         PhosphorShellPatterns::Hud.withScopePrefix(
+ *         PhosphorShellPatterns::Hud().withScopePrefix(
  *             QStringLiteral("pz-overlay"));
  * @endcode
  */
@@ -91,15 +91,16 @@ struct PHOSPHORLAYER_EXPORT Role
 
     /// @brief True if this Role is a semantically valid wlr-layer-shell configuration.
     /// False for combinations the protocol rejects (e.g. Overlay layer with a
-    /// positive exclusive zone — Overlay ignores zones so a non-negative value
-    /// is silently wasted) or that no compositor accepts (empty scopePrefix).
-    /// The factory calls this and refuses to create malformed surfaces.
+    /// positive exclusive zone, where Overlay ignores zones so a non-negative
+    /// value is silently wasted) or that no compositor accepts (empty
+    /// scopePrefix). The factory calls this and refuses to create malformed
+    /// surfaces.
     [[nodiscard]] bool isValid() const;
 
     friend bool operator==(const Role& a, const Role& b) = default;
 };
 
-// The legacy @ref Roles namespace was removed in phase 1 of the surface
+// The legacy `Roles` namespace was removed in phase 1 of the surface
 // taxonomy refactor, and the axis-2 Patterns vocabulary was lifted into
 // its own sibling library `phosphor-shell-patterns` in phase 3. New
 // consumers should depend on PhosphorShellPatterns and use

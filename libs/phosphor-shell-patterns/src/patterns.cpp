@@ -13,25 +13,41 @@ using PhosphorLayer::KeyboardInteractivity;
 using PhosphorLayer::Layer;
 using PhosphorLayer::Role;
 
-namespace {
+// Each preset is exposed via a function-local static (Meyers singleton).
+// Construction is deferred to first call, thread-safe by §6.7.4
+// "Initialization of block-scope static variables", and dodges the static
+// initialization order fiasco entirely. Consumers can store derived Roles
+// (built via `withScopePrefix(...)`, `withMargins(...)`, etc.) in their
+// own `inline const` globals without depending on dynamic-init ordering
+// across translation units or shared libraries.
 
-const Role kWallpaper{Layer::Background,           AnchorAll,  0,
-                      KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-background")};
+const Role& Wallpaper()
+{
+    static const Role r{Layer::Background,           AnchorAll,  0,
+                        KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-background")};
+    return r;
+}
 
-const Role kHud{
-    Layer::Overlay, AnchorAll, -1, KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-fullscreen")};
+const Role& Hud()
+{
+    static const Role r{
+        Layer::Overlay, AnchorAll, -1, KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-fullscreen")};
+    return r;
+}
 
-const Role kModal{Layer::Top, AnchorNone, -1, KeyboardInteractivity::Exclusive, QMargins(), QStringLiteral("pl-modal")};
+const Role& Modal()
+{
+    static const Role r{
+        Layer::Top, AnchorNone, -1, KeyboardInteractivity::Exclusive, QMargins(), QStringLiteral("pl-modal")};
+    return r;
+}
 
-const Role kFloating{
-    Layer::Overlay, AnchorNone, -1, KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-floating")};
-
-} // namespace
-
-const Role& Wallpaper = kWallpaper;
-const Role& Hud = kHud;
-const Role& Modal = kModal;
-const Role& Floating = kFloating;
+const Role& Floating()
+{
+    static const Role r{
+        Layer::Overlay, AnchorNone, -1, KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-floating")};
+    return r;
+}
 
 Role Panel(Edge edge)
 {

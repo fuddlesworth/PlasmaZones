@@ -11,18 +11,18 @@
 ## Responsibility
 
 [`phosphor-wayland`](../phosphor-wayland/README.md) owns the low-level
-`zwlr_layer_shell_v1` plumbing — the QPA plugin and the raw
+`zwlr_layer_shell_v1` plumbing: the QPA plugin and the raw
 `LayerSurface`. `phosphor-layer` sits one level up. It's the **policy
 layer** that says "we currently have these overlay surfaces, they belong
 to these screens, their per-surface animators look like this, and each
 has one of these well-known roles."
 
 - **Role primitive** (`Role`): a value struct bundling the
-  wlr-layer-shell parameters that are immutable after `show()` — layer,
+  wlr-layer-shell parameters that are immutable after `show()`: layer,
   anchors, keyboard interactivity, exclusive zone, default margins,
   scope prefix. Pure protocol vocabulary, no UI-pattern semantics. The
-  named UI patterns (`Wallpaper`, `Hud`, `Modal`, `Floating`, `Panel`,
-  `Toast`) live in the sibling
+  named UI patterns (`Wallpaper()`, `Hud()`, `Modal()`, `Floating()`,
+  `Panel(Edge)`, `Toast(Corner)`) live in the sibling
   [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md)
   library so this lib stays domain-agnostic.
 - **Surface** (`Surface`): one layer-shell window. Carries its config,
@@ -86,15 +86,22 @@ auto screens   = std::make_unique<DefaultScreenProvider>();
 SurfaceFactory factory(transport.get(), engineProvider, screens.get(), animator);
 
 SurfaceConfig cfg;
-cfg.role       = PhosphorShellPatterns::Hud.withScopePrefix(
-                     QStringLiteral("zone-outline"));
+// Role is a plain value type. Construct one directly or use a recipe from
+// the sibling phosphor-shell-patterns library if you prefer named UI
+// patterns (Wallpaper, Hud, Modal, Floating, Panel, Toast).
+cfg.role       = Role{Layer::Overlay,
+                      AnchorAll,
+                      -1,
+                      KeyboardInteractivity::None,
+                      QMargins(),
+                      QStringLiteral("zone-outline")};
 cfg.screenId   = "output-1";
 cfg.qmlSource  = QUrl(QStringLiteral("qrc:/overlays/ZoneOutline.qml"));
 cfg.contextProperties.insert(QStringLiteral("zones"), QVariant::fromValue(zoneList));
 
 Surface *s = factory.create(cfg, /*parent*/ this);
 s->show();
-// … later
+// Later:
 s->hide();
 ```
 
@@ -120,10 +127,10 @@ s->hide();
 ## Dependencies
 
 - `QtCore`, `QtGui`, `QtQml`
-- [`phosphor-wayland`](../phosphor-wayland/README.md) — default transport binds to its `LayerSurface`
+- [`phosphor-wayland`](../phosphor-wayland/README.md). Default transport binds to its `LayerSurface`.
 
 ## See also
 
-- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md) — UI-pattern recipes (Wallpaper, Hud, Modal, Floating, Panel, Toast) built on this library's `Role` primitive.
-- [`phosphor-surfaces`](../phosphor-surfaces/README.md) — higher-level surface manager built on these primitives, adds Vulkan + pipeline-cache wiring.
-- [`phosphor-wayland`](../phosphor-wayland/README.md) — the QPA plugin and raw layer-shell binding the default transport talks to.
+- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md). UI-pattern recipes (Wallpaper, Hud, Modal, Floating, Panel, Toast) built on this library's `Role` primitive.
+- [`phosphor-surfaces`](../phosphor-surfaces/README.md). Higher-level surface manager built on these primitives, adds Vulkan and pipeline-cache wiring.
+- [`phosphor-wayland`](../phosphor-wayland/README.md). The QPA plugin and raw layer-shell binding the default transport talks to.

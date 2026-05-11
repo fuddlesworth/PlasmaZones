@@ -245,7 +245,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     }
 
     if (liveOverlayCount == 0) {
-        qCWarning(lcOverlay) << "initializeOverlay: no overlay windows created — "
+        qCWarning(lcOverlay) << "initializeOverlay: no overlay windows created: "
                                 "phosphorwayland transport unavailable "
                                 "(overlays disabled on this screen)";
         m_visible = false;
@@ -372,7 +372,7 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
             const QRect targetGeom = it.value().overlayGeometry;
             if (!targetGeom.isValid()) {
                 qCWarning(lcOverlay) << "updateMousePosition: no overlay geometry for screen" << it.key()
-                                     << "— skipping mouse position update";
+                                     << ": skipping mouse position update";
                 continue;
             }
             const QPointF local(cursorX - targetGeom.x(), cursorY - targetGeom.y());
@@ -685,7 +685,7 @@ void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) 
         }
         if (!targetSet.contains(it.key())) {
             qCWarning(lcOverlay) << "validateScreenStateInvariant: live overlay" << it.key()
-                                 << "is not in the current target set — orphan";
+                                 << "is not in the current target set: orphan";
             Q_ASSERT_X(false, "OverlayService", "orphaned overlay entry");
         }
     }

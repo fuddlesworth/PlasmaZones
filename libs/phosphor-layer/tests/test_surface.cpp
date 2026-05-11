@@ -62,7 +62,7 @@ private Q_SLOTS:
         QVERIFY(surface->window() != nullptr);
         QVERIFY(surface->transport() != nullptr);
         QCOMPARE(t.m_attachCount, 1);
-        QCOMPARE(t.m_lastArgs.layer, Layer::Top); // CenteredModal
+        QCOMPARE(t.m_lastArgs.layer, Layer::Top); // Modal fixture
         QCOMPARE(t.m_lastArgs.keyboard, KeyboardInteractivity::Exclusive);
 
         // Expect: Constructed → Warming → Hidden → Shown
@@ -212,7 +212,11 @@ private Q_SLOTS:
         QCOMPARE(t.m_lastArgs.margins, QMargins(5, 10, 15, 20));
         QCOMPARE(t.m_lastArgs.exclusiveZone, 42);
         QCOMPARE(t.m_lastArgs.screen, s.primary());
-        QCOMPARE(t.m_lastArgs.scope, hud.scopePrefix);
+        // Assert against the literal scope prefix the Hud fixture ships
+        // (not against `hud.scopePrefix`) so a regression where the
+        // factory constructs its own empty/derived scope would be caught
+        // rather than silently passing through.
+        QCOMPARE(t.m_lastArgs.scope, QStringLiteral("test-hud"));
     }
 
     void engineProviderReleaseOrderingDefersAfterWindowDelete()

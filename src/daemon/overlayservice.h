@@ -268,11 +268,11 @@ public:
     void showDisabledOsd(const QString& reason, const QString& screenId = QString());
 
     /**
-     * @brief Pre-create the unified NotificationOverlay window for all connected
+     * @brief Pre-create the per-screen passive overlay shell for all connected
      * screens. Drives both the layout-OSD and navigation-OSD show paths since
      * they share a single per-screen surface (Phase-2 unification).
      *
-     * First-time QML compilation of NotificationOverlay.qml takes ~100-300ms
+     * First-time QML compilation of PassiveOverlayShell.qml takes ~100-300ms
      * (component loading, scene graph creation, Wayland layer-shell
      * registration). Call this early (deferred from daemon start) so the
      * first layout switch OSD or keyboard navigation action appears
@@ -366,7 +366,7 @@ public:
 public Q_SLOTS:
     // hideLayoutOsd / hideNavigationOsd intentionally absent. Phase-5
     // dismiss path: QML auto-dismiss timer → loaded content's
-    // dismissRequested() → host NotificationOverlay re-emits → wired by
+    // dismissRequested() → host PassiveOverlayShell re-emits → wired by
     // createWarmedOsdSurface to Surface::hide() → SurfaceAnimator::beginHide
     // → PhosphorLayer::Surface flips Qt::WindowTransparentForInput on the
     // still-mapped QWindow. No C++ slot runs on dismiss — destroying the
@@ -572,8 +572,9 @@ private:
     QRectF m_selectedZoneRelGeo;
 
     // Layout-OSD and Navigation-OSD content share a single per-screen
-    // PerScreenOverlayState::notificationWindow (NotificationOverlay.qml)
-    // post-Phase-2 unification — no separate per-mode window pointers.
+    // PerScreenOverlayState::passiveShellWindow plus per-slot QQuickItems
+    // (PassiveOverlayShell.qml) post-Phase-2 unification. No separate
+    // per-mode window pointers.
 
     // Shader preview overlay (editor dialog)
     QPointer<PhosphorLayer::Surface> m_shaderPreviewSurface;
@@ -660,9 +661,9 @@ private:
     /// `this`-receiver-context, and we drop the entry from the slot.
     QHash<PhosphorLayer::Surface*, QMetaObject::Connection> m_primingDestroyedConnections;
     // "Notifications have been pre-warmed" flag. With LayoutOsd and
-    // NavigationOsd unified onto a single per-screen NotificationOverlay
-    // surface, this single flag gates whether the screenAdded hot-plug
-    // lambda auto-creates the per-new-screen notification window.
+    // NavigationOsd unified onto a single per-screen passive overlay
+    // shell, this single flag gates whether the screenAdded hot-plug
+    // lambda auto-creates the shell for a newly-attached screen.
     // Set by warmUpNotifications().
     bool m_notificationsWarmed = false;
 
@@ -674,10 +675,10 @@ private:
     // entry in the connection's slot table for the rest of the session).
     bool m_prepareForSleepConnected = false;
 
-    // Track screens where notification-window creation has failed, so the
-    // spam-guard in createNotificationWindow only logs once per screen
-    // regardless of which OSD path (layout-osd or navigation-osd) tried to
-    // bring the surface up. Cleared in destroyAllWindowsForPhysicalScreen
+    // Track screens where passive-overlay-shell creation has failed, so
+    // the spam-guard in ensurePassiveShellFor only logs once per screen
+    // regardless of which OSD path (layout-osd or navigation-osd) tried
+    // to bring the surface up. Cleared in destroyAllWindowsForPhysicalScreen
     // when a hot-plug cycle reattaches the same physical monitor.
     QSet<QString> m_notificationCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
@@ -694,14 +695,6 @@ private:
     /// QQuickItem owned by it). Called from
     /// `destroyAllWindowsForPhysicalScreen` on screen hot-plug cleanup.
     void destroyPassiveShell(const QString& screenId);
-
-    /// Lazily create the per-screen NotificationOverlay window if missing,
-    /// then return a pointer to its PerScreenOverlayState (or nullptr if
-    /// creation failed — surface refused, layer-shell unavailable, etc.).
-    /// Single source of truth for the "ensure-notification-window" pattern
-    /// shared between prepareLayoutOsdWindow, showNavigationOsd, and the
-    /// screenAdded hot-plug lambda.
-    PerScreenOverlayState* ensureNotificationWindowFor(const QString& effectiveId, QScreen* physScreen);
 
     /// Lazily create the per-screen PassiveOverlayShell + return the
     /// state entry (or nullptr if creation failed). The shell is the
@@ -914,7 +907,7 @@ private:
     /**
      * @brief Create a warmed OSD-style surface and wire its dismiss signal.
      *
-     * Common pattern for createNotificationWindow (and the LayoutPicker
+     * Common pattern for ensurePassiveShellFor (and the LayoutPicker
      * surface in snapassist.cpp): (1) caller builds a per-instance
      * scope-prefixed Role via @ref PzRoles::makePerInstanceRole,
      * (2) this helper calls createLayerSurface with keepMappedOnHide=true,

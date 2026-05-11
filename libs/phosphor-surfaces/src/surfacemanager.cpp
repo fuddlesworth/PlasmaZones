@@ -5,9 +5,10 @@
 
 #include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/Surface.h>
-#include <PhosphorShellPatterns/Patterns.h>
 #include <PhosphorLayer/SurfaceConfig.h>
 #include <PhosphorLayer/SurfaceFactory.h>
+
+#include <PhosphorShellPatterns/Patterns.h>
 
 #include <QCoreApplication>
 #include <QDir>
@@ -224,7 +225,7 @@ void SurfaceManager::createKeepAlive()
     }
 
     PhosphorLayer::SurfaceConfig cfg;
-    cfg.role = PhosphorShellPatterns::Wallpaper.withScopePrefix(QStringLiteral("phosphor-surfaces-keepalive"));
+    cfg.role = PhosphorShellPatterns::Wallpaper().withScopePrefix(QStringLiteral("phosphor-surfaces-keepalive"));
     cfg.contentItem = std::make_unique<QQuickItem>();
     cfg.sharedEngine = m_impl->engine.get();
     cfg.debugName = QStringLiteral("keepalive");

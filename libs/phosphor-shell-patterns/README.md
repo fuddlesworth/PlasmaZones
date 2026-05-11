@@ -13,7 +13,7 @@
 A `Role` in [`phosphor-layer`](../phosphor-layer/README.md) is a bundle
 of wlr-layer-shell parameters: `Layer`, `Anchors`, exclusive zone,
 keyboard interactivity, scope prefix. That's intentionally
-domain-agnostic — every Qt-based Wayland shell needs those.
+domain-agnostic. Every Qt-based Wayland shell needs those.
 
 `phosphor-shell-patterns` sits one level up. It names the *UI patterns*
 a shell wants ("a wallpaper covers the background; a panel reserves an
@@ -27,20 +27,27 @@ today does, Phosphor-as-standalone tomorrow will.
 
 ## Vocabulary
 
-| Pattern | Returns | Purpose |
-|---------|---------|---------|
-| `Wallpaper`             | `const Role&` | Background layer, all anchors, exclusive zone 0, kbd None |
-| `Hud`                   | `const Role&` | Overlay layer, all anchors, click-through, no exclusive zone |
-| `Modal`                 | `const Role&` | Top layer, no anchors (compositor centres), exclusive kbd grab |
-| `Floating`              | `const Role&` | Overlay layer, no anchors, no kbd — consumer positions via margins |
+| Pattern | Signature | Purpose |
+|---------|-----------|---------|
+| `Wallpaper()`           | `const Role&` | Background layer, all anchors, exclusive zone 0, kbd None |
+| `Hud()`                 | `const Role&` | Overlay layer, all anchors, click-through, no exclusive zone |
+| `Modal()`               | `const Role&` | Top layer, no anchors (compositor centres), exclusive kbd grab |
+| `Floating()`            | `const Role&` | Overlay layer, no anchors, no kbd. Consumer positions via margins |
 | `Panel(Edge)`           | `Role`        | Edge-anchored, reserves space via exclusive zone, kbd OnDemand |
 | `Toast(Corner)`         | `Role`        | Corner-anchored, click-through, no exclusive zone |
 
 `Edge` is `Top | Bottom | Left | Right`; `Corner` is `TopLeft |
-TopRight | BottomLeft | BottomRight`. The four primitive presets are
-`extern const Role&` (single allocation, library-load time); the
-parameterised `Panel` / `Toast` functions return a fresh `Role` per
-call so the scope prefix encodes the edge/corner variant.
+TopRight | BottomLeft | BottomRight`.
+
+The four fixed presets are exposed as accessor functions that return a
+reference to a function-local static (Meyers singleton). First call
+constructs the Role lazily; subsequent calls return the same object.
+This makes the presets safe to use from any consumer's static
+initializer regardless of dynamic-init order across translation units
+or shared libraries.
+
+The parameterised `Panel` and `Toast` functions return a fresh `Role`
+per call so the scope prefix encodes the edge/corner variant.
 
 ## Typical use
 
@@ -50,12 +57,12 @@ call so the scope prefix encodes the edge/corner variant.
 
 namespace PSP = PhosphorShellPatterns;
 
-// Compose an app-specific role from a pattern + a scope prefix that
-// identifies the consumer:
+// Compose an app-specific role from a pattern plus a scope prefix
+// that identifies the consumer:
 inline const PhosphorLayer::Role MyAppOverlay =
-    PSP::Hud.withScopePrefix(QStringLiteral("myapp-overlay"));
+    PSP::Hud().withScopePrefix(QStringLiteral("myapp-overlay"));
 
-// Panels / toasts take a variation parameter:
+// Panels and toasts take a variation parameter:
 inline const PhosphorLayer::Role MyAppLeftRail =
     PSP::Panel(PSP::Edge::Left).withScopePrefix(QStringLiteral("myapp-left-rail"));
 
@@ -69,8 +76,9 @@ inline const PhosphorLayer::Role MyAppToast =
   concerns surface taxonomy fuses today: protocol (axis 1, on `Role`),
   UI pattern (axis 2, here), app role (axis 3, consumer-side). A
   consumer that wants to override one axis without disturbing the
-  others can target just that one — e.g. swap `Hud` for `Wallpaper` on
-  a particular consumer role without retyping every other field.
+  others can target just that one. For example, swap `Hud` for
+  `Wallpaper` on a particular consumer role without retyping every
+  other field.
 - **Patterns are open vocabulary.** Adding a new pattern (e.g. `Card`
   for in-place transient surfaces) costs one entry here and zero
   changes to phosphor-layer. The lib does not aspire to be exhaustive;
@@ -87,12 +95,12 @@ inline const PhosphorLayer::Role MyAppToast =
 ## Dependencies
 
 - `QtCore`, `QtGui` (for `QMargins`)
-- [`phosphor-layer`](../phosphor-layer/README.md) — the `Role` struct
-  Patterns produces
+- [`phosphor-layer`](../phosphor-layer/README.md). The `Role` struct
+  Patterns produces.
 
 ## See also
 
-- [`phosphor-layer`](../phosphor-layer/README.md) — wlr-layer-shell
+- [`phosphor-layer`](../phosphor-layer/README.md). wlr-layer-shell
   primitives (axis 1) this library composes.
-- [`docs/surface-taxonomy-refactor-plan.md`](../../docs/surface-taxonomy-refactor-plan.md)
-  — the design split that produced this library.
+- [`docs/surface-taxonomy-refactor-plan.md`](../../docs/surface-taxonomy-refactor-plan.md).
+  The design split that produced this library.

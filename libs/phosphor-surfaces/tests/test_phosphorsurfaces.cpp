@@ -82,7 +82,7 @@ private Q_SLOTS:
         PhosphorSurfaces::SurfaceManager manager(std::move(config));
 
         PhosphorLayer::SurfaceConfig surfCfg;
-        surfCfg.role = PhosphorShellPatterns::Hud;
+        surfCfg.role = PhosphorShellPatterns::Hud();
         surfCfg.contentUrl = QUrl(QStringLiteral("qrc:/nonexistent.qml"));
 
         auto* surface = manager.createSurface(std::move(surfCfg));
@@ -96,7 +96,7 @@ private Q_SLOTS:
 
         QObject customParent;
         PhosphorLayer::SurfaceConfig surfCfg;
-        surfCfg.role = PhosphorShellPatterns::Hud;
+        surfCfg.role = PhosphorShellPatterns::Hud();
         surfCfg.contentUrl = QUrl(QStringLiteral("qrc:/nonexistent.qml"));
 
         auto* surface = manager.createSurface(std::move(surfCfg), &customParent);

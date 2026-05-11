@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorShellPatterns — UI-pattern recipes built on PhosphorLayer::Role.
+# PhosphorShellPatterns: UI-pattern recipes built on PhosphorLayer::Role.
 #
 # Axis-2 vocabulary between protocol primitives (PhosphorLayer) and
 # consumer-side application roles (e.g. PzRoles in the PlasmaZones

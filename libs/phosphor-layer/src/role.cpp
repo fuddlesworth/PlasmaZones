@@ -58,12 +58,12 @@ bool Role::isValid() const
     if (scopePrefix.isEmpty()) {
         return false;
     }
-    // Overlay sits above everything and ignores other surfaces' zones —
-    // specifying a non-negative exclusive zone is a consumer mistake.
+    // Overlay sits above everything and ignores other surfaces' zones,
+    // so specifying a non-negative exclusive zone is a consumer mistake.
     if (layer == Layer::Overlay && exclusiveZone >= 0) {
         return false;
     }
-    // Margins are meaningful only when at least one edge is anchored —
+    // Margins are meaningful only when at least one edge is anchored.
     // wlr-layer-shell ignores them on a fully unanchored surface. A role
     // that ships default margins without any anchor is a silent consumer
     // mistake: the compositor discards them and the consumer is left

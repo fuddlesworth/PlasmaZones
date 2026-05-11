@@ -5,7 +5,7 @@ import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-// Side panels animation page — the `panel.*` resolver subtree (the
+// Side panels animation page: the `panel.*` resolver subtree (the
 // resolver path keeps the historical name). Covers in-app side
 // surfaces that slide in from an edge (settings nav rail, editor
 // property panel). Slide is size/translate motion; fade is opacity.

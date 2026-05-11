@@ -17,29 +17,29 @@ class TestPatterns : public QObject
 private Q_SLOTS:
     void hudIsFullscreenClickThroughOverlay()
     {
-        QCOMPARE(PSP::Hud.layer, Layer::Overlay);
-        QCOMPARE(PSP::Hud.anchors, AnchorAll);
-        QCOMPARE(PSP::Hud.keyboard, KeyboardInteractivity::None);
-        QCOMPARE(PSP::Hud.exclusiveZone, -1);
+        QCOMPARE(PSP::Hud().layer, Layer::Overlay);
+        QCOMPARE(PSP::Hud().anchors, AnchorAll);
+        QCOMPARE(PSP::Hud().keyboard, KeyboardInteractivity::None);
+        QCOMPARE(PSP::Hud().exclusiveZone, -1);
     }
 
     void wallpaperIsBackgroundLayerSpaceReserving()
     {
-        QCOMPARE(PSP::Wallpaper.layer, Layer::Background);
-        QCOMPARE(PSP::Wallpaper.anchors, AnchorAll);
-        QCOMPARE(PSP::Wallpaper.exclusiveZone, 0);
+        QCOMPARE(PSP::Wallpaper().layer, Layer::Background);
+        QCOMPARE(PSP::Wallpaper().anchors, AnchorAll);
+        QCOMPARE(PSP::Wallpaper().exclusiveZone, 0);
     }
 
     void modalGrabsExclusiveKeyboard()
     {
-        QCOMPARE(PSP::Modal.anchors, AnchorNone);
-        QCOMPARE(PSP::Modal.keyboard, KeyboardInteractivity::Exclusive);
+        QCOMPARE(PSP::Modal().anchors, AnchorNone);
+        QCOMPARE(PSP::Modal().keyboard, KeyboardInteractivity::Exclusive);
     }
 
     void floatingHasNoAnchors()
     {
-        QCOMPARE(PSP::Floating.anchors, AnchorNone);
-        QCOMPARE(PSP::Floating.layer, Layer::Overlay);
+        QCOMPARE(PSP::Floating().anchors, AnchorNone);
+        QCOMPARE(PSP::Floating().layer, Layer::Overlay);
     }
 
     void panelReservesSpaceWithEdgeAnchors()
@@ -75,21 +75,21 @@ private Q_SLOTS:
 
     void scopePrefixesAreUnique()
     {
-        // Each Pattern / variation has a distinct scope prefix so the
+        // Each Pattern and variation has a distinct scope prefix so the
         // compositor can namespace surfaces independently.
         const QStringList prefixes{
-            PSP::Hud.scopePrefix,
+            PSP::Hud().scopePrefix,
             PSP::Panel(PSP::Edge::Top).scopePrefix,
             PSP::Panel(PSP::Edge::Bottom).scopePrefix,
             PSP::Panel(PSP::Edge::Left).scopePrefix,
             PSP::Panel(PSP::Edge::Right).scopePrefix,
-            PSP::Modal.scopePrefix,
+            PSP::Modal().scopePrefix,
             PSP::Toast(PSP::Corner::TopLeft).scopePrefix,
             PSP::Toast(PSP::Corner::TopRight).scopePrefix,
             PSP::Toast(PSP::Corner::BottomLeft).scopePrefix,
             PSP::Toast(PSP::Corner::BottomRight).scopePrefix,
-            PSP::Wallpaper.scopePrefix,
-            PSP::Floating.scopePrefix,
+            PSP::Wallpaper().scopePrefix,
+            PSP::Floating().scopePrefix,
         };
         for (const auto& p : prefixes) {
             QVERIFY2(!p.isEmpty(), qPrintable(QStringLiteral("Empty prefix: %1").arg(p)));
@@ -100,10 +100,10 @@ private Q_SLOTS:
 
     void allPresetsPassRoleIsValid()
     {
-        QVERIFY(PSP::Hud.isValid());
-        QVERIFY(PSP::Modal.isValid());
-        QVERIFY(PSP::Wallpaper.isValid());
-        QVERIFY(PSP::Floating.isValid());
+        QVERIFY(PSP::Hud().isValid());
+        QVERIFY(PSP::Modal().isValid());
+        QVERIFY(PSP::Wallpaper().isValid());
+        QVERIFY(PSP::Floating().isValid());
         QVERIFY(PSP::Panel(PSP::Edge::Top).isValid());
         QVERIFY(PSP::Panel(PSP::Edge::Bottom).isValid());
         QVERIFY(PSP::Panel(PSP::Edge::Left).isValid());
@@ -112,6 +112,17 @@ private Q_SLOTS:
         QVERIFY(PSP::Toast(PSP::Corner::TopRight).isValid());
         QVERIFY(PSP::Toast(PSP::Corner::BottomLeft).isValid());
         QVERIFY(PSP::Toast(PSP::Corner::BottomRight).isValid());
+    }
+
+    void presetsAreSingletonReferences()
+    {
+        // The four named preset accessors return references to function-local
+        // statics. Repeated calls must alias the same object so consumers can
+        // capture by reference and compare addresses for identity.
+        QCOMPARE(&PSP::Hud(), &PSP::Hud());
+        QCOMPARE(&PSP::Modal(), &PSP::Modal());
+        QCOMPARE(&PSP::Wallpaper(), &PSP::Wallpaper());
+        QCOMPARE(&PSP::Floating(), &PSP::Floating());
     }
 };
 

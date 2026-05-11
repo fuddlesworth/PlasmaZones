@@ -5,7 +5,7 @@ import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-// OSDs animation page — the `osd.*` resolver subtree (both LayoutOsd
+// OSDs animation page: the `osd.*` resolver subtree (both LayoutOsd
 // and NavigationOsd modes). The "All OSDs" parent is a parent-node
 // card whose override cascades to `osd.show` and `osd.hide` via
 // ShaderProfileTree::resolve's walk-up. Transient overlays (zone
