@@ -89,6 +89,27 @@ public:
     /// removed entirely should follow up with @ref removeState.
     void destroyShell(const QString& screenId);
 
+    /// Reconcile the shell's mapped state + pointer-input region with
+    /// the consumer's view of what's live on this screen.
+    ///
+    /// @p anyVisible — true when at least one slot wants the surface
+    /// mapped (driven by the consumer's slot-visibility check). Brings
+    /// the surface up on the first transition from never-shown → live;
+    /// subsequent visibility transitions toggle the input flag directly
+    /// without re-entering Surface::show()/hide() (the keep-mapped hide
+    /// path cancels per-surface animator tracking, which would wipe
+    /// in-flight beginShow's on OTHER slots on the same shell).
+    ///
+    /// @p anyInputGrabbing — true when at least one modal slot
+    /// (consumer-defined; PZ today: snap-assist + layout picker) wants
+    /// pointer input. When false the shell's QQuickWindow is flagged
+    /// Qt::WindowTransparentForInput so background windows stay
+    /// interactable beneath non-modal slots (OSDs, main overlay, zone
+    /// selector during drag).
+    ///
+    /// No-op when the shell surface or window is not yet up.
+    void syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing);
+
     /// Read-write accessor. Returns the existing ShellState for
     /// @p screenId, default-constructing one in place if absent so
     /// callers can populate fields without an explicit insert.

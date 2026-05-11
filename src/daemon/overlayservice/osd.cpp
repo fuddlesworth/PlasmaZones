@@ -635,11 +635,35 @@ void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
 
 void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
 {
-    auto it = m_screenStates.find(effectiveId);
-    if (it == m_screenStates.end() || !it->shell.shellSurface) {
+    // Compute PZ-specific visibility predicates from the parallel slot
+    // pointers on PerScreenOverlayState, then hand the resulting booleans
+    // to the library. The lib decides the mapping + input-region toggle;
+    // PZ decides what counts as "live" and "input-grabbing".
+    //
+    // Input-region rationale (Qt::WindowTransparentForInput): pre-shell-
+    // migration each overlay had its own wl_surface sized to its visible
+    // content, so clicks outside the toast / card naturally fell through
+    // to underlying windows. Post-shell every kbd-None overlay shares the
+    // screen-sized shell surface — there's no per-slot input region the
+    // daemon can hand to the compositor. The pragmatic split: only MODAL
+    // slots (snap-assist, layout picker) grab input. OSD / main overlay /
+    // zone-selector are purely visual:
+    //   - OSDs auto-dismiss on a timer; a click-to-dismiss MouseArea
+    //     inside the OSD content is the accepted casualty — the
+    //     alternative is the daemon eating every click on the screen
+    //     for the OSD's full lifetime, which the user reported as worse
+    //     than losing click-dismiss.
+    //   - Main overlay during drag is driven by KWin's drag stream
+    //     (cursor pushes via OverlayService::updateMousePosition);
+    //     it never needs Qt-level input on its own.
+    //   - Zone selector during drag is the same — D-Bus
+    //     updateSelectorPosition pushes cursor coords; the zone is
+    //     committed via drag-end-on-hovered-zone, not a Qt click.
+    auto it = m_screenStates.constFind(effectiveId);
+    if (it == m_screenStates.constEnd()) {
         return;
     }
-    auto& s = *it;
+    const auto& s = *it;
     auto isVisible = [](QQuickItem* item) {
         return item != nullptr && item->isVisible();
     };
@@ -659,82 +683,9 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     const bool anyVisible = isVisible(s.passiveShellOsdSlot) || isVisible(s.passiveShellSnapAssistSlot)
         || isVisible(s.passiveShellLayoutPickerSlot) || isVisible(s.passiveShellZoneSelectorSlot)
         || isMainOverlayLive(s.passiveShellMainOverlaySlot);
-    // Input region (Qt::WindowTransparentForInput) is governed separately
-    // from the surface-show decision. Pre-shell-migration each overlay
-    // had its own wl_surface sized to its visible content, so clicks
-    // outside the toast / card naturally fell through to underlying
-    // windows. Post-shell every kbd-None overlay shares the screen-sized
-    // shell surface — there's no per-slot input region the daemon can
-    // hand to the compositor. The pragmatic split: only MODAL slots
-    // (snap-assist, layout picker) grab input. OSD / main overlay /
-    // zone-selector are purely visual:
-    //   - OSDs auto-dismiss on a timer; a click-to-dismiss MouseArea
-    //     inside LayoutOsdContent / NavigationOsdContent is the
-    //     accepted casualty — the alternative is the daemon eating
-    //     every click on the screen for the OSD's full lifetime,
-    //     which the user reported as worse than losing click-dismiss.
-    //   - Main overlay during drag is driven by KWin's drag stream
-    //     (cursor pushes via `OverlayService::updateMousePosition`);
-    //     it never needs Qt-level input on its own.
-    //   - Zone selector during drag is the same — D-Bus
-    //     `updateSelectorPosition` pushes cursor coords; the zone is
-    //     committed via drag-end-on-hovered-zone, not a Qt click.
-    //     A lock-overlay `cursorShape: Qt.ForbiddenCursor` hover hint
-    //     stops working under this rule, but it's a minor cosmetic
-    //     loss versus the global click-eating regression.
     const bool anyInputGrabbing = isVisible(s.passiveShellSnapAssistSlot) || isVisible(s.passiveShellLayoutPickerSlot);
-    // Bring the surface up on the first transition from never-shown →
-    // any-slot-live. Subsequent transitions toggle Qt::WindowTransparentForInput
-    // directly on the shell QQuickWindow rather than routing through
-    // Surface::show()/hide().
-    //
-    // The `keepMappedOnHide=true` Surface::hide() path looks tempting but
-    // has two cascading side effects we don't want during a click-through
-    // toggle:
-    //   1. It calls `animator().cancel(surface)` which wipes every
-    //      per-(surface, slot) tracking entry on the shell. The
-    //      unified-shell pattern hosts multiple slots animating
-    //      independently; cancelling the entire surface kills the
-    //      in-flight beginShow on slots OTHER than the one whose idle
-    //      state triggered the sync. Symptom: the inactive VS's main
-    //      overlay slot loses its show animation mid-flight, the slot
-    //      stays invisible, the ZoneShaderItem's QSGRenderNode never
-    //      receives paint events, prepare() never reaches its INIT
-    //      block, and the Vulkan shader pipeline never compiles —
-    //      shader stays dark forever on every VS after the first
-    //      activated one.
-    //   2. It calls `beginHide(surface, animatorTarget())` which animates
-    //      the shell ROOT's opacity to 0. That hides every child
-    //      regardless of slot.setVisible(true), compounding (1).
-    //
-    // The first show()/animator-attach is still required to map the
-    // wl_surface and warm the RHI; flipping the QPA flag from a never-
-    // mapped state is a no-op.
-    if (!s.shell.shellWindow) {
-        return;
-    }
-    // Bring the surface up on the first transition from never-shown →
-    // any-slot-visible. The first show() call goes through the Surface
-    // state machine (maps the wl_surface, warms the RHI, fires animator
-    // attach callbacks); subsequent input-region toggles flip
-    // Qt::WindowTransparentForInput directly without re-entering the
-    // Surface::show()/hide() path — that path's `animator().cancel(...)`
-    // would wipe per-slot tracking and `beginHide(animatorTarget())`
-    // would animate the shell root opacity, both of which we want to
-    // avoid for a pure click-through toggle.
-    if (anyVisible && !s.shell.shellSurface->isLogicallyShown()) {
-        s.shell.shellSurface->show();
-    }
-    // Drive the Qt input flag based purely on whether a modal slot is
-    // up. A non-modal slot (OSD / main overlay / zone selector) being
-    // visible keeps the surface mapped for rendering but leaves the
-    // shell click-through, so background windows stay interactable
-    // for the OSD's auto-dismiss lifetime instead of eating every
-    // click on every screen for several seconds.
-    const bool wantTransparent = !anyInputGrabbing;
-    if (s.shell.shellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
-        s.shell.shellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
-    }
+
+    m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing);
 }
 
 void OverlayService::syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surface* surface)

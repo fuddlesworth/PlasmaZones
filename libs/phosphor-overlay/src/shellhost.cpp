@@ -5,6 +5,8 @@
 
 #include <PhosphorLayer/Surface.h>
 
+#include <QQuickWindow>
+
 namespace PhosphorOverlay {
 
 ShellHost::ShellHost(QObject* parent)
@@ -86,6 +88,39 @@ void ShellHost::destroyShell(const QString& screenId)
     it->shellWindow = nullptr;
     it->physScreen = nullptr;
     it->slots.clear();
+}
+
+void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing)
+{
+    auto it = m_states.find(screenId);
+    if (it == m_states.end() || !it->shellSurface || !it->shellWindow) {
+        return;
+    }
+    auto& s = *it;
+
+    // Bring the surface up on the first transition from never-shown →
+    // any-slot-visible. The first show() call goes through the Surface
+    // state machine (maps the wl_surface, warms the RHI, fires animator
+    // attach callbacks); subsequent input-region toggles flip
+    // Qt::WindowTransparentForInput directly without re-entering the
+    // Surface::show()/hide() path — that path's `animator().cancel(...)`
+    // would wipe per-slot tracking and `beginHide(animatorTarget())`
+    // would animate the shell root opacity, both of which we want to
+    // avoid for a pure click-through toggle.
+    if (anyVisible && !s.shellSurface->isLogicallyShown()) {
+        s.shellSurface->show();
+    }
+
+    // Drive the Qt input flag based purely on whether a modal slot is
+    // up. A non-modal slot (OSD / main overlay / zone selector) being
+    // visible keeps the surface mapped for rendering but leaves the
+    // shell click-through, so background windows stay interactable
+    // for the non-modal slot's lifetime instead of eating every click
+    // on every screen for several seconds.
+    const bool wantTransparent = !anyInputGrabbing;
+    if (s.shellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
+        s.shellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
+    }
 }
 
 ShellState& ShellHost::stateFor(const QString& screenId)
