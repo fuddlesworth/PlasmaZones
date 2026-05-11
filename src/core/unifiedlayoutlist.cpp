@@ -14,7 +14,7 @@
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
@@ -195,7 +195,7 @@ QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManu
     return order;
 }
 
-QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* layoutManager,
+QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
                                               PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                               bool includeAutotile, const QStringList& customOrder,
                                               PhosphorLayout::ILayoutSource* autotileSource,
@@ -222,7 +222,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* lay
     return list;
 }
 
-QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* layoutManager,
+QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
                                               PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                               const QString& screenId, int virtualDesktop, const QString& activity,
                                               bool includeManual, bool includeAutotile, qreal screenAspectRatio,

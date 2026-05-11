@@ -85,6 +85,41 @@ public:
     virtual void setActiveLayout(Layout* layout) = 0;
     virtual void setActiveLayoutById(const QUuid& id) = 0;
 
+    // ─── Per-screen layout resolution (cascade-aware) ─────────────────────
+    //
+    // These queries resolve a layout for a (screen, desktop, activity)
+    // context by walking the assignment cascade and falling back to the
+    // global default. Overlay/geometry/animation consumers depend on this
+    // shape, so it lives on the interface — callers can target the
+    // contract without depending on the concrete @c LayoutRegistry.
+
+    /// Cascade-resolve the manual layout for @p screenId. Returns
+    /// @c defaultLayout() when no explicit assignment matches.
+    virtual Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
+                                    const QString& activity = QString()) const = 0;
+
+    /// Convenience: resolve a layout using the registry's current
+    /// (desktop, activity) context.
+    virtual Layout* resolveLayoutForScreen(const QString& screenId) const = 0;
+
+    /// Raw assignment id (manual-layout UUID or @c "autotile:<algorithmId>")
+    /// for @p screenId, with cascade + level-1 provider fallback.
+    virtual QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
+                                          const QString& activity = QString()) const = 0;
+
+    /// Effective global default layout (snap-only fallback).
+    virtual Layout* defaultLayout() const = 0;
+
+    // ─── Session context (current desktop / activity) ─────────────────────
+    //
+    // The registry holds session-context state because per-context
+    // assignment resolution needs it. Consumers that drive context-aware
+    // queries (overlay re-layout on desktop switch, autotile re-run on
+    // activity change) read it through the interface.
+
+    virtual int currentVirtualDesktop() const = 0;
+    virtual QString currentActivity() const = 0;
+
 Q_SIGNALS:
     // Catalog mutation. @c addLayout / @c duplicateLayout fire `layoutAdded`;
     // @c removeLayout / @c removeLayoutById fire `layoutRemoved`.

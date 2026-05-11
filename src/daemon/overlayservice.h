@@ -38,6 +38,7 @@ class PhosphorProfileRegistry;
 } // namespace PhosphorAnimation
 
 namespace PhosphorZones {
+class IZoneLayoutRegistry;
 class Zone;
 }
 
@@ -178,7 +179,7 @@ public:
     }
 
     void setSettings(ISettings* settings);
-    void setLayoutManager(PhosphorZones::LayoutRegistry* layoutManager);
+    void setLayoutManager(PhosphorZones::IZoneLayoutRegistry* layoutManager);
 
     /// Inject the daemon-owned tile-algorithm registry. Required when
     /// autotile entries should appear in @ref visibleLayoutCount /
@@ -413,7 +414,7 @@ private:
     // without waiting for a layout switch or daemon restart.
     void observeLayoutForLiveEdits(PhosphorZones::Layout* layout);
 
-    // Stop observing a layout (e.g. because PhosphorZones::LayoutRegistry just removed it).
+    // Stop observing a layout (e.g. because the layout registry just removed it).
     // Disconnects the per-layout layoutModified signal and erases the entry
     // from m_observedLayouts. Idempotent — calling for an unobserved layout
     // is a no-op.
@@ -540,7 +541,7 @@ private:
     QHash<QString, PerScreenOverlayState> m_screenStates;
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
-    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
+    PhosphorZones::IZoneLayoutRegistry* m_layoutManager = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service
     ShaderRegistry* m_shaderRegistry = nullptr; ///< Borrowed; outlives service
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives service (optional)

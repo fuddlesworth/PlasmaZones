@@ -9,7 +9,7 @@
 #include "../../core/logging.h"
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include "../../core/shaderregistry.h"
 #include "../../core/utils.h"
 #include <QQuickWindow>
@@ -142,12 +142,11 @@ void OverlayService::setSettings(ISettings* settings)
     }
 }
 
-void OverlayService::setLayoutManager(PhosphorZones::LayoutRegistry* layoutManager)
+void OverlayService::setLayoutManager(PhosphorZones::IZoneLayoutRegistry* layoutManager)
 {
     // Disconnect from old layout manager if exists. The four catalog /
     // assignment signals are declared on PhosphorZones::IZoneLayoutRegistry
-    // (LayoutRegistry's interface); connecting via the concrete pointer
-    // works because Qt's metaobject inherits the interface's signal table.
+    // and reach this slot via Qt's metaobject signal table.
     if (m_layoutManager) {
         disconnect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::activeLayoutChanged, this, nullptr);
         disconnect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAssigned, this, nullptr);
@@ -239,7 +238,7 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
     // PhosphorZones::Layout::layoutModified fires whenever any Q_PROPERTY changes (shaderId,
     // shaderParams, zones, appearance, etc.). Without this hook the editor's
     // changes only reach the live overlay after a layout switch or daemon
-    // restart, since PhosphorZones::LayoutRegistry::activeLayoutChanged only fires on switch.
+    // restart, since PhosphorZones::IZoneLayoutRegistry::activeLayoutChanged only fires on switch.
     //
     // Route through a coalescing shim: zone-drag in the editor can fire
     // layoutModified dozens of times per second; refreshVisibleWindows is

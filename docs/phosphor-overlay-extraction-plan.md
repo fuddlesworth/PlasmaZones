@@ -210,7 +210,7 @@ Each phase is its own PR. Build clean + tests green at every commit.
 - Verify blocker #3 (ShaderRegistry DI) is already resolved
   (confirmed: `daemon.h:520-525`).
 
-### Phase 0b - Interface widening for layout queries
+### Phase 0b - Interface widening for layout queries (DONE in this branch)
 
 `OverlayService` consumes these `LayoutRegistry`-concrete methods today:
 
@@ -240,6 +240,16 @@ These are all concrete-only on `LayoutRegistry` today. Port them up to
 4. Re-run the audit pattern from #436 to check no other call sites are
    accidentally relying on concrete-only `LayoutRegistry` methods via
    the OverlayService bridge.
+
+The audit picked up one transitive widening: the
+`PhosphorZones::LayoutUtils::buildUnifiedLayoutList` helper (consumed by
+`OverlayService::buildLayoutsList` / `visibleLayoutCount`) took a
+concrete `LayoutRegistry*` even though it only called interface methods
+(`layouts()`, `activeLayout()`). Widened to `IZoneLayoutRegistry*` so
+`OverlayService` can pass its (now-interface) pointer through. Other
+daemon callers (`zoneselectorcontroller`, `daemon`, `layoutadaptor`,
+`unifiedlayoutcontroller`) pass concrete `LayoutRegistry*` and upcast
+implicitly - no churn at call sites.
 
 Result: `OverlayService` only sees `IZoneLayoutRegistry`. The PZ
 daemon is now interface-driven for its biggest subsystem, matching the
@@ -381,7 +391,7 @@ to interfaces.
 | Phase | Status |
 |---|---|
 | 0a - Plan + signal lift | DONE (#436) |
-| 0b - Interface widening for layout queries | NEXT |
+| 0b - Interface widening for layout queries | DONE (#436) |
 | 1 - New library scaffolding | pending |
 | 2 - ShellHost extraction | pending |
 | 3 - Slot extraction | pending |
