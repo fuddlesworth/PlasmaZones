@@ -4,6 +4,8 @@
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorSurfaces/SurfaceManagerConfig.h>
 
+#include <PhosphorShellPatterns/Patterns.h>
+
 #include <QSignalSpy>
 #include <QTest>
 
@@ -80,7 +82,7 @@ private Q_SLOTS:
         PhosphorSurfaces::SurfaceManager manager(std::move(config));
 
         PhosphorLayer::SurfaceConfig surfCfg;
-        surfCfg.role = PhosphorLayer::Roles::FullscreenOverlay;
+        surfCfg.role = PhosphorShellPatterns::Hud();
         surfCfg.contentUrl = QUrl(QStringLiteral("qrc:/nonexistent.qml"));
 
         auto* surface = manager.createSurface(std::move(surfCfg));
@@ -94,7 +96,7 @@ private Q_SLOTS:
 
         QObject customParent;
         PhosphorLayer::SurfaceConfig surfCfg;
-        surfCfg.role = PhosphorLayer::Roles::FullscreenOverlay;
+        surfCfg.role = PhosphorShellPatterns::Hud();
         surfCfg.contentUrl = QUrl(QStringLiteral("qrc:/nonexistent.qml"));
 
         auto* surface = manager.createSurface(std::move(surfCfg), &customParent);

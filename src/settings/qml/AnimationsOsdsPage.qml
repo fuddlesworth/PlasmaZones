@@ -5,16 +5,16 @@ import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-// Notifications animation page — the `osd.*` resolver subtree (genuine
-// OSD surface, both LayoutOsd and NavigationOsd modes). The "All
-// Notifications" parent is a parent-node card whose override cascades
-// to `osd.show` and `osd.hide` via ShaderProfileTree::resolve's
-// walk-up. Popup-family events (zone selector, layout picker, snap
-// assist) live under `popup.*` and have their own dedicated page.
+// OSDs animation page: the `osd.*` resolver subtree (both LayoutOsd
+// and NavigationOsd modes). The "All OSDs" parent is a parent-node
+// card whose override cascades to `osd.show` and `osd.hide` via
+// ShaderProfileTree::resolve's walk-up. Transient overlays (zone
+// selector, layout picker, snap assist) live under `popup.*` and have
+// their own dedicated Overlays page.
 SettingsFlickable {
     contentHeight: col.implicitHeight
     clip: true
-    Accessible.name: i18n("Notification animation events")
+    Accessible.name: i18n("OSD animation events")
 
     ColumnLayout {
         id: col
@@ -25,7 +25,7 @@ SettingsFlickable {
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "osd"
-            eventLabel: i18n("All Notifications")
+            eventLabel: i18n("All OSDs")
             isParentNode: true
         }
 

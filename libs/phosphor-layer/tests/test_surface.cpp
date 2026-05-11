@@ -5,6 +5,7 @@
 
 #include "mocks/mockscreenprovider.h"
 #include "mocks/mocktransport.h"
+#include "mocks/testroles.h"
 
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -26,7 +27,7 @@ private:
     static SurfaceConfig buildConfig(QScreen* screen, QString debugName = QStringLiteral("test"))
     {
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Testing::makeModalRole();
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = screen;
         cfg.debugName = std::move(debugName);
@@ -61,7 +62,7 @@ private Q_SLOTS:
         QVERIFY(surface->window() != nullptr);
         QVERIFY(surface->transport() != nullptr);
         QCOMPARE(t.m_attachCount, 1);
-        QCOMPARE(t.m_lastArgs.layer, Layer::Top); // CenteredModal
+        QCOMPARE(t.m_lastArgs.layer, Layer::Top); // Modal fixture
         QCOMPARE(t.m_lastArgs.keyboard, KeyboardInteractivity::Exclusive);
 
         // Expect: Constructed → Warming → Hidden → Shown
@@ -146,7 +147,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Testing::makeModalRole();
         cfg.screen = s.primary();
         // Neither contentUrl nor contentItem set — SurfaceFactory should
         // refuse before we even reach the state machine.
@@ -160,7 +161,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Testing::makeModalRole();
         cfg.screen = s.primary();
         cfg.contentUrl = QUrl(QStringLiteral("qrc:/nonexistent.qml"));
         cfg.contentItem = std::make_unique<QQuickItem>();
@@ -198,8 +199,9 @@ private Q_SLOTS:
         MockTransport t;
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        const Role hud = Testing::makeHudRole();
         auto cfg = buildConfig(s.primary());
-        cfg.role = Roles::FullscreenOverlay;
+        cfg.role = hud;
         cfg.marginsOverride = QMargins(5, 10, 15, 20);
         cfg.exclusiveZoneOverride = 42;
         auto* surface = f.create(std::move(cfg));
@@ -210,7 +212,11 @@ private Q_SLOTS:
         QCOMPARE(t.m_lastArgs.margins, QMargins(5, 10, 15, 20));
         QCOMPARE(t.m_lastArgs.exclusiveZone, 42);
         QCOMPARE(t.m_lastArgs.screen, s.primary());
-        QCOMPARE(t.m_lastArgs.scope, Roles::FullscreenOverlay.scopePrefix);
+        // Assert against the literal scope prefix the Hud fixture ships
+        // (not against `hud.scopePrefix`) so a regression where the
+        // factory constructs its own empty/derived scope would be caught
+        // rather than silently passing through.
+        QCOMPARE(t.m_lastArgs.scope, QStringLiteral("test-hud"));
     }
 
     void engineProviderReleaseOrderingDefersAfterWindowDelete()

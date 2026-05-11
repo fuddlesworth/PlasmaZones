@@ -9,9 +9,9 @@
  * project's <800-line guideline. Owns:
  *   - resolveShaderEffect / resolveShaderParameters (tree → config field
  *     adapters)
- *   - build*Config factories (one per overlay role: Notification,
- *     LayoutPicker, ZoneSelector, SnapAssist) — each documents the
- *     visual shape it encodes
+ *   - build*Config factories (one per overlay role: Osd, LayoutPicker,
+ *     ZoneSelector, SnapAssist). Each documents the visual shape it
+ *     encodes.
  *   - OverlayService::setupSurfaceAnimator — animator construction +
  *     initial config registration
  *   - OverlayService::applyShaderProfilesToAnimator — per-role re-
@@ -42,9 +42,9 @@ namespace {
 // **Surface-family separation policy.** Profile paths are partitioned by
 // surface family so each overlay tunes independently:
 //
-//   - **OSD family (`osd.*`)** — genuine OSDs only. Used by the
-//     Notification surface (LayoutOsd / NavigationOsd). A JSON edit to
-//     `osd.hide` affects OSDs and ONLY OSDs.
+//   - **OSD family (`osd.*`)**: genuine OSDs only. Driven by the
+//     passive-shell OSD slot (LayoutOsd and NavigationOsd content). A
+//     JSON edit to `osd.hide` affects OSDs and ONLY OSDs.
 //   - **Popup family (`popup.<surface>.*`)** — non-OSD overlay
 //     surfaces. Each gets its own leaf paths under
 //     `popup.<surface>` per surface's needs:
@@ -243,12 +243,13 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
 {
     namespace PAL = PhosphorAnimationLayer;
 
-    // Two existing surface types deliberately BYPASS this animator and
-    // therefore never read any config (default or per-role):
-    //   - Overlay (zone overlay rendering): hidden via direct
-    //     window->hide() in dismissOverlayWindow because the rapid
-    //     drag-mode path uses _idled property toggling rather than the
-    //     show/hide state machine.
+    // Two existing surface types do NOT have a per-role config registered
+    // and therefore fall back to the empty default (no shader effect, the
+    // library-default 150 ms OutCubic motion):
+    //   - ZoneOverlay (zone overlay rendering): routes through the
+    //     animator (overlay.cpp passes PzRoles::ZoneOverlay to
+    //     beginShow/beginHide on the passive-shell slot) but the default
+    //     motion is the intended visual; no shader leg is configured.
     //   - ShaderPreview (editor preview window): shown via direct
     //     window->show() in showShaderPreview because the editor controls
     //     visibility imperatively and re-creates on every open.
@@ -268,12 +269,15 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // uses today, so the live-reload path (drop a JSON, see it apply on
     // next show) automatically applies to the C++ side too.
     //
-    // Phase-2 surface unification: a single per-screen
-    // PzRoles::Notification surface (NotificationOverlay.qml) hosts both
-    // layout-OSD and navigation-OSD content via a Loader. Production
-    // surfaces are scoped `plasmazones-notification-{screenId}-{gen}`
-    // and resolve to this config via the animator's longest-prefix
-    // lookup.
+    // Post-shell-migration: the wl_surface that hosts OSD content is the
+    // unified PassiveShell (one per screen, scoped
+    // `plasmazones-passive-shell-{screenId}-{gen}`); OSD content rides
+    // a slot inside it via `PassiveOverlayShell.qml`'s Loader. The
+    // animator config registered here is keyed on PzRoles::Osd's scope
+    // prefix (`plasmazones-osd`). Lookups go through the role-override
+    // path on beginShow / beginHide (osd.cpp passes PzRoles::Osd as the
+    // override role), not through the longest-prefix surface lookup, so
+    // the passive-shell surface scope does not collide with this config.
     //
     // Initial registration runs with an empty tree — m_settings is wired
     // later via setSettings(). A default-constructed tree resolves every
@@ -311,7 +315,7 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
                                      << " snapAssist.show=" << resolveShaderEffect(tree, PP::PopupSnapAssistShow)
                                      << " snapAssist.hide=" << resolveShaderEffect(tree, PP::PopupSnapAssistHide);
     }
-    m_surfaceAnimator->registerConfigForRole(PzRoles::Notification, buildOsdConfig(tree));
+    m_surfaceAnimator->registerConfigForRole(PzRoles::Osd, buildOsdConfig(tree));
     m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig(tree));
     m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig(tree));
     m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, buildSnapAssistConfig(tree));

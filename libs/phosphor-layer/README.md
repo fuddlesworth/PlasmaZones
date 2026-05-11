@@ -11,16 +11,20 @@
 ## Responsibility
 
 [`phosphor-wayland`](../phosphor-wayland/README.md) owns the low-level
-`zwlr_layer_shell_v1` plumbing — the QPA plugin and the raw
+`zwlr_layer_shell_v1` plumbing: the QPA plugin and the raw
 `LayerSurface`. `phosphor-layer` sits one level up. It's the **policy
 layer** that says "we currently have these overlay surfaces, they belong
 to these screens, their per-surface animators look like this, and each
 has one of these well-known roles."
 
-- **Role vocabulary** (`Role`): named overlay kinds — zone-outline,
-  snap-preview, wallpaper-effect, snap-assist, OSD. Each role carries
-  its default anchor, margin, and interactivity settings so individual
-  consumers don't re-invent them.
+- **Role primitive** (`Role`): a value struct bundling the
+  wlr-layer-shell parameters that are immutable after `show()`: layer,
+  anchors, keyboard interactivity, exclusive zone, default margins,
+  scope prefix. Pure protocol vocabulary, no UI-pattern semantics. The
+  named UI patterns (`Wallpaper()`, `Hud()`, `Modal()`, `Floating()`,
+  `Panel(Edge)`, `Toast(Corner)`) live in the sibling
+  [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md)
+  library so this lib stays domain-agnostic.
 - **Surface** (`Surface`): one layer-shell window. Carries its config,
   knows its current screen, exposes show / hide.
 - **SurfaceFactory** (`SurfaceFactory`): stateless builder that turns a
@@ -52,7 +56,7 @@ has one of these well-known roles."
 | `PhosphorLayer::Surface`                    | Per-surface wrapper around a layer-shell role |
 | `PhosphorLayer::SurfaceFactory`             | Stateless builder: `SurfaceConfig` → `Surface` |
 | `PhosphorLayer::SurfaceConfig`              | Per-surface descriptor: role, screen, QML source, properties |
-| `PhosphorLayer::Role`                       | Enum + metadata for well-known overlay roles |
+| `PhosphorLayer::Role`                       | Value struct for wlr-layer-shell config (layer + anchors + kbd + zone + margins + scope prefix) |
 | `PhosphorLayer::ScreenSurfaceRegistry<T>`   | Per-screen surface tracking (template) |
 | `PhosphorLayer::TopologyCoordinator`        | Debounces `screensChanged`; reconciles registry |
 | `PhosphorLayer::ISurfaceStore`              | Persistence of per-surface state across restarts |
@@ -82,21 +86,32 @@ auto screens   = std::make_unique<DefaultScreenProvider>();
 SurfaceFactory factory(transport.get(), engineProvider, screens.get(), animator);
 
 SurfaceConfig cfg;
-cfg.role       = Role::ZoneOutline;
+// Role is a plain value type. Construct one directly or use a recipe from
+// the sibling phosphor-shell-patterns library if you prefer named UI
+// patterns (Wallpaper, Hud, Modal, Floating, Panel, Toast).
+cfg.role       = Role{Layer::Overlay,
+                      AnchorAll,
+                      -1,
+                      KeyboardInteractivity::None,
+                      QMargins(),
+                      QStringLiteral("zone-outline")};
 cfg.screenId   = "output-1";
 cfg.qmlSource  = QUrl(QStringLiteral("qrc:/overlays/ZoneOutline.qml"));
 cfg.contextProperties.insert(QStringLiteral("zones"), QVariant::fromValue(zoneList));
 
 Surface *s = factory.create(cfg, /*parent*/ this);
 s->show();
-// … later
+// Later:
 s->hide();
 ```
 
 ## Design notes
 
-- **Role is the primary key.** "Zone-outline overlay on screen 1" has a
-  single identity; the per-screen registry collapses duplicates.
+- **Role identity is the scope prefix.** Two `Role` values with the
+  same scope prefix refer to the same logical surface kind; the
+  per-screen registry uses that to collapse duplicates. Consumers
+  compose their roles by taking a pattern from
+  `phosphor-shell-patterns` and stamping their own scope prefix on top.
 - **Transport is injectable.** Every interaction with the Wayland layer-
   shell goes through `ILayerShellTransport`. Tests verify that the
   factory asked the transport to change anchor to Top+Right without a
@@ -112,9 +127,10 @@ s->hide();
 ## Dependencies
 
 - `QtCore`, `QtGui`, `QtQml`
-- [`phosphor-wayland`](../phosphor-wayland/README.md) — default transport binds to its `LayerSurface`
+- [`phosphor-wayland`](../phosphor-wayland/README.md). Default transport binds to its `LayerSurface`.
 
 ## See also
 
-- [`phosphor-surfaces`](../phosphor-surfaces/README.md) — higher-level surface manager built on these primitives, adds Vulkan + pipeline-cache wiring.
-- [`phosphor-wayland`](../phosphor-wayland/README.md) — the QPA plugin and raw layer-shell binding the default transport talks to.
+- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md). UI-pattern recipes (Wallpaper, Hud, Modal, Floating, Panel, Toast) built on this library's `Role` primitive.
+- [`phosphor-surfaces`](../phosphor-surfaces/README.md). Higher-level surface manager built on these primitives, adds Vulkan and pipeline-cache wiring.
+- [`phosphor-wayland`](../phosphor-wayland/README.md). The QPA plugin and raw layer-shell binding the default transport talks to.

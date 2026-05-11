@@ -8,6 +8,8 @@
 #include <PhosphorLayer/SurfaceConfig.h>
 #include <PhosphorLayer/SurfaceFactory.h>
 
+#include <PhosphorShellPatterns/Patterns.h>
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QEventLoop>
@@ -223,7 +225,7 @@ void SurfaceManager::createKeepAlive()
     }
 
     PhosphorLayer::SurfaceConfig cfg;
-    cfg.role = PhosphorLayer::Roles::Background.withScopePrefix(QStringLiteral("phosphor-surfaces-keepalive"));
+    cfg.role = PhosphorShellPatterns::Wallpaper().withScopePrefix(QStringLiteral("phosphor-surfaces-keepalive"));
     cfg.contentItem = std::make_unique<QQuickItem>();
     cfg.sharedEngine = m_impl->engine.get();
     cfg.debugName = QStringLiteral("keepalive");

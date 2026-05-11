@@ -195,16 +195,16 @@ ApplicationWindow {
             "label": i18n("Zones"),
             "iconName": "view-grid"
         }, {
-            "name": "animations-notifications",
-            "label": i18n("Notifications"),
+            "name": "animations-osds",
+            "label": i18n("OSDs"),
             "iconName": "dialog-information"
         }, {
-            "name": "animations-popups",
-            "label": i18n("Popups"),
+            "name": "animations-overlays",
+            "label": i18n("Overlays"),
             "iconName": "view-presentation"
         }, {
-            "name": "animations-panels",
-            "label": i18n("Panels"),
+            "name": "animations-side-panels",
+            "label": i18n("Side Panels"),
             "iconName": "sidebar-collapse-symbolic"
         }, {
             "name": "animations-workspaces",
@@ -265,9 +265,9 @@ ApplicationWindow {
         "animations-windows": "AnimationsWindowsPage.qml",
         "animations-app-rules": "AnimationsAppRulesPage.qml",
         "animations-zones": "AnimationsZonesPage.qml",
-        "animations-notifications": "AnimationsNotificationsPage.qml",
-        "animations-popups": "AnimationsPopupsPage.qml",
-        "animations-panels": "AnimationsPanelsPage.qml",
+        "animations-osds": "AnimationsOsdsPage.qml",
+        "animations-overlays": "AnimationsOverlaysPage.qml",
+        "animations-side-panels": "AnimationsSidePanelsPage.qml",
         "animations-workspaces": "AnimationsWorkspacesPage.qml",
         "animations-widgets": "AnimationsWidgetsPage.qml",
         "animations-presets": "AnimationsPresetsPage.qml",

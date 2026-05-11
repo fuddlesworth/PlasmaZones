@@ -3,10 +3,11 @@
 
 #pragma once
 
+#include <PhosphorLayer/Role.h>
+#include <PhosphorShellPatterns/Patterns.h>
+
 #include <QString>
 #include <QStringView>
-
-#include <PhosphorLayer/Role.h>
 
 namespace PlasmaZones {
 
@@ -14,24 +15,25 @@ namespace PlasmaZones {
 ///
 /// Each preset maps one of OverlayService's consumer types to the
 /// protocol-level configuration (layer, anchors, keyboard, exclusive
-/// zone, scope prefix) it wants. Built on top of PhosphorLayer's
-/// library-provided @ref PhosphorLayer::Roles vocabulary.
+/// zone, scope prefix) it wants. Built on top of the
+/// @ref PhosphorShellPatterns axis-2 UI-pattern vocabulary.
 namespace PzRoles {
 
-/// Main zone overlay: fullscreen Overlay layer, click-through, no
-/// exclusive zone (stays on top of panels). The overlay uses
-/// AnchorAll for physical screens; virtual-screen surfaces override
-/// to AnchorTop|AnchorLeft + margins via SurfaceConfig overrides.
-inline const PhosphorLayer::Role Overlay =
-    PhosphorLayer::Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("plasmazones-overlay"));
+/// Zone overlay: the full-screen layer that paints zone rectangles and
+/// hosts the snap-assist/zone-selector slots. Hud pattern (Overlay layer,
+/// click-through, no exclusive zone). AnchorAll for physical screens;
+/// virtual-screen surfaces override to AnchorTop|AnchorLeft + margins
+/// via SurfaceConfig overrides.
+inline const PhosphorLayer::Role ZoneOverlay =
+    PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-zone-overlay"));
 
-/// PhosphorZones::Zone selector: Top layer so pointer events route to it ahead of the
+/// Zone selector: Top layer so pointer events route to it ahead of the
 /// main overlay.
 ///
 /// **Anchors are consumer-mandatory.** The preset ships `AnchorNone` but
 /// `selector.cpp::createZoneSelectorWindow` ALWAYS supplies an
 /// `anchorsOverride` (via `layerPlacementForVs`). The preset's anchors are
-/// therefore unreachable in production — the None value is a placeholder
+/// therefore unreachable in production. The None value is a placeholder
 /// that signals "caller must override" rather than a real default. A
 /// future refactor that starts honouring the preset anchors without also
 /// updating the selector's create path would silently lose anchoring.
@@ -42,14 +44,16 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
                                                                     QMargins(),
                                                                     QStringLiteral("plasmazones-zone-selector")};
 
-/// OSD config-only role. The wl_surface lifetime moved to the unified
-/// PassiveShell post-shell-migration; this role is preserved purely for
-/// SurfaceAnimator config-lookup (registerConfigForRole keys on the
-/// scope prefix, and the role-override beginShow/beginHide overloads
-/// resolve per-content motion + shader profiles via this role's prefix
-/// even though the shell's actual surface uses PassiveShell).
-inline const PhosphorLayer::Role Notification =
-    PhosphorLayer::Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("plasmazones-notification"));
+/// OSD config-only role. Used by both LayoutOsd (which layout is active)
+/// and NavigationOsd (focus-change indicators); a single animator config
+/// drives both since they share the same fade/scale motion. The
+/// wl_surface lifetime moved to the unified PassiveShell post-shell-
+/// migration; this role is preserved purely for SurfaceAnimator config-
+/// lookup (registerConfigForRole keys on the scope prefix, and the
+/// role-override beginShow/beginHide overloads resolve per-content
+/// motion + shader profiles via this role's prefix even though the
+/// shell's actual surface uses PassiveShell).
+inline const PhosphorLayer::Role Osd = PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-osd"));
 
 /// Passive overlay shell — single per-screen wlr-layer-shell host that
 /// groups every kbd-None overlay (OSD, zone-selector, main zone overlay,
@@ -63,13 +67,13 @@ inline const PhosphorLayer::Role Notification =
 /// (PassiveShell surface, slot QQuickItem). Per-content motion / shader
 /// configs are resolved via the role-override `beginShow`/`beginHide`
 /// overloads — the surface's own role is PassiveShell but the animation
-/// config role is the per-content role (Notification, ZoneSelector, …)
-/// so per-content profiles still drive each slot's transitions.
+/// config role is the per-content role (Osd, ZoneSelector, …) so
+/// per-content profiles still drive each slot's transitions.
 ///
 /// See `PassiveOverlayShell.qml` for the QML side and the unified-shell
 /// migration commits for the per-consumer rewrite.
 inline const PhosphorLayer::Role PassiveShell =
-    PhosphorLayer::Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("plasmazones-passive-shell"));
+    PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-passive-shell"));
 
 /// Snap-assist config-only role. The wl_surface lifetime moved to the
 /// unified PassiveShell post-shell-migration; this role is preserved
@@ -84,7 +88,7 @@ inline const PhosphorLayer::Role PassiveShell =
 /// Singleton at the daemon level — m_snapAssistScreenId tracks which
 /// screen's slot is active and re-targets across screens.
 inline const PhosphorLayer::Role SnapAssist =
-    PhosphorLayer::Roles::CenteredModal.withScopePrefix(QStringLiteral("plasmazones-snap-assist"));
+    PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-snap-assist"));
 
 /// Layout-picker config-only role. Same migration story as SnapAssist —
 /// the picker now lives as an Item slot inside the per-screen passive
@@ -94,13 +98,13 @@ inline const PhosphorLayer::Role SnapAssist =
 /// by `WindowDragAdaptor::ensureLayoutPickerNavShortcutsRegistered`
 /// on show and released on dismiss.
 inline const PhosphorLayer::Role LayoutPicker =
-    PhosphorLayer::Roles::CenteredModal.withScopePrefix(QStringLiteral("plasmazones-layout-picker"));
+    PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-layout-picker"));
 
 /// Shader preview (editor Shader Settings dialog). Floating Overlay
 /// layer, no anchors, no keyboard. Singleton. Positioned programmatically
 /// by the caller.
 inline const PhosphorLayer::Role ShaderPreview =
-    PhosphorLayer::Roles::FloatingOverlay.withScopePrefix(QStringLiteral("plasmazones-shader-preview"));
+    PhosphorShellPatterns::Floating().withScopePrefix(QStringLiteral("plasmazones-shader-preview"));
 
 /// Build a per-instance Role from one of the base roles above by appending
 /// `-{screenId}-{generation}` to its base scope prefix. Single-source for
@@ -116,7 +120,7 @@ inline const PhosphorLayer::Role ShaderPreview =
 /// Either case made the longest-prefix match silently miss and the
 /// surface fell back to the library's empty default config.
 ///
-/// @param base       Named base role (e.g. PzRoles::Notification).
+/// @param base       Named base role (e.g. PzRoles::Osd).
 /// @param screenId   Effective screen id (physical or virtual).
 /// @param generation Monotonic per-process counter, e.g. from
 ///                   `SurfaceManager::nextScopeGeneration()`.

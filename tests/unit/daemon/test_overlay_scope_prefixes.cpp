@@ -8,10 +8,10 @@
  *        OverlayService::setupSurfaceAnimator.
  *
  * Why this exists: every overlay surface gets a per-instance compositor
- * scope (e.g. `plasmazones-notification-{screenId}-{gen}`) so wlr-layer-shell
+ * scope (e.g. `plasmazones-osd-{screenId}-{gen}`) so wlr-layer-shell
  * sees each Surface as a distinct scope. The SurfaceAnimator registers
  * per-Role configs against the BASE scope from PzRoles
- * (`plasmazones-notification`) and looks up by longest-prefix-match against
+ * (`plasmazones-osd`) and looks up by longest-prefix-match against
  * the Surface's scope. If the per-instance scope literal in
  * `osd.cpp` / `selector.cpp` / `snapassist.cpp` ever diverges from the
  * matching PzRoles base, the lookup silently falls back to the empty
@@ -20,7 +20,7 @@
  * `popup.zoneSelector.show` / etc.
  *
  * The previous safety net was a single Q_ASSERT_X in
- * createZoneSelectorWindow — debug-only, and only covered ZoneSelector.
+ * createZoneSelectorWindow: debug-only, and only covered ZoneSelector.
  * Production now constructs every per-instance role via
  * `PzRoles::makePerInstanceRole(base, id, gen)` so the prefix-match is
  * guaranteed by construction; the tests below pin that helper's behavior
@@ -29,7 +29,7 @@
  *
  * Construction policy (centralized in pz_roles.h):
  *   `<base.scopePrefix>-<screenId>-<generation>`
- *   where base is one of PzRoles::{Notification, ZoneSelector,
+ *   where base is one of PzRoles::{Osd, ZoneSelector,
  *   SnapAssist, LayoutPicker}.
  */
 
@@ -46,10 +46,10 @@ namespace PAL = PhosphorAnimationLayer;
 
 namespace {
 
-/// Mirror of OverlayService::setupSurfaceAnimator — builds the same
+/// Mirror of OverlayService::setupSurfaceAnimator. Builds the same
 /// configs against the same roles. If setupSurfaceAnimator's
 /// registration policy ever changes (different roles registered, or
-/// different config shapes), this helper must change in lockstep —
+/// different config shapes), this helper must change in lockstep:
 /// catching any divergence is the point of the test.
 std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimation::PhosphorProfileRegistry& registry)
 {
@@ -69,9 +69,9 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
                                                  .hideShaderProfile = {},
                                                  .showShaderParameters = {},
                                                  .hideShaderParameters = {}};
-    anim->registerConfigForRole(PzRoles::Notification, osdConfig);
+    anim->registerConfigForRole(PzRoles::Osd, osdConfig);
 
-    // LayoutPicker — popup surface family. Path-family separation means
+    // LayoutPicker: popup surface family. Path-family separation means
     // every leg resolves under `popup.layoutPicker.*`, NOT under
     // `osd.*`. A regression that re-bundles LayoutPicker onto osd paths
     // (or accidentally leaves it on the OSD family during a refactor)
@@ -90,7 +90,7 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
                                                           .hideShaderParameters = {}};
     anim->registerConfigForRole(PzRoles::LayoutPicker, layoutPickerConfig);
 
-    // ZoneSelector — popup surface family, dedicated `.show` / `.hide`
+    // ZoneSelector: popup surface family, dedicated `.show` / `.hide`
     // leaves under `popup.zoneSelector.*`. Previously borrowed
     // `popup` (show) and `widget.fadeOut` (hide); now its own
     // family.
@@ -106,7 +106,7 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
                                                           .hideShaderParameters = {}};
     anim->registerConfigForRole(PzRoles::ZoneSelector, zoneSelectorConfig);
 
-    // SnapAssist — popup surface family, dedicated `.show` leaf.
+    // SnapAssist: popup surface family, dedicated `.show` leaf.
     // Previously borrowed `popup` directly; now its own.
     const PAL::SurfaceAnimator::Config snapAssistConfig{.showProfile = QStringLiteral("popup.snapAssist.show"),
                                                         .hideProfile = {},
@@ -124,14 +124,13 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
 }
 
 /// Build a per-instance Role the way the daemon does. Routes through the
-/// production helper `PzRoles::makePerInstanceRole` (used by
-/// createNotificationWindow / createZoneSelectorWindow /
-/// createSnapAssistWindowFor / createLayoutPickerWindowFor) so the test
-/// and production share a single source of truth for the per-instance
-/// scope construction policy. A regression in the helper itself is
-/// caught here; a regression in any production caller that bypasses the
-/// helper is caught by code review (no production caller hand-rolls the
-/// literal anymore).
+/// production helper `PzRoles::makePerInstanceRole` (used by the OSD,
+/// zone-selector, snap-assist and layout-picker creation paths) so the
+/// test and production share a single source of truth for the
+/// per-instance scope construction policy. A regression in the helper
+/// itself is caught here; a regression in any production caller that
+/// bypasses the helper is caught by code review (no production caller
+/// hand-rolls the literal anymore).
 PhosphorLayer::Role perInstanceRole(const PhosphorLayer::Role& base, const QString& screenId, quint64 generation)
 {
     return PlasmaZones::PzRoles::makePerInstanceRole(base, screenId, generation);
@@ -152,37 +151,36 @@ private Q_SLOTS:
     /// don't also pick up.
     void pz_role_base_scope_prefixes_match_production_families()
     {
-        QCOMPARE(PzRoles::Notification.scopePrefix, QStringLiteral("plasmazones-notification"));
+        QCOMPARE(PzRoles::Osd.scopePrefix, QStringLiteral("plasmazones-osd"));
         QCOMPARE(PzRoles::ZoneSelector.scopePrefix, QStringLiteral("plasmazones-zone-selector"));
         QCOMPARE(PzRoles::SnapAssist.scopePrefix, QStringLiteral("plasmazones-snap-assist"));
         QCOMPARE(PzRoles::LayoutPicker.scopePrefix, QStringLiteral("plasmazones-layout-picker"));
     }
 
-    /// Per-instance Notification role resolves to the registered osd
-    /// config. If `osd.cpp::createNotificationWindow` ever stops
-    /// constructing scopes that prefix-match
-    /// PzRoles::Notification.scopePrefix, configFor returns the empty
-    /// default and the OSD silently falls back to the library default
-    /// profile. Both layout-OSD and navigation-OSD content share this
-    /// surface post-Phase-2, so this test covers both modes.
-    void notification_scope_resolves_to_registered_config()
+    /// Per-instance OSD role resolves to the registered osd config. If
+    /// the daemon ever stops constructing scopes that prefix-match
+    /// PzRoles::Osd.scopePrefix, configFor returns the empty default
+    /// and the OSD silently falls back to the library default profile.
+    /// Both layout-OSD and navigation-OSD content share this surface
+    /// post-Phase-2, so this test covers both modes.
+    void osd_scope_resolves_to_registered_config()
     {
         PhosphorAnimation::PhosphorProfileRegistry registry;
         const auto anim = buildAnimatorMatchingDaemon(registry);
-        const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("DP-1"), 7);
+        const auto role = perInstanceRole(PzRoles::Osd, QStringLiteral("DP-1"), 7);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.show"));
         QCOMPARE(cfg.showScaleFrom, 0.8);
     }
 
-    /// Different screen, different generation — the per-instance
+    /// Different screen, different generation: the per-instance
     /// suffix must not affect the prefix-match outcome.
-    void notification_scope_resolves_independent_of_screen_id()
+    void osd_scope_resolves_independent_of_screen_id()
     {
         PhosphorAnimation::PhosphorProfileRegistry registry;
         const auto anim = buildAnimatorMatchingDaemon(registry);
-        const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("HDMI-A-1/vs:0"), 3);
+        const auto role = perInstanceRole(PzRoles::Osd, QStringLiteral("HDMI-A-1/vs:0"), 3);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.show"));
@@ -223,7 +221,7 @@ private Q_SLOTS:
     }
 
     /// LayoutPicker: dedicated `popup.layoutPicker.*` paths
-    /// (previously borrowed osd.* — surface-family separation moved it
+    /// (previously borrowed osd.*; surface-family separation moved it
     /// off the OSD family so JSON edits to `osd.hide` no longer leak
     /// into the picker's hide animation).
     void layout_picker_scope_resolves_to_dedicated_paths()
@@ -244,7 +242,7 @@ private Q_SLOTS:
     /// (genuine OSD hide path) MUST NOT leak into LayoutPicker's hide.
     /// Pre-separation, LayoutPicker borrowed `osd.show`/`osd.hide`/
     /// `osd.pop`, so any per-OSD timing tweak would also reshape the
-    /// picker — exactly the coupling the user asked to break. Pin the
+    /// picker. Exactly the coupling the user asked to break. Pin the
     /// invariant: no LayoutPicker leg references an `osd.*` path.
     void layout_picker_does_not_borrow_osd_paths()
     {
@@ -252,28 +250,27 @@ private Q_SLOTS:
         const auto anim = buildAnimatorMatchingDaemon(registry);
         const auto cfg = anim->configForRole(PzRoles::LayoutPicker);
         QVERIFY2(!cfg.showProfile.startsWith(QStringLiteral("osd.")),
-                 "LayoutPicker.showProfile must not live under osd.* — surface families are partitioned");
+                 "LayoutPicker.showProfile must not live under osd.*: surface families are partitioned");
         QVERIFY2(!cfg.hideProfile.startsWith(QStringLiteral("osd.")),
-                 "LayoutPicker.hideProfile must not live under osd.* — surface families are partitioned");
+                 "LayoutPicker.hideProfile must not live under osd.*: surface families are partitioned");
         QVERIFY2(!cfg.showScaleProfile.startsWith(QStringLiteral("osd.")),
-                 "LayoutPicker.showScaleProfile must not live under osd.* — surface families are partitioned");
+                 "LayoutPicker.showScaleProfile must not live under osd.*: surface families are partitioned");
         QVERIFY2(!cfg.hideScaleProfile.startsWith(QStringLiteral("osd.")),
-                 "LayoutPicker.hideScaleProfile must not live under osd.* — surface families are partitioned");
+                 "LayoutPicker.hideScaleProfile must not live under osd.*: surface families are partitioned");
     }
 
     /// Regression: longest-prefix matching must respect `-` boundaries.
-    /// `plasmazones-notification` is NOT a prefix of any other role's
+    /// `plasmazones-osd` is NOT a prefix of any other role's
     /// scope, but a future rename that introduces overlap (e.g. adding a
-    /// `plasmazones-notification-bar`) must not silently route to the
-    /// wrong config. Verify the boundary check works by using the same
-    /// kind of test the previous LayoutOsd/LayoutPicker pair exercised:
-    /// confirm a per-instance Notification scope picks up the OSD
-    /// config (showScaleFrom 0.8), not the picker (0.9).
-    void notification_does_not_cross_pollinate_to_layout_picker()
+    /// `plasmazones-osd-bar`) must not silently route to the wrong
+    /// config. Verify the boundary check works by confirming a
+    /// per-instance OSD scope picks up the OSD config (showScaleFrom
+    /// 0.8), not the picker (0.9).
+    void osd_does_not_cross_pollinate_to_layout_picker()
     {
         PhosphorAnimation::PhosphorProfileRegistry registry;
         const auto anim = buildAnimatorMatchingDaemon(registry);
-        const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("DP-1"), 1);
+        const auto role = perInstanceRole(PzRoles::Osd, QStringLiteral("DP-1"), 1);
         const auto cfg = anim->configForRole(role);
         // OSD config has 0.8, picker has 0.9. Picking up the picker
         // config here would mean the boundary check is broken.
@@ -281,7 +278,7 @@ private Q_SLOTS:
     }
 
     /// Regression: the bare base role (no per-instance suffix) must
-    /// also resolve. createNotificationWindow uses `withScopePrefix` to
+    /// also resolve. The OSD creation path uses `withScopePrefix` to
     /// derive a per-instance role, but a future refactor that registers
     /// a base role directly (or a test that constructs one inline)
     /// should still work.
@@ -289,7 +286,7 @@ private Q_SLOTS:
     {
         PhosphorAnimation::PhosphorProfileRegistry registry;
         const auto anim = buildAnimatorMatchingDaemon(registry);
-        QCOMPARE(anim->configForRole(PzRoles::Notification).showProfile, QStringLiteral("osd.show"));
+        QCOMPARE(anim->configForRole(PzRoles::Osd).showProfile, QStringLiteral("osd.show"));
         QCOMPARE(anim->configForRole(PzRoles::ZoneSelector).showProfile, QStringLiteral("popup.zoneSelector.show"));
     }
 

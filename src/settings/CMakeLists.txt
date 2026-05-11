@@ -168,9 +168,9 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationsWindowsPage.qml
         qml/AnimationsAppRulesPage.qml
         qml/AnimationsZonesPage.qml
-        qml/AnimationsNotificationsPage.qml
-        qml/AnimationsPopupsPage.qml
-        qml/AnimationsPanelsPage.qml
+        qml/AnimationsOsdsPage.qml
+        qml/AnimationsOverlaysPage.qml
+        qml/AnimationsSidePanelsPage.qml
         qml/AnimationsWorkspacesPage.qml
         qml/AnimationsWidgetsPage.qml
         qml/AnimationsGeneralPage.qml
