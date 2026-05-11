@@ -124,7 +124,7 @@ void OverlayService::setSettings(ISettings* settings)
                         if (!it_.value().overlayPhysScreen) {
                             continue;
                         }
-                        auto* slot = it_.value().passiveShellMainOverlaySlot;
+                        auto* slot = it_.value().mainOverlaySlot();
                         if (slot && slot->property("useShader").toBool()) {
                             QMetaObject::invokeMethod(slot, "reloadShader");
                         }
@@ -310,7 +310,7 @@ void OverlayService::syncCavaState()
                 if (!it_.value().overlayPhysScreen) {
                     continue;
                 }
-                auto* slot = it_.value().passiveShellMainOverlaySlot;
+                auto* slot = it_.value().mainOverlaySlot();
                 if (slot) {
                     writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
                 }

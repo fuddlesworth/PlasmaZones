@@ -190,7 +190,7 @@ void OverlayService::stopShaderAnimation()
 {
     // Don't stop CAVA here — it stays warm for instant audio data on next show().
     // Just clear the spectrum from overlay windows so they don't render stale data.
-    // audioSpectrum lives on passiveShellMainOverlaySlot (the slot
+    // audioSpectrum lives on mainOverlaySlot() (the slot
     // Item that hosts the shader content), not on the shell window
     // root. PassiveOverlayShell.qml's mainOverlaySlot declares
     // `property var audioSpectrum: []` and the inner shader content
@@ -199,7 +199,7 @@ void OverlayService::stopShaderAnimation()
         if (!it_.value().overlayPhysScreen) {
             continue;
         }
-        auto* slot = it_.value().passiveShellMainOverlaySlot;
+        auto* slot = it_.value().mainOverlaySlot();
         if (slot) {
             writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
         }
@@ -229,7 +229,7 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
         if (!it.value().overlayPhysScreen) {
             continue;
         }
-        auto* slot = it.value().passiveShellMainOverlaySlot;
+        auto* slot = it.value().mainOverlaySlot();
         if (slot && useShaderForScreen(it.key())) {
             writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), wrapped);
         }
@@ -305,7 +305,7 @@ void OverlayService::updateShaderUniforms()
         if (!it.value().overlayPhysScreen) {
             continue;
         }
-        auto* slot = it.value().passiveShellMainOverlaySlot;
+        auto* slot = it.value().mainOverlaySlot();
         auto* window = it.value().shell->shellWindow;
         if (slot && window && window->isVisible()) {
             writeQmlProperty(slot, QStringLiteral("iTime"), static_cast<qreal>(iTime));

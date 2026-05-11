@@ -200,12 +200,12 @@ void OverlayService::setIdleForDragPause()
             continue;
         }
         // _idled and the zone-data properties live on
-        // passiveShellMainOverlaySlot (PassiveOverlayShell.qml lines
+        // mainOverlaySlot() (PassiveOverlayShell.qml lines
         // 633, 652, 661-662, etc.), not on the shell window root.
         // Writing on the window root creates dynamic properties that
         // QML never observes — the slot's content keeps rendering live
         // zones while the user expects an idle blank.
-        QQuickItem* slot = it.value().passiveShellMainOverlaySlot;
+        QQuickItem* slot = it.value().mainOverlaySlot();
         if (!slot) {
             continue;
         }
@@ -289,7 +289,7 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
         if (!it.value().overlayPhysScreen) {
             continue;
         }
-        QQuickItem* slot = it.value().passiveShellMainOverlaySlot;
+        QQuickItem* slot = it.value().mainOverlaySlot();
         if (!slot) {
             continue;
         }

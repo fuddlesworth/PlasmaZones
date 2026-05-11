@@ -35,7 +35,7 @@ void OverlayService::destroyIfTypeMismatch(const QString& screenId)
     if (it == m_screenStates.end() || !it->overlayPhysScreen) {
         return;
     }
-    auto* slot = it->passiveShellMainOverlaySlot;
+    auto* slot = it->mainOverlaySlot();
     if (!slot) {
         return;
     }
@@ -213,7 +213,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             // animation drives the per-content slot's opacity. Surface::show()
             // only fires on the very first transition Hidden→Shown.
             auto* shellSurface = m_screenStates[screenId].shell->shellSurface;
-            auto* slot = m_screenStates[screenId].passiveShellMainOverlaySlot;
+            auto* slot = m_screenStates[screenId].mainOverlaySlot();
             if (shellSurface && slot) {
                 if (!shellSurface->isLogicallyShown()) {
                     shellSurface->show();
@@ -281,7 +281,7 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
                 if (!it_.value().overlayPhysScreen) {
                     continue;
                 }
-                auto* slot = it_.value().passiveShellMainOverlaySlot;
+                auto* slot = it_.value().mainOverlaySlot();
                 if (slot) {
                     QMetaObject::invokeMethod(slot, "flash");
                 }
@@ -322,7 +322,7 @@ void OverlayService::highlightZone(const QString& zoneId)
     m_zoneDataDirty = true;
 
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-        auto* slot = it_.value().passiveShellMainOverlaySlot;
+        auto* slot = it_.value().mainOverlaySlot();
         if (slot) {
             writeQmlProperty(slot, QStringLiteral("highlightedZoneId"), zoneId);
             writeQmlProperty(slot, QStringLiteral("highlightedZoneIds"), QVariantList());
@@ -340,7 +340,7 @@ void OverlayService::highlightZones(const QStringList& zoneIds)
     }
 
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-        auto* slot = it_.value().passiveShellMainOverlaySlot;
+        auto* slot = it_.value().mainOverlaySlot();
         if (slot) {
             writeQmlProperty(slot, QStringLiteral("highlightedZoneIds"), zoneIdList);
             writeQmlProperty(slot, QStringLiteral("highlightedZoneId"), QString());
@@ -353,7 +353,7 @@ void OverlayService::clearHighlight()
     m_zoneDataDirty = true;
 
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-        auto* slot = it_.value().passiveShellMainOverlaySlot;
+        auto* slot = it_.value().mainOverlaySlot();
         if (slot) {
             writeQmlProperty(slot, QStringLiteral("highlightedZoneId"), QString());
             writeQmlProperty(slot, QStringLiteral("highlightedZoneIds"), QVariantList());
@@ -368,7 +368,7 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
     }
 
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (it.value().passiveShellMainOverlaySlot) {
+        if (it.value().mainOverlaySlot()) {
             const QRect targetGeom = it.value().overlayGeometry;
             if (!targetGeom.isValid()) {
                 qCWarning(lcOverlay) << "updateMousePosition: no overlay geometry for screen" << it.key()
@@ -376,7 +376,7 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
                 continue;
             }
             const QPointF local(cursorX - targetGeom.x(), cursorY - targetGeom.y());
-            it.value().passiveShellMainOverlaySlot->setProperty("mousePosition", local);
+            it.value().mainOverlaySlot()->setProperty("mousePosition", local);
         }
     }
 }
@@ -401,7 +401,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         return;
     }
     auto* state = ensurePassiveShellFor(screenId, physScreen);
-    if (!state || !state->passiveShellMainOverlaySlot) {
+    if (!state || !state->mainOverlaySlot()) {
         return;
     }
 
@@ -409,7 +409,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     const QRect physScreenGeom = physScreen ? physScreen->geometry() : geometry;
     const bool isVS = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
 
-    auto* slot = state->passiveShellMainOverlaySlot;
+    auto* slot = state->mainOverlaySlot();
     auto* window = state->shell->shellWindow;
 
     state->overlayPhysScreen = physScreen;
@@ -462,7 +462,7 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
     // with the now-correct sourceComponent.
     QStringList screensToFlip;
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        auto* slot = it.value().passiveShellMainOverlaySlot;
+        auto* slot = it.value().mainOverlaySlot();
         if (!slot)
             continue;
         const bool slotIsShader = slot->property("useShader").toBool();
@@ -522,7 +522,7 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
         qCDebug(lcOverlay) << "dismissOverlayWindow: no state for" << screenId;
         return;
     }
-    auto* slot = it->passiveShellMainOverlaySlot;
+    auto* slot = it->mainOverlaySlot();
     if (!slot) {
         qCDebug(lcOverlay) << "dismissOverlayWindow: no slot for" << screenId << "(shell creation may have failed)";
         // Clean up partial state even when slot is null — the shell
@@ -546,7 +546,7 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
     if (shellSurface) {
         m_surfaceAnimator->beginHide(shellSurface, slot, PzRoles::ZoneOverlay, [this, screenIdCopy = screenId]() {
             auto sit = m_screenStates.find(screenIdCopy);
-            if (sit == m_screenStates.end() || !sit->passiveShellMainOverlaySlot) {
+            if (sit == m_screenStates.end() || !sit->mainOverlaySlot()) {
                 return;
             }
             QObject::disconnect(sit->overlayGeomConnection);
@@ -560,8 +560,8 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
             // input change and rebuild only then. Zeroing the hash
             // would force a redundant 23 MB QImage rebuild on every
             // hide/show cycle even for unchanged zone inputs.
-            writeQmlProperty(sit->passiveShellMainOverlaySlot, QStringLiteral("loaded"), false);
-            sit->passiveShellMainOverlaySlot->setVisible(false);
+            writeQmlProperty(sit->mainOverlaySlot(), QStringLiteral("loaded"), false);
+            sit->mainOverlaySlot()->setVisible(false);
             syncPassiveShellSurfaceState(screenIdCopy);
         });
     } else {
@@ -784,7 +784,7 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
 
 void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physScreen)
 {
-    auto* slot = m_screenStates.value(screenId).passiveShellMainOverlaySlot;
+    auto* slot = m_screenStates.value(screenId).mainOverlaySlot();
     if (!slot) {
         return;
     }

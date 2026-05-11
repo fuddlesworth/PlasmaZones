@@ -120,7 +120,7 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
 
     PerScreenOverlayState* state = nullptr;
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        if (it.value().passiveShellMainOverlaySlot == slot) {
+        if (it.value().mainOverlaySlot() == slot) {
             state = &it.value();
             break;
         }
@@ -340,7 +340,7 @@ void OverlayService::updateZonesForAllWindows()
 
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
         const QString& screenId = it.key();
-        auto* slot = it.value().passiveShellMainOverlaySlot;
+        auto* slot = it.value().mainOverlaySlot();
 
         if (!slot) {
             continue;
@@ -369,7 +369,7 @@ void OverlayService::updateZonesForAllWindows()
 
     ++m_zoneDataVersion;
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-        auto* slot = it_.value().passiveShellMainOverlaySlot;
+        auto* slot = it_.value().mainOverlaySlot();
         if (slot) {
             writeQmlProperty(slot, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
         }

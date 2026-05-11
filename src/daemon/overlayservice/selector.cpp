@@ -55,7 +55,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
 
     auto showOnScreen = [this](const QString& screenId, QScreen* physScreen, const QRect& targetGeom) {
         auto* state = ensurePassiveShellFor(screenId, physScreen);
-        if (!state || !state->shell->shellSurface || !state->passiveShellZoneSelectorSlot) {
+        if (!state || !state->shell->shellSurface || !state->zoneSelectorSlot()) {
             return;
         }
         state->zoneSelectorPhysScreen = physScreen;
@@ -66,7 +66,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             state->shell->shellWindow->setHeight(targetGeom.height());
         }
         updateZoneSelectorWindow(screenId);
-        auto* slot = state->passiveShellZoneSelectorSlot;
+        auto* slot = state->zoneSelectorSlot();
         // OSD-style content lifecycle: toggle `loaded` false→true so the
         // Loader re-instantiates ZoneSelectorContent fresh per show.
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
@@ -143,7 +143,7 @@ void OverlayService::hideZoneSelector()
     // operator[] re-lookup (which would default-insert if a key were
     // ever absent — fragile invariant to rely on).
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        auto* slot = it->passiveShellZoneSelectorSlot;
+        auto* slot = it->zoneSelectorSlot();
         if (!slot || !slot->isVisible()) {
             continue;
         }
@@ -183,13 +183,13 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     // Clear selection highlight on all OTHER zone selector slots when cursor
     // moves to a different VS, preventing stale highlights from previous VS.
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        if (it.key() != cursorScreenId && it.value().passiveShellZoneSelectorSlot) {
-            writeQmlProperty(it.value().passiveShellZoneSelectorSlot, QStringLiteral("selectedLayoutId"), QString());
-            writeQmlProperty(it.value().passiveShellZoneSelectorSlot, QStringLiteral("selectedZoneIndex"), -1);
+        if (it.key() != cursorScreenId && it.value().zoneSelectorSlot()) {
+            writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedLayoutId"), QString());
+            writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedZoneIndex"), -1);
         }
     }
 
-    if (auto* slot = m_screenStates.value(cursorScreenId).passiveShellZoneSelectorSlot) {
+    if (auto* slot = m_screenStates.value(cursorScreenId).zoneSelectorSlot()) {
         auto* window = m_screenStates.value(cursorScreenId).shell->shellWindow;
         // Convert global cursor position to window-local coordinates.
         int localX, localY;
@@ -448,7 +448,7 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
         return;
     }
     auto* state = ensurePassiveShellFor(screenId, physScreen);
-    if (!state || !state->passiveShellZoneSelectorSlot) {
+    if (!state || !state->zoneSelectorSlot()) {
         return;
     }
     state->zoneSelectorPhysScreen = physScreen;
@@ -456,7 +456,7 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     const QRect screenGeom = geom.isValid() ? geom : physScreen->geometry();
     state->zoneSelectorGeometry = screenGeom;
 
-    auto* slot = state->passiveShellZoneSelectorSlot;
+    auto* slot = state->zoneSelectorSlot();
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
     aspectRatio = qBound(0.5, aspectRatio, 4.0);
@@ -503,7 +503,7 @@ void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
                 if (sit.key() == screenId) {
                     continue;
                 }
-                if (sit.value().passiveShellZoneSelectorSlot && sit.value().passiveShellZoneSelectorSlot->isVisible()) {
+                if (sit.value().zoneSelectorSlot() && sit.value().zoneSelectorSlot()->isVisible()) {
                     anyOtherVisible = true;
                     break;
                 }
@@ -522,7 +522,7 @@ void OverlayService::hideZoneSelectorSlotOnScreen(const QString& effectiveId)
     if (it == m_screenStates.end()) {
         return;
     }
-    auto* slot = it->passiveShellZoneSelectorSlot;
+    auto* slot = it->zoneSelectorSlot();
     if (!slot || !slot->isVisible()) {
         return;
     }
@@ -546,17 +546,17 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
     // slot painted with stale geometry.
     {
         auto existing = m_screenStates.find(effectiveId);
-        if (existing != m_screenStates.end() && existing->passiveShellZoneSelectorSlot
-            && existing->passiveShellZoneSelectorSlot->isVisible() && existing->zoneSelectorPhysScreen == physScreen
+        if (existing != m_screenStates.end() && existing->zoneSelectorSlot()
+            && existing->zoneSelectorSlot()->isVisible() && existing->zoneSelectorPhysScreen == physScreen
             && existing->zoneSelectorGeometry == targetGeom) {
             return;
         }
     }
     auto* state = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!state || !state->shell->shellSurface || !state->passiveShellZoneSelectorSlot) {
+    if (!state || !state->shell->shellSurface || !state->zoneSelectorSlot()) {
         return;
     }
-    auto* slot = state->passiveShellZoneSelectorSlot;
+    auto* slot = state->zoneSelectorSlot();
     state->zoneSelectorPhysScreen = physScreen;
     state->zoneSelectorGeometry = targetGeom;
     if (state->shell->shellWindow) {
@@ -579,11 +579,11 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
 void OverlayService::onZoneSelectorSlotHideCompleted(const QString& effectiveId)
 {
     auto it = m_screenStates.find(effectiveId);
-    if (it == m_screenStates.end() || !it->passiveShellZoneSelectorSlot) {
+    if (it == m_screenStates.end() || !it->zoneSelectorSlot()) {
         return;
     }
-    it->passiveShellZoneSelectorSlot->setVisible(false);
-    writeQmlProperty(it->passiveShellZoneSelectorSlot, QStringLiteral("loaded"), false);
+    it->zoneSelectorSlot()->setVisible(false);
+    writeQmlProperty(it->zoneSelectorSlot(), QStringLiteral("loaded"), false);
     syncPassiveShellSurfaceState(effectiveId);
 }
 
@@ -710,7 +710,7 @@ void OverlayService::scrollZoneSelector(int angleDeltaY)
         return;
     }
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-        auto* slot = it_.value().passiveShellZoneSelectorSlot;
+        auto* slot = it_.value().zoneSelectorSlot();
         if (slot) {
             QMetaObject::invokeMethod(slot, "applyScrollDelta", Q_ARG(QVariant, angleDeltaY));
         }

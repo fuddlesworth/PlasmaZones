@@ -117,7 +117,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         return;
     }
 
-    auto* window = m_screenStates.value(screenId).passiveShellZoneSelectorSlot;
+    auto* window = m_screenStates.value(screenId).zoneSelectorSlot();
     if (!window) {
         return;
     }

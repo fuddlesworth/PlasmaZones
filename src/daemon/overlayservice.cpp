@@ -7,6 +7,7 @@
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 #include <PhosphorOverlay/ShellHost.h>
+#include <PhosphorOverlay/ShellState.h>
 
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorSurfaces/SurfaceManagerConfig.h>
@@ -49,6 +50,7 @@
 #include <PhosphorLayer/defaults/PhosphorWaylandTransport.h>
 #include <QQuickItem>
 #include "overlayservice/pz_roles.h"
+#include "overlayservice/pz_slot_keys.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -64,23 +66,21 @@ void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
 {
     QObject::disconnect(state.overlayGeomConnection);
     state.overlayGeomConnection = {};
-    if (state.shell->shellSurface) {
+    if (state.shell && state.shell->shellSurface) {
         state.shell->shellSurface->deleteLater();
     }
-    state.shell->shellSurface = nullptr;
-    state.shell->shellWindow = nullptr;
-    // Slot Items are children of the shell QQuickWindow; deleting the
-    // shell destroys them. Null all five slot pointers so a stale
-    // signal handler that runs before the screen-state entry is purged
-    // doesn't dereference a dangling QQuickItem*.
-    state.passiveShellOsdSlot = nullptr;
-    state.passiveShellSnapAssistSlot = nullptr;
-    state.passiveShellLayoutPickerSlot = nullptr;
-    state.passiveShellZoneSelectorSlot = nullptr;
-    state.passiveShellMainOverlaySlot = nullptr;
+    if (state.shell) {
+        state.shell->shellSurface = nullptr;
+        state.shell->shellWindow = nullptr;
+        // Slot Items are children of the shell QQuickWindow; deleting the
+        // shell destroys them. Clear the slot map so a stale signal
+        // handler that runs before the screen-state entry is purged
+        // doesn't dereference a dangling QQuickItem*.
+        state.shell->slots.clear();
+        state.shell->physScreen = nullptr;
+    }
     state.overlayPhysScreen = nullptr;
     state.zoneSelectorPhysScreen = nullptr;
-    state.shell->physScreen = nullptr;
 }
 
 // Release every surface across the state map, then clear it.
@@ -113,7 +113,46 @@ void cleanupVirtualScreenStates(QHash<QString, OverlayService::PerScreenOverlayS
     }
 }
 
+// Resolve a slot Item from the lib's per-screen slot map. Returns
+// nullptr when no shell is wired up, when no slot under @p key was
+// populated by the post-create callback, or when the QPointer in the
+// map has been cleared because the underlying QQuickItem was destroyed
+// (typically: shell torn down out from under us by a deferred signal).
+QQuickItem* slotItemOrNull(const OverlayService::PerScreenOverlayState& state, const QString& key)
+{
+    if (!state.shell) {
+        return nullptr;
+    }
+    auto it = state.shell->slots.constFind(key);
+    return it == state.shell->slots.cend() ? nullptr : it.value().data();
+}
+
 } // namespace
+
+QQuickItem* OverlayService::PerScreenOverlayState::osdSlot() const
+{
+    return slotItemOrNull(*this, PzSlotKeys::Osd());
+}
+
+QQuickItem* OverlayService::PerScreenOverlayState::snapAssistSlot() const
+{
+    return slotItemOrNull(*this, PzSlotKeys::SnapAssist());
+}
+
+QQuickItem* OverlayService::PerScreenOverlayState::layoutPickerSlot() const
+{
+    return slotItemOrNull(*this, PzSlotKeys::LayoutPicker());
+}
+
+QQuickItem* OverlayService::PerScreenOverlayState::zoneSelectorSlot() const
+{
+    return slotItemOrNull(*this, PzSlotKeys::ZoneSelector());
+}
+
+QQuickItem* OverlayService::PerScreenOverlayState::mainOverlaySlot() const
+{
+    return slotItemOrNull(*this, PzSlotKeys::MainOverlay());
+}
 
 // Per-role SurfaceAnimator config builders + setupSurfaceAnimator +
 // applyShaderProfilesToAnimator are extracted to
@@ -793,7 +832,7 @@ void OverlayService::hideDisabledAndRefresh()
                               m_currentActivity)) {
             continue;
         }
-        if (it.value().passiveShellZoneSelectorSlot) {
+        if (it.value().zoneSelectorSlot()) {
             updateZoneSelectorWindow(screenId);
         }
         if (m_visible && it.value().overlayPhysScreen) {

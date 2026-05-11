@@ -106,7 +106,7 @@ public:
         // @c ensurePassiveShellFor shim after @c ShellHost::ensureShell
         // materializes a lib-side entry; the pointer is stable across
         // map operations because ShellHost stores entries through
-        // @c std::unique_ptr. nullptr until the first ensure call wires
+        // raw owning pointers. nullptr until the first ensure call wires
         // it up.
         //
         // The pointee is the single source of truth for shell mechanism
@@ -118,11 +118,16 @@ public:
         // / zoneSelectorPhysScreen / ...) live below — they're PZ-content
         // state, not lib-mechanism state.
         PhosphorOverlay::ShellState* shell = nullptr;
-        QQuickItem* passiveShellOsdSlot = nullptr;
-        QQuickItem* passiveShellSnapAssistSlot = nullptr;
-        QQuickItem* passiveShellLayoutPickerSlot = nullptr;
-        QQuickItem* passiveShellZoneSelectorSlot = nullptr;
-        QQuickItem* passiveShellMainOverlaySlot = nullptr;
+
+        /// Convenience accessors that resolve the named PZ slot through
+        /// the shell's generic slot map. Returns nullptr when no shell
+        /// is wired up, or when the QML aliasing in PassiveOverlayShell.qml
+        /// did not expose the requested slot Item.
+        QQuickItem* osdSlot() const;
+        QQuickItem* snapAssistSlot() const;
+        QQuickItem* layoutPickerSlot() const;
+        QQuickItem* zoneSelectorSlot() const;
+        QQuickItem* mainOverlaySlot() const;
 
         // overlayPhysScreen != nullptr is the sentinel for "main overlay
         // mode is active on this screen" — set in createOverlayWindow,

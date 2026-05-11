@@ -19,6 +19,7 @@
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
 #include "pz_roles.h"
+#include "pz_slot_keys.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
@@ -107,7 +108,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
     auto* state = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!state || !state->shell->shellWindow || !state->passiveShellOsdSlot) {
+    if (!state || !state->shell->shellWindow || !state->osdSlot()) {
         qCWarning(lcOverlay) << "Failed to get passive shell for layout OSD on screen=" << effectiveId;
         return false;
     }
@@ -120,7 +121,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
 
     window = state->shell->shellWindow;
     outSurface = state->shell->shellSurface;
-    outOsdSlot = state->passiveShellOsdSlot;
+    outOsdSlot = state->osdSlot();
 
     // Mode is NOT written here — callers write data properties first, then
     // set mode. This ensures the Loader's freshly instantiated content
@@ -467,50 +468,41 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
 
 void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState)
 {
-    auto& pzState = m_screenStates[screenId];
-
-    // Cache the per-content slot Items — exposed as `osdSlotItem` /
-    // `snapAssistSlotItem` on the shell window root via QML aliases.
-    // Per-show writeQmlProperty / animator beginShow target these Items
-    // directly.
-    if (auto* window = shellState.shellWindow) {
-        pzState.passiveShellOsdSlot = qvariant_cast<QQuickItem*>(window->property("osdSlotItem"));
-        if (!pzState.passiveShellOsdSlot) {
-            qCWarning(lcOverlay)
-                << "PassiveOverlayShell on screen=" << screenId
-                << "did not expose `osdSlotItem`: OSD content writes will fall through. Check QML resource.";
-        }
-        pzState.passiveShellSnapAssistSlot = qvariant_cast<QQuickItem*>(window->property("snapAssistSlotItem"));
-        if (!pzState.passiveShellSnapAssistSlot) {
-            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << screenId
-                                 << "did not expose `snapAssistSlotItem`: snap-assist on this screen will fail.";
-        }
-        pzState.passiveShellLayoutPickerSlot = qvariant_cast<QQuickItem*>(window->property("layoutPickerSlotItem"));
-        if (!pzState.passiveShellLayoutPickerSlot) {
-            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << screenId
-                                 << "did not expose `layoutPickerSlotItem`: picker on this screen will fail.";
-        }
-        pzState.passiveShellZoneSelectorSlot = qvariant_cast<QQuickItem*>(window->property("zoneSelectorSlotItem"));
-        if (!pzState.passiveShellZoneSelectorSlot) {
-            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << screenId
-                                 << "did not expose `zoneSelectorSlotItem`: selector on this screen will fail.";
-        }
-        pzState.passiveShellMainOverlaySlot = qvariant_cast<QQuickItem*>(window->property("mainOverlaySlotItem"));
-        if (!pzState.passiveShellMainOverlaySlot) {
-            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << screenId
-                                 << "did not expose `mainOverlaySlotItem`: main overlay on this screen will fail.";
-        }
-
-        // Wire QML signals → animator-driven slot hide / forward.
-        QObject::connect(window, SIGNAL(osdDismissRequested()), this, SLOT(onOsdDismissRequested()));
-        QObject::connect(window, SIGNAL(snapAssistDismissRequested()), this, SLOT(onSnapAssistDismissRequested()));
-        QObject::connect(window, SIGNAL(snapAssistWindowSelected(QString, QString, QString)), this,
-                         SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
-        QObject::connect(window, SIGNAL(layoutPickerSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
-        QObject::connect(window, SIGNAL(layoutPickerDismissRequested()), this, SLOT(onLayoutPickerDismissRequested()));
-        QObject::connect(window, SIGNAL(zoneSelectorZoneSelected(QString, int, QVariant)), this,
-                         SLOT(onZoneSelected(QString, int, QVariant)));
+    // Look up the per-content slot Items by their QML object names —
+    // exposed as `osdSlotItem` / `snapAssistSlotItem` / … on the shell
+    // window root via QML aliases — and cache them under the daemon's
+    // slot-key vocabulary in the lib's generic slot map. Per-show
+    // writeQmlProperty / animator beginShow target these Items via
+    // the PerScreenOverlayState::xxxSlot() accessors.
+    auto* window = shellState.shellWindow;
+    if (!window) {
+        return;
     }
+
+    auto wireSlot = [&](const QString& slotKey, const char* qmlObjectName, const char* descriptionForLog) {
+        auto* item = qvariant_cast<QQuickItem*>(window->property(qmlObjectName));
+        if (!item) {
+            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << screenId << "did not expose `" << qmlObjectName
+                                 << "`:" << descriptionForLog << "will fail. Check QML resource.";
+        }
+        shellState.slots.insert(slotKey, item);
+    };
+
+    wireSlot(PzSlotKeys::Osd(), "osdSlotItem", "OSD content writes");
+    wireSlot(PzSlotKeys::SnapAssist(), "snapAssistSlotItem", "snap-assist on this screen");
+    wireSlot(PzSlotKeys::LayoutPicker(), "layoutPickerSlotItem", "picker on this screen");
+    wireSlot(PzSlotKeys::ZoneSelector(), "zoneSelectorSlotItem", "selector on this screen");
+    wireSlot(PzSlotKeys::MainOverlay(), "mainOverlaySlotItem", "main overlay on this screen");
+
+    // Wire QML signals → animator-driven slot hide / forward.
+    QObject::connect(window, SIGNAL(osdDismissRequested()), this, SLOT(onOsdDismissRequested()));
+    QObject::connect(window, SIGNAL(snapAssistDismissRequested()), this, SLOT(onSnapAssistDismissRequested()));
+    QObject::connect(window, SIGNAL(snapAssistWindowSelected(QString, QString, QString)), this,
+                     SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
+    QObject::connect(window, SIGNAL(layoutPickerSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
+    QObject::connect(window, SIGNAL(layoutPickerDismissRequested()), this, SLOT(onLayoutPickerDismissRequested()));
+    QObject::connect(window, SIGNAL(zoneSelectorZoneSelected(QString, int, QVariant)), this,
+                     SLOT(onZoneSelected(QString, int, QVariant)));
 
     // Prime the wl_surface map + Vulkan swapchain init + first-frame
     // render so the very first user-triggered slot show doesn't race
@@ -559,17 +551,11 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     if (it == m_screenStates.end()) {
         return;
     }
-    // Null PZ slot pointers defensively so any signal handler that runs
-    // before the screen-state entry is purged from m_screenStates doesn't
-    // dereference a dangling QQuickItem*.
-    it->passiveShellOsdSlot = nullptr;
-    it->passiveShellSnapAssistSlot = nullptr;
-    it->passiveShellLayoutPickerSlot = nullptr;
-    it->passiveShellZoneSelectorSlot = nullptr;
-    it->passiveShellMainOverlaySlot = nullptr;
-    // Per-content sentinels: tearing the shell down ends every
-    // slot's lifecycle on this screen, so the "context active"
-    // flags must follow.
+    // The lib's destroyShell clears ShellState::slots after this hook
+    // runs, so no slot-pointer nulling is needed here. We only have to
+    // clear the daemon's PZ-content sentinels and disconnect the geom
+    // watcher — those are the parallel-state bookkeeping the lib does
+    // not know about.
     QObject::disconnect(it->overlayGeomConnection);
     it->overlayGeomConnection = {};
     it->overlayPhysScreen = nullptr;
@@ -601,10 +587,10 @@ void OverlayService::onOsdDismissRequested()
             break;
         }
     }
-    if (!state || !state->shell->shellSurface || !state->passiveShellOsdSlot) {
+    if (!state || !state->shell->shellSurface || !state->osdSlot()) {
         return;
     }
-    auto* slot = state->passiveShellOsdSlot;
+    auto* slot = state->osdSlot();
     m_surfaceAnimator->beginHide(state->shell->shellSurface, slot, PzRoles::Osd, [this, effectiveId = matchedId]() {
         onOsdSlotHideCompleted(effectiveId);
     });
@@ -615,14 +601,14 @@ void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
     // Animator hide leg settled — flip slot.visible=false so the next
     // show's beginShow re-asserts opacity 0 → 1 cleanly.
     auto it = m_screenStates.find(effectiveId);
-    if (it == m_screenStates.end() || !it->passiveShellOsdSlot) {
+    if (it == m_screenStates.end() || !it->osdSlot()) {
         return;
     }
-    it->passiveShellOsdSlot->setVisible(false);
+    it->osdSlot()->setVisible(false);
     // Clear mode so the Loader unloads — keeps the QML scene tree
     // small between shows and forces a fresh per-show shaderAnchor on
     // the next mode write.
-    writeQmlProperty(it->passiveShellOsdSlot, QStringLiteral("mode"), QString());
+    writeQmlProperty(it->osdSlot(), QStringLiteral("mode"), QString());
     // Symmetric restore: layout/disabled/navigation OSD show paths
     // hid the zone-selector slot to keep it from peeking through the
     // OSD card. The drag may still be active, so re-show the selector
@@ -684,10 +670,9 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
         }
         return !slot->property("_idled").toBool();
     };
-    const bool anyVisible = isVisible(s.passiveShellOsdSlot) || isVisible(s.passiveShellSnapAssistSlot)
-        || isVisible(s.passiveShellLayoutPickerSlot) || isVisible(s.passiveShellZoneSelectorSlot)
-        || isMainOverlayLive(s.passiveShellMainOverlaySlot);
-    const bool anyInputGrabbing = isVisible(s.passiveShellSnapAssistSlot) || isVisible(s.passiveShellLayoutPickerSlot);
+    const bool anyVisible = isVisible(s.osdSlot()) || isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot())
+        || isVisible(s.zoneSelectorSlot()) || isMainOverlayLive(s.mainOverlaySlot());
+    const bool anyInputGrabbing = isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot());
 
     m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing);
 }
@@ -778,7 +763,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // path; the dismiss path is QML → osdDismissRequested → animator
     // beginHide.
     auto* navState = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!navState || !navState->shell->shellWindow || !navState->passiveShellOsdSlot) {
+    if (!navState || !navState->shell->shellWindow || !navState->osdSlot()) {
         qCDebug(lcOverlay) << "No passive shell for navigation OSD on screen=" << effectiveId;
         return;
     }
@@ -787,7 +772,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
     auto* window = navState->shell->shellWindow;
     auto* navSurface = navState->shell->shellSurface;
-    auto* osdSlot = navState->passiveShellOsdSlot;
+    auto* osdSlot = navState->osdSlot();
 
     // Process reason field - for rotation/resnap, extract window count
     // Format: "clockwise:N" or "counterclockwise:N" or "resnap:N" where N is window count
