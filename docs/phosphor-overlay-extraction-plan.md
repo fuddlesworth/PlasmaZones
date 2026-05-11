@@ -3,7 +3,8 @@
 
 # phosphor-overlay extraction plan
 
-**Status:** sketch. Not yet started.
+**Status:** Phases 0a-5 shipped in PR #436; Phase 6 deferred. See the
+status table at the bottom for the per-phase breakdown.
 
 ## Why
 

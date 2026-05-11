@@ -284,9 +284,11 @@ void OverlayService::updateShaderUniforms()
     float iTimeDelta = qMin(static_cast<float>(currentTime - lastTime) / 1000.0f,
                             PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds);
 
-    // Prevent frame counter overflow (reset at 1 billion, ~193 days at 60fps)
+    // Prevent frame counter overflow (~193 days at 60fps before the
+    // reset cap kicks in).
+    constexpr int kFrameOverflowReset = 1'000'000'000;
     int frame = m_frameCount.fetch_add(1);
-    if (frame > 1000000000) {
+    if (frame > kFrameOverflowReset) {
         m_frameCount.store(0);
     }
 
@@ -302,7 +304,7 @@ void OverlayService::updateShaderUniforms()
     // binds to mainOverlaySlot.iTime, so writes to the window root would
     // create dynamic properties that QML never observes.
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
-        if (!it.value().overlayPhysScreen) {
+        if (!it.value().overlayPhysScreen || !it.value().shell) {
             continue;
         }
         auto* slot = it.value().mainOverlaySlot();

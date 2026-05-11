@@ -131,7 +131,8 @@ public:
 
         // overlayPhysScreen != nullptr is the sentinel for "main overlay
         // mode is active on this screen" — set in createOverlayWindow,
-        // cleared in destroyOverlayWindow / releaseSurfacesInState.
+        // cleared in destroyOverlayWindow / by the PreDestroyCallback
+        // registered on m_shellHost (OverlayService::unwirePassiveShellSlots).
         QScreen* overlayPhysScreen = nullptr;
         QRect overlayGeometry;
         QMetaObject::Connection overlayGeomConnection; ///< geometryChanged connection for overlay
@@ -554,11 +555,14 @@ private:
     // Managed surface lifecycle: shared QQmlEngine, Vulkan keep-alive, scope generation.
     std::unique_ptr<PhosphorSurfaces::SurfaceManager> m_surfaceManager;
 
-    // ShellHost holds the per-screen layer-shell shell state (surfaces,
+    // ShellHost owns the per-screen layer-shell shell state (surfaces,
     // windows, slot Items) and the sticky creation-failure spam-guard.
-    // Method moves from OverlayService land in subsequent Phase 2 commits;
-    // for now the host is a passive member alongside m_screenStates, with
-    // ownership over the library-side state shape.
+    // The daemon's PerScreenOverlayState below caches a borrowed
+    // ShellState* pointer that points into m_shellHost's owning map;
+    // m_shellHost must outlive m_screenStates (enforced by member
+    // declaration order — m_shellHost above m_screenStates means
+    // reverse-destruction order drains m_screenStates first, then
+    // destroys m_shellHost).
     std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
 
     QHash<QString, PerScreenOverlayState> m_screenStates;

@@ -109,6 +109,10 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
     wireSlot(PzSlotKeys::MainOverlay(), "mainOverlaySlotItem", PzRoles::ZoneOverlay, "main overlay on this screen");
 
     // Wire QML signals → animator-driven slot hide / forward.
+    // String-based SIGNAL/SLOT macros are required here because the source
+    // signals are declared on `PassiveOverlayShell.qml` (a QML object's
+    // dynamic signal list), not on a C++ type — the function-pointer form
+    // can't resolve them at compile time.
     QObject::connect(window, SIGNAL(osdDismissRequested()), this, SLOT(onOsdDismissRequested()));
     QObject::connect(window, SIGNAL(snapAssistDismissRequested()), this, SLOT(onSnapAssistDismissRequested()));
     QObject::connect(window, SIGNAL(snapAssistWindowSelected(QString, QString, QString)), this,
@@ -136,7 +140,7 @@ void OverlayService::warmUpNotifications()
             m_screenManager ? m_screenManager->physicalQScreenFor(sid) : Utils::findScreenAtPosition(QPoint(0, 0));
         if (physScreen) {
             auto* state = ensurePassiveShellFor(sid, physScreen);
-            if (state && state->shell->shellSurface) {
+            if (state && state->shell && state->shell->shellSurface) {
                 ++createdCount;
             }
         }
@@ -239,7 +243,7 @@ void OverlayService::syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surfa
         return;
     }
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (it.value().shell->shellSurface == surface) {
+        if (it.value().shell && it.value().shell->shellSurface == surface) {
             syncPassiveShellSurfaceState(it.key());
             return;
         }

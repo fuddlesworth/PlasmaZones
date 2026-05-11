@@ -57,7 +57,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
 
     auto showOnScreen = [this](const QString& screenId, QScreen* physScreen, const QRect& targetGeom) {
         auto* state = ensurePassiveShellFor(screenId, physScreen);
-        if (!state || !state->shell->shellSurface || !state->zoneSelectorSlot()) {
+        if (!state || !state->shell || !state->shell->shellSurface || !state->zoneSelectorSlot()) {
             return;
         }
         state->zoneSelectorPhysScreen = physScreen;
@@ -191,11 +191,13 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         }
     }
 
-    if (auto* slot = m_screenStates.value(cursorScreenId).zoneSelectorSlot()) {
-        auto* window = m_screenStates.value(cursorScreenId).shell->shellWindow;
+    auto cursorStateIt = m_screenStates.constFind(cursorScreenId);
+    if (cursorStateIt != m_screenStates.constEnd() && cursorStateIt->zoneSelectorSlot()) {
+        auto* slot = cursorStateIt->zoneSelectorSlot();
+        auto* window = cursorStateIt->shell ? cursorStateIt->shell->shellWindow : nullptr;
         // Convert global cursor position to window-local coordinates.
         int localX, localY;
-        const QRect& storedGeom = m_screenStates.value(cursorScreenId).zoneSelectorGeometry;
+        const QRect& storedGeom = cursorStateIt->zoneSelectorGeometry;
         const QRect winGeom = storedGeom.isValid() ? storedGeom : (window ? window->geometry() : QRect());
         if (winGeom.isValid() && winGeom.width() > 0) {
             localX = cursorX - winGeom.x();
@@ -689,7 +691,7 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
     if (senderWindow) {
         for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-            if (it.value().shell->shellWindow == senderWindow) {
+            if (it.value().shell && it.value().shell->shellWindow == senderWindow) {
                 screenId = it.key();
                 break;
             }

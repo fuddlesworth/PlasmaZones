@@ -6,7 +6,7 @@
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorLayer/Surface.h>
 
-#include <QLatin1Char>
+#include <QChar>
 #include <QQuickItem>
 #include <QQuickWindow>
 
@@ -31,7 +31,19 @@ ShellHost::ShellHost(QObject* parent)
 
 ShellHost::~ShellHost()
 {
+    // Surfaces still mapped must have deleteLater scheduled (so the Qt
+    // event loop unmaps them cleanly) and consumers must get a chance
+    // to drop their borrowed pointers. Iterate keys via destroyShell
+    // first; then qDeleteAll wipes the now-zeroed heap objects.
+    // Consumers that already called destroyShell on every screen
+    // (e.g. OverlayService::~OverlayService) hit the early-return on
+    // null shellSurface, so the iteration is idempotent.
+    const QStringList keys = m_states.keys();
+    for (const QString& key : keys) {
+        destroyShell(key);
+    }
     qDeleteAll(m_states);
+    m_states.clear();
 }
 
 void ShellHost::setSurfaceFactory(SurfaceFactory factory)
@@ -199,7 +211,7 @@ void ShellHost::registerConfigForRole(const PhosphorLayer::Role& role,
 
 void ShellHost::hideSlot(const QString& screenId, const QString& slotKey, std::function<void()> completion)
 {
-    if (!m_surfaceAnimator) {
+    if (!m_surfaceAnimator || screenId.isEmpty() || slotKey.isEmpty()) {
         return;
     }
     auto it = m_states.find(screenId);

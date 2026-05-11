@@ -6,6 +6,7 @@
 include(CMakeFindDependencyMacro)
 
 find_dependency(Qt6 6.6 COMPONENTS Core Quick)
+
 find_dependency(PhosphorLayer)
 find_dependency(PhosphorShellPatterns)
 find_dependency(PhosphorSurfaces)

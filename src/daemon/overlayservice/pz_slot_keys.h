@@ -15,7 +15,6 @@
 // is constructed once on first call.
 
 #include <QString>
-#include <QStringLiteral>
 
 namespace PlasmaZones::PzSlotKeys {
 

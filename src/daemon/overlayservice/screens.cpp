@@ -79,7 +79,8 @@ void OverlayService::handleScreenAdded(QScreen* screen)
 
     // Always attempt to recreate overlay windows for reconnected screens,
     // even when m_visible is false. This handles monitor power-cycle recovery:
-    // screenRemoved clears m_notificationCreationFailed sentinels, so when the
+    // screenRemoved clears the ShellHost creation-failure sentinels
+    // (m_shellHost->clearFailure() per prefix-matched id), so when the
     // screen comes back we must retry shell creation. If m_visible is true the
     // existing path also shows the overlay; if false we just ensure the
     // windows exist so the next showAtPosition call finds them ready.
@@ -103,7 +104,7 @@ void OverlayService::handleScreenAdded(QScreen* screen)
                 createOverlayWindow(vsId, screen, vsGeom);
                 updateOverlayWindow(vsId, screen);
                 const auto& vsState = m_screenStates.value(vsId);
-                if (vsState.overlayPhysScreen) {
+                if (vsState.overlayPhysScreen && vsState.shell) {
                     if (auto* window = vsState.shell->shellWindow) {
                         assertWindowOnScreen(window, screen, vsGeom);
                         if (vsState.shell->shellSurface && !vsState.shell->shellSurface->isLogicallyShown()) {
@@ -117,7 +118,7 @@ void OverlayService::handleScreenAdded(QScreen* screen)
         createOverlayWindow(screen);
         updateOverlayWindow(screen);
         const auto& pState = m_screenStates.value(physScreenId);
-        if (pState.overlayPhysScreen) {
+        if (pState.overlayPhysScreen && pState.shell) {
             if (auto* window = pState.shell->shellWindow) {
                 assertWindowOnScreen(window, screen);
                 if (pState.shell->shellSurface && !pState.shell->shellSurface->isLogicallyShown()) {
@@ -143,14 +144,14 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     for (const QString& id : screenIds) {
         const auto& state = m_screenStates[id];
         if (state.overlayPhysScreen == screen || state.zoneSelectorPhysScreen == screen
-            || state.shell->physScreen == screen) {
+            || (state.shell && state.shell->physScreen == screen)) {
             destroyOverlayWindow(id);
             destroyZoneSelectorWindow(id);
             destroyPassiveShell(id);
             // Drop the empty state entry once the shell surface is gone —
             // screen hot-plug cycles don't slowly accumulate dead keys.
             auto& s = m_screenStates[id];
-            if (!s.shell->shellSurface) {
+            if (!s.shell || !s.shell->shellSurface) {
                 m_screenStates.remove(id);
             }
         }

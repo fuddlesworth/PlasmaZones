@@ -245,8 +245,8 @@ void OverlayService::setIdleForDragPause()
     // to a surface that's rendering no visible geometry — bounded cost, O(1)
     // per screen. Pausing and restarting the timer across the idle cycle
     // would require additional state tracking in refreshFromIdle() and add
-    // a startup transient on every modifier re-press. Left unchanged for
-    // simplicity; revisit if profiling ever shows it as a hot spot.
+    // a startup transient on every modifier re-press. The bounded per-frame
+    // cost is the cheaper trade.
 }
 
 void OverlayService::refreshFromIdle()

@@ -200,7 +200,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
                 createOverlayWindow(physScreen);
             }
         }
-        if (auto* window = m_screenStates.value(screenId).shell->shellWindow) {
+        auto* shellState = m_screenStates.value(screenId).shell;
+        if (auto* window = shellState ? shellState->shellWindow : nullptr) {
             m_screenStates[screenId].overlayPhysScreen = physScreen;
             if (geom.isValid()) {
                 m_screenStates[screenId].overlayGeometry = geom;
@@ -214,7 +215,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             // Post-shell-migration: shell window stays mapped permanently;
             // animation drives the per-content slot's opacity. Surface::show()
             // only fires on the very first transition Hidden→Shown.
-            auto* shellSurface = m_screenStates[screenId].shell->shellSurface;
+            auto* shellSurface = shellState->shellSurface;
             auto* slot = m_screenStates[screenId].mainOverlaySlot();
             if (shellSurface && slot) {
                 if (!shellSurface->isLogicallyShown()) {
@@ -241,7 +242,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // attempt recreation on screen reconnection.
     int liveOverlayCount = 0;
     for (const auto& state : m_screenStates) {
-        if (state.overlayPhysScreen && state.shell->shellWindow) {
+        if (state.overlayPhysScreen && state.shell && state.shell->shellWindow) {
             ++liveOverlayCount;
         }
     }
@@ -403,7 +404,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         return;
     }
     auto* state = ensurePassiveShellFor(screenId, physScreen);
-    if (!state || !state->mainOverlaySlot()) {
+    if (!state || !state->shell || !state->mainOverlaySlot()) {
         return;
     }
 
@@ -544,7 +545,7 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
     // setVisible(false) out from under a possibly-still-running
     // beginShow — that would leave the Track in m_pendingDestroy with
     // a stale onComplete callback racing the next show.
-    auto* shellSurface = it->shell->shellSurface;
+    auto* shellSurface = it->shell ? it->shell->shellSurface : nullptr;
     if (shellSurface) {
         m_shellHost->hideSlot(screenId, PzSlotKeys::MainOverlay(), [this, screenIdCopy = screenId]() {
             auto sit = m_screenStates.find(screenIdCopy);
@@ -720,7 +721,7 @@ QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* p
             return; // State was cleaned up, ignore stale geometry signal
         }
         auto& st = stateIt.value();
-        if (!st.overlayPhysScreen) {
+        if (!st.overlayPhysScreen || !st.shell) {
             return; // Main overlay context not active for this entry
         }
         if (auto* w = st.shell->shellWindow) {

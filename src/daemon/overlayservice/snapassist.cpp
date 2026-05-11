@@ -29,8 +29,10 @@
 
 namespace PlasmaZones {
 
+namespace {
+
 /// Convert EmptyZoneList to QVariantList for QML property push
-static QVariantList emptyZonesToVariantList(const EmptyZoneList& zones)
+QVariantList emptyZonesToVariantList(const EmptyZoneList& zones)
 {
     QVariantList result;
     result.reserve(zones.size());
@@ -57,7 +59,7 @@ static QVariantList emptyZonesToVariantList(const EmptyZoneList& zones)
 }
 
 /// Convert SnapAssistCandidateList to QVariantList for QML property push
-static QVariantList candidatesToVariantList(const SnapAssistCandidateList& candidates)
+QVariantList candidatesToVariantList(const SnapAssistCandidateList& candidates)
 {
     QVariantList result;
     result.reserve(candidates.size());
@@ -71,6 +73,8 @@ static QVariantList candidatesToVariantList(const SnapAssistCandidateList& candi
     }
     return result;
 }
+
+} // namespace
 
 void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
                                     const SnapAssistCandidateList& candidates)
@@ -117,7 +121,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
 
     // Resolve target shell — per-screen shell hosts the snap-assist slot.
     auto* state = ensurePassiveShellFor(screenId, screen);
-    if (!state || !state->shell->shellSurface || !state->snapAssistSlot()) {
+    if (!state || !state->shell || !state->shell->shellSurface || !state->snapAssistSlot()) {
         qCWarning(lcOverlay) << "showSnapAssist: no passive shell for screen=" << screenId;
         Q_EMIT snapAssistDismissed();
         return;
@@ -132,7 +136,8 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     if (m_snapAssistVisible && !m_snapAssistScreenId.isEmpty() && m_snapAssistScreenId != screenId) {
         const QString prevScreenId = m_snapAssistScreenId;
         auto prevIt = m_screenStates.find(prevScreenId);
-        if (prevIt != m_screenStates.end() && prevIt->shell->shellSurface && prevIt->snapAssistSlot()) {
+        if (prevIt != m_screenStates.end() && prevIt->shell && prevIt->shell->shellSurface
+            && prevIt->snapAssistSlot()) {
             m_shellHost->hideSlot(prevScreenId, PzSlotKeys::SnapAssist(), [this, prevScreenId]() {
                 onSnapAssistSlotHideCompleted(prevScreenId);
             });
@@ -313,7 +318,8 @@ void OverlayService::hideSnapAssist()
     m_snapAssistScreenId.clear();
 
     auto stateIt = m_screenStates.find(screenId);
-    if (stateIt != m_screenStates.end() && stateIt->shell->shellSurface && stateIt->snapAssistSlot()) {
+    if (stateIt != m_screenStates.end() && stateIt->shell && stateIt->shell->shellSurface
+        && stateIt->snapAssistSlot()) {
         m_shellHost->hideSlot(screenId, PzSlotKeys::SnapAssist(), [this, effectiveId = screenId]() {
             onSnapAssistSlotHideCompleted(effectiveId);
         });
@@ -396,7 +402,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
 
     auto* state = ensurePassiveShellFor(resolvedId, screen);
-    if (!state || !state->shell->shellSurface || !state->layoutPickerSlot()) {
+    if (!state || !state->shell || !state->shell->shellSurface || !state->layoutPickerSlot()) {
         qCWarning(lcOverlay) << "showLayoutPicker: no passive shell for screen=" << resolvedId;
         return;
     }
@@ -490,7 +496,8 @@ void OverlayService::hideLayoutPicker()
     m_layoutPickerScreenId.clear();
 
     auto stateIt = m_screenStates.find(screenId);
-    if (stateIt != m_screenStates.end() && stateIt->shell->shellSurface && stateIt->layoutPickerSlot()) {
+    if (stateIt != m_screenStates.end() && stateIt->shell && stateIt->shell->shellSurface
+        && stateIt->layoutPickerSlot()) {
         m_shellHost->hideSlot(screenId, PzSlotKeys::LayoutPicker(), [this, effectiveId = screenId]() {
             onLayoutPickerSlotHideCompleted(effectiveId);
         });

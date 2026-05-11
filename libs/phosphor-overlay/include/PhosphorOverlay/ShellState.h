@@ -37,9 +37,12 @@ namespace PhosphorOverlay {
 struct PHOSPHOROVERLAY_EXPORT ShellState
 {
     /// The layer-shell wl_surface backing this screen's overlay shell.
-    /// Owned by the SurfaceManager; ShellHost holds a borrowed pointer.
-    /// nullptr means the shell has not been created yet (or was torn
-    /// down and not yet re-created).
+    /// Lifetime is managed by the Qt parent chain (the Surface is a
+    /// QObject parented inside the SurfaceManager / consumer-owned
+    /// engine), but ShellHost::destroyShell schedules `deleteLater()`
+    /// explicitly so the wl_surface unmaps deterministically rather
+    /// than at random parent-dtor time. nullptr means the shell has
+    /// not been created yet (or was torn down and not yet re-created).
     PhosphorLayer::Surface* shellSurface = nullptr;
 
     /// The QQuickWindow hosting the shell's QML scene tree. Cached at
