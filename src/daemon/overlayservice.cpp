@@ -57,62 +57,6 @@ namespace PlasmaZones {
 
 namespace {
 
-// Tear down every PhosphorLayer::Surface referenced by a state entry.
-// The Surface owns its QQuickWindow; deleteLater cascades into ~Surface
-// which unmaps the layer surface and schedules the window for deletion.
-// We never touch the QQuickWindow* directly — double-destroying a Surface-
-// owned window was the source of UB in a prior revision of this file.
-void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
-{
-    QObject::disconnect(state.overlayGeomConnection);
-    state.overlayGeomConnection = {};
-    if (state.shell && state.shell->shellSurface) {
-        state.shell->shellSurface->deleteLater();
-    }
-    if (state.shell) {
-        state.shell->shellSurface = nullptr;
-        state.shell->shellWindow = nullptr;
-        // Slot Items are children of the shell QQuickWindow; deleting the
-        // shell destroys them. Clear the slot map so a stale signal
-        // handler that runs before the screen-state entry is purged
-        // doesn't dereference a dangling QQuickItem*.
-        state.shell->slots.clear();
-        state.shell->physScreen = nullptr;
-    }
-    state.overlayPhysScreen = nullptr;
-    state.zoneSelectorPhysScreen = nullptr;
-}
-
-// Release every surface across the state map, then clear it.
-void cleanupAllScreenStates(QHash<QString, OverlayService::PerScreenOverlayState>& states)
-{
-    for (auto& state : states) {
-        releaseSurfacesInState(state);
-    }
-    states.clear();
-}
-
-// Release surfaces for state entries whose key starts with @p prefix,
-// then erase those entries from the map.
-//
-// Semantics: prefix is typically `physId + PhosphorIdentity::VirtualScreenId::Separator`, so
-// this function matches ONLY virtual-screen entries (`physId/vs:N`) and
-// deliberately skips the bare-physId entry (`physId`). Callers that need
-// to clean up the bare entry must do so separately — see the
-// onVirtualScreensChangedHandler call site where both are explicitly
-// cleaned in sequence.
-void cleanupVirtualScreenStates(QHash<QString, OverlayService::PerScreenOverlayState>& states, const QString& prefix)
-{
-    for (auto it = states.begin(); it != states.end();) {
-        if (it.key().startsWith(prefix)) {
-            releaseSurfacesInState(it.value());
-            it = states.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
 // Resolve a slot Item from the lib's per-screen slot map. Returns
 // nullptr when no shell is wired up, when no slot under @p key was
 // populated by the post-create callback, or when the QPointer in the
@@ -461,11 +405,30 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
             QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physicalScreenId);
             if (!physScreen) {
                 // Physical screen removed -- destroy windows and clean up stale virtual screen entries
+                // Tear down every shell whose key matches the
+                // virtual-screen prefix (`physId/vs:N`) — this catches
+                // all sub-region overlays rooted on the just-removed
+                // monitor. The bare physId entry is handled separately
+                // below; it has no `/vs:N` suffix so it doesn't match
+                // the startsWith filter.
+                //
+                // Two-pass (collect keys, then destroy + erase) because
+                // ShellHost::destroyShell's pre-destroy callback
+                // (unwirePassiveShellSlots) re-enters m_screenStates by
+                // key; a single-pass loop using `it = erase(it)` would
+                // invalidate the iterator while the callback is still
+                // reading via that same map.
                 const QString prefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
-                cleanupVirtualScreenStates(m_screenStates, prefix);
-                // Also clean up the bare physical-ID entry (no /vs:N suffix) —
-                // cleanupVirtualScreenStates only matches entries starting with "physId/",
-                // not the bare "physId" key itself.
+                QStringList virtualKeysToDestroy;
+                for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                    if (it.key().startsWith(prefix)) {
+                        virtualKeysToDestroy.append(it.key());
+                    }
+                }
+                for (const QString& key : virtualKeysToDestroy) {
+                    m_shellHost->destroyShell(key);
+                    m_screenStates.remove(key);
+                }
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
                 destroyPassiveShell(physicalScreenId);
@@ -602,7 +565,16 @@ OverlayService::~OverlayService()
     // ~Surface → ~Impl → window teardown in the right order. Never destroy
     // the window directly — that races against ~Surface and dereferences a
     // deleted pointer in ~Impl.
-    cleanupAllScreenStates(m_screenStates);
+    //
+    // Two-pass over keys-snapshot for the same reason as
+    // destroyAllWindowsForPhysicalScreen's virtual-state cleanup: the
+    // pre-destroy callback re-reads m_screenStates by key, so we can't
+    // mutate during iteration.
+    const QStringList screenKeysAtShutdown = m_screenStates.keys();
+    for (const QString& screenId : screenKeysAtShutdown) {
+        m_shellHost->destroyShell(screenId);
+    }
+    m_screenStates.clear();
 
     // Singleton surfaces (layout picker, shader preview) are QObject
     // children of `this`, so the QObject parent-child system would
