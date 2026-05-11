@@ -42,7 +42,18 @@ public:
     StatusNotifierWatcher* watcher = nullptr;
     QString hostServiceName; ///< "org.kde.StatusNotifierHost-1234"
     QDBusServiceWatcher* nameWatcher = nullptr;
-    QHash<QString, StatusNotifierItem*> items; ///< canonical "service/path" → item
+
+    // Items in registration order. The model maps row → item by
+    // index, so the storage MUST be ordered — earlier rev used a
+    // QHash here and `itemAt(N)` returned hash-bucket order, which
+    // meant new items at "row count-1" weren't the items actually at
+    // the end of the visible list, and the QML Repeater bound
+    // delegates to the wrong items. Two containers: the list is the
+    // ordered truth, the hash is an O(1) canonical-id lookup
+    // (canonical is "service/path"). itemAdded/itemRemoved keep them
+    // in lockstep.
+    QList<StatusNotifierItem*> itemsList;
+    QHash<QString, StatusNotifierItem*> itemsByCanonical;
 
     void connectToWatcher();
     void registerHost();
@@ -131,7 +142,7 @@ void StatusNotifierHost::Private::seedExistingItems()
 
 void StatusNotifierHost::Private::onItemRegistered(const QString& canonical)
 {
-    if (items.contains(canonical))
+    if (itemsByCanonical.contains(canonical))
         return;
     // Split canonical "service/path" back into (service, path).
     // Service starts with ':' (unique name) or 'o.' (well-known);
@@ -143,18 +154,20 @@ void StatusNotifierHost::Private::onItemRegistered(const QString& canonical)
     const QString path = canonical.mid(slash);
 
     auto* item = new StatusNotifierItem(service, path, q);
-    items.insert(canonical, item);
+    itemsList.append(item);
+    itemsByCanonical.insert(canonical, item);
     qCInfo(lcSniHost) << "item registered:" << canonical << "→ service" << service << "path" << path
-                      << "(total items now:" << items.size() << ")";
+                      << "(total items now:" << itemsList.size() << ")";
     Q_EMIT q->itemAdded(item);
     Q_EMIT q->itemCountChanged();
 }
 
 void StatusNotifierHost::Private::onItemUnregistered(const QString& canonical)
 {
-    auto* item = items.take(canonical);
+    auto* item = itemsByCanonical.take(canonical);
     if (!item)
         return;
+    itemsList.removeOne(item);
     Q_EMIT q->itemRemoved(item);
     Q_EMIT q->itemCountChanged();
     item->deleteLater();
@@ -184,20 +197,19 @@ StatusNotifierHost::~StatusNotifierHost()
 
 QList<StatusNotifierItem*> StatusNotifierHost::items() const
 {
-    return d->items.values();
+    return d->itemsList;
 }
 
 int StatusNotifierHost::itemCount() const
 {
-    return d->items.size();
+    return d->itemsList.size();
 }
 
 StatusNotifierItem* StatusNotifierHost::itemAt(int index) const
 {
-    if (index < 0 || index >= d->items.size())
+    if (index < 0 || index >= d->itemsList.size())
         return nullptr;
-    auto values = d->items.values();
-    return values.value(index);
+    return d->itemsList.value(index);
 }
 
 void StatusNotifierHost::_q_remoteItemRegistered(const QString& canonical)
