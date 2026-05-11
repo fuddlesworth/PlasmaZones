@@ -22,27 +22,32 @@ IconImageProvider::IconImageProvider()
 QImage IconImageProvider::requestImage(const QString& id, QSize* size, const QSize& requestedSize)
 {
     QMutexLocker lock(&s_mutex);
-    // Qt's behaviour around id encoding is inconsistent across
-    // versions and even across what part of the URL the request
-    // originated from. Some versions pass the percent-encoded form
-    // (":1.67%7C/StatusNotifierItem"), others pass the decoded form
-    // (":1.67|/StatusNotifierItem"). We publish under the decoded
-    // form (clean printable key) and try both on lookup so we don't
-    // have to guess what Qt version is in play. The percent-decode
-    // is a no-op when the id was already decoded, so this is free
-    // on the happy path.
-    auto it = s_registry.constFind(id);
-    if (it == s_registry.constEnd()) {
-        const QString decoded = QUrl::fromPercentEncoding(id.toUtf8());
-        it = s_registry.constFind(decoded);
+    // Two transformations from URL → registry key:
+    //   1. Strip the ?v=<cacheKey> query string — that suffix exists
+    //      only to force QML's Image element to re-fetch when the
+    //      underlying QImage data changes (Image only reloads when
+    //      the URL string differs). The PUBLISH side never sees the
+    //      cacheKey, so we mustn't either when looking up.
+    //   2. Percent-decode `%7C` back to `|` etc. — Qt's image-provider
+    //      dispatch hands us the URL-path form, which on this version
+    //      preserves percent-encoding. The publish side uses the
+    //      decoded form (clean printable key).
+    // Both transformations are no-ops when the input already lacks
+    // them, so the cleanup is safe to run unconditionally.
+    QString lookupId = id;
+    const int q = lookupId.indexOf(QLatin1Char('?'));
+    if (q >= 0) {
+        lookupId.truncate(q);
     }
+    lookupId = QUrl::fromPercentEncoding(lookupId.toUtf8());
+
+    auto it = s_registry.constFind(lookupId);
     if (it == s_registry.constEnd()) {
         // Surface the miss to logs so a future regression (wrong key
         // format, missed publish callsite) is debuggable without a
         // gdb session. Throttled implicitly by Qt's "same message
         // collapsed" output policy when QT_LOGGING_RULES is default.
-        qCWarning(lcImageProvider) << "no registered image for id" << id
-                                   << "(decoded:" << QUrl::fromPercentEncoding(id.toUtf8()) << ")";
+        qCWarning(lcImageProvider) << "no registered image for id" << id << "(stripped+decoded:" << lookupId << ")";
         if (size) {
             *size = QSize(0, 0);
         }
