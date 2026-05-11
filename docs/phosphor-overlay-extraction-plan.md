@@ -360,19 +360,37 @@ public:
 };
 ```
 
-### Phase 3 - Slot extraction
+### Phase 3 - Slot extraction (DONE in this branch)
 
-- Move per-slot show/hide animator coordination
-  (`hideOsdSlotOnScreen`, `hideZoneSelectorSlotOnScreen`, etc.) into
-  `Slot` / `SlotRegistry`. Each daemon `show*` method shrinks to:
-  ```cpp
-  void OverlayService::showLayoutOsd(PhosphorZones::Layout* layout, QString sid) {
-      pushLayoutOsdContent(...);                     // PZ-specific
-      m_overlay->slot(sid, kOsdSlotKey)->show();     // mechanism
-  }
-  ```
-- `SlotRegistry::registerContent` calls move to `setupOverlay()` at
-  daemon startup.
+Sub-commits:
+
+- **3.1**: Slot pointer storage migrates from 5 named fields on
+  `PerScreenOverlayState` (`passiveShellOsdSlot`, …) into the lib's
+  `ShellState::slots` map keyed by daemon-defined slot key strings
+  (`pz_slot_keys.h` with `PzSlotKeys::Osd()` / `SnapAssist()` / etc.
+  function-local-static accessors). `PerScreenOverlayState` exposes
+  the same 5 names as inline accessor methods (`osdSlot()` etc.) that
+  resolve through the borrowed `ShellState*`. ~95 read sites mass-renamed.
+- **3.2**: `SlotEntry` struct ({item, role}) added to the lib;
+  `ShellState::slots` becomes `QHash<QString, SlotEntry>`. Roles are
+  pinned at slot-wire time so the lib can drive the animator. ShellHost
+  gains `setSurfaceAnimator(SurfaceAnimator*)` and
+  `hideSlot(screenId, slotKey, completion)`. PZ wires the 5 slots' roles
+  in `wirePassiveShellSlots`. `hideZoneSelectorSlotOnScreen` shrinks
+  to a thin shim.
+- **3.3**: Every direct `m_surfaceAnimator->beginHide` call in the
+  overlay subsystem (6 total) routes through `ShellHost::hideSlot`.
+  The lib is now the SurfaceAnimator client for slot hides; the daemon
+  retains content-side concerns (resetCursorState QML invocations,
+  completion callbacks).
+
+The "show side" of slot lifecycle (`beginShow` calls in
+`showZoneSelector` / `showSnapAssist` / etc.) stays in the daemon for
+now — each show path intermixes PZ content writes (mode toggles, loader
+re-instantiation, content-property pushes) with the
+animator-trigger boilerplate. Phase 4 (animator config wiring)
+addresses this once the per-slot animator config registration moves
+into a similar slot-keyed API on `ShellHost`.
 
 ### Phase 4 - Animator config wiring
 
@@ -476,7 +494,7 @@ public:
 | 0b - Interface widening for layout queries | DONE (#436) |
 | 1 - New library scaffolding | DONE (#436) |
 | 2 - ShellHost extraction | DONE (#436): 8 sub-commits, all 4 movable methods landed; validate stays in daemon |
-| 3 - Slot extraction | pending |
+| 3 - Slot extraction | DONE (#436): 3 sub-commits, slot storage + hide path lifted; show-side stays for phase 4 |
 | 4 - Animator config wiring | pending |
 | 5 - OverlayService shrink + cleanup | pending |
 | 6 - Optional standalone-compositor seam | pending |
