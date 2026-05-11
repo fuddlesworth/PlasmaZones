@@ -67,6 +67,13 @@ PopupWindow {
         service: root.service
         path: root.menuPath
         rootId: root.rootId
+        // App misbehaviour — some SNI items advertise a Menu path
+        // that's broken (wrong object, wrong signature, doesn't exist).
+        // Rather than leave an empty floating popup taking input
+        // grab, dismiss it. The user can still left-click the icon
+        // to call Activate (the app's "primary action" handler) — for
+        // most apps that's what they actually want anyway.
+        onLoadFailed: root.close()
     }
 
     Rectangle {

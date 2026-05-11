@@ -17,7 +17,10 @@
 #include <QDebug>
 #include <QHash>
 #include <QImage>
+#include <QLoggingCategory>
 #include <QVariant>
+
+Q_LOGGING_CATEGORY(lcSniMenu, "phosphorservices.sni.menu")
 
 namespace PhosphorServices {
 
@@ -186,7 +189,21 @@ void DBusMenuModel::Private::refresh()
         watcher->deleteLater();
         QDBusPendingReply<uint, DBusMenuLayoutItem> reply = *watcher;
         if (reply.isError()) {
-            qWarning() << "DBusMenuModel: GetLayout failed:" << reply.error().message();
+            // App misconfigurations are common — SNI items advertise
+            // a Menu path that's empty, stale, or implements something
+            // OTHER than canonical dbusmenu. Log at info, not warning:
+            // these are user-visible only via the popup-auto-close
+            // path below (loadFailed → QML dismisses popup), and they
+            // happen often enough on a typical desktop that warning-
+            // level noise would drown out real bugs.
+            qCInfo(lcSniMenu) << "GetLayout failed for" << service << path << ":" << reply.error().message();
+            // Flip valid → false so QML bindings (loadFailed +
+            // onLoadFailed close handler in TrayMenuPopup) react.
+            if (valid) {
+                valid = false;
+                Q_EMIT q->validChanged();
+            }
+            Q_EMIT q->loadFailed(reply.error().message());
             return;
         }
         revision = reply.argumentAt<0>();

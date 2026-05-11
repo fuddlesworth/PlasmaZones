@@ -86,6 +86,12 @@ Q_SIGNALS:
     void rootIdChanged();
     void validChanged();
     void countChanged();
+    /// Fired when a GetLayout call returns a DBus error — usually
+    /// means the SNI item advertised a Menu path that's stale,
+    /// broken, or implemented as something other than canonical
+    /// dbusmenu. QML can listen and dismiss the popup so the user
+    /// doesn't stare at an empty floating box.
+    void loadFailed(const QString& message);
 
 private:
     class Private;
