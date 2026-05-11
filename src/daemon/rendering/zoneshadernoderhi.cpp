@@ -9,22 +9,20 @@
 #include <QFileInfo>
 #include <QStandardPaths>
 
-namespace {
-
-void appendUniquePath(QStringList& paths, const QString& path)
+inline void appendUniquePath(QStringList& paths, const QString& path)
 {
     if (!path.isEmpty() && QDir(path).exists() && !paths.contains(path)) {
         paths.append(path);
     }
 }
 
-QStringList trustedShaderRoots()
+inline QStringList trustedShaderRoots()
 {
     return QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"),
                                      QStandardPaths::LocateDirectory);
 }
 
-QStringList expandShaderIncludePaths(const QStringList& inputPaths)
+inline QStringList expandShaderIncludePaths(const QStringList& inputPaths)
 {
     QStringList expanded;
 
@@ -47,8 +45,6 @@ QStringList expandShaderIncludePaths(const QStringList& inputPaths)
 
     return expanded;
 }
-
-} // namespace
 
 namespace PlasmaZones {
 

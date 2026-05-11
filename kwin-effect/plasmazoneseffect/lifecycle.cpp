@@ -603,18 +603,13 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
 
     auto sendNoReply = [](const QString& interfaceName, const QString& methodName) {
         QDBusMessage msg = QDBusMessage::createMethodCall(
-            PhosphorProtocol::Service::Name,
-            PhosphorProtocol::Service::ObjectPath,
-            interfaceName,
-            methodName);
+            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath, interfaceName, methodName);
         QDBusConnection::sessionBus().send(msg);
     };
 
-    sendNoReply(PhosphorProtocol::Service::Interface::WindowDrag,
-                QStringLiteral("clearForCompositorReconnect"));
+    sendNoReply(PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("clearForCompositorReconnect"));
 
-    sendNoReply(PhosphorProtocol::Service::Interface::Overlay,
-                QStringLiteral("hideOverlay"));
+    sendNoReply(PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("hideOverlay"));
 }
 
 PlasmaZonesEffect::~PlasmaZonesEffect()
