@@ -113,6 +113,15 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     if (genIt != m_screenGeneration.constEnd() && result.generation < *genIt) {
         qCDebug(lcLayoutLib) << "LayoutComputeService: discarding stale result for" << result.screenId
                              << "gen=" << result.generation << "current=" << *genIt;
+        // Emit so async barriers (e.g. Daemon::processPendingGeometryUpdates) still
+        // drain for this (screenId, layoutId) pair. Without this, a burst of
+        // panel/screen events that bumps the generation faster than worker results
+        // arrive leaves every superseded barrier waiting forever, and the
+        // reapply-geometries timer that follows the barrier never starts. Pass
+        // nullptr because the layout's zone geometries do NOT reflect this
+        // generation — consumers that need fresh state will see the next
+        // non-stale emit for the same (screenId, layoutId) pair.
+        Q_EMIT geometriesComputed(result.screenId, result.layoutId, nullptr);
         return;
     }
 

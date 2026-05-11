@@ -496,7 +496,6 @@ void Daemon::processPendingGeometryUpdates()
         ? m_activityManager->currentActivity()
         : QString();
     const QStringList screenIds = m_screenManager->effectiveScreenIds();
-    QSet<QUuid> processedLayouts;
 
     // Key = (screenId, layoutId). Matches what geometriesComputed carries.
     using PendingKey = QPair<QString, QUuid>;
@@ -516,24 +515,16 @@ void Daemon::processPendingGeometryUpdates()
         if (layout) {
             requestFor(layout, screenId,
                        GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, screenId));
-            processedLayouts.insert(layout->id());
         }
     }
 
-    // Also recalculate layouts not currently assigned to any screen
-    // to prevent stale geometries when the user switches layouts.
-    // Use primary screen geometry as fallback reference.
-    const QVector<PhosphorZones::Layout*> allLayouts = m_layoutManager->layouts();
-    for (auto* layout : allLayouts) {
-        if (!processedLayouts.contains(layout->id())) {
-            const QScreen* primaryScreen = Utils::primaryScreen();
-            if (primaryScreen) {
-                QString primaryId = Phosphor::Screens::ScreenIdentity::identifierFor(primaryScreen);
-                requestFor(layout, primaryId,
-                           GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primaryId));
-            }
-        }
-    }
+    // Layouts not currently displayed on any screen are NOT recomputed here.
+    // They get a fresh recalc on demand: LayoutRegistry::activeLayoutChanged and
+    // layoutAssigned both trigger requestRecalculate against the relevant screen.
+    // Eagerly recomputing every unassigned layout against the primary's physical
+    // id used to flood the worker with O(layouts) requests per panel-change
+    // burst, all keyed by one screenId, which inflated m_screenGeneration and
+    // turned earlier-round results stale en masse.
 
     m_geometryUpdatePending = false;
 
