@@ -58,10 +58,6 @@ namespace PhosphorOverlay {
 [[nodiscard]] PHOSPHOROVERLAY_EXPORT PhosphorLayer::Role makePerInstanceRole(const PhosphorLayer::Role& base,
                                                                              QStringView screenId, quint64 generation);
 
-} // namespace PhosphorOverlay
-
-namespace PhosphorOverlay {
-
 class PHOSPHOROVERLAY_EXPORT ShellHost : public QObject
 {
     Q_OBJECT

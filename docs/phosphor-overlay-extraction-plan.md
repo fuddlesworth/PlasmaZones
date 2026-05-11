@@ -392,13 +392,43 @@ animator-trigger boilerplate. Phase 4 (animator config wiring)
 addresses this once the per-slot animator config registration moves
 into a similar slot-keyed API on `ShellHost`.
 
-### Phase 4 - Animator config wiring
+### Phase 4 - Animator config wiring (DONE in this branch)
 
-- Move `applyShaderProfilesToAnimator` / `buildOsdConfig` / friends out
-  of `animation_config.cpp` and into per-content `ContentDescriptor`
-  builders inside the daemon. The library exposes
-  `registerConfigForRole` and the per-instance role construction; the
-  daemon keeps the *shape* (curve names, durations, shader paths).
+The library is now the sole SurfaceAnimator client for the overlay
+subsystem. The daemon's `applyShaderProfilesToAnimator` routes its 4
+`registerConfigForRole` calls through `ShellHost::registerConfigForRole`,
+and the per-instance scope-prefix construction policy
+(`makePerInstanceRole`) moves to a `PhosphorOverlay::` free function so
+every consumer gets the same longest-prefix-lookup guarantee.
+
+The `build*Config` helpers (`buildOsdConfig`, `buildLayoutPickerConfig`,
+`buildZoneSelectorConfig`, `buildSnapAssistConfig`) stay in
+`animation_config.cpp` — they own the SHAPE of each config (curve
+names, durations, shader paths) which is PZ-content. The plan-doc
+phrased this as "per-content ContentDescriptor builders inside the
+daemon"; in practice the existing build*Config functions are already
+the right shape, no rename needed.
+
+Library additions:
+
+```cpp
+namespace PhosphorOverlay {
+
+[[nodiscard]] PhosphorLayer::Role makePerInstanceRole(const PhosphorLayer::Role& base,
+                                                     QStringView screenId, quint64 generation);
+
+class ShellHost : public QObject {
+public:
+    void registerConfigForRole(const PhosphorLayer::Role& role,
+                               PhosphorAnimationLayer::SurfaceAnimator::Config config);
+    // ...
+};
+
+} // namespace PhosphorOverlay
+```
+
+`PzRoles::makePerInstanceRole` shrinks to a delegating wrapper so every
+existing call site continues to compile under the PzRoles:: namespace.
 
 ### Phase 5 - OverlayService shrink + cleanup
 
@@ -495,6 +525,6 @@ into a similar slot-keyed API on `ShellHost`.
 | 1 - New library scaffolding | DONE (#436) |
 | 2 - ShellHost extraction | DONE (#436): 8 sub-commits, all 4 movable methods landed; validate stays in daemon |
 | 3 - Slot extraction | DONE (#436): 3 sub-commits, slot storage + hide path lifted; show-side stays for phase 4 |
-| 4 - Animator config wiring | pending |
+| 4 - Animator config wiring | DONE (#436): registerConfigForRole + makePerInstanceRole on lib; daemon routes through ShellHost |
 | 5 - OverlayService shrink + cleanup | pending |
 | 6 - Optional standalone-compositor seam | pending |
