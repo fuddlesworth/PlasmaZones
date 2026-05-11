@@ -7,3 +7,4 @@
 /// For lean includes, include the individual headers instead.
 
 #include <PhosphorOverlay/ShellHost.h>
+#include <PhosphorOverlay/ShellState.h>

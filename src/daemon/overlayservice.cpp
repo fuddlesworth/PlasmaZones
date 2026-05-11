@@ -6,6 +6,7 @@
 #include "snapassistthumbnailprovider.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
+#include <PhosphorOverlay/ShellHost.h>
 
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorSurfaces/SurfaceManagerConfig.h>
@@ -373,6 +374,14 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
         .vulkanInstance = externalVulkanInstance,
         .vulkanApiVersion = PlasmaZones::PzVulkanApiVersion,
     });
+
+    // Phase 2 foundation: own a ShellHost from construction time so
+    // subsequent Phase 2 commits can migrate per-screen shell-state
+    // ownership into the library incrementally without daemon-side
+    // construction-order churn. Today the host is a passive member
+    // alongside m_screenStates; method moves (rekey / validate /
+    // ensure / destroy / sync) land in follow-on commits.
+    m_shellHost = std::make_unique<PhosphorOverlay::ShellHost>(this);
 
     // Connect to screen changes (with safety check for early initialization)
     if (qGuiApp) {

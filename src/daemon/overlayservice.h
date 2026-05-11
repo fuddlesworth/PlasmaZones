@@ -29,6 +29,10 @@ class SurfaceFactory;
 // Role is a value type — full definition pulled in via Role.h above.
 } // namespace PhosphorLayer
 
+namespace PhosphorOverlay {
+class ShellHost;
+} // namespace PhosphorOverlay
+
 namespace PhosphorAnimationLayer {
 class SurfaceAnimator;
 } // namespace PhosphorAnimationLayer
@@ -537,6 +541,13 @@ private:
 
     // Managed surface lifecycle: shared QQmlEngine, Vulkan keep-alive, scope generation.
     std::unique_ptr<PhosphorSurfaces::SurfaceManager> m_surfaceManager;
+
+    // ShellHost holds the per-screen layer-shell shell state (surfaces,
+    // windows, slot Items) and the sticky creation-failure spam-guard.
+    // Method moves from OverlayService land in subsequent Phase 2 commits;
+    // for now the host is a passive member alongside m_screenStates, with
+    // ownership over the library-side state shape.
+    std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
 
     QHash<QString, PerScreenOverlayState> m_screenStates;
     QPointer<PhosphorZones::Layout> m_layout;
