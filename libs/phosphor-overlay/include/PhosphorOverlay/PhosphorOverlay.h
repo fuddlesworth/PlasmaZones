@@ -8,3 +8,4 @@
 
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorOverlay/ShellState.h>
+#include <PhosphorOverlay/SlotEntry.h>

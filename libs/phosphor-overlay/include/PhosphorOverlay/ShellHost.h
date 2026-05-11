@@ -32,6 +32,10 @@ namespace PhosphorLayer {
 class Surface;
 } // namespace PhosphorLayer
 
+namespace PhosphorAnimationLayer {
+class SurfaceAnimator;
+} // namespace PhosphorAnimationLayer
+
 namespace PhosphorOverlay {
 
 class PHOSPHOROVERLAY_EXPORT ShellHost : public QObject
@@ -72,6 +76,12 @@ public:
 
     /// Inject the pre-destroy hook (optional).
     void setPreDestroyCallback(PreDestroyCallback callback);
+
+    /// Inject the SurfaceAnimator that drives every slot's show/hide
+    /// leg. Required before any @ref hideSlot call. Borrowed pointer —
+    /// the lib does not own the animator; composition roots typically
+    /// own a single instance and thread it through every consumer.
+    void setSurfaceAnimator(PhosphorAnimationLayer::SurfaceAnimator* animator);
 
     /// Idempotent: bring up (or return) the per-screen shell for
     /// @p screenId on @p physScreen. Returns a pointer to the ShellState
@@ -128,6 +138,16 @@ public:
     /// ignore the post-rekey step.
     bool rekey(const QString& oldKey, const QString& newKey);
 
+    /// Animator-driven slot hide for the slot keyed by @p slotKey on the
+    /// shell for @p screenId. No-op when no shell is up, no slot under
+    /// that key was registered, the slot item is gone, the slot's
+    /// QQuickItem is not currently visible, or the animator has not been
+    /// injected. @p completion fires on the hide leg's settle (via the
+    /// SurfaceAnimator's normal completion plumbing) so consumers can
+    /// run their post-hide content writes (e.g. clear loader mode,
+    /// release content state).
+    void hideSlot(const QString& screenId, const QString& slotKey, std::function<void()> completion = {});
+
     /// Read-write accessor. Returns the existing ShellState for
     /// @p screenId, default-constructing one in place if absent so
     /// callers can populate fields without an explicit insert.
@@ -183,6 +203,7 @@ private:
     SurfaceFactory m_surfaceFactory;
     PostCreateCallback m_postCreateCallback;
     PreDestroyCallback m_preDestroyCallback;
+    PhosphorAnimationLayer::SurfaceAnimator* m_surfaceAnimator = nullptr;
 };
 
 } // namespace PhosphorOverlay

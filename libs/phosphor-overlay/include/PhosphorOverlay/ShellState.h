@@ -19,13 +19,12 @@
 // for surface mapping (added in the subsequent sync-state migration
 // commit).
 
+#include <PhosphorOverlay/SlotEntry.h>
 #include <PhosphorOverlay/phosphoroverlay_export.h>
 
 #include <QHash>
-#include <QPointer>
 #include <QString>
 
-class QQuickItem;
 class QQuickWindow;
 class QScreen;
 
@@ -53,12 +52,15 @@ struct PHOSPHOROVERLAY_EXPORT ShellState
     /// new key.
     QScreen* physScreen = nullptr;
 
-    /// Slot Items keyed by slot name (e.g. "osd", "snapAssist",
-    /// "layoutPicker", "zoneSelector", "mainOverlay"). Populated by the
-    /// post-create callback. Borrowed — owned by the shell QQuickWindow's
-    /// scene graph, torn down implicitly when the shell surface is
-    /// deleted.
-    QHash<QString, QPointer<QQuickItem>> slots;
+    /// Per-content slot entries keyed by slot name (e.g. "osd",
+    /// "snapAssist", "layoutPicker", "zoneSelector", "mainOverlay").
+    /// Each entry holds the slot's QQuickItem (borrowed; owned by the
+    /// shell QQuickWindow's scene graph) plus the @c PhosphorLayer::Role
+    /// the slot's SurfaceAnimator show/hide leg targets. Populated by
+    /// the consumer's post-create callback and consumed by
+    /// @c ShellHost::hideSlot to drive the animator without the consumer
+    /// re-specifying the role at each call.
+    QHash<QString, SlotEntry> slots;
 };
 
 } // namespace PhosphorOverlay

@@ -4,6 +4,8 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
+#include "pz_slot_keys.h"
+#include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -526,8 +528,12 @@ void OverlayService::hideZoneSelectorSlotOnScreen(const QString& effectiveId)
     if (!slot || !slot->isVisible()) {
         return;
     }
+    // Reset hover/cursor state BEFORE the animator-driven hide so the
+    // slot's interactive bits don't keep responding to pointer events
+    // while it fades out. PZ-specific QML invocation; the animator-leg
+    // mechanism itself routes through ShellHost::hideSlot.
     QMetaObject::invokeMethod(slot, "resetCursorState");
-    m_surfaceAnimator->beginHide(it->shell->shellSurface, slot, PzRoles::ZoneSelector, [this, effectiveId]() {
+    m_shellHost->hideSlot(effectiveId, PzSlotKeys::ZoneSelector(), [this, effectiveId]() {
         onZoneSelectorSlotHideCompleted(effectiveId);
     });
 }

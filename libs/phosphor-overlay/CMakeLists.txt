@@ -67,6 +67,7 @@ set(phosphoroverlay_public_HDRS
     include/PhosphorOverlay/PhosphorOverlay.h
     include/PhosphorOverlay/ShellHost.h
     include/PhosphorOverlay/ShellState.h
+    include/PhosphorOverlay/SlotEntry.h
 )
 
 add_library(PhosphorOverlay SHARED

@@ -124,7 +124,7 @@ QQuickItem* slotItemOrNull(const OverlayService::PerScreenOverlayState& state, c
         return nullptr;
     }
     auto it = state.shell->slots.constFind(key);
-    return it == state.shell->slots.cend() ? nullptr : it.value().data();
+    return it == state.shell->slots.cend() ? nullptr : it.value().item.data();
 }
 
 } // namespace
@@ -424,6 +424,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     // Phase 2 method moves (rekey / sync / validate-invariant) land in
     // follow-on commits.
     m_shellHost = std::make_unique<PhosphorOverlay::ShellHost>(this);
+    m_shellHost->setSurfaceAnimator(m_surfaceAnimator.get());
 
     m_shellHost->setSurfaceFactory([this](const QString& screenId, QScreen* physScreen) -> PhosphorLayer::Surface* {
         const auto role =

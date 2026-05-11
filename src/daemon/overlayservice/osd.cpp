@@ -479,20 +479,21 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
         return;
     }
 
-    auto wireSlot = [&](const QString& slotKey, const char* qmlObjectName, const char* descriptionForLog) {
+    auto wireSlot = [&](const QString& slotKey, const char* qmlObjectName, const PhosphorLayer::Role& role,
+                        const char* descriptionForLog) {
         auto* item = qvariant_cast<QQuickItem*>(window->property(qmlObjectName));
         if (!item) {
             qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << screenId << "did not expose `" << qmlObjectName
                                  << "`:" << descriptionForLog << "will fail. Check QML resource.";
         }
-        shellState.slots.insert(slotKey, item);
+        shellState.slots.insert(slotKey, PhosphorOverlay::SlotEntry{item, role});
     };
 
-    wireSlot(PzSlotKeys::Osd(), "osdSlotItem", "OSD content writes");
-    wireSlot(PzSlotKeys::SnapAssist(), "snapAssistSlotItem", "snap-assist on this screen");
-    wireSlot(PzSlotKeys::LayoutPicker(), "layoutPickerSlotItem", "picker on this screen");
-    wireSlot(PzSlotKeys::ZoneSelector(), "zoneSelectorSlotItem", "selector on this screen");
-    wireSlot(PzSlotKeys::MainOverlay(), "mainOverlaySlotItem", "main overlay on this screen");
+    wireSlot(PzSlotKeys::Osd(), "osdSlotItem", PzRoles::Osd, "OSD content writes");
+    wireSlot(PzSlotKeys::SnapAssist(), "snapAssistSlotItem", PzRoles::SnapAssist, "snap-assist on this screen");
+    wireSlot(PzSlotKeys::LayoutPicker(), "layoutPickerSlotItem", PzRoles::LayoutPicker, "picker on this screen");
+    wireSlot(PzSlotKeys::ZoneSelector(), "zoneSelectorSlotItem", PzRoles::ZoneSelector, "selector on this screen");
+    wireSlot(PzSlotKeys::MainOverlay(), "mainOverlaySlotItem", PzRoles::ZoneOverlay, "main overlay on this screen");
 
     // Wire QML signals → animator-driven slot hide / forward.
     QObject::connect(window, SIGNAL(osdDismissRequested()), this, SLOT(onOsdDismissRequested()));

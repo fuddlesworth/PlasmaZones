@@ -3,8 +3,10 @@
 
 #include <PhosphorOverlay/ShellHost.h>
 
+#include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorLayer/Surface.h>
 
+#include <QQuickItem>
 #include <QQuickWindow>
 
 namespace PhosphorOverlay {
@@ -32,6 +34,11 @@ void ShellHost::setPostCreateCallback(PostCreateCallback callback)
 void ShellHost::setPreDestroyCallback(PreDestroyCallback callback)
 {
     m_preDestroyCallback = std::move(callback);
+}
+
+void ShellHost::setSurfaceAnimator(PhosphorAnimationLayer::SurfaceAnimator* animator)
+{
+    m_surfaceAnimator = animator;
 }
 
 namespace {
@@ -166,6 +173,30 @@ bool ShellHost::rekey(const QString& oldKey, const QString& newKey)
     m_states.erase(donor);
     m_states.insert(newKey, state);
     return true;
+}
+
+void ShellHost::hideSlot(const QString& screenId, const QString& slotKey, std::function<void()> completion)
+{
+    if (!m_surfaceAnimator) {
+        return;
+    }
+    auto it = m_states.find(screenId);
+    if (it == m_states.end()) {
+        return;
+    }
+    auto& state = *it.value();
+    if (!state.shellSurface) {
+        return;
+    }
+    auto slotIt = state.slots.constFind(slotKey);
+    if (slotIt == state.slots.cend()) {
+        return;
+    }
+    auto* item = slotIt.value().item.data();
+    if (!item || !item->isVisible()) {
+        return;
+    }
+    m_surfaceAnimator->beginHide(state.shellSurface, item, slotIt.value().role, std::move(completion));
 }
 
 ShellState& ShellHost::stateFor(const QString& screenId)
