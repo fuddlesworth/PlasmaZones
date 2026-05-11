@@ -274,22 +274,22 @@ the real ctor signature (`SurfaceManager&`, `ScreenManager&`, etc.)
 without churn at the library boundary - consumers Phase 2 lands on
 re-call against the same `PhosphorOverlay::` namespace.
 
-### Phase 2 - ShellHost extraction (IN PROGRESS in this branch)
+### Phase 2 - ShellHost extraction (DONE in this branch)
 
-Move the per-screen passive-shell mechanism into `phosphor-overlay/`.
-Shipping incrementally as sub-commits on the same branch so each step
-builds clean. Status of the five method moves the original plan
-called for:
+Per-screen passive-shell mechanism extracted into `phosphor-overlay/`.
+Shipped as eight sub-commits on the same branch (each builds clean,
+tests green). Status of the five method moves the original plan called
+for:
 
 | Method | Status |
 |---|---|
 | `ensurePassiveShellFor` | DONE (2.4) - delegates to `ShellHost::ensureShell` |
 | `destroyPassiveShell` | DONE (2.4) - delegates to `ShellHost::destroyShell` |
-| `syncPassiveShellSurfaceState` | pending - needs slot-visibility predicates |
-| `rekeyOverlayState` | pending - mixes lib + PZ content fields, callback-driven |
-| `validateScreenStateInvariant` | pending - debug check on "main overlay live" predicate |
+| `syncPassiveShellSurfaceState` | DONE (2.5) - delegates to `ShellHost::syncSurfaceState` with PZ-computed visibility booleans |
+| `rekeyOverlayState` | DONE (2.7) - delegates to `ShellHost::rekey` with PZ guards + post-rekey re-anchor |
+| `validateScreenStateInvariant` | STAYS in daemon - debug check on PZ-content "main overlay live" sentinel (`overlayPhysScreen != nullptr`); iteration domain is the daemon's `m_screenStates`, not the lib's shell state map, so moving it would change semantics without adding value |
 
-Foundation sub-commits already landed on this branch:
+Sub-commits landed on this branch:
 
 - **2.1**: `ShellState` struct + real `ShellHost` state container
   (stateFor / removeState / screenIds / failure flag accessors). Smoke
@@ -307,12 +307,29 @@ Foundation sub-commits already landed on this branch:
   6 QML signal wires, RHI prime, PZ-content sentinel teardown) move
   into `wirePassiveShellSlots` / `unwirePassiveShellSlots` helpers and
   register as callbacks on the ShellHost in the OverlayService ctor.
+- **2.5**: `syncPassiveShellSurfaceState` delegates to
+  `ShellHost::syncSurfaceState(screenId, anyVisible, anyInputGrabbing)`.
+  PZ computes the two booleans from its parallel slot pointers; the
+  lib owns the surface-mapped + input-region toggle mechanism.
+- **2.6**: Latent-bug fix from 2.4 design. `PerScreenOverlayState::shell`
+  was an embedded `ShellState` value, but `ensureShell` populated only
+  the lib's parallel map — the embedded field stayed default-initialized.
+  Switched to single source of truth: lib stores
+  `QHash<QString, ShellState*>` (raw owning pointers, stable across
+  rehashes); PZ state carries a borrowed pointer wired by the shim.
+  `.shell.X` -> `.shell->X` mass-renamed across the daemon.
+- **2.7**: `rekeyOverlayState` delegates to `ShellHost::rekey(oldKey, newKey)`,
+  which does the lib-side map-key swap without touching the heap
+  ShellState (borrowed pointer survives). PZ shim keeps the flavor-flip
+  guard, clobber check, daemon-state move, geom-watcher reinstall, and
+  re-anchor-the-surface step. Smoke test grew by 3 rekey edge-case
+  pins.
 
 The QML side (`PassiveOverlayShell.qml`) stays where it is in the
 daemon; the library accepts the qmlSource via the
 consumer-registered `SurfaceFactory` callback.
 
-Library API surface after 2.4:
+Library API surface at end of Phase 2:
 
 ```cpp
 class ShellHost : public QObject {
@@ -327,6 +344,8 @@ public:
 
     ShellState* ensureShell(const QString& screenId, QScreen* physScreen);
     void destroyShell(const QString& screenId);
+    void syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing);
+    bool rekey(const QString& oldKey, const QString& newKey);
 
     ShellState& stateFor(const QString&);
     const ShellState* stateFor(const QString&) const;
@@ -456,7 +475,7 @@ public:
 | 0a - Plan + signal lift | DONE (#436) |
 | 0b - Interface widening for layout queries | DONE (#436) |
 | 1 - New library scaffolding | DONE (#436) |
-| 2 - ShellHost extraction | IN PROGRESS (#436): 2.1-2.4 shipped, sync/rekey/validate pending |
+| 2 - ShellHost extraction | DONE (#436): 8 sub-commits, all 4 movable methods landed; validate stays in daemon |
 | 3 - Slot extraction | pending |
 | 4 - Animator config wiring | pending |
 | 5 - OverlayService shrink + cleanup | pending |
