@@ -6,8 +6,8 @@
 #include <QString>
 #include <QStringView>
 
-#include <PhosphorLayer/Patterns.h>
 #include <PhosphorLayer/Role.h>
+#include <PhosphorShellPatterns/Patterns.h>
 
 namespace PlasmaZones {
 
@@ -15,9 +15,8 @@ namespace PlasmaZones {
 ///
 /// Each preset maps one of OverlayService's consumer types to the
 /// protocol-level configuration (layer, anchors, keyboard, exclusive
-/// zone, scope prefix) it wants. Built on top of PhosphorLayer's
-/// library-provided @ref PhosphorLayer::Patterns vocabulary (the axis-2
-/// UI-pattern layer).
+/// zone, scope prefix) it wants. Built on top of the
+/// @ref PhosphorShellPatterns axis-2 UI-pattern vocabulary.
 namespace PzRoles {
 
 /// Zone overlay: the full-screen layer that paints zone rectangles and
@@ -26,7 +25,7 @@ namespace PzRoles {
 /// virtual-screen surfaces override to AnchorTop|AnchorLeft + margins
 /// via SurfaceConfig overrides.
 inline const PhosphorLayer::Role ZoneOverlay =
-    PhosphorLayer::Patterns::Hud.withScopePrefix(QStringLiteral("plasmazones-zone-overlay"));
+    PhosphorShellPatterns::Hud.withScopePrefix(QStringLiteral("plasmazones-zone-overlay"));
 
 /// PhosphorZones::Zone selector: Top layer so pointer events route to it ahead of the
 /// main overlay.
@@ -54,7 +53,7 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
 /// role-override beginShow/beginHide overloads resolve per-content
 /// motion + shader profiles via this role's prefix even though the
 /// shell's actual surface uses PassiveShell).
-inline const PhosphorLayer::Role Osd = PhosphorLayer::Patterns::Hud.withScopePrefix(QStringLiteral("plasmazones-osd"));
+inline const PhosphorLayer::Role Osd = PhosphorShellPatterns::Hud.withScopePrefix(QStringLiteral("plasmazones-osd"));
 
 /// Passive overlay shell — single per-screen wlr-layer-shell host that
 /// groups every kbd-None overlay (OSD, zone-selector, main zone overlay,
@@ -74,7 +73,7 @@ inline const PhosphorLayer::Role Osd = PhosphorLayer::Patterns::Hud.withScopePre
 /// See `PassiveOverlayShell.qml` for the QML side and the unified-shell
 /// migration commits for the per-consumer rewrite.
 inline const PhosphorLayer::Role PassiveShell =
-    PhosphorLayer::Patterns::Hud.withScopePrefix(QStringLiteral("plasmazones-passive-shell"));
+    PhosphorShellPatterns::Hud.withScopePrefix(QStringLiteral("plasmazones-passive-shell"));
 
 /// Snap-assist config-only role. The wl_surface lifetime moved to the
 /// unified PassiveShell post-shell-migration; this role is preserved
@@ -89,7 +88,7 @@ inline const PhosphorLayer::Role PassiveShell =
 /// Singleton at the daemon level — m_snapAssistScreenId tracks which
 /// screen's slot is active and re-targets across screens.
 inline const PhosphorLayer::Role SnapAssist =
-    PhosphorLayer::Patterns::Modal.withScopePrefix(QStringLiteral("plasmazones-snap-assist"));
+    PhosphorShellPatterns::Modal.withScopePrefix(QStringLiteral("plasmazones-snap-assist"));
 
 /// Layout-picker config-only role. Same migration story as SnapAssist —
 /// the picker now lives as an Item slot inside the per-screen passive
@@ -99,13 +98,13 @@ inline const PhosphorLayer::Role SnapAssist =
 /// by `WindowDragAdaptor::ensureLayoutPickerNavShortcutsRegistered`
 /// on show and released on dismiss.
 inline const PhosphorLayer::Role LayoutPicker =
-    PhosphorLayer::Patterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-picker"));
+    PhosphorShellPatterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-picker"));
 
 /// Shader preview (editor Shader Settings dialog). Floating Overlay
 /// layer, no anchors, no keyboard. Singleton. Positioned programmatically
 /// by the caller.
 inline const PhosphorLayer::Role ShaderPreview =
-    PhosphorLayer::Patterns::Floating.withScopePrefix(QStringLiteral("plasmazones-shader-preview"));
+    PhosphorShellPatterns::Floating.withScopePrefix(QStringLiteral("plasmazones-shader-preview"));
 
 /// Build a per-instance Role from one of the base roles above by appending
 /// `-{screenId}-{generation}` to its base scope prefix. Single-source for

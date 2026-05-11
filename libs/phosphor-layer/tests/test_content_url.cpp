@@ -5,6 +5,7 @@
 
 #include "mocks/mockscreenprovider.h"
 #include "mocks/mocktransport.h"
+#include "mocks/testroles.h"
 
 #include <QDir>
 #include <QQuickItem>
@@ -60,7 +61,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Patterns::Modal;
+        cfg.role = Testing::makeModalRole();
         cfg.contentUrl = url;
         cfg.screen = s.primary();
 
@@ -87,7 +88,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Patterns::Modal;
+        cfg.role = Testing::makeModalRole();
         cfg.contentUrl = url;
         cfg.screen = s.primary();
         cfg.debugName = QStringLiteral("broken-qml");
@@ -113,7 +114,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Patterns::Modal;
+        cfg.role = Testing::makeModalRole();
         cfg.contentUrl = url;
         cfg.screen = s.primary();
 
@@ -143,7 +144,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Patterns::Modal;
+        cfg.role = Testing::makeModalRole();
         cfg.contentUrl = url;
         cfg.screen = s.primary();
         cfg.debugName = QStringLiteral("window-root");
@@ -170,7 +171,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Patterns::Modal;
+        cfg.role = Testing::makeModalRole();
         cfg.contentUrl = url;
         cfg.screen = s.primary();
         cfg.windowProperties = {{QStringLiteral("injected"), QStringLiteral("from-config")}};
@@ -198,7 +199,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Patterns::Modal;
+        cfg.role = Testing::makeModalRole();
         cfg.contentUrl = url;
         cfg.screen = s.primary();
 
@@ -224,7 +225,7 @@ private Q_SLOTS:
         QVERIFY(primary);
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Patterns::Modal;
+        cfg.role = Testing::makeModalRole();
         cfg.contentUrl = url;
         cfg.screen = primary;
 
@@ -250,7 +251,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Patterns::Modal;
+        cfg.role = Testing::makeModalRole();
         cfg.contentUrl = url;
         cfg.screen = s.primary();
         cfg.contextProperties = {{QStringLiteral("injectedTag"), QStringLiteral("hello-phosphorlayer")}};

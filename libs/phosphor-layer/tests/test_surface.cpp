@@ -5,6 +5,7 @@
 
 #include "mocks/mockscreenprovider.h"
 #include "mocks/mocktransport.h"
+#include "mocks/testroles.h"
 
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -26,7 +27,7 @@ private:
     static SurfaceConfig buildConfig(QScreen* screen, QString debugName = QStringLiteral("test"))
     {
         SurfaceConfig cfg;
-        cfg.role = Patterns::Modal;
+        cfg.role = Testing::makeModalRole();
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = screen;
         cfg.debugName = std::move(debugName);
@@ -146,7 +147,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Patterns::Modal;
+        cfg.role = Testing::makeModalRole();
         cfg.screen = s.primary();
         // Neither contentUrl nor contentItem set — SurfaceFactory should
         // refuse before we even reach the state machine.
@@ -160,7 +161,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Patterns::Modal;
+        cfg.role = Testing::makeModalRole();
         cfg.screen = s.primary();
         cfg.contentUrl = QUrl(QStringLiteral("qrc:/nonexistent.qml"));
         cfg.contentItem = std::make_unique<QQuickItem>();
@@ -198,8 +199,9 @@ private Q_SLOTS:
         MockTransport t;
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        const Role hud = Testing::makeHudRole();
         auto cfg = buildConfig(s.primary());
-        cfg.role = Patterns::Hud;
+        cfg.role = hud;
         cfg.marginsOverride = QMargins(5, 10, 15, 20);
         cfg.exclusiveZoneOverride = 42;
         auto* surface = f.create(std::move(cfg));
@@ -210,7 +212,7 @@ private Q_SLOTS:
         QCOMPARE(t.m_lastArgs.margins, QMargins(5, 10, 15, 20));
         QCOMPARE(t.m_lastArgs.exclusiveZone, 42);
         QCOMPARE(t.m_lastArgs.screen, s.primary());
-        QCOMPARE(t.m_lastArgs.scope, Patterns::Hud.scopePrefix);
+        QCOMPARE(t.m_lastArgs.scope, hud.scopePrefix);
     }
 
     void engineProviderReleaseOrderingDefersAfterWindowDelete()

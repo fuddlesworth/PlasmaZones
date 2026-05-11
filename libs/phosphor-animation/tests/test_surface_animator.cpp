@@ -40,6 +40,7 @@
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
 #include <PhosphorLayer/PhosphorLayer.h>
+#include <PhosphorShellPatterns/Patterns.h>
 
 #include "mocks/mockscreenprovider.h"
 #include "mocks/mocktransport.h"
@@ -179,15 +180,14 @@ private Q_SLOTS:
         special.showProfile = QStringLiteral("test.show");
         special.showScaleProfile = QStringLiteral("test.scale-show");
         special.showScaleFrom = 0.8;
-        anim.registerConfigForRole(PhosphorLayer::Patterns::Modal, special);
+        anim.registerConfigForRole(PhosphorShellPatterns::Modal, special);
 
-        const auto resolved = anim.configForRole(PhosphorLayer::Patterns::Modal);
+        const auto resolved = anim.configForRole(PhosphorShellPatterns::Modal);
         QCOMPARE(resolved.showScaleProfile, QStringLiteral("test.scale-show"));
         QCOMPARE(resolved.showScaleFrom, 0.8);
 
         // Unregistered role falls back to default
-        const auto defaultResolved =
-            anim.configForRole(PhosphorLayer::Patterns::Panel(PhosphorLayer::Patterns::Edge::Top));
+        const auto defaultResolved = anim.configForRole(PhosphorShellPatterns::Panel(PhosphorShellPatterns::Edge::Top));
         QCOMPARE(defaultResolved.showProfile, QStringLiteral("test.show"));
         QVERIFY(defaultResolved.showScaleProfile.isEmpty());
     }
@@ -207,38 +207,37 @@ private Q_SLOTS:
         SurfaceAnimator::Config refinement;
         refinement.showProfile = QStringLiteral("refinement.show");
         anim.registerConfigForRole(
-            PhosphorLayer::Patterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-osd")), base);
+            PhosphorShellPatterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-osd")), base);
         anim.registerConfigForRole(
-            PhosphorLayer::Patterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-picker")), sibling);
+            PhosphorShellPatterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-picker")), sibling);
         // Longer key under same prefix family — should beat "base" for
         // surfaces scoped to its sub-tree.
         anim.registerConfigForRole(
-            PhosphorLayer::Patterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-osd-locked")),
-            refinement);
+            PhosphorShellPatterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-osd-locked")), refinement);
 
         // Per-instance scope: matches the base via prefix + '-' boundary.
         auto perInstance =
-            PhosphorLayer::Patterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-osd-DP-1-3"));
+            PhosphorShellPatterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-osd-DP-1-3"));
         QCOMPARE(anim.configForRole(perInstance).showProfile, QStringLiteral("base.show"));
 
         // Sibling prefix must NOT match the base — boundary check guards
         // against accidental cross-pollination.
         auto sibInstance =
-            PhosphorLayer::Patterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-picker-DP-1-3"));
+            PhosphorShellPatterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-picker-DP-1-3"));
         QCOMPARE(anim.configForRole(sibInstance).showProfile, QStringLiteral("sibling.show"));
 
         // Longest-match wins: a surface scoped under the "locked" sub-tree
         // resolves to the more-specific config.
         auto lockedInstance =
-            PhosphorLayer::Patterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-osd-locked-DP-1-3"));
+            PhosphorShellPatterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-osd-locked-DP-1-3"));
         QCOMPARE(anim.configForRole(lockedInstance).showProfile, QStringLiteral("refinement.show"));
 
         // Exact-match still works (registered key == surface prefix).
-        auto exactInstance = PhosphorLayer::Patterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-osd"));
+        auto exactInstance = PhosphorShellPatterns::Modal.withScopePrefix(QStringLiteral("plasmazones-layout-osd"));
         QCOMPARE(anim.configForRole(exactInstance).showProfile, QStringLiteral("base.show"));
 
         // Completely unrelated prefix → default.
-        auto unrelated = PhosphorLayer::Patterns::Modal.withScopePrefix(QStringLiteral("some-other-overlay"));
+        auto unrelated = PhosphorShellPatterns::Modal.withScopePrefix(QStringLiteral("some-other-overlay"));
         QCOMPARE(anim.configForRole(unrelated).showProfile, QStringLiteral("test.show"));
     }
 
@@ -267,7 +266,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig sc;
-        sc.role = PhosphorLayer::Patterns::Modal;
+        sc.role = PhosphorShellPatterns::Modal;
         sc.contentItem = std::make_unique<QQuickItem>();
         sc.screen = s.primary();
         sc.keepMappedOnHide = true;
@@ -343,7 +342,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig sc;
-        sc.role = PhosphorLayer::Patterns::Modal;
+        sc.role = PhosphorShellPatterns::Modal;
         sc.contentItem = std::make_unique<QQuickItem>();
         sc.screen = s.primary();
         sc.debugName = QStringLiteral("reload-test");
@@ -397,7 +396,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig cfg;
-        cfg.role = PhosphorLayer::Patterns::Modal;
+        cfg.role = PhosphorShellPatterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         cfg.debugName = QStringLiteral("show-test");
@@ -444,7 +443,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig cfg;
-        cfg.role = PhosphorLayer::Patterns::Modal;
+        cfg.role = PhosphorShellPatterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         cfg.keepMappedOnHide = true;
@@ -489,7 +488,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig cfg;
-        cfg.role = PhosphorLayer::Patterns::Modal;
+        cfg.role = PhosphorShellPatterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         cfg.keepMappedOnHide = true;
@@ -538,7 +537,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig cfg;
-        cfg.role = PhosphorLayer::Patterns::Modal;
+        cfg.role = PhosphorShellPatterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         cfg.keepMappedOnHide = true;
@@ -602,7 +601,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig cfg;
-        cfg.role = PhosphorLayer::Patterns::Modal;
+        cfg.role = PhosphorShellPatterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         cfg.keepMappedOnHide = true;
@@ -646,7 +645,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig cfg;
-        cfg.role = PhosphorLayer::Patterns::Modal;
+        cfg.role = PhosphorShellPatterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         cfg.keepMappedOnHide = true;
@@ -696,7 +695,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig cfg;
-        cfg.role = PhosphorLayer::Patterns::Modal;
+        cfg.role = PhosphorShellPatterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         cfg.debugName = QStringLiteral("fresh-show-test");
@@ -753,7 +752,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig sc;
-        sc.role = PhosphorLayer::Patterns::Modal;
+        sc.role = PhosphorShellPatterns::Modal;
         sc.contentItem = std::make_unique<QQuickItem>();
         sc.screen = s.primary();
         sc.debugName = QStringLiteral("zero-duration-test");
@@ -799,7 +798,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig cfg;
-        cfg.role = PhosphorLayer::Patterns::Modal;
+        cfg.role = PhosphorShellPatterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         cfg.keepMappedOnHide = true;
@@ -885,7 +884,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig sc;
-        sc.role = PhosphorLayer::Patterns::Modal;
+        sc.role = PhosphorShellPatterns::Modal;
         sc.contentItem = std::make_unique<QQuickItem>();
         sc.screen = s.primary();
         sc.keepMappedOnHide = true;
@@ -981,7 +980,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig sc;
-        sc.role = PhosphorLayer::Patterns::Modal;
+        sc.role = PhosphorShellPatterns::Modal;
         sc.contentItem = std::make_unique<QQuickItem>();
         sc.screen = s.primary();
         sc.keepMappedOnHide = true;
@@ -1074,7 +1073,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig sc;
-        sc.role = PhosphorLayer::Patterns::Modal;
+        sc.role = PhosphorShellPatterns::Modal;
         sc.contentItem = std::make_unique<QQuickItem>();
         sc.screen = s.primary();
         sc.debugName = QStringLiteral("reload-during-flight");
@@ -1149,7 +1148,7 @@ private Q_SLOTS:
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig sc;
-        sc.role = PhosphorLayer::Patterns::Modal;
+        sc.role = PhosphorShellPatterns::Modal;
         sc.contentItem = std::make_unique<QQuickItem>();
         sc.screen = s.primary();
         sc.keepMappedOnHide = true;

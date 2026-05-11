@@ -4,25 +4,24 @@
 #pragma once
 
 #include <PhosphorLayer/Role.h>
-#include <PhosphorLayer/phosphorlayer_export.h>
-
-namespace PhosphorLayer {
+#include <PhosphorShellPatterns/phosphorshellpatterns_export.h>
 
 /// Shell UI patterns — axis-2 vocabulary on top of the wlr-layer-shell
-/// primitives in @ref Role.
+/// primitives in PhosphorLayer::Role.
 ///
 /// A Pattern is a UI concept ("a panel reserves screen space", "a toast
-/// appears in a corner") realised as a @ref Role bundle. Each Pattern is
-/// orthogonal to:
-///   - axis 1 (compositor primitive: @ref Layer, @ref Anchors, …) — those
-///     live on @ref Role.
+/// appears in a corner") realised as a PhosphorLayer::Role bundle. Each
+/// Pattern is orthogonal to:
+///   - axis 1 (compositor primitive: Layer, Anchors, …) — those live on
+///     @ref PhosphorLayer::Role.
 ///   - axis 3 (application role: what the consumer uses it for) — those
-///     live in consumer-side role files (e.g. `pz_roles.h`).
+///     live in consumer-side role files (e.g. PlasmaZones' `pz_roles.h`).
 ///
-/// This namespace is the supported surface for consumers; the older
-/// @ref Roles namespace is being phased out (see
-/// `docs/surface-taxonomy-refactor-plan.md`).
-namespace Patterns {
+/// This library is the seam between protocol primitives and consumer
+/// app-roles, so any Phosphor shell (PZ today, Phosphor-as-standalone
+/// tomorrow) composes its public roles from these recipes without having
+/// to know the wlr-layer-shell wire details.
+namespace PhosphorShellPatterns {
 
 /// Screen edge a @ref Panel anchors to.
 enum class Edge : int {
@@ -44,36 +43,33 @@ enum class Corner : int {
 
 /// Wallpaper. Background layer, anchors all edges, exclusive-zone 0 so
 /// panels and other layer surfaces render on top. No keyboard.
-PHOSPHORLAYER_EXPORT extern const Role& Wallpaper;
+PHOSPHORSHELLPATTERNS_EXPORT extern const PhosphorLayer::Role& Wallpaper;
 
 /// Heads-up display. Overlay layer, anchors all edges, click-through,
 /// no exclusive zone (drawn on top of panels). Typical for drag
 /// indicators, zone highlights, focus rings.
-PHOSPHORLAYER_EXPORT extern const Role& Hud;
+PHOSPHORSHELLPATTERNS_EXPORT extern const PhosphorLayer::Role& Hud;
 
 /// Modal dialog. Top layer, no anchors (centred by the compositor),
 /// exclusive keyboard grab. Typical for confirmation prompts, pickers.
-PHOSPHORLAYER_EXPORT extern const Role& Modal;
+PHOSPHORSHELLPATTERNS_EXPORT extern const PhosphorLayer::Role& Modal;
 
 /// Free-floating overlay. Overlay layer, no anchors, no keyboard.
 /// Position is supplied by the consumer (e.g. shader previews, tear-off
 /// windows).
-PHOSPHORLAYER_EXPORT extern const Role& Floating;
+PHOSPHORSHELLPATTERNS_EXPORT extern const PhosphorLayer::Role& Floating;
 
 // ── Pattern factories (parameterised) ──────────────────────────────────
 
 /// Panel anchored to a screen @p edge, reserving space via exclusive
-/// zone, keyboard-on-demand (clicking gives focus). One factory replaces
-/// the four legacy `TopPanel` / `BottomPanel` / `LeftDock` / `RightDock`
-/// presets. The returned @ref Role has the scope prefix
-/// `"pl-{edge}-panel"`.
-[[nodiscard]] PHOSPHORLAYER_EXPORT Role Panel(Edge edge);
+/// zone, keyboard-on-demand (clicking gives focus). The returned
+/// @ref PhosphorLayer::Role has the scope prefix `"pl-{edge}-panel"`.
+[[nodiscard]] PHOSPHORSHELLPATTERNS_EXPORT PhosphorLayer::Role Panel(Edge edge);
 
 /// Transient corner-anchored display. Click-through, no exclusive zone.
 /// Typical for short-lived OSDs, snack-bars, success indicators. The
-/// returned @ref Role has the scope prefix `"pl-{corner}-toast"`.
-[[nodiscard]] PHOSPHORLAYER_EXPORT Role Toast(Corner corner);
+/// returned @ref PhosphorLayer::Role has the scope prefix
+/// `"pl-{corner}-toast"`.
+[[nodiscard]] PHOSPHORSHELLPATTERNS_EXPORT PhosphorLayer::Role Toast(Corner corner);
 
-} // namespace Patterns
-
-} // namespace PhosphorLayer
+} // namespace PhosphorShellPatterns

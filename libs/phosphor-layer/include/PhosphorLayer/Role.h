@@ -63,12 +63,14 @@ Q_ENUM_NS(KeyboardInteractivity)
  * Role captures the wlr-layer-shell parameters that are immutable after
  * show() (layer, anchors, keyboard, scope) plus defaults for parameters
  * that are mutable (margins, exclusive zone). Consumers pick from the
- * library-provided @ref Patterns presets or define their own.
+ * PhosphorShellPatterns library (axis-2 UI-pattern recipes) or define
+ * their own Role values directly.
  *
  * The fluent `withX()` modifiers return copies for composition:
  * @code
  *     inline const Role PzOverlay =
- *         Patterns::Hud.withScopePrefix(QStringLiteral("pz-overlay"));
+ *         PhosphorShellPatterns::Hud.withScopePrefix(
+ *             QStringLiteral("pz-overlay"));
  * @endcode
  */
 struct PHOSPHORLAYER_EXPORT Role
@@ -98,9 +100,11 @@ struct PHOSPHORLAYER_EXPORT Role
 };
 
 // The legacy @ref Roles namespace was removed in phase 1 of the surface
-// taxonomy refactor; consumers should use @ref Patterns (in
-// `PhosphorLayer/Patterns.h`) which separates axis 2 (UI pattern) from
-// axis 1 (compositor primitive). See
+// taxonomy refactor, and the axis-2 Patterns vocabulary was lifted into
+// its own sibling library `phosphor-shell-patterns` in phase 3. New
+// consumers should depend on PhosphorShellPatterns and use
+// `PhosphorShellPatterns::{Hud, Modal, Wallpaper, Floating, Panel(Edge),
+// Toast(Corner)}` rather than re-deriving Role values inline. See
 // `docs/surface-taxonomy-refactor-plan.md` for the migration map.
 
 } // namespace PhosphorLayer

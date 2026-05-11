@@ -21,6 +21,7 @@
 
 #include "mocks/mockscreenprovider.h"
 #include "mocks/mocktransport.h"
+#include "mocks/testroles.h"
 
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -86,7 +87,7 @@ Q_SIGNALS:
 SurfaceConfig buildConfig(QScreen* screen, bool keepMapped = false)
 {
     SurfaceConfig cfg;
-    cfg.role = Patterns::Modal;
+    cfg.role = Testing::makeModalRole();
     cfg.contentItem = std::make_unique<QQuickItem>();
     cfg.screen = screen;
     cfg.keepMappedOnHide = keepMapped;
