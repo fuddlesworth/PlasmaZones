@@ -274,16 +274,72 @@ the real ctor signature (`SurfaceManager&`, `ScreenManager&`, etc.)
 without churn at the library boundary - consumers Phase 2 lands on
 re-call against the same `PhosphorOverlay::` namespace.
 
-### Phase 2 - ShellHost extraction
+### Phase 2 - ShellHost extraction (IN PROGRESS in this branch)
 
-- Move the per-screen passive-shell creation logic
-  (`ensurePassiveShellFor`, `destroyPassiveShell`,
-  `syncPassiveShellSurfaceState`, `rekeyOverlayState`,
-  `validateScreenStateInvariant`) into `phosphor-overlay/src/shellhost.cpp`.
-- The QML side (`PassiveOverlayShell.qml`) stays where it is in the
-  daemon for now; the library takes a `qmlSource: QUrl` parameter so
-  it doesn't ship QML of its own.
-- `OverlayService` keeps a `ShellHost` instance and delegates.
+Move the per-screen passive-shell mechanism into `phosphor-overlay/`.
+Shipping incrementally as sub-commits on the same branch so each step
+builds clean. Status of the five method moves the original plan
+called for:
+
+| Method | Status |
+|---|---|
+| `ensurePassiveShellFor` | DONE (2.4) - delegates to `ShellHost::ensureShell` |
+| `destroyPassiveShell` | DONE (2.4) - delegates to `ShellHost::destroyShell` |
+| `syncPassiveShellSurfaceState` | pending - needs slot-visibility predicates |
+| `rekeyOverlayState` | pending - mixes lib + PZ content fields, callback-driven |
+| `validateScreenStateInvariant` | pending - debug check on "main overlay live" predicate |
+
+Foundation sub-commits already landed on this branch:
+
+- **2.1**: `ShellState` struct + real `ShellHost` state container
+  (stateFor / removeState / screenIds / failure flag accessors). Smoke
+  test grew from 2 to 7 cases.
+- **2.2**: Sticky creation-failure spam-guard moves from
+  `OverlayService::m_notificationCreationFailed` to ShellHost.
+- **2.3**: Shell mechanism fields (`shellSurface`, `shellWindow`,
+  `physScreen`) migrate from `PerScreenOverlayState` into the embedded
+  `ShellState shell` member. ~90 access sites across 7 TUs renamed via
+  sed.
+- **2.4**: `ensurePassiveShellFor` and `destroyPassiveShell` shrink to
+  shims that delegate to `ShellHost::ensureShell` /
+  `ShellHost::destroyShell`. The PZ-specific bits (PassiveShell role +
+  qmlSource + warmed-surface pipeline, 5 slot QML object-name lookups,
+  6 QML signal wires, RHI prime, PZ-content sentinel teardown) move
+  into `wirePassiveShellSlots` / `unwirePassiveShellSlots` helpers and
+  register as callbacks on the ShellHost in the OverlayService ctor.
+
+The QML side (`PassiveOverlayShell.qml`) stays where it is in the
+daemon; the library accepts the qmlSource via the
+consumer-registered `SurfaceFactory` callback.
+
+Library API surface after 2.4:
+
+```cpp
+class ShellHost : public QObject {
+public:
+    using SurfaceFactory      = std::function<PhosphorLayer::Surface*(const QString&, QScreen*)>;
+    using PostCreateCallback  = std::function<void(const QString&, ShellState&)>;
+    using PreDestroyCallback  = std::function<void(const QString&)>;
+
+    void setSurfaceFactory(SurfaceFactory);
+    void setPostCreateCallback(PostCreateCallback);
+    void setPreDestroyCallback(PreDestroyCallback);
+
+    ShellState* ensureShell(const QString& screenId, QScreen* physScreen);
+    void destroyShell(const QString& screenId);
+
+    ShellState& stateFor(const QString&);
+    const ShellState* stateFor(const QString&) const;
+    bool hasState(const QString&) const;
+    void removeState(const QString&);
+    QStringList screenIds() const;
+
+    void markFailure(const QString&);
+    void clearFailure(const QString&);
+    bool hasFailure(const QString&) const;
+    QStringList failureScreenIds() const;
+};
+```
 
 ### Phase 3 - Slot extraction
 
@@ -400,7 +456,7 @@ re-call against the same `PhosphorOverlay::` namespace.
 | 0a - Plan + signal lift | DONE (#436) |
 | 0b - Interface widening for layout queries | DONE (#436) |
 | 1 - New library scaffolding | DONE (#436) |
-| 2 - ShellHost extraction | pending |
+| 2 - ShellHost extraction | IN PROGRESS (#436): 2.1-2.4 shipped, sync/rekey/validate pending |
 | 3 - Slot extraction | pending |
 | 4 - Animator config wiring | pending |
 | 5 - OverlayService shrink + cleanup | pending |
