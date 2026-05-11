@@ -52,25 +52,91 @@ DBusMenuLayoutItem unpackLayoutVariant(const QVariant& v)
 
 QString labelFromProps(const QVariantMap& props)
 {
-    // dbusmenu labels embed accelerator markers as single ampersands —
-    // "&File" means "F" is the accel. We strip them for display since
-    // we don't render underline-on-Alt; doubled "&&" stays as one
-    // literal ampersand.
+    // dbusmenu labels embed accelerator markers in two flavours,
+    // depending on whether the publishing app uses GTK or Qt
+    // conventions:
+    //
+    //   GTK   — `_` before the accel char, `__` for a literal _
+    //   Qt    — `&` before the accel char, `&&` for a literal &
+    //
+    // The Deskflow app indicator publishes GTK-style ("_Quit",
+    // "Rest_art"), KDE's own indicators publish Qt-style. We strip
+    // BOTH because we don't render underline-on-Alt either way.
     auto raw = props.value(QStringLiteral("label")).toString();
     QString out;
     out.reserve(raw.size());
     for (int i = 0; i < raw.size(); ++i) {
-        if (raw[i] == QLatin1Char('&')) {
-            if (i + 1 < raw.size() && raw[i + 1] == QLatin1Char('&')) {
-                out.append(QLatin1Char('&'));
+        const QChar c = raw[i];
+        if (c == QLatin1Char('&') || c == QLatin1Char('_')) {
+            // Doubled = literal character; keep one copy and skip the
+            // duplicate.
+            if (i + 1 < raw.size() && raw[i + 1] == c) {
+                out.append(c);
                 ++i;
+                continue;
             }
-            // Otherwise it's an accelerator marker — skip.
-        } else {
-            out.append(raw[i]);
+            // Lone marker = strip and move on; the NEXT char is the
+            // mnemonic but we don't need to do anything special with
+            // it (no underline rendering).
+            continue;
         }
+        out.append(c);
     }
     return out;
+}
+
+/// Parse the `shortcut` property — the dbusmenu spec types it as
+/// `aas` (array of array of strings), where each outer entry is an
+/// alternative key-press and each inner entry is a modifier list
+/// terminating in the key. Example: [["Control","S"], ["Control","Q"]]
+/// means "Ctrl+S or Ctrl+Q". We render only the first chord.
+///
+/// Modifier strings come straight from the spec — "Control", "Shift",
+/// "Alt", "Super". We map them to the standard human display form
+/// ("Ctrl", "Shift", "Alt", "Super") and join with "+".
+QString shortcutFromProps(const QVariantMap& props)
+{
+    const QVariant raw = props.value(QStringLiteral("shortcut"));
+    if (!raw.isValid()) {
+        return {};
+    }
+
+    // Iterate the outer + inner array via QDBusArgument — Qt
+    // doesn't auto-flatten `aas` to QStringList; that's why the
+    // earlier `toStringList()` always returned empty.
+    QList<QStringList> chords;
+    if (raw.canConvert<QDBusArgument>()) {
+        QDBusArgument outer = raw.value<QDBusArgument>();
+        outer.beginArray();
+        while (!outer.atEnd()) {
+            QStringList chord;
+            outer.beginArray();
+            while (!outer.atEnd()) {
+                QString part;
+                outer >> part;
+                chord.append(part);
+            }
+            outer.endArray();
+            chords.append(chord);
+        }
+        outer.endArray();
+    }
+    if (chords.isEmpty()) {
+        return {};
+    }
+
+    static const QHash<QString, QString> modifierDisplay{
+        {QStringLiteral("Control"), QStringLiteral("Ctrl")},
+        {QStringLiteral("Shift"), QStringLiteral("Shift")},
+        {QStringLiteral("Alt"), QStringLiteral("Alt")},
+        {QStringLiteral("Super"), QStringLiteral("Super")},
+    };
+
+    QStringList rendered;
+    for (const auto& part : chords.first()) {
+        rendered.append(modifierDisplay.value(part, part));
+    }
+    return rendered.join(QLatin1Char('+'));
 }
 
 /// Encode a QImage as a data:image/png;base64 URL. Used for menu
@@ -406,7 +472,7 @@ QVariant DBusMenuModel::data(const QModelIndex& index, int role) const
     case ChildrenDisplayRole:
         return r.hasChildren ? QStringLiteral("submenu") : QString();
     case ShortcutRole:
-        return r.properties.value(QStringLiteral("shortcut")).toStringList();
+        return shortcutFromProps(r.properties);
     default:
         return {};
     }

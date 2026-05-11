@@ -117,6 +117,7 @@ PopupWindow {
                 required property string toggleType
                 required property int toggleState
                 required property string childrenDisplay
+                required property string shortcut
 
                 width: ListView.view.width
                 // Separators are thin, regular rows pop to a usable height.
@@ -196,14 +197,34 @@ PopupWindow {
                         }
 
                         Text {
+                            id: labelText
+
                             text: menuRow.label
                             color: "#cdd6f4"
                             font.pixelSize: 12
                             anchors.verticalCenter: parent.verticalCenter
                             // Eat remaining width so the submenu arrow
-                            // hugs the right edge.
-                            width: row.width - 16 - 8 - 8 - 16 - 8
+                            // (or shortcut text) hugs the right edge.
+                            // Reserved: 16 icon + 8 + 8 label-side
+                            // padding + 16 right slot (chevron or
+                            // shortcut) + the shortcut's intrinsic
+                            // width when present.
+                            width: row.width - 16 - 8 - 8 - 16 - 8 - shortcutText.width - (shortcutText.text.length > 0 ? 8 : 0)
                             elide: Text.ElideRight
+                        }
+
+                        Text {
+                            id: shortcutText
+
+                            // Right-aligned shortcut display ("Ctrl+S")
+                            // matching KDE's tray menus. Empty string
+                            // → width 0 → no spacing reservation in
+                            // the label binding above.
+                            text: menuRow.shortcut
+                            color: "#7f849c"
+                            font.pixelSize: 11
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: text.length > 0
                         }
 
                         // Submenu chevron — only renders when the item
