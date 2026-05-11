@@ -107,7 +107,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
     auto* state = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!state || !state->passiveShellWindow || !state->passiveShellOsdSlot) {
+    if (!state || !state->shell.shellWindow || !state->passiveShellOsdSlot) {
         qCWarning(lcOverlay) << "Failed to get passive shell for layout OSD on screen=" << effectiveId;
         return false;
     }
@@ -118,8 +118,8 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     // OSD that follows.
     hideZoneSelectorSlotOnScreen(effectiveId);
 
-    window = state->passiveShellWindow;
-    outSurface = state->passiveShellSurface;
+    window = state->shell.shellWindow;
+    outSurface = state->shell.shellSurface;
     outOsdSlot = state->passiveShellOsdSlot;
 
     // Mode is NOT written here — callers write data properties first, then
@@ -449,7 +449,7 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
                                                                              QScreen* physScreen)
 {
     auto it = m_screenStates.find(effectiveId);
-    if (it != m_screenStates.end() && it->passiveShellSurface) {
+    if (it != m_screenStates.end() && it->shell.shellSurface) {
         return &it.value();
     }
 
@@ -473,9 +473,9 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     }
 
     auto& state = m_screenStates[effectiveId];
-    state.passiveShellSurface = surface;
-    state.passiveShellWindow = surface->window();
-    state.notificationPhysScreen = physScreen;
+    state.shell.shellSurface = surface;
+    state.shell.shellWindow = surface->window();
+    state.shell.physScreen = physScreen;
 
     // Cache the per-content slot Items — exposed as `osdSlotItem` /
     // `snapAssistSlotItem` on the shell window root via QML aliases.
@@ -539,7 +539,7 @@ void OverlayService::warmUpNotifications()
             m_screenManager ? m_screenManager->physicalQScreenFor(sid) : Utils::findScreenAtPosition(QPoint(0, 0));
         if (physScreen) {
             auto* state = ensurePassiveShellFor(sid, physScreen);
-            if (state && state->passiveShellSurface) {
+            if (state && state->shell.shellSurface) {
                 ++createdCount;
             }
         }
@@ -554,7 +554,7 @@ void OverlayService::destroyPassiveShell(const QString& screenId)
 {
     // Tear down the per-screen passive shell. The shell's QQuickWindow
     // owns every slot QQuickItem as a scene-graph descendant, so the
-    // deleteLater on passiveShellSurface tears them all down too —
+    // deleteLater on shell.shellSurface tears them all down too —
     // null all slot pointers defensively so any signal handler that
     // runs before the screen-state entry is purged from m_screenStates
     // doesn't dereference a dangling QQuickItem*.
@@ -562,11 +562,11 @@ void OverlayService::destroyPassiveShell(const QString& screenId)
     if (it == m_screenStates.end()) {
         return;
     }
-    if (it->passiveShellSurface) {
-        it->passiveShellSurface->deleteLater();
+    if (it->shell.shellSurface) {
+        it->shell.shellSurface->deleteLater();
     }
-    it->passiveShellSurface = nullptr;
-    it->passiveShellWindow = nullptr;
+    it->shell.shellSurface = nullptr;
+    it->shell.shellWindow = nullptr;
     it->passiveShellOsdSlot = nullptr;
     it->passiveShellSnapAssistSlot = nullptr;
     it->passiveShellLayoutPickerSlot = nullptr;
@@ -582,7 +582,7 @@ void OverlayService::destroyPassiveShell(const QString& screenId)
     it->labelsTextureHash = 0;
     it->zoneSelectorPhysScreen = nullptr;
     it->zoneSelectorGeometry = QRect();
-    it->notificationPhysScreen = nullptr;
+    it->shell.physScreen = nullptr;
 }
 
 void OverlayService::onOsdDismissRequested()
@@ -601,17 +601,17 @@ void OverlayService::onOsdDismissRequested()
     QString matchedId;
     PerScreenOverlayState* state = nullptr;
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        if (it->passiveShellWindow == senderWindow) {
+        if (it->shell.shellWindow == senderWindow) {
             matchedId = it.key();
             state = &it.value();
             break;
         }
     }
-    if (!state || !state->passiveShellSurface || !state->passiveShellOsdSlot) {
+    if (!state || !state->shell.shellSurface || !state->passiveShellOsdSlot) {
         return;
     }
     auto* slot = state->passiveShellOsdSlot;
-    m_surfaceAnimator->beginHide(state->passiveShellSurface, slot, PzRoles::Osd, [this, effectiveId = matchedId]() {
+    m_surfaceAnimator->beginHide(state->shell.shellSurface, slot, PzRoles::Osd, [this, effectiveId = matchedId]() {
         onOsdSlotHideCompleted(effectiveId);
     });
 }
@@ -646,7 +646,7 @@ void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
 void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
 {
     auto it = m_screenStates.find(effectiveId);
-    if (it == m_screenStates.end() || !it->passiveShellSurface) {
+    if (it == m_screenStates.end() || !it->shell.shellSurface) {
         return;
     }
     auto& s = *it;
@@ -720,7 +720,7 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // The first show()/animator-attach is still required to map the
     // wl_surface and warm the RHI; flipping the QPA flag from a never-
     // mapped state is a no-op.
-    if (!s.passiveShellWindow) {
+    if (!s.shell.shellWindow) {
         return;
     }
     // Bring the surface up on the first transition from never-shown →
@@ -732,8 +732,8 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // would wipe per-slot tracking and `beginHide(animatorTarget())`
     // would animate the shell root opacity, both of which we want to
     // avoid for a pure click-through toggle.
-    if (anyVisible && !s.passiveShellSurface->isLogicallyShown()) {
-        s.passiveShellSurface->show();
+    if (anyVisible && !s.shell.shellSurface->isLogicallyShown()) {
+        s.shell.shellSurface->show();
     }
     // Drive the Qt input flag based purely on whether a modal slot is
     // up. A non-modal slot (OSD / main overlay / zone selector) being
@@ -742,8 +742,8 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // for the OSD's auto-dismiss lifetime instead of eating every
     // click on every screen for several seconds.
     const bool wantTransparent = !anyInputGrabbing;
-    if (s.passiveShellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
-        s.passiveShellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
+    if (s.shell.shellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
+        s.shell.shellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
     }
 }
 
@@ -753,7 +753,7 @@ void OverlayService::syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surfa
         return;
     }
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (it.value().passiveShellSurface == surface) {
+        if (it.value().shell.shellSurface == surface) {
             syncPassiveShellSurfaceState(it.key());
             return;
         }
@@ -833,15 +833,15 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // path; the dismiss path is QML → osdDismissRequested → animator
     // beginHide.
     auto* navState = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!navState || !navState->passiveShellWindow || !navState->passiveShellOsdSlot) {
+    if (!navState || !navState->shell.shellWindow || !navState->passiveShellOsdSlot) {
         qCDebug(lcOverlay) << "No passive shell for navigation OSD on screen=" << effectiveId;
         return;
     }
 
     hideZoneSelectorSlotOnScreen(effectiveId);
 
-    auto* window = navState->passiveShellWindow;
-    auto* navSurface = navState->passiveShellSurface;
+    auto* window = navState->shell.shellWindow;
+    auto* navSurface = navState->shell.shellSurface;
     auto* osdSlot = navState->passiveShellOsdSlot;
 
     // Process reason field - for rotation/resnap, extract window count

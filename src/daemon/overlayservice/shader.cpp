@@ -306,7 +306,7 @@ void OverlayService::updateShaderUniforms()
             continue;
         }
         auto* slot = it.value().passiveShellMainOverlaySlot;
-        auto* window = it.value().passiveShellWindow;
+        auto* window = it.value().shell.shellWindow;
         if (slot && window && window->isVisible()) {
             writeQmlProperty(slot, QStringLiteral("iTime"), static_cast<qreal>(iTime));
             writeQmlProperty(slot, QStringLiteral("iTimeDelta"), static_cast<qreal>(iTimeDelta));

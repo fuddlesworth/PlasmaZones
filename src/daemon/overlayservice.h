@@ -17,6 +17,7 @@
 #include <optional>
 
 #include <PhosphorLayer/Role.h>
+#include <PhosphorOverlay/ShellState.h>
 
 #include "../core/interfaces.h"
 #include <PhosphorZones/Layout.h>
@@ -100,16 +101,17 @@ public:
      */
     struct PerScreenOverlayState
     {
-        // Unified per-screen passive overlay shell — single wl_surface
-        // hosting kbd-None overlay slots (OSD, zone-selector, main
-        // overlay, snap-assist, picker). See PassiveOverlayShell.qml
-        // and PzRoles::PassiveShell for the architectural rationale.
-        // The shell QQuickWindow is reached via passiveShellSurface->window()
-        // and cached in passiveShellWindow at create-time. Per-content
-        // "is this slot wired up?" sentinels live as separate fields
-        // below (overlayPhysScreen / zoneSelectorPhysScreen / ...).
-        PhosphorLayer::Surface* passiveShellSurface = nullptr;
-        QQuickWindow* passiveShellWindow = nullptr;
+        // Library-side shell-host state: the passive overlay shell's
+        // wl_surface, its QQuickWindow, the physical QScreen the shell
+        // was constructed against, and the (currently-empty until Phase
+        // 3 slot-abstraction lands) slot-Item map. Owned by-value here
+        // so per-screen lookup stays single-hash; PhosphorOverlay::ShellHost
+        // provides the lifecycle methods that operate on this field.
+        //
+        // Per-content "is this slot wired up?" sentinels (overlayPhysScreen
+        // / zoneSelectorPhysScreen / ...) live below — they're PZ-content
+        // state, not lib-mechanism state.
+        PhosphorOverlay::ShellState shell;
         QQuickItem* passiveShellOsdSlot = nullptr;
         QQuickItem* passiveShellSnapAssistSlot = nullptr;
         QQuickItem* passiveShellLayoutPickerSlot = nullptr;
@@ -135,7 +137,6 @@ public:
         /// stores the geometry we requested so hit-testing in
         /// updateSelectorPosition() has a stable reference.
         QRect zoneSelectorGeometry;
-        QScreen* notificationPhysScreen = nullptr;
     };
 
     /// @param screenManager Borrowed; must outlive this service.
@@ -584,7 +585,7 @@ private:
     QRectF m_selectedZoneRelGeo;
 
     // Layout-OSD and Navigation-OSD content share a single per-screen
-    // PerScreenOverlayState::passiveShellWindow plus per-slot QQuickItems
+    // PerScreenOverlayState::shell.shellWindow plus per-slot QQuickItems
     // (PassiveOverlayShell.qml) post-Phase-2 unification. No separate
     // per-mode window pointers.
 

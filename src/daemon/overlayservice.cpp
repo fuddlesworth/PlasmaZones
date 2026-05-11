@@ -64,11 +64,11 @@ void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
 {
     QObject::disconnect(state.overlayGeomConnection);
     state.overlayGeomConnection = {};
-    if (state.passiveShellSurface) {
-        state.passiveShellSurface->deleteLater();
+    if (state.shell.shellSurface) {
+        state.shell.shellSurface->deleteLater();
     }
-    state.passiveShellSurface = nullptr;
-    state.passiveShellWindow = nullptr;
+    state.shell.shellSurface = nullptr;
+    state.shell.shellWindow = nullptr;
     // Slot Items are children of the shell QQuickWindow; deleting the
     // shell destroys them. Null all five slot pointers so a stale
     // signal handler that runs before the screen-state entry is purged
@@ -80,7 +80,7 @@ void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
     state.passiveShellMainOverlaySlot = nullptr;
     state.overlayPhysScreen = nullptr;
     state.zoneSelectorPhysScreen = nullptr;
-    state.notificationPhysScreen = nullptr;
+    state.shell.physScreen = nullptr;
 }
 
 // Release every surface across the state map, then clear it.
@@ -877,10 +877,10 @@ void OverlayService::handleScreenAdded(QScreen* screen)
                 updateOverlayWindow(vsId, screen);
                 const auto& vsState = m_screenStates.value(vsId);
                 if (vsState.overlayPhysScreen) {
-                    if (auto* window = vsState.passiveShellWindow) {
+                    if (auto* window = vsState.shell.shellWindow) {
                         assertWindowOnScreen(window, screen, vsGeom);
-                        if (vsState.passiveShellSurface && !vsState.passiveShellSurface->isLogicallyShown()) {
-                            vsState.passiveShellSurface->show();
+                        if (vsState.shell.shellSurface && !vsState.shell.shellSurface->isLogicallyShown()) {
+                            vsState.shell.shellSurface->show();
                         }
                     }
                 }
@@ -891,10 +891,10 @@ void OverlayService::handleScreenAdded(QScreen* screen)
         updateOverlayWindow(screen);
         const auto& pState = m_screenStates.value(physScreenId);
         if (pState.overlayPhysScreen) {
-            if (auto* window = pState.passiveShellWindow) {
+            if (auto* window = pState.shell.shellWindow) {
                 assertWindowOnScreen(window, screen);
-                if (pState.passiveShellSurface && !pState.passiveShellSurface->isLogicallyShown()) {
-                    pState.passiveShellSurface->show();
+                if (pState.shell.shellSurface && !pState.shell.shellSurface->isLogicallyShown()) {
+                    pState.shell.shellSurface->show();
                 }
             }
         }
@@ -916,7 +916,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     for (const QString& id : screenIds) {
         const auto& state = m_screenStates[id];
         if (state.overlayPhysScreen == screen || state.zoneSelectorPhysScreen == screen
-            || state.notificationPhysScreen == screen) {
+            || state.shell.physScreen == screen) {
             destroyOverlayWindow(id);
             destroyZoneSelectorWindow(id);
             destroyPassiveShell(id);
@@ -924,7 +924,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             // gone — matches cleanupVirtualScreenStates semantics so
             // screen hot-plug cycles don't slowly accumulate dead keys.
             auto& s = m_screenStates[id];
-            if (!s.passiveShellSurface) {
+            if (!s.shell.shellSurface) {
                 m_screenStates.remove(id);
             }
         }

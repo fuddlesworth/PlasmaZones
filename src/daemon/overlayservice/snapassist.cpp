@@ -115,7 +115,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
 
     // Resolve target shell — per-screen shell hosts the snap-assist slot.
     auto* state = ensurePassiveShellFor(screenId, screen);
-    if (!state || !state->passiveShellSurface || !state->passiveShellSnapAssistSlot) {
+    if (!state || !state->shell.shellSurface || !state->passiveShellSnapAssistSlot) {
         qCWarning(lcOverlay) << "showSnapAssist: no passive shell for screen=" << screenId;
         Q_EMIT snapAssistDismissed();
         return;
@@ -130,8 +130,8 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     if (m_snapAssistVisible && !m_snapAssistScreenId.isEmpty() && m_snapAssistScreenId != screenId) {
         const QString prevScreenId = m_snapAssistScreenId;
         auto prevIt = m_screenStates.find(prevScreenId);
-        if (prevIt != m_screenStates.end() && prevIt->passiveShellSurface && prevIt->passiveShellSnapAssistSlot) {
-            m_surfaceAnimator->beginHide(prevIt->passiveShellSurface, prevIt->passiveShellSnapAssistSlot,
+        if (prevIt != m_screenStates.end() && prevIt->shell.shellSurface && prevIt->passiveShellSnapAssistSlot) {
+            m_surfaceAnimator->beginHide(prevIt->shell.shellSurface, prevIt->passiveShellSnapAssistSlot,
                                          PzRoles::SnapAssist, [this, prevScreenId]() {
                                              onSnapAssistSlotHideCompleted(prevScreenId);
                                          });
@@ -170,8 +170,8 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
                        << "remaining will arrive from kwin-effect via setSnapAssistThumbnail";
 
     auto* slot = state->passiveShellSnapAssistSlot;
-    auto* shellSurface = state->passiveShellSurface;
-    auto* shellWindow = state->passiveShellWindow;
+    auto* shellSurface = state->shell.shellSurface;
+    auto* shellWindow = state->shell.shellWindow;
 
     writeQmlProperty(slot, QStringLiteral("emptyZones"), zonesList);
     writeQmlProperty(slot, QStringLiteral("candidates"), m_snapAssistCandidates);
@@ -312,8 +312,8 @@ void OverlayService::hideSnapAssist()
     m_snapAssistScreenId.clear();
 
     auto stateIt = m_screenStates.find(screenId);
-    if (stateIt != m_screenStates.end() && stateIt->passiveShellSurface && stateIt->passiveShellSnapAssistSlot) {
-        m_surfaceAnimator->beginHide(stateIt->passiveShellSurface, stateIt->passiveShellSnapAssistSlot,
+    if (stateIt != m_screenStates.end() && stateIt->shell.shellSurface && stateIt->passiveShellSnapAssistSlot) {
+        m_surfaceAnimator->beginHide(stateIt->shell.shellSurface, stateIt->passiveShellSnapAssistSlot,
                                      PzRoles::SnapAssist, [this, effectiveId = screenId]() {
                                          onSnapAssistSlotHideCompleted(effectiveId);
                                      });
@@ -396,7 +396,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
 
     auto* state = ensurePassiveShellFor(resolvedId, screen);
-    if (!state || !state->passiveShellSurface || !state->passiveShellLayoutPickerSlot) {
+    if (!state || !state->shell.shellSurface || !state->passiveShellLayoutPickerSlot) {
         qCWarning(lcOverlay) << "showLayoutPicker: no passive shell for screen=" << resolvedId;
         return;
     }
@@ -430,8 +430,8 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     aspectRatio = qBound(0.5, aspectRatio, 4.0);
 
     auto* slot = state->passiveShellLayoutPickerSlot;
-    auto* shellSurface = state->passiveShellSurface;
-    auto* shellWindow = state->passiveShellWindow;
+    auto* shellSurface = state->shell.shellSurface;
+    auto* shellWindow = state->shell.shellWindow;
 
     writeQmlProperty(slot, QStringLiteral("layouts"), layoutsList);
     writeQmlProperty(slot, QStringLiteral("activeLayoutId"), activeId);
@@ -490,8 +490,8 @@ void OverlayService::hideLayoutPicker()
     m_layoutPickerScreenId.clear();
 
     auto stateIt = m_screenStates.find(screenId);
-    if (stateIt != m_screenStates.end() && stateIt->passiveShellSurface && stateIt->passiveShellLayoutPickerSlot) {
-        m_surfaceAnimator->beginHide(stateIt->passiveShellSurface, stateIt->passiveShellLayoutPickerSlot,
+    if (stateIt != m_screenStates.end() && stateIt->shell.shellSurface && stateIt->passiveShellLayoutPickerSlot) {
+        m_surfaceAnimator->beginHide(stateIt->shell.shellSurface, stateIt->passiveShellLayoutPickerSlot,
                                      PzRoles::LayoutPicker, [this, effectiveId = screenId]() {
                                          onLayoutPickerSlotHideCompleted(effectiveId);
                                      });
