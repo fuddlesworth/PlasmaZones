@@ -57,7 +57,16 @@ bool parseFboExtent(const QString& raw, AnimationShaderEffect::FboExtentKind& ou
         }
         bool ok = false;
         const double v = tail.toDouble(&ok);
-        if (ok) {
+        // QString::toDouble parses "nan" / "inf" / "+inf" / "-inf" as
+        // floating-point literals (ok == true) but those values aren't
+        // safe to flow downstream: qBound propagates NaN through
+        // qMax/qMin rather than clamping it, and consumers that read
+        // `effect.fboExtentRing` raw (e.g. osd.cpp's
+        // `resolveOsdShaderPadding` feeding QML's `shaderBoundsPadding`)
+        // would collapse window dimensions to NaN. Reject at the parse
+        // boundary so bad metadata surfaces on the warning channel
+        // rather than corrupting OSD geometry silently.
+        if (ok && qIsFinite(v)) {
             const qreal pad = percent ? (v / 100.0) : v;
             outExtent = AnimationShaderEffect::FboExtentKind::Anchor;
             outPad = qBound(qreal(0.0), pad, AnimationShaderEffect::kMaxFboExtentRing);

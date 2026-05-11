@@ -114,7 +114,7 @@ public:
 
     /// Anchor (card) pixel size in logical pixels. Decoupled from
     /// `iResolution` because Qt auto-resets iResolution to the shader
-    /// item's bounds on any geometry event — for a `fboExtentKind: parent`
+    /// item's bounds on any geometry event. For a `fboExtentKind: Surface`
     /// shader item that auto-reset would clobber any anchor-size override.
     /// Pushed alongside `iSurfaceScreenPos` from `syncShaderGeometryNow`.
     void setIAnchorSize(const QSizeF& size)
@@ -140,7 +140,7 @@ public:
     /// vec2 anchorUv        = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;
     /// ```
     /// This generalises the previous `customParams[7].x`-based ring-
-    /// padding remap (morph, broken-glass) AND the parent-extent vertex
+    /// padding remap (morph, broken-glass) AND the surface-extent vertex
     /// remap (fly-in) onto a single math contract that works for any
     /// FBO size the runtime decides to allocate.
     ///

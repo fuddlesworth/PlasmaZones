@@ -123,11 +123,8 @@ void PlasmaZonesEffect::postPaintScreen()
                     // and the BMW-style shards-past-window-bounds visual
                     // would be cropped flat at the shadow edge.
                     if (transition.fboExtentRing > 0.0) {
-                        const QRectF geo = w->frameGeometry();
-                        const qreal padW = transition.fboExtentRing * geo.width();
-                        const qreal padH = transition.fboExtentRing * geo.height();
                         const QRect ringRect =
-                            QRectF(geo.x() - padW, geo.y() - padH, geo.width() + 2.0 * padW, geo.height() + 2.0 * padH)
+                            ShaderInternal::inflatedByRingFraction(w->frameGeometry(), transition.fboExtentRing)
                                 .toAlignedRect();
                         repaintRect = repaintRect.united(ringRect);
                     }
@@ -419,7 +416,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // uses different uniform values (iAnchorPosInFbo =
                     // (padW, padH), iResolution = expanded size) to
                     // produce the same anchor-space range from a `[0, 1]`
-                    // vTexCoord — different runtime mechanism, same shader
+                    // vTexCoord; different runtime mechanism, same shader
                     // source.
                     shader->setUniform(cached->iAnchorPosInFboLoc, QVector2D(0.0f, 0.0f));
                 }
@@ -584,7 +581,7 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // effect declares `fboExtent: "anchor+N"`. The redirected texture
     // (allocated by OffscreenEffect::redirect at window-frame size) gets
     // sampled by an expanded quad with `texCoord` spanning [-ring, 1+ring]
-    // — the central [0..1] sub-region maps to the captured window content
+    // The central [0..1] sub-region maps to the captured window content
     // and the surrounding ring lets the shader render past the natural
     // frame. Morph and broken-glass already guard their out-of-anchor
     // samples (boundaryMask / getInputColor override → vec4(0)), so the
@@ -607,30 +604,35 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
 
     const qreal ring = it->second.fboExtentRing;
     const QRectF geo = window->frameGeometry();
-    const qreal frameW = geo.width();
-    const qreal frameH = geo.height();
-    if (frameW < 1.0 || frameH < 1.0) {
+    if (geo.width() < 1.0 || geo.height() < 1.0) {
         OffscreenEffect::apply(window, mask, data, quads);
         return;
     }
-    const qreal padW = ring * frameW;
-    const qreal padH = ring * frameH;
 
     // Replace the (potentially multi-quad) input mesh with a single quad
     // covering the expanded region. Vertex positions are in window-local
     // coords (KWin's MVP matrix translates to screen position downstream),
     // so subtracting padW/padH from the natural frame origin shifts the
-    // top-left into negative window-local space — exactly the "render
+    // top-left into negative window-local space. That's the "render
     // past the frame" semantic. Texture coordinates follow the same
     // ring convention so the captured-window texture (`uTexture0` on
     // KWin) lands in the central [0..1] region, matching what the
     // shader's `anchorUv` remap recovers via the unified
     // `iAnchorPosInFbo / iResolution / iAnchorSize` math.
+    //
+    // The expanded rect is computed via `inflatedByRingFraction` (single
+    // source of truth shared with `postPaintScreen`'s
+    // `addLayerRepaint` ring-rect union).
+    const QRectF expandedGeo = ShaderInternal::inflatedByRingFraction(geo, ring);
+    const qreal leftLocal = expandedGeo.x() - geo.x();
+    const qreal topLocal = expandedGeo.y() - geo.y();
+    const qreal rightLocal = leftLocal + expandedGeo.width();
+    const qreal bottomLocal = topLocal + expandedGeo.height();
     KWin::WindowQuad expanded;
-    expanded[0] = KWin::WindowVertex(-padW, -padH, -ring, -ring); // TL
-    expanded[1] = KWin::WindowVertex(frameW + padW, -padH, 1.0 + ring, -ring); // TR
-    expanded[2] = KWin::WindowVertex(frameW + padW, frameH + padH, 1.0 + ring, 1.0 + ring); // BR
-    expanded[3] = KWin::WindowVertex(-padW, frameH + padH, -ring, 1.0 + ring); // BL
+    expanded[0] = KWin::WindowVertex(leftLocal, topLocal, -ring, -ring); // TL
+    expanded[1] = KWin::WindowVertex(rightLocal, topLocal, 1.0 + ring, -ring); // TR
+    expanded[2] = KWin::WindowVertex(rightLocal, bottomLocal, 1.0 + ring, 1.0 + ring); // BR
+    expanded[3] = KWin::WindowVertex(leftLocal, bottomLocal, -ring, 1.0 + ring); // BL
     quads.clear();
     quads.append(expanded);
 }

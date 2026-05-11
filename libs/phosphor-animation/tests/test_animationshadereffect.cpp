@@ -155,6 +155,143 @@ private Q_SLOTS:
         const AnimationShaderEffect undershoot = AnimationShaderEffect::fromJson(obj);
         QCOMPARE(undershoot.bufferScale, qreal(0.125));
     }
+
+    /// `fboExtent` grammar parser coverage. The Phase 3 refactor
+    /// replaced the split `boundsExtent` enum + `boundsPadding` qreal
+    /// JSON keys with a single string field; the parser at
+    /// `parseFboExtent` in animationshadereffect.cpp accepts four forms
+    /// (`"anchor"`, `"anchor+0.5"` fraction, `"anchor+50%"` percent,
+    /// `"surface"`). Pin each form here so a regression in the parser
+    /// that silently drops a form (e.g. dropping percent support)
+    /// surfaces in CI rather than waiting on a metadata round-trip.
+    void testFromJsonFboExtentAnchorDefault()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("test"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("fboExtent"), QStringLiteral("anchor"));
+        const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(e.fboExtentKind, AnimationShaderEffect::FboExtentKind::Anchor);
+        QCOMPARE(e.fboExtentRing, qreal(0.0));
+    }
+
+    void testFromJsonFboExtentAnchorFraction()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("test"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("fboExtent"), QStringLiteral("anchor+0.5"));
+        const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(e.fboExtentKind, AnimationShaderEffect::FboExtentKind::Anchor);
+        QCOMPARE(e.fboExtentRing, qreal(0.5));
+    }
+
+    void testFromJsonFboExtentAnchorPercent()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("test"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("fboExtent"), QStringLiteral("anchor+50%"));
+        const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(e.fboExtentKind, AnimationShaderEffect::FboExtentKind::Anchor);
+        QCOMPARE(e.fboExtentRing, qreal(0.5));
+    }
+
+    void testFromJsonFboExtentSurface()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("test"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("fboExtent"), QStringLiteral("surface"));
+        const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(e.fboExtentKind, AnimationShaderEffect::FboExtentKind::Surface);
+        QCOMPARE(e.fboExtentRing, qreal(0.0));
+    }
+
+    /// Malformed `fboExtent` values must fall back to defaults (Anchor,
+    /// ring=0) with a warning. The parser is fail-loud rather than
+    /// fail-silent: an unrecognised grammar surfaces on the journal so
+    /// metadata typos don't degrade silently into the no-shader path.
+    void testFromJsonFboExtentMalformed()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("test"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("fboExtent"), QStringLiteral("foo"));
+        const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(e.fboExtentKind, AnimationShaderEffect::FboExtentKind::Anchor);
+        QCOMPARE(e.fboExtentRing, qreal(0.0));
+    }
+
+    void testFromJsonFboExtentAnchorWithBadFraction()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("test"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("fboExtent"), QStringLiteral("anchor+abc"));
+        const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(e.fboExtentKind, AnimationShaderEffect::FboExtentKind::Anchor);
+        QCOMPARE(e.fboExtentRing, qreal(0.0));
+    }
+
+    /// NaN / Inf in the "anchor+N" fraction must be rejected. `qBound`
+    /// propagates NaN, and consumers reading `fboExtentRing` raw (e.g.
+    /// `osd.cpp::resolveOsdShaderPadding` feeding QML's
+    /// `shaderBoundsPadding`) would otherwise collapse window dimensions
+    /// to NaN. Pin the parse-boundary `qIsFinite` guard.
+    void testFromJsonFboExtentRejectsNan()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("test"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("fboExtent"), QStringLiteral("anchor+nan"));
+        const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(e.fboExtentKind, AnimationShaderEffect::FboExtentKind::Anchor);
+        QCOMPARE(e.fboExtentRing, qreal(0.0));
+    }
+
+    void testFromJsonFboExtentRejectsInf()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("test"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("fboExtent"), QStringLiteral("anchor+inf"));
+        const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(e.fboExtentKind, AnimationShaderEffect::FboExtentKind::Anchor);
+        QCOMPARE(e.fboExtentRing, qreal(0.0));
+    }
+
+    /// Out-of-range ring fractions clamp to `[0, kMaxFboExtentRing]` at
+    /// the parse boundary so the metadata can't exceed the runtime's
+    /// FBO-size budget (a centred-in-huge-parent anchor with ring=5
+    /// would otherwise inflate the shader item by 11x on each axis →
+    /// 121x area, gigabytes of FBO).
+    void testFromJsonFboExtentClampsOverRing()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("test"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("fboExtent"), QStringLiteral("anchor+10.0"));
+        const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(e.fboExtentKind, AnimationShaderEffect::FboExtentKind::Anchor);
+        QCOMPARE(e.fboExtentRing, AnimationShaderEffect::kMaxFboExtentRing);
+    }
+
+    /// Round-trip Surface extent through JSON. toJson emits
+    /// `"fboExtent": "surface"`; fromJson reads it back. Mirrors the
+    /// pattern in `testJsonPreservesMultipassFields` but for the
+    /// non-default extent kind.
+    void testFboExtentSurfaceRoundTrip()
+    {
+        AnimationShaderEffect original;
+        original.id = QStringLiteral("fly-in");
+        original.fragmentShaderPath = QStringLiteral("effect.frag");
+        original.fboExtentKind = AnimationShaderEffect::FboExtentKind::Surface;
+
+        const AnimationShaderEffect restored = AnimationShaderEffect::fromJson(original.toJson());
+        QCOMPARE(restored.fboExtentKind, AnimationShaderEffect::FboExtentKind::Surface);
+        QCOMPARE(restored.fboExtentRing, qreal(0.0));
+    }
 };
 
 QTEST_MAIN(TestAnimationShaderEffect)
