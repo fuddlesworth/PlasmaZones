@@ -690,6 +690,8 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kISurfaceScreenPos);
         cached.iAnchorSizeLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAnchorSize);
+        cached.iAnchorPosInFboLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAnchorPosInFbo);
         // Cache element locations for the per-effect declared parameter
         // slots: `customParams[0..kMaxCustomParams-1]` for float / int /
         // bool params, and `customColors[0..kMaxCustomColors-1]` for color
@@ -758,6 +760,15 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     const auto& cachedEntry = cacheIt->second;
     ShaderTransition transition;
     transition.cached = &cachedEntry;
+    // Carry the effect's FBO-extent ring fraction so the apply() override
+    // can rebuild quads at expanded size and the per-frame uniform push
+    // can adjust iAnchorPosInFbo / iResolution. Only meaningful when
+    // `fboExtentKind == Anchor` and ring > 0; surface-extent effects
+    // (fly-in) use MVP translation instead and leave this at 0.
+    transition.fboExtentRing =
+        (eff.fboExtentKind == PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind::Anchor)
+        ? eff.fboExtentRing
+        : 0.0;
 
     // Translate the friendly parameter map (e.g. {"direction": 1,
     // "parallax": 0.2}) to slot keys, then pack each
@@ -1056,6 +1067,20 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     QRect repaintRect = window->expandedGeometry().toAlignedRect();
     if (repaintRect.isEmpty()) {
         repaintRect = window->frameGeometry().toAlignedRect();
+    }
+    // Actor-expansion ring union: mirrors `postPaintScreen`'s addLayerRepaint
+    // loop in paint_pipeline.cpp. Without this, the very first frame of a
+    // transition with `fboExtentRing > 0` would have damage scheduled only
+    // for the natural expanded rect (shadow extents) and KWin would clip
+    // the visible ring back to that boundary on frame 1. Subsequent frames
+    // pick up the ring via postPaintScreen, but the first-frame "shards
+    // popping in cropped" artefact would be visible at transition install
+    // time without this union here.
+    const qreal installFboExtentRing = emplaceResult.first->second.fboExtentRing;
+    if (installFboExtentRing > 0.0) {
+        const QRect ringRect =
+            ShaderInternal::inflatedByRingFraction(window->frameGeometry(), installFboExtentRing).toAlignedRect();
+        repaintRect = repaintRect.united(ringRect);
     }
     window->addLayerRepaint(repaintRect);
     if (KWin::effects) {

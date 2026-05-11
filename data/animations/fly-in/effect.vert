@@ -12,20 +12,23 @@
 //
 // At iTime=0 the geometry is offset by `clearancePx` toward the closer
 // edge so the card sits fully off-screen; the offset shrinks linearly to
-// zero at iTime=1. This shader REQUIRES `"boundsExtent": "parent"` in
-// metadata.json on the daemon path — without that the FBO is anchor-
+// zero at iTime=1. This shader REQUIRES `"fboExtent": "surface"` in
+// metadata.json on the daemon path; without that the FBO is anchor-
 // sized and the translated geometry walks straight off the FBO edge,
 // producing the "flies in from the anchor's location" symptom that
-// motivated the boundsExtent contract in the first place.
+// motivated the surface-extent contract in the first place.
 //
-// Coordinate-space split — daemon vs kwin:
+// Coordinate-space split (daemon vs kwin):
 //
-//  • Daemon (Qt RHI): with boundsExtent=parent the FBO covers the
-//    parent item (screen-sized for OSDs and popups), and `iResolution`
-//    means the *card* pixel size. The vertex shader has to remap the
-//    standard (-1..1) clip-space quad onto the card's region within the
-//    parent-sized FBO before applying translation; that's the bulk of
-//    the math below. Position arrives in clip space directly (no MVP).
+//  • Daemon (Qt RHI): with fboExtent=surface the FBO covers the
+//    QQuickWindow's contentItem (the wl_surface scene root, sized to
+//    the host screen / VS rect for OSDs and popups), and `iResolution`
+//    naturally tracks that FBO size (Qt auto-syncs it from the shader
+//    item's bounds). Card pixel size comes from `iAnchorSize`. The
+//    vertex shader has to remap the standard (-1..1) clip-space quad
+//    onto the card's region within the surface-sized FBO before
+//    applying translation; that's the bulk of the math below. Position
+//    arrives in clip space directly (no MVP).
 //
 //  • kwin-effect (classic GL): position is in window-frame logical
 //    pixels, `modelViewProjectionMatrix` carries the window-to-screen
@@ -69,7 +72,7 @@ void main() {
     // Decide direction from card position on its host screen. Card size
     // comes from `iAnchorSize` (NOT `iResolution`): the latter is auto-
     // reset by Qt to the shader item's bounds on every geometry event,
-    // which under boundsExtent=parent means the entire screen — so
+    // which under fboExtent=surface means the entire wl_surface, so
     // reading iResolution here would produce a screen-sized card during
     // motion. iAnchorSize is the runtime-pushed captured-anchor size
     // and stays stable per leg.
@@ -102,25 +105,24 @@ void main() {
     vec2 shifted = position + vec2(offsetPx, 0.0);
     gl_Position = modelViewProjectionMatrix * vec4(shifted, 0.0, 1.0);
 #else
-    // Daemon (boundsExtent=parent): the FBO spans iResolution (= the
-    // shader item's bounds = the parent item = host screen / VS rect
-    // post-fullscreen-OSD migration). Map the standard (-1..1) clip-
-    // space quad onto the card's region within the FBO so the captured
-    // anchor texture renders at native pixel size at the card's
-    // resting screen position, then add the fly-in offset.
+    // Daemon (fboExtent=surface): the FBO spans iResolution (= the
+    // shader item's bounds = the QQuickWindow's contentItem = host
+    // screen / VS rect post-fullscreen-OSD migration). Map the standard
+    // (-1..1) clip-space quad onto the card's region within the FBO so
+    // the captured anchor texture renders at native pixel size at the
+    // card's resting screen position, then add the fly-in offset.
     //
     // iResolution naturally tracks the FBO size (Qt auto-syncs it from
     // the shader item's geometry). Use that directly for FBO width /
-    // height. For card pixel size we read iAnchorSize — see the comment
+    // height. For card pixel size we read iAnchorSize; see the comment
     // above for why iResolution is unsafe for "size of the card."
     vec2 fboSizePx = vec2(max(iResolution.x, 1.0), max(iResolution.y, 1.0));
 
     // Card centre in clip space. Qt's QSGRenderNode convention matches
     // the screen: clip-space Y = -1 is the top of the FBO and Y = +1
     // is the bottom (same Y-down as the captured texture's UV). No flip
-    // here — a card at screen Y near 0 should land at clip-Y near -1
-    // and a card near the bottom of the screen should land at clip-Y
-    // near +1.
+    // here; a card at screen Y near 0 should land at clip-Y near -1 and
+    // a card near the bottom of the screen should land at clip-Y near +1.
     vec2 cardCenterPx = iSurfaceScreenPos.xy + cardSize * 0.5;
     vec2 cardCenterClip;
     cardCenterClip.x = (cardCenterPx.x / fboSizePx.x) * 2.0 - 1.0;

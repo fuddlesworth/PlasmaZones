@@ -54,11 +54,11 @@ qreal resolveOsdShaderPadding(ISettings* settings, PhosphorAnimationShaders::Ani
     qreal pad = 0.0;
     const QString showId = tree.resolve(showPath).effectiveEffectId();
     if (!showId.isEmpty()) {
-        pad = qMax(pad, registry->effect(showId).boundsPadding);
+        pad = qMax(pad, registry->effect(showId).fboExtentRing);
     }
     const QString hideId = tree.resolve(hidePath).effectiveEffectId();
     if (!hideId.isEmpty()) {
-        pad = qMax(pad, registry->effect(hideId).boundsPadding);
+        pad = qMax(pad, registry->effect(hideId).fboExtentRing);
     }
     return pad;
 }
@@ -545,15 +545,20 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
 void OverlayService::warmUpNotifications()
 {
     const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
+    int createdCount = 0;
     for (const QString& sid : effectiveIds) {
         QScreen* physScreen =
             m_screenManager ? m_screenManager->physicalQScreenFor(sid) : Utils::findScreenAtPosition(QPoint(0, 0));
         if (physScreen) {
-            ensureNotificationWindowFor(sid, physScreen);
+            auto* state = ensureNotificationWindowFor(sid, physScreen);
+            if (state && state->passiveShellSurface) {
+                ++createdCount;
+            }
         }
     }
     m_notificationsWarmed = true;
-    qCInfo(lcOverlay) << "Pre-warmed NotificationOverlay windows for" << effectiveIds.size() << "effective screens";
+    qCInfo(lcOverlay) << "Pre-warmed NotificationOverlay windows for" << createdCount << "of"
+                      << effectiveIds.size() << "effective screens";
     ensureOsdScreenAddedConnected();
 }
 

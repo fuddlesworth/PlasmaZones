@@ -16,21 +16,23 @@
 //
 // Note on actor scale: BMW grows the actor by 2x (ACTOR_SCALE=2.0,
 // PADDING=0.5) so shards can fly past the original window bounds. We
-// match that on PlasmaZones via the `boundsPadding` mechanism: metadata
-// declares `"boundsPadding": 0.5`, SurfaceAnimator expands the
-// shaderItem QUAD accordingly and writes the fraction into
-// customParams[7].x. The morph-style UV remap below converts the padded
-// vTexCoord back into anchor-space coords ∈ [-0.5, 1.5], which is
+// match that on PlasmaZones via the `fboExtent` metadata grammar:
+// metadata declares `"fboExtent": "anchor+0.5"`, SurfaceAnimator
+// expands the shaderItem QUAD accordingly, and the runtime pushes
+// the anchor's region inside the padded FBO via `iAnchorPosInFbo`
+// (= (padW, padH)) alongside `iAnchorSize` and Qt-auto-derived
+// `iResolution`. The `anchorRemap` helper below converts the padded
+// vTexCoord back into anchor-space coords (-0.5..1.5 for ring=0.5),
 // exactly what BMW's `iTexCoord*2 - 0.5` produced upstream.
 //
-// `bmw_compat.glsl`'s default `getInputColor` only divides by alpha —
-// it does NOT clip — so an off-window sample on a clamp-to-edge
+// `bmw_compat.glsl`'s default `getInputColor` only divides by alpha,
+// it does NOT clip, so an off-window sample on a clamp-to-edge
 // `uTexture0` would smear edge pixels (visible artefact for opaque-
-// edged windows like terminals or most app chrome). We therefore
-// override `getInputColor` locally to return `vec4(0.0)` outside
-// [0, 1], matching the matrix.frag pattern (matrix/effect.frag:196-205).
-// The cascade still reads as a shatter; shards beyond the window crop
-// cleanly to transparent.
+// edged windows like terminals or most app chrome). The cascade
+// below calls the `getClippedInputColor` helper (defined in
+// bmw_compat.glsl) instead, which crops samples outside [0, 1] to
+// `vec4(0.0)` before delegating to `getInputColor`. Shards beyond
+// the window crop cleanly to transparent.
 
 #version 450
 
@@ -47,14 +49,42 @@ layout(location = 0) out vec4 fragColor;
 #define uBlowForce  customParams[0].y
 #define uGravity    customParams[0].z
 
-// Bounds-padding fraction supplied by SurfaceAnimator from
-// AnimationShaderEffect::boundsPadding (metadata.json `"boundsPadding": 0.5`).
-// See morph/effect.frag for the same contract — customParams[7].x is the
-// reserved structural slot. With boundsPadding=0.5 the UV remap below
-// produces anchorUv ∈ [-0.5, 1.5], reproducing BMW's `coords =
-// iTexCoord*ACTOR_SCALE - PADDING` (ACTOR_SCALE=2, PADDING=0.5) without
-// hardcoding the constants on the GLSL side.
-#define boundsPadding customParams[7].x
+// Anchor's region inside the shader FBO. SurfaceAnimator expands the
+// shaderItem QUAD by metadata's `fboExtent: "anchor+N"` ring fraction.
+// The runtime pushes `iAnchorPosInFbo` = (padW, padH) and `iAnchorSize`
+// = the captured-anchor pixel size; Qt auto-derives `iResolution` from
+// the padded shaderItem bounds. The remap below converts the padded
+// `iTexCoord` (0..1 over the expanded FBO) back into anchor-space coords
+// (-ring..1+ring over the original anchor), reproducing BMW's
+// `iTexCoord*ACTOR_SCALE - PADDING` without hardcoding the constants.
+// With ring=0.5 (ACTOR_SCALE=2 equivalent) the coords land in [-0.5, 1.5]
+// exactly as BMW's broken-glass.frag expects.
+//
+// Kwin-effect path: actor expansion is implemented at quad-construction
+// time. PlasmaZonesEffect::apply() (paint_pipeline.cpp) rebuilds the
+// window's quads at `(1+2·ring) × frame` with texCoord remapped to
+// `[-ring, 1+ring]`, so `iTexCoord` already arrives in anchor-space.
+// `iAnchorPosInFbo` is pushed as (0, 0) and `iAnchorSize == iResolution`,
+// so the unified remap math collapses to coords == iTexCoord, giving
+// the same `[-ring, 1+ring]` range the daemon path produces. The
+// `getClippedInputColor` helper used in the cascade below (defined in
+// bmw_compat.glsl) crops samples outside [0, 1] to transparent so the
+// redirected texture's clamp-to-edge wrap mode doesn't smear edge
+// pixels into the ring. BMW visual parity (shards flying past the
+// natural frame) works on both runtimes.
+vec2 anchorRemap(vec2 uv) {
+    // Defence in depth: see morph/effect.frag's resSafe comment. The
+    // runtime normally pushes positive iResolution / iAnchorSize at
+    // leg start, but transient pre-attach or mid-relayout frames can
+    // land at zero. Clamp the divisors so a stale frame samples a
+    // degenerate but finite UV rather than propagating Inf / NaN
+    // through the shard cascade.
+    vec2 resSafe = max(iResolution, vec2(1.0));
+    vec2 anchorSizePx = max(iAnchorSize, vec2(1.0));
+    vec2 anchorTopLeftUv = iAnchorPosInFbo / resSafe;
+    vec2 anchorSizeUv = anchorSizePx / resSafe;
+    return (uv - anchorTopLeftUv) / anchorSizeUv;
+}
 
 // uSeed (BMW: per-leg `Math.random()`) is computed once at the top of
 // `main()` from `hash22(iSurfaceScreenPos.xy)` and bound to a local
@@ -91,12 +121,13 @@ void main() {
   for (float i = 0.0; i < SHARD_LAYERS; ++i) {
 
     // To enable drawing shards outside of the window bounds, SurfaceAnimator
-    // expands the shaderItem QUAD by `boundsPadding` (metadata.json: 0.5).
-    // Here we remap the padded vTexCoord back into anchor-space so the
-    // window gets drawn at the correct position; coords ∈ [-pad, 1+pad]
-    // reproduces BMW's `iTexCoord * ACTOR_SCALE - PADDING` for pad=0.5.
-    float k = 1.0 + 2.0 * boundsPadding;
-    vec2 coords = iTexCoord.st * k - boundsPadding;
+    // expands the shaderItem QUAD by metadata's `fboExtent: "anchor+0.5"`
+    // ring fraction. The helper above turns the padded `iTexCoord` back into
+    // anchor-space coords (-0.5..1.5 for ring=0.5), reproducing BMW's
+    // `iTexCoord*ACTOR_SCALE - PADDING` from `iAnchorPosInFbo` /
+    // `iAnchorSize` / `iResolution` instead of the previous structural
+    // `customParams[7].x` slot.
+    vec2 coords = anchorRemap(iTexCoord.st);
 
     // Scale and rotate around our epicenter.
     coords -= uEpicenter;

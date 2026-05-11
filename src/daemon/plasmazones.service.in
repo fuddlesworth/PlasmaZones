@@ -10,6 +10,8 @@ ExecStart=@KDE_INSTALL_FULL_BINDIR@/plasmazonesd
 Restart=on-failure
 RestartSec=5
 Slice=session.slice
+Environment=QT_PLUGIN_PATH=@KDE_INSTALL_FULL_LIBDIR@/qt6/plugins
+Environment=LD_LIBRARY_PATH=@KDE_INSTALL_FULL_LIBDIR@
 
 [Install]
 WantedBy=plasma-workspace.target

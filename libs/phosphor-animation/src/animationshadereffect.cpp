@@ -13,6 +13,103 @@ namespace PhosphorAnimationShaders {
 
 namespace {
 Q_LOGGING_CATEGORY(lcAnimationShader, "phosphoranimationshaders.effect")
+
+/// Parse a `fboExtent` string into the internal `FboExtentKind` +
+/// `fboExtentRing` representation. Grammar:
+///   * `"anchor"`            → Anchor, pad = 0
+///   * `"anchor+0.5"`        → Anchor, pad = 0.5 (fraction form)
+///   * `"anchor+50%"`        → Anchor, pad = 0.5 (percent form, identical effect)
+///   * `"surface"`           → Surface, pad = 0
+/// Padding is clamped to `[0, kMaxFboExtentRing]` at the parse boundary
+/// to mirror the legacy `fboExtentRing` read clamp.
+///
+/// Returns `true` on success and writes through `outExtent` / `outPad`;
+/// returns `false` for an unknown / malformed string and emits a
+/// `qCWarning` so a typo in metadata.json surfaces on the journal
+/// rather than degrading silently. Caller keeps the struct's default
+/// values (Anchor, pad=0) on failure.
+bool parseFboExtent(const QString& raw, AnimationShaderEffect::FboExtentKind& outExtent, qreal& outPad)
+{
+    const QString s = raw.trimmed();
+    if (s.isEmpty()) {
+        return false;
+    }
+    if (s.compare(QLatin1String("anchor"), Qt::CaseInsensitive) == 0) {
+        outExtent = AnimationShaderEffect::FboExtentKind::Anchor;
+        outPad = 0.0;
+        return true;
+    }
+    if (s.compare(QLatin1String("surface"), Qt::CaseInsensitive) == 0) {
+        outExtent = AnimationShaderEffect::FboExtentKind::Surface;
+        outPad = 0.0;
+        return true;
+    }
+    // `anchor+N` / `anchor+N%` form. Split on '+'; left half must be
+    // `anchor`, right half is a float (with optional trailing `%`).
+    const int plusIdx = s.indexOf(QLatin1Char('+'));
+    if (plusIdx > 0 && s.left(plusIdx).trimmed().compare(QLatin1String("anchor"), Qt::CaseInsensitive) == 0) {
+        QString tail = s.mid(plusIdx + 1).trimmed();
+        bool percent = false;
+        if (tail.endsWith(QLatin1Char('%'))) {
+            percent = true;
+            tail.chop(1);
+            tail = tail.trimmed();
+        }
+        bool ok = false;
+        const double v = tail.toDouble(&ok);
+        // QString::toDouble parses "nan" / "inf" / "+inf" / "-inf" as
+        // floating-point literals (ok == true) but those values aren't
+        // safe to flow downstream: qBound propagates NaN through
+        // qMax/qMin rather than clamping it, and consumers that read
+        // `effect.fboExtentRing` raw (e.g. osd.cpp's
+        // `resolveOsdShaderPadding` feeding QML's `shaderBoundsPadding`)
+        // would collapse window dimensions to NaN. Reject at the parse
+        // boundary so bad metadata surfaces on the warning channel
+        // rather than corrupting OSD geometry silently.
+        if (ok && qIsFinite(v)) {
+            const qreal pad = percent ? (v / 100.0) : v;
+            // Reject negatives at the parse boundary instead of silently
+            // clamping to 0. An authoring typo like "anchor+-0.5" would
+            // otherwise masquerade as a valid `anchor` extent with no ring,
+            // losing the operator's chance to spot the bad value in
+            // metadata. The unrecognised-grammar fallback below emits the
+            // warning and returns false; caller keeps the struct defaults.
+            if (pad >= 0.0) {
+                outExtent = AnimationShaderEffect::FboExtentKind::Anchor;
+                outPad = qMin(pad, AnimationShaderEffect::kMaxFboExtentRing);
+                return true;
+            }
+        }
+    }
+    qCWarning(lcAnimationShader)
+        << "AnimationShaderEffect::fromJson: unrecognised fboExtent" << raw
+        << "Accepted forms are \"anchor\", \"anchor+0.5\", \"anchor+50%\", \"surface\". Falling back to defaults.";
+    return false;
+}
+
+/// Emit the internal `FboExtentKind` + `fboExtentRing` representation
+/// as a `fboExtent` string. Inverse of `parseFboExtent`. Empty result
+/// = "Anchor extent with zero padding" (omitted from JSON to keep
+/// authored metadata terse, same idiom as the rest of `toJson`).
+QString formatFboExtent(AnimationShaderEffect::FboExtentKind extent, qreal pad)
+{
+    if (extent == AnimationShaderEffect::FboExtentKind::Surface) {
+        return QStringLiteral("surface");
+    }
+    // Anchor extent: omit when there's no ring (the common case in
+    // 53 of 56 shipping shaders).
+    const qreal clamped = qBound(qreal(0.0), pad, AnimationShaderEffect::kMaxFboExtentRing);
+    if (clamped <= 0.0) {
+        return QString();
+    }
+    // Pin `g` format to 17 significant digits so a programmatically
+    // assigned ring (e.g. 1.0/3.0 in C++ code) survives toJson -> fromJson
+    // round-trip. `arg(double)` defaults to 6 sig digits, which collapses
+    // 0.333333... to "0.333333" and breaks strict-equality comparison on
+    // the resulting AnimationShaderEffect. 17 digits is the IEEE-754
+    // double-precision round-trip width.
+    return QStringLiteral("anchor+%1").arg(clamped, 0, 'g', 17);
+}
 } // namespace
 
 QJsonObject AnimationShaderEffect::toJson() const
@@ -35,28 +132,17 @@ QJsonObject AnimationShaderEffect::toJson() const
         obj.insert(QLatin1String("vertexShader"), vertexShaderPath);
     if (!previewPath.isEmpty())
         obj.insert(QLatin1String("preview"), previewPath);
-    // Clamp on emit so the JSON never carries an out-of-range value that
-    // fromJson would silently re-clamp on read. This makes `fromJson(toJson(x))`
-    // idempotent — successive round-trips produce a stable struct, even
-    // when the source `boundsPadding` was assigned out-of-range
-    // programmatically. (A single round-trip from an out-of-range source
-    // intentionally does NOT preserve the original out-of-range value;
-    // that's the whole point of the clamp.) The lower-bound check
-    // (`> 0.0` vs `>= 0.0`) is intentional: 0.0 is the documented default
-    // and is omitted from the JSON to keep authored metadata.json files
-    // terse.
+    // Single `fboExtent` string field replaces the previous split
+    // `fboExtentKind` + `fboExtentRing` pair. See `parseFboExtent` /
+    // `formatFboExtent` for the grammar. Emit only when the combined
+    // value diverges from the Anchor-no-pad default (53 of 56 shipping
+    // shaders); the empty-string return from `formatFboExtent` signals
+    // that case so authored metadata.json files stay terse.
     {
-        const qreal clampedPadding = qBound(0.0, boundsPadding, kMaxBoundsPadding);
-        if (clampedPadding > 0.0)
-            obj.insert(QLatin1String("boundsPadding"), clampedPadding);
+        const QString fboExtentStr = formatFboExtent(fboExtentKind, fboExtentRing);
+        if (!fboExtentStr.isEmpty())
+            obj.insert(QLatin1String("fboExtent"), fboExtentStr);
     }
-    // Emit boundsExtent only when it diverges from the Anchor default —
-    // keeps authored metadata.json terse for the common fragment-shader
-    // case. Round-trip stability mirrors boundsPadding's pattern above:
-    // an unknown / typo value falls back to Anchor on read, and toJson
-    // omits the field rather than emitting an explicit "anchor" string.
-    if (boundsExtent == BoundsExtent::Parent)
-        obj.insert(QLatin1String("boundsExtent"), QLatin1String("parent"));
     if (isMultipass)
         obj.insert(QLatin1String("multipass"), true);
     if (!bufferShaderPaths.isEmpty()) {
@@ -191,21 +277,26 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     }
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
 
-    // Clamp negatives at the input boundary — a negative boundsPadding
-    // would silently propagate into surfaceanimator.cpp's geometry math
-    // (negative-area shader bounds) and into the shader's uv->anchorUv
-    // remap (sample outside [0,1] always → fully transparent leg).
-    // Upper cap shared with surfaceanimator's runtime clamp via the
-    // `kMaxBoundsPadding` constant — see its rationale on the struct.
-    e.boundsPadding = qBound(0.0, obj.value(QLatin1String("boundsPadding")).toDouble(0.0), kMaxBoundsPadding);
-
-    // boundsExtent: "anchor" (default) or "parent". Unknown / missing /
-    // typo'd values silently fall back to Anchor — matches the lenient
-    // round-trip semantics elsewhere in this struct (no hard error on a
-    // malformed value, but the value the runtime sees is always one of
-    // the two declared variants).
-    if (obj.value(QLatin1String("boundsExtent")).toString().compare(QLatin1String("parent"), Qt::CaseInsensitive) == 0)
-        e.boundsExtent = BoundsExtent::Parent;
+    // `fboExtent` (string). Single grammar replaces the previous split
+    // `fboExtentKind` + `fboExtentRing` pair. Accepted forms (see
+    // `parseFboExtent` for full details):
+    //   "anchor"        is Anchor extent, no padding (default)
+    //   "anchor+0.5"    is Anchor extent with ring-padding fraction
+    //   "anchor+50%"    is the percent form
+    //   "surface"       fills the anchor's QQuickWindow content
+    //                     root (= the wl_surface scene root on daemon)
+    // Missing field falls through to the struct's defaults (Anchor,
+    // pad=0); a recognised but malformed value (`parseFboExtent`
+    // returns false) emits a journal warning and ALSO falls through to
+    // the defaults. Same lenient pattern as the legacy split fields,
+    // but typos now surface to the operator instead of being silent.
+    // Per the project's no-legacy-shims rule, the prior `fboExtentRing`
+    // / `fboExtentKind` JSON keys are NOT read here. Authored metadata
+    // must use `fboExtent`.
+    const QString fboExtentRaw = obj.value(QLatin1String("fboExtent")).toString();
+    if (!fboExtentRaw.isEmpty()) {
+        parseFboExtent(fboExtentRaw, e.fboExtentKind, e.fboExtentRing);
+    }
 
     const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
     e.parameters.reserve(params.size());
@@ -308,9 +399,16 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
         return false;
     if (previewPath != other.previewPath)
         return false;
-    if (!qFuzzyCompare(boundsPadding + 1.0, other.boundsPadding + 1.0))
+    if (fboExtentKind != other.fboExtentKind)
         return false;
-    if (boundsExtent != other.boundsExtent)
+    // `fboExtentRing` is semantically dead when kind == Surface (the FBO
+    // already covers the entire surface, ring padding is ignored); the
+    // docstring on the field declares this. Mirror that contract in
+    // operator==: a programmatic Surface effect with ring != 0 would
+    // otherwise compare unequal to its `fromJson(toJson(x))` round-trip
+    // because formatFboExtent drops the ring for Surface and parseFboExtent
+    // reads it back as 0.
+    if (fboExtentKind == FboExtentKind::Anchor && !qFuzzyCompare(fboExtentRing + 1.0, other.fboExtentRing + 1.0))
         return false;
     if (isMultipass != other.isMultipass || useWallpaper != other.useWallpaper || bufferFeedback != other.bufferFeedback
         || useDepthBuffer != other.useDepthBuffer)
