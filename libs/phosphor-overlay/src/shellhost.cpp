@@ -53,4 +53,9 @@ bool ShellHost::hasFailure(const QString& screenId) const
     return m_creationFailed.contains(screenId);
 }
 
+QStringList ShellHost::failureScreenIds() const
+{
+    return QStringList(m_creationFailed.cbegin(), m_creationFailed.cend());
+}
+
 } // namespace PhosphorOverlay

@@ -687,12 +687,14 @@ private:
     // entry in the connection's slot table for the rest of the session).
     bool m_prepareForSleepConnected = false;
 
-    // Track screens where passive-overlay-shell creation has failed, so
-    // the spam-guard in ensurePassiveShellFor only logs once per screen
-    // regardless of which OSD path (layout-osd or navigation-osd) tried
-    // to bring the surface up. Cleared in destroyAllWindowsForPhysicalScreen
-    // when a hot-plug cycle reattaches the same physical monitor.
-    QSet<QString> m_notificationCreationFailed;
+    // Sticky per-screen passive-shell creation-failure flag now lives on
+    // the ShellHost (PhosphorOverlay::ShellHost::markFailure /
+    // clearFailure / hasFailure). The spam-guard in ensurePassiveShellFor
+    // logs once per screen regardless of which OSD path (layout-osd or
+    // navigation-osd) tried to bring the surface up. Cleared in
+    // destroyAllWindowsForPhysicalScreen when a hot-plug cycle reattaches
+    // the same physical monitor.
+
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
     QString m_lastNavigationActionKey; // "action:reason" composite key
     QString m_lastNavigationScreenId;

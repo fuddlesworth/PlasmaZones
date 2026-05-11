@@ -943,11 +943,9 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     if (!physId.isEmpty()) {
         const QString vsPrefix = physId + PhosphorIdentity::VirtualScreenId::Separator;
-        for (auto it = m_notificationCreationFailed.begin(); it != m_notificationCreationFailed.end();) {
-            if (*it == physId || it->startsWith(vsPrefix)) {
-                it = m_notificationCreationFailed.erase(it);
-            } else {
-                ++it;
+        for (const QString& flagged : m_shellHost->failureScreenIds()) {
+            if (flagged == physId || flagged.startsWith(vsPrefix)) {
+                m_shellHost->clearFailure(flagged);
             }
         }
     }

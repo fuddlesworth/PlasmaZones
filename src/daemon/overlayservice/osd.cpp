@@ -4,6 +4,7 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
+#include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
@@ -456,7 +457,7 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     // shell on a given screen suppresses retries until the screen is
     // hot-plug-cycled, same lifecycle the now-obsolete notification
     // surface used.
-    if (m_notificationCreationFailed.contains(effectiveId)) {
+    if (m_shellHost->hasFailure(effectiveId)) {
         return (it == m_screenStates.end()) ? nullptr : &it.value();
     }
 
@@ -467,7 +468,7 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     if (!surface) {
         qCWarning(lcOverlay) << "Failed to create passive overlay shell for screen=" << effectiveId
                              << ": suppressing further attempts until screen is replugged";
-        m_notificationCreationFailed.insert(effectiveId);
+        m_shellHost->markFailure(effectiveId);
         return nullptr;
     }
 

@@ -64,6 +64,13 @@ public:
     void clearFailure(const QString& screenId);
     bool hasFailure(const QString& screenId) const;
 
+    /// Snapshot of every screen id currently flagged as failed. Used by
+    /// hot-plug cleanup paths that need to clear sentinels by consumer-
+    /// specific id schemes (e.g. clear every virtual-screen id rooted on
+    /// a now-removed physical monitor) without burdening the library
+    /// with the consumer's id grammar.
+    QStringList failureScreenIds() const;
+
 private:
     QHash<QString, ShellState> m_states;
     QSet<QString> m_creationFailed;
