@@ -304,8 +304,36 @@ PanelWindow {
                         radius: 6
                         color: trayMouse.containsMouse ? "#45475a" : "transparent"
 
+                        // Fallback glyph — first letter of title in a
+                        // muted circle. Renders when iconUrl is empty
+                        // (which happens for items that ship an
+                        // IconName the resolver couldn't match against
+                        // any installed theme, common for apps that
+                        // depend on their own bundled icon dir without
+                        // setting IconThemePath properly). Keeps the
+                        // tray slot visible + clickable instead of
+                        // collapsing to 0 px.
+                        Rectangle {
+                            anchors.centerIn: parent
+                            visible: trayDelegate.iconUrl.length === 0
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#45475a"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: trayDelegate.title.length > 0 ? trayDelegate.title.charAt(0).toUpperCase() : "?"
+                                color: "#cdd6f4"
+                                font.pixelSize: 10
+                                font.weight: Font.Bold
+                            }
+
+                        }
+
                         Image {
                             anchors.centerIn: parent
+                            visible: trayDelegate.iconUrl.length > 0
                             width: 18
                             height: 18
                             // Image.source is a QUrl property — feed

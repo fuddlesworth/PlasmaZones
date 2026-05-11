@@ -8,8 +8,11 @@
 
 #include "../iconimageprovider.h"
 
+#include <QLoggingCategory>
 #include <QUrl>
 #include <QVariant>
+
+Q_LOGGING_CATEGORY(lcSniModel, "phosphorservices.sni.model")
 
 namespace PhosphorServices {
 
@@ -45,9 +48,21 @@ QString publishAndUrl(StatusNotifierItem* item, const QString& variant)
     const QImage img = variant == QLatin1String("overlay") ? item->overlayIconImage()
         : variant == QLatin1String("attention")            ? item->attentionIconImage()
                                                            : item->iconImage();
-    if (img.isNull())
-        return {};
     const QString key = iconKeyBase(item, variant);
+    if (img.isNull()) {
+        // Empty URL = nothing for QML's Image to bind to → tray
+        // delegate's transparent Rectangle renders as zero-px wide.
+        // The log helps diagnose "tray items exist but I see nothing":
+        // it usually means the XDG icon-theme resolver couldn't find
+        // the named icon (item shipped IconName but no IconPixmap and
+        // no IconThemePath fallback) — pick a generic fallback icon
+        // in the QML delegate, OR teach the resolver about the app's
+        // theme dir, OR install the app's icon theme system-wide.
+        qCDebug(lcSniModel) << "no icon image for" << key
+                            << "— Image.source will be empty, delegate will render invisible";
+        return {};
+    }
+    qCDebug(lcSniModel) << "publishing icon for" << key << "size" << img.size() << "cacheKey" << img.cacheKey();
     IconImageProvider::setImage(key, img);
     return QStringLiteral("image://phosphor-services/") + key + QStringLiteral("?v=") + QString::number(img.cacheKey());
 }

@@ -17,7 +17,10 @@
 #include <QDBusServiceWatcher>
 #include <QDebug>
 #include <QHash>
+#include <QLoggingCategory>
 #include <QStringList>
+
+Q_LOGGING_CATEGORY(lcSniHost, "phosphorservices.sni")
 
 namespace PhosphorServices {
 
@@ -55,6 +58,8 @@ void StatusNotifierHost::Private::connectToWatcher()
     // through the winner. The winner ALSO runs the host so a
     // single-shell setup (the common case) needs only one process.
     watcher = new StatusNotifierWatcher(q);
+    qCInfo(lcSniHost) << "watcher owner?" << watcher->isServiceOwner()
+                      << "— if false, another shell (likely plasma) is the canonical watcher";
 
     auto bus = QDBusConnection::sessionBus();
 
@@ -92,6 +97,7 @@ void StatusNotifierHost::Private::registerHost()
     // wire (below) will retry once it appears.
     QDBusInterface watcherIface(QString::fromLatin1(kWatcherService), QString::fromLatin1(kWatcherPath),
                                 QString::fromLatin1(kWatcherInterface), bus);
+    qCInfo(lcSniHost) << "host name registered:" << hostServiceName << "watcher iface valid?" << watcherIface.isValid();
     if (watcherIface.isValid()) {
         watcherIface.asyncCall(QStringLiteral("RegisterStatusNotifierHost"), hostServiceName);
         seedExistingItems();
@@ -116,6 +122,7 @@ void StatusNotifierHost::Private::seedExistingItems()
             return;
         }
         const auto list = reply.value().toStringList();
+        qCInfo(lcSniHost) << "seedExistingItems found" << list.size() << "pre-existing tray item(s):" << list;
         for (const auto& canonical : list) {
             onItemRegistered(canonical);
         }
@@ -137,6 +144,8 @@ void StatusNotifierHost::Private::onItemRegistered(const QString& canonical)
 
     auto* item = new StatusNotifierItem(service, path, q);
     items.insert(canonical, item);
+    qCInfo(lcSniHost) << "item registered:" << canonical << "→ service" << service << "path" << path
+                      << "(total items now:" << items.size() << ")";
     Q_EMIT q->itemAdded(item);
     Q_EMIT q->itemCountChanged();
 }
