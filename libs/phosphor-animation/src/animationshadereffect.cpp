@@ -68,9 +68,17 @@ bool parseFboExtent(const QString& raw, AnimationShaderEffect::FboExtentKind& ou
         // rather than corrupting OSD geometry silently.
         if (ok && qIsFinite(v)) {
             const qreal pad = percent ? (v / 100.0) : v;
-            outExtent = AnimationShaderEffect::FboExtentKind::Anchor;
-            outPad = qBound(qreal(0.0), pad, AnimationShaderEffect::kMaxFboExtentRing);
-            return true;
+            // Reject negatives at the parse boundary instead of silently
+            // clamping to 0. An authoring typo like "anchor+-0.5" would
+            // otherwise masquerade as a valid `anchor` extent with no ring,
+            // losing the operator's chance to spot the bad value in
+            // metadata. The unrecognised-grammar fallback below emits the
+            // warning and returns false; caller keeps the struct defaults.
+            if (pad >= 0.0) {
+                outExtent = AnimationShaderEffect::FboExtentKind::Anchor;
+                outPad = qMin(pad, AnimationShaderEffect::kMaxFboExtentRing);
+                return true;
+            }
         }
     }
     qCWarning(lcAnimationShader)
@@ -94,7 +102,13 @@ QString formatFboExtent(AnimationShaderEffect::FboExtentKind extent, qreal pad)
     if (clamped <= 0.0) {
         return QString();
     }
-    return QStringLiteral("anchor+%1").arg(clamped);
+    // Pin `g` format to 17 significant digits so a programmatically
+    // assigned ring (e.g. 1.0/3.0 in C++ code) survives toJson -> fromJson
+    // round-trip. `arg(double)` defaults to 6 sig digits, which collapses
+    // 0.333333... to "0.333333" and breaks strict-equality comparison on
+    // the resulting AnimationShaderEffect. 17 digits is the IEEE-754
+    // double-precision round-trip width.
+    return QStringLiteral("anchor+%1").arg(clamped, 0, 'g', 17);
 }
 } // namespace
 

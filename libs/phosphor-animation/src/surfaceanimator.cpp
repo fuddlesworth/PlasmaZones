@@ -317,40 +317,54 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
 
         // iSurfaceScreenPos describes where the card sits within its
         // *playing field* and how big that field is. The "playing field"
-        // on the daemon path is the wl_surface (= the window's logical
-        // size = the anchor's parent for Surface-extent shaders): for a
+        // on the daemon path is the wl_surface (= the QQuickWindow's
+        // contentItem, which is sized to the wl_surface 1:1). For a
         // virtual-screen popup the wl_surface IS the VS rect, so a
         // fly-in from "the nearest edge" naturally reads as flying in
-        // from the VS's edge — which is what the user sees.
+        // from the VS's edge, which is what the user sees.
+        //
+        // Source zw from `QQuickWindow::contentItem` (not
+        // `anchor->parentItem`): for Surface-extent shaders the FBO is
+        // already sized to the contentItem (see syncShaderGeometryNow's
+        // Surface branch), so reporting parent's width/height here when
+        // the anchor sits inside a small inner container would leave
+        // `iSurfaceScreenPos.zw` describing the container while the
+        // shader's clip-space maps to the wl_surface. Vertex shaders
+        // doing closest-edge math would then fire on the wrong edges.
+        // Sourcing zw from contentItem keeps the "playing field" the
+        // shader sees aligned with the FBO it is rendering into.
         //
         // CRITICAL: do NOT add `window->position()` to the card's
         // surface-local position. For a popup on a VS at screen offset
         // (X, Y), `window->position()` reports the VS offset but the
         // shader's FBO is the wl_surface (sized to the VS, NOT to the
         // physical screen). Adding the offset would produce absolute-
-        // screen coords that overflow the FBO clip-space mapping —
+        // screen coords that overflow the FBO clip-space mapping;
         // VS-1's centred card would land at clip-x = 2.0 and never
         // render. xy MUST stay surface-local.
-        //
-        // Likewise zw is the wl_surface size, not the physical screen
-        // size, because the shader's clip-space (-1..1) maps to the
-        // FBO (= wl_surface) bounds. Closest-edge math computed against
-        // the surface size correctly fires the VS edges as the "screen
-        // edges" the user perceives.
-        if (QQuickItem* parent = anchor->parentItem()) {
-            const QPointF anchorScene = anchor->mapToScene(QPointF(0.0, 0.0));
-            const qreal fieldW = parent->width();
-            const qreal fieldH = parent->height();
+        QQuickItem* sceneRoot = nullptr;
+        if (QQuickWindow* window = anchor->window()) {
+            sceneRoot = window->contentItem();
+        }
+        const QPointF anchorScene = anchor->mapToScene(QPointF(0.0, 0.0));
+        qreal fieldW = 0.0;
+        qreal fieldH = 0.0;
+        if (sceneRoot) {
+            fieldW = sceneRoot->width();
+            fieldH = sceneRoot->height();
+        } else if (QQuickItem* parent = anchor->parentItem()) {
+            // No window reachable (headless tests, parentless anchors
+            // mid-construction); fall back to the immediate parent so
+            // the field is at least non-zero and matches what
+            // syncShaderGeometryNow's Surface-branch fallback used to
+            // size the FBO.
+            fieldW = parent->width();
+            fieldH = parent->height();
+        }
+        if (fieldW > 0.0 && fieldH > 0.0) {
             ext->setISurfaceScreenPos(QVector4D(static_cast<float>(anchorScene.x()),
                                                 static_cast<float>(anchorScene.y()), static_cast<float>(fieldW),
                                                 static_cast<float>(fieldH)));
-        } else if (QQuickWindow* window = anchor->window()) {
-            // Parent-less anchor (rare — see attachShaderToAnchor's
-            // warning). Fall back to the window's logical size.
-            const QPointF anchorScene = anchor->mapToScene(QPointF(0.0, 0.0));
-            ext->setISurfaceScreenPos(
-                QVector4D(static_cast<float>(anchorScene.x()), static_cast<float>(anchorScene.y()),
-                          static_cast<float>(window->width()), static_cast<float>(window->height())));
         }
     }
 }
@@ -1488,7 +1502,7 @@ public:
         QPointer<QQuickShaderEffectSource> reusedShaderSource;
         QPointer<QQuickItem> reusedShaderAnchor;
         bool reusedFoundExplicit = false;
-        std::shared_ptr<qreal> reusedRequestedPadPtr;
+        std::shared_ptr<qreal> reusedFboExtentRingPtr;
         std::shared_ptr<PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind> reusedFboExtentKindPtr;
         if (hasShaderLeg) {
             const auto pendIt = m_pendingReuse.find(TrackKey{surface, target});
@@ -1522,7 +1536,7 @@ public:
                     reusedShaderSource = std::move(pending.shaderSource);
                     reusedShaderAnchor = pending.shaderAnchor;
                     reusedFoundExplicit = pending.foundExplicitAnchor;
-                    reusedRequestedPadPtr = std::move(pending.fboExtentRingPtr);
+                    reusedFboExtentRingPtr = std::move(pending.fboExtentRingPtr);
                     reusedFboExtentKindPtr = std::move(pending.fboExtentKindPtr);
                     // Refresh the live fboExtentRing so the persistent
                     // syncGeometry lambda (still connected from the
@@ -1532,8 +1546,8 @@ public:
                     // changes `fboExtentRing` between legs leaves the
                     // lambda using the OLD value when the anchor next
                     // moves/resizes.
-                    if (reusedRequestedPadPtr) {
-                        *reusedRequestedPadPtr = sanitiseFboExtentRing(resolvedShaderEff.fboExtentRing);
+                    if (reusedFboExtentRingPtr) {
+                        *reusedFboExtentRingPtr = sanitiseFboExtentRing(resolvedShaderEff.fboExtentRing);
                     }
                     if (reusedFboExtentKindPtr) {
                         *reusedFboExtentKindPtr = resolvedShaderEff.fboExtentKind;
@@ -1702,7 +1716,7 @@ public:
                     // pad is wrong. Manually invoking the same logic
                     // here closes that gap.
                     syncShaderGeometryNow(reusedShaderAnchor.data(), reusedShaderItem.data(), reusedShaderSource.data(),
-                                          reusedRequestedPadPtr ? *reusedRequestedPadPtr : qreal(0.0),
+                                          reusedFboExtentRingPtr ? *reusedFboExtentRingPtr : qreal(0.0),
                                           reusedFboExtentKindPtr
                                               ? *reusedFboExtentKindPtr
                                               : PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind::Anchor);
@@ -1742,7 +1756,7 @@ public:
                     it->second.foundExplicitAnchor = reusedFoundExplicit;
                     it->second.hiddenSiblings = std::move(hidden);
                     it->second.shaderEffectId = shaderEffectId;
-                    it->second.fboExtentRingPtr = std::move(reusedRequestedPadPtr);
+                    it->second.fboExtentRingPtr = std::move(reusedFboExtentRingPtr);
                     it->second.fboExtentKindPtr = std::move(reusedFboExtentKindPtr);
                     it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
                     seedShaderUniformsAtAttach(it->second);

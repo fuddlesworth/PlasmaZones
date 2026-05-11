@@ -145,7 +145,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // Mark as transformed so paintWindow applies our translate+scale, and
         // so the OffscreenEffect redirect drives full-window repaints for the
         // shader leg's iTime advance even when the underlying window content
-        // hasn't changed (lifecycle-event shaders need this — without the
+        // hasn't changed (lifecycle-event shaders need this; without the
         // transformed flag, paintWindow only fires on actual window damage).
         //
         // Damage-region expansion for actor-expansion transitions lives
@@ -154,6 +154,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // `WindowPrePaintData::devicePaint` is the dirty region in
         // device coords and isn't the right surface for declaring "I
         // want to paint this many pixels past the natural frame".
+        data.setTransformed();
     }
 
     OffscreenEffect::prePaintWindow(view, w, data, presentTime);
