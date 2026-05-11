@@ -365,6 +365,7 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/priming.cpp
     daemon/overlayservice/screens.cpp
     daemon/overlayservice/selector.cpp
+    daemon/overlayservice/shellhost_bridge.cpp
     daemon/overlayservice/selector_update.cpp
     daemon/overlayservice/shader.cpp
     daemon/overlayservice/snapassist.cpp
