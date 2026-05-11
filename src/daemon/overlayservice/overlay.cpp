@@ -51,8 +51,6 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // Determine if we should show on all monitors (cursorScreen == nullptr means all)
     const bool showOnAllMonitors = (cursorScreen == nullptr);
 
-    m_visible = true;
-
     // Initialize shader timing (shared across all monitors for synchronized effects)
     // Only start timer if invalid - preserves iTime across show/hide for less predictable animations
     ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
@@ -233,6 +231,28 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     }
 
     validateScreenStateInvariant(targetIds);
+
+    // Count how many overlay windows actually have a live shell surface.
+    // If zero, the transport (phosphorwayland) is unavailable and we must
+    // not mark ourselves visible — the caller (e.g. prepareHandlerContext)
+    // will retry on the next drag tick, and handleScreenAdded will also
+    // attempt recreation on screen reconnection.
+    int liveOverlayCount = 0;
+    for (const auto& state : m_screenStates) {
+        if (state.overlayPhysScreen && state.passiveShellWindow) {
+            ++liveOverlayCount;
+        }
+    }
+
+    if (liveOverlayCount == 0) {
+        qCWarning(lcOverlay) << "initializeOverlay: no overlay windows created — "
+                                "phosphorwayland transport unavailable "
+                                "(overlays disabled on this screen)";
+        m_visible = false;
+        return;
+    }
+
+    m_visible = true;
 
     if (anyScreenUsesShader()) {
         updateZonesForAllWindows(); // Push initial zone data
@@ -499,10 +519,22 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
 {
     auto it = m_screenStates.find(screenId);
     if (it == m_screenStates.end()) {
+        qCDebug(lcOverlay) << "dismissOverlayWindow: no state for" << screenId;
         return;
     }
     auto* slot = it->passiveShellMainOverlaySlot;
     if (!slot) {
+        qCDebug(lcOverlay) << "dismissOverlayWindow: no slot for" << screenId
+                           << "(shell creation may have failed)";
+        // Clean up partial state even when slot is null — the shell
+        // surface may never have been created (transport unavailable),
+        // but we still need to clear the sentinels so a later recreate
+        // doesn't think a stale entry is live.
+        QObject::disconnect(it->overlayGeomConnection);
+        it->overlayGeomConnection = {};
+        it->overlayPhysScreen = nullptr;
+        it->overlayGeometry = QRect();
+        it->labelsTextureHash = 0;
         return;
     }
     // Post-shell-migration: there's no separate wl_surface to destroy.
@@ -715,11 +747,13 @@ QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* p
 void OverlayService::destroyOverlayWindow(QScreen* screen)
 {
     const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    qCDebug(lcOverlay) << "destroyOverlayWindow:" << screenId;
     destroyOverlayWindow(screenId);
 }
 
 void OverlayService::destroyOverlayWindow(const QString& screenId)
 {
+    qCDebug(lcOverlay) << "destroyOverlayWindow:" << screenId;
     auto it = m_screenStates.find(screenId);
     if (it == m_screenStates.end()) {
         return;

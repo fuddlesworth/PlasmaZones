@@ -101,6 +101,8 @@ public:
     PlasmaZonesEffect();
     ~PlasmaZonesEffect() override;
 
+    void clearDaemonCompositorState();
+
     // Effect metadata
     static bool supported();
     static bool enabledByDefault();

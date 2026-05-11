@@ -209,13 +209,16 @@ QScreen* findByIdOrName(const QString& identifier)
         cache.remove(physId);
     }
 
-    // Exact screen ID match (only if it looks like an EDID-style ID).
-    if (physId.contains(QLatin1Char(':'))) {
-        for (QScreen* screen : QGuiApplication::screens()) {
-            if (identifierFor(screen) == physId) {
-                cache.insert(physId, screen);
-                return screen;
-            }
+    // Exact canonical screen ID match.
+    // Use physId, not the raw identifier, because virtual-screen IDs have
+    // already been reduced to their physical parent above.
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (!screen)
+            continue;
+
+        if (identifierFor(screen) == physId) {
+            cache.insert(physId, screen);
+            return screen;
         }
     }
 
@@ -256,9 +259,13 @@ QScreen* findByIdOrName(const QString& identifier)
     // Reverse fallback: stored config has bare base ID without suffix,
     // but currently-connected monitors are duplicates (so identifierFor
     // adds suffix). Match by base part of current screens.
-    if (identifier.contains(QLatin1Char(':')) && !identifier.contains(QLatin1Char('/'))) {
+    if (physId.contains(QLatin1Char(':')) && !physId.contains(QLatin1Char('/'))) {
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (baseIdentifierFor(screen) == identifier) {
+            if (!screen)
+                continue;
+
+            if (baseIdentifierFor(screen) == physId) {
+                cache.insert(physId, screen);
                 return screen;
             }
         }
