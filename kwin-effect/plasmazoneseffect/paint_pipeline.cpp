@@ -149,7 +149,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // transformed flag, paintWindow only fires on actual window damage).
         //
         // Damage-region expansion for actor-expansion transitions lives
-        // in `prePaintScreen`'s addLayerRepaint loop (see the ringRect
+        // in `postPaintScreen`'s addLayerRepaint loop (see the ringRect
         // block there). prePaintWindow doesn't drive that on KWin 6;
         // `WindowPrePaintData::devicePaint` is the dirty region in
         // device coords and isn't the right surface for declaring "I
