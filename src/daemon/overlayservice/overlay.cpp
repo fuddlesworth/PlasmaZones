@@ -5,6 +5,8 @@
 #include "../overlayservice.h"
 #include "qml_property_names.h"
 #include "../../core/logging.h"
+#include "pz_slot_keys.h"
+#include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -544,7 +546,7 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
     // a stale onComplete callback racing the next show.
     auto* shellSurface = it->shell->shellSurface;
     if (shellSurface) {
-        m_surfaceAnimator->beginHide(shellSurface, slot, PzRoles::ZoneOverlay, [this, screenIdCopy = screenId]() {
+        m_shellHost->hideSlot(screenId, PzSlotKeys::MainOverlay(), [this, screenIdCopy = screenId]() {
             auto sit = m_screenStates.find(screenIdCopy);
             if (sit == m_screenStates.end() || !sit->mainOverlaySlot()) {
                 return;

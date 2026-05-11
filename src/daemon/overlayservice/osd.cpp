@@ -591,8 +591,7 @@ void OverlayService::onOsdDismissRequested()
     if (!state || !state->shell->shellSurface || !state->osdSlot()) {
         return;
     }
-    auto* slot = state->osdSlot();
-    m_surfaceAnimator->beginHide(state->shell->shellSurface, slot, PzRoles::Osd, [this, effectiveId = matchedId]() {
+    m_shellHost->hideSlot(matchedId, PzSlotKeys::Osd(), [this, effectiveId = matchedId]() {
         onOsdSlotHideCompleted(effectiveId);
     });
 }

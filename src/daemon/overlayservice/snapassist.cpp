@@ -4,6 +4,8 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
+#include "pz_slot_keys.h"
+#include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
@@ -131,10 +133,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         const QString prevScreenId = m_snapAssistScreenId;
         auto prevIt = m_screenStates.find(prevScreenId);
         if (prevIt != m_screenStates.end() && prevIt->shell->shellSurface && prevIt->snapAssistSlot()) {
-            m_surfaceAnimator->beginHide(prevIt->shell->shellSurface, prevIt->snapAssistSlot(), PzRoles::SnapAssist,
-                                         [this, prevScreenId]() {
-                                             onSnapAssistSlotHideCompleted(prevScreenId);
-                                         });
+            m_shellHost->hideSlot(prevScreenId, PzSlotKeys::SnapAssist(), [this, prevScreenId]() {
+                onSnapAssistSlotHideCompleted(prevScreenId);
+            });
         }
     }
 
@@ -313,10 +314,9 @@ void OverlayService::hideSnapAssist()
 
     auto stateIt = m_screenStates.find(screenId);
     if (stateIt != m_screenStates.end() && stateIt->shell->shellSurface && stateIt->snapAssistSlot()) {
-        m_surfaceAnimator->beginHide(stateIt->shell->shellSurface, stateIt->snapAssistSlot(), PzRoles::SnapAssist,
-                                     [this, effectiveId = screenId]() {
-                                         onSnapAssistSlotHideCompleted(effectiveId);
-                                     });
+        m_shellHost->hideSlot(screenId, PzSlotKeys::SnapAssist(), [this, effectiveId = screenId]() {
+            onSnapAssistSlotHideCompleted(effectiveId);
+        });
     }
 
     // snapAssistDismissed → WindowDragAdaptor::onSnapAssistDismissed →
@@ -491,10 +491,9 @@ void OverlayService::hideLayoutPicker()
 
     auto stateIt = m_screenStates.find(screenId);
     if (stateIt != m_screenStates.end() && stateIt->shell->shellSurface && stateIt->layoutPickerSlot()) {
-        m_surfaceAnimator->beginHide(stateIt->shell->shellSurface, stateIt->layoutPickerSlot(), PzRoles::LayoutPicker,
-                                     [this, effectiveId = screenId]() {
-                                         onLayoutPickerSlotHideCompleted(effectiveId);
-                                     });
+        m_shellHost->hideSlot(screenId, PzSlotKeys::LayoutPicker(), [this, effectiveId = screenId]() {
+            onLayoutPickerSlotHideCompleted(effectiveId);
+        });
     }
 
     // Zone-selector restore is owned by onLayoutPickerSlotHideCompleted —

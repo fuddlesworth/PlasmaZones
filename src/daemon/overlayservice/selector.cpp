@@ -151,7 +151,7 @@ void OverlayService::hideZoneSelector()
         }
         QMetaObject::invokeMethod(slot, "resetCursorState");
         const QString screenId = it.key();
-        m_surfaceAnimator->beginHide(it->shell->shellSurface, slot, PzRoles::ZoneSelector, [this, screenId]() {
+        m_shellHost->hideSlot(screenId, PzSlotKeys::ZoneSelector(), [this, screenId]() {
             onZoneSelectorSlotHideCompleted(screenId);
         });
     }
