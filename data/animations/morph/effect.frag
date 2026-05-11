@@ -61,35 +61,43 @@ void main()
     );
 
     // Geometry-warp: at output anchorUv, sample BACK from where the
-    // warp would have displaced it (first-order inverse). A backward
-    // warp with magnitude `strength` can only pull `sampleUv` inside
-    // the anchor's `[0, 1]` square from up to `strength` distance into
-    // the ring — fragments past that range have no warp-displaced
-    // content to show, and rendering anything there (smearing the
-    // anchor's edge texel via clamp-to-edge, or sampling outside the
-    // FBO via wrap) produces visible bleed.
+    // warp would have displaced it (first-order inverse).
     //
-    // Mask the sample by a feathered alpha that runs over exactly the
-    // warp's reach. Inside the anchor (with feather slack on the
-    // border for sub-pixel AA), `mask == 1` and the warp ripples the
-    // content normally. From the anchor edge outward into the ring,
-    // `mask` smoothstep's from 1 to 0 over `feather` units — which
-    // matches `strength` so the fade exactly covers the area where
-    // warp can possibly reach inward. Beyond that, `mask == 0`: the
-    // deep ring is transparent regardless of what the texture sample
-    // returns there. `clamp(sampleUv)` keeps the texture access
-    // in-bounds so wrap-mode garbage doesn't influence the result
-    // even with `mask == 0` (defence in depth — masked sample value
-    // shouldn't matter, but a NaN sample multiplied by 0 is still NaN).
+    // Two separate concerns the shader has to handle without either
+    // cliffing or smearing edge texels into the ring:
     //
-    // The 0.005 lower bound stays for the inside-the-anchor case where
-    // strength == 0 mid-paint (envelope at the endpoints): without it
-    // the smoothstep collapses to a step at 0 / 1 and the rendered
-    // anchor would lose sub-pixel AA at its outer edge.
+    // 1. Out-of-anchor texture sampling. The redirected texture is
+    //    bound with GL_CLAMP_TO_EDGE, so any `texture(uTexture0, uv)`
+    //    with uv outside `[0, 1]` returns the anchor's edge texel —
+    //    which for opaque-edged content (terminal background, app
+    //    chrome, rounded card borders) is a solid colour that smears
+    //    visibly into the ring. Kill those samples with a HARD
+    //    `step`-based mask on `sampleUv`. The boundary is sharp on
+    //    purpose: any partial value here would multiply the edge
+    //    texel by a non-zero alpha and leak grey/border colour.
+    //
+    // 2. Visual fade from the warped anchor into the empty ring. The
+    //    backward-warp can only carry content `strength` units into
+    //    the ring, so the ring is mostly empty regardless of how the
+    //    `inside` mask above filtered the sample. A `boundaryMask`-
+    //    style hard cliff on `anchorUv` produced the visible edge the
+    //    user reported pre-feather; a smoothstep over `[1, 1+feather]`
+    //    feathers the anchor's outer edge into the ring instead. The
+    //    feather width tracks `strength` so the fade exactly matches
+    //    the warp's actual reach: where the warp can carry content,
+    //    the alpha is partial; where it can't, the alpha is 0 anyway.
+    //
+    // The 0.005 lower bound on `feather` covers the envelope-zero
+    // endpoints (start / end of the leg) where `strength == 0` would
+    // otherwise collapse the smoothstep to a step at the anchor edge
+    // and lose sub-pixel AA on the silhouette.
     vec2 sampleUv = anchorUv - warp;
+    vec2 sampleInside = step(vec2(0.0), sampleUv) * step(sampleUv, vec2(1.0));
+    vec4 warpedSample = texture(uTexture0, sampleUv) * sampleInside.x * sampleInside.y;
+
     float feather = max(strength, 0.005);
-    vec2 lo = smoothstep(vec2(-feather), vec2(0.0), sampleUv);
-    vec2 hi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.0) + vec2(feather), sampleUv);
+    vec2 lo = smoothstep(vec2(-feather), vec2(0.0), anchorUv);
+    vec2 hi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.0) + vec2(feather), anchorUv);
     float mask = lo.x * lo.y * hi.x * hi.y;
-    fragColor = texture(uTexture0, clamp(sampleUv, vec2(0.0), vec2(1.0))) * mask;
+    fragColor = warpedSample * mask;
 }
