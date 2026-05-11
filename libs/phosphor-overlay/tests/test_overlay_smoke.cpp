@@ -205,8 +205,8 @@ void TestOverlaySmoke::hideSlotFiresCompletionWhenSlotItemIsNullQPointer()
         ++fired;
     });
     // No shellSurface set on the state, so the "no shell" early-return
-    // path fires the completion. This is also the correct behaviour
-    // — consumer cleanup must run regardless.
+    // path fires the completion. This is also the correct behaviour:
+    // consumer cleanup must run regardless.
     QCOMPARE(fired, 1);
 }
 
