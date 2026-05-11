@@ -51,13 +51,6 @@ PHOSPHORANIMATION_EXPORT extern const QString ZoneLayoutSwitchIn;
 // surface. If a future consumer needs an out-leg shape, add the
 // constant in lockstep with the consumer.
 
-// workspace.*
-PHOSPHORANIMATION_EXPORT extern const QString Workspace;
-PHOSPHORANIMATION_EXPORT extern const QString WorkspaceSwitchIn;
-PHOSPHORANIMATION_EXPORT extern const QString WorkspaceSwitchOut;
-PHOSPHORANIMATION_EXPORT extern const QString WorkspaceOverviewOpen;
-PHOSPHORANIMATION_EXPORT extern const QString WorkspaceOverviewClose;
-
 // osd.*
 PHOSPHORANIMATION_EXPORT extern const QString Osd;
 PHOSPHORANIMATION_EXPORT extern const QString OsdShow;

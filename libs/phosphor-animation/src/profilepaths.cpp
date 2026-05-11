@@ -30,13 +30,6 @@ const QString ZoneHighlightBorder = QStringLiteral("zone.highlight.border");
 const QString ZoneLayoutSwitchIn = QStringLiteral("zone.layoutSwitchIn");
 // `zone.layoutSwitchOut` intentionally undeclared — see ProfilePaths.h.
 
-// workspace.*
-const QString Workspace = QStringLiteral("workspace");
-const QString WorkspaceSwitchIn = QStringLiteral("workspace.switchIn");
-const QString WorkspaceSwitchOut = QStringLiteral("workspace.switchOut");
-const QString WorkspaceOverviewOpen = QStringLiteral("workspace.overviewOpen");
-const QString WorkspaceOverviewClose = QStringLiteral("workspace.overviewClose");
-
 // osd.*
 const QString Osd = QStringLiteral("osd");
 const QString OsdShow = QStringLiteral("osd.show");
@@ -120,11 +113,6 @@ QStringList allBuiltInPaths()
         ZoneHighlightPop,
         ZoneHighlightBorder,
         ZoneLayoutSwitchIn,
-        Workspace,
-        WorkspaceSwitchIn,
-        WorkspaceSwitchOut,
-        WorkspaceOverviewOpen,
-        WorkspaceOverviewClose,
         Osd,
         OsdShow,
         OsdPop,

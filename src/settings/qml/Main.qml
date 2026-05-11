@@ -207,10 +207,6 @@ ApplicationWindow {
             "label": i18n("Side Panels"),
             "iconName": "sidebar-collapse-symbolic"
         }, {
-            "name": "animations-workspaces",
-            "label": i18n("Workspaces"),
-            "iconName": "virtual-desktops"
-        }, {
             "name": "animations-widgets",
             "label": i18n("Widgets"),
             "iconName": "preferences-desktop-theme"
@@ -268,7 +264,6 @@ ApplicationWindow {
         "animations-osds": "AnimationsOsdsPage.qml",
         "animations-overlays": "AnimationsOverlaysPage.qml",
         "animations-side-panels": "AnimationsSidePanelsPage.qml",
-        "animations-workspaces": "AnimationsWorkspacesPage.qml",
         "animations-widgets": "AnimationsWidgetsPage.qml",
         "animations-presets": "AnimationsPresetsPage.qml",
         "animations-motionsets": "AnimationsMotionSetsPage.qml",
