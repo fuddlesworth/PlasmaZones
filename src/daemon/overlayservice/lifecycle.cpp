@@ -119,7 +119,18 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         // the next hide()/show() cycle.
         const bool cursorVsHasWindow = m_screenStates.contains(cursorEffectiveId)
             && m_screenStates.value(cursorEffectiveId).overlayPhysScreen != nullptr;
-        if (cursorVsHasWindow || m_excludedScreens.contains(cursorEffectiveId)) {
+        // Also check that the slot is not mid-hide-animation (opacity near 0
+        // means the hide callback hasn't fired yet, or the slot was hidden
+        // via dismissOverlayWindow which sets opacity to 0 via the animator).
+        // If the slot is hidden, fall through to initializeOverlay which
+        // properly recreates the overlay state (loaded toggle, setVisible,
+        // beginShow) rather than taking the fast path that only calls
+        // applyIdleStateForCursor.
+        auto cursorIt = m_screenStates.find(cursorEffectiveId);
+        QQuickItem* cursorMainOverlay = (cursorIt != m_screenStates.end()) ? cursorIt->mainOverlaySlot() : nullptr;
+        const bool cursorSlotVisible =
+            cursorMainOverlay != nullptr && !qFuzzyCompare(cursorMainOverlay->opacity(), 0.0);
+        if ((cursorVsHasWindow && cursorSlotVisible) || m_excludedScreens.contains(cursorEffectiveId)) {
             m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
             applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
             return;

@@ -74,6 +74,18 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
         auto it = m_screenStates.find(effectiveId);
         return (it == m_screenStates.end()) ? nullptr : &it.value();
     }
+    // Defensive default: every successful ensure should leave the
+    // shell window click-through unless a modal slot is up. The
+    // companion syncPassiveShellSurfaceState call is the authoritative
+    // setter, but a missed sync (e.g. during screen power-cycle re-
+    // entry where the lib returns the cached state without re-firing
+    // PostCreate) would otherwise inherit a stale
+    // wantTransparent=false from a prior modal popup. Asserting the
+    // default here ensures the shell never silently steals clicks
+    // when the daemon thinks no modal is active.
+    if (auto* window = shellState->shellWindow()) {
+        window->setFlag(Qt::WindowTransparentForInput, true);
+    }
     // Only cache the borrowed shell pointer when it actually backs a
     // live surface. When ensureShell returns a zeroed state (sticky
     // failure or a self-teardown from wirePassiveShellSlots's null-
