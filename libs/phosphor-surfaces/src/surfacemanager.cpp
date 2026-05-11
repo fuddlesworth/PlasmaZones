@@ -230,11 +230,15 @@ void SurfaceManager::createKeepAlive()
     cfg.screen = screen;
     cfg.anchorsOverride = PhosphorLayer::AnchorNone;
     cfg.exclusiveZoneOverride = 0;
-    // Warm-up at the eventual 1x1 visible size so the Vulkan swapchain isn't
-    // first allocated at full-screen geometry and then resized — that costs
-    // a destroy+recreate cycle on NVIDIA's proprietary stack and pre-allocates
-    // ~25 MB at 4K for a surface whose only job is to keep the QSG/QRhi
-    // device + QML engine warm for subsequent overlays.
+    // Warm-up at 1x1 so the swapchain isn't first allocated at full-screen
+    // geometry and then resized. A resize costs a destroy+recreate cycle on
+    // NVIDIA's proprietary Vulkan stack and pre-allocates ~25 MB at 4K for a
+    // surface whose only job is to keep the QSG/QRhi device + QML engine warm
+    // for subsequent overlays. The surface is never shown: warmUp() leaves it
+    // in Hidden with the QQuickWindow + swapchain materialised, which is all
+    // we need to keep the device alive. Mapping a 1x1 Background layer-shell
+    // surface would render a single visible pixel at output center, because
+    // compositors center anchor-less layer-shell surfaces (see #433).
     cfg.initialSize = QSize(1, 1);
 
     auto* surface = m_impl->config.surfaceFactory->create(std::move(cfg), this);
@@ -255,13 +259,8 @@ void SurfaceManager::createKeepAlive()
         return;
     }
 
-    if (surface->window()) {
-        surface->window()->setWidth(1);
-        surface->window()->setHeight(1);
-    }
     configureWindow(surface);
 
-    surface->show();
     m_impl->keepAliveSurface = surface;
     m_impl->keepAliveWindow = surface->window();
     m_impl->creatingKeepAlive = false;
