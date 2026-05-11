@@ -589,4 +589,4 @@ The plan-doc's other Phase 5 goals do NOT apply in practice:
 | 3 - Slot extraction | DONE (#436): 3 sub-commits, slot storage + hide path lifted; show-side stays for phase 4 |
 | 4 - Animator config wiring | DONE (#436): registerConfigForRole + makePerInstanceRole on lib; daemon routes through ShellHost |
 | 5 - OverlayService shrink + cleanup | DONE (#436): redundant helpers removed; overlayservice.cpp + osd.cpp under 800-line cap |
-| 6 - Optional standalone-compositor seam | pending |
+| 6 - Optional standalone-compositor seam | DEFERRED: lib API surface is pinned by the smoke test and the in-tree PZ consumer; an example app would be a "nice to have" without a current driver |
