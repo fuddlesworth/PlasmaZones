@@ -537,6 +537,12 @@ private:
     // raw pointers to the other two).
     std::unique_ptr<PhosphorLayer::IScreenProvider> m_screenProvider;
     std::unique_ptr<PhosphorLayer::ILayerShellTransport> m_transport;
+    /// Raw pointer to Daemon-owned registry. Valid for the lifetime of
+    /// this OverlayService because m_animationShaderRegistry is declared
+    /// before m_overlayService in daemon.h — reverse destruction order
+    /// guarantees the registry outlives this service.
+    PhosphorAnimationShaders::AnimationShaderRegistry* m_animShaderRegistry = nullptr;
+
     /// Phase-5 SurfaceAnimator. Drives show/hide visual transitions for
     /// every Surface this service creates. Forward-declared to keep the
     /// phosphor-animation-layer header out of the daemon's public surface;
@@ -544,11 +550,6 @@ private:
     /// time. MUST outlive m_surfaceFactory (the factory's Deps captures
     /// the animator pointer; surfaces it produces dispatch through it on
     /// every show/hide).
-    /// Raw pointer to Daemon-owned registry. Valid for the lifetime of
-    /// this OverlayService because m_animationShaderRegistry is declared
-    /// before m_overlayService in daemon.h — reverse destruction order
-    /// guarantees the registry outlives this service.
-    PhosphorAnimationShaders::AnimationShaderRegistry* m_animShaderRegistry = nullptr;
     std::unique_ptr<PhosphorAnimationLayer::SurfaceAnimator> m_surfaceAnimator;
     std::unique_ptr<PhosphorLayer::SurfaceFactory> m_surfaceFactory;
 

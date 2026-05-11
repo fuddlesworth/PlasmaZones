@@ -561,7 +561,7 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
         }
     }
     auto* state = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!state || !state->shell->shellSurface || !state->zoneSelectorSlot()) {
+    if (!state || !state->shell || !state->shell->shellSurface || !state->zoneSelectorSlot()) {
         return;
     }
     auto* slot = state->zoneSelectorSlot();

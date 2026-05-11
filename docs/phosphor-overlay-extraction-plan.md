@@ -66,7 +66,15 @@ The PZ-specific bits (zones, snap-assist, layout-picker, OSDs) are
 The library knows about *surfaces and slots*. It does not know about
 zones, layouts, or audio spectrums. PZ keeps the content vocabulary.
 
-## Proposed public API
+## Original API sketch (NOT shipped — see Phase 2 for the final API)
+
+This block is the pre-implementation sketch from the plan's early
+draft. The actual shipped surface is documented in the Phase 2 status
+entry below; it uses `ensureShell` / `destroyShell` / `syncSurfaceState`
+/ `rekey` / `hideSlot` / `registerConfigForRole` with a plain
+`SlotEntry { item, role }` struct (no `Slot` class, no `SlotRegistry`,
+no `ContentDescriptor`). The sketch is preserved here as a record of
+the design exploration that motivated the simpler shipped API.
 
 ```cpp
 namespace PhosphorOverlay {
@@ -174,10 +182,10 @@ current code:
 2. **Hardwired `IAudioSpectrumProvider` flow** (`overlayservice/settings.cpp:301-312`,
    `shader.cpp:182-183`). Already an interface, but its lifecycle is
    driven from inside `OverlayService`. A generic overlay library
-   shouldn't ship the audio-spectrum config knobs. **Fix:** audio
-   spectrum is PZ-specific shader content; keep it consumer-side, route
-   it through `ContentDescriptor::animatorConfigBuilder` so the library
-   never sees `m_audioProvider`.
+   shouldn't ship the audio-spectrum config knobs. **As shipped:** audio
+   spectrum stays consumer-side via the daemon's per-role
+   `buildOsdConfig` / `buildZoneSelectorConfig` / etc. helpers in
+   `animation_config.cpp`. The lib never sees `m_audioProvider`.
 
 3. **`ShaderRegistry` singleton** (per memory note). Already resolved:
    `daemon.h:520-525` owns a per-daemon `ShaderRegistry` and injects it.
@@ -231,7 +239,7 @@ These are all concrete-only on `LayoutRegistry` today. Port them up to
    (`currentActivity` / `currentVirtualDesktop`) are session state
    that `LayoutRegistry` happens to hold; flag whether they should live
    on a separate `ISessionContext` interface or stay on the layout
-   registry. For now, put them on the layout registry interface to
+   registry. As shipped, they live on the layout registry interface to
    keep the change scope-bounded.
 2. Update `LayoutRegistry` to declare each method `override`.
 3. Update `OverlayService::m_layoutManager` to `IZoneLayoutRegistry*`
@@ -386,12 +394,12 @@ Sub-commits:
   completion callbacks).
 
 The "show side" of slot lifecycle (`beginShow` calls in
-`showZoneSelector` / `showSnapAssist` / etc.) stays in the daemon for
-now — each show path intermixes PZ content writes (mode toggles, loader
+`showZoneSelector` / `showSnapAssist` / etc.) stays in the daemon —
+each show path intermixes PZ content writes (mode toggles, loader
 re-instantiation, content-property pushes) with the
-animator-trigger boilerplate. Phase 4 (animator config wiring)
-addresses this once the per-slot animator config registration moves
-into a similar slot-keyed API on `ShellHost`.
+animator-trigger boilerplate. The show side did not migrate in this
+PR — its content/mechanism interleaving makes a clean lift
+significantly larger than the hide-side conversion landed in Phase 3.
 
 ### Phase 4 - Animator config wiring (DONE in this branch)
 
@@ -510,18 +518,21 @@ The plan-doc's other Phase 5 goals do NOT apply in practice:
   external API surface.
 - This is also the seam Phosphor-as-standalone would consume.
 
-## Renames + new vocabulary
+## Renames + new vocabulary (original sketch — actual mapping below)
 
-| PZ today | phosphor-overlay tomorrow |
-|---|---|
-| `OverlayService::ensurePassiveShellFor` | `ShellHost::start` |
-| `OverlayService::destroyPassiveShell` | `ShellHost::stop` |
-| `OverlayService::syncPassiveShellSurfaceState` | internal to `ShellHost` |
-| `OverlayService::rekeyOverlayState` | `ShellHost::rekey` (internal-facing) |
-| `OverlayService::hideOsdSlotOnScreen` | `Slot::hide()` |
-| `OverlayService::hideZoneSelectorSlotOnScreen` | `Slot::hide()` |
-| `PerScreenOverlayState` struct | `ShellHost::PerScreenState` (private impl) |
-| Per-content `show*` methods | `Slot::show()` + per-content content-write |
+The first column shows the pre-extraction PZ names. The second column
+was the sketched target API; the third shows what actually shipped.
+
+| PZ daemon (pre-extraction) | Sketched target | Shipped |
+|---|---|---|
+| `OverlayService::ensurePassiveShellFor` | `ShellHost::start` | `ShellHost::ensureShell` (+ daemon shim of the same name) |
+| `OverlayService::destroyPassiveShell` | `ShellHost::stop` | `ShellHost::destroyShell` (+ daemon shim of the same name) |
+| `OverlayService::syncPassiveShellSurfaceState` | internal to `ShellHost` | `ShellHost::syncSurfaceState(screenId, anyVisible, anyInputGrabbing)`; daemon shim computes the booleans |
+| `OverlayService::rekeyOverlayState` | `ShellHost::rekey` (internal-facing) | `ShellHost::rekey` (public) |
+| `OverlayService::hideOsdSlotOnScreen` | `Slot::hide()` | `ShellHost::hideSlot(screenId, slotKey, completion)` |
+| `OverlayService::hideZoneSelectorSlotOnScreen` | `Slot::hide()` | `ShellHost::hideSlot(screenId, slotKey, completion)` |
+| `PerScreenOverlayState` struct | `ShellHost::PerScreenState` (private impl) | `PhosphorOverlay::ShellState` (public lib struct); PZ-content fields stay on daemon's `PerScreenOverlayState` with a borrowed `ShellState*` |
+| Per-content `show*` methods | `Slot::show()` + per-content content-write | Per-content `show*` methods stay in daemon (mixed content writes + animator triggers) |
 
 ## Risks
 
@@ -587,7 +598,7 @@ The plan-doc's other Phase 5 goals do NOT apply in practice:
 | 0b - Interface widening for layout queries | DONE (#436) |
 | 1 - New library scaffolding | DONE (#436) |
 | 2 - ShellHost extraction | DONE (#436): 8 sub-commits, all 4 movable methods landed; validate stays in daemon |
-| 3 - Slot extraction | DONE (#436): 3 sub-commits, slot storage + hide path lifted; show-side stays for phase 4 |
+| 3 - Slot extraction | DONE (#436): 3 sub-commits, slot storage + hide path lifted; show-side stays in daemon |
 | 4 - Animator config wiring | DONE (#436): registerConfigForRole + makePerInstanceRole on lib; daemon routes through ShellHost |
 | 5 - OverlayService shrink + cleanup | DONE (#436): redundant helpers removed; overlayservice.cpp + osd.cpp under 800-line cap |
 | 6 - Optional standalone-compositor seam | DEFERRED: lib API surface is pinned by the smoke test and the in-tree PZ consumer; an example app would be a "nice to have" without a current driver |

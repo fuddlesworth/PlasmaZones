@@ -142,7 +142,11 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     // (includes any virtual screens on this physical screen)
     const QStringList screenIds = m_screenStates.keys();
     for (const QString& id : screenIds) {
-        const auto& state = m_screenStates[id];
+        auto it = m_screenStates.constFind(id);
+        if (it == m_screenStates.constEnd()) {
+            continue;
+        }
+        const auto& state = it.value();
         if (state.overlayPhysScreen == screen || state.zoneSelectorPhysScreen == screen
             || (state.shell && state.shell->physScreen == screen)) {
             destroyOverlayWindow(id);
@@ -150,8 +154,11 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             destroyPassiveShell(id);
             // Drop the empty state entry once the shell surface is gone —
             // screen hot-plug cycles don't slowly accumulate dead keys.
-            auto& s = m_screenStates[id];
-            if (!s.shell || !s.shell->shellSurface) {
+            // Re-find because the destroy calls above may have invalidated
+            // our iterator through the PreDestroyCallback's m_screenStates
+            // re-entry.
+            auto postIt = m_screenStates.constFind(id);
+            if (postIt == m_screenStates.constEnd() || !postIt->shell || !postIt->shell->shellSurface) {
                 m_screenStates.remove(id);
             }
         }

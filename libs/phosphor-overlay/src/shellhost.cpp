@@ -35,9 +35,15 @@ ShellHost::~ShellHost()
     // event loop unmaps them cleanly) and consumers must get a chance
     // to drop their borrowed pointers. Iterate keys via destroyShell
     // first; then qDeleteAll wipes the now-zeroed heap objects.
-    // Consumers that already called destroyShell on every screen
-    // (e.g. OverlayService::~OverlayService) hit the early-return on
-    // null shellSurface, so the iteration is idempotent.
+    //
+    // Idempotency: destroyShell early-returns only when the map entry
+    // is missing. Entries left behind by a prior consumer-side drain
+    // still exist with shellSurface == nullptr, so the dtor's loop
+    // re-enters destroyShell's body and re-fires the PreDestroyCallback.
+    // The deleteLater path is gated on shellSurface non-null so no
+    // double-delete occurs; consumers must tolerate the PreDestroyCallback
+    // re-firing (in practice this is fine — daemon-side parallel state
+    // is already cleared by the prior drain, so the second pass no-ops).
     const QStringList keys = m_states.keys();
     for (const QString& key : keys) {
         destroyShell(key);
