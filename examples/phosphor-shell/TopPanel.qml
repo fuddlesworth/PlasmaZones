@@ -278,11 +278,13 @@ PanelWindow {
             // Tray icons. Each delegate is a 22-px clickable image with
             // hover background + cascade-popup menu on right-click. The
             // model auto-refreshes when items register/unregister/change
-            // status — no manual binding needed.
+            // status — no manual binding needed. The Row auto-collapses
+            // to 0 width when empty, so we don't need a `visible:` gate
+            // (and an earlier `visible: trayModel.count > 0` was broken
+            // anyway — `count` was an undeclared property at the time).
             Row {
                 spacing: 6
                 anchors.verticalCenter: parent.verticalCenter
-                visible: trayModel.count > 0
 
                 Repeater {
                     model: trayModel
@@ -302,15 +304,7 @@ PanelWindow {
                         width: 26
                         height: 26
                         radius: 6
-                        // DIAG: half-opaque red so the delegate is
-                        // visible even when its Image child fails to
-                        // render. If we see red squares between the
-                        // clock and CPU readout, the Repeater is
-                        // producing delegates correctly and the issue
-                        // is downstream (Image element or layout
-                        // clipping). If we see no red, the Repeater
-                        // itself isn't instantiating visual delegates.
-                        color: trayMouse.containsMouse ? "#45475a" : "#80ff0000"
+                        color: trayMouse.containsMouse ? "#45475a" : "transparent"
 
                         // Fallback glyph — first letter of title in a
                         // muted circle. Renders when iconUrl is empty
@@ -355,10 +349,6 @@ PanelWindow {
                             // sourceSize keeps the on-screen size stable
                             // regardless of the icon's intrinsic res.
                             source: trayDelegate.iconUrl
-                            // DIAG: log every load transition so we can
-                            // see whether the Image is reaching Ready
-                            // state or stalling at Loading / Error.
-                            onStatusChanged: console.log("trayIcon status:", status, "source:", source, "sourceSize:", sourceSize, "implicit:", implicitWidth + "x" + implicitHeight, "paintedSize:", paintedWidth + "x" + paintedHeight)
                             sourceSize.width: 36
                             sourceSize.height: 36
                             smooth: true

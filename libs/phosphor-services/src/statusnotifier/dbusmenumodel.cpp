@@ -207,6 +207,7 @@ void DBusMenuModel::Private::refresh()
         q->beginResetModel();
         rows = nextRows;
         q->endResetModel();
+        Q_EMIT q->countChanged();
 
         if (!valid) {
             valid = true;

@@ -23,6 +23,12 @@ class PHOSPHORSERVICES_EXPORT StatusNotifierItemModel : public QAbstractListMode
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(PhosphorServices::StatusNotifierHost* host READ host WRITE setHost NOTIFY hostChanged)
+    // `count` mirrors rowCount() and emits countChanged on every
+    // insert/remove. QAbstractListModel does NOT expose this by
+    // default — QML's `model.count` binding silently evaluates to
+    // `undefined` without it, and any `visible: model.count > 0`
+    // expression collapses to false, hiding the whole tray.
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
 public:
     enum Roles {
@@ -74,6 +80,7 @@ public:
 
 Q_SIGNALS:
     void hostChanged();
+    void countChanged();
 
 private:
     QPointer<StatusNotifierHost> m_host;

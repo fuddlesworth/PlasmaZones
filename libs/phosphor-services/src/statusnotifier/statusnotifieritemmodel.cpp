@@ -112,6 +112,12 @@ void StatusNotifierItemModel::setHost(StatusNotifierHost* host)
     }
 
     Q_EMIT hostChanged();
+    // setHost wraps a beginResetModel/endResetModel — the model's
+    // row count moved from "old host count" to "new host count" but
+    // QML's `count` binding doesn't subscribe to modelReset, only to
+    // the property's NOTIFY signal. Fire it explicitly so QML
+    // recomputes on every host attach.
+    Q_EMIT countChanged();
 }
 
 void StatusNotifierItemModel::connectItem(StatusNotifierItem* item)
@@ -217,6 +223,7 @@ void StatusNotifierItemModel::onItemAdded(StatusNotifierItem* item)
     beginInsertRows({}, row, row);
     connectItem(item);
     endInsertRows();
+    Q_EMIT countChanged();
 }
 
 void StatusNotifierItemModel::onItemRemoved(StatusNotifierItem* item)
@@ -230,6 +237,7 @@ void StatusNotifierItemModel::onItemRemoved(StatusNotifierItem* item)
     beginRemoveRows({}, row, row);
     disconnect(item, nullptr, this, nullptr);
     endRemoveRows();
+    Q_EMIT countChanged();
 }
 
 void StatusNotifierItemModel::onItemDataChanged(StatusNotifierItem* item)

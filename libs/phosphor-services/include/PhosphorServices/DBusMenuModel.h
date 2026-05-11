@@ -30,6 +30,11 @@ class PHOSPHORSERVICES_EXPORT DBusMenuModel : public QAbstractListModel
     Q_PROPERTY(QString path READ path WRITE setPath NOTIFY sourceChanged)
     Q_PROPERTY(int rootId READ rootId WRITE setRootId NOTIFY rootIdChanged)
     Q_PROPERTY(bool valid READ valid NOTIFY validChanged)
+    // Mirror of rowCount() — QAbstractListModel doesn't expose count
+    // as a property, so QML's `model.count` evaluates to undefined
+    // without this. Worth keeping the API symmetric with
+    // StatusNotifierItemModel.
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
 public:
     enum Roles {
@@ -80,6 +85,7 @@ Q_SIGNALS:
     void sourceChanged();
     void rootIdChanged();
     void validChanged();
+    void countChanged();
 
 private:
     class Private;
