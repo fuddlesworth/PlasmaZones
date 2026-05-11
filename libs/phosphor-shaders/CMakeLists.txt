@@ -10,12 +10,6 @@
 # top of the headers here, and phosphor-wayland (the Wayland integration)
 # does not depend on it.
 #
-# Phase B1 of docs/phosphor-architecture-refactor-plan.md: extracted
-# from phosphor-wayland so the layer-shell QPA and shader concerns can be
-# reasoned about independently. The eventual Phase C1 target
-# `MetadataPackScanStrategy<Payload>` will let ShaderRegistry and
-# AnimationShaderRegistry collapse onto the same pack-walker scaffold.
-#
 # Depends on Qt6 Core+Gui (Gui for QImage in the wallpaper cache) and
 # PhosphorFsLoader for WatchedDirectorySet. No QML facade today —
 # downstream PlasmaZones code exposes ShaderRegistry to QML via

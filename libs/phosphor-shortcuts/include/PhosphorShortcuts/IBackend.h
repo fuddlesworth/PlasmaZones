@@ -90,7 +90,7 @@ public:
      * the event, but the key stays grabbed compositor-side until the
      * session closes). Consumers needing truly transient grabs on Portal
      * compositors should bind once and gate via a flag inside the
-     * callback. See docs/phosphor-shortcuts-api.md for details.
+     * callback.
      */
     virtual void unregisterShortcut(const QString& id) = 0;
 

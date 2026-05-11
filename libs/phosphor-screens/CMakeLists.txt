@@ -6,7 +6,7 @@
 # Owns physical screen monitoring, virtual-screen subdivision, and
 # effective-screen resolution. Pluggable backends for panel-offset
 # detection (KDE Plasma D-Bus, no-op) and VS-config persistence
-# (Settings, in-memory). See docs/phosphor-screens-api-design.md.
+# (Settings, in-memory). See README.md for the public-API overview.
 #
 # Surface: VirtualScreen.h POD types, ScreenResolver, ScreenManager,
 # IPanelSource (+ PlasmaPanelSource, NoOpPanelSource), IConfigStore
