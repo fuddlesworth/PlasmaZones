@@ -87,12 +87,19 @@ PopupWindow {
             spacing: 0
 
             delegate: Item {
+                id: menuRow
+
+                // Role names are renamed in the model side to avoid
+                // collision with QQuickItem's FINAL `visible` and its
+                // `enabled` Q_PROPERTY — binding role values onto an
+                // Item with the same property name would either shadow
+                // (enabled) or fail at load (visible is FINAL).
                 required property int index
                 required property int menuId
-                required property string type
+                required property string itemType
                 required property string label
-                required property bool enabled
-                required property bool visible
+                required property bool itemEnabled
+                required property bool itemVisible
                 required property var iconImage
                 required property string toggleType
                 required property int toggleState
@@ -100,12 +107,12 @@ PopupWindow {
 
                 width: ListView.view.width
                 // Separators are thin, regular rows pop to a usable height.
-                height: type === "separator" ? 6 : (visible ? 28 : 0)
-                visible: model.visible
+                height: itemType === "separator" ? 6 : (itemVisible ? 28 : 0)
+                visible: itemVisible
 
                 // Separator: a hairline rule across the row.
                 Rectangle {
-                    visible: parent.type === "separator"
+                    visible: menuRow.itemType === "separator"
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
@@ -119,11 +126,11 @@ PopupWindow {
                 Rectangle {
                     id: row
 
-                    visible: parent.type !== "separator"
+                    visible: menuRow.itemType !== "separator"
                     anchors.fill: parent
                     radius: 6
-                    color: rowMouse.containsMouse && parent.enabled ? "#3a3a4a" : "transparent"
-                    opacity: parent.enabled ? 1 : 0.4
+                    color: rowMouse.containsMouse && menuRow.itemEnabled ? "#3a3a4a" : "transparent"
+                    opacity: menuRow.itemEnabled ? 1 : 0.4
 
                     Row {
                         anchors.left: parent.left
@@ -144,7 +151,7 @@ PopupWindow {
 
                             Text {
                                 anchors.centerIn: parent
-                                visible: row.parent.toggleType === "checkmark" && row.parent.toggleState === 1
+                                visible: menuRow.toggleType === "checkmark" && menuRow.toggleState === 1
                                 text: "✓"
                                 color: "#cdd6f4"
                                 font.pixelSize: 13
@@ -153,21 +160,21 @@ PopupWindow {
 
                             Rectangle {
                                 anchors.centerIn: parent
-                                visible: row.parent.toggleType === "radio"
+                                visible: menuRow.toggleType === "radio"
                                 width: 8
                                 height: 8
                                 radius: 4
-                                color: row.parent.toggleState === 1 ? "#cba6f7" : "transparent"
+                                color: menuRow.toggleState === 1 ? "#cba6f7" : "transparent"
                                 border.color: "#a6adc8"
                                 border.width: 1
                             }
 
                             Image {
                                 anchors.centerIn: parent
-                                visible: row.parent.toggleType.length === 0
+                                visible: menuRow.toggleType.length === 0
                                 width: 16
                                 height: 16
-                                source: row.parent.iconImage
+                                source: menuRow.iconImage
                                 sourceSize.width: 32
                                 sourceSize.height: 32
                                 smooth: true
@@ -176,7 +183,7 @@ PopupWindow {
                         }
 
                         Text {
-                            text: row.parent.label
+                            text: menuRow.label
                             color: "#cdd6f4"
                             font.pixelSize: 12
                             anchors.verticalCenter: parent.verticalCenter
@@ -189,7 +196,7 @@ PopupWindow {
                         // Submenu chevron — only renders when the item
                         // has children.
                         Text {
-                            visible: row.parent.childrenDisplay === "submenu"
+                            visible: menuRow.childrenDisplay === "submenu"
                             text: "▸"
                             color: "#a6adc8"
                             font.pixelSize: 10
@@ -203,20 +210,20 @@ PopupWindow {
 
                         anchors.fill: parent
                         hoverEnabled: true
-                        cursorShape: row.parent.enabled ? Qt.PointingHandCursor : Qt.ForbiddenCursor
-                        enabled: row.parent.enabled
+                        cursorShape: menuRow.itemEnabled ? Qt.PointingHandCursor : Qt.ForbiddenCursor
+                        enabled: menuRow.itemEnabled
                         Accessible.role: Accessible.MenuItem
-                        Accessible.name: row.parent.label
+                        Accessible.name: menuRow.label
                         onClicked: {
-                            if (row.parent.childrenDisplay === "submenu") {
+                            if (menuRow.childrenDisplay === "submenu") {
                                 // Submenu — open cascade. We re-use the
                                 // SAME root popup but re-bind to a deeper
                                 // rootId. A future enhancement: stack
                                 // multiple popups so the user can click
                                 // back to a parent level.
-                                root.rootId = menuModel.aboutToShowSubmenu(row.parent.index);
+                                root.rootId = menuModel.aboutToShowSubmenu(menuRow.index);
                             } else {
-                                menuModel.triggerItem(row.parent.index);
+                                menuModel.triggerItem(menuRow.index);
                                 root.close();
                             }
                         }

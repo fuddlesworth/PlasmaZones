@@ -356,12 +356,19 @@ QVariant DBusMenuModel::data(const QModelIndex& index, int role) const
 
 QHash<int, QByteArray> DBusMenuModel::roleNames() const
 {
+    // `itemEnabled` / `itemVisible` rather than the plain names — the
+    // QML side renders these as Item delegates, and Item exposes
+    // `enabled` + `visible` as Q_PROPERTYs (visible is FINAL). A
+    // matching role name would shadow QQuickItem's property and fail
+    // at QML load with "Cannot override FINAL property", which is
+    // exactly what bit us the first time around. Rename here so the
+    // delegate can bind cleanly via `Item.enabled: model.itemEnabled`.
     return {
         {IdRole, "menuId"},
-        {TypeRole, "type"},
+        {TypeRole, "itemType"},
         {LabelRole, "label"},
-        {EnabledRole, "enabled"},
-        {VisibleRole, "visible"},
+        {EnabledRole, "itemEnabled"},
+        {VisibleRole, "itemVisible"},
         {IconImageRole, "iconImage"},
         {ToggleTypeRole, "toggleType"},
         {ToggleStateRole, "toggleState"},

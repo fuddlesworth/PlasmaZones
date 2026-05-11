@@ -27,11 +27,14 @@ private Q_SLOTS:
         DBusMenuModel m;
         const auto roles = m.roleNames();
         // Public contract — QML's TrayMenuPopup binds these names.
+        // `itemType` / `itemEnabled` / `itemVisible` rather than the
+        // plain forms so the QML delegate Item doesn't shadow
+        // QQuickItem's FINAL `visible` and Q_PROPERTY `enabled`.
         QVERIFY(roles.values().contains("menuId"));
-        QVERIFY(roles.values().contains("type"));
+        QVERIFY(roles.values().contains("itemType"));
         QVERIFY(roles.values().contains("label"));
-        QVERIFY(roles.values().contains("enabled"));
-        QVERIFY(roles.values().contains("visible"));
+        QVERIFY(roles.values().contains("itemEnabled"));
+        QVERIFY(roles.values().contains("itemVisible"));
         QVERIFY(roles.values().contains("iconImage"));
         QVERIFY(roles.values().contains("toggleType"));
         QVERIFY(roles.values().contains("toggleState"));
