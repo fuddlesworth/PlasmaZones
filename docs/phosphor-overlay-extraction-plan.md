@@ -430,13 +430,75 @@ public:
 `PzRoles::makePerInstanceRole` shrinks to a delegating wrapper so every
 existing call site continues to compile under the PzRoles:: namespace.
 
-### Phase 5 - OverlayService shrink + cleanup
+### Phase 5 - OverlayService shrink + cleanup (DONE in this branch)
 
-- The daemon's `OverlayService` should be a few hundred lines of
-  PZ-content wiring. Files like `overlayservice/lifecycle.cpp` move
-  into the library or get deleted. Per-screen state moves to the
-  library's `ShellHost`.
-- Per the project's <800-line file cap, the post-extraction
+Three sub-commits:
+
+- **5.1**: Delete the three redundant cleanup helpers
+  (`releaseSurfacesInState`, `cleanupAllScreenStates`,
+  `cleanupVirtualScreenStates`) that duplicated `ShellHost::destroyShell`
+  semantics. The two callers (dtor + physical-screen-removed handler)
+  switch to two-pass (collect keys → destroy + erase) loops calling
+  `m_shellHost->destroyShell` per screen. Net: `overlayservice.cpp`
+  drops 28 lines.
+
+- **5.2**: Split `overlayservice.cpp` into three:
+  - `overlayservice.cpp` (kept the ctor + dtor + small handlers): now
+    785 lines, under the 800-line cap.
+  - `overlayservice/priming.cpp` (new, 182 lines):
+    `primeSurfaceRenderPipeline` + `cancelSurfacePrime` — the
+    RHI/Vulkan pipeline-warmup helpers.
+  - `overlayservice/screens.cpp` (new, 200 lines): screen-lifecycle
+    methods (`setupForScreen`, `removeScreen`, `assertWindowOnScreen`,
+    `handleScreenAdded`, `destroyAllWindowsForPhysicalScreen`,
+    `handleScreenRemoved`).
+
+- **5.3**: Extract the 8 daemon-to-ShellHost bridge methods from
+  `osd.cpp` (where they accumulated during Phase 2-4) into a new
+  `overlayservice/shellhost_bridge.cpp` (249 lines). `osd.cpp` drops
+  from 889 to 693 lines, under the cap. OSD-specific show / dismiss
+  paths stay in `osd.cpp`.
+
+Final TU sizes after Phase 5:
+
+| File | Lines |
+|---|---|
+| `overlayservice.cpp` | 785 |
+| `overlayservice/osd.cpp` | 693 |
+| `overlayservice/overlay.cpp` | 864 |
+| `overlayservice/selector.cpp` | 726 |
+| `overlayservice/snapassist.cpp` | 566 |
+| `overlayservice/shader.cpp` | 555 |
+| `overlayservice/overlay_data.cpp` | 379 |
+| `overlayservice/animation_config.cpp` | 330 |
+| `overlayservice/settings.cpp` | 326 |
+| `overlayservice/lifecycle.cpp` | 311 |
+| `overlayservice/shellhost_bridge.cpp` | 249 |
+| `overlayservice/screens.cpp` | 200 |
+| `overlayservice/priming.cpp` | 182 |
+| `overlayservice/selector_update.cpp` | 231 |
+| `overlayservice.h` | 1035 |
+
+`overlay.cpp` at 864 sits 64 lines over the 800-line cap — further
+fragmentation (e.g. lifting `rekeyOverlayState` and
+`validateScreenStateInvariant` into a separate TU) would hurt
+readability for a marginal win. The header at 1035 is dominated by
+the still-large `OverlayService` class declaration; meaningful
+header shrinkage requires breaking up the class itself, which is
+beyond Phase 5's scope.
+
+The plan-doc's other Phase 5 goals do NOT apply in practice:
+  - "Files like `overlayservice/lifecycle.cpp` move into the library or
+    get deleted." `lifecycle.cpp` is 311 lines of PZ-content
+    initialization (show / hide / setupZoneOverlay) — it's content,
+    not mechanism, and stays in the daemon.
+  - "Per-screen state moves to the library's ShellHost." Shell
+    mechanism state already lives in `ShellState` (Phase 2.3-2.6);
+    PZ-content state (`overlayPhysScreen`, `overlayGeometry`,
+    `labelsTextureHash`, `zoneSelectorPhysScreen`,
+    `zoneSelectorGeometry`) stays on the daemon's
+    `PerScreenOverlayState` because it's PZ semantics, not lib
+    semantics.
   `OverlayService` TU split should drop from 14 files to 4 or 5.
 
 ### Phase 6 - Optional: standalone-compositor seam
@@ -526,5 +588,5 @@ existing call site continues to compile under the PzRoles:: namespace.
 | 2 - ShellHost extraction | DONE (#436): 8 sub-commits, all 4 movable methods landed; validate stays in daemon |
 | 3 - Slot extraction | DONE (#436): 3 sub-commits, slot storage + hide path lifted; show-side stays for phase 4 |
 | 4 - Animator config wiring | DONE (#436): registerConfigForRole + makePerInstanceRole on lib; daemon routes through ShellHost |
-| 5 - OverlayService shrink + cleanup | pending |
+| 5 - OverlayService shrink + cleanup | DONE (#436): redundant helpers removed; overlayservice.cpp + osd.cpp under 800-line cap |
 | 6 - Optional standalone-compositor seam | pending |
