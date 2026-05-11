@@ -153,48 +153,99 @@ library.
 
 ## Blockers that must clear first
 
-Captured by the project-memory note (`project_phosphor_overlay_scope.md`):
+Originally captured by the project-memory note
+(`project_phosphor_overlay_scope.md`), with corrections from reading
+current code:
 
-1. **`OverlayService::setLayoutManager` casts an interface to concrete**
-   (`overlayservice/settings.cpp:149`):
-   ```cpp
-   auto* oldManager = dynamic_cast<PhosphorZones::LayoutRegistry*>(m_layoutManager);
-   ```
-   The injected pointer is `ILayoutRegistry*` but the code needs signals
-   only on the concrete. **Fix:** add `layoutAssigned`/`activeLayoutChanged`/...
-   to the interface, drop the cast. This is PZ-side cleanup but the
-   pattern would leak into phosphor-overlay if not fixed first.
+1. **`PhosphorZones::IZoneLayoutRegistry` is missing the layout
+   signals and most of the query surface OverlayService needs.** The
+   memory note framed this as "a `dynamic_cast` from `ILayoutRegistry*`
+   to concrete." The actual code is worse: `OverlayService::m_layoutManager`
+   is already typed `LayoutRegistry*` (concrete) and the cast was a
+   no-op self-cast. So the architectural problem is that the daemon's
+   biggest single subsystem hard-binds to the concrete `LayoutRegistry`
+   for both signals and query methods, while the project memory's
+   plugin-architecture direction wants every consumer talking to an
+   interface.
+
+   **Fix is two-phase** (see Phase 0a + 0b below).
 
 2. **Hardwired `IAudioSpectrumProvider` flow** (`overlayservice/settings.cpp:301-312`,
    `shader.cpp:182-183`). Already an interface, but its lifecycle is
-   driven from inside `OverlayService` — a generic overlay library
+   driven from inside `OverlayService`. A generic overlay library
    shouldn't ship the audio-spectrum config knobs. **Fix:** audio
    spectrum is PZ-specific shader content; keep it consumer-side, route
    it through `ContentDescriptor::animatorConfigBuilder` so the library
    never sees `m_audioProvider`.
 
-3. **`ShaderRegistry` singleton** (per memory note). Constructor-injected
-   already in most places; finish the singleton kill before extraction.
+3. **`ShaderRegistry` singleton** (per memory note). Already resolved:
+   `daemon.h:520-525` owns a per-daemon `ShaderRegistry` and injects it.
 
-4. **Per-instance `QQmlEngine`** — confirm `PhosphorSurfaces::SurfaceManager`'s
+4. **Per-instance `QQmlEngine`**. Confirm `PhosphorSurfaces::SurfaceManager`'s
    shared-engine path covers every overlay surface phosphor-overlay
    creates. The PassiveShell already shares; verify SnapAssist / Picker /
    ShaderPreview do too.
 
-5. **Vulkan keep-alive surface** — already in phosphor-surfaces;
+5. **Vulkan keep-alive surface**. Already in phosphor-surfaces;
    phosphor-overlay does NOT recreate this.
 
 ## Migration phases
 
 Each phase is its own PR. Build clean + tests green at every commit.
 
-### Phase 0 - Plan + blocker cleanup
+### Phase 0a - Plan + signal lift (DONE in this branch)
 
 - Land this doc.
-- Fix blocker #1 (interface signals): add the four signals to
-  `PhosphorZones::ILayoutRegistry` and drop the `dynamic_cast`.
-- Fix blocker #3 if not already done (ShaderRegistry DI).
-- Verify blockers #2, #4, #5 are already resolved.
+- Lift the four catalog / active-layout signals (`layoutAdded`,
+  `layoutRemoved`, `activeLayoutChanged`, `layoutAssigned`) onto
+  `PhosphorZones::IZoneLayoutRegistry` so consumers can target the
+  interface for the lifecycle subset.
+- Move the `Q_PROPERTY(Layout* activeLayout READ activeLayout NOTIFY
+  activeLayoutChanged)` to the interface alongside its NOTIFY signal
+  (moc 6.11's same-class NOTIFY-resolution rule needs both in the
+  same class scope).
+- Delete the dead `dynamic_cast<LayoutRegistry*>(m_layoutManager)`
+  self-cast pair in `OverlayService::setLayoutManager`. Connect via
+  `IZoneLayoutRegistry::*` signal pointers directly.
+- Verify blocker #3 (ShaderRegistry DI) is already resolved
+  (confirmed: `daemon.h:520-525`).
+
+### Phase 0b - Interface widening for layout queries
+
+`OverlayService` consumes these `LayoutRegistry`-concrete methods today:
+
+- `layoutForScreen(screenId, vd, activity)` - cascade-resolved layout
+- `assignmentIdForScreen(screenId, vd, activity)` - cascade-resolved assignment id
+- `defaultLayout()` - fallback layout
+- `layoutById(uuid)` - layout lookup by UUID
+- `resolveLayoutForScreen(screenId)` - convenience over `layoutForScreen` + current VD/activity
+- `currentActivity()` - currently-active KActivities id
+- `currentVirtualDesktop()` - currently-active virtual desktop id
+
+These are all concrete-only on `LayoutRegistry` today. Port them up to
+`IZoneLayoutRegistry`:
+
+1. Add the seven virtual methods to the interface. The first five
+   belong cleanly there (layout-catalog queries). The last two
+   (`currentActivity` / `currentVirtualDesktop`) are session state
+   that `LayoutRegistry` happens to hold; flag whether they should live
+   on a separate `ISessionContext` interface or stay on the layout
+   registry. For now, put them on the layout registry interface to
+   keep the change scope-bounded.
+2. Update `LayoutRegistry` to declare each method `override`.
+3. Update `OverlayService::m_layoutManager` to `IZoneLayoutRegistry*`
+   and `setLayoutManager(IZoneLayoutRegistry*)`. The daemon caller
+   (`daemon.cpp:694`) keeps passing `m_layoutManager.get()` (concrete
+   `LayoutRegistry*` upcasts implicitly to the interface).
+4. Re-run the audit pattern from #436 to check no other call sites are
+   accidentally relying on concrete-only `LayoutRegistry` methods via
+   the OverlayService bridge.
+
+Result: `OverlayService` only sees `IZoneLayoutRegistry`. The PZ
+daemon is now interface-driven for its biggest subsystem, matching the
+plugin-architecture direction. The bridge from `OverlayService` into
+the future `phosphor-overlay` library is symmetrical: both sides talk
+to interfaces.
 
 ### Phase 1 - New library scaffolding
 
@@ -325,17 +376,15 @@ Each phase is its own PR. Build clean + tests green at every commit.
    pin the show/hide/animator-config-resolution paths. Integration with
    real animators / shaders stays in PZ's `tests/`.
 
-## Concrete first commit on this branch
+## Status
 
-Phase 0, blocker #1:
-
-- Add the four signals (`activeLayoutChanged`, `layoutAssigned`,
-  `layoutAdded`, `layoutRemoved`) to
-  `PhosphorZones::ILayoutRegistry`.
-- `OverlayService::setLayoutManager` drops the
-  `dynamic_cast<PhosphorZones::LayoutRegistry*>` and connects directly
-  on the interface pointer.
-- Update any other `dynamic_cast<...LayoutRegistry...>` consumers the
-  same way.
-- One PR, narrow scope, ready to land before the library scaffolding
-  starts.
+| Phase | Status |
+|---|---|
+| 0a - Plan + signal lift | DONE (#436) |
+| 0b - Interface widening for layout queries | NEXT |
+| 1 - New library scaffolding | pending |
+| 2 - ShellHost extraction | pending |
+| 3 - Slot extraction | pending |
+| 4 - Animator config wiring | pending |
+| 5 - OverlayService shrink + cleanup | pending |
+| 6 - Optional standalone-compositor seam | pending |
