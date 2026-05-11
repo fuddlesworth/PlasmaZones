@@ -6,10 +6,23 @@
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorLayer/Surface.h>
 
+#include <QLatin1Char>
 #include <QQuickItem>
 #include <QQuickWindow>
 
 namespace PhosphorOverlay {
+
+PhosphorLayer::Role makePerInstanceRole(const PhosphorLayer::Role& base, QStringView screenId, quint64 generation)
+{
+    QString prefix;
+    prefix.reserve(base.scopePrefix.size() + 1 + screenId.size() + 1 + 20);
+    prefix.append(base.scopePrefix);
+    prefix.append(QLatin1Char('-'));
+    prefix.append(screenId);
+    prefix.append(QLatin1Char('-'));
+    prefix.append(QString::number(generation));
+    return base.withScopePrefix(std::move(prefix));
+}
 
 ShellHost::ShellHost(QObject* parent)
     : QObject(parent)
@@ -173,6 +186,15 @@ bool ShellHost::rekey(const QString& oldKey, const QString& newKey)
     m_states.erase(donor);
     m_states.insert(newKey, state);
     return true;
+}
+
+void ShellHost::registerConfigForRole(const PhosphorLayer::Role& role,
+                                      PhosphorAnimationLayer::SurfaceAnimator::Config config)
+{
+    if (!m_surfaceAnimator) {
+        return;
+    }
+    m_surfaceAnimator->registerConfigForRole(role, std::move(config));
 }
 
 void ShellHost::hideSlot(const QString& screenId, const QString& slotKey, std::function<void()> completion)

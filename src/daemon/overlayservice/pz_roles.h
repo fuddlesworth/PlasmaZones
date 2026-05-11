@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorLayer/Role.h>
+#include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorShellPatterns/Patterns.h>
 
 #include <QString>
@@ -127,14 +128,13 @@ inline const PhosphorLayer::Role ShaderPreview =
 [[nodiscard]] inline PhosphorLayer::Role makePerInstanceRole(const PhosphorLayer::Role& base, QStringView screenId,
                                                              quint64 generation)
 {
-    QString prefix;
-    prefix.reserve(base.scopePrefix.size() + 1 + screenId.size() + 1 + 20);
-    prefix.append(base.scopePrefix);
-    prefix.append(QLatin1Char('-'));
-    prefix.append(screenId);
-    prefix.append(QLatin1Char('-'));
-    prefix.append(QString::number(generation));
-    return base.withScopePrefix(std::move(prefix));
+    // Delegates to PhosphorOverlay::makePerInstanceRole — the
+    // scope-prefix-construction policy lives in the lib so any consumer
+    // (not just PZ) gets the same SurfaceAnimator longest-prefix lookup
+    // guarantee. PZ keeps this thin wrapper because every existing call
+    // site uses the PzRoles:: namespace; the wrapper is the migration
+    // bridge, not a fork.
+    return PhosphorOverlay::makePerInstanceRole(base, screenId, generation);
 }
 
 } // namespace PzRoles

@@ -315,10 +315,16 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
                                      << " snapAssist.show=" << resolveShaderEffect(tree, PP::PopupSnapAssistShow)
                                      << " snapAssist.hide=" << resolveShaderEffect(tree, PP::PopupSnapAssistHide);
     }
-    m_surfaceAnimator->registerConfigForRole(PzRoles::Osd, buildOsdConfig(tree));
-    m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig(tree));
-    m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig(tree));
-    m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, buildSnapAssistConfig(tree));
+    // Route through the lib so animator-config writes share the same
+    // host that owns slot lifecycle (3.x) and surface lifecycle (2.x).
+    // The lib is now the sole SurfaceAnimator client for both slot
+    // hides and per-role config registration; the daemon retains the
+    // SHAPE of each config (curves, durations, shader paths) via the
+    // build*Config helpers above.
+    m_shellHost->registerConfigForRole(PzRoles::Osd, buildOsdConfig(tree));
+    m_shellHost->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig(tree));
+    m_shellHost->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig(tree));
+    m_shellHost->registerConfigForRole(PzRoles::SnapAssist, buildSnapAssistConfig(tree));
 }
 
 } // namespace PlasmaZones

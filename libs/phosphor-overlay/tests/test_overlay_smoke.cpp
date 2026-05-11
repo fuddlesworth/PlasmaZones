@@ -10,8 +10,12 @@
 
 #include <PhosphorOverlay/PhosphorOverlay.h>
 
+#include <PhosphorLayer/Role.h>
+#include <PhosphorShellPatterns/Patterns.h>
+
 #include <QObject>
 #include <QString>
+#include <QStringLiteral>
 #include <QtTest/QtTest>
 
 class TestOverlaySmoke : public QObject
@@ -29,6 +33,8 @@ private Q_SLOTS:
     void rekeyReturnsFalseForSameKey();
     void rekeyReturnsFalseWhenDonorAbsent();
     void rekeyReturnsFalseWhenDonorHasNoLiveShell();
+    void makePerInstanceRoleAppendsScreenAndGenerationToScope();
+    void registerConfigForRoleIsNoOpWithoutAnimator();
 };
 
 void TestOverlaySmoke::shellHostConstructsAndDestructs()
@@ -110,6 +116,27 @@ void TestOverlaySmoke::rekeyReturnsFalseWhenDonorHasNoLiveShell()
     // rather than silently moving an empty entry.
     host.stateFor(QStringLiteral("DP-1"));
     QCOMPARE(host.rekey(QStringLiteral("DP-1"), QStringLiteral("HDMI-A-1")), false);
+}
+
+void TestOverlaySmoke::makePerInstanceRoleAppendsScreenAndGenerationToScope()
+{
+    const auto base = PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("phosphor-overlay-test"));
+    const auto perInstance = PhosphorOverlay::makePerInstanceRole(base, QStringLiteral("DP-1"), 7);
+    QCOMPARE(perInstance.scopePrefix, QStringLiteral("phosphor-overlay-test-DP-1-7"));
+    // The longest-prefix lookup the SurfaceAnimator does on per-instance
+    // roles only resolves when the per-instance prefix starts with the
+    // base prefix — pin that invariant.
+    QVERIFY(perInstance.scopePrefix.startsWith(base.scopePrefix));
+}
+
+void TestOverlaySmoke::registerConfigForRoleIsNoOpWithoutAnimator()
+{
+    PhosphorOverlay::ShellHost host;
+    // No setSurfaceAnimator call — the lib silently no-ops rather than
+    // dereferencing a null animator pointer. Consumers that call this
+    // without injection get nothing rather than a crash.
+    const auto role = PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("phosphor-overlay-test"));
+    host.registerConfigForRole(role, {});
 }
 
 QTEST_MAIN(TestOverlaySmoke)

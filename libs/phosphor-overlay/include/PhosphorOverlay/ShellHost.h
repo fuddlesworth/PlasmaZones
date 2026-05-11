@@ -18,11 +18,15 @@
 #include <PhosphorOverlay/ShellState.h>
 #include <PhosphorOverlay/phosphoroverlay_export.h>
 
+#include <PhosphorAnimation/SurfaceAnimator.h>
+#include <PhosphorLayer/Role.h>
+
 #include <QHash>
 #include <QObject>
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QStringView>
 
 #include <functional>
 
@@ -32,9 +36,29 @@ namespace PhosphorLayer {
 class Surface;
 } // namespace PhosphorLayer
 
-namespace PhosphorAnimationLayer {
-class SurfaceAnimator;
-} // namespace PhosphorAnimationLayer
+namespace PhosphorOverlay {
+
+/// Build a per-instance @c PhosphorLayer::Role by appending
+/// `-{screenId}-{generation}` to @p base's scope prefix. Single-source
+/// for the policy "per-instance scope prefix-matches the base role's
+/// prefix" so the SurfaceAnimator's longest-prefix lookup always
+/// resolves the base role's registered config.
+///
+/// Pre-existing failure modes this prevents:
+///  - Build the per-instance literal from scratch (e.g. typo), or
+///  - Pass a different base role and re-type the literal, then later
+///    rename the family role.
+/// Either case made the longest-prefix match silently miss and the
+/// surface fell back to the library's empty default config.
+///
+/// @param base       Named base role (e.g. PassiveShell pattern in PZ).
+/// @param screenId   Effective screen id (physical or virtual).
+/// @param generation Monotonic per-process counter, e.g. from
+///                   @c PhosphorSurfaces::SurfaceManager::nextScopeGeneration().
+[[nodiscard]] PHOSPHOROVERLAY_EXPORT PhosphorLayer::Role makePerInstanceRole(const PhosphorLayer::Role& base,
+                                                                             QStringView screenId, quint64 generation);
+
+} // namespace PhosphorOverlay
 
 namespace PhosphorOverlay {
 
@@ -137,6 +161,13 @@ public:
     /// that don't need re-anchoring (same-screen identifier drift) can
     /// ignore the post-rekey step.
     bool rekey(const QString& oldKey, const QString& newKey);
+
+    /// Register an animator @p config under @p role. Pass-through to
+    /// @c PhosphorAnimationLayer::SurfaceAnimator::registerConfigForRole
+    /// so consumers route every animator-config write through the same
+    /// host that owns the slot vocabulary. No-op when the SurfaceAnimator
+    /// has not been injected.
+    void registerConfigForRole(const PhosphorLayer::Role& role, PhosphorAnimationLayer::SurfaceAnimator::Config config);
 
     /// Animator-driven slot hide for the slot keyed by @p slotKey on the
     /// shell for @p screenId. No-op when no shell is up, no slot under

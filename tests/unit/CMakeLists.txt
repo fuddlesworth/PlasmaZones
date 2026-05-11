@@ -265,9 +265,10 @@ add_test(NAME test_animation_profile_publication COMMAND test_animation_profile_
 # with a release-built check that covers every overlay role.
 add_executable(test_overlay_scope_prefixes daemon/test_overlay_scope_prefixes.cpp)
 target_link_libraries(test_overlay_scope_prefixes
-    PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorLayer::PhosphorLayer
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick PhosphorLayer::PhosphorLayer
             PhosphorShellPatterns::PhosphorShellPatterns
-            PhosphorAnimation::PhosphorAnimation)
+            PhosphorAnimation::PhosphorAnimation
+            PhosphorOverlay::PhosphorOverlay)
 add_test(NAME test_overlay_scope_prefixes COMMAND test_overlay_scope_prefixes)
 
 # Snap-assist thumbnail provider: bounded LRU cache, monotonic URL
