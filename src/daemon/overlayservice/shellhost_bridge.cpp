@@ -70,19 +70,30 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     // downstream consumer of `state->shell` reaches the lib's single
     // source of truth.
     auto* shellState = m_shellHost->ensureShell(effectiveId, physScreen);
+    // Helper: enforce the "non-null shell pointer ⇒ live surface"
+    // contract on either failure-return path by nulling any stale
+    // cached pointer (a previous successful ensure may have wired
+    // pzState.shell to a ShellState whose fields have since been
+    // zeroed by destroyShell). Callers gate on shell->shellSurface()
+    // today, but keeping the cache true to the contract removes a
+    // class of latent bugs.
+    auto returnExistingClearingStaleShell = [this, &effectiveId]() -> PerScreenOverlayState* {
+        auto it = m_screenStates.find(effectiveId);
+        if (it == m_screenStates.end()) {
+            return nullptr;
+        }
+        it->shell = nullptr;
+        return &it.value();
+    };
     if (!shellState) {
-        auto it = m_screenStates.find(effectiveId);
-        return (it == m_screenStates.end()) ? nullptr : &it.value();
+        return returnExistingClearingStaleShell();
     }
-    // Surface-live gate first: a zeroed state (sticky failure or
-    // self-teardown from wirePassiveShellSlots's null-shellWindow
-    // recovery) must not be cached on the daemon's parallel state
-    // (implicit contract: "non-null shell pointer ⇒ live surface"),
-    // and the defensive flag-set below must not touch a zombie
-    // window.
+    // Surface-live gate: a zeroed state (sticky failure or self-
+    // teardown from wirePassiveShellSlots's null-shellWindow recovery)
+    // must not be cached on the daemon's parallel state, and the
+    // defensive flag-set below must not touch a zombie window.
     if (!shellState->shellSurface()) {
-        auto it = m_screenStates.find(effectiveId);
-        return (it == m_screenStates.end()) ? nullptr : &it.value();
+        return returnExistingClearingStaleShell();
     }
     // Defensive default: every successful ensure should leave the
     // shell window click-through unless a modal slot is up. The

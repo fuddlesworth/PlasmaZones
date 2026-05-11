@@ -221,7 +221,7 @@ bool ShellHost::rekey(const QString& oldKey, const QString& newKey)
     m_states.insert(newKey, state);
     // Clear any sticky creation-failure flag at newKey: a live shell
     // now backs the key, so future ensureShell calls must not short-
-    // circuit to the failure path. Symmetric with the donor side —
+    // circuit to the failure path. Symmetric with the donor side:
     // oldKey's flag stays as-is (it may legitimately be marked failed
     // separately by the consumer's id-grammar logic).
     m_creationFailed.remove(newKey);
@@ -319,7 +319,7 @@ void ShellHost::removeState(const QString& screenId)
     if (it.value()->m_shellSurface) {
         destroyShell(screenId);
         // destroyShell only zeroes fields; m_states keys are unchanged.
-        // Re-find to refresh the iterator (defensive — QHash::find()
+        // Re-find to refresh the iterator (defensive: QHash::find()
         // doesn't invalidate non-mutated entries, but explicit re-find
         // makes the invariant survive future refactors).
         it = m_states.find(screenId);

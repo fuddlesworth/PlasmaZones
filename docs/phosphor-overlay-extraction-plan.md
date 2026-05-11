@@ -456,7 +456,9 @@ Three sub-commits:
 
 - **5.2**: Split `overlayservice.cpp` into three:
   - `overlayservice.cpp` (kept the ctor + dtor + small handlers): now
-    795 lines, under the 800-line cap.
+    694 lines, under the 800-line cap (post-audit-pass-9 extraction
+    of `onVirtualScreensChanged` to `screens.cpp` kept it under cap
+    after later edits added defensive cleanup).
   - `overlayservice/priming.cpp` (new, 182 lines):
     `primeSurfaceRenderPipeline` + `cancelSurfacePrime`: the
     RHI/Vulkan pipeline-warmup helpers.
@@ -475,29 +477,27 @@ Final TU sizes after Phase 5 (and pass-4/5 audit fixes):
 
 | File | Lines |
 |---|---|
-| `overlayservice.cpp` | 795 |
-| `overlayservice/osd.cpp` | 690 |
-| `overlayservice/overlay.cpp` | 893 |
+| `overlayservice.cpp` | 694 |
 | `overlayservice/selector.cpp` | 748 |
+| `overlayservice/overlay.cpp` | 701 |
+| `overlayservice/osd.cpp` | 690 |
 | `overlayservice/snapassist.cpp` | 578 |
 | `overlayservice/shader.cpp` | 557 |
 | `overlayservice/overlay_data.cpp` | 379 |
+| `overlayservice/screens.cpp` | 339 |
 | `overlayservice/animation_config.cpp` | 330 |
+| `overlayservice/lifecycle.cpp` | 330 |
 | `overlayservice/settings.cpp` | 326 |
-| `overlayservice/lifecycle.cpp` | 324 |
-| `overlayservice/shellhost_bridge.cpp` | 282 |
-| `overlayservice/screens.cpp` | 220 |
-| `overlayservice/priming.cpp` | 182 |
+| `overlayservice/shellhost_bridge.cpp` | 310 |
+| `overlayservice/rekey.cpp` | 244 |
 | `overlayservice/selector_update.cpp` | 231 |
-| `overlayservice.h` | 1047 |
+| `overlayservice/priming.cpp` | 182 |
+| `overlayservice.h` | 1055 |
 
-`overlay.cpp` at 893 sits 93 lines over the 800-line cap: further
-fragmentation (e.g. lifting `rekeyOverlayState` and
-`validateScreenStateInvariant` into a separate TU) would hurt
-readability for a marginal win. The header at 1047 is dominated by
-the still-large `OverlayService` class declaration; meaningful
-header shrinkage requires breaking up the class itself, which is
-beyond Phase 5's scope.
+Every TU is now under the 800-line cap. The header at 1055 is
+dominated by the still-large `OverlayService` class declaration;
+meaningful header shrinkage requires breaking up the class itself,
+which is beyond Phase 5's scope.
 
 The plan-doc's other Phase 5 goals do NOT apply in practice:
   - "Files like `overlayservice/lifecycle.cpp` move into the library or

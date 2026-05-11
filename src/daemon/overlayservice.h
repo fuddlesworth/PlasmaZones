@@ -248,6 +248,14 @@ public:
     void handleScreenAdded(QScreen* screen);
     void handleScreenRemoved(QScreen* screen);
 
+    /// Reconcile overlay state for a physical-screen reconfig event.
+    /// Wired to both @c ScreenManager::virtualScreensChanged (add /
+    /// remove / re-cache of virtual screens under @p physicalScreenId)
+    /// and @c ScreenManager::virtualScreenRegionsChanged (swap /
+    /// rotate / boundary resize). The handler is heavy but only runs
+    /// when overlays are visible (active drag), so the cost is bounded.
+    void onVirtualScreensChanged(const QString& physicalScreenId);
+
     // PhosphorZones::Zone selector management (IOverlayService interface)
     bool isZoneSelectorVisible() const override;
     void showZoneSelector(const QString& targetScreenId = QString()) override;
