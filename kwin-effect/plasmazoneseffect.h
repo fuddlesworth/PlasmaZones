@@ -120,6 +120,16 @@ public:
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                      KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                      KWin::WindowPaintData& data) override;
+    /// OffscreenEffect hook for transforming the redirected window before
+    /// the GL pipeline composites it. For active shader transitions with
+    /// `fboExtentRing > 0` (morph, broken-glass, future BMW-style ring
+    /// effects), this rebuilds @p quads as a single expanded quad sized
+    /// `(1 + 2·ring) × frame` with `texCoord` range `[-ring, 1+ring]` so
+    /// the shader has room to draw past the window's natural bounds
+    /// (BMW's actor-expansion model). For ring == 0 (surface-extent
+    /// shaders + the 53 default-shader case) the base class default
+    /// behaviour passes through.
+    void apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data, KWin::WindowQuadList& quads) override;
     void grabbedKeyboardEvent(QKeyEvent* e) override;
 
 private Q_SLOTS:

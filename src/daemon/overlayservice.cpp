@@ -608,7 +608,7 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
     // by the compositor. A screen-sized OSD surface gives shader effects
     // headroom equal to the screen, and keeps the wiring path identical
     // to popups (which were already screen-sized) so a single
-    // `boundsExtent` mechanism works uniformly across every overlay role.
+    // `fboExtent` mechanism works uniformly across every overlay role.
     //
     // Cost is real but bearable: a fullscreen swapchain runs ~25 MB at 4K
     // on the NVIDIA proprietary stack, vs ~tens of KB for the content-

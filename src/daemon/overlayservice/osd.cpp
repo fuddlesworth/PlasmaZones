@@ -54,11 +54,11 @@ qreal resolveOsdShaderPadding(ISettings* settings, PhosphorAnimationShaders::Ani
     qreal pad = 0.0;
     const QString showId = tree.resolve(showPath).effectiveEffectId();
     if (!showId.isEmpty()) {
-        pad = qMax(pad, registry->effect(showId).boundsPadding);
+        pad = qMax(pad, registry->effect(showId).fboExtentRing);
     }
     const QString hideId = tree.resolve(hidePath).effectiveEffectId();
     if (!hideId.isEmpty()) {
-        pad = qMax(pad, registry->effect(hideId).boundsPadding);
+        pad = qMax(pad, registry->effect(hideId).fboExtentRing);
     }
     return pad;
 }

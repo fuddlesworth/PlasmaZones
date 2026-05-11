@@ -89,7 +89,7 @@ Item {
     // Per-side padding (fraction of container width/height) reserved for
     // shader transition effects whose silhouette extends outside the
     // container's rectangle. Set by the daemon to the active SurfaceAnimator
-    // shader's metadata `boundsPadding` (max of show + hide so the surface
+    // shader's metadata `fboExtentRing` (max of show + hide so the surface
     // accommodates whichever leg is currently running). 0.0 = no padding.
     property real shaderBoundsPadding: 0
     // Content-driven desired size, exposed for the unified host (which binds

@@ -130,13 +130,6 @@ private Q_SLOTS:
             const int slot = m.captured(2).toInt();
             const QChar subChar = m.captured(3).at(0);
             const int sub = subChar == u'x' ? 0 : subChar == u'y' ? 1 : subChar == u'z' ? 2 : 3;
-            // Slot 7 is the SurfaceAnimator structural slot
-            // (boundsPadding); shader-side `#define`s into [7].x are
-            // not user parameters, so skip the metadata cross-check
-            // for that slot.
-            if (slot == 7) {
-                continue;
-            }
             QVERIFY2(expected.contains(id),
                      qPrintable(QStringLiteral("Pack %1: shader defines `%2` but metadata.json has no such parameter")
                                     .arg(packDir, id)));

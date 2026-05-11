@@ -20,36 +20,45 @@
 #define warpStrength  customParams[0].x
 #define warpFrequency customParams[0].y
 
-// Bounds-padding fraction supplied by SurfaceAnimator from
-// AnimationShaderEffect::boundsPadding (metadata.json). Single source of
-// truth — this slot is filled by surfaceanimator.cpp's attachShaderToAnchor
-// at leg start. No hardcoded constant means the GLSL value can never drift
-// from metadata.json. customParams[7] is reserved for SurfaceAnimator's
-// structural data (see ShaderEffect.h customParams8 Q_PROPERTY); no
-// user-declared parameter in any shipping shader reaches this slot
-// (translateAnimationParams fills from customParams[0] up).
-//
-// Kwin-effect path: plasmazoneseffect.cpp doesn't expand the redirected
-// window's geometry by `boundsPadding`, so the slot reads 0 and the UV
-// remap below collapses to identity (k=1, anchorUv=vTexCoord). That's
-// the correct behaviour on kwin — without geometry expansion there's
-// no padding region to remap into, so the warp simply samples the
-// un-padded surface directly.
-#define boundsPadding customParams[7].x
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 void main()
 {
-    // Remap padded vTexCoord → anchor-space UV. Anchor occupies the
-    // central region [pad/(1+2pad), (1+pad)/(1+2pad)] of the padded
-    // shaderItem; anchorUv = uv*(1+2pad) - pad ∈ [-pad, 1+pad].
-    float k = 1.0 + 2.0 * boundsPadding;
-    vec2 anchorUv = vTexCoord * k - boundsPadding;
+    // Remap padded vTexCoord → anchor-space UV. SurfaceAnimator expands
+    // the shaderItem QUAD by metadata's `fboExtent: "anchor+N"` ring
+    // fraction and pushes `iAnchorPosInFbo` = (padW, padH) alongside
+    // `iAnchorSize` = the captured-anchor pixel size; Qt auto-derives
+    // `iResolution` from the padded shaderItem bounds. The unified
+    // remap below produces an anchorUv range of `[-ring, 1+ring]` for
+    // a ring fraction of `ring`. Replaces the previous
+    // `customParams[7].x`-based math.
+    //
+    // Kwin-effect path: actor expansion is implemented at quad-
+    // construction time. PlasmaZonesEffect::apply() (paint_pipeline.cpp)
+    // rebuilds the window's quads at `(1+2·ring) × frame` size and
+    // remaps the texCoord to `[-ring, 1+ring]`, so `vTexCoord` already
+    // arrives in anchor-space coordinates. iAnchorPosInFbo is pushed as
+    // (0, 0) and iAnchorSize == iResolution, so the math collapses to
+    // anchorUv == vTexCoord, giving the same `[-ring, 1+ring]` range
+    // the daemon path produces via uniform-driven remap. Different
+    // runtime mechanism, same shader source.
+    // Defence in depth: iResolution and iAnchorSize are runtime-pushed
+    // and normally positive by leg start, but in a few well-known
+    // transient windows (pre-attach paint, anchor mid-relayout where
+    // width / height drop to zero between bindings) they can land at
+    // zero. `max(..., 1.0)` keeps the divisor strictly positive so a
+    // stale frame samples a degenerate but finite UV rather than
+    // propagating Inf / NaN through the warp math and dropping the
+    // surface to transparent.
+    vec2 resSafe = max(iResolution, vec2(1.0));
+    vec2 anchorSizePx = max(iAnchorSize, vec2(1.0));
+    vec2 anchorTopLeftUv = iAnchorPosInFbo / resSafe;
+    vec2 anchorSizeUv = anchorSizePx / resSafe;
+    vec2 anchorUv = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;
 
     // Envelope peaks at iTime == 0.5 (mid-transition) and returns to
-    // 0 at the endpoints — same shape as glitch, gives both show and
+    // 0 at the endpoints. Same shape as glitch; gives both show and
     // hide a "warp peak then settle" feel.
     float visibility = clamp(iTime, 0.0, 1.0);
     float envelope = sin(visibility * 3.14159);
@@ -62,13 +71,43 @@ void main()
     );
 
     // Geometry-warp: at output anchorUv, sample BACK from where the
-    // warp would have displaced it (first-order inverse). Points whose
-    // pre-image falls outside [0,1] represent areas of the warped
-    // silhouette outside the anchor's content — emit transparent.
-    // Padding on shaderItem + matching padding on the surface give
-    // the rippled silhouette room to extend OUTSIDE the original
-    // anchor rectangle without clipping.
+    // warp would have displaced it (first-order inverse).
+    //
+    // Two separate concerns the shader has to handle without either
+    // cliffing or smearing edge texels into the ring:
+    //
+    // 1. Out-of-anchor texture sampling. The redirected texture is
+    //    bound with GL_CLAMP_TO_EDGE, so any `texture(uTexture0, uv)`
+    //    with uv outside `[0, 1]` returns the anchor's edge texel,
+    //    which for opaque-edged content (terminal background, app
+    //    chrome, rounded card borders) is a solid colour that smears
+    //    visibly into the ring. Kill those samples with a HARD
+    //    `step`-based mask on `sampleUv`. The boundary is sharp on
+    //    purpose: any partial value here would multiply the edge
+    //    texel by a non-zero alpha and leak grey/border colour.
+    //
+    // 2. Visual fade from the warped anchor into the empty ring. The
+    //    backward-warp can only carry content `strength` units into
+    //    the ring, so the ring is mostly empty regardless of how the
+    //    `inside` mask above filtered the sample. A `boundaryMask`-
+    //    style hard cliff on `anchorUv` produced the visible edge the
+    //    user reported pre-feather; a smoothstep over `[1, 1+feather]`
+    //    feathers the anchor's outer edge into the ring instead. The
+    //    feather width tracks `strength` so the fade exactly matches
+    //    the warp's actual reach: where the warp can carry content,
+    //    the alpha is partial; where it can't, the alpha is 0 anyway.
+    //
+    // The 0.005 lower bound on `feather` covers the envelope-zero
+    // endpoints (start / end of the leg) where `strength == 0` would
+    // otherwise collapse the smoothstep to a step at the anchor edge
+    // and lose sub-pixel AA on the silhouette.
     vec2 sampleUv = anchorUv - warp;
-    // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-    fragColor = texture(uTexture0, sampleUv) * boundaryMask(sampleUv);
+    vec2 sampleInside = step(vec2(0.0), sampleUv) * step(sampleUv, vec2(1.0));
+    vec4 warpedSample = texture(uTexture0, sampleUv) * sampleInside.x * sampleInside.y;
+
+    float feather = max(strength, 0.005);
+    vec2 lo = smoothstep(vec2(-feather), vec2(0.0), anchorUv);
+    vec2 hi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.0) + vec2(feather), anchorUv);
+    float mask = lo.x * lo.y * hi.x * hi.y;
+    fragColor = warpedSample * mask;
 }

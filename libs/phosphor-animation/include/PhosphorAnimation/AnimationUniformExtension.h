@@ -114,7 +114,7 @@ public:
 
     /// Anchor (card) pixel size in logical pixels. Decoupled from
     /// `iResolution` because Qt auto-resets iResolution to the shader
-    /// item's bounds on any geometry event — for a `boundsExtent: parent`
+    /// item's bounds on any geometry event. For a `fboExtentKind: Surface`
     /// shader item that auto-reset would clobber any anchor-size override.
     /// Pushed alongside `iSurfaceScreenPos` from `syncShaderGeometryNow`.
     void setIAnchorSize(const QSizeF& size)
@@ -130,6 +130,43 @@ public:
         m_dirty.store(true, std::memory_order_release);
     }
 
+    /// Anchor's top-left position inside the shader item's FBO, in
+    /// logical pixels. Combined with `iAnchorSize` and `iResolution`
+    /// (which Qt auto-derives from the shader item's bounds), shaders
+    /// can compute the anchor's UV region inside the FBO:
+    /// ```
+    /// vec2 anchorTopLeftUv = iAnchorPosInFbo / iResolution;
+    /// vec2 anchorSizeUv    = iAnchorSize    / iResolution;
+    /// vec2 anchorUv        = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;
+    /// ```
+    /// This generalises the previous `customParams[7].x`-based ring-
+    /// padding remap (morph, broken-glass) AND the surface-extent vertex
+    /// remap (fly-in) onto a single math contract that works for any
+    /// FBO size the runtime decides to allocate.
+    ///
+    /// Values per FBO-extent mode:
+    ///   * Anchor extent, no padding: (0, 0). Anchor == FBO.
+    ///   * Anchor extent with ring (e.g. anchor+0.5): (padW, padH) where
+    ///     padW = anchor.width * pad, padH = anchor.height * pad.
+    ///   * Surface extent: anchor's position relative to the FBO's
+    ///     origin, which under the daemon's shaderItem-parented-to-
+    ///     anchor->parentItem() convention equals `anchor->x()` /
+    ///     `anchor->y()` (the shaderItem is at (0,0) in parent's coords
+    ///     for surface extent, so anchor's local-to-parent coords ARE
+    ///     anchor's local-to-FBO coords).
+    void setIAnchorPosInFbo(const QPointF& pos)
+    {
+        QMutexLocker lock(&m_mutex);
+        const float x = static_cast<float>(pos.x());
+        const float y = static_cast<float>(pos.y());
+        if (m_data.iAnchorPosInFbo[0] == x && m_data.iAnchorPosInFbo[1] == y) {
+            return;
+        }
+        m_data.iAnchorPosInFbo[0] = x;
+        m_data.iAnchorPosInFbo[1] = y;
+        m_dirty.store(true, std::memory_order_release);
+    }
+
 private:
     /// Std140 layout — appended after BaseUniforms at offset
     /// `sizeof(PhosphorShaders::BaseUniforms)`. Mirror of the trailing
@@ -139,10 +176,12 @@ private:
     /// view is unchanged.
     struct alignas(16) AnimationExtensionData
     {
-        float iSurfaceScreenPos[4]; // offset 0 (16 bytes) — UBO offset 672 = 0 + sizeof(BaseUniforms)
-        float iAnchorSize[2]; // offset 16 (8 bytes) — UBO offset 688
-        // implicit trailing 8 bytes for std140 16-byte struct alignment, total 32 bytes
-        float _pad_after_iAnchorSize[2]; // offset 24 — written zero by std::memset in ctor
+        float iSurfaceScreenPos[4]; // offset 0  (16 bytes), UBO offset 672 = 0 + sizeof(BaseUniforms)
+        float iAnchorSize[2]; // offset 16 (8 bytes),  UBO offset 688
+        float iAnchorPosInFbo[2]; // offset 24 (8 bytes),  UBO offset 696. Anchor's top-left
+                                  //   position inside the shader item's FBO, in logical pixels.
+                                  //   See setIAnchorPosInFbo's docstring for the per-extent math
+                                  //   contract this enables.
     };
     static_assert(sizeof(AnimationExtensionData) == 32,
                   "AnimationExtensionData must be exactly 32 bytes — std140 trailing pad to 16-aligned");

@@ -104,12 +104,26 @@ uniform int iIsReversed;
 uniform vec4 iSurfaceScreenPos;
 // Anchor (card) pixel size in logical pixels. Decoupled from iResolution
 // because Qt auto-resets iResolution to the QQuickItem's bounds on any
-// geometry event — a `boundsExtent: parent` shader item is parent-sized
-// (= screen) and that auto-reset would clobber any anchor-size override.
-// Vertex shaders mapping a captured small texture into a parent-sized
-// FBO read this for the card's pixel dimensions; iResolution still
-// carries the FBO size as usual.
+// geometry event: a `fboExtent: "surface"` shader item is surface-sized
+// and that auto-reset would clobber any anchor-size override. Vertex
+// shaders mapping a captured small texture into a surface-sized FBO
+// read this for the card's pixel dimensions; iResolution still carries
+// the FBO size as usual.
 uniform vec2 iAnchorSize;
+// Anchor's top-left position inside the shader item's FBO, in logical
+// pixels. Combined with `iAnchorSize` and `iResolution`, shaders compute
+// the anchor's UV region inside the FBO:
+//   vec2 anchorTopLeftUv = iAnchorPosInFbo / iResolution;
+//   vec2 anchorSizeUv    = iAnchorSize    / iResolution;
+//   vec2 anchorUv        = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;
+// This generalises the previous `customParams[7].x` ring-padding remap
+// (morph, broken-glass) and the surface-extent vertex remap (fly-in)
+// onto one contract that works for any FBO size the runtime allocates.
+// On the kwin-effect path the value is (0, 0); the quad-side texCoord
+// remap done by `PlasmaZonesEffect::apply()` already delivers
+// `vTexCoord` in anchor-space coordinates, so the math collapses to
+// identity on that runtime.
+uniform vec2 iAnchorPosInFbo;
 
 // uTexture0 — redirected window content (the surface the shader is
 // transitioning). Auto-bound by the runtime: KWin's OffscreenEffect
@@ -201,11 +215,18 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              geometryChange auto-resets iResolution
                                  //              to the item's bounds on any geometry
                                  //              event, which clobbers an anchor-size
-                                 //              override under boundsExtent=parent.
+                                 //              override under fboExtent=surface.
                                  //              Vertex shaders that need the captured
                                  //              card's pixel dimensions read this.
-    // implicit 8-byte trailing pad — std140 rounds the struct end up
-    // to a 16-byte boundary, total 704 bytes.
+    vec2 iAnchorPosInFbo;        // offset 696 (8 bytes). Anchor's top-left position
+                                 //              inside the shader item's FBO, in
+                                 //              logical pixels. Lets shaders compute
+                                 //              the anchor's UV region for vTexCoord
+                                 //              -> anchor-space remap (replaces the
+                                 //              old customParams[7].x ring-padding
+                                 //              fraction). Total struct size 704 bytes;
+                                 //              std140 trailing pad is now zero bytes
+                                 //              because the field fills it exactly.
 };
 
 layout(binding = 7) uniform sampler2D uTexture0;
