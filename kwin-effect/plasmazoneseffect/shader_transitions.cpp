@@ -1068,6 +1068,20 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (repaintRect.isEmpty()) {
         repaintRect = window->frameGeometry().toAlignedRect();
     }
+    // Actor-expansion ring union: mirrors `postPaintScreen`'s addLayerRepaint
+    // loop in paint_pipeline.cpp. Without this, the very first frame of a
+    // transition with `fboExtentRing > 0` would have damage scheduled only
+    // for the natural expanded rect (shadow extents) and KWin would clip
+    // the visible ring back to that boundary on frame 1. Subsequent frames
+    // pick up the ring via postPaintScreen, but the first-frame "shards
+    // popping in cropped" artefact would be visible at transition install
+    // time without this union here.
+    const qreal installFboExtentRing = emplaceResult.first->second.fboExtentRing;
+    if (installFboExtentRing > 0.0) {
+        const QRect ringRect =
+            ShaderInternal::inflatedByRingFraction(window->frameGeometry(), installFboExtentRing).toAlignedRect();
+        repaintRect = repaintRect.united(ringRect);
+    }
     window->addLayerRepaint(repaintRect);
     if (KWin::effects) {
         // Match the null-guard the constructor and destructor use for

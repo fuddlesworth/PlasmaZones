@@ -399,9 +399,16 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
         return false;
     if (previewPath != other.previewPath)
         return false;
-    if (!qFuzzyCompare(fboExtentRing + 1.0, other.fboExtentRing + 1.0))
-        return false;
     if (fboExtentKind != other.fboExtentKind)
+        return false;
+    // `fboExtentRing` is semantically dead when kind == Surface (the FBO
+    // already covers the entire surface, ring padding is ignored); the
+    // docstring on the field declares this. Mirror that contract in
+    // operator==: a programmatic Surface effect with ring != 0 would
+    // otherwise compare unequal to its `fromJson(toJson(x))` round-trip
+    // because formatFboExtent drops the ring for Surface and parseFboExtent
+    // reads it back as 0.
+    if (fboExtentKind == FboExtentKind::Anchor && !qFuzzyCompare(fboExtentRing + 1.0, other.fboExtentRing + 1.0))
         return false;
     if (isMultipass != other.isMultipass || useWallpaper != other.useWallpaper || bufferFeedback != other.bufferFeedback
         || useDepthBuffer != other.useDepthBuffer)

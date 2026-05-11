@@ -67,10 +67,11 @@ layout(location = 0) out vec4 fragColor;
 // `iAnchorPosInFbo` is pushed as (0, 0) and `iAnchorSize == iResolution`,
 // so the unified remap math collapses to coords == iTexCoord, giving
 // the same `[-ring, 1+ring]` range the daemon path produces. The
-// `getInputColor` override below crops samples outside [0, 1] to
-// transparent so the redirected texture's clamp-to-edge wrap mode
-// doesn't smear edge pixels into the ring. BMW visual parity (shards
-// flying past the natural frame) works on both runtimes.
+// `getClippedInputColor` helper used in the cascade below (defined in
+// bmw_compat.glsl) crops samples outside [0, 1] to transparent so the
+// redirected texture's clamp-to-edge wrap mode doesn't smear edge
+// pixels into the ring. BMW visual parity (shards flying past the
+// natural frame) works on both runtimes.
 vec2 anchorRemap(vec2 uv) {
     // Defence in depth: see morph/effect.frag's resSafe comment. The
     // runtime normally pushes positive iResolution / iAnchorSize at
