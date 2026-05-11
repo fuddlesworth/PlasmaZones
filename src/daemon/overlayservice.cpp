@@ -375,13 +375,36 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
         .vulkanApiVersion = PlasmaZones::PzVulkanApiVersion,
     });
 
-    // Phase 2 foundation: own a ShellHost from construction time so
-    // subsequent Phase 2 commits can migrate per-screen shell-state
-    // ownership into the library incrementally without daemon-side
-    // construction-order churn. Today the host is a passive member
-    // alongside m_screenStates; method moves (rekey / validate /
-    // ensure / destroy / sync) land in follow-on commits.
+    // Phase 2: ShellHost owns the per-screen layer-shell shell-state map
+    // and the create / destroy lifecycle. The daemon registers callbacks
+    // for the PZ-specific bits — surface factory (PassiveShell role +
+    // PassiveOverlayShell.qml + warmed-surface pipeline), post-create
+    // slot wiring (5 PZ slot QML object-name lookups + 6 QML signal
+    // wires + RHI prime), pre-destroy slot teardown (nulls PZ content
+    // sentinels and disconnects per-content connections). The remaining
+    // Phase 2 method moves (rekey / sync / validate-invariant) land in
+    // follow-on commits.
     m_shellHost = std::make_unique<PhosphorOverlay::ShellHost>(this);
+
+    m_shellHost->setSurfaceFactory([this](const QString& screenId, QScreen* physScreen) -> PhosphorLayer::Surface* {
+        const auto role =
+            PzRoles::makePerInstanceRole(PzRoles::PassiveShell, screenId, m_surfaceManager->nextScopeGeneration());
+        auto* surface = createWarmedOsdSurface(role, QUrl(QStringLiteral("qrc:/ui/PassiveOverlayShell.qml")),
+                                               physScreen, "passive shell", screenId);
+        if (!surface) {
+            qCWarning(lcOverlay) << "Failed to create passive overlay shell for screen=" << screenId
+                                 << ": suppressing further attempts until screen is replugged";
+        }
+        return surface;
+    });
+
+    m_shellHost->setPostCreateCallback([this](const QString& screenId, PhosphorOverlay::ShellState& shellState) {
+        wirePassiveShellSlots(screenId, shellState);
+    });
+
+    m_shellHost->setPreDestroyCallback([this](const QString& screenId) {
+        unwirePassiveShellSlots(screenId);
+    });
 
     // Connect to screen changes (with safety check for early initialization)
     if (qGuiApp) {

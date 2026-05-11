@@ -720,6 +720,22 @@ private:
     /// path.
     PerScreenOverlayState* ensurePassiveShellFor(const QString& effectiveId, QScreen* physScreen);
 
+    /// PostCreate hook registered with the ShellHost. Caches the per-content
+    /// slot Items by their QML object names (osdSlotItem / snapAssistSlotItem
+    /// / ...), wires up QML signal handlers, then primes the rendering
+    /// pipeline. Runs from inside ShellHost::ensureShell immediately after
+    /// the surface and window are recorded in ShellState. The QML object
+    /// names are PZ-shell-specific so this method, not the library, owns
+    /// the lookup grammar.
+    void wirePassiveShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState);
+
+    /// PreDestroy hook registered with the ShellHost. Nulls every
+    /// PZ-content sentinel on the daemon's PerScreenOverlayState so a
+    /// stale signal handler firing during teardown doesn't reach into a
+    /// half-destroyed scene graph. Runs from inside ShellHost::destroyShell
+    /// before the library schedules the shell surface for deletion.
+    void unwirePassiveShellSlots(const QString& screenId);
+
     /// Slot-hide animation completion — flips the OSD slot Item's
     /// `visible` to false once the SurfaceAnimator's hide leg settles,
     /// so a subsequent show with no content state writes doesn't paint a

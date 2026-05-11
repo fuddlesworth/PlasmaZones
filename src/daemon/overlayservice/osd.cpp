@@ -448,64 +448,52 @@ void OverlayService::ensureOsdScreenAddedConnected()
 OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(const QString& effectiveId,
                                                                              QScreen* physScreen)
 {
-    auto it = m_screenStates.find(effectiveId);
-    if (it != m_screenStates.end() && it->shell.shellSurface) {
-        return &it.value();
-    }
-
-    // Spam-guard re-uses the notification slot — failure to create a
-    // shell on a given screen suppresses retries until the screen is
-    // hot-plug-cycled, same lifecycle the now-obsolete notification
-    // surface used.
-    if (m_shellHost->hasFailure(effectiveId)) {
+    // Library-side lifecycle delegated to ShellHost. The SurfaceFactory /
+    // PostCreate callbacks registered in the OverlayService ctor handle
+    // the PZ-specific surface creation (role + qmlSource + warmed-surface
+    // pipeline) and slot wiring; this shim just maps the lib-side return
+    // back onto the daemon's PerScreenOverlayState entry.
+    auto* shellState = m_shellHost->ensureShell(effectiveId, physScreen);
+    if (!shellState) {
+        auto it = m_screenStates.find(effectiveId);
         return (it == m_screenStates.end()) ? nullptr : &it.value();
     }
+    return &m_screenStates[effectiveId];
+}
 
-    const auto role =
-        PzRoles::makePerInstanceRole(PzRoles::PassiveShell, effectiveId, m_surfaceManager->nextScopeGeneration());
-    auto* surface = createWarmedOsdSurface(role, QUrl(QStringLiteral("qrc:/ui/PassiveOverlayShell.qml")), physScreen,
-                                           "passive shell", effectiveId);
-    if (!surface) {
-        qCWarning(lcOverlay) << "Failed to create passive overlay shell for screen=" << effectiveId
-                             << ": suppressing further attempts until screen is replugged";
-        m_shellHost->markFailure(effectiveId);
-        return nullptr;
-    }
-
-    auto& state = m_screenStates[effectiveId];
-    state.shell.shellSurface = surface;
-    state.shell.shellWindow = surface->window();
-    state.shell.physScreen = physScreen;
+void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState)
+{
+    auto& pzState = m_screenStates[screenId];
 
     // Cache the per-content slot Items — exposed as `osdSlotItem` /
     // `snapAssistSlotItem` on the shell window root via QML aliases.
     // Per-show writeQmlProperty / animator beginShow target these Items
     // directly.
-    if (auto* window = surface->window()) {
-        state.passiveShellOsdSlot = qvariant_cast<QQuickItem*>(window->property("osdSlotItem"));
-        if (!state.passiveShellOsdSlot) {
+    if (auto* window = shellState.shellWindow) {
+        pzState.passiveShellOsdSlot = qvariant_cast<QQuickItem*>(window->property("osdSlotItem"));
+        if (!pzState.passiveShellOsdSlot) {
             qCWarning(lcOverlay)
-                << "PassiveOverlayShell on screen=" << effectiveId
+                << "PassiveOverlayShell on screen=" << screenId
                 << "did not expose `osdSlotItem`: OSD content writes will fall through. Check QML resource.";
         }
-        state.passiveShellSnapAssistSlot = qvariant_cast<QQuickItem*>(window->property("snapAssistSlotItem"));
-        if (!state.passiveShellSnapAssistSlot) {
-            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << effectiveId
+        pzState.passiveShellSnapAssistSlot = qvariant_cast<QQuickItem*>(window->property("snapAssistSlotItem"));
+        if (!pzState.passiveShellSnapAssistSlot) {
+            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << screenId
                                  << "did not expose `snapAssistSlotItem`: snap-assist on this screen will fail.";
         }
-        state.passiveShellLayoutPickerSlot = qvariant_cast<QQuickItem*>(window->property("layoutPickerSlotItem"));
-        if (!state.passiveShellLayoutPickerSlot) {
-            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << effectiveId
+        pzState.passiveShellLayoutPickerSlot = qvariant_cast<QQuickItem*>(window->property("layoutPickerSlotItem"));
+        if (!pzState.passiveShellLayoutPickerSlot) {
+            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << screenId
                                  << "did not expose `layoutPickerSlotItem`: picker on this screen will fail.";
         }
-        state.passiveShellZoneSelectorSlot = qvariant_cast<QQuickItem*>(window->property("zoneSelectorSlotItem"));
-        if (!state.passiveShellZoneSelectorSlot) {
-            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << effectiveId
+        pzState.passiveShellZoneSelectorSlot = qvariant_cast<QQuickItem*>(window->property("zoneSelectorSlotItem"));
+        if (!pzState.passiveShellZoneSelectorSlot) {
+            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << screenId
                                  << "did not expose `zoneSelectorSlotItem`: selector on this screen will fail.";
         }
-        state.passiveShellMainOverlaySlot = qvariant_cast<QQuickItem*>(window->property("mainOverlaySlotItem"));
-        if (!state.passiveShellMainOverlaySlot) {
-            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << effectiveId
+        pzState.passiveShellMainOverlaySlot = qvariant_cast<QQuickItem*>(window->property("mainOverlaySlotItem"));
+        if (!pzState.passiveShellMainOverlaySlot) {
+            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << screenId
                                  << "did not expose `mainOverlaySlotItem`: main overlay on this screen will fail.";
         }
 
@@ -523,8 +511,7 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     // Prime the wl_surface map + Vulkan swapchain init + first-frame
     // render so the very first user-triggered slot show doesn't race
     // the FBO capture used by shader-exclusive transitions.
-    primeSurfaceRenderPipeline(surface);
-    return &state;
+    primeSurfaceRenderPipeline(shellState.shellSurface);
 }
 
 // Pre-create the per-screen passive overlay shell for every effective
@@ -552,21 +539,25 @@ void OverlayService::warmUpNotifications()
 
 void OverlayService::destroyPassiveShell(const QString& screenId)
 {
-    // Tear down the per-screen passive shell. The shell's QQuickWindow
-    // owns every slot QQuickItem as a scene-graph descendant, so the
-    // deleteLater on shell.shellSurface tears them all down too —
-    // null all slot pointers defensively so any signal handler that
-    // runs before the screen-state entry is purged from m_screenStates
-    // doesn't dereference a dangling QQuickItem*.
+    // Library-side teardown delegated to ShellHost::destroyShell. The
+    // PreDestroy callback (wirePassiveShellSlots' inverse) clears every
+    // PZ-content sentinel on the daemon's PerScreenOverlayState before
+    // the lib schedules the shell surface for deletion; the lib then
+    // nulls its own ShellState mechanism fields. The shell QQuickWindow
+    // owns every slot QQuickItem as a scene-graph descendant so the
+    // single deleteLater on the surface cascades through every slot.
+    m_shellHost->destroyShell(screenId);
+}
+
+void OverlayService::unwirePassiveShellSlots(const QString& screenId)
+{
     auto it = m_screenStates.find(screenId);
     if (it == m_screenStates.end()) {
         return;
     }
-    if (it->shell.shellSurface) {
-        it->shell.shellSurface->deleteLater();
-    }
-    it->shell.shellSurface = nullptr;
-    it->shell.shellWindow = nullptr;
+    // Null PZ slot pointers defensively so any signal handler that runs
+    // before the screen-state entry is purged from m_screenStates doesn't
+    // dereference a dangling QQuickItem*.
     it->passiveShellOsdSlot = nullptr;
     it->passiveShellSnapAssistSlot = nullptr;
     it->passiveShellLayoutPickerSlot = nullptr;
@@ -582,7 +573,6 @@ void OverlayService::destroyPassiveShell(const QString& screenId)
     it->labelsTextureHash = 0;
     it->zoneSelectorPhysScreen = nullptr;
     it->zoneSelectorGeometry = QRect();
-    it->shell.physScreen = nullptr;
 }
 
 void OverlayService::onOsdDismissRequested()

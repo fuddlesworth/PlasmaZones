@@ -24,6 +24,14 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
+class QScreen;
+
+namespace PhosphorLayer {
+class Surface;
+} // namespace PhosphorLayer
+
 namespace PhosphorOverlay {
 
 class PHOSPHOROVERLAY_EXPORT ShellHost : public QObject
@@ -31,8 +39,55 @@ class PHOSPHOROVERLAY_EXPORT ShellHost : public QObject
     Q_OBJECT
 
 public:
+    /// Consumer-provided factory for the per-screen layer-shell surface.
+    /// The library does not know which Role / qmlSource / SurfaceManager
+    /// the consumer wires through — the factory encapsulates all of
+    /// that, returns the resulting Surface*, or nullptr on failure.
+    using SurfaceFactory = std::function<PhosphorLayer::Surface*(const QString& screenId, QScreen* physScreen)>;
+
+    /// Hook fired after a fresh shell surface + window are recorded in
+    /// the ShellState. Consumers use this to look up content slot Items
+    /// by QML object name, wire up QML signal handlers, prime the
+    /// rendering pipeline, and run any per-shell warm-up. Receives a
+    /// mutable reference to the ShellState the library just populated.
+    using PostCreateCallback = std::function<void(const QString& screenId, ShellState& state)>;
+
+    /// Hook fired before the library deletes the shell surface. Consumers
+    /// use this to drop their parallel per-screen state (e.g. content-mode
+    /// sentinels, content geometry caches, signal-disconnection bookkeeping)
+    /// so a stale signal handler firing during teardown doesn't dereference
+    /// a dangling pointer.
+    using PreDestroyCallback = std::function<void(const QString& screenId)>;
+
     explicit ShellHost(QObject* parent = nullptr);
     ~ShellHost() override;
+
+    /// Inject the per-screen surface factory. Required before any
+    /// @ref ensureShell call; the library has no built-in surface
+    /// creation pipeline.
+    void setSurfaceFactory(SurfaceFactory factory);
+
+    /// Inject the post-create hook (optional but typically used).
+    void setPostCreateCallback(PostCreateCallback callback);
+
+    /// Inject the pre-destroy hook (optional).
+    void setPreDestroyCallback(PreDestroyCallback callback);
+
+    /// Idempotent: bring up (or return) the per-screen shell for
+    /// @p screenId on @p physScreen. Returns a pointer to the ShellState
+    /// on success. Returns nullptr if no shell exists AND the factory
+    /// failed to create one (sticky-failure flag set automatically).
+    /// If a previous create attempt failed and the failure flag is still
+    /// set, returns the existing state (possibly with shellSurface=null)
+    /// or nullptr if no state was ever materialized.
+    ShellState* ensureShell(const QString& screenId, QScreen* physScreen);
+
+    /// Tear down the shell for @p screenId. Fires the pre-destroy
+    /// callback before scheduling shellSurface for deletion via
+    /// deleteLater. After return, the ShellState entry survives with
+    /// every shell-mechanism field nulled — callers that want the entry
+    /// removed entirely should follow up with @ref removeState.
+    void destroyShell(const QString& screenId);
 
     /// Read-write accessor. Returns the existing ShellState for
     /// @p screenId, default-constructing one in place if absent so
@@ -74,6 +129,9 @@ public:
 private:
     QHash<QString, ShellState> m_states;
     QSet<QString> m_creationFailed;
+    SurfaceFactory m_surfaceFactory;
+    PostCreateCallback m_postCreateCallback;
+    PreDestroyCallback m_preDestroyCallback;
 };
 
 } // namespace PhosphorOverlay
