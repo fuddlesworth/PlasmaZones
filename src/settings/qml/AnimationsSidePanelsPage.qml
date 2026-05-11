@@ -5,15 +5,18 @@ import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-// Panels animation page — the `panel.*` resolver subtree. Covers
-// in-app side surfaces that slide in from an edge (settings nav rail,
-// editor property panel). Slide is size/translate motion; fade is
-// opacity. Transient overlays (zone selector, layout picker, snap
-// assist) live under `popup.*` and have their own dedicated page.
+// Side panels animation page — the `panel.*` resolver subtree (the
+// resolver path keeps the historical name). Covers in-app side
+// surfaces that slide in from an edge (settings nav rail, editor
+// property panel). Slide is size/translate motion; fade is opacity.
+// Renamed from "Panels" to disambiguate from system panels (Plasma
+// taskbar, etc.) which we do not animate. Transient overlays (zone
+// selector, layout picker, snap assist) live under `popup.*` and
+// have their own dedicated Overlays page.
 SettingsFlickable {
     contentHeight: col.implicitHeight
     clip: true
-    Accessible.name: i18n("Panel animation events")
+    Accessible.name: i18n("Side panel animation events")
 
     ColumnLayout {
         id: col
@@ -24,7 +27,7 @@ SettingsFlickable {
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "panel"
-            eventLabel: i18n("All Panels")
+            eventLabel: i18n("All Side Panels")
             isParentNode: true
         }
 

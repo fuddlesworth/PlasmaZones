@@ -68,8 +68,8 @@ inline const PhosphorLayer::Role Osd = PhosphorLayer::Patterns::Hud.withScopePre
 /// (PassiveShell surface, slot QQuickItem). Per-content motion / shader
 /// configs are resolved via the role-override `beginShow`/`beginHide`
 /// overloads — the surface's own role is PassiveShell but the animation
-/// config role is the per-content role (Notification, ZoneSelector, …)
-/// so per-content profiles still drive each slot's transitions.
+/// config role is the per-content role (Osd, ZoneSelector, …) so
+/// per-content profiles still drive each slot's transitions.
 ///
 /// See `PassiveOverlayShell.qml` for the QML side and the unified-shell
 /// migration commits for the per-consumer rewrite.

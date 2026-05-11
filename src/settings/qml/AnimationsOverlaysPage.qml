@@ -5,17 +5,19 @@ import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-// Popups animation page — the `popup.*` resolver subtree. The "All
-// Popups" parent is a parent-node card whose override cascades to
-// `popup.zoneSelector.*`, `popup.layoutPicker.*` and
-// `popup.snapAssist.*` via ShaderProfileTree::resolve's walk-up
-// (`popup` is the closest common ancestor of all three popup surfaces).
-// In-app side panels (settings nav rail, editor property panel) live
-// under `panel.*` and have their own dedicated Panels page.
+// Overlays animation page — the `popup.*` resolver subtree (zone
+// selector, layout picker, snap assist; the resolver path keeps the
+// historical name). The "All Overlays" parent is a parent-node card
+// whose override cascades to `popup.zoneSelector.*`,
+// `popup.layoutPicker.*` and `popup.snapAssist.*` via
+// ShaderProfileTree::resolve's walk-up (`popup` is the closest common
+// ancestor of all three surfaces). In-app side panels (settings nav
+// rail, editor property panel) live under `panel.*` and have their
+// own dedicated Side Panels page.
 SettingsFlickable {
     contentHeight: col.implicitHeight
     clip: true
-    Accessible.name: i18n("Popup animation events")
+    Accessible.name: i18n("Overlay animation events")
 
     ColumnLayout {
         id: col
@@ -26,7 +28,7 @@ SettingsFlickable {
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "popup"
-            eventLabel: i18n("All Popups")
+            eventLabel: i18n("All Overlays")
             isParentNode: true
         }
 
