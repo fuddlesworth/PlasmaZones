@@ -41,6 +41,8 @@ QImage IconImageProvider::requestImage(const QString& id, QSize* size, const QSi
     }
     lookupId = QUrl::fromPercentEncoding(lookupId.toUtf8());
 
+    qCInfo(lcImageProvider) << "requestImage id=" << id << " lookup=" << lookupId << " requestedSize=" << requestedSize
+                            << " registry size=" << s_registry.size();
     auto it = s_registry.constFind(lookupId);
     if (it == s_registry.constEnd()) {
         // Surface the miss to logs so a future regression (wrong key

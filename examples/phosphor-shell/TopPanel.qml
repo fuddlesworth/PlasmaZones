@@ -302,7 +302,15 @@ PanelWindow {
                         width: 26
                         height: 26
                         radius: 6
-                        color: trayMouse.containsMouse ? "#45475a" : "transparent"
+                        // DIAG: half-opaque red so the delegate is
+                        // visible even when its Image child fails to
+                        // render. If we see red squares between the
+                        // clock and CPU readout, the Repeater is
+                        // producing delegates correctly and the issue
+                        // is downstream (Image element or layout
+                        // clipping). If we see no red, the Repeater
+                        // itself isn't instantiating visual delegates.
+                        color: trayMouse.containsMouse ? "#45475a" : "#80ff0000"
 
                         // Fallback glyph — first letter of title in a
                         // muted circle. Renders when iconUrl is empty
@@ -332,6 +340,8 @@ PanelWindow {
                         }
 
                         Image {
+                            id: trayIcon
+
                             anchors.centerIn: parent
                             visible: trayDelegate.iconUrl.length > 0
                             width: 18
@@ -345,6 +355,10 @@ PanelWindow {
                             // sourceSize keeps the on-screen size stable
                             // regardless of the icon's intrinsic res.
                             source: trayDelegate.iconUrl
+                            // DIAG: log every load transition so we can
+                            // see whether the Image is reaching Ready
+                            // state or stalling at Loading / Error.
+                            onStatusChanged: console.log("trayIcon status:", status, "source:", source, "sourceSize:", sourceSize, "implicit:", implicitWidth + "x" + implicitHeight, "paintedSize:", paintedWidth + "x" + paintedHeight)
                             sourceSize.width: 36
                             sourceSize.height: 36
                             smooth: true

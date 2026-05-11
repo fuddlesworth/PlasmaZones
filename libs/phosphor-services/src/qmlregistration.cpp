@@ -50,6 +50,7 @@ void registerQmlTypes()
 void installImageProvider(QQmlEngine* engine)
 {
     if (!engine) {
+        qWarning("PhosphorServices::installImageProvider called with null engine");
         return;
     }
     // QQmlEngine takes ownership of the provider — passing a raw new
@@ -57,6 +58,8 @@ void installImageProvider(QQmlEngine* engine)
     // would clash (Qt warns + drops the new one), but we only call
     // this once per engine construction.
     engine->addImageProvider(QStringLiteral("phosphor-services"), new IconImageProvider());
+    qInfo("PhosphorServices: image provider mounted at image://phosphor-services/ on engine %p",
+          static_cast<void*>(engine));
 }
 
 } // namespace PhosphorServices
