@@ -147,9 +147,12 @@ struct ContentDescriptor {
 } // namespace PhosphorOverlay
 ```
 
-`SlotKey` is a strong-typed `quint32` newtype (no enum, no string) so
-third-party plugins can mint their own keys without touching the
-library.
+(Sketch note: `SlotKey` was proposed as a strong-typed `quint32`
+newtype. As shipped, the lib uses plain `QString` keys — consumers
+define their own slot vocabulary via function-local-static accessors,
+e.g. PZ's `PzSlotKeys::Osd()` / `SnapAssist()` / etc. in
+`src/daemon/overlayservice/pz_slot_keys.h`. Third-party plugins mint
+their own keys the same way without touching the library.)
 
 ## Dependencies (declared public)
 
@@ -556,11 +559,12 @@ was the sketched target API; the third shows what actually shipped.
   `OverlayContract.qml` interface header that consumers' QML files
   conform to (`osdSlotItem`, `snapAssistSlotItem`, etc. as published
   object names).
-- **Animator config drift.** Today the daemon registers per-content
-  animator configs from `applyShaderProfilesToAnimator`. If the
-  registration moves to the library's `SlotRegistry`, the daemon must
-  re-fire registration on `shaderProfileTree` change. The library
-  should expose a `Slot::rebuildAnimatorConfig()` for this.
+- **Animator config drift.** Resolved as shipped: the daemon's
+  `applyShaderProfilesToAnimator` routes through
+  `ShellHost::registerConfigForRole` (Phase 4) and re-fires from the
+  `shaderProfileTreeChanged` signal handler in `settings.cpp`, so
+  registration stays current across live tree edits without a
+  separate library-side rebuild hook.
 - **OverlayService is the IOverlayService implementation.** The
   daemon's interface contract continues to point at `OverlayService`
   during the migration. No interface changes here; the daemon's
