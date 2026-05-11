@@ -15,11 +15,12 @@ namespace PhosphorServices {
 
 namespace {
 
-/// Per-item-per-variant base key (service|path[#variant]). The full
-/// provider id appends `?v=<cacheKey>` so the URL changes whenever
-/// the underlying QImage data changes, which forces QML's Image
-/// element to re-fetch via the provider (Qt only re-loads when the
-/// source URL string differs, regardless of `cache:` settings).
+/// Provider key for an item's icon variant. Plain path-form
+/// (service|path[#variant]) — NO query string. Qt's image-provider
+/// dispatch strips the URL's query component before calling
+/// requestImage(), so the provider only ever sees this path-form key.
+/// Earlier rev appended ?v=<cacheKey> to the publish key as well,
+/// which made every lookup miss (provider id != publish id).
 QString iconKeyBase(const StatusNotifierItem* item, const QString& variant)
 {
     QString k = item->dbusService() + QLatin1Char('|') + item->dbusPath();
@@ -30,8 +31,13 @@ QString iconKeyBase(const StatusNotifierItem* item, const QString& variant)
 }
 
 /// Snapshot the current QImage for the given variant, publish it to
-/// the image provider under a cacheKey-suffixed id, and return the
-/// URL the QML side should bind to.
+/// the image provider under the path-form key, and return a URL with
+/// a cacheKey-bearing query string. The query string is invisible to
+/// the provider (Qt strips it) but visible to QML's URL comparator,
+/// which is what gates whether `Image` re-fetches: same URL → reuse
+/// cached pixmap; different URL → call requestImage() again. So
+/// every icon-data change yields a new URL → new requestImage() call
+/// → fresh QImage from the registry.
 QString publishAndUrl(StatusNotifierItem* item, const QString& variant)
 {
     if (!item)
@@ -41,9 +47,9 @@ QString publishAndUrl(StatusNotifierItem* item, const QString& variant)
                                                            : item->iconImage();
     if (img.isNull())
         return {};
-    const QString id = iconKeyBase(item, variant) + QStringLiteral("?v=") + QString::number(img.cacheKey());
-    IconImageProvider::setImage(id, img);
-    return QStringLiteral("image://phosphor-services/") + id;
+    const QString key = iconKeyBase(item, variant);
+    IconImageProvider::setImage(key, img);
+    return QStringLiteral("image://phosphor-services/") + key + QStringLiteral("?v=") + QString::number(img.cacheKey());
 }
 
 } // namespace
