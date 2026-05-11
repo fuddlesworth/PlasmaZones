@@ -38,6 +38,24 @@ PopupWindow {
     /// delegates do). The popup mounts ONLY after the menu model
     /// reaches `valid` state — see the Connections block below.
     function openFor(delegate) {
+        console.log("openFor:", delegate.dbusService, delegate.menuPath, "currentPopupVisible=" + popupVisible);
+        // Force-unmap before each open so every click gets visible
+        // feedback. Two scenarios this handles:
+        //   1. Same icon right-clicked twice with the popup still
+        //      technically mapped between (e.g., user clicked the
+        //      icon WITHOUT first dismissing) — setting popupVisible
+        //      to true when it's already true is a no-op, so the
+        //      user sees nothing happen. False-then-true forces a
+        //      remap.
+        //   2. Compositor silently dismissed the popup on some
+        //      configurations without firing popup_done back to
+        //      Qt, leaving Qt's `popupVisible` stuck at true while
+        //      the surface is actually unmapped. Same fix: explicit
+        //      false first, then the Connections.onLoaded sets it
+        //      true to trigger a fresh mapping.
+        if (popupVisible)
+            popupVisible = false;
+
         anchor = delegate;
         rootId = 0;
         const sameSource = menuModel.service === delegate.dbusService && menuModel.path === delegate.menuPath;
