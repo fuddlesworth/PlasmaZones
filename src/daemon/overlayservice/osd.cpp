@@ -168,12 +168,16 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
         return;
     }
 
+    // Pass the actual screen geometry as reference so fixed-mode zones
+    // normalize against the correct screen dimensions rather than
+    // lastRecalcGeometry (which may belong to a different screen).
     LayoutOsdContentParams p;
     p.id = layout->id().toString();
     p.name = layout->name();
     p.zones = layout->zones().isEmpty()
         ? QVariantList()
-        : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full);
+        : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full,
+                                                          QRectF(screenGeom));
     p.category = static_cast<int>(PhosphorZones::LayoutCategory::Manual);
     p.autoAssign = layout->autoAssign();
     p.globalAutoAssign = m_settings && m_settings->autoAssignAllLayouts();
@@ -878,10 +882,13 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
     writeQmlProperty(osdSlot, QStringLiteral("highlightedZoneIds"), highlightedZoneIds);
 
-    // Use shared PhosphorZones::LayoutUtils with minimal fields for zone number lookup
-    // (only need zoneId and zoneNumber, not name/appearance)
+    // Use shared PhosphorZones::LayoutUtils with minimal fields for zone number lookup.
+    // Pass navScreenGeom as reference so fixed-mode zones normalize against the
+    // correct screen dimensions rather than lastRecalcGeometry (which may belong
+    // to a different screen).
     QVariantList zonesList =
-        PhosphorZones::LayoutUtils::zonesToVariantList(screenLayout, PhosphorZones::ZoneField::Minimal);
+        PhosphorZones::LayoutUtils::zonesToVariantList(screenLayout, PhosphorZones::ZoneField::Minimal,
+                                                        QRectF(navScreenGeom));
     writeQmlProperty(osdSlot, QStringLiteral("zones"), zonesList);
 
     // shaderBoundsPadding before mode — the Loader instantiates

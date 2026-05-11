@@ -34,9 +34,56 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout, c
     // pass one (the historical single-screen path). The canvas parameter
     // lets two callers on different screens share a Layout* without one
     // poisoning the other's projection via the shared last-recalc cache.
-    const QRectF refGeo = !canvas.isEmpty()
-        ? QRectF(0, 0, canvas.width(), canvas.height())
-        : (layout->hasFixedGeometryZones() ? layout->lastRecalcGeometry() : QRectF());
+    //
+    // For fixed-geometry layouts, if lastRecalcGeometry is smaller than the
+    // actual bounding box of the fixed zones (e.g. when the layout was
+    // authored for a 4K monitor with 2160px height but the screen's
+    // availableGeometry is 2126px due to a panel), compute the bounding box
+    // directly from the zone fixed geometries to avoid normalized coords > 1.
+    QRectF refGeo;
+    if (!canvas.isEmpty()) {
+        refGeo = QRectF(0, 0, canvas.width(), canvas.height());
+        qInfo() << "previewFromLayout: using canvas refGeo:" << refGeo << "for layout:" << layout->name();
+    } else if (layout->hasFixedGeometryZones()) {
+        refGeo = layout->lastRecalcGeometry();
+        if (refGeo.isEmpty() || refGeo.height() <= 0) {
+            // No recalc geometry — compute from zones.
+            qreal maxX = 0, maxY = 0;
+            for (auto* z : layout->zones()) {
+                if (!z || z->geometryMode() != PhosphorZones::ZoneGeometryMode::Fixed)
+                    continue;
+                const auto& fg = z->fixedGeometry();
+                if (fg.x() + fg.width() > maxX) maxX = fg.x() + fg.width();
+                if (fg.y() + fg.height() > maxY) maxY = fg.y() + fg.height();
+            }
+            if (maxX > 0 && maxY > 0)
+                refGeo = QRectF(0, 0, maxX, maxY);
+        } else {
+            // Check if recalc geometry is smaller than the zone bounding box.
+            qreal maxX = 0, maxY = 0;
+            for (auto* z : layout->zones()) {
+                if (!z || z->geometryMode() != PhosphorZones::ZoneGeometryMode::Fixed)
+                    continue;
+                const auto& fg = z->fixedGeometry();
+                if (fg.x() + fg.width() > maxX) maxX = fg.x() + fg.width();
+                if (fg.y() + fg.height() > maxY) maxY = fg.y() + fg.height();
+            }
+            if (maxX > refGeo.width() || maxY > refGeo.height()) {
+                // The fixed zones exceed the recalc geometry — use the zone
+                // bounding box directly rather than mixing dimensions from
+                // potentially different screen orientations (e.g. a portrait
+                // screen's 3840px height mixed with a landscape layout's
+                // 2160px maxY would produce a 3840x3840 square instead of
+                // the correct 3840x2160 rectangle).
+                refGeo = QRectF(0, 0, maxX, maxY);
+                qInfo() << "previewFromLayout: replaced recalcGeo" << layout->lastRecalcGeometry()
+                                      << "with zone bounding box:" << refGeo << "for layout:" << layout->name();
+            } else {
+                qInfo() << "previewFromLayout: using recalcGeo:" << refGeo
+                                     << "for layout:" << layout->name() << "hasFixed:" << layout->hasFixedGeometryZones();
+            }
+        }
+    }
 
     if (layout->hasFixedGeometryZones() && refGeo.height() > 0) {
         preview.referenceAspectRatio = refGeo.width() / refGeo.height();
