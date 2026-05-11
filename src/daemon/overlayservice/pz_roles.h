@@ -20,12 +20,13 @@ namespace PlasmaZones {
 /// UI-pattern layer).
 namespace PzRoles {
 
-/// Main zone overlay: fullscreen Overlay layer, click-through, no
-/// exclusive zone (stays on top of panels). The overlay uses
-/// AnchorAll for physical screens; virtual-screen surfaces override
-/// to AnchorTop|AnchorLeft + margins via SurfaceConfig overrides.
-inline const PhosphorLayer::Role Overlay =
-    PhosphorLayer::Patterns::Hud.withScopePrefix(QStringLiteral("plasmazones-overlay"));
+/// Zone overlay: the full-screen layer that paints zone rectangles and
+/// hosts the snap-assist/zone-selector slots. Hud pattern (Overlay layer,
+/// click-through, no exclusive zone). AnchorAll for physical screens;
+/// virtual-screen surfaces override to AnchorTop|AnchorLeft + margins
+/// via SurfaceConfig overrides.
+inline const PhosphorLayer::Role ZoneOverlay =
+    PhosphorLayer::Patterns::Hud.withScopePrefix(QStringLiteral("plasmazones-zone-overlay"));
 
 /// PhosphorZones::Zone selector: Top layer so pointer events route to it ahead of the
 /// main overlay.
@@ -44,14 +45,16 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
                                                                     QMargins(),
                                                                     QStringLiteral("plasmazones-zone-selector")};
 
-/// OSD config-only role. The wl_surface lifetime moved to the unified
-/// PassiveShell post-shell-migration; this role is preserved purely for
-/// SurfaceAnimator config-lookup (registerConfigForRole keys on the
-/// scope prefix, and the role-override beginShow/beginHide overloads
-/// resolve per-content motion + shader profiles via this role's prefix
-/// even though the shell's actual surface uses PassiveShell).
-inline const PhosphorLayer::Role Notification =
-    PhosphorLayer::Patterns::Hud.withScopePrefix(QStringLiteral("plasmazones-notification"));
+/// OSD config-only role. Used by both LayoutOsd (which layout is active)
+/// and NavigationOsd (focus-change indicators); a single animator config
+/// drives both since they share the same fade/scale motion. The
+/// wl_surface lifetime moved to the unified PassiveShell post-shell-
+/// migration; this role is preserved purely for SurfaceAnimator config-
+/// lookup (registerConfigForRole keys on the scope prefix, and the
+/// role-override beginShow/beginHide overloads resolve per-content
+/// motion + shader profiles via this role's prefix even though the
+/// shell's actual surface uses PassiveShell).
+inline const PhosphorLayer::Role Osd = PhosphorLayer::Patterns::Hud.withScopePrefix(QStringLiteral("plasmazones-osd"));
 
 /// Passive overlay shell — single per-screen wlr-layer-shell host that
 /// groups every kbd-None overlay (OSD, zone-selector, main zone overlay,
@@ -118,7 +121,7 @@ inline const PhosphorLayer::Role ShaderPreview =
 /// Either case made the longest-prefix match silently miss and the
 /// surface fell back to the library's empty default config.
 ///
-/// @param base       Named base role (e.g. PzRoles::Notification).
+/// @param base       Named base role (e.g. PzRoles::Osd).
 /// @param screenId   Effective screen id (physical or virtual).
 /// @param generation Monotonic per-process counter, e.g. from
 ///                   `SurfaceManager::nextScopeGeneration()`.

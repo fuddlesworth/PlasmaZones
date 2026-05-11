@@ -205,7 +205,7 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
         surface->show();
     }
     osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Notification, []() { });
+    m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Osd, []() { });
     // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
     // OSD slots don't grab input (they auto-dismiss; keeping the input
     // region active for the OSD's lifetime would block clicks on every
@@ -300,7 +300,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
         surface->show();
     }
     osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Notification, []() { });
+    m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Osd, []() { });
     // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
     // OSD slots don't grab input (they auto-dismiss; keeping the input
     // region active for the OSD's lifetime would block clicks on every
@@ -397,7 +397,7 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
         surface->show();
     }
     osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Notification, []() { });
+    m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Osd, []() { });
     // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
     // OSD slots don't grab input (they auto-dismiss; keeping the input
     // region active for the OSD's lifetime would block clicks on every
@@ -557,8 +557,8 @@ void OverlayService::warmUpNotifications()
         }
     }
     m_notificationsWarmed = true;
-    qCInfo(lcOverlay) << "Pre-warmed NotificationOverlay windows for" << createdCount << "of"
-                      << effectiveIds.size() << "effective screens";
+    qCInfo(lcOverlay) << "Pre-warmed NotificationOverlay windows for" << createdCount << "of" << effectiveIds.size()
+                      << "effective screens";
     ensureOsdScreenAddedConnected();
 }
 
@@ -623,10 +623,9 @@ void OverlayService::onOsdDismissRequested()
         return;
     }
     auto* slot = state->passiveShellOsdSlot;
-    m_surfaceAnimator->beginHide(state->passiveShellSurface, slot, PzRoles::Notification,
-                                 [this, effectiveId = matchedId]() {
-                                     onOsdSlotHideCompleted(effectiveId);
-                                 });
+    m_surfaceAnimator->beginHide(state->passiveShellSurface, slot, PzRoles::Osd, [this, effectiveId = matchedId]() {
+        onOsdSlotHideCompleted(effectiveId);
+    });
 }
 
 void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
@@ -840,7 +839,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // Reuse the per-screen passive shell (create only if not in map).
     // The shell stays mapped for the daemon's lifetime; per-show the
     // SurfaceAnimator's beginShow on (shellSurface, osdSlot,
-    // PzRoles::Notification) replays the fade-in, and
+    // PzRoles::Osd) replays the fade-in, and
     // restartDismissTimer extends the auto-hide. Cleanup happens only
     // on screen removal / shutdown via the shell's surface destroy
     // path; the dismiss path is QML → osdDismissRequested → animator
@@ -932,7 +931,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         navSurface->show();
     }
     osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(navSurface, osdSlot, PzRoles::Notification, []() { });
+    m_surfaceAnimator->beginShow(navSurface, osdSlot, PzRoles::Osd, []() { });
     // OSDs don't grab input — see the matching syncPassiveShellSurfaceStateForSurface
     // call in showLayoutOsdImpl for the rationale.
     syncPassiveShellSurfaceStateForSurface(navSurface);

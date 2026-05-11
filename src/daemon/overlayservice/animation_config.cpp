@@ -269,11 +269,10 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // next show) automatically applies to the C++ side too.
     //
     // Phase-2 surface unification: a single per-screen
-    // PzRoles::Notification surface (NotificationOverlay.qml) hosts both
+    // PzRoles::Osd surface (NotificationOverlay.qml) hosts both
     // layout-OSD and navigation-OSD content via a Loader. Production
-    // surfaces are scoped `plasmazones-notification-{screenId}-{gen}`
-    // and resolve to this config via the animator's longest-prefix
-    // lookup.
+    // surfaces are scoped `plasmazones-osd-{screenId}-{gen}` and
+    // resolve to this config via the animator's longest-prefix lookup.
     //
     // Initial registration runs with an empty tree — m_settings is wired
     // later via setSettings(). A default-constructed tree resolves every
@@ -311,7 +310,7 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
                                      << " snapAssist.show=" << resolveShaderEffect(tree, PP::PopupSnapAssistShow)
                                      << " snapAssist.hide=" << resolveShaderEffect(tree, PP::PopupSnapAssistHide);
     }
-    m_surfaceAnimator->registerConfigForRole(PzRoles::Notification, buildOsdConfig(tree));
+    m_surfaceAnimator->registerConfigForRole(PzRoles::Osd, buildOsdConfig(tree));
     m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig(tree));
     m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig(tree));
     m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, buildSnapAssistConfig(tree));
