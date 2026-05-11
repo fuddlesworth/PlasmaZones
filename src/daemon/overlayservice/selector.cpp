@@ -55,15 +55,15 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
 
     auto showOnScreen = [this](const QString& screenId, QScreen* physScreen, const QRect& targetGeom) {
         auto* state = ensurePassiveShellFor(screenId, physScreen);
-        if (!state || !state->shell.shellSurface || !state->passiveShellZoneSelectorSlot) {
+        if (!state || !state->shell->shellSurface || !state->passiveShellZoneSelectorSlot) {
             return;
         }
         state->zoneSelectorPhysScreen = physScreen;
         state->zoneSelectorGeometry = targetGeom;
-        if (state->shell.shellWindow) {
-            assertWindowOnScreen(state->shell.shellWindow, physScreen, targetGeom);
-            state->shell.shellWindow->setWidth(targetGeom.width());
-            state->shell.shellWindow->setHeight(targetGeom.height());
+        if (state->shell->shellWindow) {
+            assertWindowOnScreen(state->shell->shellWindow, physScreen, targetGeom);
+            state->shell->shellWindow->setWidth(targetGeom.width());
+            state->shell->shellWindow->setHeight(targetGeom.height());
         }
         updateZoneSelectorWindow(screenId);
         auto* slot = state->passiveShellZoneSelectorSlot;
@@ -71,17 +71,17 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         // Loader re-instantiates ZoneSelectorContent fresh per show.
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
         writeQmlProperty(slot, QStringLiteral("loaded"), true);
-        cancelSurfacePrime(state->shell.shellSurface);
-        if (!state->shell.shellSurface->isLogicallyShown()) {
-            state->shell.shellSurface->show();
+        cancelSurfacePrime(state->shell->shellSurface);
+        if (!state->shell->shellSurface->isLogicallyShown()) {
+            state->shell->shellSurface->show();
         }
         slot->setVisible(true);
-        m_surfaceAnimator->beginShow(state->shell.shellSurface, slot, PzRoles::ZoneSelector, []() { });
+        m_surfaceAnimator->beginShow(state->shell->shellSurface, slot, PzRoles::ZoneSelector, []() { });
         // Zone selector is purely visual during a drag (KWin owns the
         // drag stream and pushes cursor coords via D-Bus
         // updateSelectorPosition). Sync the input region so a stale
         // shell grab from a prior modal-up state can't bleed across.
-        syncPassiveShellSurfaceStateForSurface(state->shell.shellSurface);
+        syncPassiveShellSurfaceStateForSurface(state->shell->shellSurface);
     };
 
     if (mgr && !effectiveIds.isEmpty()) {
@@ -149,7 +149,7 @@ void OverlayService::hideZoneSelector()
         }
         QMetaObject::invokeMethod(slot, "resetCursorState");
         const QString screenId = it.key();
-        m_surfaceAnimator->beginHide(it->shell.shellSurface, slot, PzRoles::ZoneSelector, [this, screenId]() {
+        m_surfaceAnimator->beginHide(it->shell->shellSurface, slot, PzRoles::ZoneSelector, [this, screenId]() {
             onZoneSelectorSlotHideCompleted(screenId);
         });
     }
@@ -190,7 +190,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     }
 
     if (auto* slot = m_screenStates.value(cursorScreenId).passiveShellZoneSelectorSlot) {
-        auto* window = m_screenStates.value(cursorScreenId).shell.shellWindow;
+        auto* window = m_screenStates.value(cursorScreenId).shell->shellWindow;
         // Convert global cursor position to window-local coordinates.
         int localX, localY;
         const QRect& storedGeom = m_screenStates.value(cursorScreenId).zoneSelectorGeometry;
@@ -527,7 +527,7 @@ void OverlayService::hideZoneSelectorSlotOnScreen(const QString& effectiveId)
         return;
     }
     QMetaObject::invokeMethod(slot, "resetCursorState");
-    m_surfaceAnimator->beginHide(it->shell.shellSurface, slot, PzRoles::ZoneSelector, [this, effectiveId]() {
+    m_surfaceAnimator->beginHide(it->shell->shellSurface, slot, PzRoles::ZoneSelector, [this, effectiveId]() {
         onZoneSelectorSlotHideCompleted(effectiveId);
     });
 }
@@ -553,26 +553,26 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
         }
     }
     auto* state = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!state || !state->shell.shellSurface || !state->passiveShellZoneSelectorSlot) {
+    if (!state || !state->shell->shellSurface || !state->passiveShellZoneSelectorSlot) {
         return;
     }
     auto* slot = state->passiveShellZoneSelectorSlot;
     state->zoneSelectorPhysScreen = physScreen;
     state->zoneSelectorGeometry = targetGeom;
-    if (state->shell.shellWindow) {
-        assertWindowOnScreen(state->shell.shellWindow, physScreen, targetGeom);
-        state->shell.shellWindow->setWidth(targetGeom.width());
-        state->shell.shellWindow->setHeight(targetGeom.height());
+    if (state->shell->shellWindow) {
+        assertWindowOnScreen(state->shell->shellWindow, physScreen, targetGeom);
+        state->shell->shellWindow->setWidth(targetGeom.width());
+        state->shell->shellWindow->setHeight(targetGeom.height());
     }
     updateZoneSelectorWindow(effectiveId);
     writeQmlProperty(slot, QStringLiteral("loaded"), false);
     writeQmlProperty(slot, QStringLiteral("loaded"), true);
-    cancelSurfacePrime(state->shell.shellSurface);
-    if (!state->shell.shellSurface->isLogicallyShown()) {
-        state->shell.shellSurface->show();
+    cancelSurfacePrime(state->shell->shellSurface);
+    if (!state->shell->shellSurface->isLogicallyShown()) {
+        state->shell->shellSurface->show();
     }
     slot->setVisible(true);
-    m_surfaceAnimator->beginShow(state->shell.shellSurface, slot, PzRoles::ZoneSelector, []() { });
+    m_surfaceAnimator->beginShow(state->shell->shellSurface, slot, PzRoles::ZoneSelector, []() { });
     syncPassiveShellSurfaceState(effectiveId);
 }
 
@@ -678,12 +678,12 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     // The zoneSelected signal is forwarded by the shell window, so
     // sender() is the shell QQuickWindow. The shell hosts every
     // kbd-None overlay slot for one screen; matching to its
-    // shell.shellWindow yields the screen id.
+    // shell->shellWindow yields the screen id.
     QString screenId;
     auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
     if (senderWindow) {
         for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-            if (it.value().shell.shellWindow == senderWindow) {
+            if (it.value().shell->shellWindow == senderWindow) {
                 screenId = it.key();
                 break;
             }

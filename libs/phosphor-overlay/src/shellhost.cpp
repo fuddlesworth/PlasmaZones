@@ -14,7 +14,10 @@ ShellHost::ShellHost(QObject* parent)
 {
 }
 
-ShellHost::~ShellHost() = default;
+ShellHost::~ShellHost()
+{
+    qDeleteAll(m_states);
+}
 
 void ShellHost::setSurfaceFactory(SurfaceFactory factory)
 {
@@ -31,11 +34,24 @@ void ShellHost::setPreDestroyCallback(PreDestroyCallback callback)
     m_preDestroyCallback = std::move(callback);
 }
 
+namespace {
+
+ShellState* ensureEntry(QHash<QString, ShellState*>& states, const QString& screenId)
+{
+    auto it = states.find(screenId);
+    if (it == states.end()) {
+        it = states.insert(screenId, new ShellState());
+    }
+    return it.value();
+}
+
+} // namespace
+
 ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
 {
     auto it = m_states.find(screenId);
-    if (it != m_states.end() && it->shellSurface) {
-        return &it.value();
+    if (it != m_states.end() && it.value()->shellSurface) {
+        return it.value();
     }
 
     // Sticky-failure short-circuit: matches legacy
@@ -45,7 +61,7 @@ ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
     // state when present so callers that previously held a pointer
     // don't see it disappear.
     if (m_creationFailed.contains(screenId)) {
-        return (it == m_states.end()) ? nullptr : &it.value();
+        return (it == m_states.end()) ? nullptr : it.value();
     }
 
     if (!m_surfaceFactory) {
@@ -58,16 +74,16 @@ ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
         return nullptr;
     }
 
-    auto& state = m_states[screenId];
-    state.shellSurface = surface;
-    state.shellWindow = surface->window();
-    state.physScreen = physScreen;
+    auto* state = ensureEntry(m_states, screenId);
+    state->shellSurface = surface;
+    state->shellWindow = surface->window();
+    state->physScreen = physScreen;
 
     if (m_postCreateCallback) {
-        m_postCreateCallback(screenId, state);
+        m_postCreateCallback(screenId, *state);
     }
 
-    return &state;
+    return state;
 }
 
 void ShellHost::destroyShell(const QString& screenId)
@@ -81,22 +97,23 @@ void ShellHost::destroyShell(const QString& screenId)
         m_preDestroyCallback(screenId);
     }
 
-    if (it->shellSurface) {
-        it->shellSurface->deleteLater();
+    auto* state = it.value();
+    if (state->shellSurface) {
+        state->shellSurface->deleteLater();
     }
-    it->shellSurface = nullptr;
-    it->shellWindow = nullptr;
-    it->physScreen = nullptr;
-    it->slots.clear();
+    state->shellSurface = nullptr;
+    state->shellWindow = nullptr;
+    state->physScreen = nullptr;
+    state->slots.clear();
 }
 
 void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing)
 {
     auto it = m_states.find(screenId);
-    if (it == m_states.end() || !it->shellSurface || !it->shellWindow) {
+    if (it == m_states.end() || !it.value()->shellSurface || !it.value()->shellWindow) {
         return;
     }
-    auto& s = *it;
+    auto& s = *it.value();
 
     // Bring the surface up on the first transition from never-shown →
     // any-slot-visible. The first show() call goes through the Surface
@@ -125,13 +142,13 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
 
 ShellState& ShellHost::stateFor(const QString& screenId)
 {
-    return m_states[screenId];
+    return *ensureEntry(m_states, screenId);
 }
 
 const ShellState* ShellHost::stateFor(const QString& screenId) const
 {
     auto it = m_states.constFind(screenId);
-    return it == m_states.cend() ? nullptr : &it.value();
+    return it == m_states.cend() ? nullptr : it.value();
 }
 
 bool ShellHost::hasState(const QString& screenId) const
@@ -141,7 +158,12 @@ bool ShellHost::hasState(const QString& screenId) const
 
 void ShellHost::removeState(const QString& screenId)
 {
-    m_states.remove(screenId);
+    auto it = m_states.find(screenId);
+    if (it == m_states.end()) {
+        return;
+    }
+    delete it.value();
+    m_states.erase(it);
 }
 
 QStringList ShellHost::screenIds() const

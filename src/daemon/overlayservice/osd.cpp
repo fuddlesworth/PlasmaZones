@@ -107,7 +107,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
     auto* state = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!state || !state->shell.shellWindow || !state->passiveShellOsdSlot) {
+    if (!state || !state->shell->shellWindow || !state->passiveShellOsdSlot) {
         qCWarning(lcOverlay) << "Failed to get passive shell for layout OSD on screen=" << effectiveId;
         return false;
     }
@@ -118,8 +118,8 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     // OSD that follows.
     hideZoneSelectorSlotOnScreen(effectiveId);
 
-    window = state->shell.shellWindow;
-    outSurface = state->shell.shellSurface;
+    window = state->shell->shellWindow;
+    outSurface = state->shell->shellSurface;
     outOsdSlot = state->passiveShellOsdSlot;
 
     // Mode is NOT written here — callers write data properties first, then
@@ -451,14 +451,18 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     // Library-side lifecycle delegated to ShellHost. The SurfaceFactory /
     // PostCreate callbacks registered in the OverlayService ctor handle
     // the PZ-specific surface creation (role + qmlSource + warmed-surface
-    // pipeline) and slot wiring; this shim just maps the lib-side return
-    // back onto the daemon's PerScreenOverlayState entry.
+    // pipeline) and slot wiring; this shim caches the lib's stable
+    // ShellState pointer on the daemon's PerScreenOverlayState so every
+    // downstream consumer of `state->shell` reaches the lib's single
+    // source of truth.
     auto* shellState = m_shellHost->ensureShell(effectiveId, physScreen);
     if (!shellState) {
         auto it = m_screenStates.find(effectiveId);
         return (it == m_screenStates.end()) ? nullptr : &it.value();
     }
-    return &m_screenStates[effectiveId];
+    auto& pzState = m_screenStates[effectiveId];
+    pzState.shell = shellState;
+    return &pzState;
 }
 
 void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState)
@@ -526,7 +530,7 @@ void OverlayService::warmUpNotifications()
             m_screenManager ? m_screenManager->physicalQScreenFor(sid) : Utils::findScreenAtPosition(QPoint(0, 0));
         if (physScreen) {
             auto* state = ensurePassiveShellFor(sid, physScreen);
-            if (state && state->shell.shellSurface) {
+            if (state && state->shell->shellSurface) {
                 ++createdCount;
             }
         }
@@ -591,17 +595,17 @@ void OverlayService::onOsdDismissRequested()
     QString matchedId;
     PerScreenOverlayState* state = nullptr;
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        if (it->shell.shellWindow == senderWindow) {
+        if (it->shell->shellWindow == senderWindow) {
             matchedId = it.key();
             state = &it.value();
             break;
         }
     }
-    if (!state || !state->shell.shellSurface || !state->passiveShellOsdSlot) {
+    if (!state || !state->shell->shellSurface || !state->passiveShellOsdSlot) {
         return;
     }
     auto* slot = state->passiveShellOsdSlot;
-    m_surfaceAnimator->beginHide(state->shell.shellSurface, slot, PzRoles::Osd, [this, effectiveId = matchedId]() {
+    m_surfaceAnimator->beginHide(state->shell->shellSurface, slot, PzRoles::Osd, [this, effectiveId = matchedId]() {
         onOsdSlotHideCompleted(effectiveId);
     });
 }
@@ -694,7 +698,7 @@ void OverlayService::syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surfa
         return;
     }
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (it.value().shell.shellSurface == surface) {
+        if (it.value().shell->shellSurface == surface) {
             syncPassiveShellSurfaceState(it.key());
             return;
         }
@@ -774,15 +778,15 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // path; the dismiss path is QML → osdDismissRequested → animator
     // beginHide.
     auto* navState = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!navState || !navState->shell.shellWindow || !navState->passiveShellOsdSlot) {
+    if (!navState || !navState->shell->shellWindow || !navState->passiveShellOsdSlot) {
         qCDebug(lcOverlay) << "No passive shell for navigation OSD on screen=" << effectiveId;
         return;
     }
 
     hideZoneSelectorSlotOnScreen(effectiveId);
 
-    auto* window = navState->shell.shellWindow;
-    auto* navSurface = navState->shell.shellSurface;
+    auto* window = navState->shell->shellWindow;
+    auto* navSurface = navState->shell->shellSurface;
     auto* osdSlot = navState->passiveShellOsdSlot;
 
     // Process reason field - for rotation/resnap, extract window count

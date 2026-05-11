@@ -148,7 +148,19 @@ public:
     QStringList failureScreenIds() const;
 
 private:
-    QHash<QString, ShellState> m_states;
+    /// State entries are heap-allocated raw owning pointers so the
+    /// @c ShellState* values returned by @ref stateFor / @ref ensureShell
+    /// stay valid across QHash rehashes (QHash holds @c ShellState* by
+    /// value, but the pointed-to objects are stable). Consumers cache
+    /// these pointers on parallel per-screen state and need them stable.
+    /// The host's destructor and @ref removeState delete the pointed-to
+    /// objects.
+    ///
+    /// @c std::unique_ptr cannot live in @c QHash (Qt 6's hash requires
+    /// copy-constructible values), and @c std::shared_ptr would add
+    /// reference-counting overhead the lib does not need — there is one
+    /// owner (the host) and any number of borrowed observers.
+    QHash<QString, ShellState*> m_states;
     QSet<QString> m_creationFailed;
     SurfaceFactory m_surfaceFactory;
     PostCreateCallback m_postCreateCallback;

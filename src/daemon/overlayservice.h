@@ -101,17 +101,23 @@ public:
      */
     struct PerScreenOverlayState
     {
-        // Library-side shell-host state: the passive overlay shell's
-        // wl_surface, its QQuickWindow, the physical QScreen the shell
-        // was constructed against, and the (currently-empty until Phase
-        // 3 slot-abstraction lands) slot-Item map. Owned by-value here
-        // so per-screen lookup stays single-hash; PhosphorOverlay::ShellHost
-        // provides the lifecycle methods that operate on this field.
+        // Library-owned shell-host state: borrowed pointer into the
+        // PhosphorOverlay::ShellHost-owned map. Set by the
+        // @c ensurePassiveShellFor shim after @c ShellHost::ensureShell
+        // materializes a lib-side entry; the pointer is stable across
+        // map operations because ShellHost stores entries through
+        // @c std::unique_ptr. nullptr until the first ensure call wires
+        // it up.
+        //
+        // The pointee is the single source of truth for shell mechanism
+        // fields (shellSurface / shellWindow / physScreen / slots);
+        // writes route through @c ShellHost::ensureShell /
+        // @c ShellHost::destroyShell.
         //
         // Per-content "is this slot wired up?" sentinels (overlayPhysScreen
         // / zoneSelectorPhysScreen / ...) live below — they're PZ-content
         // state, not lib-mechanism state.
-        PhosphorOverlay::ShellState shell;
+        PhosphorOverlay::ShellState* shell = nullptr;
         QQuickItem* passiveShellOsdSlot = nullptr;
         QQuickItem* passiveShellSnapAssistSlot = nullptr;
         QQuickItem* passiveShellLayoutPickerSlot = nullptr;
@@ -585,7 +591,7 @@ private:
     QRectF m_selectedZoneRelGeo;
 
     // Layout-OSD and Navigation-OSD content share a single per-screen
-    // PerScreenOverlayState::shell.shellWindow plus per-slot QQuickItems
+    // PerScreenOverlayState::shell->shellWindow plus per-slot QQuickItems
     // (PassiveOverlayShell.qml) post-Phase-2 unification. No separate
     // per-mode window pointers.
 
