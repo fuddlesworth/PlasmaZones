@@ -112,6 +112,8 @@ target_link_libraries(PhosphorOverlay
 set_target_properties(PhosphorOverlay PROPERTIES
     VERSION ${PHOSPHOROVERLAY_VERSION}
     SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -134,8 +136,9 @@ install(TARGETS PhosphorOverlay
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
 )
 
-install(FILES ${phosphoroverlay_public_HDRS}
+install(DIRECTORY include/PhosphorOverlay/
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorOverlay
+    FILES_MATCHING PATTERN "*.h"
 )
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorOverlay/phosphoroverlay_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorOverlay

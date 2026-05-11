@@ -36,14 +36,10 @@ ShellHost::~ShellHost()
     // to drop their borrowed pointers. Iterate keys via destroyShell
     // first; then qDeleteAll wipes the now-zeroed heap objects.
     //
-    // Idempotency: destroyShell early-returns only when the map entry
-    // is missing. Entries left behind by a prior consumer-side drain
-    // still exist with shellSurface == nullptr, so the dtor's loop
-    // re-enters destroyShell's body and re-fires the PreDestroyCallback.
-    // The deleteLater path is gated on shellSurface non-null so no
-    // double-delete occurs; consumers must tolerate the PreDestroyCallback
-    // re-firing (in practice this is fine — daemon-side parallel state
-    // is already cleared by the prior drain, so the second pass no-ops).
+    // destroyShell gates PreDestroyCallback on `shellSurface != nullptr`,
+    // so entries previously drained by the consumer (shellSurface already
+    // null) skip the callback in this pass — no re-entry into consumer
+    // state that may already be partially destroyed.
     const QStringList keys = m_states.keys();
     for (const QString& key : keys) {
         destroyShell(key);
@@ -88,7 +84,7 @@ ShellState* ensureEntry(QHash<QString, ShellState*>& states, const QString& scre
 ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
 {
     auto it = m_states.find(screenId);
-    if (it != m_states.end() && it.value()->shellSurface) {
+    if (it != m_states.end() && it.value()->m_shellSurface) {
         return it.value();
     }
 
@@ -113,9 +109,9 @@ ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
     }
 
     auto* state = ensureEntry(m_states, screenId);
-    state->shellSurface = surface;
-    state->shellWindow = surface->window();
-    state->physScreen = physScreen;
+    state->m_shellSurface = surface;
+    state->m_shellWindow = surface->window();
+    state->m_physScreen = physScreen;
 
     if (m_postCreateCallback) {
         m_postCreateCallback(screenId, *state);
@@ -131,24 +127,28 @@ void ShellHost::destroyShell(const QString& screenId)
         return;
     }
 
-    if (m_preDestroyCallback) {
+    auto* state = it.value();
+    // Gate the PreDestroyCallback on shellSurface non-null: re-calls on
+    // already-drained entries (e.g. ~ShellHost's loop after a consumer
+    // drain) skip the callback so consumer state that may have already
+    // started destruction isn't touched.
+    if (state->m_shellSurface && m_preDestroyCallback) {
         m_preDestroyCallback(screenId);
     }
 
-    auto* state = it.value();
-    if (state->shellSurface) {
-        state->shellSurface->deleteLater();
+    if (state->m_shellSurface) {
+        state->m_shellSurface->deleteLater();
     }
-    state->shellSurface = nullptr;
-    state->shellWindow = nullptr;
-    state->physScreen = nullptr;
+    state->m_shellSurface = nullptr;
+    state->m_shellWindow = nullptr;
+    state->m_physScreen = nullptr;
     state->slots.clear();
 }
 
 void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing)
 {
     auto it = m_states.find(screenId);
-    if (it == m_states.end() || !it.value()->shellSurface || !it.value()->shellWindow) {
+    if (it == m_states.end() || !it.value()->m_shellSurface || !it.value()->m_shellWindow) {
         return;
     }
     auto& s = *it.value();
@@ -162,8 +162,8 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // would wipe per-slot tracking and `beginHide(animatorTarget())`
     // would animate the shell root opacity, both of which we want to
     // avoid for a pure click-through toggle.
-    if (anyVisible && !s.shellSurface->isLogicallyShown()) {
-        s.shellSurface->show();
+    if (anyVisible && !s.m_shellSurface->isLogicallyShown()) {
+        s.m_shellSurface->show();
     }
 
     // Drive the Qt input flag based purely on whether a modal slot is
@@ -173,18 +173,21 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // for the non-modal slot's lifetime instead of eating every click
     // on every screen for several seconds.
     const bool wantTransparent = !anyInputGrabbing;
-    if (s.shellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
-        s.shellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
+    if (s.m_shellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
+        s.m_shellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
     }
 }
 
 bool ShellHost::rekey(const QString& oldKey, const QString& newKey)
 {
+    // Same key is idempotent success: the entry is at newKey after this
+    // call (it was already there). Callers that distinguish "moved" from
+    // "already there" should compare keys themselves before calling.
     if (oldKey == newKey) {
-        return false;
+        return m_states.contains(oldKey) && m_states.value(oldKey)->m_shellSurface != nullptr;
     }
     auto donor = m_states.find(oldKey);
-    if (donor == m_states.end() || !donor.value()->shellSurface) {
+    if (donor == m_states.end() || !donor.value()->m_shellSurface) {
         return false;
     }
 
@@ -193,7 +196,7 @@ bool ShellHost::rekey(const QString& oldKey, const QString& newKey)
     // this donor when the target slot is occupied.
     auto existing = m_states.find(newKey);
     if (existing != m_states.end()) {
-        if (existing.value()->shellSurface) {
+        if (existing.value()->m_shellSurface) {
             return false;
         }
         delete existing.value();
@@ -217,26 +220,44 @@ void ShellHost::registerConfigForRole(const PhosphorLayer::Role& role,
 
 void ShellHost::hideSlot(const QString& screenId, const QString& slotKey, std::function<void()> completion)
 {
+    // Programmer-setup errors (no animator wired, empty ids) — drop
+    // completion silently because the caller has no recovery path.
     if (!m_surfaceAnimator || screenId.isEmpty() || slotKey.isEmpty()) {
         return;
     }
+    // Benign no-ops (no shell, no slot, slot Item gone, slot already
+    // hidden) — fire completion synchronously so consumer cleanup that
+    // relies on "post-hide" semantics (clear loader mode, clear
+    // sentinels, restore sibling slot) still runs. Without this, a
+    // dismiss called on an already-hidden slot leaves consumer parallel
+    // state stuck "live" forever.
+    auto runCompletion = [&completion]() {
+        if (completion) {
+            auto cb = std::move(completion);
+            cb();
+        }
+    };
     auto it = m_states.find(screenId);
     if (it == m_states.end()) {
+        runCompletion();
         return;
     }
     auto& state = *it.value();
-    if (!state.shellSurface) {
+    if (!state.m_shellSurface) {
+        runCompletion();
         return;
     }
     auto slotIt = state.slots.constFind(slotKey);
     if (slotIt == state.slots.cend()) {
+        runCompletion();
         return;
     }
     auto* item = slotIt.value().item.data();
     if (!item || !item->isVisible()) {
+        runCompletion();
         return;
     }
-    m_surfaceAnimator->beginHide(state.shellSurface, item, slotIt.value().role, std::move(completion));
+    m_surfaceAnimator->beginHide(state.m_shellSurface, item, slotIt.value().role, std::move(completion));
 }
 
 ShellState& ShellHost::stateFor(const QString& screenId)

@@ -81,6 +81,12 @@ public:
     /// sentinels, content geometry caches, signal-disconnection bookkeeping)
     /// so a stale signal handler firing during teardown doesn't dereference
     /// a dangling pointer.
+    ///
+    /// Only fires when a live shell surface is being torn down — re-calls
+    /// of @ref destroyShell on an already-drained entry (shellSurface
+    /// already nullptr) skip the callback. ~ShellHost's cleanup loop
+    /// therefore won't re-enter consumer state that may have already
+    /// started destruction.
     using PreDestroyCallback = std::function<void(const QString& screenId)>;
 
     explicit ShellHost(QObject* parent = nullptr);
@@ -144,10 +150,14 @@ public:
     /// the underlying heap-allocated state object (the borrowed pointer
     /// stored on the consumer's parallel per-screen state stays valid).
     /// Returns true on success; returns false when:
-    ///   - oldKey == newKey
     ///   - oldKey has no live shell (no entry or shellSurface is nullptr)
     ///   - newKey already has a LIVE entry (refuses to clobber); a stale
     ///     zeroed entry under newKey is dropped to make room.
+    ///
+    /// Same-key (`oldKey == newKey`) is idempotent success: returns true
+    /// iff a live entry exists under that key. The entry is at newKey
+    /// after the call — the bool reports "the postcondition holds", not
+    /// "a move happened".
     ///
     /// Surface re-anchoring is the consumer's responsibility: the layer
     /// surface's anchors / margins were baked in at attach time for
@@ -166,13 +176,20 @@ public:
     void registerConfigForRole(const PhosphorLayer::Role& role, PhosphorAnimationLayer::SurfaceAnimator::Config config);
 
     /// Animator-driven slot hide for the slot keyed by @p slotKey on the
-    /// shell for @p screenId. No-op when no shell is up, no slot under
-    /// that key was registered, the slot item is gone, the slot's
-    /// QQuickItem is not currently visible, or the animator has not been
-    /// injected. @p completion fires on the hide leg's settle (via the
-    /// SurfaceAnimator's normal completion plumbing) so consumers can
-    /// run their post-hide content writes (e.g. clear loader mode,
-    /// release content state).
+    /// shell for @p screenId.
+    ///
+    /// @p completion fires:
+    ///   - asynchronously, on the hide-leg's settle, when the slot was
+    ///     visible and the animator ran the transition;
+    ///   - synchronously, before this call returns, when nothing needed
+    ///     to animate (no shell, no slot under that key, slot Item gone,
+    ///     slot Item not currently visible) — consumer post-hide cleanup
+    ///     (clear loader mode, release content state, restore siblings)
+    ///     runs in either case.
+    ///
+    /// Completion is dropped only when the call is a programmer-setup
+    /// error: animator not injected, empty @p screenId, or empty
+    /// @p slotKey — none have a recovery path the consumer could take.
     void hideSlot(const QString& screenId, const QString& slotKey, std::function<void()> completion = {});
 
     /// Read-write accessor. Returns the existing ShellState for

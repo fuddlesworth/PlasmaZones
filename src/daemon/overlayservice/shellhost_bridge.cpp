@@ -87,8 +87,16 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
     // slot-key vocabulary in the lib's generic slot map. Per-show
     // writeQmlProperty / animator beginShow target these Items via
     // the PerScreenOverlayState::xxxSlot() accessors.
-    auto* window = shellState.shellWindow;
+    auto* window = shellState.shellWindow();
     if (!window) {
+        // QML hasn't materialized the wrapper window yet (async path).
+        // Mark this screen failed so the lib's ensureShell short-circuit
+        // doesn't keep returning a half-wired state forever. The next
+        // hot-plug clearFailure unblocks a clean re-create that should
+        // race the QML root load successfully on the second attempt.
+        qCWarning(lcOverlay) << "wirePassiveShellSlots: shellWindow null at PostCreate for screen=" << screenId
+                             << "— marking failure so next attempt re-creates from scratch";
+        m_shellHost->markFailure(screenId);
         return;
     }
 
@@ -98,6 +106,12 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
         if (!item) {
             qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << screenId << "did not expose `" << qmlObjectName
                                  << "`:" << descriptionForLog << "will fail. Check QML resource.";
+            // Skip the insert. With no entry under the key, hideSlot's
+            // "no slot" path runs (which now fires completion synchronously)
+            // rather than the "null item" path on a SlotEntry{nullptr, role}
+            // — the absent-entry shape makes the breakage visible in
+            // failure logs instead of silently looking like a successful hide.
+            return;
         }
         shellState.slots.insert(slotKey, PhosphorOverlay::SlotEntry{item, role});
     };
@@ -125,7 +139,7 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
     // Prime the wl_surface map + Vulkan swapchain init + first-frame
     // render so the very first user-triggered slot show doesn't race
     // the FBO capture used by shader-exclusive transitions.
-    primeSurfaceRenderPipeline(shellState.shellSurface);
+    primeSurfaceRenderPipeline(shellState.shellSurface());
 }
 
 // Pre-create the per-screen passive overlay shell for every effective
@@ -140,7 +154,7 @@ void OverlayService::warmUpNotifications()
             m_screenManager ? m_screenManager->physicalQScreenFor(sid) : Utils::findScreenAtPosition(QPoint(0, 0));
         if (physScreen) {
             auto* state = ensurePassiveShellFor(sid, physScreen);
-            if (state && state->shell && state->shell->shellSurface) {
+            if (state && state->shell && state->shell->shellSurface()) {
                 ++createdCount;
             }
         }
@@ -243,7 +257,7 @@ void OverlayService::syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surfa
         return;
     }
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (it.value().shell && it.value().shell->shellSurface == surface) {
+        if (it.value().shell && it.value().shell->shellSurface() == surface) {
             syncPassiveShellSurfaceState(it.key());
             return;
         }

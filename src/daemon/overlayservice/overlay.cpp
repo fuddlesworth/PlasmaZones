@@ -163,7 +163,15 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             break;
         }
         if (!donorKey.isEmpty()) {
-            rekeyOverlayState(donorKey, targetId);
+            if (!rekeyOverlayState(donorKey, targetId)) {
+                // Refused (flavor flip, live target, or lib rejection).
+                // Phase-2 dismiss + Phase-3 create below recover by
+                // building a fresh window under targetId — log so the
+                // perf regression (full Vulkan teardown vs preserved
+                // swapchain) is visible in field reports.
+                qCDebug(lcOverlay) << "initializeOverlay: rekey refused" << donorKey << "->" << targetId
+                                   << "— falling back to dismiss+recreate";
+            }
         }
     }
 
@@ -201,7 +209,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             }
         }
         auto* shellState = m_screenStates.value(screenId).shell;
-        if (auto* window = shellState ? shellState->shellWindow : nullptr) {
+        if (auto* window = shellState ? shellState->shellWindow() : nullptr) {
             m_screenStates[screenId].overlayPhysScreen = physScreen;
             if (geom.isValid()) {
                 m_screenStates[screenId].overlayGeometry = geom;
@@ -215,7 +223,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             // Post-shell-migration: shell window stays mapped permanently;
             // animation drives the per-content slot's opacity. Surface::show()
             // only fires on the very first transition Hidden→Shown.
-            auto* shellSurface = shellState->shellSurface;
+            auto* shellSurface = shellState->shellSurface();
             auto* slot = m_screenStates[screenId].mainOverlaySlot();
             if (shellSurface && slot) {
                 if (!shellSurface->isLogicallyShown()) {
@@ -242,7 +250,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // attempt recreation on screen reconnection.
     int liveOverlayCount = 0;
     for (const auto& state : m_screenStates) {
-        if (state.overlayPhysScreen && state.shell && state.shell->shellWindow) {
+        if (state.overlayPhysScreen && state.shell && state.shell->shellWindow()) {
             ++liveOverlayCount;
         }
     }
@@ -413,7 +421,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     const bool isVS = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
 
     auto* slot = state->mainOverlaySlot();
-    auto* window = state->shell->shellWindow;
+    auto* window = state->shell->shellWindow();
 
     state->overlayPhysScreen = physScreen;
     state->overlayGeometry = geometry;
@@ -545,7 +553,7 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
     // setVisible(false) out from under a possibly-still-running
     // beginShow — that would leave the Track in m_pendingDestroy with
     // a stale onComplete callback racing the next show.
-    auto* shellSurface = it->shell ? it->shell->shellSurface : nullptr;
+    auto* shellSurface = it->shell ? it->shell->shellSurface() : nullptr;
     if (shellSurface) {
         m_shellHost->hideSlot(screenId, PzSlotKeys::MainOverlay(), [this, screenIdCopy = screenId]() {
             auto sit = m_screenStates.find(screenIdCopy);
@@ -609,28 +617,39 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         return false;
     }
 
-    // If a stale (empty) entry already exists under newKey, drop it so the
-    // move lands cleanly. It has no live window — if it did the caller
-    // should not have selected this donor.
+    // If a stale (empty) entry already exists under newKey, refuse the
+    // move when the daemon side already considers it live; otherwise
+    // wait until the lib confirms its own side before erasing — the
+    // lib's rekey is the authority on whether the move can land.
     auto existing = m_screenStates.find(newKey);
+    if (existing != m_screenStates.end() && existing->overlayPhysScreen) {
+        qCWarning(lcOverlay) << "rekeyOverlayState: refusing to clobber live entry under" << newKey << "with donor"
+                             << oldKey;
+        return false;
+    }
+
+    // Drive lib-side rekey FIRST so its liveness check (which may catch
+    // a live ShellState under newKey from a prior OSD/snap-assist warm
+    // that the daemon's overlayPhysScreen sentinel doesn't reflect) is
+    // authoritative. If it refuses, leave daemon-side state untouched
+    // and return false — the caller's Phase-2 dismiss + Phase-3 create
+    // fallback handles recovery.
+    if (!m_shellHost->rekey(oldKey, newKey)) {
+        qCWarning(lcOverlay) << "rekeyOverlayState: lib-side rekey refused" << oldKey << "->" << newKey
+                             << "(lib has a live shell under target); falling back to recreate";
+        return false;
+    }
+
+    // Lib accepted — now safe to drop the daemon's stale newKey entry
+    // (lib already dropped its own) and move the donor's daemon state
+    // across. Iterators were not invalidated by the lib call (it only
+    // touches m_states, not m_screenStates).
     if (existing != m_screenStates.end()) {
-        if (existing->overlayPhysScreen) {
-            qCWarning(lcOverlay) << "rekeyOverlayState: refusing to clobber live entry under" << newKey << "with donor"
-                                 << oldKey;
-            return false;
-        }
         m_screenStates.erase(existing);
     }
     PerScreenOverlayState state = std::move(donor.value());
     m_screenStates.erase(donor);
     auto inserted = m_screenStates.insert(newKey, std::move(state));
-
-    // Move the lib's ShellState entry under the new key so future
-    // ShellHost::stateFor(newKey) lookups reach the same heap object
-    // the borrowed pointer on PerScreenOverlayState::shell already
-    // points at. The heap object is unchanged — the rekey is a pure
-    // map-key swap; the borrowed pointer survives.
-    m_shellHost->rekey(oldKey, newKey);
 
     // The geometryChanged lambda captured the OLD sid by value. After the
     // state moved to newKey, the lambda's m_screenStates.find(oldSid) lookup
@@ -653,15 +672,15 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         // rendering across the full monitor. wlr-layer-shell v2+ allows
         // set_anchor / set_margin post-attach; push the corrected placement
         // through the mutable transport handle.
-        if (rekeyed.shell && rekeyed.shell->shellSurface) {
-            if (auto* handle = rekeyed.shell->shellSurface->transport()) {
+        if (rekeyed.shell && rekeyed.shell->shellSurface()) {
+            if (auto* handle = rekeyed.shell->shellSurface()->transport()) {
                 const QRect targetVsGeom = resolveScreenGeometry(m_screenManager, newKey);
                 const auto placement = layerPlacementForVs(isVS ? targetVsGeom : QRect(), physScreen->geometry());
                 handle->setAnchors(placement.anchors);
                 handle->setMargins(placement.margins);
                 if (isVS && targetVsGeom.isValid()) {
                     rekeyed.overlayGeometry = targetVsGeom;
-                    if (auto* w = rekeyed.shell->shellWindow) {
+                    if (auto* w = rekeyed.shell->shellWindow()) {
                         w->setWidth(targetVsGeom.width());
                         w->setHeight(targetVsGeom.height());
                     }
@@ -724,15 +743,15 @@ QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* p
         if (!st.overlayPhysScreen || !st.shell) {
             return; // Main overlay context not active for this entry
         }
-        if (auto* w = st.shell->shellWindow) {
+        if (auto* w = st.shell->shellWindow()) {
             if (isVS) {
                 // Virtual screen: recompute sub-region geometry from Phosphor::Screens::ScreenManager
                 // (virtual proportions are relative to the physical screen) and
                 // push new margins via the PhosphorLayer transport handle.
                 // Anchors (Top|Left) are fixed at attach and can't change.
                 const QRect vsGeom = resolveScreenGeometry(m_screenManager, sid);
-                if (vsGeom.isValid() && st.shell->shellSurface) {
-                    if (auto* handle = st.shell->shellSurface->transport()) {
+                if (vsGeom.isValid() && st.shell->shellSurface()) {
+                    if (auto* handle = st.shell->shellSurface()->transport()) {
                         handle->setMargins(layerPlacementForVs(vsGeom, newGeom).margins);
                     }
                     w->setWidth(vsGeom.width());
@@ -769,7 +788,7 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     }
     QObject::disconnect(it->overlayGeomConnection);
     // Reset the main-overlay context sentinel + cached geom for this
-    // screen. The shell wl_surface stays alive (via shell->shellSurface)
+    // screen. The shell wl_surface stays alive (via shell->shellSurface())
     // until destroyPassiveShell runs, hosting any other slots
     // (OSD / snap-assist / picker / zone-selector) independently of
     // the main overlay's lifetime.

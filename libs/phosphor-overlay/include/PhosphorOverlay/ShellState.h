@@ -13,11 +13,11 @@
 // per-content sentinels) lives in the consumer's parallel per-screen
 // map; ShellState only owns what the library mechanism owns.
 //
-// Slot Items are looked up at shell-create time by the consumer via
-// the post-create callback and stored here so the library can use the
-// names to compute the "is any slot live?" predicate ShellHost needs
-// for surface mapping (added in the subsequent sync-state migration
-// commit).
+// Mechanism pointers (shellSurface / shellWindow / physScreen) are
+// readable via accessors but not writable from outside the library —
+// only ShellHost (friended) writes them at create / destroy time.
+// The slot map stays public because PostCreateCallback consumers
+// populate it with their slot vocabulary at shell-attach time.
 
 #include <PhosphorOverlay/SlotEntry.h>
 #include <PhosphorOverlay/phosphoroverlay_export.h>
@@ -34,8 +34,11 @@ class Surface;
 
 namespace PhosphorOverlay {
 
-struct PHOSPHOROVERLAY_EXPORT ShellState
+class ShellHost;
+
+class PHOSPHOROVERLAY_EXPORT ShellState
 {
+public:
     /// The layer-shell wl_surface backing this screen's overlay shell.
     /// Lifetime is managed by the Qt parent chain (the Surface is a
     /// QObject parented inside the SurfaceManager / consumer-owned
@@ -43,17 +46,26 @@ struct PHOSPHOROVERLAY_EXPORT ShellState
     /// explicitly so the wl_surface unmaps deterministically rather
     /// than at random parent-dtor time. nullptr means the shell has
     /// not been created yet (or was torn down and not yet re-created).
-    PhosphorLayer::Surface* shellSurface = nullptr;
+    PhosphorLayer::Surface* shellSurface() const
+    {
+        return m_shellSurface;
+    }
 
     /// The QQuickWindow hosting the shell's QML scene tree. Cached at
     /// create-time to avoid repeated `shellSurface->window()` calls in
     /// the hot per-show path.
-    QQuickWindow* shellWindow = nullptr;
+    QQuickWindow* shellWindow() const
+    {
+        return m_shellWindow;
+    }
 
     /// The physical QScreen the shell was constructed against. Used by
     /// hot-plug rekey logic to confirm the same monitor underlies the
     /// new key.
-    QScreen* physScreen = nullptr;
+    QScreen* physScreen() const
+    {
+        return m_physScreen;
+    }
 
     /// Per-content slot entries keyed by slot name (e.g. "osd",
     /// "snapAssist", "layoutPicker", "zoneSelector", "mainOverlay").
@@ -64,6 +76,12 @@ struct PHOSPHOROVERLAY_EXPORT ShellState
     /// @c ShellHost::hideSlot to drive the animator without the consumer
     /// re-specifying the role at each call.
     QHash<QString, SlotEntry> slots;
+
+private:
+    friend class ShellHost;
+    PhosphorLayer::Surface* m_shellSurface = nullptr;
+    QQuickWindow* m_shellWindow = nullptr;
+    QScreen* m_physScreen = nullptr;
 };
 
 } // namespace PhosphorOverlay

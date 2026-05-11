@@ -108,7 +108,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
     auto* state = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!state || !state->shell || !state->shell->shellWindow || !state->osdSlot()) {
+    if (!state || !state->shell || !state->shell->shellWindow() || !state->osdSlot()) {
         qCWarning(lcOverlay) << "Failed to get passive shell for layout OSD on screen=" << effectiveId;
         return false;
     }
@@ -119,8 +119,8 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     // OSD that follows.
     hideZoneSelectorSlotOnScreen(effectiveId);
 
-    window = state->shell->shellWindow;
-    outSurface = state->shell->shellSurface;
+    window = state->shell->shellWindow();
+    outSurface = state->shell->shellSurface();
     outOsdSlot = state->osdSlot();
 
     // Mode is NOT written here — callers write data properties first, then
@@ -447,13 +447,13 @@ void OverlayService::onOsdDismissRequested()
     QString matchedId;
     PerScreenOverlayState* state = nullptr;
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        if (it->shell && it->shell->shellWindow == senderWindow) {
+        if (it->shell && it->shell->shellWindow() == senderWindow) {
             matchedId = it.key();
             state = &it.value();
             break;
         }
     }
-    if (!state || !state->shell || !state->shell->shellSurface || !state->osdSlot()) {
+    if (!state || !state->shell || !state->shell->shellSurface() || !state->osdSlot()) {
         return;
     }
     m_shellHost->hideSlot(matchedId, PzSlotKeys::Osd(), [this, effectiveId = matchedId]() {
@@ -567,15 +567,15 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // path; the dismiss path is QML → osdDismissRequested → animator
     // beginHide.
     auto* navState = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!navState || !navState->shell || !navState->shell->shellWindow || !navState->osdSlot()) {
+    if (!navState || !navState->shell || !navState->shell->shellWindow() || !navState->osdSlot()) {
         qCDebug(lcOverlay) << "No passive shell for navigation OSD on screen=" << effectiveId;
         return;
     }
 
     hideZoneSelectorSlotOnScreen(effectiveId);
 
-    auto* window = navState->shell->shellWindow;
-    auto* navSurface = navState->shell->shellSurface;
+    auto* window = navState->shell->shellWindow();
+    auto* navSurface = navState->shell->shellSurface();
     auto* osdSlot = navState->osdSlot();
 
     // Process reason field - for rotation/resnap, extract window count

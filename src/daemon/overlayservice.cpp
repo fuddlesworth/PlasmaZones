@@ -421,6 +421,14 @@ OverlayService::~OverlayService()
     }
     m_screenStates.clear();
 
+    // Explicit lib teardown BEFORE implicit member destruction, so
+    // ~ShellHost runs while every member it might re-enter through the
+    // PreDestroyCallback is still alive. The lib dtor gates the callback
+    // on a live shellSurface (skipping already-drained entries), so the
+    // loop above already neutered re-entry — this reset is defense in
+    // depth for any future code path that leaves a live shell behind.
+    m_shellHost.reset();
+
     // Singleton surfaces (layout picker, shader preview) are QObject
     // children of `this`, so the QObject parent-child system would
     // destroy them AFTER our own destructor body runs — i.e. after

@@ -105,10 +105,15 @@ void OverlayService::handleScreenAdded(QScreen* screen)
                 updateOverlayWindow(vsId, screen);
                 const auto& vsState = m_screenStates.value(vsId);
                 if (vsState.overlayPhysScreen && vsState.shell) {
-                    if (auto* window = vsState.shell->shellWindow) {
+                    if (auto* window = vsState.shell->shellWindow()) {
                         assertWindowOnScreen(window, screen, vsGeom);
-                        if (vsState.shell->shellSurface && !vsState.shell->shellSurface->isLogicallyShown()) {
-                            vsState.shell->shellSurface->show();
+                        if (vsState.shell->shellSurface() && !vsState.shell->shellSurface()->isLogicallyShown()) {
+                            vsState.shell->shellSurface()->show();
+                            // Surface::show() clears Qt::WindowTransparentForInput.
+                            // Re-assert the input region based on current modal-slot
+                            // state so a hot-plug add on a screen with no modal
+                            // slot up doesn't leave the shell click-eating.
+                            syncPassiveShellSurfaceState(vsId);
                         }
                     }
                 }
@@ -119,10 +124,11 @@ void OverlayService::handleScreenAdded(QScreen* screen)
         updateOverlayWindow(screen);
         const auto& pState = m_screenStates.value(physScreenId);
         if (pState.overlayPhysScreen && pState.shell) {
-            if (auto* window = pState.shell->shellWindow) {
+            if (auto* window = pState.shell->shellWindow()) {
                 assertWindowOnScreen(window, screen);
-                if (pState.shell->shellSurface && !pState.shell->shellSurface->isLogicallyShown()) {
-                    pState.shell->shellSurface->show();
+                if (pState.shell->shellSurface() && !pState.shell->shellSurface()->isLogicallyShown()) {
+                    pState.shell->shellSurface()->show();
+                    syncPassiveShellSurfaceState(physScreenId);
                 }
             }
         }
@@ -148,7 +154,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
         }
         const auto& state = it.value();
         if (state.overlayPhysScreen == screen || state.zoneSelectorPhysScreen == screen
-            || (state.shell && state.shell->physScreen == screen)) {
+            || (state.shell && state.shell->physScreen() == screen)) {
             destroyOverlayWindow(id);
             destroyZoneSelectorWindow(id);
             destroyPassiveShell(id);
@@ -158,8 +164,14 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             // our iterator through the PreDestroyCallback's m_screenStates
             // re-entry.
             auto postIt = m_screenStates.constFind(id);
-            if (postIt == m_screenStates.constEnd() || !postIt->shell || !postIt->shell->shellSurface) {
+            if (postIt == m_screenStates.constEnd() || !postIt->shell || !postIt->shell->shellSurface()) {
                 m_screenStates.remove(id);
+                // Symmetric drop on the lib side — destroyPassiveShell
+                // only zeroes the ShellState fields, the entry itself
+                // survives in ShellHost's m_states. Without this drop,
+                // many hot-plug cycles slowly grow the lib's map with
+                // dead keys.
+                m_shellHost->removeState(id);
             }
         }
     }

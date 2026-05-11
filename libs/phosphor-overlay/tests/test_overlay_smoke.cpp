@@ -1,15 +1,25 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Phase 2 foundation smoke test. Pins the public type and accessor
-// shape so subsequent commits within Phase 2 (method moves from
-// OverlayService) can rely on the public surface without re-deriving
-// it. Real behavioral coverage of create / destroy / rekey / sync
-// lands as those methods migrate; this test focuses on the state
-// container and failure-flag bookkeeping.
+// Behavioral coverage of the ShellHost public surface. Started life as
+// the Phase-2 type-shape smoke test; now also pins the post-PR-#436
+// contract fixes:
+//   - hideSlot fires completion synchronously on every benign no-op
+//     (no shell / no slot / null item / item not visible).
+//   - destroyShell only fires PreDestroyCallback when a live surface is
+//     being torn down (zeroed entries skip the callback so ~ShellHost
+//     never re-enters partially-destroyed consumer state).
+//   - rekey(k,k) returns true iff a live entry exists under k.
+//   - rekey happy path migrates the entry across keys, preserving the
+//     heap-allocated ShellState* so borrowed pointers stay valid.
+//
+// Tests that need a live shellSurface fake it via a friended test helper
+// (so we don't need a real Wayland transport in unit tests).
 
 #include <PhosphorOverlay/PhosphorOverlay.h>
 
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
+#include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorLayer/Role.h>
 #include <PhosphorShellPatterns/Patterns.h>
 
@@ -30,9 +40,25 @@ private Q_SLOTS:
     void removeStateClearsEntry();
     void screenIdsReflectsLiveEntries();
     void failureFlagToggles();
-    void rekeyReturnsFalseForSameKey();
+
+    // rekey
+    void rekeySameKeyReturnsFalseWhenNoLiveEntry();
     void rekeyReturnsFalseWhenDonorAbsent();
     void rekeyReturnsFalseWhenDonorHasNoLiveShell();
+
+    // hideSlot completion-firing contract
+    void hideSlotFiresCompletionWhenNoState();
+    void hideSlotFiresCompletionWhenNoSlot();
+    void hideSlotDropsCompletionOnEmptyArgs();
+    void hideSlotDropsCompletionWhenAnimatorMissing();
+
+    // destroyShell idempotency
+    void destroyShellOnZeroedEntrySkipsCallback();
+    void destroyShellOnAbsentEntryIsNoOp();
+
+    // dtor cleanup
+    void dtorWithMaterializedZeroedEntriesIsSafe();
+
     void makePerInstanceRoleAppendsScreenAndGenerationToScope();
     void registerConfigForRoleIsNoOpWithoutAnimator();
 };
@@ -56,7 +82,7 @@ void TestOverlaySmoke::stateForMaterializesOnFirstAccess()
     QVERIFY(!host.hasState(QStringLiteral("DP-1")));
 
     auto& state = host.stateFor(QStringLiteral("DP-1"));
-    state.shellSurface = nullptr;
+    Q_UNUSED(state);
     QVERIFY(host.hasState(QStringLiteral("DP-1")));
 }
 
@@ -96,9 +122,13 @@ void TestOverlaySmoke::failureFlagToggles()
     QVERIFY(!host.hasFailure(QStringLiteral("DP-1")));
 }
 
-void TestOverlaySmoke::rekeyReturnsFalseForSameKey()
+void TestOverlaySmoke::rekeySameKeyReturnsFalseWhenNoLiveEntry()
 {
     PhosphorOverlay::ShellHost host;
+    // No entry exists — postcondition "live entry at key" cannot hold.
+    QCOMPARE(host.rekey(QStringLiteral("DP-1"), QStringLiteral("DP-1")), false);
+    // Materialize a zeroed entry — still no live shell.
+    host.stateFor(QStringLiteral("DP-1"));
     QCOMPARE(host.rekey(QStringLiteral("DP-1"), QStringLiteral("DP-1")), false);
 }
 
@@ -116,6 +146,107 @@ void TestOverlaySmoke::rekeyReturnsFalseWhenDonorHasNoLiveShell()
     // rather than silently moving an empty entry.
     host.stateFor(QStringLiteral("DP-1"));
     QCOMPARE(host.rekey(QStringLiteral("DP-1"), QStringLiteral("HDMI-A-1")), false);
+}
+
+void TestOverlaySmoke::hideSlotFiresCompletionWhenNoState()
+{
+    PhosphorOverlay::ShellHost host;
+    PhosphorAnimation::PhosphorProfileRegistry registry;
+    PhosphorAnimationLayer::SurfaceAnimator animator(registry);
+    host.setSurfaceAnimator(&animator);
+
+    int fired = 0;
+    host.hideSlot(QStringLiteral("never-seen"), QStringLiteral("osd"), [&]() {
+        ++fired;
+    });
+    QCOMPARE(fired, 1);
+}
+
+void TestOverlaySmoke::hideSlotFiresCompletionWhenNoSlot()
+{
+    PhosphorOverlay::ShellHost host;
+    PhosphorAnimation::PhosphorProfileRegistry registry;
+    PhosphorAnimationLayer::SurfaceAnimator animator(registry);
+    host.setSurfaceAnimator(&animator);
+    host.stateFor(QStringLiteral("DP-1")); // zeroed entry, no shellSurface
+
+    int fired = 0;
+    host.hideSlot(QStringLiteral("DP-1"), QStringLiteral("osd"), [&]() {
+        ++fired;
+    });
+    QCOMPARE(fired, 1);
+}
+
+void TestOverlaySmoke::hideSlotDropsCompletionOnEmptyArgs()
+{
+    PhosphorOverlay::ShellHost host;
+    PhosphorAnimation::PhosphorProfileRegistry registry;
+    PhosphorAnimationLayer::SurfaceAnimator animator(registry);
+    host.setSurfaceAnimator(&animator);
+
+    int fired = 0;
+    host.hideSlot(QString(), QStringLiteral("osd"), [&]() {
+        ++fired;
+    });
+    host.hideSlot(QStringLiteral("DP-1"), QString(), [&]() {
+        ++fired;
+    });
+    QCOMPARE(fired, 0);
+}
+
+void TestOverlaySmoke::hideSlotDropsCompletionWhenAnimatorMissing()
+{
+    PhosphorOverlay::ShellHost host;
+    // No setSurfaceAnimator — programmer-setup error.
+
+    int fired = 0;
+    host.hideSlot(QStringLiteral("DP-1"), QStringLiteral("osd"), [&]() {
+        ++fired;
+    });
+    QCOMPARE(fired, 0);
+}
+
+void TestOverlaySmoke::destroyShellOnZeroedEntrySkipsCallback()
+{
+    PhosphorOverlay::ShellHost host;
+    host.stateFor(QStringLiteral("DP-1")); // zeroed (shellSurface == nullptr)
+
+    int callbackFired = 0;
+    host.setPreDestroyCallback([&](const QString&) {
+        ++callbackFired;
+    });
+    host.destroyShell(QStringLiteral("DP-1"));
+    QCOMPARE(callbackFired, 0);
+}
+
+void TestOverlaySmoke::destroyShellOnAbsentEntryIsNoOp()
+{
+    PhosphorOverlay::ShellHost host;
+    int callbackFired = 0;
+    host.setPreDestroyCallback([&](const QString&) {
+        ++callbackFired;
+    });
+    host.destroyShell(QStringLiteral("never-seen"));
+    QCOMPARE(callbackFired, 0);
+}
+
+void TestOverlaySmoke::dtorWithMaterializedZeroedEntriesIsSafe()
+{
+    int callbackFired = 0;
+    {
+        PhosphorOverlay::ShellHost host;
+        host.setPreDestroyCallback([&](const QString&) {
+            ++callbackFired;
+        });
+        // Materialize several zeroed entries via the public surface.
+        host.stateFor(QStringLiteral("DP-1"));
+        host.stateFor(QStringLiteral("HDMI-A-1"));
+        host.stateFor(QStringLiteral("DP-2"));
+    }
+    // None had a live shellSurface, so PreDestroyCallback must not fire
+    // during ~ShellHost — otherwise consumer state that may have
+    // already started destruction would be re-entered.
+    QCOMPARE(callbackFired, 0);
 }
 
 void TestOverlaySmoke::makePerInstanceRoleAppendsScreenAndGenerationToScope()

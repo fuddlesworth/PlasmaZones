@@ -559,17 +559,22 @@ private:
     // ShellHost owns the per-screen layer-shell shell state (surfaces,
     // windows, slot Items) and the sticky creation-failure spam-guard.
     // The daemon's PerScreenOverlayState below caches a borrowed
-    // ShellState* pointer that points into m_shellHost's owning map;
-    // m_shellHost must outlive m_screenStates (enforced by member
-    // declaration order — m_shellHost above m_screenStates means
-    // reverse-destruction order drains m_screenStates first, then
-    // destroys m_shellHost).
+    // ShellState* pointer that points into m_shellHost's owning map.
+    //
+    // ~OverlayService explicitly resets m_shellHost AFTER draining
+    // m_screenStates and BEFORE implicit member destruction, so the lib
+    // dtor's PreDestroyCallback re-fire (for any entry the explicit
+    // drain missed) runs while m_screenStates and friends are still
+    // alive. The decl order below (m_screenStates before m_shellHost)
+    // also makes reverse-destruction order safe — m_shellHost
+    // (declared later) destroys FIRST, while m_screenStates is still
+    // alive — even if a future change removes the explicit reset.
+    QHash<QString, PerScreenOverlayState> m_screenStates;
     std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
 
-    QHash<QString, PerScreenOverlayState> m_screenStates;
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
-    PhosphorZones::IZoneLayoutRegistry* m_layoutManager = nullptr;
+    PhosphorZones::IZoneLayoutRegistry* m_layoutManager = nullptr; ///< Borrowed; outlives service
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service
     ShaderRegistry* m_shaderRegistry = nullptr; ///< Borrowed; outlives service
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives service (optional)
@@ -601,7 +606,7 @@ private:
     QRectF m_selectedZoneRelGeo;
 
     // Layout-OSD and Navigation-OSD content share a single per-screen
-    // PerScreenOverlayState::shell->shellWindow plus per-slot QQuickItems
+    // PerScreenOverlayState::shell->shellWindow() plus per-slot QQuickItems
     // (PassiveOverlayShell.qml) post-Phase-2 unification. No separate
     // per-mode window pointers.
 
