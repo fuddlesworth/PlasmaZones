@@ -176,7 +176,7 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         QLatin1StringView curveSpec;
         qreal durationMs;
     };
-    constexpr std::array<FamilySeed, 32> seeds{{
+    constexpr std::array<FamilySeed, 28> seeds{{
         // ── Popups ────────────────────────────────────────────────
         // Family parent — leaves (popup.layoutPicker.*,
         // popup.zoneSelector.*, popup.snapAssist.*) inherit from this.
@@ -243,13 +243,10 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         // hover around 200 ms ease-out.
         {QLatin1StringView{"zone"}, QLatin1StringView{"widget-out"}, 200.0},
 
-        // ── Workspaces ────────────────────────────────────────────
-        // Asymmetric switch in / out — ease-out then ease-in.
-        // Overview open/close mirror the same asymmetry.
-        {QLatin1StringView{"workspace.switchIn"}, QLatin1StringView{"cubic-out"}, 250.0},
-        {QLatin1StringView{"workspace.switchOut"}, QLatin1StringView{"cubic-in"}, 250.0},
-        {QLatin1StringView{"workspace.overviewOpen"}, QLatin1StringView{"cubic-out"}, 250.0},
-        {QLatin1StringView{"workspace.overviewClose"}, QLatin1StringView{"cubic-in"}, 250.0},
+        // No `workspace.*` seeds: virtual-desktop transitions are KWin's
+        // compositor-level domain (Slide / Fade Desktop / etc.). PZ does
+        // not run a parallel animation in that lane to avoid double
+        // transforms and bypassing the user's KWin effect choice.
     }};
 
     for (const auto& seed : seeds) {
