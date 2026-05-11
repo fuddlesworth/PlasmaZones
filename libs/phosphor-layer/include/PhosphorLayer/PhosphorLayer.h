@@ -11,6 +11,7 @@
 #include <PhosphorLayer/IScreenProvider.h>
 #include <PhosphorLayer/ISurfaceAnimator.h>
 #include <PhosphorLayer/ISurfaceStore.h>
+#include <PhosphorLayer/Patterns.h>
 #include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/ScreenSurfaceRegistry.h>
 #include <PhosphorLayer/Surface.h>

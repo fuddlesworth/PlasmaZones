@@ -77,79 +77,64 @@ bool Role::isValid() const
     return true;
 }
 
-// ── Preset definitions ─────────────────────────────────────────────────
-// Declared `extern const` in the header so presets compose via QString
-// (which isn't constexpr). Dynamic-init cost is one-time at library load.
-
-namespace Roles {
-
-const Role FullscreenOverlay{
-    Layer::Overlay, AnchorAll, -1, KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-fullscreen")};
-
-const Role TopPanel{Layer::Top, Anchor::Top | Anchor::Left | Anchor::Right,
-                    0,          KeyboardInteractivity::OnDemand,
-                    QMargins(), QStringLiteral("pl-top-panel")};
-
-const Role BottomPanel{Layer::Top, Anchor::Bottom | Anchor::Left | Anchor::Right,
-                       0,          KeyboardInteractivity::OnDemand,
-                       QMargins(), QStringLiteral("pl-bottom-panel")};
-
-const Role LeftDock{Layer::Top, Anchor::Top | Anchor::Bottom | Anchor::Left,
-                    0,          KeyboardInteractivity::OnDemand,
-                    QMargins(), QStringLiteral("pl-left-dock")};
-
-const Role RightDock{Layer::Top, Anchor::Top | Anchor::Bottom | Anchor::Right,
-                     0,          KeyboardInteractivity::OnDemand,
-                     QMargins(), QStringLiteral("pl-right-dock")};
-
-const Role CenteredModal{
-    Layer::Top, AnchorNone, -1, KeyboardInteractivity::Exclusive, QMargins(), QStringLiteral("pl-modal")};
-
-const Role CornerToast{Layer::Top, Anchor::Top | Anchor::Right,      -1, KeyboardInteractivity::None,
-                       QMargins(), QStringLiteral("pl-corner-toast")};
-
-const Role Background{Layer::Background,           AnchorAll,  0,
-                      KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-background")};
-
-const Role FloatingOverlay{
-    Layer::Overlay, AnchorNone, -1, KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-floating")};
-
-} // namespace Roles
-
-// ── Pattern presets (axis-2 vocabulary) ────────────────────────────────
-// Aliases reuse the same Role values as the legacy Roles::* presets, so
-// runtime behaviour is unchanged. Phase 1 will migrate call sites and
-// drop the Roles:: spellings. See docs/surface-taxonomy-refactor-plan.md.
+// ── Pattern preset definitions ─────────────────────────────────────────
+// Declared `extern const Role&` in Patterns.h so consumers can refer to
+// them as `const Role&` values; the underlying Role objects live here
+// as `static const` (TU-local). Panel/Toast are factory functions that
+// build Role values from primitive parameters (Edge, Corner).
+//
+// Dynamic-init cost is one-time at library load (QString scopePrefix
+// prevents constexpr).
 
 namespace Patterns {
 
-const Role& Wallpaper = Roles::Background;
-const Role& Hud = Roles::FullscreenOverlay;
-const Role& Modal = Roles::CenteredModal;
-const Role& Floating = Roles::FloatingOverlay;
+namespace {
+
+const Role kWallpaper{Layer::Background,           AnchorAll,  0,
+                      KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-background")};
+
+const Role kHud{
+    Layer::Overlay, AnchorAll, -1, KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-fullscreen")};
+
+const Role kModal{Layer::Top, AnchorNone, -1, KeyboardInteractivity::Exclusive, QMargins(), QStringLiteral("pl-modal")};
+
+const Role kFloating{
+    Layer::Overlay, AnchorNone, -1, KeyboardInteractivity::None, QMargins(), QStringLiteral("pl-floating")};
+
+} // namespace
+
+const Role& Wallpaper = kWallpaper;
+const Role& Hud = kHud;
+const Role& Modal = kModal;
+const Role& Floating = kFloating;
 
 Role Panel(Edge edge)
 {
+    Anchors anchors;
+    QString prefix;
     switch (edge) {
     case Edge::Top:
-        return Roles::TopPanel;
+        anchors = Anchor::Top | Anchor::Left | Anchor::Right;
+        prefix = QStringLiteral("pl-top-panel");
+        break;
     case Edge::Bottom:
-        return Roles::BottomPanel;
+        anchors = Anchor::Bottom | Anchor::Left | Anchor::Right;
+        prefix = QStringLiteral("pl-bottom-panel");
+        break;
     case Edge::Left:
-        return Roles::LeftDock;
+        anchors = Anchor::Top | Anchor::Bottom | Anchor::Left;
+        prefix = QStringLiteral("pl-left-panel");
+        break;
     case Edge::Right:
-        return Roles::RightDock;
+        anchors = Anchor::Top | Anchor::Bottom | Anchor::Right;
+        prefix = QStringLiteral("pl-right-panel");
+        break;
     }
-    // Unreachable for well-formed inputs; fall through to top edge so
-    // a malformed enum value still yields a usable panel.
-    return Roles::TopPanel;
+    return Role{Layer::Top, anchors, 0, KeyboardInteractivity::OnDemand, QMargins(), std::move(prefix)};
 }
 
 Role Toast(Corner corner)
 {
-    // CornerToast bakes in Top|Right; rebuild the anchor combo for the
-    // other three corners. Scope prefix is rewritten to encode the
-    // corner so the surface name reflects which corner it lives in.
     Anchors anchors;
     QString prefix;
     switch (corner) {
@@ -170,7 +155,7 @@ Role Toast(Corner corner)
         prefix = QStringLiteral("pl-bottom-right-toast");
         break;
     }
-    return Roles::CornerToast.withAnchors(anchors).withScopePrefix(prefix);
+    return Role{Layer::Top, anchors, -1, KeyboardInteractivity::None, QMargins(), std::move(prefix)};
 }
 
 } // namespace Patterns

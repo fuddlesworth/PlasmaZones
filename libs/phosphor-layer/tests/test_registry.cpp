@@ -21,7 +21,7 @@ private:
     SurfaceConfig makeConfig(QScreen* s)
     {
         SurfaceConfig c;
-        c.role = Roles::CornerToast;
+        c.role = Patterns::Toast(Patterns::Corner::TopRight);
         c.contentItem = std::make_unique<QQuickItem>();
         c.screen = s;
         c.debugName = QStringLiteral("toast-") + (s ? s->name() : QStringLiteral("none"));

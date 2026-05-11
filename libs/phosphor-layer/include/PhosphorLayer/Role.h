@@ -63,12 +63,12 @@ Q_ENUM_NS(KeyboardInteractivity)
  * Role captures the wlr-layer-shell parameters that are immutable after
  * show() (layer, anchors, keyboard, scope) plus defaults for parameters
  * that are mutable (margins, exclusive zone). Consumers pick from the
- * library-provided @ref Roles presets or define their own.
+ * library-provided @ref Patterns presets or define their own.
  *
  * The fluent `withX()` modifiers return copies for composition:
  * @code
  *     inline const Role PzOverlay =
- *         Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("pz-overlay"));
+ *         Patterns::Hud.withScopePrefix(QStringLiteral("pz-overlay"));
  * @endcode
  */
 struct PHOSPHORLAYER_EXPORT Role
@@ -97,52 +97,11 @@ struct PHOSPHORLAYER_EXPORT Role
     friend bool operator==(const Role& a, const Role& b) = default;
 };
 
-// ── Library-provided presets (open vocabulary — extend via `withX()`) ──
-//
-// DEPRECATED: this namespace mixes axis 1 (compositor primitive) with
-// axis 2 (UI pattern). Prefer @ref Patterns (in `PhosphorLayer/Patterns.h`)
-// which exposes the same recipes under UI-pattern names. See
+// The legacy @ref Roles namespace was removed in phase 1 of the surface
+// taxonomy refactor; consumers should use @ref Patterns (in
+// `PhosphorLayer/Patterns.h`) which separates axis 2 (UI pattern) from
+// axis 1 (compositor primitive). See
 // `docs/surface-taxonomy-refactor-plan.md` for the migration map.
-
-namespace Roles {
-
-/// @deprecated Use @ref PhosphorLayer::Patterns::Hud.
-[[deprecated("use PhosphorLayer::Patterns::Hud")]]
-PHOSPHORLAYER_EXPORT extern const Role FullscreenOverlay;
-
-/// @deprecated Use @ref PhosphorLayer::Patterns::Panel with Edge::Top.
-[[deprecated("use PhosphorLayer::Patterns::Panel(Edge::Top)")]]
-PHOSPHORLAYER_EXPORT extern const Role TopPanel;
-
-/// @deprecated Use @ref PhosphorLayer::Patterns::Panel with Edge::Bottom.
-[[deprecated("use PhosphorLayer::Patterns::Panel(Edge::Bottom)")]]
-PHOSPHORLAYER_EXPORT extern const Role BottomPanel;
-
-/// @deprecated Use @ref PhosphorLayer::Patterns::Panel with Edge::Left.
-[[deprecated("use PhosphorLayer::Patterns::Panel(Edge::Left)")]]
-PHOSPHORLAYER_EXPORT extern const Role LeftDock;
-
-/// @deprecated Use @ref PhosphorLayer::Patterns::Panel with Edge::Right.
-[[deprecated("use PhosphorLayer::Patterns::Panel(Edge::Right)")]]
-PHOSPHORLAYER_EXPORT extern const Role RightDock;
-
-/// @deprecated Use @ref PhosphorLayer::Patterns::Modal.
-[[deprecated("use PhosphorLayer::Patterns::Modal")]]
-PHOSPHORLAYER_EXPORT extern const Role CenteredModal;
-
-/// @deprecated Use @ref PhosphorLayer::Patterns::Toast with a Corner.
-[[deprecated("use PhosphorLayer::Patterns::Toast(Corner::TopRight)")]]
-PHOSPHORLAYER_EXPORT extern const Role CornerToast;
-
-/// @deprecated Use @ref PhosphorLayer::Patterns::Wallpaper.
-[[deprecated("use PhosphorLayer::Patterns::Wallpaper")]]
-PHOSPHORLAYER_EXPORT extern const Role Background;
-
-/// @deprecated Use @ref PhosphorLayer::Patterns::Floating.
-[[deprecated("use PhosphorLayer::Patterns::Floating")]]
-PHOSPHORLAYER_EXPORT extern const Role FloatingOverlay;
-
-} // namespace Roles
 
 } // namespace PhosphorLayer
 

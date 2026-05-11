@@ -25,7 +25,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(nullptr, &s));
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Patterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         QCOMPARE(f.create(std::move(cfg)), nullptr);
@@ -36,7 +36,7 @@ private Q_SLOTS:
         MockTransport t;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, nullptr));
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Patterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         QCOMPARE(f.create(std::move(cfg)), nullptr);
     }
@@ -47,7 +47,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Patterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         auto* surface = f.create(std::move(cfg));
@@ -62,7 +62,7 @@ private Q_SLOTS:
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         QObject owner;
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Patterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         auto* surface = f.create(std::move(cfg), &owner);
@@ -89,7 +89,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Patterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = nullptr;
         auto* surface = f.create(std::move(cfg));
@@ -123,7 +123,7 @@ private Q_SLOTS:
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s, &p));
         QQmlEngine sharedEngine;
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Patterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         cfg.sharedEngine = &sharedEngine;
@@ -141,7 +141,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Patterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = s.primary();
         auto* surface = f.create(std::move(cfg));

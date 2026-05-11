@@ -86,7 +86,7 @@ Q_SIGNALS:
 SurfaceConfig buildConfig(QScreen* screen, bool keepMapped = false)
 {
     SurfaceConfig cfg;
-    cfg.role = Roles::CenteredModal;
+    cfg.role = Patterns::Modal;
     cfg.contentItem = std::make_unique<QQuickItem>();
     cfg.screen = screen;
     cfg.keepMappedOnHide = keepMapped;

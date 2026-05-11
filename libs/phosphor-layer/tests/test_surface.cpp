@@ -26,7 +26,7 @@ private:
     static SurfaceConfig buildConfig(QScreen* screen, QString debugName = QStringLiteral("test"))
     {
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Patterns::Modal;
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = screen;
         cfg.debugName = std::move(debugName);
@@ -146,7 +146,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Patterns::Modal;
         cfg.screen = s.primary();
         // Neither contentUrl nor contentItem set — SurfaceFactory should
         // refuse before we even reach the state machine.
@@ -160,7 +160,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
-        cfg.role = Roles::CenteredModal;
+        cfg.role = Patterns::Modal;
         cfg.screen = s.primary();
         cfg.contentUrl = QUrl(QStringLiteral("qrc:/nonexistent.qml"));
         cfg.contentItem = std::make_unique<QQuickItem>();
@@ -199,7 +199,7 @@ private Q_SLOTS:
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         auto cfg = buildConfig(s.primary());
-        cfg.role = Roles::FullscreenOverlay;
+        cfg.role = Patterns::Hud;
         cfg.marginsOverride = QMargins(5, 10, 15, 20);
         cfg.exclusiveZoneOverride = 42;
         auto* surface = f.create(std::move(cfg));
@@ -210,7 +210,7 @@ private Q_SLOTS:
         QCOMPARE(t.m_lastArgs.margins, QMargins(5, 10, 15, 20));
         QCOMPARE(t.m_lastArgs.exclusiveZone, 42);
         QCOMPARE(t.m_lastArgs.screen, s.primary());
-        QCOMPARE(t.m_lastArgs.scope, Roles::FullscreenOverlay.scopePrefix);
+        QCOMPARE(t.m_lastArgs.scope, Patterns::Hud.scopePrefix);
     }
 
     void engineProviderReleaseOrderingDefersAfterWindowDelete()
