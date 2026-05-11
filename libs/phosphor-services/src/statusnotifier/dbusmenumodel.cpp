@@ -156,6 +156,23 @@ public:
 void DBusMenuModel::Private::buildProxy()
 {
     proxy.reset();
+    // Clear out the previous menu's rows + validity immediately —
+    // before the new GetLayout completes — so the popup doesn't
+    // briefly display the OLD app's menu under the NEW app's icon.
+    // Without this, the QML side observes leftover rows while the
+    // async GetLayout for the new path is in flight, and a popup
+    // that's bound to `model.valid` would still flash the wrong
+    // content during the swap.
+    if (!rows.isEmpty()) {
+        q->beginResetModel();
+        rows.clear();
+        q->endResetModel();
+        Q_EMIT q->countChanged();
+    }
+    if (valid) {
+        valid = false;
+        Q_EMIT q->validChanged();
+    }
     if (service.isEmpty() || path.isEmpty())
         return;
     proxy = std::make_unique<ComCanonicalDbusmenuInterface>(service, path, QDBusConnection::sessionBus(), q);

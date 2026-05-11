@@ -49,7 +49,13 @@ PopupWindow {
     popupWidth: 240
     popupHeight: Math.min(420, Math.max(40, menuList.contentHeight + 16))
     gap: 4
-    popupVisible: root.service.length > 0 && root.menuPath.length > 0
+    // Gate on menuModel.valid in addition to having a non-empty
+    // service/path: the model only flips valid → true after a
+    // SUCCESSFUL GetLayout. Failed loads leave it false and the
+    // popup never maps in the first place, so the user sees nothing
+    // instead of a fast flash-then-vanish (which was what the
+    // earlier "open then auto-close on loadFailed" path produced).
+    popupVisible: root.service.length > 0 && root.menuPath.length > 0 && menuModel.valid
     // Dismiss-on-outside-click. Wayland popups grab input by default
     // when they map; clicking outside the popup surface fires the
     // compositor's "popup dismissed" signal, which PopupWindow
