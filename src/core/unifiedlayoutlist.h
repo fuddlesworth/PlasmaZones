@@ -24,12 +24,9 @@
 
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
-#include <QJsonObject>
 #include <QSize>
 #include <QString>
 #include <QStringList>
-#include <QVariantList>
-#include <QVariantMap>
 #include <QVector>
 
 namespace PhosphorLayout {

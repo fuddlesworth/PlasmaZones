@@ -39,6 +39,18 @@ class ShellHost;
 class PHOSPHOROVERLAY_EXPORT ShellState
 {
 public:
+    ShellState() = default;
+    // Non-copyable, non-movable: ShellHost owns these objects as
+    // heap-allocated raw pointers and consumers cache borrowed
+    // references via `ShellHost::stateFor`. A copy (e.g. `auto copy =
+    // host.stateFor(id)` instead of `auto&`) would silently duplicate
+    // the mechanism pointers and slot map, leaving the caller's
+    // mutations invisible to the host. Block at compile time.
+    ShellState(const ShellState&) = delete;
+    ShellState(ShellState&&) = delete;
+    ShellState& operator=(const ShellState&) = delete;
+    ShellState& operator=(ShellState&&) = delete;
+
     /// The layer-shell wl_surface backing this screen's overlay shell.
     /// Lifetime is managed by the Qt parent chain (the Surface is a
     /// QObject parented inside the SurfaceManager / consumer-owned

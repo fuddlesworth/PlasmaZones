@@ -484,7 +484,7 @@ Final TU sizes after Phase 5 (and pass-4/5 audit fixes):
 | `overlayservice/overlay_data.cpp` | 379 |
 | `overlayservice/animation_config.cpp` | 330 |
 | `overlayservice/settings.cpp` | 326 |
-| `overlayservice/lifecycle.cpp` | 313 |
+| `overlayservice/lifecycle.cpp` | 324 |
 | `overlayservice/shellhost_bridge.cpp` | 282 |
 | `overlayservice/screens.cpp` | 220 |
 | `overlayservice/priming.cpp` | 182 |
@@ -501,8 +501,9 @@ beyond Phase 5's scope.
 
 The plan-doc's other Phase 5 goals do NOT apply in practice:
   - "Files like `overlayservice/lifecycle.cpp` move into the library or
-    get deleted." `lifecycle.cpp` is 311 lines of PZ-content
-    initialization (show / hide / setupZoneOverlay): it's content,
+    get deleted." `lifecycle.cpp` is 324 lines of PZ-content
+    initialization (show / hide / toggle / setIdleForDragPause /
+    refreshFromIdle / applyIdleStateForCursor): it's content,
     not mechanism, and stays in the daemon.
   - "Per-screen state moves to the library's ShellHost." Shell
     mechanism state already lives in `ShellState` (Phase 2.3-2.6);

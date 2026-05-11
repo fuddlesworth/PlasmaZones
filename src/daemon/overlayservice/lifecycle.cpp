@@ -117,17 +117,23 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         // so Phase 3 creates the window. Without this, applyIdleStateForCursor
         // finds nothing to flip and the overlay never becomes visible until
         // the next hide()/show() cycle.
-        const bool cursorVsHasWindow = m_screenStates.contains(cursorEffectiveId)
-            && m_screenStates.value(cursorEffectiveId).overlayPhysScreen != nullptr;
-        // Also check that the slot is not mid-hide-animation (opacity near 0
-        // means the hide callback hasn't fired yet, or the slot was hidden
-        // via dismissOverlayWindow which sets opacity to 0 via the animator).
-        // If the slot is hidden, fall through to initializeOverlay which
-        // properly recreates the overlay state (loaded toggle, setVisible,
-        // beginShow) rather than taking the fast path that only calls
-        // applyIdleStateForCursor.
         auto cursorIt = m_screenStates.find(cursorEffectiveId);
-        QQuickItem* cursorMainOverlay = (cursorIt != m_screenStates.end()) ? cursorIt->mainOverlaySlot() : nullptr;
+        const bool cursorVsHasWindow = cursorIt != m_screenStates.end() && cursorIt->overlayPhysScreen != nullptr;
+        // Fast path is only correct when applyIdleStateForCursor can
+        // salvage the slot. applyIdleStateForCursor only flips the
+        // `_idled` QML property; it doesn't run beginShow / reset
+        // opacity. If the slot is mid-hide-animation (opacity~0 from
+        // dismissOverlayWindow's animator) or fully dismissed,
+        // applyIdleStateForCursor would leave it invisible. Fall
+        // through to initializeOverlay in that case so beginShow
+        // animates the slot back up.
+        //
+        // Note: this is a DIFFERENT question from
+        // syncPassiveShellSurfaceState's isMainOverlayLive predicate
+        // (which asks "is the slot rendering content the user sees"
+        // for the surface input-region decision). Both checks are
+        // intentional; do not merge them.
+        QQuickItem* cursorMainOverlay = cursorVsHasWindow ? cursorIt->mainOverlaySlot() : nullptr;
         const bool cursorSlotVisible =
             cursorMainOverlay != nullptr && !qFuzzyCompare(cursorMainOverlay->opacity(), 0.0);
         if ((cursorVsHasWindow && cursorSlotVisible) || m_excludedScreens.contains(cursorEffectiveId)) {

@@ -4,16 +4,20 @@
 #pragma once
 
 #include "plasmazones_export.h"
+
 #include "../core/interfaces.h"
-#include "../core/utils.h"
 #include "../core/logging.h"
+#include "../core/utils.h"
+
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
+
 #include <QRectF>
 #include <QScreen>
-#include <QUuid>
 #include <QString>
+#include <QUuid>
+
 #include <optional>
 
 namespace Phosphor::Screens {

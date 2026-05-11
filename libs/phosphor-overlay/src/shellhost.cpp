@@ -89,8 +89,14 @@ ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
         // cycle (monitor removed and re-added under the same key) can
         // leave a stale QScreen* on the state object while the lib
         // surface stays alive. Callers reading physScreen() rely on
-        // it tracking the most recent ensureShell call.
+        // it tracking the most recent ensureShell call. Refresh
+        // m_shellWindow alongside since Surface::window() is the
+        // single source of truth; the 1:1 Surface↔Window invariant
+        // holds today, but re-reading is cheap insurance against
+        // future Surface internals that could swap the window across
+        // a transport reattach.
         it.value()->m_physScreen = physScreen;
+        it.value()->m_shellWindow = it.value()->m_shellSurface->window();
         return it.value();
     }
 
@@ -213,6 +219,12 @@ bool ShellHost::rekey(const QString& oldKey, const QString& newKey)
     ShellState* state = donor.value();
     m_states.erase(donor);
     m_states.insert(newKey, state);
+    // Clear any sticky creation-failure flag at newKey: a live shell
+    // now backs the key, so future ensureShell calls must not short-
+    // circuit to the failure path. Symmetric with the donor side —
+    // oldKey's flag stays as-is (it may legitimately be marked failed
+    // separately by the consumer's id-grammar logic).
+    m_creationFailed.remove(newKey);
     return true;
 }
 
@@ -296,6 +308,24 @@ void ShellHost::removeState(const QString& screenId)
     auto it = m_states.find(screenId);
     if (it == m_states.end()) {
         return;
+    }
+    // Drain the surface before deleting the state object. Callers that
+    // forget to call destroyShell first would otherwise leak the
+    // wl_surface (orphaned with no event-loop unmap) AND skip the
+    // PreDestroyCallback consumers rely on for parallel-state cleanup.
+    // destroyShell gates its callback on shellSurface non-null and
+    // zeroes the field, so re-calling here is safe for already-drained
+    // entries (the gate makes it a no-op).
+    if (it.value()->m_shellSurface) {
+        destroyShell(screenId);
+        // destroyShell only zeroes fields; m_states keys are unchanged.
+        // Re-find to refresh the iterator (defensive — QHash::find()
+        // doesn't invalidate non-mutated entries, but explicit re-find
+        // makes the invariant survive future refactors).
+        it = m_states.find(screenId);
+        if (it == m_states.end()) {
+            return;
+        }
     }
     delete it.value();
     m_states.erase(it);

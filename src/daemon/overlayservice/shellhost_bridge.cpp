@@ -74,6 +74,16 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
         auto it = m_screenStates.find(effectiveId);
         return (it == m_screenStates.end()) ? nullptr : &it.value();
     }
+    // Surface-live gate first: a zeroed state (sticky failure or
+    // self-teardown from wirePassiveShellSlots's null-shellWindow
+    // recovery) must not be cached on the daemon's parallel state
+    // (implicit contract: "non-null shell pointer ⇒ live surface"),
+    // and the defensive flag-set below must not touch a zombie
+    // window.
+    if (!shellState->shellSurface()) {
+        auto it = m_screenStates.find(effectiveId);
+        return (it == m_screenStates.end()) ? nullptr : &it.value();
+    }
     // Defensive default: every successful ensure should leave the
     // shell window click-through unless a modal slot is up. The
     // companion syncPassiveShellSurfaceState call is the authoritative
@@ -82,20 +92,15 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     // PostCreate) would otherwise inherit a stale
     // wantTransparent=false from a prior modal popup. Asserting the
     // default here ensures the shell never silently steals clicks
-    // when the daemon thinks no modal is active.
+    // when the daemon thinks no modal is active. Modal-show paths
+    // overwrite this immediately via syncPassiveShellSurfaceState
+    // (anyInputGrabbing=true), so the brief redundant write happens
+    // entirely within a single event-loop tick.
     if (auto* window = shellState->shellWindow()) {
         window->setFlag(Qt::WindowTransparentForInput, true);
     }
-    // Only cache the borrowed shell pointer when it actually backs a
-    // live surface. When ensureShell returns a zeroed state (sticky
-    // failure or a self-teardown from wirePassiveShellSlots's null-
-    // shellWindow recovery), leave pzState.shell as its previous value
-    // (null on first encounter) so the implicit contract "non-null
-    // shell ⇒ live surface" holds for every downstream consumer.
     auto& pzState = m_screenStates[effectiveId];
-    if (shellState->shellSurface()) {
-        pzState.shell = shellState;
-    }
+    pzState.shell = shellState;
     return &pzState;
 }
 

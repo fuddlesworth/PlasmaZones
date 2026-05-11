@@ -10,7 +10,7 @@
 #include <PhosphorConfig/IBackend.h>
 
 #include <QHash>
-#include <QSet>
+#include <QPair>
 #include <QString>
 #include <QUuid>
 #include <functional>

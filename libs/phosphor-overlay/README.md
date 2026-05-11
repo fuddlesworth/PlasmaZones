@@ -66,10 +66,14 @@ host.destroyShell(screenId);
   heap-allocated; the host stores `QHash<QString, ShellState*>`.
   Consumers cache the `ShellState*` returned by `ensureShell` /
   `stateFor` in parallel per-screen state and rely on the pointer
-  staying valid across rehashes. `std::unique_ptr` cannot live in
-  `QHash` (Qt 6's hash requires copy-constructible values);
+  staying valid across rehashes. `QHash<QString, std::unique_ptr<ShellState>>`
+  would move the pointee but still rehash the bucket array, so
+  consumer-cached references are stable only by the indirection.
   `std::shared_ptr` would add refcount overhead the lib does not need
   (there is one owner, the host, plus any number of borrowed observers).
+  `ShellState` is non-copyable / non-movable to prevent accidental
+  `auto copy = host.stateFor(id)` (note the missing `&`) from
+  shallow-cloning the mechanism pointers and slot map.
 - **Callback-driven content boundary.** Three function-object hooks
   (`SurfaceFactory`, `PostCreateCallback`, `PreDestroyCallback`) carry
   every consumer-specific decision: which role / qmlSource the surface

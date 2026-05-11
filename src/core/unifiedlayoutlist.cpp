@@ -21,9 +21,9 @@
 #include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <algorithm>
+#include <climits>
 
 #include <QHash>
-#include <QJsonArray>
 #include <QRectF>
 #include <QUuid>
 

@@ -273,12 +273,24 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 }
                 for (const QString& key : virtualKeysToDestroy) {
                     m_shellHost->destroyShell(key);
+                    m_shellHost->removeState(key);
                     m_screenStates.remove(key);
                 }
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
                 destroyPassiveShell(physicalScreenId);
+                m_shellHost->removeState(physicalScreenId);
                 m_screenStates.remove(physicalScreenId);
+                // Drop sticky creation-failure flags rooted on the
+                // now-removed physical monitor. Without this, a same-
+                // name replug would inherit the stale flag and silently
+                // refuse to recreate. Mirrors the symmetric clear in
+                // destroyAllWindowsForPhysicalScreen (screens.cpp).
+                for (const QString& flagged : m_shellHost->failureScreenIds()) {
+                    if (flagged == physicalScreenId || flagged.startsWith(prefix)) {
+                        m_shellHost->clearFailure(flagged);
+                    }
+                }
                 return;
             }
 
