@@ -9,6 +9,8 @@
 #include <PhosphorServices/StatusNotifierItem.h>
 #include <PhosphorServices/StatusNotifierItemModel.h>
 
+#include "iconimageprovider.h"
+
 #include <QQmlEngine>
 
 namespace PhosphorServices {
@@ -43,6 +45,18 @@ void registerQmlTypes()
     // the tray).
     qmlRegisterSingletonInstance<IconThemeResolver>(kModule, kModuleVersionMajor, kModuleVersionMinor,
                                                     "IconThemeResolver", IconThemeResolver::instance());
+}
+
+void installImageProvider(QQmlEngine* engine)
+{
+    if (!engine) {
+        return;
+    }
+    // QQmlEngine takes ownership of the provider — passing a raw new
+    // is the documented pattern. Repeated installs on the same engine
+    // would clash (Qt warns + drops the new one), but we only call
+    // this once per engine construction.
+    engine->addImageProvider(QStringLiteral("phosphor-services"), new IconImageProvider());
 }
 
 } // namespace PhosphorServices

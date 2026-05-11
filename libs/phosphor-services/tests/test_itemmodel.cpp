@@ -31,6 +31,7 @@ private Q_SLOTS:
         // shell's Repeater delegates).
         QVERIFY(roles.values().contains("itemId"));
         QVERIFY(roles.values().contains("title"));
+        QVERIFY(roles.values().contains("iconUrl"));
         QVERIFY(roles.values().contains("iconImage"));
         QVERIFY(roles.values().contains("status"));
         QVERIFY(roles.values().contains("toolTipTitle"));

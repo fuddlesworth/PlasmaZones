@@ -38,7 +38,8 @@ public:
         LabelRole, ///< menu text, ampersands already stripped for accel
         EnabledRole,
         VisibleRole,
-        IconImageRole, ///< QImage (themed or inline data)
+        IconUrlRole, ///< data:image/png;base64,... URL — bind to Image.source
+        IconImageRole, ///< raw QImage (kept for C++ use; not usable as Image.source)
         ToggleTypeRole, ///< "checkmark" | "radio" | empty
         ToggleStateRole, ///< 0 = off, 1 = on, -1 = indeterminate
         ChildrenDisplayRole, ///< "submenu" if this entry has children, else empty

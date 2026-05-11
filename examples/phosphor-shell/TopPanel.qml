@@ -293,7 +293,7 @@ PanelWindow {
                         required property int index
                         required property string itemId
                         required property string title
-                        required property var iconImage
+                        required property string iconUrl
                         required property string toolTipTitle
                         required property string toolTipBody
                         required property string menuPath
@@ -308,13 +308,15 @@ PanelWindow {
                             anchors.centerIn: parent
                             width: 18
                             height: 18
-                            // QImage from C++ → QML via a temporary
-                            // image:// provider would be canonical, but
-                            // setting source directly to the QImage role
-                            // works because Qt6 implicitly wraps it.
+                            // Image.source is a QUrl property — feed
+                            // the model's URL-form role, which encodes
+                            // a cacheKey so the URL changes whenever
+                            // the underlying QImage data updates. The
+                            // engine routes the URL back through
+                            // image://phosphor-services/ provider.
                             // sourceSize keeps the on-screen size stable
-                            // regardless of the icon's intrinsic dimensions.
-                            source: trayDelegate.iconImage
+                            // regardless of the icon's intrinsic res.
+                            source: trayDelegate.iconUrl
                             sourceSize.width: 36
                             sourceSize.height: 36
                             smooth: true

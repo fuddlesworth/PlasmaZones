@@ -30,6 +30,15 @@ public:
         TitleRole,
         CategoryRole,
         StatusRole,
+        // Icon URL forms — bind to QML's Image.source (a QUrl). The
+        // underlying QImage is published to the
+        // `image://phosphor-services/` provider as a side-effect of
+        // model attachment / item icon changes.
+        IconUrlRole,
+        OverlayIconUrlRole,
+        AttentionIconUrlRole,
+        // Raw QImage forms — kept for C++ consumers / future ImageItem
+        // bindings. Not directly usable as Image.source.
         IconImageRole,
         OverlayIconImageRole,
         AttentionIconImageRole,

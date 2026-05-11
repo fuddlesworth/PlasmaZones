@@ -74,6 +74,7 @@ set(phosphorservices_public_HDRS
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(phosphorservices_SRCS
+    src/iconimageprovider.cpp
     src/qmlregistration.cpp
     src/statusnotifier/dbustypes.cpp
     src/statusnotifier/statusnotifierwatcher.cpp

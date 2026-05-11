@@ -35,6 +35,7 @@ private Q_SLOTS:
         QVERIFY(roles.values().contains("label"));
         QVERIFY(roles.values().contains("itemEnabled"));
         QVERIFY(roles.values().contains("itemVisible"));
+        QVERIFY(roles.values().contains("iconUrl"));
         QVERIFY(roles.values().contains("iconImage"));
         QVERIFY(roles.values().contains("toggleType"));
         QVERIFY(roles.values().contains("toggleState"));

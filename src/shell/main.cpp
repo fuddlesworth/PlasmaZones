@@ -65,6 +65,15 @@ int main(int argc, char* argv[])
         },
         &app);
 
+    // Mount the PhosphorServices image provider on every QQmlEngine
+    // the shell constructs — startup + every hot-reload. Without
+    // this the tray `Image.source` URLs fall through to "image
+    // provider not found" and panel icons render as broken-image
+    // placeholders.
+    engine.addEngineHook([](QQmlEngine* qmlEngine) {
+        PhosphorServices::installImageProvider(qmlEngine);
+    });
+
     if (!engine.load(shellUrl)) {
         return 1;
     }

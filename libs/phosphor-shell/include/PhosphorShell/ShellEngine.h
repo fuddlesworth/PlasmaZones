@@ -12,6 +12,7 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -49,6 +50,17 @@ public:
     bool load(const QUrl& shellUrl);
     [[nodiscard]] QQmlEngine* engine() const;
 
+    /// Register a callback that fires whenever a fresh QQmlEngine is
+    /// created — at startup AND on hot-reload (file watcher triggers
+    /// rebuild). Use this to install image providers, register
+    /// engine-scoped singletons, or set additional context properties
+    /// without forcing ShellEngine to depend on the modules that
+    /// supply them. The callback is invoked synchronously, in
+    /// registration order, after the engine's own context properties
+    /// are set but before any QML is loaded.
+    using EngineHook = std::function<void(QQmlEngine*)>;
+    void addEngineHook(EngineHook hook);
+
 Q_SIGNALS:
     void loaded();
     void reloaded();
@@ -82,6 +94,7 @@ private:
     ScreenModel* m_screenModel = nullptr;
     ShellGlobal* m_shellGlobal = nullptr;
     QHash<QString, QVariantMap> m_persistentState;
+    std::vector<EngineHook> m_engineHooks;
 };
 
 } // namespace PhosphorShell

@@ -8,6 +8,8 @@
 #include "dbusmenu_interface.h"
 #include "dbustypes.h"
 
+#include <QBuffer>
+#include <QByteArray>
 #include <QDBusConnection>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
@@ -66,6 +68,23 @@ QString labelFromProps(const QVariantMap& props)
         }
     }
     return out;
+}
+
+/// Encode a QImage as a data:image/png;base64 URL. Used for menu
+/// icons because they're per-row, short-lived (only while the menu
+/// is open), and small (typically 16×16) — no point routing them
+/// through a stateful image provider with cleanup plumbing. Empty
+/// input → empty string, so the QML side can `visible: src.length`.
+QString iconToDataUrl(const QImage& img)
+{
+    if (img.isNull()) {
+        return {};
+    }
+    QByteArray buf;
+    QBuffer dev(&buf);
+    dev.open(QIODevice::WriteOnly);
+    img.save(&dev, "PNG");
+    return QStringLiteral("data:image/png;base64,") + QString::fromLatin1(buf.toBase64());
 }
 
 QImage iconFromProps(const QVariantMap& props, int size, const QStringList& themePaths)
@@ -337,6 +356,10 @@ QVariant DBusMenuModel::data(const QModelIndex& index, int role) const
         return r.properties.value(QStringLiteral("enabled"), true).toBool();
     case VisibleRole:
         return r.properties.value(QStringLiteral("visible"), true).toBool();
+    case IconUrlRole: {
+        const int size = 16;
+        return iconToDataUrl(iconFromProps(r.properties, size, d->themePaths));
+    }
     case IconImageRole: {
         const int size = 16; // typical menu icon
         return iconFromProps(r.properties, size, d->themePaths);
@@ -369,6 +392,7 @@ QHash<int, QByteArray> DBusMenuModel::roleNames() const
         {LabelRole, "label"},
         {EnabledRole, "itemEnabled"},
         {VisibleRole, "itemVisible"},
+        {IconUrlRole, "iconUrl"},
         {IconImageRole, "iconImage"},
         {ToggleTypeRole, "toggleType"},
         {ToggleStateRole, "toggleState"},

@@ -6,9 +6,47 @@
 #include <PhosphorServices/StatusNotifierHost.h>
 #include <PhosphorServices/StatusNotifierItem.h>
 
+#include "../iconimageprovider.h"
+
+#include <QUrl>
 #include <QVariant>
 
 namespace PhosphorServices {
+
+namespace {
+
+/// Per-item-per-variant base key (service|path[#variant]). The full
+/// provider id appends `?v=<cacheKey>` so the URL changes whenever
+/// the underlying QImage data changes, which forces QML's Image
+/// element to re-fetch via the provider (Qt only re-loads when the
+/// source URL string differs, regardless of `cache:` settings).
+QString iconKeyBase(const StatusNotifierItem* item, const QString& variant)
+{
+    QString k = item->dbusService() + QLatin1Char('|') + item->dbusPath();
+    if (!variant.isEmpty()) {
+        k += QLatin1Char('#') + variant;
+    }
+    return k;
+}
+
+/// Snapshot the current QImage for the given variant, publish it to
+/// the image provider under a cacheKey-suffixed id, and return the
+/// URL the QML side should bind to.
+QString publishAndUrl(StatusNotifierItem* item, const QString& variant)
+{
+    if (!item)
+        return {};
+    const QImage img = variant == QLatin1String("overlay") ? item->overlayIconImage()
+        : variant == QLatin1String("attention")            ? item->attentionIconImage()
+                                                           : item->iconImage();
+    if (img.isNull())
+        return {};
+    const QString id = iconKeyBase(item, variant) + QStringLiteral("?v=") + QString::number(img.cacheKey());
+    IconImageProvider::setImage(id, img);
+    return QStringLiteral("image://phosphor-services/") + id;
+}
+
+} // namespace
 
 StatusNotifierItemModel::StatusNotifierItemModel(QObject* parent)
     : QAbstractListModel(parent)
@@ -96,6 +134,12 @@ QVariant StatusNotifierItemModel::data(const QModelIndex& index, int role) const
         return item->category();
     case StatusRole:
         return QVariant::fromValue(item->status());
+    case IconUrlRole:
+        return publishAndUrl(item, {});
+    case OverlayIconUrlRole:
+        return publishAndUrl(item, QStringLiteral("overlay"));
+    case AttentionIconUrlRole:
+        return publishAndUrl(item, QStringLiteral("attention"));
     case IconImageRole:
         return item->iconImage();
     case OverlayIconImageRole:
@@ -128,6 +172,11 @@ QHash<int, QByteArray> StatusNotifierItemModel::roleNames() const
         {TitleRole, "title"},
         {CategoryRole, "category"},
         {StatusRole, "status"},
+        // URL forms — bind these to QML `Image.source`.
+        {IconUrlRole, "iconUrl"},
+        {OverlayIconUrlRole, "overlayIconUrl"},
+        {AttentionIconUrlRole, "attentionIconUrl"},
+        // Raw-QImage forms — keep for C++ / future ImageItem bindings.
         {IconImageRole, "iconImage"},
         {OverlayIconImageRole, "overlayIconImage"},
         {AttentionIconImageRole, "attentionIconImage"},

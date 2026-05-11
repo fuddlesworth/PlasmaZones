@@ -100,7 +100,7 @@ PopupWindow {
                 required property string label
                 required property bool itemEnabled
                 required property bool itemVisible
-                required property var iconImage
+                required property string iconUrl
                 required property string toggleType
                 required property int toggleState
                 required property string childrenDisplay
@@ -171,10 +171,10 @@ PopupWindow {
 
                             Image {
                                 anchors.centerIn: parent
-                                visible: menuRow.toggleType.length === 0
+                                visible: menuRow.toggleType.length === 0 && menuRow.iconUrl.length > 0
                                 width: 16
                                 height: 16
-                                source: menuRow.iconImage
+                                source: menuRow.iconUrl
                                 sourceSize.width: 32
                                 sourceSize.height: 32
                                 smooth: true

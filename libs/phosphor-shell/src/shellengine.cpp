@@ -96,6 +96,15 @@ bool ShellEngine::load(const QUrl& shellUrl)
     m_engine = std::make_unique<QQmlEngine>(this);
     m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
     m_engine->rootContext()->setContextProperty(QStringLiteral("Environment"), new Environment(m_engine.get()));
+    // Run the per-engine hooks AFTER our own context-property setup
+    // and BEFORE the shell QML is parsed. Image providers, custom
+    // context properties, and engine-scoped singletons all need to be
+    // in place by the time QQmlComponent walks the QML tree.
+    for (const auto& hook : m_engineHooks) {
+        if (hook) {
+            hook(m_engine.get());
+        }
+    }
 
     QQmlComponent component(m_engine.get(), shellUrl, QQmlComponent::PreferSynchronous);
     if (component.isError()) {
@@ -118,6 +127,20 @@ bool ShellEngine::load(const QUrl& shellUrl)
     setupWatcher();
     Q_EMIT loaded();
     return true;
+}
+
+void ShellEngine::addEngineHook(EngineHook hook)
+{
+    if (!hook) {
+        return;
+    }
+    m_engineHooks.push_back(std::move(hook));
+    // If the engine is already up (caller registered the hook after
+    // load()), run the hook against it once so they don't have to
+    // worry about ordering. Hot-reload picks it up automatically.
+    if (m_engine) {
+        m_engineHooks.back()(m_engine.get());
+    }
 }
 
 QQmlEngine* ShellEngine::engine() const
@@ -186,6 +209,14 @@ void ShellEngine::onFileChanged()
     // line silently returns undefined and the example settings panel
     // would render blank after every hot reload.
     m_engine->rootContext()->setContextProperty(QStringLiteral("Environment"), new Environment(m_engine.get()));
+    // Re-run the engine hooks on the fresh engine — image providers
+    // and engine-scoped singletons need to be installed on every
+    // QQmlEngine, not just the first one.
+    for (const auto& hook : m_engineHooks) {
+        if (hook) {
+            hook(m_engine.get());
+        }
+    }
     // No qmlRegisterType call here: those are PROCESS-global, set up
     // once in load() at startup. A new QQmlEngine sees the existing
     // registrations and resolves "Phosphor.Shell" types correctly. If
