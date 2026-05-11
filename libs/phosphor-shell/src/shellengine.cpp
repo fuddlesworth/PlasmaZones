@@ -392,7 +392,25 @@ void ShellEngine::materializePanels()
 
         PhosphorLayer::Role role;
         role = role.withAnchors(anchors).withScopePrefix(QStringLiteral("phosphor-shell"));
-        role = role.withKeyboard(PhosphorLayer::KeyboardInteractivity::OnDemand);
+        // Per-panel keyboard interactivity from the QML property —
+        // defaults to None so clicking the panel doesn't steal focus
+        // from the user's active app (matches Plasma's panel
+        // behaviour). Popups attached to the panel still get their
+        // own xdg_popup grab and can receive keyboard input even
+        // when the parent panel is None.
+        PhosphorLayer::KeyboardInteractivity interactivity = PhosphorLayer::KeyboardInteractivity::None;
+        switch (panel->keyboardFocus()) {
+        case PanelWindow::None:
+            interactivity = PhosphorLayer::KeyboardInteractivity::None;
+            break;
+        case PanelWindow::OnDemand:
+            interactivity = PhosphorLayer::KeyboardInteractivity::OnDemand;
+            break;
+        case PanelWindow::Exclusive:
+            interactivity = PhosphorLayer::KeyboardInteractivity::Exclusive;
+            break;
+        }
+        role = role.withKeyboard(interactivity);
 
         switch (panel->panelLayer()) {
         case PanelWindow::LayerBackground:

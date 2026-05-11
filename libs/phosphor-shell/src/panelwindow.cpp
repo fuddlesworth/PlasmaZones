@@ -180,4 +180,18 @@ void PanelWindow::setMargins(const QMargins& margins)
     Q_EMIT marginsChanged();
 }
 
+PanelWindow::KeyboardFocus PanelWindow::keyboardFocus() const
+{
+    return m_keyboardFocus;
+}
+
+void PanelWindow::setKeyboardFocus(KeyboardFocus focus)
+{
+    if (m_keyboardFocus == focus) {
+        return;
+    }
+    m_keyboardFocus = focus;
+    Q_EMIT keyboardFocusChanged();
+}
+
 } // namespace PhosphorShell

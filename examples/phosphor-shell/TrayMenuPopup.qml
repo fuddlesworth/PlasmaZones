@@ -40,21 +40,21 @@ PopupWindow {
     function openFor(delegate) {
         anchor = delegate;
         rootId = 0;
+        const sameSource = menuModel.service === delegate.dbusService && menuModel.path === delegate.menuPath;
         menuModel.service = delegate.dbusService;
         menuModel.path = delegate.menuPath;
-        menuModel.aboutToShow();
-        // Re-show case: when the same tray icon is right-clicked
-        // twice in a row (with a dismissal between), service/path
-        // don't change, the model's setService/setPath are no-ops,
-        // and `valid` stays true the whole time — so validChanged
-        // never fires and the Connections handler below never gets
-        // a chance to set popupVisible. Drive it directly here for
-        // the already-valid case. For fresh menus (different service
-        // or first-ever open), valid starts at false and the
-        // Connections handler takes over once GetLayout completes.
-        if (menuModel.valid)
-            popupVisible = true;
+        // setService/setPath early-return when the values match the
+        // current ones — that's the right behaviour for avoiding
+        // redundant GetLayout traffic when QML re-assigns the same
+        // properties, but it means re-opening the SAME menu (after
+        // dismissal) doesn't trigger a fresh load. Force one
+        // explicitly. The model's `loaded` signal will then fire and
+        // the Connections handler maps the popup. AboutToShow is
+        // still called for spec compliance.
+        if (sameSource)
+            menuModel.refresh();
 
+        menuModel.aboutToShow();
     }
 
     popupEdge: PopupWindow.Below
@@ -83,21 +83,27 @@ PopupWindow {
     // Imperative show/hide driven off the model — no popupVisible
     // binding, no binding-loop hazard.
     Connections {
-        // Show when (and only when) the model successfully loads. The
-        // valid signal also fires the OTHER direction (true → false)
-        // when buildProxy() clears between menu opens; in that
-        // direction we want popup to stay hidden until the next
-        // GetLayout completes.
-        function onValidChanged() {
-            root.popupVisible = menuModel.valid;
+        // Fires on every successful GetLayout, not just the first
+        // transition to valid. That makes it the right signal for
+        // both initial open AND re-open of the same menu (which
+        // doesn't toggle `valid` and so doesn't fire validChanged).
+        function onLoaded() {
+            root.popupVisible = true;
         }
 
         // App-side menu broken (wrong path, wrong interface): stay
-        // hidden. menuModel.valid is already false here so this is
-        // belt-and-braces, but explicit is better for the case where
-        // a late LayoutUpdated signal toggles validity unexpectedly.
+        // hidden so the user doesn't see a frame of empty floating box.
         function onLoadFailed() {
             root.popupVisible = false;
+        }
+
+        // valid → false transitions happen when buildProxy clears
+        // between different services; mirror them onto popupVisible so
+        // a half-loaded popup doesn't linger across switches.
+        function onValidChanged() {
+            if (!menuModel.valid)
+                root.popupVisible = false;
+
         }
 
         target: menuModel

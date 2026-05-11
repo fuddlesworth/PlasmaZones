@@ -302,6 +302,11 @@ void DBusMenuModel::Private::refresh()
             valid = true;
             Q_EMIT q->validChanged();
         }
+        // Fires on every successful GetLayout. validChanged is
+        // silent when valid was already true (re-fetch of an
+        // already-loaded menu), and QML needs SOMETHING to listen
+        // for so it can remap a popup on re-open.
+        Q_EMIT q->loaded();
     });
 }
 
@@ -516,6 +521,11 @@ void DBusMenuModel::aboutToShow()
     if (!d->proxy)
         return;
     d->proxy->AboutToShow(d->rootId);
+}
+
+void DBusMenuModel::refresh()
+{
+    d->refresh();
 }
 
 void DBusMenuModel::aboutToHide()

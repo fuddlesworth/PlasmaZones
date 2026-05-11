@@ -80,12 +80,23 @@ public:
     /// the spec before showing the root. Idempotent on repeated calls.
     Q_INVOKABLE void aboutToShow();
     Q_INVOKABLE void aboutToHide();
+    /// Force a fresh GetLayout against the current service/path. Used
+    /// by the QML side when re-opening the SAME menu — `setService`/
+    /// `setPath` early-return when values are unchanged, so without
+    /// this the model never re-fetches and never re-fires `loaded`,
+    /// leaving the popup unable to remap.
+    Q_INVOKABLE void refresh();
 
 Q_SIGNALS:
     void sourceChanged();
     void rootIdChanged();
     void validChanged();
     void countChanged();
+    /// Fires on EVERY successful GetLayout — not just transitions
+    /// from invalid → valid. Used by QML to remap the popup when the
+    /// same menu is re-opened (validChanged stays silent in that case
+    /// because the bool didn't change).
+    void loaded();
     /// Fired when a GetLayout call returns a DBus error — usually
     /// means the SNI item advertised a Menu path that's stale,
     /// broken, or implemented as something other than canonical

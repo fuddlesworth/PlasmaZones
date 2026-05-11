@@ -56,6 +56,16 @@ class PHOSPHORSHELL_EXPORT PanelWindow : public QQuickItem
     Q_PROPERTY(Alignment alignment READ alignment WRITE setAlignment NOTIFY alignmentChanged)
     Q_PROPERTY(int panelLength READ panelLength WRITE setPanelLength NOTIFY panelLengthChanged)
     Q_PROPERTY(QMargins margins READ margins WRITE setMargins NOTIFY marginsChanged)
+    // Layer-shell keyboard_interactivity. Default `None` matches what
+    // Plasma's panel ships with: panels grab pointer events for their
+    // own widgets but never keyboard focus from other windows. Clicking
+    // a tray icon shouldn't steal focus from the user's terminal /
+    // editor / browser. Set to `OnDemand` when the panel hosts an
+    // input field (search launcher etc.) that needs key events; set
+    // to `Exclusive` for shell-modal surfaces like a lock screen.
+    // Popups attached to the panel get their own xdg_popup grab and
+    // can receive keyboard input independently of this setting.
+    Q_PROPERTY(KeyboardFocus keyboardFocus READ keyboardFocus WRITE setKeyboardFocus NOTIFY keyboardFocusChanged)
 
 public:
     enum Edge {
@@ -81,6 +91,17 @@ public:
         End,
     };
     Q_ENUM(Alignment)
+
+    // Mirror of PhosphorLayer::KeyboardInteractivity. Kept in this
+    // namespace so QML doesn't need to import PhosphorLayer just to
+    // name the enumerators. ShellEngine maps these to the layer
+    // library's enum at surface-creation time.
+    enum KeyboardFocus {
+        None, ///< Never receives keyboard focus (default — typical panel).
+        OnDemand, ///< Receives focus when the user clicks the surface.
+        Exclusive ///< Holds focus exclusively; for lock screens etc.
+    };
+    Q_ENUM(KeyboardFocus)
 
     explicit PanelWindow(QQuickItem* parent = nullptr);
     ~PanelWindow() override;
@@ -118,6 +139,9 @@ public:
     [[nodiscard]] QMargins margins() const;
     void setMargins(const QMargins& margins);
 
+    [[nodiscard]] KeyboardFocus keyboardFocus() const;
+    void setKeyboardFocus(KeyboardFocus focus);
+
 Q_SIGNALS:
     void edgeChanged();
     void thicknessChanged();
@@ -130,6 +154,7 @@ Q_SIGNALS:
     void alignmentChanged();
     void panelLengthChanged();
     void marginsChanged();
+    void keyboardFocusChanged();
 
 private:
     Edge m_edge = Top;
@@ -151,6 +176,7 @@ private:
     // >0:         "explicit pin in screen-axis pixels"
     int m_panelLength = -1;
     QMargins m_margins;
+    KeyboardFocus m_keyboardFocus = None;
 };
 
 } // namespace PhosphorShell
