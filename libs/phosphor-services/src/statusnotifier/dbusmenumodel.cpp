@@ -306,7 +306,7 @@ void DBusMenuModel::Private::refresh()
         // silent when valid was already true (re-fetch of an
         // already-loaded menu), and QML needs SOMETHING to listen
         // for so it can remap a popup on re-open.
-        qCInfo(lcSniMenu) << "loaded" << service << path << "rows=" << rows.size();
+        qCDebug(lcSniMenu) << "loaded" << service << path << "rows=" << rows.size();
         Q_EMIT q->loaded();
     });
 }
@@ -526,7 +526,7 @@ void DBusMenuModel::aboutToShow()
 
 void DBusMenuModel::refresh()
 {
-    qCInfo(lcSniMenu) << "refresh() invoked for" << d->service << d->path << "proxy=" << (d->proxy ? "live" : "null");
+    qCDebug(lcSniMenu) << "refresh() invoked for" << d->service << d->path << "proxy=" << (d->proxy ? "live" : "null");
     d->refresh();
 }
 

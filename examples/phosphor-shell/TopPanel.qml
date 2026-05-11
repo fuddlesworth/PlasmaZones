@@ -371,13 +371,6 @@ PanelWindow {
                             Accessible.role: Accessible.Button
                             Accessible.name: trayDelegate.toolTipTitle.length > 0 ? trayDelegate.toolTipTitle : trayDelegate.title
                             onClicked: function(mouse) {
-                                // DIAG: prove the click reached the
-                                // MouseArea. If this log never appears
-                                // for a problematic tray icon, the
-                                // event isn't reaching QML at all and
-                                // the bug is in pointer-focus / surface
-                                // stacking, not our model.
-                                console.log("tray click:", trayDelegate.dbusService, "button=" + mouse.button, "menuPath=" + trayDelegate.menuPath, "itemIsMenu=" + trayDelegate.itemIsMenu);
                                 // Translate the delegate-local click
                                 // coords to screen coords so the item's
                                 // process can position any popup it
