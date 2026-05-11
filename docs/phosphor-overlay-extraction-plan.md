@@ -467,7 +467,7 @@ Three sub-commits:
 
 - **5.3**: Extract the 8 daemon-to-ShellHost bridge methods from
   `osd.cpp` (where they accumulated during Phase 2-4) into a new
-  `overlayservice/shellhost_bridge.cpp` (274 lines). `osd.cpp` drops
+  `overlayservice/shellhost_bridge.cpp` (282 lines). `osd.cpp` drops
   from 889 to 691 lines, under the cap. OSD-specific show / dismiss
   paths stay in `osd.cpp`.
 
@@ -476,7 +476,7 @@ Final TU sizes after Phase 5 (and pass-4/5 audit fixes):
 | File | Lines |
 |---|---|
 | `overlayservice.cpp` | 795 |
-| `overlayservice/osd.cpp` | 691 |
+| `overlayservice/osd.cpp` | 690 |
 | `overlayservice/overlay.cpp` | 893 |
 | `overlayservice/selector.cpp` | 748 |
 | `overlayservice/snapassist.cpp` | 578 |
@@ -485,16 +485,16 @@ Final TU sizes after Phase 5 (and pass-4/5 audit fixes):
 | `overlayservice/animation_config.cpp` | 330 |
 | `overlayservice/settings.cpp` | 326 |
 | `overlayservice/lifecycle.cpp` | 313 |
-| `overlayservice/shellhost_bridge.cpp` | 274 |
+| `overlayservice/shellhost_bridge.cpp` | 282 |
 | `overlayservice/screens.cpp` | 220 |
 | `overlayservice/priming.cpp` | 182 |
 | `overlayservice/selector_update.cpp` | 231 |
-| `overlayservice.h` | 1046 |
+| `overlayservice.h` | 1047 |
 
 `overlay.cpp` at 893 sits 93 lines over the 800-line cap: further
 fragmentation (e.g. lifting `rekeyOverlayState` and
 `validateScreenStateInvariant` into a separate TU) would hurt
-readability for a marginal win. The header at 1046 is dominated by
+readability for a marginal win. The header at 1047 is dominated by
 the still-large `OverlayService` class declaration; meaningful
 header shrinkage requires breaking up the class itself, which is
 beyond Phase 5's scope.
