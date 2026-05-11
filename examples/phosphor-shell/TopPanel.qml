@@ -3,6 +3,7 @@
 // Single continuous top panel: one layer-shell surface spans the full
 // screen edge, three child zones anchor to left / center / right.
 
+import Phosphor.Services 1.0
 import Phosphor.Shell 1.0
 import QtQuick
 import QtQuick.Window
@@ -251,7 +252,21 @@ PanelWindow {
 
         }
 
-        // ─── Right zone: CPU / MEM / BAT readouts + settings ─────────────
+        // ─── System-tray (StatusNotifierItem) plumbing ────────────────────
+        // One host per panel — owns the DBus watcher + items collection.
+        // Lives outside the Row so the Repeater can reference it via
+        // anchors-of-anchors without lifetime races on Row re-layout.
+        StatusNotifierHost {
+            id: trayHost
+        }
+
+        StatusNotifierItemModel {
+            id: trayModel
+
+            host: trayHost
+        }
+
+        // ─── Right zone: tray + CPU / MEM / BAT readouts + settings ──────
         Row {
             id: rightZone
 
@@ -259,6 +274,93 @@ PanelWindow {
             anchors.verticalCenter: parent.verticalCenter
             anchors.rightMargin: 12
             spacing: 14
+
+            // Tray icons. Each delegate is a 22-px clickable image with
+            // hover background + cascade-popup menu on right-click. The
+            // model auto-refreshes when items register/unregister/change
+            // status — no manual binding needed.
+            Row {
+                spacing: 6
+                anchors.verticalCenter: parent.verticalCenter
+                visible: trayModel.count > 0
+
+                Repeater {
+                    model: trayModel
+
+                    delegate: Rectangle {
+                        id: trayDelegate
+
+                        required property int index
+                        required property string itemId
+                        required property string title
+                        required property var iconImage
+                        required property string toolTipTitle
+                        required property string toolTipBody
+                        required property string menuPath
+                        required property string dbusService
+
+                        width: 26
+                        height: 26
+                        radius: 6
+                        color: trayMouse.containsMouse ? "#45475a" : "transparent"
+
+                        Image {
+                            anchors.centerIn: parent
+                            width: 18
+                            height: 18
+                            // QImage from C++ → QML via a temporary
+                            // image:// provider would be canonical, but
+                            // setting source directly to the QImage role
+                            // works because Qt6 implicitly wraps it.
+                            // sourceSize keeps the on-screen size stable
+                            // regardless of the icon's intrinsic dimensions.
+                            source: trayDelegate.iconImage
+                            sourceSize.width: 36
+                            sourceSize.height: 36
+                            smooth: true
+                            // Some apps emit `Passive` items they never
+                            // upgrade — keep them visible but slightly
+                            // dimmed so they don't dominate the panel.
+                            opacity: 1
+                        }
+
+                        MouseArea {
+                            id: trayMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                            Accessible.role: Accessible.Button
+                            Accessible.name: trayDelegate.toolTipTitle.length > 0 ? trayDelegate.toolTipTitle : trayDelegate.title
+                            onClicked: function(mouse) {
+                                // Translate the delegate-local click
+                                // coords to screen coords so the item's
+                                // process can position any popup it
+                                // wants to render relative to "where
+                                // the user clicked the tray icon".
+                                const global = trayDelegate.mapToGlobal(mouse.x, mouse.y);
+                                if (mouse.button === Qt.LeftButton) {
+                                    if (trayDelegate.menuPath.length > 0)
+                                        trayMenu.openFor(trayDelegate);
+                                    else
+                                        trayModel.activate(trayDelegate.index, global.x, global.y);
+                                } else if (mouse.button === Qt.MiddleButton) {
+                                    trayModel.secondaryActivate(trayDelegate.index, global.x, global.y);
+                                } else if (mouse.button === Qt.RightButton) {
+                                    if (trayDelegate.menuPath.length > 0)
+                                        trayMenu.openFor(trayDelegate);
+                                    else
+                                        trayModel.contextMenu(trayDelegate.index, global.x, global.y);
+                                }
+                            }
+                        }
+
+                    }
+
+                }
+
+            }
 
             Row {
                 spacing: 4
@@ -351,6 +453,16 @@ PanelWindow {
 
         }
 
+    }
+
+    // dbusmenu cascade for tray right-clicks. Re-anchored per click
+    // via trayMenu.openFor(delegate). Lives at the panel-root level
+    // so the popup surface is a sibling of the panel, not a child of
+    // any Row (which would re-parent it on layout changes).
+    TrayMenuPopup {
+        id: trayMenu
+
+        shellState: root.shellState
     }
 
 }

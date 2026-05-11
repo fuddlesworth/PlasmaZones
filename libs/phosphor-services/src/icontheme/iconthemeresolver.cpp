@@ -185,6 +185,54 @@ QString IconThemeResolver::Private::detectThemeName() const
     return name;
 }
 
+namespace {
+
+/// Parse an index.theme file into (groupName → {key → value}) pairs.
+/// Hand-rolled because QSettings::IniFormat treats `/` in group names
+/// as nested-subgroup separators, which silently mangles XDG's spec-
+/// mandated `[NN/context]` group names ("16x16/apps" becomes group
+/// "16x16" subgroup "apps", and the directory descriptor's keys
+/// disappear under a path the rest of the code doesn't expect). The
+/// .desktop / .theme INI dialect is trivial: `# comment`, `[group]`,
+/// `key=value`, `key[locale]=value` (we ignore locale variants).
+QMap<QString, QMap<QString, QString>> parseIniFile(const QString& path)
+{
+    QMap<QString, QMap<QString, QString>> result;
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return result;
+    }
+    QString currentGroup;
+    while (!f.atEnd()) {
+        auto line = QString::fromUtf8(f.readLine()).trimmed();
+        if (line.isEmpty() || line.startsWith(QLatin1Char('#')) || line.startsWith(QLatin1Char(';'))) {
+            continue;
+        }
+        if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
+            currentGroup = line.mid(1, line.size() - 2);
+            continue;
+        }
+        if (currentGroup.isEmpty()) {
+            continue;
+        }
+        const int eq = line.indexOf(QLatin1Char('='));
+        if (eq <= 0) {
+            continue;
+        }
+        auto key = line.left(eq).trimmed();
+        const auto value = line.mid(eq + 1).trimmed();
+        // Drop `key[lang]` localisation suffixes — we only care about
+        // the C locale for spec-defined keys (Size, Type, etc.).
+        if (key.contains(QLatin1Char('['))) {
+            continue;
+        }
+        result[currentGroup].insert(key, value);
+    }
+    return result;
+}
+
+} // namespace
+
 const ThemeIndex& IconThemeResolver::Private::parseThemeIndex(const QString& themeName)
 {
     if (auto it = themeCache.constFind(themeName); it != themeCache.constEnd()) {
@@ -205,33 +253,32 @@ const ThemeIndex& IconThemeResolver::Private::parseThemeIndex(const QString& the
         if (!QFile::exists(indexPath))
             continue;
 
-        QSettings settings(indexPath, QSettings::IniFormat);
+        const auto sections = parseIniFile(indexPath);
+
         if (!foundHeader) {
             foundHeader = true;
-            settings.beginGroup(QStringLiteral("Icon Theme"));
-            const auto inheritsRaw = settings.value(QStringLiteral("Inherits")).toString();
+            const auto inheritsRaw = sections.value(QStringLiteral("Icon Theme")).value(QStringLiteral("Inherits"));
             for (const auto& parent : inheritsRaw.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
                 idx.inherits.append(parent.trimmed());
             }
-            settings.endGroup();
         }
 
-        const auto groups = settings.childGroups();
-        for (const auto& group : groups) {
-            if (group == QLatin1String("Icon Theme"))
+        for (auto sectionIt = sections.constBegin(); sectionIt != sections.constEnd(); ++sectionIt) {
+            const auto& group = sectionIt.key();
+            if (group == QLatin1String("Icon Theme")) {
                 continue;
-            settings.beginGroup(group);
+            }
+            const auto& kv = sectionIt.value();
             DirectoryEntry e;
             e.path = group;
-            e.size = settings.value(QStringLiteral("Size")).toInt();
-            e.scale = settings.value(QStringLiteral("Scale"), 1).toInt();
-            e.context = settings.value(QStringLiteral("Context")).toString();
-            e.type = settings.value(QStringLiteral("Type"), QStringLiteral("Threshold")).toString();
-            e.minSize = settings.value(QStringLiteral("MinSize"), e.size).toInt();
-            e.maxSize = settings.value(QStringLiteral("MaxSize"), e.size).toInt();
-            e.threshold = settings.value(QStringLiteral("Threshold"), 2).toInt();
+            e.size = kv.value(QStringLiteral("Size")).toInt();
+            e.scale = kv.value(QStringLiteral("Scale"), QStringLiteral("1")).toInt();
+            e.context = kv.value(QStringLiteral("Context"));
+            e.type = kv.value(QStringLiteral("Type"), QStringLiteral("Threshold"));
+            e.minSize = kv.value(QStringLiteral("MinSize"), QString::number(e.size)).toInt();
+            e.maxSize = kv.value(QStringLiteral("MaxSize"), QString::number(e.size)).toInt();
+            e.threshold = kv.value(QStringLiteral("Threshold"), QStringLiteral("2")).toInt();
             idx.directories.append(e);
-            settings.endGroup();
         }
     }
 

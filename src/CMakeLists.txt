@@ -456,6 +456,7 @@ add_executable(phosphor-shell shell/main.cpp)
 target_link_libraries(phosphor-shell
     PRIVATE
         PhosphorShell::PhosphorShell
+        PhosphorServices::PhosphorServices
         PhosphorLayer::PhosphorLayer
         PhosphorWayland::PhosphorWayland
         PhosphorRendering::PhosphorRendering

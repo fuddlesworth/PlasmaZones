@@ -60,6 +60,8 @@ qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(phosphorservices_public_HDRS
+    include/PhosphorServices/PhosphorServices.h
+    include/PhosphorServices/QmlRegistration.h
     include/PhosphorServices/StatusNotifierItem.h
     include/PhosphorServices/StatusNotifierItemModel.h
     include/PhosphorServices/StatusNotifierHost.h
@@ -72,6 +74,7 @@ set(phosphorservices_public_HDRS
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(phosphorservices_SRCS
+    src/qmlregistration.cpp
     src/statusnotifier/dbustypes.cpp
     src/statusnotifier/statusnotifierwatcher.cpp
     src/statusnotifier/statusnotifierhost.cpp
