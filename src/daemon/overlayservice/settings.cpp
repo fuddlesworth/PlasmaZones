@@ -52,7 +52,7 @@ void OverlayService::setSettings(ISettings* settings)
             // dependency graph manually with no functional difference: QML
             // property writes short-circuit on equal value, so the worst case
             // for the catch-all is N redundant property lookups across the
-            // selector windows — measured in microseconds. The catch-all is
+            // selector windows - measured in microseconds. The catch-all is
             // the maintenance-cheap choice; specific connections below cover
             // the cases where the response is structurally different
             // (overlay-window recreation, audio-spectrum start/stop, shader
@@ -79,7 +79,7 @@ void OverlayService::setSettings(ISettings* settings)
             // popup.zoneSelector, etc.). Push it into the SurfaceAnimator
             // now that settings are available, and re-push on every edit so
             // users editing the tree at runtime see the new effects on the next
-            // show — no daemon restart needed. registerConfigForRole only
+            // show - no daemon restart needed. registerConfigForRole only
             // affects subsequent show()/hide(), so animations mid-flight keep
             // their bound config (matches motion-tree live-reload semantics).
             applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
@@ -93,7 +93,7 @@ void OverlayService::setSettings(ISettings* settings)
             // beginShow / beginHide to the target opacity and fires
             // completion synchronously, skipping motion + shader legs.
             // Mirrors the kwin-effect's `m_windowAnimator->isEnabled()`
-            // gate on `tryBeginShaderForEvent` — single
+            // gate on `tryBeginShaderForEvent` - single
             // `Settings::animationsEnabled` flag stops every animation
             // on both runtimes.
             if (m_surfaceAnimator) {
@@ -111,7 +111,7 @@ void OverlayService::setSettings(ISettings* settings)
             // re-read its source from disk by invoking reloadShader() (inherited
             // Q_INVOKABLE from PhosphorRendering::ShaderEffect).
             // Daemon must call setShaderRegistry() before the first updateSettings()
-            // — without it, this branch is silently skipped and on-disk shader edits
+            // - without it, this branch is silently skipped and on-disk shader edits
             // won't propagate until the next daemon restart.
             if (m_shaderRegistry) {
                 m_shadersChangedConnection = connect(m_shaderRegistry, &ShaderRegistry::shadersChanged, this, [this]() {
@@ -249,7 +249,7 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
             return;
         }
         m_refreshCoalescePending = true;
-        // 16 ms ≈ one display frame — small enough that live-edit feels
+        // 16 ms ≈ one display frame - small enough that live-edit feels
         // instant, large enough that a burst of Q_PROPERTY writes collapses
         // into one refresh.
         QTimer::singleShot(16, this, [this]() {

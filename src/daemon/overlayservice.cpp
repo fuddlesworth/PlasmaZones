@@ -119,7 +119,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
 
     // The profile registry is non-optional: SurfaceAnimator binds to it by
     // reference. Composition roots own a single PhosphorProfileRegistry
-    // and thread it through every consumer — fail loud if the wiring is
+    // and thread it through every consumer - fail loud if the wiring is
     // wrong rather than silently falling back to library defaults.
     Q_ASSERT_X(profileRegistry, "OverlayService::OverlayService",
                "profileRegistry must not be null: composition root must own and inject the registry");
@@ -152,7 +152,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     // pointer is non-null from this point onwards. The SurfaceManager (and
     // its engine) is created next; the engineConfigurator releases ownership
     // to the engine once it exists. Until then the unique_ptr keeps the
-    // provider alive — there is no longer any window where a D-Bus
+    // provider alive - there is no longer any window where a D-Bus
     // setSnapAssistThumbnail call would silently drop because the engine
     // hasn't materialised yet.
     m_thumbnailProviderOwned = std::make_unique<SnapAssistThumbnailProvider>();
@@ -206,7 +206,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
 
     // Phase 2: ShellHost owns the per-screen layer-shell shell-state map
     // and the create / destroy lifecycle. The daemon registers callbacks
-    // for the PZ-specific bits — surface factory (PassiveShell role +
+    // for the PZ-specific bits - surface factory (PassiveShell role +
     // PassiveOverlayShell.qml + warmed-surface pipeline), post-create
     // slot wiring (5 PZ slot QML object-name lookups + 6 QML signal
     // wires + RHI prime), pre-destroy slot teardown (nulls PZ content
@@ -252,7 +252,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
             if (!physScreen) {
                 // Physical screen removed -- destroy windows and clean up stale virtual screen entries
                 // Tear down every shell whose key matches the
-                // virtual-screen prefix (`physId/vs:N`) — this catches
+                // virtual-screen prefix (`physId/vs:N`) - this catches
                 // all sub-region overlays rooted on the just-removed
                 // monitor. The bare physId entry is handled separately
                 // below; it has no `/vs:N` suffix so it doesn't match
@@ -293,7 +293,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 destroyPassiveShell(physicalScreenId);
             }
 
-            // Clear selected zone before destroying windows — the selection references
+            // Clear selected zone before destroying windows - the selection references
             // zone geometry from the old virtual screen config and would be stale.
             clearSelectedZone();
 
@@ -304,7 +304,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
             // Destroy all window types (overlays, selectors, OSDs, snap assist, layout picker)
             destroyAllWindowsForPhysicalScreen(physScreen);
 
-            // Reset zone selector flag — the windows were destroyed, so the flag
+            // Reset zone selector flag - the windows were destroyed, so the flag
             // must be cleared to allow re-showing. Without this, the guard at the
             // top of showZoneSelector() prevents recreation.
             if (hadZoneSelector) {
@@ -312,7 +312,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
             }
 
             // Recreate with new virtual screen config if visible. Reuses
-            // mgr2 from above — the Phosphor::Screens::ScreenManager singleton doesn't change
+            // mgr2 from above - the Phosphor::Screens::ScreenManager singleton doesn't change
             // mid-lambda, so re-querying would just be noise.
             if (isVisible()) {
                 if (mgr2 && mgr2->hasVirtualScreens(physicalScreenId)) {
@@ -338,7 +338,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                     // m_zoneSelectorVisible was set to false above (to allow recreation).
                     // If an external showZoneSelector() ran during the event loop pass between
                     // posting this timer and its execution, it will have set m_zoneSelectorVisible
-                    // back to true — in that case we must NOT call showZoneSelector() again
+                    // back to true - in that case we must NOT call showZoneSelector() again
                     // (double-show). The !m_zoneSelectorVisible guard handles exactly this:
                     // false means "no interim show happened, we still need to recreate";
                     // true means "already re-shown, skip".
@@ -409,7 +409,7 @@ OverlayService::~OverlayService()
     // Clean up all window types before engine is destroyed. The Surface owns
     // the QQuickWindow, so deleteLater on the Surface cascades into
     // ~Surface → ~Impl → window teardown in the right order. Never destroy
-    // the window directly — that races against ~Surface and dereferences a
+    // the window directly - that races against ~Surface and dereferences a
     // deleted pointer in ~Impl.
     //
     // Two-pass over keys-snapshot for the same reason as
@@ -426,21 +426,21 @@ OverlayService::~OverlayService()
     // the drain loop above missed) can still touch its parallel
     // per-screen state for cleanup. The lib dtor gates the callback on
     // a live shellSurface (skipping already-drained entries), so the
-    // re-fire is a no-op in the steady state — but ordering matters if
+    // re-fire is a no-op in the steady state - but ordering matters if
     // a future code path leaves a live shell behind.
     m_shellHost.reset();
     m_screenStates.clear();
 
     // Singleton surfaces (layout picker, shader preview) are QObject
     // children of `this`, so the QObject parent-child system would
-    // destroy them AFTER our own destructor body runs — i.e. after
+    // destroy them AFTER our own destructor body runs - i.e. after
     // the member destructors. Schedule their deletion now so
     // SurfaceManager's drain loop picks them up before the engine is
     // destroyed. Snap-assist post-shell-migration is an Item slot
-    // inside the per-screen passive shell — its lifetime is the
+    // inside the per-screen passive shell - its lifetime is the
     // shell's, no separate cleanup here.
     // Picker post-shell-migration is also a slot in the per-screen
-    // passive shell — no separate surface cleanup.
+    // passive shell - no separate surface cleanup.
     if (m_shaderPreviewSurface) {
         m_shaderPreviewSurface->deleteLater();
         m_shaderPreviewSurface = nullptr;
@@ -448,7 +448,7 @@ OverlayService::~OverlayService()
 
     // Drain deferred-delete events NOW, while all OverlayService members are
     // still alive. Surface destructors may touch m_screenStates, m_shaderRegistry,
-    // etc. — if we let ~m_surfaceManager's drain run instead, those members could
+    // etc. - if we let ~m_surfaceManager's drain run instead, those members could
     // already be destroyed (C++ member destruction order is reverse declaration).
     m_surfaceManager->drainDeferredDeletes();
 
@@ -486,7 +486,7 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams pa
     cfg.anchorsOverride = std::move(params.anchorsOverride);
     cfg.marginsOverride = std::move(params.marginsOverride);
     cfg.keepMappedOnHide = params.keepMappedOnHide;
-    // SurfaceConfig::initialSize uses isEmpty() as the "unset" sentinel —
+    // SurfaceConfig::initialSize uses isEmpty() as the "unset" sentinel -
     // forwarding the param verbatim preserves that contract (empty here →
     // empty there → fall back to screen geometry inside surface.cpp).
     cfg.initialSize = params.initialSize;
@@ -503,7 +503,7 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
     // Phase prior to this change kept OSD wl_surfaces content-sized (240×70
     // toast) and the layer-shell margins did the on-screen centering, but
     // that left vertex-shader transitions like fly-in clipped at the
-    // surface edge — geometry shifted past the surface bounds is dropped
+    // surface edge - geometry shifted past the surface bounds is dropped
     // by the compositor. A screen-sized OSD surface gives shader effects
     // headroom equal to the screen, and keeps the wiring path identical
     // to popups (which were already screen-sized) so a single
@@ -512,7 +512,7 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
     // Cost is real but bearable: a fullscreen swapchain runs ~25 MB at 4K
     // on the NVIDIA proprietary stack, vs ~tens of KB for the content-
     // sized warm-up. With one notification surface per effective screen
-    // (~1–6 in typical setups), that's ~25–150 MB. Damage tracking keeps
+    // (~1-6 in typical setups), that's ~25-150 MB. Damage tracking keeps
     // the per-frame cost negligible while idle: a fullscreen surface with
     // a small centred card only repaints the card region.
     QRect screenGeom;
@@ -558,7 +558,7 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
     // each routed by ensurePassiveShellFor to a slot-specific
     // animator-driven hide rather than a whole-surface hide. There's
     // no generic `dismissRequested` signal on PassiveOverlayShell.qml
-    // anymore — wiring one would unmap the shell on any per-slot
+    // anymore - wiring one would unmap the shell on any per-slot
     // auto-dismiss timer.
     return surface;
 }
@@ -754,13 +754,13 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
 {
     // Mirror buildLayoutsList's per-screen include resolution. Pre-fix the
     // raw m_includeManualLayouts/m_includeAutotileLayouts flags were used
-    // here — both default true — so on screens where the popup actually
+    // here - both default true - so on screens where the popup actually
     // showed only manual (or only autotile) layouts, this returned the
     // sum of both, inflating the row count and blowing barHeight up to
     // ~screen height. isNearTriggerEdge then kept the popup visible
     // wherever the cursor was during the drag.
     const auto inc = resolvePerScreenLayoutInclude(screenId);
-    // Ordering doesn't affect count — skip custom order for performance.
+    // Ordering doesn't affect count - skip custom order for performance.
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, inc.manual,
         inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),

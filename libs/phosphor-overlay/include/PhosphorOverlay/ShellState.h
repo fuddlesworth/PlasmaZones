@@ -14,7 +14,7 @@
 // map; ShellState only owns what the library mechanism owns.
 //
 // Mechanism pointers (shellSurface / shellWindow / physScreen) are
-// readable via accessors but not writable from outside the library —
+// readable via accessors but not writable from outside the library -
 // only ShellHost (friended) writes them at create / destroy time.
 // The slot map stays public because PostCreateCallback consumers
 // populate it with their slot vocabulary at shell-attach time.

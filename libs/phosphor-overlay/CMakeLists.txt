@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorOverlay — helper library for building overlays with PhosphorLayer.
+# PhosphorOverlay - helper library for building overlays with PhosphorLayer.
 #
 # Provides the per-screen layer-shell shell host, per-slot animator
 # coordination, and screen hot-plug / rekey plumbing that any Phosphor
@@ -12,7 +12,7 @@
 # Depends on Qt6::Core, Qt6::Quick, and the Phosphor primitive libs the
 # overlay subsystem rides on:
 #   • PhosphorLayer            (wlr-layer-shell wire primitives)
-#   • PhosphorShellPatterns    (UI-pattern recipes — axis 2)
+#   • PhosphorShellPatterns    (UI-pattern recipes - axis 2)
 #   • PhosphorSurfaces         (managed surface lifecycle + scope-gen)
 #   • PhosphorAnimation        (SurfaceAnimator for show/hide)
 #   • PhosphorScreens          (screen-topology + identity)

@@ -171,7 +171,7 @@ template<typename LogCategory>
 PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::IZoneLayoutRegistry* mgr, const QString& zoneId,
                                          const QString& operation, LogCategory category)
 {
-    // `activeLayout()` and `layouts()` are both on the interface — no
+    // `activeLayout()` and `layouts()` are both on the interface - no
     // need to require the concrete registry just to reach them.
     auto uuidOpt = parseAndValidateUuid(zoneId, operation, category);
     if (!uuidOpt) {
@@ -319,7 +319,7 @@ QString resolveScreenId(Phosphor::Screens::ScreenManager* mgr, const QString& sc
  * @brief Resolve a screen ID (physical or virtual) to its backing QScreen*
  *
  * Uses Phosphor::Screens::ScreenManager::physicalQScreenFor() when available, then falls back to
- * Phosphor::Screens::ScreenIdentity::findByIdOrName(). Does NOT fall back to primaryScreen — returns
+ * Phosphor::Screens::ScreenIdentity::findByIdOrName(). Does NOT fall back to primaryScreen - returns
  * nullptr so the caller can decide the appropriate fallback behavior.
  */
 QScreen* resolvePhysicalQScreen(Phosphor::Screens::ScreenManager* mgr, const QString& screenId);

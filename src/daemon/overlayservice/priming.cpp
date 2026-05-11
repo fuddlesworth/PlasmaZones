@@ -30,7 +30,7 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
     // path adds another stateChanged or frameSwapped lambda to it.
     // Without this gate, an external double-call to
     // primeSurfaceRenderPipeline (e.g. show path that races a screen
-    // reconfigure) would arm a second frameSwapped connection — one
+    // reconfigure) would arm a second frameSwapped connection - one
     // would fire and hide the surface mid-content.
     if (m_primingSurfaces.contains(surface)) {
         return;
@@ -39,7 +39,7 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
     // Single destroyed-cleanup per surface (per OverlayService
     // instance), tracked in m_primingDestroyedConnections. Replaces
     // the earlier `pz_primingDestroyedConnected` dynamic-property
-    // gate which leaked across service instances — a fresh service
+    // gate which leaked across service instances - a fresh service
     // re-encountering the same Surface* would skip wiring its own
     // cleanup. The slot's static_cast on `dying` is safe because the
     // resulting pointer is only used as a hash-map key (compare-by-
@@ -56,10 +56,10 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
 
     auto* window = surface->window();
     if (!window) {
-        // Surface hasn't materialised a QQuickWindow yet — Surface::warmUp
+        // Surface hasn't materialised a QQuickWindow yet - Surface::warmUp
         // is asynchronous for content that compiles off the main thread.
         // Defer until warm completes (stateChanged Warming → Hidden).
-        // Disconnect on the FIRST Hidden — even if the window is somehow
+        // Disconnect on the FIRST Hidden - even if the window is somehow
         // still null we drop the connection rather than letting it stay
         // armed forever and re-fire on every later state change. The
         // recursive call lands in the window-non-null branch which adds
@@ -68,7 +68,7 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
         // Insert into m_primingSurfaces NOW (warm-pending sentinel) so
         // an external second call to primeSurfaceRenderPipeline before
         // the first warm completes hits the contains() guard above and
-        // bails — without this, the second call would queue a SECOND
+        // bails - without this, the second call would queue a SECOND
         // stateChanged lambda whose recursive call lands in the window-
         // path's contains() bail at line `m_primingSurfaces.contains
         // (surface) → return` after the first one already inserted +
@@ -105,7 +105,7 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
                                 // cancelSurfacePrime during the warm-pending
                                 // window, the surface was already removed
                                 // from the set, `remove()` returns false,
-                                // and we MUST NOT recurse — recursion would
+                                // and we MUST NOT recurse - recursion would
                                 // re-arm a fresh prime cycle whose
                                 // frameSwapped-driven hide() races the
                                 // user's just-shown content off the screen.
@@ -129,7 +129,7 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
     // at least one frame.
     //
     // The connection is tracked in m_primingFrameConnections so
-    // cancelSurfacePrime can disconnect it explicitly — without
+    // cancelSurfacePrime can disconnect it explicitly - without
     // tracking, the connection survives until next paint and we
     // accumulate one stale slot per prime cycle for the surface's
     // lifetime under rapid show/hide.
@@ -137,7 +137,7 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
     QMetaObject::Connection frameConn = connect(window, &QQuickWindow::frameSwapped, this, [this, guard]() {
         if (!guard) {
             // Surface died after the connection was armed but before
-            // first frameSwapped — the destroyed-signal lambda in
+            // first frameSwapped - the destroyed-signal lambda in
             // m_primingDestroyedConnections has already cleaned the
             // map entry, and Qt's sender-destruction auto-disconnect
             // (window dies with surface) will retire this lambda
@@ -161,13 +161,13 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
 
 void OverlayService::cancelSurfacePrime(PhosphorLayer::Surface* surface)
 {
-    // Idempotent — called from every user show path so a non-priming
+    // Idempotent - called from every user show path so a non-priming
     // surface short-circuits cheaply. Disconnect the frameSwapped
     // lambda EXPLICITLY (tracked in m_primingFrameConnections) so the
     // queued hide-on-first-paint never fires after a user-show. The
     // m_primingSurfaces.remove() is the secondary guard the lambda
     // would also check, but explicit disconnection is the safer
-    // primary contract — any future event-loop pump between cancel
+    // primary contract - any future event-loop pump between cancel
     // and the user's surface->show() is now harmless. Surfaces that
     // get torn down outside of cancelSurfacePrime are cleaned via the
     // destroyed signal connection in m_primingDestroyedConnections.

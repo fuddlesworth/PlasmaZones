@@ -103,7 +103,7 @@ bool OverlayService::useShaderForScreen(QScreen* screen) const
     const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physId)) {
-        // Check all virtual screens — if any uses a shader, return true.
+        // Check all virtual screens - if any uses a shader, return true.
         // This is used by initializeOverlay which creates per-virtual-screen windows.
         const QStringList vsIds = mgr->virtualScreenIdsFor(physId);
         for (const QString& vsId : vsIds) {
@@ -188,7 +188,7 @@ void OverlayService::startShaderAnimation()
 
 void OverlayService::stopShaderAnimation()
 {
-    // Don't stop CAVA here — it stays warm for instant audio data on next show().
+    // Don't stop CAVA here - it stays warm for instant audio data on next show().
     // Just clear the spectrum from overlay windows so they don't render stale data.
     // audioSpectrum lives on mainOverlaySlot() (the slot
     // Item that hosts the shader content), not on the shell window
@@ -255,7 +255,7 @@ void OverlayService::updateShaderUniforms()
     // Pinned to the GUI thread by m_shaderUpdateTimer (a QObject parented
     // to `this`, fired only on the thread that owns it). The frame-counter
     // overflow guard below uses fetch_add + store NOT as a TOCTOU-safe
-    // sequence but as cheap relaxed-atomic increments — the assert pins
+    // sequence but as cheap relaxed-atomic increments - the assert pins
     // the thread invariant in debug builds so a future refactor that
     // drives the timer from a worker thread surfaces here rather than
     // as silently-corrupted iFrame on simultaneous invocations.
@@ -271,7 +271,7 @@ void OverlayService::updateShaderUniforms()
     }
 
     // Keep iTime as double through the whole pipeline. ZoneShaderNodeRhi splits
-    // it into iTime (wrapped) + iTimeHi at the final GPU upload — see
+    // it into iTime (wrapped) + iTimeHi at the final GPU upload - see
     // kShaderTimeWrap. Casting to float32 here would requantize the counter
     // before the wrap, reintroducing the freezing bug at long uptimes.
     const double iTime = static_cast<double>(currentTime) / 1000.0;
@@ -279,7 +279,7 @@ void OverlayService::updateShaderUniforms()
     // Calculate delta time with clamp (sleep/resume / GC stall protection).
     // Cap pinned to PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds
     // so the daemon and the surface-animator runtimes share one source
-    // of truth — bumping one without the other was the prior drift risk.
+    // of truth - bumping one without the other was the prior drift risk.
     const qint64 lastTime = m_lastFrameTime.exchange(currentTime);
     float iTimeDelta = qMin(static_cast<float>(currentTime - lastTime) / 1000.0f,
                             PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds);
@@ -300,7 +300,7 @@ void OverlayService::updateShaderUniforms()
     // Update per-frame shader uniforms on the main-overlay slot Item
     // for every screen with main overlay active. iTime/iTimeDelta/
     // iFrame are properties on mainOverlaySlot in PassiveOverlayShell.qml
-    // (lines 666-668), not on the shell window root — RenderNodeOverlayContent
+    // (lines 666-668), not on the shell window root - RenderNodeOverlayContent
     // binds to mainOverlaySlot.iTime, so writes to the window root would
     // create dynamic properties that QML never observes.
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
@@ -366,7 +366,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     const QVariantList zones = parseZonesJson(zonesJson, "showShaderPreview:");
     // Params arrive already translated to uniform names by the editor
     // (via EditorController::translateShaderParams → D-Bus translateParamsToUniforms).
-    // Do NOT re-translate here — the keys are already uniform names like "customParams1_x".
+    // Do NOT re-translate here - the keys are already uniform names like "customParams1_x".
     const QVariantMap shaderParams = parseShaderParamsJson(shaderParamsJson, "showShaderPreview:");
 
     if (!m_shaderPreviewWindow || m_shaderPreviewScreen != screen) {
@@ -385,20 +385,20 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     auto* handle = m_shaderPreviewSurface ? m_shaderPreviewSurface->transport() : nullptr;
     if (!handle) {
         qCWarning(lcOverlay) << "showShaderPreview: no transport handle for preview surface"
-                             << "— layer-shell may have been lost (compositor restart?)."
+                             << "- layer-shell may have been lost (compositor restart?)."
                              << "Destroying and recreating the window.";
         destroyShaderPreviewWindow();
         createShaderPreviewWindow(screen, screenId);
         if (!m_shaderPreviewSurface || !m_shaderPreviewWindow) {
             // Belt-and-braces: createShaderPreviewWindow sets both fields
             // atomically, but a future refactor that split them could leave
-            // a non-null surface with a null window — `setWidth` on a null
+            // a non-null surface with a null window - `setWidth` on a null
             // window would crash. Guard both.
             return;
         }
         handle = m_shaderPreviewSurface->transport();
         if (!handle) {
-            qCWarning(lcOverlay) << "showShaderPreview: recreated surface still has no transport — aborting";
+            qCWarning(lcOverlay) << "showShaderPreview: recreated surface still has no transport - aborting";
             return;
         }
     }
@@ -411,12 +411,12 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
         handle->setMargins(placement.margins);
     }
 
-    // Set window size — position is controlled by layer-surface anchors + margins,
+    // Set window size - position is controlled by layer-surface anchors + margins,
     // not by setX/setY which are no-ops on layer surfaces.
     m_shaderPreviewWindow->setWidth(width);
     m_shaderPreviewWindow->setHeight(height);
 
-    // Shader properties — set all auxiliary props BEFORE shaderSource,
+    // Shader properties - set all auxiliary props BEFORE shaderSource,
     // because setShaderSource() emits statusChanged() which cascades
     // through QML bindings and can trigger visibility changes before
     // buffer paths / zones / params are ready.
@@ -435,7 +435,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     // applyShaderInfoToWindow sets shaderSource LAST (triggers statusChanged cascade).
     // Pass the preview's sub-rect + the containing physical screen so a
     // wallpaper-consuming shader samples the portion of the wallpaper that
-    // actually sits behind the preview rect — mirrors the VS-cropping path
+    // actually sits behind the preview rect - mirrors the VS-cropping path
     // in overlay.cpp so preview and live overlay agree pixel-for-pixel.
     const QRect previewSubGeom(x, y, width, height);
     const QRect previewPhysGeom = screen->geometry();
@@ -461,7 +461,7 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
     if (width > 0 && height > 0) {
         QScreen* screen = m_shaderPreviewWindow->screen();
         if (screen) {
-            // Size only — position is controlled by layer-surface anchors + margins.
+            // Size only - position is controlled by layer-surface anchors + margins.
             m_shaderPreviewWindow->setWidth(width);
             m_shaderPreviewWindow->setHeight(height);
             if (auto* handle = m_shaderPreviewSurface ? m_shaderPreviewSurface->transport() : nullptr) {
@@ -511,7 +511,7 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     // Unique-per-instance scope to avoid compositor-side rate limiting when the
     // editor rapidly opens/closes the Shader Settings dialog. Routes through
     // makePerInstanceRole so the per-instance prefix is guaranteed by
-    // construction to start with PzRoles::ShaderPreview's base — even though
+    // construction to start with PzRoles::ShaderPreview's base - even though
     // the SurfaceAnimator deliberately doesn't register a config for this
     // role (editor-controlled imperative show/hide), keeping construction
     // uniform across every per-instance role keeps a future migration cheap.
@@ -531,7 +531,7 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     m_shaderPreviewSurface = surface;
     m_shaderPreviewWindow = surface->window();
     m_shaderPreviewScreen = screen;
-    // Surface starts in State::Hidden (warmed) — caller flips visible later.
+    // Surface starts in State::Hidden (warmed) - caller flips visible later.
 }
 
 void OverlayService::destroyShaderPreviewWindow()

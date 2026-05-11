@@ -86,7 +86,7 @@ void OverlayService::handleScreenAdded(QScreen* screen)
     // windows exist so the next showAtPosition call finds them ready.
     const bool wasVisible = m_visible;
     if (!wasVisible) {
-        m_visible = true; // transient — initializeOverlay may set it false again
+        m_visible = true; // transient - initializeOverlay may set it false again
     }
 
     const QString physScreenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
@@ -138,7 +138,7 @@ void OverlayService::handleScreenAdded(QScreen* screen)
     // no overlay windows were actually created (transport unavailable, etc.).
     if (!wasVisible && !m_visible) {
         qCDebug(lcOverlay) << "handleScreenAdded: no overlay windows created for" << physScreenId
-                           << "— transport may be unavailable";
+                           << "- transport may be unavailable";
     }
 }
 
@@ -158,7 +158,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             destroyOverlayWindow(id);
             destroyZoneSelectorWindow(id);
             destroyPassiveShell(id);
-            // Drop the empty state entry once the shell surface is gone —
+            // Drop the empty state entry once the shell surface is gone -
             // screen hot-plug cycles don't slowly accumulate dead keys.
             // Re-find because the destroy calls above may have invalidated
             // our iterator through the PreDestroyCallback's m_screenStates
@@ -166,7 +166,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             auto postIt = m_screenStates.constFind(id);
             if (postIt == m_screenStates.constEnd() || !postIt->shell || !postIt->shell->shellSurface()) {
                 m_screenStates.remove(id);
-                // Symmetric drop on the lib side — destroyPassiveShell
+                // Symmetric drop on the lib side - destroyPassiveShell
                 // only zeroes the ShellState fields, the entry itself
                 // survives in ShellHost's m_states. Without this drop,
                 // many hot-plug cycles slowly grow the lib's map with
@@ -177,7 +177,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     }
 
     // Snap-assist + layout picker post-shell-migration are Item slots
-    // inside the per-screen passive shell — destroying the shell
+    // inside the per-screen passive shell - destroying the shell
     // (above, via destroyPassiveShell) tears the slots down with
     // it. No separate cleanup needed.
 
@@ -200,7 +200,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     // doesn't suppress the first navigation OSD on the reconnected monitor
     // when it lands inside the implicit 200 ms timeout window. The dedup is
     // keyed on the screenId at time-of-fire, and a removed-then-readded
-    // monitor reuses the same id — without this clear, a navigation action
+    // monitor reuses the same id - without this clear, a navigation action
     // on the readded screen within 200 ms of the last action on the
     // pre-removal incarnation gets silently swallowed.
     if (!physId.isEmpty()

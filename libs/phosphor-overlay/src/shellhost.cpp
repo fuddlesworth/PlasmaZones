@@ -38,7 +38,7 @@ ShellHost::~ShellHost()
     //
     // destroyShell gates PreDestroyCallback on `shellSurface != nullptr`,
     // so entries previously drained by the consumer (shellSurface already
-    // null) skip the callback in this pass — no re-entry into consumer
+    // null) skip the callback in this pass - no re-entry into consumer
     // state that may already be partially destroyed.
     const QStringList keys = m_states.keys();
     for (const QString& key : keys) {
@@ -85,7 +85,7 @@ ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
 {
     auto it = m_states.find(screenId);
     if (it != m_states.end() && it.value()->m_shellSurface) {
-        // Refresh m_physScreen on the cached entry — a fast hot-plug
+        // Refresh m_physScreen on the cached entry - a fast hot-plug
         // cycle (monitor removed and re-added under the same key) can
         // leave a stale QScreen* on the state object while the lib
         // surface stays alive. Callers reading physScreen() rely on
@@ -164,7 +164,7 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // state machine (maps the wl_surface, warms the RHI, fires animator
     // attach callbacks); subsequent input-region toggles flip
     // Qt::WindowTransparentForInput directly without re-entering the
-    // Surface::show()/hide() path — that path's `animator().cancel(...)`
+    // Surface::show()/hide() path - that path's `animator().cancel(...)`
     // would wipe per-slot tracking and `beginHide(animatorTarget())`
     // would animate the shell root opacity, both of which we want to
     // avoid for a pure click-through toggle.
@@ -199,7 +199,7 @@ bool ShellHost::rekey(const QString& oldKey, const QString& newKey)
     }
 
     // Drop a stale (non-live) entry under newKey before the move lands.
-    // Refuse to clobber a live one — the caller should not have selected
+    // Refuse to clobber a live one - the caller should not have selected
     // this donor when the target slot is occupied.
     auto existing = m_states.find(newKey);
     if (existing != m_states.end()) {
@@ -227,20 +227,20 @@ void ShellHost::registerConfigForRole(const PhosphorLayer::Role& role,
 
 void ShellHost::hideSlot(const QString& screenId, const QString& slotKey, std::function<void()> completion)
 {
-    // Programmer-setup errors (no animator wired, empty ids) — drop
+    // Programmer-setup errors (no animator wired, empty ids) - drop
     // completion silently because the caller has no recovery path.
     if (!m_surfaceAnimator || screenId.isEmpty() || slotKey.isEmpty()) {
         return;
     }
     // Benign no-ops (no shell, no slot, slot Item gone, slot already
-    // hidden) — fire completion synchronously so consumer cleanup that
+    // hidden) - fire completion synchronously so consumer cleanup that
     // relies on "post-hide" semantics (clear loader mode, clear
     // sentinels, restore sibling slot) still runs. Without this, a
     // dismiss called on an already-hidden slot leaves consumer parallel
     // state stuck "live" forever.
     //
     // Helper takes the callback by rvalue-ref so the move from the
-    // caller's `completion` is explicit at each early-return site —
+    // caller's `completion` is explicit at each early-return site -
     // and the outer `completion` is left in a moved-from-but-still-
     // destructible state for any subsequent reference (the function
     // returns immediately after; the std::move(completion) on the

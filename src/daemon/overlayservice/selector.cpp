@@ -137,7 +137,7 @@ void OverlayService::hideZoneSelector()
 
     m_zoneSelectorVisible = false;
 
-    // Selected zone NOT cleared here — drag-end snap path needs it.
+    // Selected zone NOT cleared here - drag-end snap path needs it.
     //
     // Snapshot keys before iterating so the completion lambda
     // (potentially fired synchronously by ShellHost::hideSlot on a
@@ -182,7 +182,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     // Resolve to effective (virtual) screen ID if applicable
     QString cursorScreenId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), screen);
 
-    // Skip excluded screens (autotile-managed) — matches showZoneSelector exclusion
+    // Skip excluded screens (autotile-managed) - matches showZoneSelector exclusion
     if (m_excludedScreens.contains(cursorScreenId)) {
         return;
     }
@@ -493,7 +493,7 @@ void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
 {
     auto it = m_screenStates.find(screenId);
     if (it != m_screenStates.end()) {
-        // Slot lifetime is the shell's — destroyPassiveShell tears the
+        // Slot lifetime is the shell's - destroyPassiveShell tears the
         // slot Item down with it. But if the slot is currently
         // animating-visible at the moment of context-disable
         // (e.g. user disabled snapping mid-drag), we need to drive
@@ -556,7 +556,7 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
     // already visible AND the cached (physScreen, geom) match the
     // request, we have nothing to do. If the cached values differ
     // (mid-flight monitor hot-plug, geometry update), fall through
-    // to refresh — silently dropping the new args would leave the
+    // to refresh - silently dropping the new args would leave the
     // slot painted with stale geometry.
     {
         auto existing = m_screenStates.find(effectiveId);
@@ -598,7 +598,7 @@ void OverlayService::restoreZoneSelectorAfterHide(const QString& effectiveId)
     }
     // The drag may still be active (m_zoneSelectorVisible stays true
     // across temporary slot-hides), and the screen may retain its
-    // captured (physScreen, geometry) — re-show in that case.
+    // captured (physScreen, geometry) - re-show in that case.
     if (m_zoneSelectorVisible && it->zoneSelectorPhysScreen && it->zoneSelectorGeometry.isValid()) {
         showZoneSelectorSlotOnScreen(effectiveId, it->zoneSelectorPhysScreen, it->zoneSelectorGeometry);
     }

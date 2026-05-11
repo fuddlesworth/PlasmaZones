@@ -3,7 +3,7 @@
 
 #pragma once
 
-// ShellHost — owns the per-screen layer-shell shell-state map and the
+// ShellHost - owns the per-screen layer-shell shell-state map and the
 // lifecycle bookkeeping (create / destroy / rekey / sync) that any
 // multi-slot overlay consumer needs.
 //
@@ -65,7 +65,7 @@ class PHOSPHOROVERLAY_EXPORT ShellHost : public QObject
 public:
     /// Consumer-provided factory for the per-screen layer-shell surface.
     /// The library does not know which Role / qmlSource / SurfaceManager
-    /// the consumer wires through — the factory encapsulates all of
+    /// the consumer wires through - the factory encapsulates all of
     /// that, returns the resulting Surface*, or nullptr on failure.
     using SurfaceFactory = std::function<PhosphorLayer::Surface*(const QString& screenId, QScreen* physScreen)>;
 
@@ -82,7 +82,7 @@ public:
     /// so a stale signal handler firing during teardown doesn't dereference
     /// a dangling pointer.
     ///
-    /// Only fires when a live shell surface is being torn down — re-calls
+    /// Only fires when a live shell surface is being torn down - re-calls
     /// of @ref destroyShell on an already-drained entry (shellSurface
     /// already nullptr) skip the callback. ~ShellHost's cleanup loop
     /// therefore won't re-enter consumer state that may have already
@@ -104,7 +104,7 @@ public:
     void setPreDestroyCallback(PreDestroyCallback callback);
 
     /// Inject the SurfaceAnimator that drives every slot's show/hide
-    /// leg. Required before any @ref hideSlot call. Borrowed pointer —
+    /// leg. Required before any @ref hideSlot call. Borrowed pointer -
     /// the lib does not own the animator; composition roots typically
     /// own a single instance and thread it through every consumer.
     void setSurfaceAnimator(PhosphorAnimationLayer::SurfaceAnimator* animator);
@@ -132,14 +132,14 @@ public:
     /// Tear down the shell for @p screenId. Fires the pre-destroy
     /// callback before scheduling shellSurface for deletion via
     /// deleteLater. After return, the ShellState entry survives with
-    /// every shell-mechanism field nulled — callers that want the entry
+    /// every shell-mechanism field nulled - callers that want the entry
     /// removed entirely should follow up with @ref removeState.
     void destroyShell(const QString& screenId);
 
     /// Reconcile the shell's mapped state + pointer-input region with
     /// the consumer's view of what's live on this screen.
     ///
-    /// @p anyVisible — true when at least one slot wants the surface
+    /// @p anyVisible - true when at least one slot wants the surface
     /// mapped (driven by the consumer's slot-visibility check). Brings
     /// the surface up on the first transition from never-shown → live;
     /// subsequent visibility transitions toggle the input flag directly
@@ -147,7 +147,7 @@ public:
     /// path cancels per-surface animator tracking, which would wipe
     /// in-flight beginShow's on OTHER slots on the same shell).
     ///
-    /// @p anyInputGrabbing — true when at least one modal slot
+    /// @p anyInputGrabbing - true when at least one modal slot
     /// (consumer-defined; PZ today: snap-assist + layout picker) wants
     /// pointer input. When false the shell's QQuickWindow is flagged
     /// Qt::WindowTransparentForInput so background windows stay
@@ -167,7 +167,7 @@ public:
     ///
     /// Same-key (`oldKey == newKey`) is idempotent success: returns true
     /// iff a live entry exists under that key. The entry is at newKey
-    /// after the call — the bool reports "the postcondition holds", not
+    /// after the call - the bool reports "the postcondition holds", not
     /// "a move happened".
     ///
     /// Surface re-anchoring is the consumer's responsibility: the layer
@@ -194,13 +194,13 @@ public:
     ///     visible and the animator ran the transition;
     ///   - synchronously, before this call returns, when nothing needed
     ///     to animate (no shell, no slot under that key, slot Item gone,
-    ///     slot Item not currently visible) — consumer post-hide cleanup
+    ///     slot Item not currently visible) - consumer post-hide cleanup
     ///     (clear loader mode, release content state, restore siblings)
     ///     runs in either case.
     ///
     /// Completion is dropped only when the call is a programmer-setup
     /// error: animator not injected, empty @p screenId, or empty
-    /// @p slotKey — none have a recovery path the consumer could take.
+    /// @p slotKey - none have a recovery path the consumer could take.
     void hideSlot(const QString& screenId, const QString& slotKey, std::function<void()> completion = {});
 
     /// Read-write accessor. Returns the existing ShellState for
@@ -209,7 +209,7 @@ public:
     ShellState& stateFor(const QString& screenId);
 
     /// Read-only accessor. Returns nullptr if no state exists for
-    /// @p screenId — callers that need to peek without materializing
+    /// @p screenId - callers that need to peek without materializing
     /// an empty entry should use this overload.
     const ShellState* stateFor(const QString& screenId) const;
 
@@ -217,7 +217,7 @@ public:
     bool hasState(const QString& screenId) const;
 
     /// Remove the ShellState for @p screenId entirely. The library does
-    /// NOT delete the shellSurface pointer — the caller's destroy
+    /// NOT delete the shellSurface pointer - the caller's destroy
     /// pathway is expected to schedule that via deleteLater first.
     void removeState(const QString& screenId);
 
@@ -251,7 +251,7 @@ private:
     ///
     /// @c std::unique_ptr cannot live in @c QHash (Qt 6's hash requires
     /// copy-constructible values), and @c std::shared_ptr would add
-    /// reference-counting overhead the lib does not need — there is one
+    /// reference-counting overhead the lib does not need - there is one
     /// owner (the host) and any number of borrowed observers.
     QHash<QString, ShellState*> m_states;
     QSet<QString> m_creationFailed;
