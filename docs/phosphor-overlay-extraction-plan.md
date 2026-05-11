@@ -257,7 +257,7 @@ plugin-architecture direction. The bridge from `OverlayService` into
 the future `phosphor-overlay` library is symmetrical: both sides talk
 to interfaces.
 
-### Phase 1 - New library scaffolding
+### Phase 1 - New library scaffolding (DONE in this branch)
 
 - `libs/phosphor-overlay/`: CMakeLists, Config.cmake.in, README, empty
   public headers, `add_library SHARED` linking layer + surfaces +
@@ -266,6 +266,13 @@ to interfaces.
   (and after `phosphor-animation` since SurfaceAnimator is a dep).
 - `tests/test_overlay_smoke.cpp` that links the lib and exercises an
   empty ShellHost ctor/dtor. Pins the build.
+
+Shipped a minimal `PhosphorOverlay::ShellHost` (QObject, default
+ctor/dtor) and a smoke test that pins both the construct/destruct path
+and the QObject parent semantics. The Phase 2 mechanism move fills in
+the real ctor signature (`SurfaceManager&`, `ScreenManager&`, etc.)
+without churn at the library boundary - consumers Phase 2 lands on
+re-call against the same `PhosphorOverlay::` namespace.
 
 ### Phase 2 - ShellHost extraction
 
@@ -392,7 +399,7 @@ to interfaces.
 |---|---|
 | 0a - Plan + signal lift | DONE (#436) |
 | 0b - Interface widening for layout queries | DONE (#436) |
-| 1 - New library scaffolding | pending |
+| 1 - New library scaffolding | DONE (#436) |
 | 2 - ShellHost extraction | pending |
 | 3 - Slot extraction | pending |
 | 4 - Animator config wiring | pending |
