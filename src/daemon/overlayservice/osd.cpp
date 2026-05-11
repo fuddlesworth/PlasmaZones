@@ -449,6 +449,13 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
 {
     auto it = m_screenStates.find(effectiveId);
     if (it != m_screenStates.end() && it->passiveShellSurface) {
+        // Ensure the shell window defaults to click-through even on
+        // re-entry (e.g., after screen power-cycle where the shell
+        // survived but the flag may have been set to false by a modal
+        // popup or hide function).
+        if (auto* window = it->passiveShellWindow) {
+            window->setFlag(Qt::WindowTransparentForInput, true);
+        }
         return &it.value();
     }
 
@@ -475,6 +482,19 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     state.passiveShellSurface = surface;
     state.passiveShellWindow = surface->window();
     state.notificationPhysScreen = physScreen;
+
+    // Default the shell window to click-through. The shell starts in a
+    // state where no modal popup is active, so it should never steal
+    // clicks unless a modal slot (snap-assist / layout picker) is
+    // explicitly shown. Setting this as the default means that even if
+    // syncPassiveShellSurfaceState is missed (e.g., during screen
+    // power-cycle reconnection where ensurePassiveShellFor returns an
+    // existing entry without re-syncing), the overlay remains
+    // click-through by default rather than inheriting a stale
+    // wantTransparent=false from a prior modal popup.
+    if (auto* window = surface->window()) {
+        window->setFlag(Qt::WindowTransparentForInput, true);
+    }
 
     // Cache the per-content slot Items — exposed as `osdSlotItem` /
     // `snapAssistSlotItem` on the shell window root via QML aliases.
