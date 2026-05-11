@@ -299,6 +299,7 @@ PanelWindow {
                         required property string toolTipTitle
                         required property string toolTipBody
                         required property string menuPath
+                        required property bool itemIsMenu
                         required property string dbusService
 
                         width: 26
@@ -368,14 +369,31 @@ PanelWindow {
                             Accessible.role: Accessible.Button
                             Accessible.name: trayDelegate.toolTipTitle.length > 0 ? trayDelegate.toolTipTitle : trayDelegate.title
                             onClicked: function(mouse) {
+                                // SNI button-mapping, same as KDE Plasma:
+
                                 // Translate the delegate-local click
                                 // coords to screen coords so the item's
                                 // process can position any popup it
                                 // wants to render relative to "where
                                 // the user clicked the tray icon".
                                 const global = trayDelegate.mapToGlobal(mouse.x, mouse.y);
+                                //   LEFT   → Activate() — the app's primary action,
+                                //            e.g. "open main window". Exception:
+                                //            items that set ItemIsMenu = true have
+                                //            no main window (the icon IS the menu),
+                                //            so left-click opens the dbusmenu
+                                //            instead. KeePassXC and the per-shell
+                                //            "system tray menu" widgets are the
+                                //            common cases.
+                                //   MIDDLE → SecondaryActivate() — typically
+                                //            play/pause for media items, "show
+                                //            quick action" for others.
+                                //   RIGHT  → open dbusmenu when the item
+                                //            advertises one, else fall back to
+                                //            ContextMenu() so the app can render
+                                //            its own.
                                 if (mouse.button === Qt.LeftButton) {
-                                    if (trayDelegate.menuPath.length > 0)
+                                    if (trayDelegate.itemIsMenu && trayDelegate.menuPath.length > 0)
                                         trayMenu.openFor(trayDelegate);
                                     else
                                         trayModel.activate(trayDelegate.index, global.x, global.y);
@@ -387,6 +405,21 @@ PanelWindow {
                                     else
                                         trayModel.contextMenu(trayDelegate.index, global.x, global.y);
                                 }
+                            }
+                            // Forward scroll events as SNI Scroll() —
+                            // volume widgets (PulseAudio applet, PipeWire
+                            // tray), brightness controls, etc. use this
+                            // for fine-grained adjustment without
+                            // opening their menu. Y-axis maps to
+                            // "vertical" orientation per spec; X is
+                            // rarer but spec-defined for completeness.
+                            onWheel: function(wheel) {
+                                if (wheel.angleDelta.y !== 0)
+                                    trayModel.scroll(trayDelegate.index, wheel.angleDelta.y, "vertical");
+
+                                if (wheel.angleDelta.x !== 0)
+                                    trayModel.scroll(trayDelegate.index, wheel.angleDelta.x, "horizontal");
+
                             }
                         }
 
