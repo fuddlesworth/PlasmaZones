@@ -43,6 +43,18 @@ PopupWindow {
         menuModel.service = delegate.dbusService;
         menuModel.path = delegate.menuPath;
         menuModel.aboutToShow();
+        // Re-show case: when the same tray icon is right-clicked
+        // twice in a row (with a dismissal between), service/path
+        // don't change, the model's setService/setPath are no-ops,
+        // and `valid` stays true the whole time — so validChanged
+        // never fires and the Connections handler below never gets
+        // a chance to set popupVisible. Drive it directly here for
+        // the already-valid case. For fresh menus (different service
+        // or first-ever open), valid starts at false and the
+        // Connections handler takes over once GetLayout completes.
+        if (menuModel.valid)
+            popupVisible = true;
+
     }
 
     popupEdge: PopupWindow.Below
