@@ -594,13 +594,27 @@ int Renderer::render(const RenderOptions& opts)
 
     auto zoneExt = std::make_shared<PhosphorRendering::ZoneUniformExtension>();
     auto runtimeZones = toRuntimeZones(opts.zones);
+
+    // Resolve --still-highlight ZONE_NUMBER. When in range, pin that zone as
+    // the only highlighted one for the entire run; the per-frame schedule is
+    // then a no-op. Out-of-range values fall back to cycling so the caller
+    // gets a usable preview instead of an empty-handed render.
+    const int stillIdx = (opts.stillHighlightZone >= 1 && opts.stillHighlightZone <= runtimeZones.size())
+        ? opts.stillHighlightZone - 1
+        : -1;
+    if (stillIdx >= 0) {
+        for (int z = 0; z < runtimeZones.size(); ++z)
+            runtimeZones[z].isHighlighted = (z == stillIdx);
+    }
+
     zoneExt->updateFromZones(runtimeZones);
     effect->setUniformExtension(zoneExt);
 
-    // Initial zone counts. highlightedCount and per-zone isHighlighted flags
-    // are updated inside the frame loop so the demo cycles the active zone
-    // — see applyHighlightSchedule().
-    effect->setZoneCounts(runtimeZones.size(), 0);
+    // Initial zone counts. For the cycling schedule, highlightedCount and
+    // per-zone isHighlighted flags are updated inside the frame loop — see
+    // applyHighlightSchedule(). For --still-highlight, the count is fixed
+    // at 1 because the schedule is skipped entirely.
+    effect->setZoneCounts(runtimeZones.size(), stillIdx >= 0 ? 1 : 0);
 
     // Pre-render the labels texture. Many shaders sample uZoneLabels for
     // halo/chroma/text effects — an empty binding makes them silently absent.
@@ -633,7 +647,9 @@ int Renderer::render(const RenderOptions& opts)
         effect->setITime(static_cast<qreal>(i) / opts.fps);
         effect->setITimeDelta(frameInterval);
 
-        applyHighlightSchedule(i, opts.frameCount, runtimeZones, *zoneExt, *effect, lastSlice);
+        if (stillIdx < 0) {
+            applyHighlightSchedule(i, opts.frameCount, runtimeZones, *zoneExt, *effect, lastSlice);
+        }
 
         if (opts.audio) {
             opts.audio->fillFrame(i, opts.fps, spectrum);

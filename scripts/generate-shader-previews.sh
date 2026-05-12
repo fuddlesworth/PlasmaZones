@@ -22,6 +22,11 @@ readonly FRAMES=60
 readonly FPS=30
 readonly AUDIO_MODE="sine"
 readonly LAYOUT="master-stack"
+# Pin zone 1 (the master / hero zone in master-stack) as the only
+# highlighted zone for thumbnail captures so every preview features the
+# active state on the canonical lead zone. 0 would keep the cycling
+# demo schedule documented in renderer.cpp::applyHighlightSchedule().
+readonly STILL_HIGHLIGHT_ZONE=1
 # Last frame of the sequence: iTime has had time to advance into a
 # representative pose for time-driven and audio-reactive shaders.
 # Derived from $FRAMES so the two stay in sync if FRAMES is retuned.
@@ -155,6 +160,7 @@ for id in "${PACKS[@]}"; do
         --frames "$FRAMES"
         --fps "$FPS"
         --audio-mode "$AUDIO_MODE"
+        --still-highlight "$STILL_HIGHLIGHT_ZONE"
         --out "$out_dir/preview.png"
     )
 
