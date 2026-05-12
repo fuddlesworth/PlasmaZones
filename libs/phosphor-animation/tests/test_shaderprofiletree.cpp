@@ -127,12 +127,12 @@ private Q_SLOTS:
         ShaderProfileTree tree;
         ShaderProfile p;
         p.effectId = QStringLiteral("glitch");
-        tree.setOverride(PP::ZoneSnapIn, p);
-        QVERIFY(tree.hasOverride(PP::ZoneSnapIn));
+        tree.setOverride(PP::EditorSnapIn, p);
+        QVERIFY(tree.hasOverride(PP::EditorSnapIn));
 
-        QVERIFY(tree.clearOverride(PP::ZoneSnapIn));
-        QVERIFY(!tree.hasOverride(PP::ZoneSnapIn));
-        QVERIFY(!tree.clearOverride(PP::ZoneSnapIn));
+        QVERIFY(tree.clearOverride(PP::EditorSnapIn));
+        QVERIFY(!tree.hasOverride(PP::EditorSnapIn));
+        QVERIFY(!tree.clearOverride(PP::EditorSnapIn));
     }
 
     void testClearAllOverrides()
@@ -140,7 +140,7 @@ private Q_SLOTS:
         ShaderProfileTree tree;
         ShaderProfile p;
         tree.setOverride(PP::Window, p);
-        tree.setOverride(PP::Zone, p);
+        tree.setOverride(PP::Editor, p);
 
         ShaderProfile baseline;
         baseline.effectId = QStringLiteral("dissolve");
@@ -175,7 +175,7 @@ private Q_SLOTS:
 
         ShaderProfile overrideB;
         overrideB.effectId = QString();
-        original.setOverride(PP::ZoneSnapIn, overrideB);
+        original.setOverride(PP::EditorSnapIn, overrideB);
 
         const QJsonObject encoded = original.toJson();
         const ShaderProfileTree restored = ShaderProfileTree::fromJson(encoded);
@@ -187,7 +187,7 @@ private Q_SLOTS:
     {
         ShaderProfileTree original;
         original.setOverride(PP::Window, ShaderProfile());
-        original.setOverride(PP::Zone, ShaderProfile());
+        original.setOverride(PP::Editor, ShaderProfile());
         original.setOverride(PP::Osd, ShaderProfile());
 
         const QStringList before = original.overriddenPaths();

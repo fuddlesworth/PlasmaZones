@@ -112,6 +112,36 @@ SettingsFlickable {
             eventLabel: i18n("Progress")
         }
 
+        // Zone-rect widget. Embedded across the runtime overlay,
+        // settings dialogs, layout thumbnails, the new-layout dialog,
+        // shared previews. The animation lives with the widget; the
+        // surface hosting it is incidental.
+        AnimationEventCard {
+            Layout.fillWidth: true
+            eventPath: "widget.zoneHighlight"
+            eventLabel: i18n("Zone Highlight")
+        }
+
+        AnimationEventCard {
+            Layout.fillWidth: true
+            eventPath: "widget.zoneHighlight.pop"
+            eventLabel: i18n("Zone Highlight: Pop")
+        }
+
+        AnimationEventCard {
+            Layout.fillWidth: true
+            eventPath: "widget.zoneHighlight.border"
+            eventLabel: i18n("Zone Highlight: Border")
+        }
+
+        // One-shot flash on the main zone-overlay surface when the
+        // active layout switches mid-drag.
+        AnimationEventCard {
+            Layout.fillWidth: true
+            eventPath: "widget.zoneOverlayFlash"
+            eventLabel: i18n("Zone Overlay: Layout-Switch Flash")
+        }
+
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "cursor.hover"

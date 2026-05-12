@@ -19,7 +19,7 @@ namespace PhosphorAnimationShaders {
  * Parallel to `PhosphorAnimation::Profile` which configures *motion*
  * (curve, duration, stagger), `ShaderProfile` configures *visual effect*
  * (which shader, with what parameters). Both use the same dot-path event
- * namespace (window.open, zone.snapIn, etc.) but are resolved through
+ * namespace (window.open, editor.snapIn, etc.) but are resolved through
  * separate trees so the two concerns evolve independently.
  *
  * ## "Set" vs "unset" semantics

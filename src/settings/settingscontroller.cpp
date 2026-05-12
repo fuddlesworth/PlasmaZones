@@ -596,9 +596,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // Keep the per-group leaf lists in sync with the matching
     // `_childItems` entries in src/settings/qml/Main.qml.
     static const QSet<QString> kAnimationsSurfacesChildren{
-        QStringLiteral("animations-windows"),     QStringLiteral("animations-zones"),
-        QStringLiteral("animations-osds"),        QStringLiteral("animations-overlays"),
-        QStringLiteral("animations-side-panels"), QStringLiteral("animations-widgets")};
+        QStringLiteral("animations-windows"),  QStringLiteral("animations-osds"),
+        QStringLiteral("animations-overlays"), QStringLiteral("animations-side-panels"),
+        QStringLiteral("animations-widgets"),  QStringLiteral("animations-editor")};
     static const QSet<QString> kAnimationsLibraryChildren{QStringLiteral("animations-presets"),
                                                           QStringLiteral("animations-motionsets"),
                                                           QStringLiteral("animations-shaders")};
@@ -652,7 +652,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),
         QStringLiteral("animations-app-rules"),
-        QStringLiteral("animations-zones"),
+        QStringLiteral("animations-editor"),
         QStringLiteral("animations-osds"),
         QStringLiteral("animations-overlays"),
         QStringLiteral("animations-side-panels"),

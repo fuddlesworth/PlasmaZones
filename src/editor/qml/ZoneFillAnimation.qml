@@ -93,7 +93,7 @@ Item {
             target: zoneRoot
             properties: "visualX"
             to: fillAnimator.targetX
-            profile: "zone.snapIn"
+            profile: "editor.snapIn"
             durationOverride: 150
         }
 
@@ -101,7 +101,7 @@ Item {
             target: zoneRoot
             properties: "visualY"
             to: fillAnimator.targetY
-            profile: "zone.snapIn"
+            profile: "editor.snapIn"
             durationOverride: 150
         }
 
@@ -109,7 +109,7 @@ Item {
             target: zoneRoot
             properties: "visualWidth"
             to: fillAnimator.targetWidth
-            profile: "zone.snapIn"
+            profile: "editor.snapIn"
             durationOverride: 150
         }
 
@@ -117,7 +117,7 @@ Item {
             target: zoneRoot
             properties: "visualHeight"
             to: fillAnimator.targetHeight
-            profile: "zone.snapIn"
+            profile: "editor.snapIn"
             durationOverride: 150
         }
 
