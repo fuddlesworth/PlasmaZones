@@ -263,12 +263,20 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // applyShaderProfilesToAnimator runs, since that function routes
     // every per-role config write through ShellHost::registerConfigForRole
     // (which is a no-op without an animator). The ShellHost is
-    // constructed earlier in the OverlayService ctor; if a future
-    // caller invokes setupSurfaceAnimator before constructing the
-    // host, this assertion fires fast instead of silently dropping
-    // every config registration to the host's null-animator gate.
-    Q_ASSERT_X(m_shellHost.get(), "OverlayService::setupSurfaceAnimator",
-               "m_shellHost must be constructed before setupSurfaceAnimator runs");
+    // constructed earlier in the OverlayService ctor.
+    //
+    // Release-build fatal (qFatal aborts the process) on a null host
+    // so a future caller that reorders the ctor and reaches this point
+    // with m_shellHost still nullptr exits with a clear diagnostic
+    // instead of segfaulting on the next `m_shellHost->`. A null-deref
+    // here previously caused a systemd-respawn loop in production
+    // because applyShaderProfilesToAnimator's chain led straight into
+    // m_shellHost->registerConfigForRole before the host was up.
+    if (!m_shellHost) {
+        qFatal(
+            "OverlayService::setupSurfaceAnimator: m_shellHost must be constructed first "
+            "(applyShaderProfilesToAnimator dereferences it on every call)");
+    }
     m_shellHost->setSurfaceAnimator(m_surfaceAnimator.get());
     // Lifecycle invariant: `setupSurfaceAnimator` runs from the ctor
     // before `setSettings` is ever called, so `m_settings` is null here
