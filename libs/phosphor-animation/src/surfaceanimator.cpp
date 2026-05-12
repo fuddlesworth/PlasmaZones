@@ -285,21 +285,17 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
     // item's bounds. Vertex shaders read this for the visible card's
     // size in pixels regardless of fboExtentKind.
     //
-    // DPR scaling: iResolution lands in the UBO multiplied by the
-    // window's effectiveDevicePixelRatio (shadereffect.cpp's syncCustomNode
-    // path, so gl_FragCoord and iResolution agree on physical pixels).
-    // The animation-extension fields below (iAnchorSize, iAnchorPosInFbo,
-    // iSurfaceScreenPos) MUST land in the same units; otherwise vertex
-    // shaders that compute `cardSize / iResolution` ratios (fly-in,
-    // slide) and fragment shaders that compute `iAnchorPosInFbo /
-    // iResolution` UVs (morph, broken-glass) divide logical-pixel
-    // numerators by physical-pixel denominators and the result is
-    // 1/DPR of intended — the visible "card rendered smaller than its
-    // resting size during a fly-in" symptom at DPR > 1.
-    const qreal dpr =
-        (anchor->window() && anchor->window()->screen()) ? anchor->window()->effectiveDevicePixelRatio() : qreal(1.0);
+    // Units: LOGICAL pixels (no DPR multiplication). iResolution lands
+    // in the UBO multiplied by DPR (`shadereffect.cpp::syncCustomNode`)
+    // so its units differ from the extension fields here. Shaders that
+    // need to compute ratios involving FBO size MUST source the FBO
+    // size from `iSurfaceScreenPos.zw` (also logical) — see the fly-in
+    // vertex shader for the canonical pattern. Shaders that consume
+    // `iAnchorSize` as a standalone pixel count (broken-glass's
+    // `uSize`, tv-glitch's row offsets) want the logical value because
+    // the magic-constant tuning was done against logical dimensions.
     if (auto* ext = animExtensionFor(shaderItem)) {
-        ext->setIAnchorSize(QSizeF(w * dpr, h * dpr));
+        ext->setIAnchorSize(QSizeF(w, h));
 
         // iAnchorPosInFbo: anchor's top-left position inside the shader
         // item's FBO. shaderItem is parented to `anchor->parentItem()`
@@ -327,7 +323,7 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
         //            * (iResolution/iAnchorSize)
         // collapses to identity when iAnchorPosInFbo = 0 and
         // iAnchorSize = iResolution (default Anchor-extent case).
-        ext->setIAnchorPosInFbo(QPointF((anchor->x() - shaderItem->x()) * dpr, (anchor->y() - shaderItem->y()) * dpr));
+        ext->setIAnchorPosInFbo(QPointF(anchor->x() - shaderItem->x(), anchor->y() - shaderItem->y()));
 
         // iSurfaceScreenPos describes where the card sits within its
         // *playing field* and how big that field is. The "playing field"
@@ -376,9 +372,9 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
             fieldH = parent->height();
         }
         if (fieldW > 0.0 && fieldH > 0.0) {
-            ext->setISurfaceScreenPos(QVector4D(static_cast<float>(anchorScene.x() * dpr),
-                                                static_cast<float>(anchorScene.y() * dpr),
-                                                static_cast<float>(fieldW * dpr), static_cast<float>(fieldH * dpr)));
+            ext->setISurfaceScreenPos(QVector4D(static_cast<float>(anchorScene.x()),
+                                                static_cast<float>(anchorScene.y()), static_cast<float>(fieldW),
+                                                static_cast<float>(fieldH)));
         }
     }
 }
