@@ -124,9 +124,9 @@ SettingsFlickable {
                     }
 
                     LinkButton {
-                        linkText: i18n("Documentation / Wiki")
+                        linkText: i18n("Documentation")
                         linkIcon: "documentation"
-                        url: "https://github.com/fuddlesworth/PlasmaZones/wiki"
+                        url: "https://phosphor-works.github.io/plasmazones/"
                     }
 
                     LinkButton {
