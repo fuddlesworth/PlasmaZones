@@ -105,24 +105,26 @@ void main() {
     vec2 shifted = position + vec2(offsetPx, 0.0);
     gl_Position = modelViewProjectionMatrix * vec4(shifted, 0.0, 1.0);
 #else
-    // Daemon (fboExtent=surface): the FBO spans iResolution (= the
-    // shader item's bounds = the QQuickWindow's contentItem = host
-    // screen / VS rect post-fullscreen-OSD migration). Map the
-    // standard (-1..1) clip-space quad onto the card's region within
-    // the FBO so the captured anchor texture renders at native pixel
-    // size at the card's resting screen position, then add the
-    // fly-in offset.
+    // Daemon (fboExtent=surface): the FBO spans the QQuickWindow's
+    // contentItem = host screen / VS rect (post-fullscreen-OSD
+    // migration). Map the standard (-1..1) clip-space quad onto the
+    // card's region within the FBO so the captured anchor texture
+    // renders at native pixel size at the card's resting screen
+    // position, then add the fly-in offset.
     //
-    // iResolution naturally tracks the FBO size (Qt auto-syncs it
-    // from the shader item's geometry). On the animation path
-    // `ShaderEffect::syncBasePropertiesToNode` keeps it in LOGICAL
-    // pixels (gated on the AnimationUniformExtension's
-    // `requiresPhysicalResolution() == false`), so it matches the
-    // logical-pixel units of `iAnchorSize` and `iSurfaceScreenPos`
-    // and the clip-space ratio math below cancels cleanly. For card
-    // pixel size we read iAnchorSize; see the comment above for why
-    // iResolution is unsafe for "size of the card."
-    vec2 fboSizePx = vec2(max(iResolution.x, 1.0), max(iResolution.y, 1.0));
+    // CRITICAL: use `iSurfaceScreenPos.zw` (logical pixels) — NOT
+    // `iResolution` — for the FBO-size denominator. The daemon path
+    // uploads `iResolution` to the UBO multiplied by the window's DPR
+    // (so fragment shaders that read `gl_FragCoord` see matching
+    // units), but the animation-extension fields the rest of this
+    // math consumes (`iAnchorSize`, `iSurfaceScreenPos.xy`) are
+    // LOGICAL pixels. Mixing a physical iResolution denominator with
+    // logical numerators shrinks the rendered card by exactly 1/DPR —
+    // the "fly-in lands at smaller-than-resting size" symptom this
+    // comment is the fix for. `iSurfaceScreenPos.zw` mirrors the
+    // contentItem's logical width/height under `fboExtent: surface`,
+    // which is the same FBO this shader item renders into.
+    vec2 fboSizePx = vec2(max(iSurfaceScreenPos.z, 1.0), max(iSurfaceScreenPos.w, 1.0));
 
     // Card centre in clip space. Qt's QSGRenderNode convention matches
     // the screen: clip-space Y = -1 is the top of the FBO and Y = +1

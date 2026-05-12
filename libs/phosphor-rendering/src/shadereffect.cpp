@@ -1280,37 +1280,23 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     node->setTimeDelta(static_cast<float>(m_iTimeDelta));
     node->setFrame(m_iFrame);
     node->setIsReversed(m_isReversed);
-    // iResolution unit semantics — controlled by the installed uniform
-    // extension's `requiresPhysicalResolution()`:
+    // iResolution must be in PHYSICAL pixels (DPR-scaled), not logical, so it
+    // matches gl_FragCoord — which is the viewport coordinate of the
+    // rasterised fragment. QtQuick's QRhi viewport is set in physical pixels
+    // (item.size * DPR), so gl_FragCoord ranges 0..viewport.size in physical
+    // pixels too. Setting iResolution in logical pixels meant fragCoord and
+    // iResolution disagreed by a factor of DPR — at DPR > 1 the SDF rounded-
+    // rect mask covered only the *logical-sized* region of the *physical-
+    // sized* surface, leaving a transparent stripe on the trailing edge that
+    // looked exactly like content overflow. With DPR == 1 the bug was
+    // invisible (factor 1 — no mismatch) so it lay dormant on all the test
+    // setups that used 1.0 scaling.
     //
-    //   * physical (default, overlay path): DPR-scaled so the value
-    //     matches `gl_FragCoord` — which is the viewport coordinate of
-    //     the rasterised fragment. QtQuick's QRhi viewport is set in
-    //     physical pixels (item.size * DPR), so `gl_FragCoord` ranges
-    //     0..viewport.size in physical pixels too. Zone-overlay
-    //     fragment shaders that compute SDF masks via
-    //     `gl_FragCoord / iResolution` need both operands in physical
-    //     pixels; setting iResolution in logical pixels at DPR > 1
-    //     caused the rounded-rect mask to cover only the logical-sized
-    //     region of the physical-sized surface (transparent edge
-    //     stripe).
-    //
-    //   * logical (animation path): the AnimationUniformExtension
-    //     reports `requiresPhysicalResolution() == false`. Animation
-    //     shaders use the vertex-stage `vTexCoord` (auto-interpolated
-    //     0..1 over the rasterised quad regardless of DPR) and pair
-    //     `iResolution` with logical-pixel companions (`iAnchorSize`,
-    //     `iAnchorPosInFbo`, `iSurfaceScreenPos`) for UV / clip-space
-    //     ratios. Scaling iResolution by DPR there would mismatch
-    //     units across the UBO and shrink rendered output by 1/DPR
-    //     (fly-in) or shift the anchor UV remap (broken-glass, morph).
-    //
-    // `m_iResolution` itself stays in logical units (Q_PROPERTY
-    // semantics — QML callers expect the same units they bound it
-    // from). Only the GPU-bound value is conditionally multiplied.
+    // `m_iResolution` itself stays in logical units (Q_PROPERTY semantics —
+    // QML callers expect the same units they bound it from). Only the GPU-
+    // bound value is multiplied.
     qreal dpr = 1.0;
-    const bool needsPhysical = !m_uniformExtension || m_uniformExtension->requiresPhysicalResolution();
-    if (needsPhysical && window() && window()->screen()) {
+    if (window() && window()->screen()) {
         dpr = window()->effectiveDevicePixelRatio();
     }
     node->setResolution(static_cast<float>(m_iResolution.width() * dpr),
