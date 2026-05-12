@@ -26,6 +26,14 @@ struct RenderOptions
                                ///< output-size resize (PNG and ffmpeg sinks both
                                ///< honour --output-size); the renderer hands it
                                ///< unscaled frames at @c resolution. Borrowed.
+
+    /// Pin one zone as the only highlighted zone for every frame. 0 (the
+    /// default) keeps the cycling demo schedule (slice 0 = all highlighted,
+    /// slices 1..N = one zone at a time). Any value in [1, zones.size()]
+    /// disables the cycle and renders every frame with @c stillHighlightZone
+    /// as the sole highlighted zone — useful when the renderer is driving
+    /// thumbnail capture and the caller wants a deterministic hero shot.
+    int stillHighlightZone = 0;
 };
 
 /**
