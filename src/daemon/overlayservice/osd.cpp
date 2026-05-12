@@ -170,12 +170,15 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
         return;
     }
 
+    // Pass the actual screen geometry so fixed-mode zones normalize against
+    // the screen we're about to render on, not Layout::lastRecalcGeometry()
+    // (which may belong to a different screen).
     LayoutOsdContentParams p;
     p.id = layout->id().toString();
     p.name = layout->name();
     p.zones = layout->zones().isEmpty()
         ? QVariantList()
-        : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full);
+        : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full, QRectF(screenGeom));
     p.category = static_cast<int>(PhosphorZones::LayoutCategory::Manual);
     p.autoAssign = layout->autoAssign();
     p.globalAutoAssign = m_settings && m_settings->autoAssignAllLayouts();
@@ -610,10 +613,12 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
     writeQmlProperty(osdSlot, QStringLiteral("highlightedZoneIds"), highlightedZoneIds);
 
-    // Use shared PhosphorZones::LayoutUtils with minimal fields for zone number lookup
-    // (only need zoneId and zoneNumber, not name/appearance)
-    QVariantList zonesList =
-        PhosphorZones::LayoutUtils::zonesToVariantList(screenLayout, PhosphorZones::ZoneField::Minimal);
+    // Use shared PhosphorZones::LayoutUtils with minimal fields for zone number
+    // lookup (only need zoneId and zoneNumber, not name/appearance). Pass
+    // navScreenGeom so fixed-mode zones normalize against the navigated-to
+    // screen rather than Layout::lastRecalcGeometry().
+    QVariantList zonesList = PhosphorZones::LayoutUtils::zonesToVariantList(
+        screenLayout, PhosphorZones::ZoneField::Minimal, QRectF(navScreenGeom));
     writeQmlProperty(osdSlot, QStringLiteral("zones"), zonesList);
 
     // shaderBoundsPadding before mode - the Loader instantiates
