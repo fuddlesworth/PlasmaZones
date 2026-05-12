@@ -7,6 +7,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-05-12
+
 ### Added
 
 - **Hold/Toggle controls now work in always-active mode** ([#249](https://github.com/fuddlesworth/PlasmaZones/issues/249)): "Hold to activate" and "Toggle mode" stay enabled when "Activate on every drag" is on, with inverted semantics — the configured trigger DEACTIVATES the overlay (hold to hide; toggle to flip off the implicitly-on overlay) instead of activating it. The same trigger list serves both modes, so users can bind e.g. Right Mouse Button (FancyZones convention) and have it activate when always-active is off and deactivate when on. Esc continues to cancel the drag entirely.
@@ -1245,7 +1247,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.2...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.7...v3.0.0
 [2.8.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.1...v2.8.2
 [2.8.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.0...v2.8.1
 [2.8.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.7.1...v2.8.0
