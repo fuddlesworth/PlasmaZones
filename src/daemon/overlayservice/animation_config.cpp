@@ -28,6 +28,8 @@
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
 
+#include <PhosphorOverlay/ShellHost.h>
+
 namespace PlasmaZones {
 
 namespace {
@@ -257,6 +259,17 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     if (m_animShaderRegistry) {
         m_surfaceAnimator->setAnimationShaderRegistry(m_animShaderRegistry);
     }
+    // Wire the new animator into the ShellHost BEFORE
+    // applyShaderProfilesToAnimator runs, since that function routes
+    // every per-role config write through ShellHost::registerConfigForRole
+    // (which is a no-op without an animator). The ShellHost is
+    // constructed earlier in the OverlayService ctor; if a future
+    // caller invokes setupSurfaceAnimator before constructing the
+    // host, this assertion fires fast instead of silently dropping
+    // every config registration to the host's null-animator gate.
+    Q_ASSERT_X(m_shellHost.get(), "OverlayService::setupSurfaceAnimator",
+               "m_shellHost must be constructed before setupSurfaceAnimator runs");
+    m_shellHost->setSurfaceAnimator(m_surfaceAnimator.get());
     // Lifecycle invariant: `setupSurfaceAnimator` runs from the ctor
     // before `setSettings` is ever called, so `m_settings` is null here
     // and the animator stays at its default-enabled state until

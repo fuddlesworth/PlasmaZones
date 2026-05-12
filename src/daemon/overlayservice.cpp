@@ -124,6 +124,14 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     Q_ASSERT_X(profileRegistry, "OverlayService::OverlayService",
                "profileRegistry must not be null: composition root must own and inject the registry");
 
+    // Construct ShellHost BEFORE setupSurfaceAnimator: the latter
+    // calls applyShaderProfilesToAnimator which routes per-role
+    // config writes through m_shellHost->registerConfigForRole.
+    // setupSurfaceAnimator wires the animator into the host inline
+    // (see animation_config.cpp) so the host has its animator ready
+    // by the time applyShaderProfilesToAnimator runs.
+    m_shellHost = std::make_unique<PhosphorOverlay::ShellHost>(this);
+
     // Phase-5 SurfaceAnimator. One instance drives every overlay's
     // show/hide via Profile-resolved curves; per-Role configs install
     // below in setupSurfaceAnimator(). Constructed BEFORE the
@@ -204,18 +212,10 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
         .vulkanApiVersion = PlasmaZones::PzVulkanApiVersion,
     });
 
-    // Phase 2: ShellHost owns the per-screen layer-shell shell-state map
-    // and the create / destroy lifecycle. The daemon registers callbacks
-    // for the PZ-specific bits - surface factory (PassiveShell role +
-    // PassiveOverlayShell.qml + warmed-surface pipeline), post-create
-    // slot wiring (5 PZ slot QML object-name lookups + 6 QML signal
-    // wires + RHI prime), pre-destroy slot teardown (nulls PZ content
-    // sentinels and disconnects per-content connections). The remaining
-    // Phase 2 method moves (rekey / sync / validate-invariant) land in
-    // follow-on commits.
-    m_shellHost = std::make_unique<PhosphorOverlay::ShellHost>(this);
-    m_shellHost->setSurfaceAnimator(m_surfaceAnimator.get());
-
+    // ShellHost was constructed earlier (before setupSurfaceAnimator)
+    // and had its surface animator wired by setupSurfaceAnimator
+    // itself. The remaining callbacks (factory + post/pre-create) need
+    // m_surfaceManager to exist, so they're registered here.
     m_shellHost->setSurfaceFactory([this](const QString& screenId, QScreen* physScreen) -> PhosphorLayer::Surface* {
         const auto role =
             PzRoles::makePerInstanceRole(PzRoles::PassiveShell, screenId, m_surfaceManager->nextScopeGeneration());
