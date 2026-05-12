@@ -33,15 +33,16 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout, c
     // otherwise ask the layout for its own reference geometry (which
     // resolves a stale lastRecalcGeometry to the fixed-zone bounding
     // box — see Layout::fixedZoneReferenceGeometry).
+    const bool hasFixed = layout->hasFixedGeometryZones();
     const QRectF refGeo = !canvas.isEmpty() ? QRectF(QPointF(), canvas) : layout->fixedZoneReferenceGeometry();
 
-    if (layout->hasFixedGeometryZones() && refGeo.height() > 0) {
+    if (hasFixed && refGeo.height() > 0) {
         preview.referenceAspectRatio = refGeo.width() / refGeo.height();
     }
 
     // Zone projection: relative geometry + 1-based zone numbers. Caller
     // (renderer) scales the relative rects into whatever canvas it has.
-    const QRectF projectRef = layout->hasFixedGeometryZones() ? refGeo : QRectF();
+    const QRectF projectRef = hasFixed ? refGeo : QRectF();
     const auto zones = layout->zones();
     preview.zones.reserve(zones.size());
     preview.zoneNumbers.reserve(zones.size());

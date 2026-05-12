@@ -140,6 +140,10 @@ void EditorController::setTargetScreen(const QString& screenName)
         m_targetScreen = screenName;
 
         cacheVirtualScreenGeometry(screenName);
+        // Clear the per-layout override — the previous layout's bbox doesn't
+        // apply to the new screen. loadLayout / createNewLayout below set it
+        // again if the incoming layout uses fixed geometry.
+        m_layoutBoundsOverride = QSize();
 
         Q_EMIT targetScreenChanged();
         refreshUsableAreaInsets();
@@ -287,6 +291,7 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
         m_targetScreen = screenName;
 
         cacheVirtualScreenGeometry(screenName);
+        m_layoutBoundsOverride = QSize();
 
         Q_EMIT targetScreenChanged();
         Q_EMIT targetScreenSizeChanged();
@@ -307,12 +312,12 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
  */
 void EditorController::createNewLayout()
 {
-    // A fresh layout has no fixed-zone bounding box to reference; if the
-    // previous layout overrode m_virtualScreenSize to its own bbox, revert
-    // to the screen geometry cached by setTargetScreen so QML normalizes
-    // against the real screen size.
+    // A fresh layout has no fixed-zone bounding box to reference. Drop any
+    // override from the previous layout so QML normalizes against the
+    // screen geometry that setTargetScreen already cached — no D-Bus
+    // round-trip needed.
     const QSize prevSize = targetScreenSize();
-    cacheVirtualScreenGeometry(m_targetScreen);
+    m_layoutBoundsOverride = QSize();
 
     m_layoutId = QUuid::createUuid().toString();
     m_layoutName = PzI18n::tr("New Layout");
@@ -423,20 +428,14 @@ void EditorController::loadLayout(const QString& layoutId)
     // layouts normalize against their own zone bounding box (which may differ
     // from the current screen — e.g. a 3840x2160 layout shown on a 3840x2126
     // panel-reduced screen). Use a throwaway Layout to ask the canonical
-    // helper rather than re-walking the JSON here.
+    // helper rather than re-walking the JSON here. Relative-only layouts
+    // clear the override so targetScreenSize() falls back to the screen
+    // geometry setTargetScreen already cached — no extra D-Bus call.
     const QSize prevSize = targetScreenSize();
     {
         std::unique_ptr<PhosphorZones::Layout> tmp(PhosphorZones::Layout::fromJson(layoutObj));
-        if (tmp) {
-            const QRectF bbox = tmp->fixedZoneBoundingBox();
-            if (!bbox.isEmpty()) {
-                m_virtualScreenSize = QSize(qRound(bbox.width()), qRound(bbox.height()));
-            } else {
-                // Relative-only layout — revert any prior fixed-bbox override
-                // to the screen-derived size cached by setTargetScreen.
-                cacheVirtualScreenGeometry(m_targetScreen);
-            }
-        }
+        const QRectF bbox = tmp ? tmp->fixedZoneBoundingBox() : QRectF();
+        m_layoutBoundsOverride = bbox.isEmpty() ? QSize() : QSize(qRound(bbox.width()), qRound(bbox.height()));
     }
     const QSize newSize = targetScreenSize();
     if (newSize != prevSize) {

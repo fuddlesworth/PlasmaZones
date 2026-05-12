@@ -117,24 +117,23 @@ QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
         return map;
     }
 
+    // Resolve the reference geometry once so both the zone list and the
+    // aspectRatio derive from the same value (a stale lastRecalcGeometry
+    // could otherwise leave them disagreeing). fixedZoneReferenceGeometry()
+    // returns an empty rect for relative-only layouts; zonesToVariantList
+    // treats that as "no override" and falls back to its own default.
+    const QRectF refGeo = layout->fixedZoneReferenceGeometry();
+
     map[Id] = layout->id().toString();
     map[Name] = layout->name();
     map[Description] = layout->description();
     map[ZoneCount] = layout->zoneCount();
-    map[Zones] = zonesToVariantList(layout, zoneFields);
+    map[Zones] = zonesToVariantList(layout, zoneFields, refGeo);
     map[Category] = static_cast<int>(LayoutCategory::Manual);
     map[AutoAssign] = layout->autoAssign();
 
-    // Include reference aspect ratio for fixed-geometry layouts so previews
-    // render at the correct proportions even when aspectRatioClass is "any".
-    // fixedZoneReferenceGeometry() falls back to the zones' bounding box
-    // when lastRecalcGeometry is stale (e.g. cached against a different
-    // screen's orientation).
-    if (layout->hasFixedGeometryZones()) {
-        const QRectF refGeo = layout->fixedZoneReferenceGeometry();
-        if (refGeo.height() > 0) {
-            map[QLatin1String("referenceAspectRatio")] = refGeo.width() / refGeo.height();
-        }
+    if (layout->hasFixedGeometryZones() && refGeo.height() > 0) {
+        map[QLatin1String("referenceAspectRatio")] = refGeo.width() / refGeo.height();
     }
 
     return map;

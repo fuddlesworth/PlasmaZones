@@ -972,6 +972,12 @@ private:
     QString m_targetScreen;
     QSize m_virtualScreenSize; ///< Cached VS geometry size (valid when m_targetScreen is virtual)
     QRect m_virtualScreenRect; ///< Cached VS absolute geometry (position within physical monitor)
+    /// Layout-derived reference-size override. When valid, takes precedence
+    /// over m_virtualScreenSize in targetScreenSize() — used for fixed-
+    /// geometry layouts whose zone bounding box defines the canvas the
+    /// editor / preview should render against, independent of the live
+    /// screen size. Cleared for relative-only layouts.
+    QSize m_layoutBoundsOverride;
     int m_insetLeft = 0;
     int m_insetTop = 0;
     int m_insetRight = 0;
