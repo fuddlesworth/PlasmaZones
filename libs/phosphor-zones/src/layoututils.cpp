@@ -209,6 +209,27 @@ QHash<QString, int> buildZonePositionMap(Layout* layout)
     return map;
 }
 
+QRectF fixedZoneBoundingBox(Layout* layout)
+{
+    if (!layout) {
+        return {};
+    }
+    qreal maxX = 0, maxY = 0;
+    for (Zone* z : layout->zones()) {
+        if (!z || z->geometryMode() != ZoneGeometryMode::Fixed) {
+            continue;
+        }
+        const QRectF& fg = z->fixedGeometry();
+        if (fg.x() + fg.width() > maxX) {
+            maxX = fg.x() + fg.width();
+        }
+        if (fg.y() + fg.height() > maxY) {
+            maxY = fg.y() + fg.height();
+        }
+    }
+    return (maxX > 0 && maxY > 0) ? QRectF(0, 0, maxX, maxY) : QRectF();
+}
+
 } // namespace LayoutUtils
 
 } // namespace PhosphorZones

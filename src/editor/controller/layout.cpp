@@ -162,8 +162,8 @@ void EditorController::setTargetScreen(const QString& screenName)
             }
         } else {
             // No layout to load — emit size changed now so QML updates with fallback size.
-            Q_EMIT targetScreenSizeChanged();
             m_zoneManager->setReferenceScreenSize(targetScreenSize());
+            Q_EMIT targetScreenSizeChanged();
         }
     }
 }
@@ -489,14 +489,17 @@ void EditorController::loadLayout(const QString& layoutId)
     // Compute the bounding box of all fixed-geometry zones *before* setting
     // zones so that m_virtualScreenSize is ready when the QML Repeater creates
     // EditorZone delegates and calls syncFromZoneData().
-    if (!zones.isEmpty()) {
+    //
+    // We reconstruct a temporary Layout* from the parsed zone data so we can
+    // reuse `fixedZoneBoundingBox` — but since we don't have a real Layout
+    // object here yet, we compute it inline using the proper enum.
+    bool vsSizeChanged = false;
+    {
         qreal maxX = 0, maxY = 0;
-        bool hasFixed = false;
         for (const auto& v : zones) {
             const auto& zm = v.toMap();
-            int gm = zm.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::GeometryMode)).toInt();
-            if (gm == 1) {
-                hasFixed = true;
+            const int gm = zm.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::GeometryMode)).toInt();
+            if (gm == static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed)) {
                 qreal fx = zm.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedX)).toReal();
                 qreal fy = zm.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedY)).toReal();
                 qreal fw = zm.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedWidth)).toReal();
@@ -505,52 +508,11 @@ void EditorController::loadLayout(const QString& layoutId)
                 if (fy + fh > maxY) maxY = fy + fh;
             }
         }
-        if (hasFixed && maxX > 0 && maxY > 0) {
+        if (maxX > 0 && maxY > 0) {
             QSize newVS(maxX, maxY);
-            // Write debug info to a file for easy inspection
-            QFile debugFile(QStringLiteral("/tmp/plasmazones-editor-debug.txt"));
-            if (debugFile.open(QIODevice::WriteOnly | QIODevice::Append)) {
-                QTime now = QTime::currentTime();
-                QString line;
-                line = QString::fromUtf8("=== loadLayout [%1] === layout:%2 name:%3 targetScreen:%4 fixedBB:%5x%6 virtualScreenSize:%7x%8 zones:%9")
-                           .arg(now.toString(Qt::ISODateWithMs),
-                                m_layoutId, m_layoutName, m_targetScreen,
-                                QString::number(newVS.width()), QString::number(newVS.height()),
-                                QString::number(m_virtualScreenSize.width()), QString::number(m_virtualScreenSize.height()),
-                                QString::number(zones.size()));
-                debugFile.write(line.toUtf8());
-                debugFile.write("\n");
-                // Log ALL fixed zone coordinates
-                for (int i = 0; i < zones.size(); ++i) {
-                    const auto& zm = zones[i].toMap();
-                    int gm = zm.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::GeometryMode)).toInt();
-                    if (gm == 1) {
-                        line = QString::fromUtf8("  FIXED zone[%1]: id=%2")
-                                   .arg(i)
-                                   .arg(zm[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)].toString());
-                        line += QString::fromUtf8(" fixedX=%1 fixedY=%2")
-                                    .arg(zm[QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedX)].toDouble())
-                                    .arg(zm[QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedY)].toDouble());
-                        line += QString::fromUtf8(" fixedW=%1 fixedH=%2")
-                                    .arg(zm[QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedWidth)].toDouble())
-                                    .arg(zm[QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedHeight)].toDouble());
-                        line += QString::fromUtf8(" relX=%1 relY=%2")
-                                    .arg(zm[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)].toDouble())
-                                    .arg(zm[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)].toDouble());
-                        debugFile.write(line.toUtf8());
-                        debugFile.write("\n");
-                    }
-                }
-                // Also log targetScreenSize() that QML will see
-                QSize tsz = targetScreenSize();
-                line = QString::fromUtf8("  targetScreenSize() will return:%1x%2 m_virtualScreenSize=%3x%4")
-                           .arg(QString::number(tsz.width()), QString::number(tsz.height()),
-                                QString::number(m_virtualScreenSize.width()), QString::number(m_virtualScreenSize.height()));
-                debugFile.write(line.toUtf8());
-                debugFile.write("\n\n");
-            }
             if (m_virtualScreenSize != newVS) {
                 m_virtualScreenSize = newVS;
+                vsSizeChanged = true;
                 if (m_zoneManager) {
                     m_zoneManager->setReferenceScreenSize(m_virtualScreenSize);
                 }
@@ -564,7 +526,10 @@ void EditorController::loadLayout(const QString& layoutId)
     }
 
     // Emit after setZones so QML sees the updated size when syncing zones.
-    Q_EMIT targetScreenSizeChanged();
+    // Gate on actual change to avoid unnecessary QML re-layouts.
+    if (vsSizeChanged) {
+        Q_EMIT targetScreenSizeChanged();
+    }
 
     // Load shader settings
     m_currentShaderId = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)].toString();

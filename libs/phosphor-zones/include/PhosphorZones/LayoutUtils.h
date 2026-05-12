@@ -92,6 +92,16 @@ PHOSPHORZONES_EXPORT QVariantMap layoutToVariantMap(Layout* layout, ZoneFields z
 PHOSPHORZONES_EXPORT void sortZonesByNumber(QVector<Zone*>& zones);
 PHOSPHORZONES_EXPORT QHash<QString, int> buildZonePositionMap(Layout* layout);
 
+/**
+ * @brief Compute the bounding box of all fixed-geometry zones in a layout.
+ *
+ * Returns an empty QRectF when the layout is null, has no fixed zones, or
+ * the computed bounding box has zero area.  Callers use this to derive the
+ * actual screen dimensions that fixed zones occupy (as opposed to
+ * lastRecalcGeometry which may belong to a different screen).
+ */
+PHOSPHORZONES_EXPORT QRectF fixedZoneBoundingBox(Layout* layout);
+
 } // namespace LayoutUtils
 
 } // namespace PhosphorZones

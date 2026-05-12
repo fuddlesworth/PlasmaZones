@@ -4,8 +4,10 @@
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
+#include "zoneslogging.h"
 
 #include <QUuid>
 
@@ -43,45 +45,30 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout, c
     QRectF refGeo;
     if (!canvas.isEmpty()) {
         refGeo = QRectF(0, 0, canvas.width(), canvas.height());
-        qInfo() << "previewFromLayout: using canvas refGeo:" << refGeo << "for layout:" << layout->name();
+        qCDebug(lcZonesLib) << "previewFromLayout: using canvas refGeo:" << refGeo
+                            << "for layout:" << layout->name();
     } else if (layout->hasFixedGeometryZones()) {
         refGeo = layout->lastRecalcGeometry();
+        const QRectF zoneBB = LayoutUtils::fixedZoneBoundingBox(layout);
         if (refGeo.isEmpty() || refGeo.height() <= 0) {
             // No recalc geometry — compute from zones.
-            qreal maxX = 0, maxY = 0;
-            for (auto* z : layout->zones()) {
-                if (!z || z->geometryMode() != PhosphorZones::ZoneGeometryMode::Fixed)
-                    continue;
-                const auto& fg = z->fixedGeometry();
-                if (fg.x() + fg.width() > maxX) maxX = fg.x() + fg.width();
-                if (fg.y() + fg.height() > maxY) maxY = fg.y() + fg.height();
+            if (!zoneBB.isEmpty()) {
+                refGeo = zoneBB;
             }
-            if (maxX > 0 && maxY > 0)
-                refGeo = QRectF(0, 0, maxX, maxY);
+        } else if (!zoneBB.isEmpty()
+                   && (zoneBB.width() > refGeo.width() || zoneBB.height() > refGeo.height())) {
+            // The fixed zones exceed the recalc geometry — use the zone
+            // bounding box directly rather than mixing dimensions from
+            // potentially different screen orientations (e.g. a portrait
+            // screen's 3840px height mixed with a landscape layout's
+            // 2160px maxY would produce a 3840x3840 square instead of
+            // the correct 3840x2160 rectangle).
+            refGeo = zoneBB;
+            qCDebug(lcZonesLib) << "previewFromLayout: replaced recalcGeo" << layout->lastRecalcGeometry()
+                                << "with zone bounding box:" << refGeo << "for layout:" << layout->name();
         } else {
-            // Check if recalc geometry is smaller than the zone bounding box.
-            qreal maxX = 0, maxY = 0;
-            for (auto* z : layout->zones()) {
-                if (!z || z->geometryMode() != PhosphorZones::ZoneGeometryMode::Fixed)
-                    continue;
-                const auto& fg = z->fixedGeometry();
-                if (fg.x() + fg.width() > maxX) maxX = fg.x() + fg.width();
-                if (fg.y() + fg.height() > maxY) maxY = fg.y() + fg.height();
-            }
-            if (maxX > refGeo.width() || maxY > refGeo.height()) {
-                // The fixed zones exceed the recalc geometry — use the zone
-                // bounding box directly rather than mixing dimensions from
-                // potentially different screen orientations (e.g. a portrait
-                // screen's 3840px height mixed with a landscape layout's
-                // 2160px maxY would produce a 3840x3840 square instead of
-                // the correct 3840x2160 rectangle).
-                refGeo = QRectF(0, 0, maxX, maxY);
-                qInfo() << "previewFromLayout: replaced recalcGeo" << layout->lastRecalcGeometry()
-                                      << "with zone bounding box:" << refGeo << "for layout:" << layout->name();
-            } else {
-                qInfo() << "previewFromLayout: using recalcGeo:" << refGeo
-                                     << "for layout:" << layout->name() << "hasFixed:" << layout->hasFixedGeometryZones();
-            }
+            qCDebug(lcZonesLib) << "previewFromLayout: using recalcGeo:" << refGeo
+                                << "for layout:" << layout->name() << "hasFixed:" << layout->hasFixedGeometryZones();
         }
     }
 
