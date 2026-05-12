@@ -581,12 +581,12 @@ jobs:
             echo ""
             echo "**Arch Linux (manual):**"
             echo '```bash'
-            echo "sudo pacman -U plasmazones-${VERSION}-1-x86_64.pkg.tar.zst"
+            echo "sudo pacman -U plasmazones-${VERSION}-*-x86_64.pkg.tar.zst"
             echo '```'
             echo ""
             echo "**KDE Neon / Debian-based:**"
             echo '```bash'
-            echo "sudo dpkg -i plasmazones_${VERSION}-1_amd64.deb"
+            echo "sudo dpkg -i plasmazones_${VERSION}-*_amd64.deb"
             echo "sudo apt-get install -f  # Install dependencies if needed"
             echo '```'
             echo ""
@@ -599,14 +599,14 @@ jobs:
             echo "**Fedora (manual RPM):**"
             echo '```bash'
             echo "# Fedora 43"
-            echo "sudo dnf install plasmazones-${VERSION}-1.fc43.x86_64.rpm"
+            echo "sudo dnf install plasmazones-${VERSION}-*.fc43.x86_64.rpm"
             echo "# Fedora 44"
-            echo "sudo dnf install plasmazones-${VERSION}-1.fc44.x86_64.rpm"
+            echo "sudo dnf install plasmazones-${VERSION}-*.fc44.x86_64.rpm"
             echo '```'
             echo ""
             echo "**openSUSE Tumbleweed (manual RPM):**"
             echo '```bash'
-            echo "sudo zypper install plasmazones-${VERSION}-1.x86_64.rpm"
+            echo "sudo zypper install plasmazones-${VERSION}-*.x86_64.rpm"
             echo '```'
             echo ""
             echo "**openSUSE Tumbleweed (OBS):**"
