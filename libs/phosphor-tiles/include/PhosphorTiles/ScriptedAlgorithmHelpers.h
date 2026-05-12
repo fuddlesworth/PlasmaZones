@@ -83,7 +83,8 @@ struct ScriptMetadata
 /**
  * @brief Parse custom parameter definitions from a JS-exported customParams array
  */
-PHOSPHORTILES_EXPORT QVector<CustomParamDef> parseCustomParamsFromJs(const QJSValue& jsCustomParams, const QString& filePath);
+PHOSPHORTILES_EXPORT QVector<CustomParamDef> parseCustomParamsFromJs(const QJSValue& jsCustomParams,
+                                                                     const QString& filePath);
 
 /**
  * @brief Parse full algorithm metadata from a JS-exported metadata object
