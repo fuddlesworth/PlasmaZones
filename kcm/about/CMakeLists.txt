@@ -1,4 +1,5 @@
 # PlasmaZones About sub-KCM
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Minimal KCM: version info, update checks, settings launcher.

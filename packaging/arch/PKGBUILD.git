@@ -50,9 +50,15 @@ install=plasmazones.install
 pkgver() {
     cd "$pkgname"
     # Prefer `git describe`; fall back to "<project-version>.r<count>.g<sha>"
-    # so we still produce a sortable version on shallow clones.
+    # so we still produce a sortable version on shallow clones. The
+    # project version is parsed from CMakeLists.txt (rather than hand-
+    # bumped here) so a release bump doesn't silently leave the -git
+    # fallback ordering wrong against the new -stable pkgver.
+    local cmake_version
+    cmake_version=$(sed -n 's/^project(PlasmaZones VERSION \([^ )]*\).*/\1/p' CMakeLists.txt)
+    : "${cmake_version:=3.0.0}"
     git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' ||
-    printf "3.0.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    printf "%s.r%s.g%s" "$cmake_version" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }
 
 build() {

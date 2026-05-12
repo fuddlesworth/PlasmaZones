@@ -4,18 +4,18 @@ Upstream-Contact: fuddlesworth <fuddlesworth@users.noreply.github.com>
 Source: https://github.com/fuddlesworth/PlasmaZones
 
 Files: *
-Copyright: 2024-2026 fuddlesworth
+Copyright: 2024-2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
 # All phosphor-* extracted libraries ship as LGPL so third-party
 # plugins / shells can link them without inheriting GPL — see CLAUDE.md
 # for the per-tree license rules.
 Files: libs/phosphor-*/*
-Copyright: 2026 fuddlesworth
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: LGPL-2.1-or-later
 
 Files: debian/*
-Copyright: 2026 fuddlesworth
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
 License: LGPL-2.1-or-later

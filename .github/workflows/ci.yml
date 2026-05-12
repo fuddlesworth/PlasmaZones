@@ -2,6 +2,7 @@
 # Builds on Arch + a stable distro across both USE_KDE_FRAMEWORKS modes,
 # with BUILD_TOOLS=ON to exercise the shader-render tool. Tests run under
 # QT_QPA_PLATFORM=offscreen so QML-touching tests don't need a display.
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 name: CI
@@ -43,7 +44,10 @@ jobs:
       - name: Setup (Arch)
         if: matrix.distro == 'arch'
         run: |
-          pacman -Sy --noconfirm
+          set -euo pipefail
+          # Full -Syu prevents partial-upgrade state that can break linked
+          # libs against stale base packages — Arch's standard guidance.
+          pacman -Syu --noconfirm
           pacman -S --noconfirm --needed \
             git base-devel ccache \
             cmake ninja extra-cmake-modules \
@@ -75,7 +79,9 @@ jobs:
       # ccache: BIG win on PR rebuilds with unity-build + LTO; without it
       # every PR pays a 10-15 min cold compile.
       - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+        # hendrikmuhs/ccache-action v1.2.18 — SHA-pin third-party actions
+        # so a hijacked tag can't run arbitrary code in our build matrix.
+        uses: hendrikmuhs/ccache-action@a1209f81afb8c005c13b4296c32e363431bffea5
         with:
           key: ${{ matrix.distro }}-${{ matrix.kde }}
           max-size: 500M

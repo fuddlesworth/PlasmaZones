@@ -1,4 +1,5 @@
 # Auto-update flake.lock weekly to keep nixpkgs fresh
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 name: Update flake.lock

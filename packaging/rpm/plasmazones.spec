@@ -80,6 +80,10 @@ BuildRequires:  cmake(Qt6WaylandClientPrivate)
 BuildRequires:  wayland-devel
 BuildRequires:  cmake(PlasmaActivities)
 BuildRequires:  pkgconfig(systemd)
+# systemd-rpm-macros defines %systemd_user_post / %systemd_user_postun_*
+# — without it those macros expand to empty and the user-unit hooks at
+# %post / %postun silently no-op on openSUSE.
+BuildRequires:  systemd-rpm-macros
 %else
 BuildRequires:  kwin-devel >= 6.6.0
 BuildRequires:  qt6-qtwayland-devel
@@ -107,6 +111,14 @@ Requires:       kwin >= 6.6.0
 %endif
 Requires:       hicolor-icon-theme
 
+# Post-install scriptlet dependencies — must be in preamble (rpmbuild
+# parses Requires(post) only here; placing them after %install is
+# silently dropped on stricter parsers). hicolor-icon-theme is already
+# in Requires above; the post-only entries are the cache-refresh tools.
+Requires(post): /usr/bin/gtk-update-icon-cache
+Requires(post): /usr/bin/update-desktop-database
+Requires(post): /usr/bin/update-mime-database
+
 %description
 PlasmaZones is a window tiling and zone management tool for KDE Plasma 6.
 
@@ -131,11 +143,6 @@ Features:
 
 %install
 %cmake_install
-
-Requires(post): hicolor-icon-theme
-Requires(post): /usr/bin/gtk-update-icon-cache
-Requires(post): /usr/bin/update-desktop-database
-Requires(post): /usr/bin/update-mime-database
 
 %post
 # Refresh KDE service cache

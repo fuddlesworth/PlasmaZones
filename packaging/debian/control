@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 # Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, KWin 6.6).
 # Compatible with both KDE Neon (which ships `qt6-shadertools-dev`, `qt6-svg-dev`)
 # and vanilla Debian/Ubuntu (which ship `libqt6shadertools6-dev`, `libqt6svg6-dev`).
@@ -40,7 +43,7 @@ Depends:
  ${misc:Depends},
  kwin-common (>= 4:6.6.0),
  qt6-wayland (>= 6.6.0),
- libqt6shadertools6 (>= 6.6.0),
+ libqt6shadertools6 (>= 6.6.0) | qt6-shadertools,
  libkf6kirigami-bin (>= 6.6.0) | kf6-kirigami | qml6-module-org-kde-kirigami,
  libkf6kcmutils-bin (>= 6.6.0) | kcmutils6,
 Recommends:

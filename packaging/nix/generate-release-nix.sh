@@ -36,7 +36,14 @@ if [[ ! -f "$SRC_NIX" ]]; then
 fi
 
 echo "Fetching source hash for $TARBALL" >&2
-NIX_HASH=$(nix-prefetch-url --unpack "$TARBALL" 2>/dev/null)
+# Don't muzzle stderr — surface curl / nix-prefetch-url failures (404 on
+# a missing tag, network errors) instead of producing an empty SRI hash
+# and writing a corrupt plasmazones.nix.
+NIX_HASH=$(nix-prefetch-url --unpack "$TARBALL")
+if [[ -z "$NIX_HASH" ]]; then
+    echo "Error: nix-prefetch-url returned empty hash for $TARBALL" >&2
+    exit 1
+fi
 SRI_HASH=$(nix hash to-sri --type sha256 "$NIX_HASH")
 echo "SRI hash: $SRI_HASH" >&2
 
@@ -74,11 +81,22 @@ awk -v version="$VERSION" -v hash="$SRI_HASH" '
     !in_let { print }
 ' "$SRC_NIX" > "$OUT_NIX"
 
-# Smoke check: confirm the result still parses as Nix. If `nix-instantiate`
-# is on PATH, run it and fail loudly on parse errors. Without nix-instantiate
-# we at least verify the file is non-empty.
+# Smoke checks:
+#  1. Non-empty file (catches awk swallowing everything).
+#  2. Required attributes present (catches package.nix refactors that drop
+#     the patterns we rewrite — `inherit src;` / `version = extractVersion`
+#     — without changing the upstream file's syntax).
+#  3. `nix-instantiate --parse` if available (catches Nix syntax errors).
 if [[ ! -s "$OUT_NIX" ]]; then
     echo "Error: generated $OUT_NIX is empty" >&2
+    exit 1
+fi
+if ! grep -q 'fetchFromGitHub' "$OUT_NIX"; then
+    echo "Error: generated $OUT_NIX is missing fetchFromGitHub — upstream package.nix may have been restructured" >&2
+    exit 1
+fi
+if ! grep -qE '^[[:space:]]*version = "' "$OUT_NIX"; then
+    echo "Error: generated $OUT_NIX is missing a hardcoded version attribute" >&2
     exit 1
 fi
 if command -v nix-instantiate >/dev/null 2>&1; then

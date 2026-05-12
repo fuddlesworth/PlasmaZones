@@ -1,5 +1,6 @@
 # PlasmaZones Release Pipeline
 # Builds distribution packages when a version tag is pushed
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 name: Release
@@ -9,10 +10,15 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    # Allow manual triggers
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v3.0.0). Must already exist.'
+        required: true
 
+# Default scope is read-only. Only the `release` job and the AUR publish
+# need writes — they opt in via per-job permissions blocks.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
@@ -23,13 +29,37 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
     steps:
       - name: Extract version from tag
         id: version
         run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
+          set -euo pipefail
+          # On push the ref is refs/tags/v<x>; on manual dispatch we
+          # accept an explicit tag input. Fail loudly if neither yields
+          # a tag-shaped value so downstream packaging steps don't see
+          # `heads/v3` or empty.
+          INPUT_TAG="${{ github.event.inputs.tag }}"
+          if [[ -n "$INPUT_TAG" ]]; then
+              REF="refs/tags/${INPUT_TAG#refs/tags/}"
+          else
+              REF="$GITHUB_REF"
+          fi
+          if [[ "$REF" != refs/tags/v* ]]; then
+              echo "Error: refusing to release from non-tag ref: $REF" >&2
+              exit 1
+          fi
+          VERSION="${REF#refs/tags/v}"
+          # Pre-release detection: only the canonical semver-ish suffixes
+          # (-alpha[.N] / -beta[.N] / -rc[.N]). A tag like v3.0.0-arch1 is
+          # treated as a normal release; v3.0.0-rc.1 is a pre-release.
+          IS_PRE=false
+          if [[ "$VERSION" =~ -(alpha|beta|rc)(\.[0-9]+)?$ ]]; then
+              IS_PRE=true
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRE" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION (prerelease=$IS_PRE)"
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Build Debian Package (KDE Neon - ships Plasma/KF6 6.6+)
@@ -463,6 +493,9 @@ jobs:
     name: Create GitHub Release
     needs: [version, build-deb, build-rpm, build-rpm-opensuse, build-arch, build-generic, build-nix]
     runs-on: ubuntu-latest
+    # Only this job writes release assets back to the repo.
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -578,13 +611,15 @@ jobs:
       - name: Create Release
         env:
           GH_TOKEN: ${{ github.token }}
+          IS_PRERELEASE: ${{ needs.version.outputs.is_prerelease }}
         run: |
+          set -euo pipefail
           VERSION="v${{ needs.version.outputs.version }}"
+          # Source the pre-release verdict from the version job so this
+          # workflow has one regex / one decision point — see the version
+          # job's `is_prerelease` output.
           PRERELEASE_FLAG=""
-          # Match canonical pre-release suffixes only (semver-like):
-          #   -alpha / -alpha1 / -beta / -rc / -rc.1 / .alpha1 / .rc.2
-          # Tags like v3.0.0-arch1 or v3.0.0.archive are NOT pre-releases.
-          if echo "$VERSION" | grep -qE '[-.](alpha|beta|rc)[.0-9]*$'; then
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
             PRERELEASE_FLAG="--prerelease"
           fi
 
@@ -611,7 +646,10 @@ jobs:
     name: Publish to AUR
     needs: [version, release]
     runs-on: ubuntu-latest
-    if: ${{ !contains(needs.version.outputs.version, 'alpha') && !contains(needs.version.outputs.version, 'beta') && !contains(needs.version.outputs.version, 'rc') }}
+    # Skip AUR publish for pre-releases. Single source of truth: the
+    # version job's `is_prerelease` output — keeps this in sync with
+    # the GH release's `--prerelease` flag automatically.
+    if: needs.version.outputs.is_prerelease != 'true'
 
     steps:
       - name: Checkout

@@ -70,7 +70,7 @@ set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.WindowDrag.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.WindowTracking.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.ZoneDetection.xml"
-    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSDIR@/services/org.plasmazones.service"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSSERVICEDIR@/org.plasmazones.service"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_METAINFODIR@/org.plasmazones.editor.metainfo.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_METAINFODIR@/org.plasmazones.settings.metainfo.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor/scalable/apps/plasmazones.svg"
@@ -191,9 +191,11 @@ endif()
 message(STATUS "")
 message(STATUS "[5/5] Cleaning up KDE caches...")
 
-# Find kbuildsycoca6 to rebuild system configuration cache
+# Find kbuildsycoca6 to rebuild system configuration cache. Skip when
+# staging into a DESTDIR (matches the ldconfig guard above: an empty
+# string and an undefined env var both mean "real install, not staged").
 find_program(KBUILDSYCOCA kbuildsycoca6)
-if(KBUILDSYCOCA AND NOT DEFINED ENV{DESTDIR})
+if(KBUILDSYCOCA AND (NOT DEFINED ENV{DESTDIR} OR "$ENV{DESTDIR}" STREQUAL ""))
     message(STATUS "  Rebuilding KDE system configuration cache...")
     execute_process(COMMAND "${KBUILDSYCOCA}" --noincremental ERROR_QUIET)
 endif()
