@@ -68,11 +68,26 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     include(GNUInstallDirs)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 endif()
+
+# SONAME + symlinks for packagers. SOVERSION is the stable ABI version,
+# decoupled from semver — kept at 0 across the phosphor-* catalog so
+# packagers ship `lib*.so.0` until we make a deliberate ABI break.
+# Hidden visibility pairs with generate_export_header — without it the
+# PHOSPHORENGINE_EXPORT macro is a no-op and every symbol leaks.
+set_target_properties(PhosphorEngine PROPERTIES
+    VERSION ${PHOSPHORENGINE_VERSION}
+    SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+)
 
 install(TARGETS PhosphorEngine
     EXPORT PhosphorEngineTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
 )
 
 install(DIRECTORY include/PhosphorEngine

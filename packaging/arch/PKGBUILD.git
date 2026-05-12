@@ -1,9 +1,14 @@
 # Maintainer: fuddlesworth
 # PlasmaZones (git version) - Window tiling and autotiling for KDE Plasma
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 pkgname=plasmazones-git
-pkgver=1.2.0.r0.g0000000
+# Placeholder — overwritten by pkgver() on every build. The fallback in
+# pkgver() (if `git describe` fails on a shallow clone) must produce a
+# version ≥ the canonical PKGBUILD's pkgver, or pacman silently treats
+# -git as older than the stable package.
+pkgver=3.0.0.r0.g0000000
 pkgrel=1
 pkgdesc="Window tiling and autotiling for KDE Plasma (git version)"
 arch=('x86_64')
@@ -45,8 +50,24 @@ install=plasmazones.install
 
 pkgver() {
     cd "$pkgname"
-    git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' ||
-    printf "1.2.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    # Prefer `git describe`; fall back to "<project-version>.r<count>.g<sha>"
+    # so we still produce a sortable version on shallow clones. The project
+    # version is parsed from CMakeLists.txt (rather than hand-bumped here)
+    # so a release bump doesn't silently leave the -git fallback ordering
+    # wrong against the new -stable pkgver.
+    #
+    # Branch explicitly on whether describe succeeded — piping through
+    # sed swallows the failure (sed exits 0 on empty stdin) and the
+    # fallback printf never fires, leaving pkgver() empty and makepkg
+    # aborting with "pkgver is not allowed to be empty".
+    local cmake_version describe
+    cmake_version=$(sed -n 's/^project(PlasmaZones VERSION \([^ )]*\).*/\1/p' CMakeLists.txt)
+    : "${cmake_version:=3.0.0}"
+    if describe=$(git describe --long --tags 2>/dev/null) && [[ -n "$describe" ]]; then
+        printf '%s\n' "$describe" | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+    else
+        printf "%s.r%s.g%s" "$cmake_version" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    fi
 }
 
 build() {

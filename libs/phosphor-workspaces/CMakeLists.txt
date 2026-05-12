@@ -47,29 +47,25 @@ target_link_libraries(PhosphorWorkspaces
         Qt6::DBus
 )
 
-# Optional KActivities/PlasmaActivities support for ActivityManager
+# Optional activities support — PlasmaActivities is the canonical KDE
+# Plasma 6 package; KF6Activities is the older KF6 name still shipped on
+# some 6.x distros. KF5 KActivities is intentionally not consulted —
+# Plasma 6 dropped KF5 entirely.
 find_package(PlasmaActivities QUIET)
 if(NOT PlasmaActivities_FOUND)
-    find_package(KF6Activities QUIET NAMES KF6Activities KActivities)
-    if(KF6Activities_FOUND)
-        set(PlasmaActivities_FOUND TRUE)
-    endif()
+    find_package(KF6Activities QUIET)
 endif()
-if(NOT PlasmaActivities_FOUND)
-    find_package(KActivities QUIET)
-    if(KActivities_FOUND)
-        set(PlasmaActivities_FOUND TRUE)
-    endif()
-endif()
-if(PlasmaActivities_FOUND)
+
+# Gate the compile-define on the actual IMPORTED target existing, not
+# on _FOUND. A legacy Config that exposes only variables (no target)
+# would otherwise wire `HAVE_KACTIVITIES` without a link dependency,
+# producing undefined-symbol errors in the daemon's ActivityManager.
+if(TARGET Plasma::Activities)
     target_compile_definitions(PhosphorWorkspaces PRIVATE HAVE_KACTIVITIES)
-    if(TARGET Plasma::Activities)
-        target_link_libraries(PhosphorWorkspaces PRIVATE Plasma::Activities)
-    elseif(TARGET KF6::Activities)
-        target_link_libraries(PhosphorWorkspaces PRIVATE KF6::Activities)
-    elseif(TARGET KF5::Activities)
-        target_link_libraries(PhosphorWorkspaces PRIVATE KF5::Activities)
-    endif()
+    target_link_libraries(PhosphorWorkspaces PRIVATE Plasma::Activities)
+elseif(TARGET KF6::Activities)
+    target_compile_definitions(PhosphorWorkspaces PRIVATE HAVE_KACTIVITIES)
+    target_link_libraries(PhosphorWorkspaces PRIVATE KF6::Activities)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -80,11 +76,21 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     include(GNUInstallDirs)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 endif()
+
+set_target_properties(PhosphorWorkspaces PROPERTIES
+    VERSION ${PHOSPHORWORKSPACES_VERSION}
+    SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+)
 
 install(TARGETS PhosphorWorkspaces
     EXPORT PhosphorWorkspacesTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
 )
 
 install(DIRECTORY include/PhosphorWorkspaces

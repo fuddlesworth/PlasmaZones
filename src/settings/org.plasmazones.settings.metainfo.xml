@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-FileCopyrightText: 2026 fuddlesworth
+  SPDX-License-Identifier: CC0-1.0
+-->
+<component type="desktop-application">
+  <id>org.plasmazones.settings</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>PlasmaZones Settings</name>
+  <summary>Configure window zone snapping and autotiling</summary>
+
+  <description>
+    <p>
+      The PlasmaZones Settings app is the standalone configuration
+      surface for the PlasmaZones window-tiling system on KDE Plasma.
+      Most options also appear inside System Settings (via the KCM); the
+      standalone app is the place to live-tune animations and shaders
+      with previews, manage per-app rules, and review the daemon's
+      runtime state.
+    </p>
+    <p>What it configures:</p>
+    <ul>
+      <li>Snap behaviour (modifiers, drag delays, zone span, overlay timing)</li>
+      <li>Autotile algorithms and per-layout defaults</li>
+      <li>Animations, shader effects, and per-event motion profiles</li>
+      <li>Visibility filters (per-screen, per-desktop, per-activity)</li>
+      <li>Per-application zone-snap rules</li>
+      <li>Keyboard shortcuts and on-screen-display feedback</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">org.plasmazones.settings.desktop</launchable>
+
+  <categories>
+    <category>Settings</category>
+  </categories>
+
+  <keywords>
+    <keyword>window</keyword>
+    <keyword>tiling</keyword>
+    <keyword>zones</keyword>
+    <keyword>layout</keyword>
+    <keyword>snap</keyword>
+    <keyword>settings</keyword>
+  </keywords>
+
+  <url type="homepage">https://github.com/fuddlesworth/PlasmaZones</url>
+  <url type="bugtracker">https://github.com/fuddlesworth/PlasmaZones/issues</url>
+  <url type="vcs-browser">https://github.com/fuddlesworth/PlasmaZones</url>
+
+  <developer id="io.github.fuddlesworth">
+    <name>fuddlesworth</name>
+  </developer>
+
+  <content_rating type="oars-1.1" />
+
+  <provides>
+    <binary>plasmazones-settings</binary>
+  </provides>
+</component>

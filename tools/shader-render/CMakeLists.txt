@@ -14,14 +14,23 @@ find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
     Quick
 )
 
-# QRhi lives in QtGui's "rhi/" tree which is still a
-# partially-private header set in Qt 6.11 (public API, versioned
-# include path only exposed via GuiPrivate).  We need it to drive
-# the offscreen QQuickRenderControl path — no public alternative.
-find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
-    GuiPrivate
-    QuickPrivate
-)
+# QRhi lives in QtGui's "rhi/" tree which is still a partially-private
+# header set in Qt 6.11 (public API, versioned include path only exposed
+# via GuiPrivate). We need it to drive the offscreen QQuickRenderControl
+# path — no public alternative.
+#
+# Fedora ships `Qt6::GuiPrivate` / `Qt6::QuickPrivate` as targets defined
+# inside Qt6GuiConfig / Qt6QuickConfig rather than as standalone
+# Qt6GuiPrivateConfig.cmake files; the COMPONENTS dispatch then fails
+# even though the targets already exist. Mirror the guarded pattern from
+# the project's top-level CMakeLists.txt so the tool builds on both
+# Arch/openSUSE-style and Fedora-style Qt6 layouts.
+if(NOT TARGET Qt6::GuiPrivate)
+    find_package(Qt6GuiPrivate ${QT_MIN_VERSION} CONFIG REQUIRED)
+endif()
+if(NOT TARGET Qt6::QuickPrivate)
+    find_package(Qt6QuickPrivate ${QT_MIN_VERSION} CONFIG REQUIRED)
+endif()
 
 set(shader_render_SRCS
     main.cpp
@@ -47,9 +56,9 @@ target_link_libraries(plasmazones-shader-render PRIVATE
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickPrivate
-    PhosphorRendering
-    PhosphorWayland
-    PhosphorAudio
+    PhosphorRendering::PhosphorRendering
+    PhosphorWayland::PhosphorWayland
+    PhosphorAudio::PhosphorAudio
 )
 
 # The tool reuses the daemon's ZoneUniformExtension header so the
@@ -89,7 +98,14 @@ if(BUILD_TESTING)
     target_link_libraries(test_shader_render_layoutloader PRIVATE
         Qt6::Test Qt6::Core Qt6::Gui)
     target_compile_features(test_shader_render_layoutloader PRIVATE cxx_std_20)
-    add_test(NAME test_shader_render_layoutloader COMMAND test_shader_render_layoutloader)
+    # WORKING_DIRECTORY pinned to the source tree so tests that read
+    # sample JSON / fixtures via relative paths don't depend on where
+    # ctest is invoked.
+    add_test(
+        NAME test_shader_render_layoutloader
+        COMMAND test_shader_render_layoutloader
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
 
     add_executable(test_shader_render_metadataloader
         tests/test_metadataloader.cpp
@@ -99,5 +115,9 @@ if(BUILD_TESTING)
     target_link_libraries(test_shader_render_metadataloader PRIVATE
         Qt6::Test Qt6::Core Qt6::Gui)
     target_compile_features(test_shader_render_metadataloader PRIVATE cxx_std_20)
-    add_test(NAME test_shader_render_metadataloader COMMAND test_shader_render_metadataloader)
+    add_test(
+        NAME test_shader_render_metadataloader
+        COMMAND test_shader_render_metadataloader
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
 endif()
