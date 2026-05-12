@@ -646,7 +646,7 @@ Item {
                 }
             }
 
-            // Handle hover state — opacity, color, and border.color all
+            // Handle hover state. Opacity, color, and border.color all
             // animate via widget.hover so the three properties stay in
             // sync on the same hover trigger.
             Behavior on opacity {

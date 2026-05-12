@@ -917,7 +917,7 @@ public:
     {
         return PhosphorAnimation::Limits::MaxAnimationDurationMs;
     }
-    static int animationSequenceMode()
+    static constexpr int animationSequenceMode()
     {
         return 1;
     }
@@ -929,7 +929,7 @@ public:
     {
         return 1;
     }
-    static int animationStaggerInterval()
+    static constexpr int animationStaggerInterval()
     {
         return 40;
     }
@@ -1457,9 +1457,18 @@ private:
 // Compile-time bound checks for retuned animation defaults so a future
 // bump can never silently exceed the declared slider range. Mirrors the
 // pattern in AnimationLimits.h where library defaults assert against
-// their own min/max.
+// their own min/max. Mirrored at runtime by QVERIFY in
+// tests/unit/config/test_configdefaults.cpp; the compile-time form
+// catches a bad default during build, the runtime form survives header
+// changes that drop constexpr from any accessor.
 static_assert(ConfigDefaults::animationDuration() >= ConfigDefaults::animationDurationMin()
                   && ConfigDefaults::animationDuration() <= ConfigDefaults::animationDurationMax(),
               "ConfigDefaults::animationDuration() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin()
+                  && ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax(),
+              "ConfigDefaults::animationStaggerInterval() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::animationSequenceMode() >= ConfigDefaults::animationSequenceModeMin()
+                  && ConfigDefaults::animationSequenceMode() <= ConfigDefaults::animationSequenceModeMax(),
+              "ConfigDefaults::animationSequenceMode() outside declared [min, max] range");
 
 } // namespace PlasmaZones

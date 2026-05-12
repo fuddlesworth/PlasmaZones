@@ -349,10 +349,14 @@ Window {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                // Pinned to widget.fadeIn for both directions: the top bar
-                // is paired with the floating "Exit Fullscreen" pill, and
-                // asymmetric fade-in/fade-out durations break the visual
-                // handoff. widget-out curve decelerates symmetrically.
+                // Pinned to widget.fadeIn for both directions. The top bar
+                // and the floating "Exit Fullscreen" pill below are
+                // reciprocal opacity bindings during a fullscreen toggle,
+                // so they must share one profile (200 ms, widget-out
+                // curve) for a clean handoff. Deliberately NOT using
+                // widget.fadeOut for the 1->0 direction: its 400 ms
+                // cubic-in seed is for graceful standalone exits, which
+                // would desync the paired surfaces.
                 profile: "widget.fadeIn"
             }
 
@@ -738,8 +742,10 @@ Window {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                // Pinned to widget.fadeIn for both directions: paired with
-                // the top bar fade above so they hand off symmetrically.
+                // Pinned to widget.fadeIn for both directions. Paired with
+                // the top bar fade above; same rationale (200 ms,
+                // widget-out curve, NOT widget.fadeOut's 400 ms tail) so
+                // the pill and the top bar exchange visibility cleanly.
                 profile: "widget.fadeIn"
             }
 
