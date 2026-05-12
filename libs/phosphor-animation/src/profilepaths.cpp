@@ -18,17 +18,17 @@ const QString WindowMaximize = QStringLiteral("window.maximize");
 const QString WindowMove = QStringLiteral("window.move");
 const QString WindowResize = QStringLiteral("window.resize");
 const QString WindowFocus = QStringLiteral("window.focus");
+const QString WindowSnapIn = QStringLiteral("window.snapIn");
+const QString WindowSnapOut = QStringLiteral("window.snapOut");
+const QString WindowSnapResize = QStringLiteral("window.snapResize");
+const QString WindowLayoutSwitch = QStringLiteral("window.layoutSwitch");
 
-// zone.*
-const QString Zone = QStringLiteral("zone");
-const QString ZoneSnapIn = QStringLiteral("zone.snapIn");
-const QString ZoneSnapOut = QStringLiteral("zone.snapOut");
-const QString ZoneSnapResize = QStringLiteral("zone.snapResize");
-const QString ZoneHighlight = QStringLiteral("zone.highlight");
-const QString ZoneHighlightPop = QStringLiteral("zone.highlight.pop");
-const QString ZoneHighlightBorder = QStringLiteral("zone.highlight.border");
-const QString ZoneLayoutSwitchIn = QStringLiteral("zone.layoutSwitchIn");
-// `zone.layoutSwitchOut` intentionally undeclared — see ProfilePaths.h.
+// editor.* — Layout-editor-only zone manipulation. NOT runtime
+// window snapping (that's KWin's domain).
+const QString Editor = QStringLiteral("editor");
+const QString EditorSnapIn = QStringLiteral("editor.snapIn");
+const QString EditorSnapOut = QStringLiteral("editor.snapOut");
+const QString EditorSnapResize = QStringLiteral("editor.snapResize");
 
 // osd.*
 const QString Osd = QStringLiteral("osd");
@@ -87,6 +87,10 @@ const QString WidgetProgress = QStringLiteral("widget.progress");
 const QString WidgetPulse = QStringLiteral("widget.pulse");
 const QString WidgetPulseFast = QStringLiteral("widget.pulse.fast");
 const QString WidgetPulseSlow = QStringLiteral("widget.pulse.slow");
+const QString WidgetZoneHighlight = QStringLiteral("widget.zoneHighlight");
+const QString WidgetZoneHighlightPop = QStringLiteral("widget.zoneHighlight.pop");
+const QString WidgetZoneHighlightBorder = QStringLiteral("widget.zoneHighlight.border");
+const QString WidgetZoneOverlayFlash = QStringLiteral("widget.zoneOverlayFlash");
 
 QStringList allBuiltInPaths()
 {
@@ -105,14 +109,14 @@ QStringList allBuiltInPaths()
         WindowMove,
         WindowResize,
         WindowFocus,
-        Zone,
-        ZoneSnapIn,
-        ZoneSnapOut,
-        ZoneSnapResize,
-        ZoneHighlight,
-        ZoneHighlightPop,
-        ZoneHighlightBorder,
-        ZoneLayoutSwitchIn,
+        WindowSnapIn,
+        WindowSnapOut,
+        WindowSnapResize,
+        WindowLayoutSwitch,
+        Editor,
+        EditorSnapIn,
+        EditorSnapOut,
+        EditorSnapResize,
         Osd,
         OsdShow,
         OsdPop,
@@ -159,6 +163,10 @@ QStringList allBuiltInPaths()
         WidgetPulse,
         WidgetPulseFast,
         WidgetPulseSlow,
+        WidgetZoneHighlight,
+        WidgetZoneHighlightPop,
+        WidgetZoneHighlightBorder,
+        WidgetZoneOverlayFlash,
     };
     return kAllPaths;
 }

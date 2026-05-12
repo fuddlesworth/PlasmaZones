@@ -64,6 +64,33 @@ SettingsFlickable {
             eventLabel: i18n("Focus")
         }
 
+        // Snap-into-zone window animations driven by the kwin-effect.
+        // The window quad animates when it snaps into / out of a zone
+        // or when a layout switch repositions it.
+        AnimationEventCard {
+            Layout.fillWidth: true
+            eventPath: "window.snapIn"
+            eventLabel: i18n("Snap Into Zone")
+        }
+
+        AnimationEventCard {
+            Layout.fillWidth: true
+            eventPath: "window.snapOut"
+            eventLabel: i18n("Snap Out of Zone")
+        }
+
+        AnimationEventCard {
+            Layout.fillWidth: true
+            eventPath: "window.snapResize"
+            eventLabel: i18n("Snap Resize")
+        }
+
+        AnimationEventCard {
+            Layout.fillWidth: true
+            eventPath: "window.layoutSwitch"
+            eventLabel: i18n("Layout Switch")
+        }
+
     }
 
 }

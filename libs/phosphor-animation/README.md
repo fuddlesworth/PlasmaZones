@@ -23,7 +23,7 @@ that interpolates toward a target, a curve family that decides *how*
   family, polymorphic `Curve`s, the `IMotionClock` clock contract,
   retarget policy, snap policy, stagger, and the `Profile` /
   `ProfileTree` / `PhosphorProfileRegistry` system that maps event
-  names like `window.open` and `zone.snapIn` to motion configs.
+  names like `window.open` and `editor.snapIn` to motion configs.
 - **Shader transitions** (namespace `PhosphorAnimationShaders`) — the
   `AnimationShaderRegistry` that discovers transition shader packs from
   search paths, parameter metadata for a picker UI, and the parallel
@@ -93,7 +93,7 @@ registry.refresh();
 AnimatedValue<QRectF> geometry(initialRect);
 
 MotionSpec<QRectF> spec{
-    .profile        = registry.profileFor(QStringLiteral("zone.snapIn")),
+    .profile        = registry.profileFor(QStringLiteral("editor.snapIn")),
     .clock          = &clock,
     .retargetPolicy = RetargetPolicy::PreserveVelocity,
 };

@@ -4,10 +4,14 @@ import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
+// Layout-editor zone-manipulation animations. Fires only inside the
+// PlasmaZones layout editor (fill-preview, snap-resize-preview).
+// Runtime window snapping is KWin's compositor-level domain and is
+// NOT controlled here.
 SettingsFlickable {
     contentHeight: col.implicitHeight
     clip: true
-    Accessible.name: i18n("Zone animation events")
+    Accessible.name: i18n("Layout editor animation events")
 
     ColumnLayout {
         id: col
@@ -17,33 +21,27 @@ SettingsFlickable {
 
         AnimationEventCard {
             Layout.fillWidth: true
-            eventPath: "zone"
-            eventLabel: i18n("All Zone Events")
+            eventPath: "editor"
+            eventLabel: i18n("All Editor Events")
             isParentNode: true
         }
 
         AnimationEventCard {
             Layout.fillWidth: true
-            eventPath: "zone.snapIn"
-            eventLabel: i18n("Snap In")
+            eventPath: "editor.snapIn"
+            eventLabel: i18n("Snap In (Fill)")
         }
 
         AnimationEventCard {
             Layout.fillWidth: true
-            eventPath: "zone.snapResize"
-            eventLabel: i18n("Snap Resize")
+            eventPath: "editor.snapOut"
+            eventLabel: i18n("Snap Out")
         }
 
         AnimationEventCard {
             Layout.fillWidth: true
-            eventPath: "zone.highlight"
-            eventLabel: i18n("Highlight")
-        }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "zone.layoutSwitchIn"
-            eventLabel: i18n("Layout Switch")
+            eventPath: "editor.snapResize"
+            eventLabel: i18n("Snap Resize (Drag Preview)")
         }
 
     }

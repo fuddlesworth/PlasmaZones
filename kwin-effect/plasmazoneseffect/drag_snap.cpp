@@ -239,7 +239,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     }
                     // Drag-to-unsnap: window leaves zone-managed sizing, restore pre-snap dimensions.
                     applySnapGeometry(safeWindow, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                      PhosphorAnimation::ProfilePaths::ZoneSnapOut);
+                                      PhosphorAnimation::ProfilePaths::WindowSnapOut);
                     break;
                 }
                 }
@@ -577,7 +577,7 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
     // Live drag-out unsnap: restoring pre-snap dimensions while the user is still dragging.
     // Logically a snap-out (the window is leaving zone-managed sizing).
     applySnapGeometry(window, geometry, /*allowDuringDrag=*/true, /*skipAnimation=*/false,
-                      PhosphorAnimation::ProfilePaths::ZoneSnapOut);
+                      PhosphorAnimation::ProfilePaths::WindowSnapOut);
 }
 
 void PlasmaZonesEffect::slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,

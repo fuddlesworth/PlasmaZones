@@ -30,7 +30,7 @@ namespace PhosphorAnimationShaders {
 ///   • **Compositor (window-content) execution** — `kwin-effect` running
 ///     inside the KWin compositor process. Uses classic OpenGL via
 ///     `KWin::GLShader`. Animates window contents during lifecycle
-///     events (`window.open`, `window.move`, `zone.snapIn`, …).
+///     events (`window.open`, `window.move`, `editor.snapIn`, …).
 ///
 ///   • **Daemon (overlay-surface) execution** — `SurfaceAnimator::runLeg`
 ///     in the PlasmaZones daemon. Uses Qt RHI via

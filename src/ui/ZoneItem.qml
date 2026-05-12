@@ -57,19 +57,19 @@ Item {
         }
 
         // Phase 4: zone highlight transitions use the user's active
-        // animation Profile via the "zone.highlight" registry path.
+        // animation Profile via the "widget.zoneHighlight" registry path.
         // Daemon publishes Settings::animationProfile() here; live-updates
         // on settings edit with no daemon restart.
         Behavior on color {
             PhosphorMotionAnimation {
-                profile: "zone.highlight"
+                profile: "widget.zoneHighlight"
             }
 
         }
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "zone.highlight"
+                profile: "widget.zoneHighlight"
             }
 
         }
@@ -105,7 +105,7 @@ Item {
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "zone.highlight"
+                    profile: "widget.zoneHighlight"
                 }
 
             }
@@ -128,7 +128,7 @@ Item {
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "zone.highlight"
+                    profile: "widget.zoneHighlight"
                 }
 
             }

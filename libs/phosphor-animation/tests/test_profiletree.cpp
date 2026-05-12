@@ -40,7 +40,7 @@ private Q_SLOTS:
         QVERIFY(!paths.isEmpty());
         QVERIFY(paths.contains(PP::Global));
         QVERIFY(paths.contains(PP::WindowOpen));
-        QVERIFY(paths.contains(PP::ZoneSnapIn));
+        QVERIFY(paths.contains(PP::EditorSnapIn));
     }
 
     // ─── Resolve walk-up ───
@@ -177,14 +177,14 @@ private Q_SLOTS:
         ProfileTree tree;
         Profile p;
         p.duration = 999.0;
-        tree.setOverride(PP::ZoneSnapIn, p);
-        QVERIFY(tree.hasOverride(PP::ZoneSnapIn));
+        tree.setOverride(PP::EditorSnapIn, p);
+        QVERIFY(tree.hasOverride(PP::EditorSnapIn));
 
-        QVERIFY(tree.clearOverride(PP::ZoneSnapIn));
-        QVERIFY(!tree.hasOverride(PP::ZoneSnapIn));
+        QVERIFY(tree.clearOverride(PP::EditorSnapIn));
+        QVERIFY(!tree.hasOverride(PP::EditorSnapIn));
         QVERIFY(tree.overriddenPaths().isEmpty());
 
-        QVERIFY(!tree.clearOverride(PP::ZoneSnapIn));
+        QVERIFY(!tree.clearOverride(PP::EditorSnapIn));
     }
 
     void testClearAllOverrides()
@@ -192,7 +192,7 @@ private Q_SLOTS:
         ProfileTree tree;
         Profile p;
         tree.setOverride(PP::Window, p);
-        tree.setOverride(PP::Zone, p);
+        tree.setOverride(PP::Editor, p);
         tree.setOverride(PP::Osd, p);
 
         Profile baseline;
@@ -231,7 +231,7 @@ private Q_SLOTS:
         Profile overrideB;
         overrideB.curve = std::make_shared<Easing>();
         overrideB.sequenceMode = SequenceMode::Cascade;
-        original.setOverride(PP::ZoneSnapIn, overrideB);
+        original.setOverride(PP::EditorSnapIn, overrideB);
 
         const QJsonObject encoded = original.toJson();
         const ProfileTree restored = ProfileTree::fromJson(encoded, PhosphorAnimation::CurveRegistry{});
@@ -243,7 +243,7 @@ private Q_SLOTS:
     {
         ProfileTree original;
         original.setOverride(PP::Window, Profile());
-        original.setOverride(PP::Zone, Profile());
+        original.setOverride(PP::Editor, Profile());
         original.setOverride(PP::Osd, Profile());
 
         const QStringList before = original.overriddenPaths();

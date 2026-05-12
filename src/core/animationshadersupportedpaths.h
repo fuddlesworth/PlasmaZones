@@ -49,6 +49,14 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::WindowMove,
         PP::WindowResize,
         PP::WindowFocus,
+        // Snap-into-zone window animations driven by the kwin-effect's
+        // applySnapGeometry / daemon_apply chokepoints. Each routes
+        // through tryBeginShaderForEvent so the user can pick a
+        // distinct shader per snap event.
+        PP::WindowSnapIn,
+        PP::WindowSnapOut,
+        PP::WindowSnapResize,
+        PP::WindowLayoutSwitch,
     };
 }
 
@@ -62,7 +70,7 @@ inline QStringList shaderConsumedLeafEventPaths()
 /// `popup.layoutPicker.show = pixelate` overrides only that one leg.
 ///
 /// Paths that are NOT ancestors of any consumed leaf (e.g.
-/// `panel.slideIn`, `osd.pop`, `widget.fadeIn`, `zone.snapIn`) are
+/// `panel.slideIn`, `osd.pop`, `widget.fadeIn`, `editor.snapIn`) are
 /// excluded — there is no resolver path that walks through them, so
 /// any assignment would be runtime-dead and silently shadow what the
 /// user thought they set on a sibling. The settings UI hides the

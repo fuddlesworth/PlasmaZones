@@ -107,7 +107,7 @@ public:
     /// global root. Drives the sidebar grouping.
     Q_INVOKABLE QString sectionForPath(const QString& path) const;
 
-    /// Title-cased label for @p path's last segment (e.g. `"zone.snapIn"`
+    /// Title-cased label for @p path's last segment (e.g. `"editor.snapIn"`
     /// → `"Snap In"`). Falls back to the segment itself if humanisation
     /// fails. Translation hook lives in QML; this is the raw English
     /// form.

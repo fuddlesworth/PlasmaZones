@@ -10,7 +10,7 @@ import org.kde.kirigami as Kirigami
  * @brief Reusable card for per-event animation configuration.
  *
  * Each card edits one event in the `PhosphorAnimation::ProfilePaths`
- * taxonomy (e.g. `zone.snapIn`, `osd.show`). The override toggle
+ * taxonomy (e.g. `editor.snapIn`, `osd.show`). The override toggle
  * creates/clears one Profile JSON file under
  * `~/.local/share/plasmazones/profiles/`; the daemon's existing
  * `ProfileLoader` watches that dir and live-reloads the registry.
@@ -21,7 +21,7 @@ import org.kde.kirigami as Kirigami
  * land in Phase 6 alongside the shader-picker controller.
  *
  * Required properties:
- *   - eventPath:  full path string from `ProfilePaths::` (e.g. "zone.snapIn")
+ *   - eventPath:  full path string from `ProfilePaths::` (e.g. "editor.snapIn")
  *   - eventLabel: human-readable label
  *
  * Optional properties:

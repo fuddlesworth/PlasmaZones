@@ -645,7 +645,7 @@ Item {
         enabled: root.animateFillPreview
 
         PhosphorMotionAnimation {
-            profile: "zone.snapResize"
+            profile: "editor.snapResize"
             durationOverride: 150
         }
 
@@ -655,7 +655,7 @@ Item {
         enabled: root.animateFillPreview
 
         PhosphorMotionAnimation {
-            profile: "zone.snapResize"
+            profile: "editor.snapResize"
             durationOverride: 150
         }
 
@@ -665,7 +665,7 @@ Item {
         enabled: root.animateFillPreview
 
         PhosphorMotionAnimation {
-            profile: "zone.snapResize"
+            profile: "editor.snapResize"
             durationOverride: 150
         }
 
@@ -675,7 +675,7 @@ Item {
         enabled: root.animateFillPreview
 
         PhosphorMotionAnimation {
-            profile: "zone.snapResize"
+            profile: "editor.snapResize"
             durationOverride: 150
         }
 
