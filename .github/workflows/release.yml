@@ -280,7 +280,17 @@ jobs:
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           mkdir -p PlasmaZones-${VERSION}
-          tar --exclude='.git' --exclude='build' -cf - . | tar -xf - -C PlasmaZones-${VERSION}/
+          # Same exclude list as build-rpm above — keep them in sync.
+          tar \
+              --exclude='./.git' \
+              --exclude='./build' \
+              --exclude='./dist' \
+              --exclude='./install' \
+              --exclude='./AppDir' \
+              --exclude='./result' \
+              --exclude='./artifacts' \
+              --exclude="./PlasmaZones-${VERSION}" \
+              -cf - . | tar -xf - -C "PlasmaZones-${VERSION}/"
           tar czf ~/rpmbuild/SOURCES/plasmazones-${VERSION}.tar.gz PlasmaZones-${VERSION}
 
       - name: Build RPM
@@ -712,7 +722,16 @@ jobs:
         id: hash
         run: |
           set -euo pipefail
-          TARBALL=$(ls dist/plasmazones-*-linux-x86_64.tar.gz | head -1)
+          # Use a nullglob array instead of `ls | head -1` so a missing
+          # tarball fails the step explicitly instead of feeding empty
+          # input into sha256sum and producing a bogus hash.
+          shopt -s nullglob
+          arr=(dist/plasmazones-*-linux-x86_64.tar.gz)
+          if [[ ${#arr[@]} -eq 0 ]]; then
+              echo "Error: no plasmazones-*-linux-x86_64.tar.gz under dist/" >&2
+              exit 1
+          fi
+          TARBALL="${arr[0]}"
           SHA256=$(sha256sum "$TARBALL" | cut -d' ' -f1)
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
           echo "Tarball: $TARBALL"

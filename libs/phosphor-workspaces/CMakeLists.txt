@@ -51,23 +51,21 @@ target_link_libraries(PhosphorWorkspaces
 # Plasma 6 package; KF6Activities is the older KF6 name still shipped on
 # some 6.x distros. KF5 KActivities is intentionally not consulted —
 # Plasma 6 dropped KF5 entirely.
-set(_phosphorworkspaces_have_activities FALSE)
 find_package(PlasmaActivities QUIET)
-if(PlasmaActivities_FOUND)
-    set(_phosphorworkspaces_have_activities TRUE)
-else()
+if(NOT PlasmaActivities_FOUND)
     find_package(KF6Activities QUIET)
-    if(KF6Activities_FOUND)
-        set(_phosphorworkspaces_have_activities TRUE)
-    endif()
 endif()
-if(_phosphorworkspaces_have_activities)
+
+# Gate the compile-define on the actual IMPORTED target existing, not
+# on _FOUND. A legacy Config that exposes only variables (no target)
+# would otherwise wire `HAVE_KACTIVITIES` without a link dependency,
+# producing undefined-symbol errors in the daemon's ActivityManager.
+if(TARGET Plasma::Activities)
     target_compile_definitions(PhosphorWorkspaces PRIVATE HAVE_KACTIVITIES)
-    if(TARGET Plasma::Activities)
-        target_link_libraries(PhosphorWorkspaces PRIVATE Plasma::Activities)
-    elseif(TARGET KF6::Activities)
-        target_link_libraries(PhosphorWorkspaces PRIVATE KF6::Activities)
-    endif()
+    target_link_libraries(PhosphorWorkspaces PRIVATE Plasma::Activities)
+elseif(TARGET KF6::Activities)
+    target_compile_definitions(PhosphorWorkspaces PRIVATE HAVE_KACTIVITIES)
+    target_link_libraries(PhosphorWorkspaces PRIVATE KF6::Activities)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
