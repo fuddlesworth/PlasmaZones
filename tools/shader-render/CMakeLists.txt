@@ -14,14 +14,23 @@ find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
     Quick
 )
 
-# QRhi lives in QtGui's "rhi/" tree which is still a
-# partially-private header set in Qt 6.11 (public API, versioned
-# include path only exposed via GuiPrivate).  We need it to drive
-# the offscreen QQuickRenderControl path — no public alternative.
-find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
-    GuiPrivate
-    QuickPrivate
-)
+# QRhi lives in QtGui's "rhi/" tree which is still a partially-private
+# header set in Qt 6.11 (public API, versioned include path only exposed
+# via GuiPrivate). We need it to drive the offscreen QQuickRenderControl
+# path — no public alternative.
+#
+# Fedora ships `Qt6::GuiPrivate` / `Qt6::QuickPrivate` as targets defined
+# inside Qt6GuiConfig / Qt6QuickConfig rather than as standalone
+# Qt6GuiPrivateConfig.cmake files; the COMPONENTS dispatch then fails
+# even though the targets already exist. Mirror the guarded pattern from
+# the project's top-level CMakeLists.txt so the tool builds on both
+# Arch/openSUSE-style and Fedora-style Qt6 layouts.
+if(NOT TARGET Qt6::GuiPrivate)
+    find_package(Qt6GuiPrivate ${QT_MIN_VERSION} CONFIG REQUIRED)
+endif()
+if(NOT TARGET Qt6::QuickPrivate)
+    find_package(Qt6QuickPrivate ${QT_MIN_VERSION} CONFIG REQUIRED)
+endif()
 
 set(shader_render_SRCS
     main.cpp

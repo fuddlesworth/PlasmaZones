@@ -450,8 +450,12 @@ install(DIRECTORY data/curves/
 # (DESTDIR-aware via $ENV{DESTDIR}). The wipe is bounded to our own
 # `plasmazones/profiles` subdirectory - never to a directory we don't
 # own - so an accidental wide install prefix can't cascade.
+# Use KDE_INSTALL_FULL_DATADIR (already prefix-resolved by ECM) so we
+# don't manually concatenate CMAKE_INSTALL_PREFIX with KDE_INSTALL_DATADIR
+# — that join produces `/usr//absolute/...` when ECM hands us an absolute
+# KDE_INSTALL_DATADIR (some distros override it that way).
 install(CODE "
-    set(_pz_profiles_install_dir \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${KDE_INSTALL_DATADIR}/plasmazones/profiles\")
+    set(_pz_profiles_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/profiles\")
     if(EXISTS \"\${_pz_profiles_install_dir}\")
         file(GLOB _pz_stale_profile_jsons \"\${_pz_profiles_install_dir}/*.json\")
         if(_pz_stale_profile_jsons)
@@ -568,15 +572,19 @@ set(CPACK_SOURCE_IGNORE_FILES
     "/\\\\.git/"
     "/\\\\.github/"
     "/\\\\.claude/"
+    "/\\\\.zed/"
+    "/\\\\.ccache/"
     "/build/"
     "/build-.*/"
     "/install/"
+    "/dist/"
     "/node_modules/"
     "/\\\\.cache/"
     "/\\\\.idea/"
     "/\\\\.vscode/"
     "/\\\\.DS_Store"
     "/CMakeUserPresets\\\\.json$"
+    "/CMakeLists\\\\.txt\\\\.user"
     "/compile_commands\\\\.json$"
     "\\\\.qm$"
     "\\\\.swp$"

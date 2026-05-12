@@ -47,17 +47,14 @@ target_link_libraries(PhosphorWorkspaces
         Qt6::DBus
 )
 
-# Optional KActivities/PlasmaActivities support for ActivityManager
+# Optional activities support — PlasmaActivities is the canonical KDE
+# Plasma 6 package; KF6Activities is the older KF6 name still shipped on
+# some 6.x distros. KF5 KActivities is intentionally not consulted —
+# Plasma 6 dropped KF5 entirely.
 find_package(PlasmaActivities QUIET)
 if(NOT PlasmaActivities_FOUND)
-    find_package(KF6Activities QUIET NAMES KF6Activities KActivities)
+    find_package(KF6Activities QUIET)
     if(KF6Activities_FOUND)
-        set(PlasmaActivities_FOUND TRUE)
-    endif()
-endif()
-if(NOT PlasmaActivities_FOUND)
-    find_package(KActivities QUIET)
-    if(KActivities_FOUND)
         set(PlasmaActivities_FOUND TRUE)
     endif()
 endif()
@@ -84,6 +81,8 @@ endif()
 set_target_properties(PhosphorWorkspaces PROPERTIES
     VERSION ${PHOSPHORWORKSPACES_VERSION}
     SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
 )
 
 install(TARGETS PhosphorWorkspaces

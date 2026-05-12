@@ -1,4 +1,5 @@
 # PlasmaZones pacman install script
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # Helper: refresh the icon / desktop / mime / sycoca caches if the

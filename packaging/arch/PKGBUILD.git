@@ -1,5 +1,6 @@
 # Maintainer: fuddlesworth
 # PlasmaZones (git version) - Window tiling and autotiling for KDE Plasma
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 pkgname=plasmazones-git

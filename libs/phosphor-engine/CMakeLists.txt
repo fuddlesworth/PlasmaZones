@@ -74,9 +74,13 @@ endif()
 # SONAME + symlinks for packagers. SOVERSION is the stable ABI version,
 # decoupled from semver — kept at 0 across the phosphor-* catalog so
 # packagers ship `lib*.so.0` until we make a deliberate ABI break.
+# Hidden visibility pairs with generate_export_header — without it the
+# PHOSPHORENGINE_EXPORT macro is a no-op and every symbol leaks.
 set_target_properties(PhosphorEngine PROPERTIES
     VERSION ${PHOSPHORENGINE_VERSION}
     SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
 )
 
 install(TARGETS PhosphorEngine

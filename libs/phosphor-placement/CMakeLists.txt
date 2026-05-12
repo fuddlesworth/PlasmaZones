@@ -80,6 +80,8 @@ endif()
 set_target_properties(PhosphorPlacement PROPERTIES
     VERSION ${PHOSPHORPLACEMENT_VERSION}
     SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
 )
 
 install(TARGETS PhosphorPlacement

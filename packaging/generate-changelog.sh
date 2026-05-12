@@ -102,6 +102,10 @@ generate_debian() {
         if [[ "$version" != "$current_version" ]]; then
             # Close previous entry
             if [[ -n "$current_version" ]]; then
+                if [[ -z "$current_date" ]]; then
+                    echo "Error: changelog entry for $current_version is missing a date" >&2
+                    exit 1
+                fi
                 echo ""
                 echo " -- $MAINTAINER  $(iso_to_rfc2822 "$current_date")"
                 echo ""
@@ -123,6 +127,10 @@ generate_debian() {
 
     # Close final entry (append the trailing -- line)
     if [[ -n "$current_version" ]]; then
+        if [[ -z "$current_date" ]]; then
+            echo "Error: changelog entry for $current_version is missing a date" >&2
+            exit 1
+        fi
         {
             echo ""
             echo " -- $MAINTAINER  $(iso_to_rfc2822 "$current_date")"
@@ -164,8 +172,15 @@ generate_rpm() {
         fi
     done < <(parse_changelog) > "$tmpfile"
 
-    # Replace everything after %changelog in the spec
+    # Replace everything after %changelog in the spec. Without the
+    # marker `sed /%changelog/q` would copy the whole file then append,
+    # silently producing duplicate sections.
     if [[ -f "$specfile" ]]; then
+        if ! grep -q '^%changelog' "$specfile"; then
+            echo "Error: $specfile is missing a %changelog marker — refusing to splice" >&2
+            rm -f "$tmpfile"
+            exit 1
+        fi
         local headfile
         headfile=$(mktemp)
         sed '/%changelog/q' "$specfile" > "$headfile"

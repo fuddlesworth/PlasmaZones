@@ -110,10 +110,12 @@ jobs:
         run: |
           # xvfb is available for tests that explicitly need a Wayland/X
           # surface (offscreen QPA can't host RHI textures).
+          # Parallel ctest with $(nproc); xvfb-run wraps when available so
+          # surface-needing tests have a display.
           if command -v xvfb-run >/dev/null 2>&1; then
-            xvfb-run -a ctest --test-dir build --output-on-failure
+            xvfb-run -a ctest --test-dir build --output-on-failure -j "$(nproc)"
           else
-            ctest --test-dir build --output-on-failure
+            ctest --test-dir build --output-on-failure -j "$(nproc)"
           fi
 
       - name: Install (DESTDIR)
@@ -137,7 +139,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends clang-format-18 qt6-declarative-dev-tools
-          sudo ln -sf /usr/bin/clang-format-18 /usr/local/bin/clang-format
+          # update-alternatives instead of a hand-rolled symlink so an
+          # image bump to clang-format-19 picks up the newer version
+          # without leaving a dangling /usr/local/bin/clang-format
+          # pointing at the old binary.
+          sudo update-alternatives --install /usr/local/bin/clang-format clang-format /usr/bin/clang-format-18 100
 
       - name: clang-format
         run: |

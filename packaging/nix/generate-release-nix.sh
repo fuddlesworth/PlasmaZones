@@ -45,6 +45,13 @@ if [[ -z "$NIX_HASH" ]]; then
     echo "Error: nix-prefetch-url returned empty hash for $TARBALL" >&2
     exit 1
 fi
+# Sanity-check the hash format before feeding it to `nix hash to-sri` —
+# a future Nix version changing the output would otherwise produce an
+# invalid SRI string downstream consumers can't verify.
+if [[ ! "$NIX_HASH" =~ ^[0-9a-z]{52}$ ]]; then
+    echo "Error: nix-prefetch-url produced an unexpected hash format: $NIX_HASH" >&2
+    exit 1
+fi
 SRI_HASH=$(nix hash to-sri --type sha256 "$NIX_HASH")
 echo "SRI hash: $SRI_HASH" >&2
 

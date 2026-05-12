@@ -20,6 +20,13 @@ on:
 permissions:
   contents: read
 
+# Two tag pushes (or a re-run of the same tag dispatch) must not race
+# the delete-and-recreate dance in the `release` job. Serialising per
+# ref keeps multiple in-flight releases out of each other's way.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   # Extract version from tag
@@ -55,11 +62,19 @@ jobs:
               exit 1
           fi
           VERSION="${REF#refs/tags/v}"
-          # Pre-release detection: only the canonical semver-ish suffixes
-          # (-alpha[.N] / -beta[.N] / -rc[.N]). A tag like v3.0.0-arch1 is
-          # treated as a normal release; v3.0.0-rc.1 is a pre-release.
+          # Strict format gate: anything that interpolates this into a
+          # `run:` body downstream (PKGBUILD heredoc, sed `s/^Version:/`,
+          # tarball filenames) must not allow shell metacharacters. Tags
+          # outside this shape are refused before they propagate.
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.?[0-9]*)?$ ]]; then
+              echo "Error: VERSION '$VERSION' is not in <major>.<minor>.<patch>[-alpha|beta|rc[.N|N]] form" >&2
+              exit 1
+          fi
+          # Pre-release detection: canonical semver-ish suffixes (-alpha
+          # / -alpha1 / -beta.3 / -rc / -rc1 / -rc.1). A tag like
+          # v3.0.0-arch1 is rejected by the gate above as non-semver.
           IS_PRE=false
-          if [[ "$VERSION" =~ -(alpha|beta|rc)(\.[0-9]+)?$ ]]; then
+          if [[ "$VERSION" =~ -(alpha|beta|rc)\.?[0-9]*$ ]]; then
               IS_PRE=true
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -109,13 +124,19 @@ jobs:
 
       - name: Build Debian package
         run: |
-          # dpkg-buildpackage expects debian/ at project root
-          ln -s packaging/debian debian
+          set -euo pipefail
+          # dpkg-buildpackage expects debian/ at project root. -sfn so a
+          # re-run (e.g. workflow_dispatch on the same tag) doesn't fail
+          # the link step with "already exists".
+          ln -sfn packaging/debian debian
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
           mv ../*.deb dist/
-          # Include debug symbol packages (.ddeb) if generated
-          mv ../*.ddeb dist/ 2>/dev/null || true
+          # Move debug symbol packages explicitly via find so a missing
+          # .ddeb file fails loudly instead of being swallowed by glob.
+          if compgen -G "../*.ddeb" >/dev/null; then
+              mv ../*.ddeb dist/
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -780,7 +801,13 @@ jobs:
           # sha256sums=(...) block via awk so future additional hashes
           # (e.g. for the .install file) aren't silently left stale.
           TARBALL_URL="https://github.com/fuddlesworth/PlasmaZones/archive/refs/tags/v${VERSION}.tar.gz"
-          TARBALL_SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | cut -d' ' -f1)
+          # Stage the tarball to disk first so we can detect both curl
+          # failures and pipe-side errors. Piping `curl | sha256sum`
+          # silently produces a hash of empty input when curl 404s.
+          tmptar=$(mktemp)
+          curl -fsSL --retry 3 -o "$tmptar" "$TARBALL_URL"
+          TARBALL_SHA256=$(sha256sum "$tmptar" | cut -d' ' -f1)
+          rm -f "$tmptar"
           echo "Source tarball SHA256: $TARBALL_SHA256"
           awk -v sum="$TARBALL_SHA256" '
             # Single-line form: sha256sums=(\047hash\047) — replace inline.

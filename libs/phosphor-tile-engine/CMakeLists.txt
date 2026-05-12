@@ -90,6 +90,8 @@ endif()
 set_target_properties(PhosphorTileEngine PROPERTIES
     VERSION ${PHOSPHORTILEENGINE_VERSION}
     SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
 )
 
 install(TARGETS PhosphorTileEngine

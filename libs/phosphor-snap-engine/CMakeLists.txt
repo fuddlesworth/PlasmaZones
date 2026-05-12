@@ -83,6 +83,8 @@ endif()
 set_target_properties(PhosphorSnapEngine PROPERTIES
     VERSION ${PHOSPHORSNAPENGINE_VERSION}
     SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
 )
 
 install(TARGETS PhosphorSnapEngine

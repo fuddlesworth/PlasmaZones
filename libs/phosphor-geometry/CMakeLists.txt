@@ -57,6 +57,8 @@ endif()
 set_target_properties(PhosphorGeometry PROPERTIES
     VERSION ${PHOSPHORGEOMETRY_VERSION}
     SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
 )
 
 install(TARGETS PhosphorGeometry

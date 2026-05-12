@@ -1,4 +1,5 @@
 # PlasmaZones Comprehensive Uninstall Script
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # This script removes all installed files under the install prefix (e.g. /usr):
