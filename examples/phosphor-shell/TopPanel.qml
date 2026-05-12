@@ -202,6 +202,7 @@ PanelWindow {
 
                         MouseArea {
                             anchors.fill: parent
+                            hoverEnabled: true
                             Accessible.role: Accessible.Button
                             Accessible.name: "Switch to workspace " + (parent.index + 1)
                             onClicked: root.shellState.activeWorkspace = parent.index

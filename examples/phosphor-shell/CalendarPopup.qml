@@ -278,6 +278,7 @@ PopupWindow {
 
                             anchors.fill: parent
                             hoverEnabled: true
+                            Accessible.name: cellDate.getDate() + " " + Qt.formatDate(cellDate, "MMMM yyyy")
                         }
 
                     }

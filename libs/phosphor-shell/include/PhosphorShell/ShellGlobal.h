@@ -4,7 +4,6 @@
 #pragma once
 
 #include <PhosphorShell/phosphorshell_export.h>
-#include <PhosphorShell/WallpaperService.h>
 
 #include <QHash>
 #include <QObject>
@@ -15,6 +14,7 @@ namespace PhosphorShell {
 
 class PersistentProperties;
 class ScreenModel;
+class WallpaperService;
 
 // Exposed to QML as a context property (`PhosphorShell`) by ShellEngine —
 // not registered as a QML singleton. Q_INVOKABLE methods and Q_PROPERTYs

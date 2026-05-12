@@ -54,7 +54,7 @@ public:
     /// Must only be called from the GUI thread.
     static LayerShellIntegration* instance()
     {
-        Q_ASSERT(QThread::currentThread() == qApp->thread());
+        Q_ASSERT(!qApp || QThread::currentThread() == qApp->thread());
         return s_instance;
     }
 

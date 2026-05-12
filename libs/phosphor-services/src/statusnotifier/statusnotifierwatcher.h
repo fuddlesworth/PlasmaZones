@@ -66,7 +66,6 @@ private Q_SLOTS:
 
 private:
     [[nodiscard]] QString canonicalItemService(const QString& serviceOrPath, const QString& senderUniqueName) const;
-    void rebuildItemList();
 
     QDBusServiceWatcher* m_busWatcher;
     bool m_serviceOwner = false;

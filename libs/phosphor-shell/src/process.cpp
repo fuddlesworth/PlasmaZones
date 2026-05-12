@@ -49,6 +49,11 @@ Process::Process(QObject* parent)
     connect(m_process, &QProcess::readyReadStandardOutput, this, &Process::onReadyReadStdout);
     connect(m_process, &QProcess::readyReadStandardError, this, &Process::onReadyReadStderr);
     connect(m_process, &QProcess::finished, this, &Process::onProcessFinished);
+    connect(m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart) {
+            onProcessFinished(-1, QProcess::CrashExit);
+        }
+    });
     connect(m_timer, &QTimer::timeout, this, &Process::startProcess);
 }
 

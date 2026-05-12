@@ -25,6 +25,7 @@ namespace PhosphorServices {
 /// per-second at worst, so contention is a non-issue.
 class IconImageProvider : public QQuickImageProvider
 {
+    Q_DISABLE_COPY_MOVE(IconImageProvider)
 public:
     IconImageProvider();
 
