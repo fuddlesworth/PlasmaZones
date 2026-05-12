@@ -12,7 +12,17 @@ FloatingWindow::FloatingWindow(QQuickItem* parent)
 {
 }
 
-FloatingWindow::~FloatingWindow() = default; // unique_ptr cleans up m_window
+FloatingWindow::~FloatingWindow()
+{
+    // Hide the QQuickWindow BEFORE the unique_ptr unwinds. Without
+    // this, ~QQuickWindow tears down a still-mapped xdg_toplevel
+    // role, which can leave the compositor with a half-destroyed
+    // surface and (depending on compositor) crash the rendering
+    // thread mid-frame. PopupWindow does the same dance.
+    if (m_window) {
+        m_window->hide();
+    }
+}
 
 QString FloatingWindow::title() const
 {

@@ -148,6 +148,16 @@ void WallpaperService::installImage(QImage image, const QString& path)
         qCWarning(lcWallpaperService) << "Failed to load wallpaper at" << path;
         return;
     }
+    // Skip the imageChanged emission when the path is unchanged and
+    // the image cacheKey matches — i.e. nothing observable changed.
+    // CLAUDE.md mandates "only emit signals when value actually
+    // changes"; without this guard a series of `fileChanged` events
+    // on the Plasma config that don't actually flip the wallpaper
+    // line still trigger imageChanged → ShaderBackground re-uploads
+    // the same texture to the GPU.
+    if (path == m_currentPath && !m_image.isNull() && image.cacheKey() == m_image.cacheKey()) {
+        return;
+    }
     m_image = image;
     m_currentPath = path;
     qCDebug(lcWallpaperService) << "Loaded wallpaper" << path << image.size();

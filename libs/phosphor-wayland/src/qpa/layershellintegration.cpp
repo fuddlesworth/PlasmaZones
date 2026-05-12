@@ -66,6 +66,15 @@ LayerShellIntegration::~LayerShellIntegration()
             wl_proxy_destroy(reinterpret_cast<struct wl_proxy*>(m_layerShell));
         }
     }
+    // Reap any stale layer-shell proxies parked when the compositor
+    // re-advertised the global. We deferred their destruction at
+    // re-advertise time because in-flight events may still have been
+    // dispatching against them; by shutdown all dispatch has drained
+    // and we can safely destroy.
+    for (auto* p : m_staleProxies) {
+        wl_proxy_destroy(p);
+    }
+    m_staleProxies.clear();
     if (m_registry) {
         wl_registry_destroy(m_registry);
     }
@@ -167,13 +176,15 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
             // Stale proxy from a removed global. The compositor sends
             // closed events on the surfaces; existing LayerShellWindow
             // instances null their own m_layerSurface in handleClosed
-            // and will naturally die on the next configure. Drop our
-            // reference to the dead proxy so wl_registry_bind below
-            // gives us a fresh one. We don't wl_proxy_destroy here
-            // because callbacks may still be in-flight on the original
-            // proxy — libwayland will reclaim it when the wl_display
-            // tears down or when we explicitly destroy at shutdown.
+            // and will naturally die on the next configure. Park the
+            // stale proxy in m_staleProxies so the destructor can
+            // destroy it cleanly at shutdown — without this, every
+            // re-advertise leaks a wl_proxy plus its listener state
+            // (bounded by re-advertise count but visible in valgrind
+            // leak reports for long-running shells across compositor
+            // restarts).
             qCInfo(lcLayerShellIntegration) << "Re-binding zwlr_layer_shell_v1 after global re-advertisement";
+            self->m_staleProxies.push_back(reinterpret_cast<wl_proxy*>(self->m_layerShell));
             self->m_layerShell = nullptr;
         }
         self->m_layerShell = static_cast<struct zwlr_layer_shell_v1*>(

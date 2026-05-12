@@ -108,6 +108,13 @@ void Process::setInterval(int interval)
         return;
     }
     m_interval = interval;
+    // If we're transitioning to "no polling" (interval=0), explicitly
+    // stop any armed timer. Otherwise an already-scheduled fire from
+    // the previous interval still triggers one more run after the
+    // user told us they're done with polling.
+    if (m_interval <= 0) {
+        m_timer->stop();
+    }
     Q_EMIT intervalChanged();
 }
 

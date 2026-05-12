@@ -9,11 +9,24 @@
 #include <QDBusConnectionInterface>
 #include <QDebug>
 
+#include <algorithm>
+
 namespace PhosphorServices {
 
 namespace {
-constexpr auto kWatcherServiceName = "org.kde.StatusNotifierWatcher";
-constexpr auto kWatcherObjectPath = "/StatusNotifierWatcher";
+// Spec-defined DBus identifiers. Declared as inline functions
+// returning QString rather than constexpr `const char*` so each
+// callsite gets a QStringLiteral allocation (project rule: never
+// raw `"..."` with QString APIs) without paying for QString::fromLatin1
+// conversions at every use.
+inline QString kWatcherServiceName()
+{
+    return QStringLiteral("org.kde.StatusNotifierWatcher");
+}
+inline QString kWatcherObjectPath()
+{
+    return QStringLiteral("/StatusNotifierWatcher");
+}
 } // namespace
 
 StatusNotifierWatcher::StatusNotifierWatcher(QObject* parent)
@@ -33,7 +46,7 @@ StatusNotifierWatcher::StatusNotifierWatcher(QObject* parent)
 
     // Try to register the object path first — if this fails we have
     // nothing to expose, regardless of name ownership.
-    if (!bus.registerObject(QString::fromLatin1(kWatcherObjectPath), this)) {
+    if (!bus.registerObject(kWatcherObjectPath(), this)) {
         qWarning() << "StatusNotifierWatcher: registerObject failed";
         return;
     }
@@ -42,16 +55,16 @@ StatusNotifierWatcher::StatusNotifierWatcher(QObject* parent)
     // it, fall back to passive mode: the host will register with the
     // existing watcher and ignore us. Don't queue or replace — Plasma
     // and other shells already use NoQueue here too.
-    const auto reply = bus.interface()->registerService(QString::fromLatin1(kWatcherServiceName),
-                                                        QDBusConnectionInterface::DontQueueService,
-                                                        QDBusConnectionInterface::DontAllowReplacement);
+    const auto reply =
+        bus.interface()->registerService(kWatcherServiceName(), QDBusConnectionInterface::DontQueueService,
+                                         QDBusConnectionInterface::DontAllowReplacement);
     m_serviceOwner = reply.isValid() && reply.value() == QDBusConnectionInterface::ServiceRegistered;
 
     if (!m_serviceOwner) {
         // Don't keep the object registered if we aren't the canonical
         // watcher — it would advertise an empty item list and confuse
         // any apps that introspect our process by accident.
-        bus.unregisterObject(QString::fromLatin1(kWatcherObjectPath));
+        bus.unregisterObject(kWatcherObjectPath());
         return;
     }
 
@@ -67,8 +80,8 @@ StatusNotifierWatcher::~StatusNotifierWatcher()
 {
     if (m_serviceOwner) {
         auto bus = QDBusConnection::sessionBus();
-        bus.unregisterObject(QString::fromLatin1(kWatcherObjectPath));
-        bus.interface()->unregisterService(QString::fromLatin1(kWatcherServiceName));
+        bus.unregisterObject(kWatcherObjectPath());
+        bus.interface()->unregisterService(kWatcherServiceName());
     }
 }
 
@@ -79,11 +92,17 @@ bool StatusNotifierWatcher::isServiceOwner() const
 
 QStringList StatusNotifierWatcher::registeredItems() const
 {
+    // Stable sort by canonical name so successive reads of the
+    // RegisteredStatusNotifierItems DBus property return the items
+    // in a deterministic order. The QHash iteration order is bucket-
+    // dependent and changes across registrations; an observer
+    // diffing successive lists would see spurious "different" rows.
     QStringList list;
     list.reserve(m_items.size());
     for (const auto& entry : m_items) {
         list.append(entry.canonical);
     }
+    std::sort(list.begin(), list.end());
     return list;
 }
 
@@ -122,6 +141,22 @@ void StatusNotifierWatcher::RegisterStatusNotifierItem(const QString& service)
     if (!m_serviceOwner) {
         return;
     }
+    // Input validation at the DBus boundary. Reject empty service
+    // and obviously-malformed paths (anything starting with `/` that
+    // isn't a valid DBus object path). The spec requires either a
+    // bus name or an absolute object path; treat anything else as a
+    // misbehaving client and drop the request silently. CLAUDE.md
+    // mandates "input validation at system boundaries".
+    if (service.isEmpty()) {
+        return;
+    }
+    if (service.startsWith(QLatin1Char('/'))) {
+        // Object-path form: minimal sanity check — `/` followed by
+        // at least one valid path character (non-empty).
+        if (service.size() < 2) {
+            return;
+        }
+    }
     // Adaptors don't pass the sender through automatically — but
     // QDBusContext does. The adaptor base class inherits QDBusContext
     // and forwards message().service() as the unique sender name.
@@ -136,9 +171,9 @@ void StatusNotifierWatcher::RegisterStatusNotifierItem(const QString& service)
     ItemEntry entry{sender, canonical};
     m_items.insert(canonical, entry);
     m_byOwner[sender].append(canonical);
-    if (!m_busWatcher->watchedServices().contains(sender)) {
-        m_busWatcher->addWatchedService(sender);
-    }
+    // QDBusServiceWatcher::addWatchedService is idempotent — checking
+    // watchedServices() first is just an O(n) scan for no benefit.
+    m_busWatcher->addWatchedService(sender);
 
     Q_EMIT StatusNotifierItemRegistered(canonical);
     Q_EMIT registeredItemsChanged();
@@ -149,16 +184,24 @@ void StatusNotifierWatcher::RegisterStatusNotifierHost(const QString& service)
     if (!m_serviceOwner) {
         return;
     }
+    // Spec format: `org.kde.StatusNotifierHost-<pid>`. Reject any
+    // string that doesn't match the prefix — accepting arbitrary
+    // names from random clients would let a misbehaving process spam
+    // the host list. Empty also dropped.
+    if (service.isEmpty() || !service.startsWith(QStringLiteral("org.kde.StatusNotifierHost-"))) {
+        return;
+    }
     const auto sender = message().service();
     if (m_hosts.contains(service)) {
         return;
     }
+    const bool wasEmpty = m_hosts.isEmpty();
     m_hosts.insert(service, sender);
-    if (!m_busWatcher->watchedServices().contains(sender)) {
-        m_busWatcher->addWatchedService(sender);
-    }
-    const bool wasRegistered = m_hosts.size() > 1;
-    if (!wasRegistered) {
+    m_busWatcher->addWatchedService(sender);
+    // Fire hostRegisteredChanged only on the false → true transition
+    // (i.e., first host). Subsequent host registrations keep it true
+    // and don't need a re-emit per CLAUDE.md "only emit on change".
+    if (wasEmpty) {
         Q_EMIT hostRegisteredChanged();
     }
     Q_EMIT StatusNotifierHostRegistered();

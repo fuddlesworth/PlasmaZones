@@ -21,8 +21,8 @@ public:
     explicit Environment(QObject* parent = nullptr);
     ~Environment() override;
 
-    Q_INVOKABLE QString get(const QString& name) const;
-    Q_INVOKABLE bool has(const QString& name) const;
+    [[nodiscard]] Q_INVOKABLE QString get(const QString& name) const;
+    [[nodiscard]] Q_INVOKABLE bool has(const QString& name) const;
 };
 
 } // namespace PhosphorShell

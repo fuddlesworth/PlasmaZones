@@ -100,7 +100,14 @@ PanelWindow {
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                     Accessible.role: Accessible.Button
                     Accessible.name: toplevel.title || toplevel.appId || "(unnamed window)"
-                    Accessible.description: toplevel.activated ? "Minimize window" : "Activate window"
+                    // `description` is the state, not the action.
+                    // Earlier rev had "Minimize window" / "Activate
+                    // window" which screen readers announce as the
+                    // verb — confusing for users who want to know
+                    // whether the window IS active. The action hint
+                    // belongs in Accessible.help; states go here.
+                    Accessible.description: toplevel.activated ? "Active window" : "Inactive window"
+                    Accessible.help: toplevel.activated ? "Click to minimize, middle-click to close" : "Click to activate, middle-click to close"
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.MiddleButton) {
                             toplevel.close();

@@ -37,6 +37,7 @@
 #include <QTimer>
 
 #include <cmath>
+#include <mutex>
 
 Q_LOGGING_CATEGORY(lcShellEngine, "phosphorshell.engine")
 
@@ -87,25 +88,32 @@ bool ShellEngine::load(const QUrl& shellUrl)
     connect(m_deps.screenProvider->notifier(), &PhosphorLayer::ScreenProviderNotifier::screensChanged, this,
             &ShellEngine::onScreensChanged);
 
-    qmlRegisterType<PanelWindow>("Phosphor.Shell", 1, 0, "PanelWindow");
-    qmlRegisterType<PopupWindow>("Phosphor.Shell", 1, 0, "PopupWindow");
-    qmlRegisterType<FloatingWindow>("Phosphor.Shell", 1, 0, "FloatingWindow");
-    qmlRegisterType<Variants>("Phosphor.Shell", 1, 0, "Variants");
-    qmlRegisterType<LazyLoader>("Phosphor.Shell", 1, 0, "LazyLoader");
-    qmlRegisterType<Process>("Phosphor.Shell", 1, 0, "Process");
-    qmlRegisterType<FileView>("Phosphor.Shell", 1, 0, "FileView");
-    qmlRegisterType<PersistentProperties>("Phosphor.Shell", 1, 0, "PersistentProperties");
-    qmlRegisterType<PhosphorRendering::ShaderEffect>("Phosphor.Shell", 1, 0, "ShaderBackground");
-
-    // ForeignToplevel is uncreatable from QML — it's only ever vended by
-    // Toplevels via the toplevelAdded signal / toplevels list. Registering
-    // it as uncreatable lets QML resolve `PhosphorWayland.ForeignToplevel`
-    // type names in delegates (`required property var modelData` doesn't
-    // need the registration, but `as ForeignToplevel` casts do).
-    qmlRegisterUncreatableType<PhosphorWayland::ForeignToplevel>(
-        "Phosphor.Shell", 1, 0, "ForeignToplevel",
-        QStringLiteral("ForeignToplevel is owned by Toplevels and cannot be constructed from QML"));
-    qmlRegisterSingletonType<Toplevels>("Phosphor.Shell", 1, 0, "Toplevels", &Toplevels::create);
+    // QML type registration is process-global (Qt's registry, not per-
+    // engine). Guard with std::call_once so multiple ShellEngines in
+    // the same process (sequential tests, future multi-shell daemon)
+    // don't trip Qt's "type already registered" warning on the second
+    // construction. The registrations themselves are unchanged.
+    static std::once_flag s_qmlRegistered;
+    std::call_once(s_qmlRegistered, [] {
+        qmlRegisterType<PanelWindow>("Phosphor.Shell", 1, 0, "PanelWindow");
+        qmlRegisterType<PopupWindow>("Phosphor.Shell", 1, 0, "PopupWindow");
+        qmlRegisterType<FloatingWindow>("Phosphor.Shell", 1, 0, "FloatingWindow");
+        qmlRegisterType<Variants>("Phosphor.Shell", 1, 0, "Variants");
+        qmlRegisterType<LazyLoader>("Phosphor.Shell", 1, 0, "LazyLoader");
+        qmlRegisterType<Process>("Phosphor.Shell", 1, 0, "Process");
+        qmlRegisterType<FileView>("Phosphor.Shell", 1, 0, "FileView");
+        qmlRegisterType<PersistentProperties>("Phosphor.Shell", 1, 0, "PersistentProperties");
+        qmlRegisterType<PhosphorRendering::ShaderEffect>("Phosphor.Shell", 1, 0, "ShaderBackground");
+        // ForeignToplevel is uncreatable from QML — it's only ever vended by
+        // Toplevels via the toplevelAdded signal / toplevels list. Registering
+        // it as uncreatable lets QML resolve `PhosphorWayland.ForeignToplevel`
+        // type names in delegates (`required property var modelData` doesn't
+        // need the registration, but `as ForeignToplevel` casts do).
+        qmlRegisterUncreatableType<PhosphorWayland::ForeignToplevel>(
+            "Phosphor.Shell", 1, 0, "ForeignToplevel",
+            QStringLiteral("ForeignToplevel is owned by Toplevels and cannot be constructed from QML"));
+        qmlRegisterSingletonType<Toplevels>("Phosphor.Shell", 1, 0, "Toplevels", &Toplevels::create);
+    });
 
     m_engine = std::make_unique<QQmlEngine>(this);
     m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);

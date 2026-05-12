@@ -21,6 +21,7 @@ class StatusNotifierItem;
 class PHOSPHORSERVICES_EXPORT StatusNotifierItemModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(StatusNotifierItemModel)
     QML_ELEMENT
     Q_PROPERTY(PhosphorServices::StatusNotifierHost* host READ host WRITE setHost NOTIFY hostChanged)
     // `count` mirrors rowCount() and emits countChanged on every

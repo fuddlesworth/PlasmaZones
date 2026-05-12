@@ -330,10 +330,31 @@ void DBusMenuModel::Private::refresh()
             nextRows.append({child.id, child.properties, hasChildren});
         }
 
-        q->beginResetModel();
-        rows = nextRows;
-        q->endResetModel();
-        Q_EMIT q->countChanged();
+        // Use dataChanged when the row count + id sequence hasn't
+        // changed — keeps the QML view's delegate-cache warm across
+        // property-only refreshes (status toggling, dynamic labels).
+        // beginResetModel destroys every delegate, which is expensive
+        // and visually flickers the menu.
+        bool sameShape = nextRows.size() == rows.size();
+        if (sameShape) {
+            for (int i = 0; i < nextRows.size(); ++i) {
+                if (nextRows[i].id != rows[i].id || nextRows[i].hasChildren != rows[i].hasChildren) {
+                    sameShape = false;
+                    break;
+                }
+            }
+        }
+        if (sameShape) {
+            rows = nextRows; // new rows replace caches; icon URLs re-cache lazily
+            if (!rows.isEmpty()) {
+                Q_EMIT q->dataChanged(q->index(0), q->index(rows.size() - 1));
+            }
+        } else {
+            q->beginResetModel();
+            rows = nextRows;
+            q->endResetModel();
+            Q_EMIT q->countChanged();
+        }
 
         if (!valid) {
             valid = true;
@@ -415,15 +436,12 @@ QString DBusMenuModel::Private::toggleType(const Row& r) const
 
 DBusMenuModel::DBusMenuModel(QObject* parent)
     : QAbstractListModel(parent)
-    , d(new Private(this))
+    , d(std::make_unique<Private>(this))
 {
     registerDBusTypes();
 }
 
-DBusMenuModel::~DBusMenuModel()
-{
-    delete d;
-}
+DBusMenuModel::~DBusMenuModel() = default;
 
 QString DBusMenuModel::service() const
 {
@@ -556,7 +574,11 @@ void DBusMenuModel::triggerItem(int row)
     if (!d->proxy || row < 0 || row >= d->rows.size())
         return;
     const auto& r = d->rows.at(row);
-    const uint ts = uint(QDateTime::currentMSecsSinceEpoch() / 1000);
+    // dbusmenu spec timestamps are milliseconds. Earlier rev divided
+    // by 1000 (seconds), and some apps with focus-stealing prevention
+    // reject the Event as "stale" because the timestamp didn't match
+    // the platform's input-event clock.
+    const uint ts = uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
     d->proxy->Event(r.id, QStringLiteral("clicked"), QDBusVariant(0), ts);
 }
 
@@ -588,7 +610,8 @@ void DBusMenuModel::aboutToHide()
 {
     if (!d->proxy)
         return;
-    const uint ts = uint(QDateTime::currentMSecsSinceEpoch() / 1000);
+    // ms not seconds — see triggerItem rationale.
+    const uint ts = uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
     d->proxy->Event(d->rootId, QStringLiteral("closed"), QDBusVariant(0), ts);
 }
 

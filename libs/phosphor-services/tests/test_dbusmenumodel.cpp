@@ -40,6 +40,7 @@ private Q_SLOTS:
         QVERIFY(roles.values().contains("toggleType"));
         QVERIFY(roles.values().contains("toggleState"));
         QVERIFY(roles.values().contains("childrenDisplay"));
+        QVERIFY(roles.values().contains("shortcut"));
     }
 
     void emptySetterIsIdempotent()

@@ -422,15 +422,12 @@ IconThemeResolver* IconThemeResolver::instance()
 
 IconThemeResolver::IconThemeResolver(QObject* parent)
     : QObject(parent)
-    , d(new Private(this))
+    , d(std::make_unique<Private>(this))
 {
     d->searchPath = xdgIconSearchPath();
 }
 
-IconThemeResolver::~IconThemeResolver()
-{
-    delete d;
-}
+IconThemeResolver::~IconThemeResolver() = default;
 
 void IconThemeResolver::setThemeName(const QString& themeName)
 {

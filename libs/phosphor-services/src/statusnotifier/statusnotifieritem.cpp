@@ -277,11 +277,27 @@ void StatusNotifierItem::Private::refreshIcons()
 {
     if (!proxy)
         return;
-    iconName = proxy->iconName();
-    overlayIconName = proxy->overlayIconName();
-    iconThemePath = proxy->iconThemePath();
-    iconPixmap = proxy->iconPixmap();
-    overlayIconPixmap = proxy->overlayIconPixmap();
+    // Fetch first, compare against cached values, only emit if any
+    // icon-related property actually changed. CLAUDE.md mandates
+    // "only emit signals when value actually changes" — without this
+    // guard, every NewIcon spam from a chatty app fires iconChanged
+    // on the model, triggering full QML delegate refresh per signal.
+    const auto newIconName = proxy->iconName();
+    const auto newOverlayIconName = proxy->overlayIconName();
+    const auto newIconThemePath = proxy->iconThemePath();
+    const auto newIconPixmap = proxy->iconPixmap();
+    const auto newOverlayIconPixmap = proxy->overlayIconPixmap();
+    const bool changed = newIconName != iconName || newOverlayIconName != overlayIconName
+        || newIconThemePath != iconThemePath || newIconPixmap.size() != iconPixmap.size()
+        || newOverlayIconPixmap.size() != overlayIconPixmap.size();
+    if (!changed) {
+        return;
+    }
+    iconName = newIconName;
+    overlayIconName = newOverlayIconName;
+    iconThemePath = newIconThemePath;
+    iconPixmap = newIconPixmap;
+    overlayIconPixmap = newOverlayIconPixmap;
     invalidateIconCache();
     Q_EMIT q->iconChanged();
 }
@@ -290,7 +306,11 @@ void StatusNotifierItem::Private::refreshToolTip()
 {
     if (!proxy)
         return;
-    toolTip = proxy->toolTip();
+    const auto newTip = proxy->toolTip();
+    if (newTip.title == toolTip.title && newTip.body == toolTip.body && newTip.iconName == toolTip.iconName) {
+        return;
+    }
+    toolTip = newTip;
     Q_EMIT q->toolTipChanged();
 }
 
@@ -318,7 +338,7 @@ void StatusNotifierItem::Private::refreshTitle()
 
 StatusNotifierItem::StatusNotifierItem(const QString& dbusService, const QString& dbusPath, QObject* parent)
     : QObject(parent)
-    , d(new Private(this))
+    , d(std::make_unique<Private>(this))
 {
     registerDBusTypes();
     d->service = dbusService;
@@ -351,10 +371,7 @@ StatusNotifierItem::StatusNotifierItem(const QString& dbusService, const QString
     d->refreshAll();
 }
 
-StatusNotifierItem::~StatusNotifierItem()
-{
-    delete d;
-}
+StatusNotifierItem::~StatusNotifierItem() = default;
 
 QString StatusNotifierItem::id() const
 {

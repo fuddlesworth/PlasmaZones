@@ -9,6 +9,8 @@
 #include <QObject>
 #include <QString>
 
+#include <memory>
+
 namespace PhosphorServices {
 
 /// One system-tray item. Owned by StatusNotifierHost. Wraps the DBus
@@ -18,6 +20,7 @@ namespace PhosphorServices {
 class PHOSPHORSERVICES_EXPORT StatusNotifierItem : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(StatusNotifierItem)
     Q_PROPERTY(QString id READ id NOTIFY idChanged)
     Q_PROPERTY(QString title READ title NOTIFY titleChanged)
     Q_PROPERTY(QString category READ category NOTIFY categoryChanged)
@@ -87,7 +90,7 @@ Q_SIGNALS:
 
 private:
     class Private;
-    Private* const d;
+    std::unique_ptr<Private> d;
 };
 
 } // namespace PhosphorServices

@@ -10,6 +10,8 @@
 #include <QQmlEngine>
 #include <QString>
 
+#include <memory>
+
 namespace PhosphorServices {
 
 /// Flat model exposing ONE level of a com.canonical.dbusmenu tree at
@@ -25,6 +27,7 @@ namespace PhosphorServices {
 class PHOSPHORSERVICES_EXPORT DBusMenuModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(DBusMenuModel)
     QML_ELEMENT
     Q_PROPERTY(QString service READ service WRITE setService NOTIFY sourceChanged)
     Q_PROPERTY(QString path READ path WRITE setPath NOTIFY sourceChanged)
@@ -106,7 +109,7 @@ Q_SIGNALS:
 
 private:
     class Private;
-    Private* const d;
+    std::unique_ptr<Private> d;
 };
 
 } // namespace PhosphorServices

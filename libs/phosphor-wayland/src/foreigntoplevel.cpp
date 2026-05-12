@@ -266,9 +266,13 @@ public:
         raw->owner = tl;
         raw->manager = self->owner;
         raw->handle = handle;
-        if (auto* integration = LayerShellIntegration::instance()) {
-            raw->version = integration->foreignToplevelManagerVersion();
-        }
+        // Read the version from the per-HANDLE proxy, not from the
+        // manager. The protocol allows handles to be bound at a
+        // version different from the manager itself (though in
+        // practice every known compositor binds them at the same
+        // version). Using the handle's own version is the
+        // spec-correct read.
+        raw->version = wl_proxy_get_version(reinterpret_cast<wl_proxy*>(handle));
 
         static const struct zwlr_foreign_toplevel_handle_v1_listener listener = {
             .title = ForeignToplevel::Private::handleTitle,

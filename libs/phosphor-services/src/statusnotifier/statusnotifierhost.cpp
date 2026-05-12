@@ -25,9 +25,21 @@ Q_LOGGING_CATEGORY(lcSniHost, "phosphorservices.sni")
 namespace PhosphorServices {
 
 namespace {
-constexpr auto kWatcherService = "org.kde.StatusNotifierWatcher";
-constexpr auto kWatcherPath = "/StatusNotifierWatcher";
-constexpr auto kWatcherInterface = "org.kde.StatusNotifierWatcher";
+// Inline helpers — each call returns a QStringLiteral-backed QString.
+// CLAUDE.md forbids raw "..." with QString APIs; inline-function form
+// keeps the call sites clean while honouring the rule.
+inline QString kWatcherService()
+{
+    return QStringLiteral("org.kde.StatusNotifierWatcher");
+}
+inline QString kWatcherPath()
+{
+    return QStringLiteral("/StatusNotifierWatcher");
+}
+inline QString kWatcherInterface()
+{
+    return QStringLiteral("org.kde.StatusNotifierWatcher");
+}
 } // namespace
 
 class StatusNotifierHost::Private
@@ -78,12 +90,10 @@ void StatusNotifierHost::Private::connectToWatcher()
     // whether we own the service: another process may be the
     // canonical Watcher, and we still need its ItemRegistered
     // signals.
-    bus.connect(QString::fromLatin1(kWatcherService), QString::fromLatin1(kWatcherPath),
-                QString::fromLatin1(kWatcherInterface), QStringLiteral("StatusNotifierItemRegistered"), q,
-                SLOT(_q_remoteItemRegistered(QString)));
-    bus.connect(QString::fromLatin1(kWatcherService), QString::fromLatin1(kWatcherPath),
-                QString::fromLatin1(kWatcherInterface), QStringLiteral("StatusNotifierItemUnregistered"), q,
-                SLOT(_q_remoteItemUnregistered(QString)));
+    bus.connect(kWatcherService(), kWatcherPath(), kWatcherInterface(), QStringLiteral("StatusNotifierItemRegistered"),
+                q, SLOT(_q_remoteItemRegistered(QString)));
+    bus.connect(kWatcherService(), kWatcherPath(), kWatcherInterface(),
+                QStringLiteral("StatusNotifierItemUnregistered"), q, SLOT(_q_remoteItemUnregistered(QString)));
 
     // If we own the Watcher, the in-process signals fire too. Wire
     // them up so we don't depend on the bus loopback round-trip.
@@ -106,8 +116,7 @@ void StatusNotifierHost::Private::registerHost()
     // Tell whichever process owns the Watcher service that we're a
     // host. Async — if the Watcher isn't up yet, the NameOwnerChanged
     // wire (below) will retry once it appears.
-    QDBusInterface watcherIface(QString::fromLatin1(kWatcherService), QString::fromLatin1(kWatcherPath),
-                                QString::fromLatin1(kWatcherInterface), bus);
+    QDBusInterface watcherIface(kWatcherService(), kWatcherPath(), kWatcherInterface(), bus);
     qCInfo(lcSniHost) << "host name registered:" << hostServiceName << "watcher iface valid?" << watcherIface.isValid();
     if (watcherIface.isValid()) {
         watcherIface.asyncCall(QStringLiteral("RegisterStatusNotifierHost"), hostServiceName);
@@ -120,10 +129,9 @@ void StatusNotifierHost::Private::seedExistingItems()
     // Read the property — items that registered before we started
     // need to be backfilled. Async to keep the constructor cheap.
     auto bus = QDBusConnection::sessionBus();
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QString::fromLatin1(kWatcherService), QString::fromLatin1(kWatcherPath),
-                                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
-    msg << QString::fromLatin1(kWatcherInterface) << QStringLiteral("RegisteredStatusNotifierItems");
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        kWatcherService(), kWatcherPath(), QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+    msg << kWatcherInterface() << QStringLiteral("RegisteredStatusNotifierItems");
     auto pending = bus.asyncCall(msg);
     auto* watcher = new QDBusPendingCallWatcher(pending, q);
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, q, [this, watcher] {
@@ -182,7 +190,7 @@ void StatusNotifierHost::Private::onItemUnregistered(const QString& canonical)
 
 StatusNotifierHost::StatusNotifierHost(QObject* parent)
     : QObject(parent)
-    , d(new Private(this))
+    , d(std::make_unique<Private>(this))
 {
     registerDBusTypes();
     d->connectToWatcher();
@@ -190,17 +198,14 @@ StatusNotifierHost::StatusNotifierHost(QObject* parent)
 
     // Re-register if the Watcher comes back later (e.g., it crashed
     // and respawned, or we started before any host).
-    d->nameWatcher = new QDBusServiceWatcher(QString::fromLatin1(kWatcherService), QDBusConnection::sessionBus(),
+    d->nameWatcher = new QDBusServiceWatcher(kWatcherService(), QDBusConnection::sessionBus(),
                                              QDBusServiceWatcher::WatchForRegistration, this);
     connect(d->nameWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this](const QString&) {
         d->registerHost();
     });
 }
 
-StatusNotifierHost::~StatusNotifierHost()
-{
-    delete d;
-}
+StatusNotifierHost::~StatusNotifierHost() = default;
 
 QList<StatusNotifierItem*> StatusNotifierHost::items() const
 {

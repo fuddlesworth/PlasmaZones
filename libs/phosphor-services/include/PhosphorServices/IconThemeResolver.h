@@ -11,6 +11,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <memory>
+
 namespace PhosphorServices {
 
 /// XDG Icon Theme Specification 0.13 resolver.
@@ -26,6 +28,7 @@ namespace PhosphorServices {
 class PHOSPHORSERVICES_EXPORT IconThemeResolver : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(IconThemeResolver)
 public:
     /// Process-wide singleton. Created lazily on first call.
     static IconThemeResolver* instance();
@@ -57,7 +60,7 @@ private:
     ~IconThemeResolver() override;
 
     class Private;
-    Private* const d;
+    std::unique_ptr<Private> d;
 };
 
 } // namespace PhosphorServices

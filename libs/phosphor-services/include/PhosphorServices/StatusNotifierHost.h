@@ -9,6 +9,8 @@
 #include <QObject>
 #include <QPointer>
 
+#include <memory>
+
 namespace PhosphorServices {
 
 class StatusNotifierItem;
@@ -25,6 +27,7 @@ class StatusNotifierItem;
 class PHOSPHORSERVICES_EXPORT StatusNotifierHost : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(StatusNotifierHost)
     Q_PROPERTY(int itemCount READ itemCount NOTIFY itemCountChanged)
 
 public:
@@ -50,7 +53,10 @@ private Q_SLOTS:
 
 private:
     class Private;
-    Private* const d;
+    // Out-of-line destructor in the .cpp so unique_ptr<Private> can
+    // see the complete type at destruction. CLAUDE.md forbids manual
+    // `delete d;`.
+    std::unique_ptr<Private> d;
 };
 
 } // namespace PhosphorServices

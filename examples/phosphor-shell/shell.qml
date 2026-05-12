@@ -9,6 +9,9 @@ import QtQuick
 // sibling .qml files. Sibling components are auto-discovered by Qt
 // from this file's directory.
 Item {
+    // System data sources — owned at the top level so multiple
+    // panels/windows can share a single Process / FileView each.
+
     // Global UI state. Survives hot-reload via PersistentProperties.
     PersistentProperties {
         id: shellState
@@ -21,18 +24,31 @@ Item {
         reloadId: "main"
     }
 
-    // System data sources — owned at the top level so multiple
-    // panels/windows can share a single Process / FileView each.
-    Process {
+    // Clock formatting via Qt's built-in `Qt.formatDateTime` driven by
+    // a 1 s Timer instead of a 1 Hz `date` subprocess. Earlier rev
+    // fork/exec'd `date` every second (~86 400 forks/day) for a value
+    // QML can compute natively. Sync to the wall-clock minute boundary
+    // by leaving the interval at 1 s — the worst-case visual lag from
+    // minute roll-over is one second, same as the prior subprocess.
+    Item {
         id: clockProc
 
-        // 1 s interval so minute boundaries don't lag by up to the
-        // sample period. The cost is one fork/exec per second, which is
-        // a known trade-off documented in the FileView replacement
-        // pattern below.
-        command: ["date", "+%H:%M · %a %b %d"]
-        running: true
-        interval: 1000
+        property string stdoutText: ""
+
+        function update() {
+            stdoutText = Qt.formatDateTime(new Date(), "HH:mm · ddd MMM dd");
+        }
+
+        Component.onCompleted: update()
+
+        Timer {
+            interval: 1000
+            running: true
+            repeat: true
+            triggeredOnStart: true
+            onTriggered: clockProc.update()
+        }
+
     }
 
     // CPU + memory readouts via /proc — avoids a `sh -c` subprocess

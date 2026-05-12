@@ -20,6 +20,7 @@ namespace PhosphorShell {
 class PHOSPHORSHELL_EXPORT Process : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(Process)
 
     Q_PROPERTY(QStringList command READ command WRITE setCommand NOTIFY commandChanged)
     Q_PROPERTY(bool running READ running WRITE setRunning NOTIFY runningChanged)

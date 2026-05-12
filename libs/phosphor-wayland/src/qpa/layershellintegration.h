@@ -172,6 +172,12 @@ private:
     std::vector<std::pair<CallbackId, GlobalRemovedCallback>> m_globalRemovedCallbacks;
     CallbackId m_nextCallbackId = 1;
 
+    // Layer-shell proxies parked when the compositor re-advertises
+    // the global. Destroying them immediately on re-advertise is
+    // unsafe because in-flight events may still be dispatching; the
+    // destructor reaps them after dispatch has drained.
+    std::vector<struct wl_proxy*> m_staleProxies;
+
     // GUI-thread-only singleton. All access (initialize(), instance(), destructor)
     // happens on Qt's main thread. Do NOT access from worker threads.
     static LayerShellIntegration* s_instance;
