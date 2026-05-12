@@ -43,7 +43,7 @@ constexpr QLatin1String ShaderBorderWidth{"shaderBorderWidth"};
 
 // Hash only the inputs that ZoneLabelTextureBuilder::build actually reads.
 // Highlight state, colors, opacities, etc. do NOT affect the labels texture
-// — they're consumed downstream by the shader uniforms — so they're
+// - they're consumed downstream by the shader uniforms - so they're
 // deliberately excluded from the cache key. Including them would churn the
 // cache on every highlight change and defeat the whole optimization.
 quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, bool showNumbers,
@@ -55,7 +55,7 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
     //
     // Mixer is the standard boost::hash_combine / Fibonacci-constant form.
     // Earlier iterations used (h << 12) + (h >> 4), which has asymmetric and
-    // poor avalanche on the low bits — the standard (h << 6) + (h >> 2)
+    // poor avalanche on the low bits - the standard (h << 6) + (h >> 2)
     // distribution is well studied and substantially reduces false collision
     // risk. A collision here means updateLabelsTextureForWindow believes its
     // inputs are unchanged when they aren't, which displays stale zone-number
@@ -71,7 +71,7 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
     mix(::qHash(static_cast<uint>(lfs.fontColor.rgba())));
     mix(::qHash(static_cast<uint>(lfs.backgroundColor.rgba())));
     mix(::qHash(lfs.fontFamily));
-    // fontSizeScale is a qreal — bit-cast through quint64 so sub-integer
+    // fontSizeScale is a qreal - bit-cast through quint64 so sub-integer
     // differences still distinguish hash entries.
     quint64 scaleBits = 0;
     const double scale = lfs.fontSizeScale;
@@ -98,7 +98,7 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
             mix(::qHash(bits));
         }
     }
-    // Never return 0 — it's the sentinel for "cache invalid". Collapse the
+    // Never return 0 - it's the sentinel for "cache invalid". Collapse the
     // zero-hash corner case to a fixed non-zero value.
     return h ? static_cast<quint64>(h) : 1ULL;
 }
@@ -115,18 +115,18 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
         (m_settings ? m_settings->showZoneNumbers() : true) && (!screenLayout || screenLayout->showZoneNumbers());
     const LabelFontSettings lfs = extractLabelFontSettings(m_settings);
     // Slot is anchors.fill: parent on the shell window, so its size
-    // matches the shell — which has been sized to the per-screen rect.
+    // matches the shell - which has been sized to the per-screen rect.
     const QSize size(qMax(1, static_cast<int>(slot->width())), qMax(1, static_cast<int>(slot->height())));
 
     PerScreenOverlayState* state = nullptr;
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        if (it.value().passiveShellMainOverlaySlot == slot) {
+        if (it.value().mainOverlaySlot() == slot) {
             state = &it.value();
             break;
         }
     }
     if (!state) {
-        qCWarning(lcOverlay) << "updateLabelsTextureForWindow: slot not tracked in m_screenStates — "
+        qCWarning(lcOverlay) << "updateLabelsTextureForWindow: slot not tracked in m_screenStates - "
                                 "labels-texture cache bypassed";
     }
 
@@ -211,7 +211,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, QScreen*
     auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physId)) {
         qCWarning(lcOverlay) << "zoneToVariantMap(Zone*, QScreen*, Layout*): physical screen" << physId
-                             << "has virtual screens configured — caller should use QString overload.";
+                             << "has virtual screens configured - caller should use QString overload.";
     }
 
     const QPoint screenCenter = screen->geometry().center();
@@ -340,7 +340,7 @@ void OverlayService::updateZonesForAllWindows()
 
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
         const QString& screenId = it.key();
-        auto* slot = it.value().passiveShellMainOverlaySlot;
+        auto* slot = it.value().mainOverlaySlot();
 
         if (!slot) {
             continue;
@@ -369,7 +369,7 @@ void OverlayService::updateZonesForAllWindows()
 
     ++m_zoneDataVersion;
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-        auto* slot = it_.value().passiveShellMainOverlaySlot;
+        auto* slot = it_.value().mainOverlaySlot();
         if (slot) {
             writeQmlProperty(slot, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
         }

@@ -117,7 +117,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         return;
     }
 
-    auto* window = m_screenStates.value(screenId).passiveShellZoneSelectorSlot;
+    auto* window = m_screenStates.value(screenId).zoneSelectorSlot();
     if (!window) {
         return;
     }
@@ -161,7 +161,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     QVariantList layouts = buildLayoutsList(screenId);
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
-    // Global "Auto-assign for all layouts" master toggle (#370) — when on, every
+    // Global "Auto-assign for all layouts" master toggle (#370) - when on, every
     // layout effectively auto-assigns regardless of its per-layout flag. Pushed
     // here so the badge in each LayoutCard shows the effective state.
     writeQmlProperty(window, QStringLiteral("globalAutoAssign"), m_settings && m_settings->autoAssignAllLayouts());
@@ -176,7 +176,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     writeQmlProperty(window, QStringLiteral("activeLayoutId"), activeLayoutId);
 
     // Push lock state so QML disables non-active layout interaction
-    // Check both modes — zone selector appears during drag for the current mode
+    // Check both modes - zone selector appears during drag for the current mode
     bool locked = false;
     if (m_settings && m_layoutManager) {
         int curDesktop = m_layoutManager->currentVirtualDesktop();
@@ -211,7 +211,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     m_screenStates[screenId].zoneSelectorGeometry = screenGeom;
 
     // Slot is the QQuickItem hosting ZoneSelectorContent; root traversal
-    // starts directly from it (no contentItem() — that's QQuickWindow-only).
+    // starts directly from it (no contentItem() - that's QQuickWindow-only).
     if (auto* contentRoot = window) {
         contentRoot->polish();
     }

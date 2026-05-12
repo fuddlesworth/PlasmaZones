@@ -7,11 +7,11 @@
  *
  * Split from overlayservice.cpp to keep each translation unit under the
  * project's <800-line guideline. Owns:
- *   - show / showAtPosition — entry points to make the zone overlay visible,
+ *   - show / showAtPosition - entry points to make the zone overlay visible,
  *     resolving the cursor's screen and consulting per-VS disabled state
- *   - hide / toggle — symmetric counterparts; hide() destroys overlay
+ *   - hide / toggle - symmetric counterparts; hide() destroys overlay
  *     windows rather than hiding them (Vulkan swapchain re-init issue)
- *   - setIdleForDragPause / refreshFromIdle / applyIdleStateForCursor —
+ *   - setIdleForDragPause / refreshFromIdle / applyIdleStateForCursor -
  *     drag-mode pause that blanks shader output without tearing down the
  *     QQuickWindows (avoids per-screen Vulkan teardown stalls during
  *     modifier-key thrashing in a drag).
@@ -93,7 +93,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
     if (m_visible) {
         // One-overlay-per-VS architecture: every VS already has a live
         // overlay window from initializeOverlay. Cross-VS switching is
-        // just a matter of flipping per-window _idled state — no
+        // just a matter of flipping per-window _idled state - no
         // re-init, no rekey, no layer-shell re-anchor. This sidesteps
         // the earlier "wrong spot" bug where rekey moved the map entry
         // but left the layer surface anchored to the previous VS's
@@ -112,19 +112,36 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         }
         // Per-VS toggle (autotile→snap mid-session) leaves us with a VS that
         // is no longer excluded but never had its overlay window created at
-        // first-show time. Detect that here — the cursor is now on a non-
-        // excluded VS with no live window — and fall through to full init
+        // first-show time. Detect that here - the cursor is now on a non-
+        // excluded VS with no live window - and fall through to full init
         // so Phase 3 creates the window. Without this, applyIdleStateForCursor
         // finds nothing to flip and the overlay never becomes visible until
         // the next hide()/show() cycle.
-        const bool cursorVsHasWindow = m_screenStates.contains(cursorEffectiveId)
-            && m_screenStates.value(cursorEffectiveId).overlayPhysScreen != nullptr;
-        if (cursorVsHasWindow || m_excludedScreens.contains(cursorEffectiveId)) {
+        auto cursorIt = m_screenStates.find(cursorEffectiveId);
+        const bool cursorVsHasWindow = cursorIt != m_screenStates.end() && cursorIt->overlayPhysScreen != nullptr;
+        // Fast path is only correct when applyIdleStateForCursor can
+        // salvage the slot. applyIdleStateForCursor only flips the
+        // `_idled` QML property; it doesn't run beginShow / reset
+        // opacity. If the slot is mid-hide-animation (opacity~0 from
+        // dismissOverlayWindow's animator) or fully dismissed,
+        // applyIdleStateForCursor would leave it invisible. Fall
+        // through to initializeOverlay in that case so beginShow
+        // animates the slot back up.
+        //
+        // Note: this is a DIFFERENT question from
+        // syncPassiveShellSurfaceState's isMainOverlayLive predicate
+        // (which asks "is the slot rendering content the user sees"
+        // for the surface input-region decision). Both checks are
+        // intentional; do not merge them.
+        QQuickItem* cursorMainOverlay = cursorVsHasWindow ? cursorIt->mainOverlaySlot() : nullptr;
+        const bool cursorSlotVisible =
+            cursorMainOverlay != nullptr && !qFuzzyCompare(cursorMainOverlay->opacity(), 0.0);
+        if ((cursorVsHasWindow && cursorSlotVisible) || m_excludedScreens.contains(cursorEffectiveId)) {
             m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
             applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
             return;
         }
-        // Fall through — initializeOverlay will (re)build the per-VS window
+        // Fall through - initializeOverlay will (re)build the per-VS window
         // set against the current excluded set and resume normal operation.
     }
 
@@ -143,8 +160,10 @@ void OverlayService::hide()
     // Stop shader animation
     stopShaderAnimation();
 
-    // Do NOT invalidate m_shaderTimer - keeps iTime continuous across show/hide
-    // so animations feel less predictable and don't restart
+    // Do NOT invalidate m_shaderTimer - keeping iTime continuous across
+    // show/hide cycles prevents the shader phase from restarting at 0
+    // on every re-show, which would make each show visually identical
+    // (cycle-restart) rather than continuing the animation in place.
 
     // Post-shell-migration: the shell wl_surface stays mapped across
     // hide/show cycles (its lifecycle is managed by destroyPassiveShell,
@@ -153,7 +172,7 @@ void OverlayService::hide()
     // out cleanly and the next show() can fade-in. dismissOverlayWindow
     // also clears the per-screen "main overlay active" sentinel
     // (overlayPhysScreen) via setVisible(false) + syncPassiveShellSurfaceState.
-    // Gate on overlayPhysScreen — the shell may be alive for OSD-only
+    // Gate on overlayPhysScreen - the shell may be alive for OSD-only
     // screens that never had main overlay attached, and dismissing
     // those would queue 0→0 opacity noise on idle slots.
     const QStringList screenIds = m_screenStates.keys();
@@ -182,7 +201,7 @@ void OverlayService::setIdleForDragPause()
 {
     // Blank the overlay's shader output without destroying QQuickWindows.
     // The heavy hide() path pays a ~QQuickWindow Vulkan teardown per screen
-    // which blocks the main thread on the scene graph render thread — and
+    // which blocks the main thread on the scene graph render thread - and
     // with modifier-key thrashing during a drag we ended up paying that cost
     // many times per second, stalling D-Bus dispatch long enough for
     // kwin-effect's endDrag to time out and the user to see multi-second lag.
@@ -190,7 +209,7 @@ void OverlayService::setIdleForDragPause()
     // Here we only clear the per-window QML properties that drive the shader
     // (zones, zoneCount, highlights). Windows, Vulkan swap chains, and layer
     // surfaces stay alive. On the next activation tick, refreshFromIdle()
-    // re-pushes the current zone data — cheap because the labels-texture
+    // re-pushes the current zone data - cheap because the labels-texture
     // build is hash-cached on unchanged inputs.
     if (!m_visible) {
         return;
@@ -200,12 +219,12 @@ void OverlayService::setIdleForDragPause()
             continue;
         }
         // _idled and the zone-data properties live on
-        // passiveShellMainOverlaySlot (PassiveOverlayShell.qml lines
+        // mainOverlaySlot() (PassiveOverlayShell.qml lines
         // 633, 652, 661-662, etc.), not on the shell window root.
         // Writing on the window root creates dynamic properties that
-        // QML never observes — the slot's content keeps rendering live
+        // QML never observes - the slot's content keeps rendering live
         // zones while the user expects an idle blank.
-        QQuickItem* slot = it.value().passiveShellMainOverlaySlot;
+        QQuickItem* slot = it.value().mainOverlaySlot();
         if (!slot) {
             continue;
         }
@@ -242,11 +261,11 @@ void OverlayService::setIdleForDragPause()
     // NOTE: we deliberately do NOT call stopShaderAnimation() here. The
     // shader timer keeps ticking at ~60 Hz while idled, but with zoneCount
     // set to 0 the per-frame work collapses to a handful of uniform uploads
-    // to a surface that's rendering no visible geometry — bounded cost, O(1)
+    // to a surface that's rendering no visible geometry - bounded cost, O(1)
     // per screen. Pausing and restarting the timer across the idle cycle
     // would require additional state tracking in refreshFromIdle() and add
-    // a startup transient on every modifier re-press. Left unchanged for
-    // simplicity; revisit if profiling ever shows it as a hot spot.
+    // a startup transient on every modifier re-press. The bounded per-frame
+    // cost is the cheaper trade.
 }
 
 void OverlayService::refreshFromIdle()
@@ -263,7 +282,7 @@ void OverlayService::refreshFromIdle()
         return;
     }
     updateZonesForAllWindows();
-    // Resolve the cursor's current VS — the drag adaptor keeps
+    // Resolve the cursor's current VS - the drag adaptor keeps
     // m_currentOverlayScreenId updated via showAtPosition, so this
     // reflects the last VS the cursor was observed on.
     const bool showOnAllMonitors = !m_settings || m_settings->showZonesOnAllMonitors();
@@ -278,7 +297,7 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
     //
     // - showOnAllMonitors=true  → all overlays un-idled (all VSes active)
     // - showOnAllMonitors=false → only activeEffectiveId un-idled
-    // - activeEffectiveId empty → all overlays idled (no active VS —
+    // - activeEffectiveId empty → all overlays idled (no active VS -
     //   used by setIdleForDragPause when drag-end hasn't chosen a next
     //   cursor position yet, or when the cursor sits on a disabled VS)
     //
@@ -289,7 +308,7 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
         if (!it.value().overlayPhysScreen) {
             continue;
         }
-        QQuickItem* slot = it.value().passiveShellMainOverlaySlot;
+        QQuickItem* slot = it.value().mainOverlaySlot();
         if (!slot) {
             continue;
         }

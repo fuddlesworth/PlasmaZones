@@ -4,6 +4,8 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
+#include "pz_slot_keys.h"
+#include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
@@ -27,8 +29,10 @@
 
 namespace PlasmaZones {
 
+namespace {
+
 /// Convert EmptyZoneList to QVariantList for QML property push
-static QVariantList emptyZonesToVariantList(const EmptyZoneList& zones)
+QVariantList emptyZonesToVariantList(const EmptyZoneList& zones)
 {
     QVariantList result;
     result.reserve(zones.size());
@@ -55,7 +59,7 @@ static QVariantList emptyZonesToVariantList(const EmptyZoneList& zones)
 }
 
 /// Convert SnapAssistCandidateList to QVariantList for QML property push
-static QVariantList candidatesToVariantList(const SnapAssistCandidateList& candidates)
+QVariantList candidatesToVariantList(const SnapAssistCandidateList& candidates)
 {
     QVariantList result;
     result.reserve(candidates.size());
@@ -69,6 +73,8 @@ static QVariantList candidatesToVariantList(const SnapAssistCandidateList& candi
     }
     return result;
 }
+
+} // namespace
 
 void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
                                     const SnapAssistCandidateList& candidates)
@@ -101,7 +107,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
             }
         }
         if (!anyValid) {
-            qCInfo(lcOverlay) << "showSnapAssist: stale request — zone IDs do not match current layout"
+            qCInfo(lcOverlay) << "showSnapAssist: stale request - zone IDs do not match current layout"
                               << currentLayout->name();
             Q_EMIT snapAssistDismissed();
             return;
@@ -113,28 +119,28 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         screenGeom = screen->geometry();
     }
 
-    // Resolve target shell — per-screen shell hosts the snap-assist slot.
+    // Resolve target shell - per-screen shell hosts the snap-assist slot.
     auto* state = ensurePassiveShellFor(screenId, screen);
-    if (!state || !state->passiveShellSurface || !state->passiveShellSnapAssistSlot) {
+    if (!state || !state->shell || !state->shell->shellSurface() || !state->snapAssistSlot()) {
         qCWarning(lcOverlay) << "showSnapAssist: no passive shell for screen=" << screenId;
         Q_EMIT snapAssistDismissed();
         return;
     }
 
     // If snap-assist is currently shown on a DIFFERENT screen, dismiss
-    // it there first — snap-assist is a singleton across all screens.
+    // it there first - snap-assist is a singleton across all screens.
     // Animator-driven beginHide on (prevSurface, prevSlot,
     // PzRoles::SnapAssist) keys ONLY the snap-assist track via the
-    // per-(Surface, target) animator keying — sibling slots on the
+    // per-(Surface, target) animator keying - sibling slots on the
     // same shell (OSD, zone-selector) keep animating cleanly.
     if (m_snapAssistVisible && !m_snapAssistScreenId.isEmpty() && m_snapAssistScreenId != screenId) {
         const QString prevScreenId = m_snapAssistScreenId;
         auto prevIt = m_screenStates.find(prevScreenId);
-        if (prevIt != m_screenStates.end() && prevIt->passiveShellSurface && prevIt->passiveShellSnapAssistSlot) {
-            m_surfaceAnimator->beginHide(prevIt->passiveShellSurface, prevIt->passiveShellSnapAssistSlot,
-                                         PzRoles::SnapAssist, [this, prevScreenId]() {
-                                             onSnapAssistSlotHideCompleted(prevScreenId);
-                                         });
+        if (prevIt != m_screenStates.end() && prevIt->shell && prevIt->shell->shellSurface()
+            && prevIt->snapAssistSlot()) {
+            m_shellHost->hideSlot(prevScreenId, PzSlotKeys::SnapAssist(), [this, prevScreenId]() {
+                onSnapAssistSlotHideCompleted(prevScreenId);
+            });
         }
     }
 
@@ -142,12 +148,12 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     m_snapAssistVisible = true;
 
     // Hide the zone selector for the specific virtual screen where snap
-    // assist is showing — selectors on adjacent VS of the same physical
+    // assist is showing - selectors on adjacent VS of the same physical
     // monitor stay visible. Reset cursor state first so a re-show after
     // dismiss doesn't tick edge-scroll on stale drag-time cursor coords.
     hideZoneSelectorSlotOnScreen(screenId);
 
-    // Attach cached thumbnails — kwin-effect posts updates via
+    // Attach cached thumbnails - kwin-effect posts updates via
     // setSnapAssistThumbnail asynchronously after this returns.
     QVariantList rebuilt;
     rebuilt.reserve(candidatesList.size());
@@ -169,9 +175,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     qCDebug(lcOverlay) << "showSnapAssist:" << cachedCount << "cached thumbnails;"
                        << "remaining will arrive from kwin-effect via setSnapAssistThumbnail";
 
-    auto* slot = state->passiveShellSnapAssistSlot;
-    auto* shellSurface = state->passiveShellSurface;
-    auto* shellWindow = state->passiveShellWindow;
+    auto* slot = state->snapAssistSlot();
+    auto* shellSurface = state->shell->shellSurface();
+    auto* shellWindow = state->shell->shellWindow();
 
     writeQmlProperty(slot, QStringLiteral("emptyZones"), zonesList);
     writeQmlProperty(slot, QStringLiteral("candidates"), m_snapAssistCandidates);
@@ -209,7 +215,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     }
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::SnapAssist, []() { });
-    // Snap-assist is modal — needs input for click-to-select. The
+    // Snap-assist is modal - needs input for click-to-select. The
     // sync re-evaluates the input region now that the modal slot is
     // visible so `Qt::WindowTransparentForInput` flips off.
     syncPassiveShellSurfaceStateForSurface(shellSurface);
@@ -218,7 +224,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
                       << "candidates=" << candidates.size();
 
     // snapAssistShown signal is wired in start.cpp to
-    // ensureCancelOverlayShortcutRegistered() — the shell's wl_surface is
+    // ensureCancelOverlayShortcutRegistered() - the shell's wl_surface is
     // kbd-None so the per-content QML Shortcut path used by the legacy
     // SnapAssistOverlay can't fire here. KGlobalAccel grab of Escape +
     // cancelSnap()'s existing isSnapAssistVisible() branch (see
@@ -231,7 +237,7 @@ bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
 {
     // External entry point. The kwin-effect renders a candidate through
     // KWin's OffscreenQuickScene + WindowThumbnail and posts the result as
-    // raw ARGB32 (non-premultiplied) pixels — no PNG encode, no base64.
+    // raw ARGB32 (non-premultiplied) pixels - no PNG encode, no base64.
     // OverlayAdaptor::setSnapAssistThumbnail authenticates the sender and
     // applies a coarse byte-cap before this slot runs; we still validate
     // shape here because IOverlayService is a public C++ API and direct
@@ -254,7 +260,7 @@ bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
     }
     const qsizetype expectedBytes = qsizetype(width) * qsizetype(height) * 4;
     if (pixels.size() != expectedBytes) {
-        qCDebug(lcOverlay) << "setSnapAssistThumbnail: pixel-buffer size mismatch — got" << pixels.size() << "expected"
+        qCDebug(lcOverlay) << "setSnapAssistThumbnail: pixel-buffer size mismatch - got" << pixels.size() << "expected"
                            << expectedBytes << "for" << compositorHandle;
         return false;
     }
@@ -278,12 +284,12 @@ bool OverlayService::updateSnapAssistCandidateThumbnail(const QString& composito
     if (providerUrl.isEmpty()) {
         return false;
     }
-    // Cache insert succeeded — handle is held even if snap-assist isn't
+    // Cache insert succeeded - handle is held even if snap-assist isn't
     // currently open. Provider URL stays valid until LRU eviction.
     if (!m_snapAssistVisible || m_snapAssistScreenId.isEmpty()) {
         return true;
     }
-    auto* slot = m_screenStates.value(m_snapAssistScreenId).passiveShellSnapAssistSlot;
+    auto* slot = m_screenStates.value(m_snapAssistScreenId).snapAssistSlot();
     if (!slot) {
         return true;
     }
@@ -311,25 +317,32 @@ void OverlayService::hideSnapAssist()
     m_snapAssistVisible = false;
     m_snapAssistScreenId.clear();
 
-    auto stateIt = m_screenStates.find(screenId);
-    if (stateIt != m_screenStates.end() && stateIt->passiveShellSurface && stateIt->passiveShellSnapAssistSlot) {
-        m_surfaceAnimator->beginHide(stateIt->passiveShellSurface, stateIt->passiveShellSnapAssistSlot,
-                                     PzRoles::SnapAssist, [this, effectiveId = screenId]() {
-                                         onSnapAssistSlotHideCompleted(effectiveId);
-                                     });
-    }
-
+    // Emit dismissed BEFORE hideSlot so listeners observe the same
+    // signal order regardless of whether hideSlot's completion runs
+    // synchronously (benign no-op path: lib's hideSlot fires the
+    // completion inline, which restores the zone-selector via
+    // onSnapAssistSlotHideCompleted) or asynchronously (animator's
+    // settle): in both cases "dismissed" arrives first.
+    //
     // snapAssistDismissed → WindowDragAdaptor::onSnapAssistDismissed →
     // unregisterCancelOverlayShortcut() (windowdragadaptor.cpp:82).
     Q_EMIT snapAssistDismissed();
 
-    // Zone-selector restore is owned by onSnapAssistSlotHideCompleted —
+    auto stateIt = m_screenStates.find(screenId);
+    if (stateIt != m_screenStates.end() && stateIt->shell && stateIt->shell->shellSurface()
+        && stateIt->snapAssistSlot()) {
+        m_shellHost->hideSlot(screenId, PzSlotKeys::SnapAssist(), [this, effectiveId = screenId]() {
+            onSnapAssistSlotHideCompleted(effectiveId);
+        });
+    }
+
+    // Zone-selector restore is owned by onSnapAssistSlotHideCompleted -
     // it fires when the snap-assist slot has finished its hide
     // animation, so the selector fades back in cleanly after the
     // snap-assist has visually cleared. A synchronous restore here
     // would race the in-flight beginHide and rely on the
     // showZoneSelectorSlotOnScreen short-circuit (which checks
-    // slot->isVisible() — true mid-animation), risking visible
+    // slot->isVisible() - true mid-animation), risking visible
     // overlap or missed re-shows.
 }
 
@@ -349,20 +362,17 @@ void OverlayService::onSnapAssistDismissRequested()
 void OverlayService::onSnapAssistSlotHideCompleted(const QString& effectiveId)
 {
     auto it = m_screenStates.find(effectiveId);
-    if (it == m_screenStates.end() || !it->passiveShellSnapAssistSlot) {
+    if (it == m_screenStates.end() || !it->snapAssistSlot()) {
         return;
     }
-    it->passiveShellSnapAssistSlot->setVisible(false);
-    writeQmlProperty(it->passiveShellSnapAssistSlot, QStringLiteral("loaded"), false);
+    it->snapAssistSlot()->setVisible(false);
+    writeQmlProperty(it->snapAssistSlot(), QStringLiteral("loaded"), false);
     // Symmetric restore: showSnapAssist hid the zone-selector slot on
     // this screen via hideZoneSelectorSlotOnScreen. Owns BOTH the
     // user-dismiss path (hideSnapAssist routes here) and the
     // cross-screen singleton-dismiss path in showSnapAssist's
-    // prev-screen branch. Restore the selector if the drag is
-    // still logically active.
-    if (m_zoneSelectorVisible && it->zoneSelectorPhysScreen && it->zoneSelectorGeometry.isValid()) {
-        showZoneSelectorSlotOnScreen(effectiveId, it->zoneSelectorPhysScreen, it->zoneSelectorGeometry);
-    }
+    // prev-screen branch.
+    restoreZoneSelectorAfterHide(effectiveId);
     syncPassiveShellSurfaceState(effectiveId);
 }
 
@@ -396,7 +406,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
 
     auto* state = ensurePassiveShellFor(resolvedId, screen);
-    if (!state || !state->passiveShellSurface || !state->passiveShellLayoutPickerSlot) {
+    if (!state || !state->shell || !state->shell->shellSurface() || !state->layoutPickerSlot()) {
         qCWarning(lcOverlay) << "showLayoutPicker: no passive shell for screen=" << resolvedId;
         return;
     }
@@ -429,9 +439,9 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
     aspectRatio = qBound(0.5, aspectRatio, 4.0);
 
-    auto* slot = state->passiveShellLayoutPickerSlot;
-    auto* shellSurface = state->passiveShellSurface;
-    auto* shellWindow = state->passiveShellWindow;
+    auto* slot = state->layoutPickerSlot();
+    auto* shellSurface = state->shell->shellSurface();
+    auto* shellWindow = state->shell->shellWindow();
 
     writeQmlProperty(slot, QStringLiteral("layouts"), layoutsList);
     writeQmlProperty(slot, QStringLiteral("activeLayoutId"), activeId);
@@ -465,7 +475,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::LayoutPicker, []() { });
-    // Layout picker is modal — needs input for click-to-select.
+    // Layout picker is modal - needs input for click-to-select.
     syncPassiveShellSurfaceStateForSurface(shellSurface);
 
     m_layoutPickerScreenId = resolvedId;
@@ -479,7 +489,7 @@ void OverlayService::hideLayoutPicker()
 {
     if (!m_layoutPickerVisible) {
         // Always emit dismissed so the daemon's Escape-shortcut release
-        // path runs even on idempotent calls (defensive — multiple call
+        // path runs even on idempotent calls (defensive - multiple call
         // sites converge on hideLayoutPicker).
         Q_EMIT layoutPickerDismissed();
         return;
@@ -489,19 +499,23 @@ void OverlayService::hideLayoutPicker()
     m_layoutPickerVisible = false;
     m_layoutPickerScreenId.clear();
 
+    // Emit dismissed BEFORE hideSlot so listeners see "dismissed first,
+    // then completion" regardless of whether the completion runs
+    // synchronously (benign no-op) or asynchronously (animator settle).
+    // Mirrors hideSnapAssist's ordering.
+    Q_EMIT layoutPickerDismissed();
+
     auto stateIt = m_screenStates.find(screenId);
-    if (stateIt != m_screenStates.end() && stateIt->passiveShellSurface && stateIt->passiveShellLayoutPickerSlot) {
-        m_surfaceAnimator->beginHide(stateIt->passiveShellSurface, stateIt->passiveShellLayoutPickerSlot,
-                                     PzRoles::LayoutPicker, [this, effectiveId = screenId]() {
-                                         onLayoutPickerSlotHideCompleted(effectiveId);
-                                     });
+    if (stateIt != m_screenStates.end() && stateIt->shell && stateIt->shell->shellSurface()
+        && stateIt->layoutPickerSlot()) {
+        m_shellHost->hideSlot(screenId, PzSlotKeys::LayoutPicker(), [this, effectiveId = screenId]() {
+            onLayoutPickerSlotHideCompleted(effectiveId);
+        });
     }
 
-    // Zone-selector restore is owned by onLayoutPickerSlotHideCompleted —
+    // Zone-selector restore is owned by onLayoutPickerSlotHideCompleted -
     // mirror of the snap-assist + OSD ownership pattern. The synchronous
     // fast-path raced the in-flight beginHide.
-
-    Q_EMIT layoutPickerDismissed();
 }
 
 bool OverlayService::isLayoutPickerVisible() const
@@ -512,24 +526,21 @@ bool OverlayService::isLayoutPickerVisible() const
 void OverlayService::onLayoutPickerSlotHideCompleted(const QString& effectiveId)
 {
     auto it = m_screenStates.find(effectiveId);
-    if (it == m_screenStates.end() || !it->passiveShellLayoutPickerSlot) {
+    if (it == m_screenStates.end() || !it->layoutPickerSlot()) {
         return;
     }
-    it->passiveShellLayoutPickerSlot->setVisible(false);
-    writeQmlProperty(it->passiveShellLayoutPickerSlot, QStringLiteral("loaded"), false);
-    // Symmetric restore — see onSnapAssistSlotHideCompleted /
+    it->layoutPickerSlot()->setVisible(false);
+    writeQmlProperty(it->layoutPickerSlot(), QStringLiteral("loaded"), false);
+    // Symmetric restore - see onSnapAssistSlotHideCompleted /
     // onOsdSlotHideCompleted. The picker hid the zone-selector slot
-    // on show; restore it once the picker has finished its hide
-    // animation (drag may still be active).
-    if (m_zoneSelectorVisible && it->zoneSelectorPhysScreen && it->zoneSelectorGeometry.isValid()) {
-        showZoneSelectorSlotOnScreen(effectiveId, it->zoneSelectorPhysScreen, it->zoneSelectorGeometry);
-    }
+    // on show; restore it once the picker has finished its hide.
+    restoreZoneSelectorAfterHide(effectiveId);
     syncPassiveShellSurfaceState(effectiveId);
 }
 
 void OverlayService::onLayoutPickerDismissRequested()
 {
-    // Backdrop click forwarded from the shell — same as Escape route.
+    // Backdrop click forwarded from the shell - same as Escape route.
     hideLayoutPicker();
 }
 
@@ -545,7 +556,7 @@ void OverlayService::pickerMoveSelection(int dx, int dy)
     if (!m_layoutPickerVisible || m_layoutPickerScreenId.isEmpty()) {
         return;
     }
-    auto* slot = m_screenStates.value(m_layoutPickerScreenId).passiveShellLayoutPickerSlot;
+    auto* slot = m_screenStates.value(m_layoutPickerScreenId).layoutPickerSlot();
     if (!slot) {
         return;
     }
@@ -557,7 +568,7 @@ void OverlayService::pickerConfirmSelection()
     if (!m_layoutPickerVisible || m_layoutPickerScreenId.isEmpty()) {
         return;
     }
-    auto* slot = m_screenStates.value(m_layoutPickerScreenId).passiveShellLayoutPickerSlot;
+    auto* slot = m_screenStates.value(m_layoutPickerScreenId).layoutPickerSlot();
     if (!slot) {
         return;
     }

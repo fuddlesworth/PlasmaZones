@@ -10,22 +10,22 @@
 
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/ILayoutSource.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <algorithm>
+#include <climits>
 
 #include <QHash>
-#include <QJsonArray>
 #include <QRectF>
 #include <QUuid>
-#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorZones::LayoutUtils {
 
@@ -115,17 +115,17 @@ void appendAutotilePreviews(QVector<LayoutPreview>& list, PhosphorTiles::ITileAl
     // autotile source owned by the caller's LayoutSourceBundle) whose
     // internal preview cache is reused across calls. The bundle binds
     // that source to the composition root's AlgorithmRegistry once in
-    // the ctor and it self-wires to contentsChanged — every call here
+    // the ctor and it self-wires to contentsChanged - every call here
     // is a plain cache hit unless a registry mutation happened since
     // the last build.
     //
     // Fallback: construct a transient AutotileLayoutSource over the
     // registry. The transient source's preview cache is discarded
-    // between calls — every algorithm preview is recomputed. This
+    // between calls - every algorithm preview is recomputed. This
     // covers code paths that don't yet hold a bundle reference (tests,
     // early-init call sites). The previous process-global
     // AlgorithmRegistry::instance() singleton-backed static source is
-    // gone with the registry singleton — per-process ownership leaves
+    // gone with the registry singleton - per-process ownership leaves
     // no well-defined registry for a process-wide source to bind to.
     if (autotileSource) {
         const auto previews = autotileSource->availableLayouts();
@@ -195,7 +195,7 @@ QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManu
     return order;
 }
 
-QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* layoutManager,
+QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
                                               PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                               bool includeAutotile, const QStringList& customOrder,
                                               PhosphorLayout::ILayoutSource* autotileSource,
@@ -222,7 +222,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* lay
     return list;
 }
 
-QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* layoutManager,
+QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
                                               PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                               const QString& screenId, int virtualDesktop, const QString& activity,
                                               bool includeManual, bool includeAutotile, qreal screenAspectRatio,

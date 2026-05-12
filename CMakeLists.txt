@@ -67,7 +67,7 @@ set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QML language server config
 # intermittently fires against these directories. Instead of racing the
 # clean/autogen ordering from here at configure time (which `--clean-first`
 # would wipe again), the suppression is scoped to src/shared/CMakeLists.txt
-# where the affected QML-module targets live — see that file for details.
+# where the affected QML-module targets live - see that file for details.
 
 # KDE/Qt requirements (Plasma 6.6 target: KF 6.6, Qt 6.6, KWin 6.6)
 set(QT_MIN_VERSION "6.6.0")
@@ -104,7 +104,7 @@ endif()
 if(NOT TARGET Qt6::ShaderToolsPrivate)
     find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
 endif()
-# QuickPrivate is required by phosphor-animation's QML module — must be
+# QuickPrivate is required by phosphor-animation's QML module - must be
 # discovered at top-level so the IMPORTED target is global and visible to
 # every consumer of `PhosphorAnimation::PhosphorAnimation`. Without this,
 # Qt's static-QML-plugin dependency walker emits "QuickPrivate target is
@@ -122,9 +122,9 @@ set(PLASMAZONES_SHADERS_ENABLED ON)
 add_compile_definitions(PLASMAZONES_SHADERS_ENABLED)
 
 # KDE Frameworks integration.
-# ON (default): full KDE integration — KWin effect, KCM, KGlobalAccel shortcuts,
+# ON (default): full KDE integration - KWin effect, KCM, KGlobalAccel shortcuts,
 #               PlasmaActivities, KConfigXT for KCM defaults.
-# OFF: portable Qt-only build — daemon + editor only, no KDE dependencies.
+# OFF: portable Qt-only build - daemon + editor only, no KDE dependencies.
 #      Shortcuts use XDG Portal or D-Bus trigger fallback.
 option(USE_KDE_FRAMEWORKS "Build with KDE Frameworks integration" ON)
 
@@ -219,7 +219,7 @@ endif()
 # Translations (Qt Linguist)
 #
 # Daemon and editor use Qt Linguist (.ts/.qm).  lupdate scans source files
-# directly — i18n()/i18nc() are backed by Q_DECLARE_TR_FUNCTIONS(plasmazones)
+# directly - i18n()/i18nc() are backed by Q_DECLARE_TR_FUNCTIONS(plasmazones)
 # in pz_i18n.h, so lupdate recognizes them as tr() calls.
 #
 #   make update-ts   - run lupdate to refresh .ts from source
@@ -265,7 +265,7 @@ file(GLOB_RECURSE KCM_PLASMAZONES_QML "${CMAKE_SOURCE_DIR}/kcm/*.qml")
 list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/AspectRatioBadge.qml)
 list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml)
 
-# All sources for lupdate (daemon + editor + KCM — same translation context)
+# All sources for lupdate (daemon + editor + KCM - same translation context)
 set(_all_i18n_sources
     ${PLASMAZONESD_I18N_SOURCES} ${PLASMAZONESD_QML}
     ${PLASMAZONES_EDITOR_I18N_SOURCES} ${PLASMAZONES_EDITOR_QML}
@@ -279,7 +279,7 @@ file(GLOB TRANSLATION_TS_FILES "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.t
 list(FILTER TRANSLATION_TS_FILES EXCLUDE REGEX "plasmazones_en\\.ts$")
 
 # --- update-ts target: lupdate scans source directly ---
-# PzI18n::tr() uses Q_DECLARE_TR_FUNCTIONS(plasmazones) — lupdate
+# PzI18n::tr() uses Q_DECLARE_TR_FUNCTIONS(plasmazones) - lupdate
 # recognizes tr() natively.  No custom scripts or intermediate files.
 if(Qt6LinguistTools_FOUND)
     # All .ts files to update (en template + per-language)
@@ -327,10 +327,10 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 add_subdirectory(libs/phosphor-identity)    # stable cross-process window identity (composite ids, app-id matching)
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
 add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader)
-add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner — needed by phosphor-zones
+add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner - needed by phosphor-zones
 add_subdirectory(libs/phosphor-shaders)     # shader-domain primitives (BaseUniforms, IUniformExtension, ShaderRegistry)
-add_subdirectory(libs/phosphor-wayland)       # Wayland layer-shell QPA plugin + LayerSurface — needed by phosphor-screens
-add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision — needed by phosphor-zones
+add_subdirectory(libs/phosphor-wayland)       # Wayland layer-shell QPA plugin + LayerSurface - needed by phosphor-screens
+add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision - needed by phosphor-zones
 add_subdirectory(libs/phosphor-geometry)    # pure geometry math (coordinate transforms, overlap, min-size)
 add_subdirectory(libs/phosphor-zones)       # zone primitives + LayoutManager (depends on phosphor-config IBackend, phosphor-screens ScreenIdentity)
 add_subdirectory(libs/phosphor-tiles)       # auto-tiling algorithm primitives (TilingAlgorithm, AlgorithmRegistry, SplitTree)
@@ -345,6 +345,7 @@ set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by QML 
 add_subdirectory(libs/phosphor-animation)   # unified animation library: motion runtime, QML module, shaders, layer
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
+add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mechanism (rides on layer/shell-patterns/surfaces/animation/screens)
 add_subdirectory(libs/phosphor-shell)       # shell infrastructure and QML types
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts (INTERFACE)
@@ -358,7 +359,7 @@ add_subdirectory(libs/phosphor-services)    # DBus + platform-integration primit
 # Source directories
 add_subdirectory(src)
 
-# Developer tools — opt-in via -DBUILD_TOOLS=ON.  Currently builds
+# Developer tools - opt-in via -DBUILD_TOOLS=ON.  Currently builds
 # plasmazones-shader-render (offscreen shader preview generator
 # used by the docs site).  Skipped by default so packagers don't
 # pick up CLI tools they didn't ask for.
@@ -412,7 +413,7 @@ install(DIRECTORY data/curves/
 
 # Defensive cleanup: an upgrade from a build that shipped per-leaf JSONs
 # (every commit before the family-seed migration) leaves stale files in
-# the install dir that `cmake --install` does NOT remove on its own —
+# the install dir that `cmake --install` does NOT remove on its own -
 # install only adds/updates, never deletes orphans. Those stale leaves
 # silently shadow the user's parent-node Settings edits via the
 # deeper-leaf-wins overlay walk in PhosphorProfileRegistry::resolveWithInheritance,
@@ -423,8 +424,8 @@ install(DIRECTORY data/curves/
 # SCRIPT runs at install time (`cmake --install`), not configure time,
 # and runs in the install prefix the user actually invoked install with
 # (DESTDIR-aware via $ENV{DESTDIR}). The wipe is bounded to our own
-# `plasmazones/profiles` subdirectory — never to a directory we don't
-# own — so an accidental wide install prefix can't cascade.
+# `plasmazones/profiles` subdirectory - never to a directory we don't
+# own - so an accidental wide install prefix can't cascade.
 install(CODE "
     set(_pz_profiles_install_dir \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${KDE_INSTALL_DATADIR}/plasmazones/profiles\")
     if(EXISTS \"\${_pz_profiles_install_dir}\")
@@ -436,7 +437,7 @@ install(CODE "
     endif()
 ")
 
-# The data/profiles/ directory no longer ships per-leaf JSONs — animation
+# The data/profiles/ directory no longer ships per-leaf JSONs - animation
 # timings/curves are driven entirely from the Settings UI via
 # PhosphorProfileRegistry, with parent-chain inheritance filling in
 # unset leaves. The install(DIRECTORY) rule and the build-time
@@ -527,7 +528,7 @@ add_custom_target(uninstall
 # and user-facing messages are handled by packaging (Arch .install, Debian postinst, RPM %post).
 
 # Vulkan headers are needed at build time for QVulkanInstance (Vulkan backend support).
-# OPTIONAL so PlasmaZones builds silently on systems without Vulkan dev packages —
+# OPTIONAL so PlasmaZones builds silently on systems without Vulkan dev packages -
 # the Vulkan backend simply won't be available at runtime.
 # All Vulkan-specific C++ code is guarded with #if QT_CONFIG(vulkan).
 # Note: packaging specs (PKGBUILD, debian/control, rpm .spec, nix) list Vulkan as a

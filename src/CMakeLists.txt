@@ -30,7 +30,7 @@ set(plasmazones_core_SRCS
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
-    # ilayoutmanager / izonedetector shims removed — consumers include
+    # ilayoutmanager / izonedetector shims removed - consumers include
     # <PhosphorZones/ILayoutManager.h> / <PhosphorZones/IZoneDetector.h>
     # directly.
     core/ioverlayservice.h
@@ -46,14 +46,14 @@ set(plasmazones_core_SRCS
     core/geometryutils.cpp
     core/geometryutils.h
     core/spatialadjacency.h
-    # virtualscreenswapper.{h,cpp} lifted to libs/phosphor-screens/Swapper.h —
+    # virtualscreenswapper.{h,cpp} lifted to libs/phosphor-screens/Swapper.h -
     # callers include <PhosphorScreens/Swapper.h> directly.
     core/screenmoderouter.cpp
     core/screenmoderouter.h
     core/dbusvariantutils.cpp
     core/dbusvariantutils.h
     # zone, layout, layoututils, zonedetector, zonehighlighter, LayoutRegistry,
-    # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ —
+    # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ -
     # consumers include <PhosphorZones/...> directly and construct the registry
     # with createAssignmentsBackend() + the "plasmazones/layouts" subdir inline.
     core/unifiedlayoutlist.cpp
@@ -71,7 +71,7 @@ set(plasmazones_core_SRCS
     core/single_instance_service.h
     # screen_resolver.{h,cpp} and screenmanager.{h,cpp} + screenmanager/
     # lifted to libs/phosphor-screens. Daemon consumers take
-    # Phosphor::Screens::ScreenManager* via constructor injection —
+    # Phosphor::Screens::ScreenManager* via constructor injection -
     # no service-locator intermediary.
     core/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
     # shaderregistry.cpp + shaderincluderesolver moved to PhosphorShaders
@@ -162,7 +162,7 @@ generate_export_header(plasmazones_core
 )
 
 # Layer-shell: implementation moved to PhosphorWayland library.
-# The compatibility wrappers (core/qpa/*.h) are header-only — no sources to compile.
+# The compatibility wrappers (core/qpa/*.h) are header-only - no sources to compile.
 # PhosphorWayland provides the QPA plugin, protocol code, and LayerSurface implementation.
 set_source_files_properties(
     config/configdefaults.cpp
@@ -183,7 +183,7 @@ target_link_libraries(plasmazones_core
         Qt6::Gui
         Qt6::DBus
         # PhosphorAnimation PUBLIC because Settings::animationProfile()
-        # exposes PhosphorAnimation::Profile in the header — consumers
+        # exposes PhosphorAnimation::Profile in the header - consumers
         # that #include <settings.h> need the core library for the
         # return type (Phase 4 sub-commit 6).
         PhosphorAnimation::PhosphorAnimation
@@ -210,7 +210,7 @@ target_link_libraries(plasmazones_core
 # PhosphorShortcuts: plasmazones_core uses ONLY the Integration::IAdhocRegistrar header
 # (consumed by WindowDragAdaptor); the daemon links the shared library
 # binary (see target_link_libraries(plasmazonesd ...) below). Wire the
-# headers via INTERFACE-only include — pulls no .so dependency into
+# headers via INTERFACE-only include - pulls no .so dependency into
 # editor / settings builds that link plasmazones_core but never touch
 # shortcuts.
 target_include_directories(plasmazones_core SYSTEM PRIVATE
@@ -291,7 +291,7 @@ install(TARGETS plasmazones_core
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Layer Shell Qt Plugin — now provided by PhosphorWayland library
+# Layer Shell Qt Plugin - now provided by PhosphorWayland library
 # ═══════════════════════════════════════════════════════════════════════════════
 # The QPA plugin (phosphorwayland-qpa) is built and installed by libs/phosphor-wayland/CMakeLists.txt.
 # PlasmaZones::registerLayerShellPlugin() forwards to PhosphorWayland::registerLayerShellPlugin()
@@ -362,7 +362,11 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/overlay.cpp
     daemon/overlayservice/overlay_data.cpp
     daemon/overlayservice/osd.cpp
+    daemon/overlayservice/priming.cpp
+    daemon/overlayservice/rekey.cpp
+    daemon/overlayservice/screens.cpp
     daemon/overlayservice/selector.cpp
+    daemon/overlayservice/shellhost_bridge.cpp
     daemon/overlayservice/selector_update.cpp
     daemon/overlayservice/shader.cpp
     daemon/overlayservice/snapassist.cpp
@@ -400,6 +404,7 @@ target_link_libraries(plasmazonesd
         PhosphorShortcuts::PhosphorShortcuts  # ShortcutManager / Registry / backends
         PhosphorAudio::PhosphorAudio  # audio spectrum provider (CAVA)
         PhosphorSurfaces::PhosphorSurfaces  # managed surface lifecycle (engine, keep-alive)
+        PhosphorOverlay::PhosphorOverlay  # per-screen shell-host + slot mechanism (Phase 2 onward)
         Qt6::Widgets
         Qt6::Quick
         Qt6::QuickControls2
@@ -674,7 +679,7 @@ install(FILES
     DESTINATION ${KDE_INSTALL_APPDIR}
 )
 
-# KGlobalAccel component desktop file — provides display name + icon in
+# KGlobalAccel component desktop file - provides display name + icon in
 # System Settings > Shortcuts.  Filename must match applicationName ("plasmazonesd").
 install(FILES
     daemon/plasmazonesd.desktop
