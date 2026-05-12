@@ -9,7 +9,7 @@
 #include "../../core/logging.h"
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include "../../core/shaderregistry.h"
 #include "../../core/utils.h"
 #include <QQuickWindow>
@@ -52,7 +52,7 @@ void OverlayService::setSettings(ISettings* settings)
             // dependency graph manually with no functional difference: QML
             // property writes short-circuit on equal value, so the worst case
             // for the catch-all is N redundant property lookups across the
-            // selector windows — measured in microseconds. The catch-all is
+            // selector windows - measured in microseconds. The catch-all is
             // the maintenance-cheap choice; specific connections below cover
             // the cases where the response is structurally different
             // (overlay-window recreation, audio-spectrum start/stop, shader
@@ -79,7 +79,7 @@ void OverlayService::setSettings(ISettings* settings)
             // popup.zoneSelector, etc.). Push it into the SurfaceAnimator
             // now that settings are available, and re-push on every edit so
             // users editing the tree at runtime see the new effects on the next
-            // show — no daemon restart needed. registerConfigForRole only
+            // show - no daemon restart needed. registerConfigForRole only
             // affects subsequent show()/hide(), so animations mid-flight keep
             // their bound config (matches motion-tree live-reload semantics).
             applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
@@ -93,7 +93,7 @@ void OverlayService::setSettings(ISettings* settings)
             // beginShow / beginHide to the target opacity and fires
             // completion synchronously, skipping motion + shader legs.
             // Mirrors the kwin-effect's `m_windowAnimator->isEnabled()`
-            // gate on `tryBeginShaderForEvent` — single
+            // gate on `tryBeginShaderForEvent` - single
             // `Settings::animationsEnabled` flag stops every animation
             // on both runtimes.
             if (m_surfaceAnimator) {
@@ -111,7 +111,7 @@ void OverlayService::setSettings(ISettings* settings)
             // re-read its source from disk by invoking reloadShader() (inherited
             // Q_INVOKABLE from PhosphorRendering::ShaderEffect).
             // Daemon must call setShaderRegistry() before the first updateSettings()
-            // — without it, this branch is silently skipped and on-disk shader edits
+            // - without it, this branch is silently skipped and on-disk shader edits
             // won't propagate until the next daemon restart.
             if (m_shaderRegistry) {
                 m_shadersChangedConnection = connect(m_shaderRegistry, &ShaderRegistry::shadersChanged, this, [this]() {
@@ -124,7 +124,7 @@ void OverlayService::setSettings(ISettings* settings)
                         if (!it_.value().overlayPhysScreen) {
                             continue;
                         }
-                        auto* slot = it_.value().passiveShellMainOverlaySlot;
+                        auto* slot = it_.value().mainOverlaySlot();
                         if (slot && slot->property("useShader").toBool()) {
                             QMetaObject::invokeMethod(slot, "reloadShader");
                         }
@@ -142,17 +142,16 @@ void OverlayService::setSettings(ISettings* settings)
     }
 }
 
-void OverlayService::setLayoutManager(PhosphorZones::LayoutRegistry* layoutManager)
+void OverlayService::setLayoutManager(PhosphorZones::IZoneLayoutRegistry* layoutManager)
 {
-    // Disconnect from old layout manager if exists
+    // Disconnect from old layout manager if exists. The four catalog /
+    // assignment signals are declared on PhosphorZones::IZoneLayoutRegistry
+    // and reach this slot via Qt's metaobject signal table.
     if (m_layoutManager) {
-        auto* oldManager = dynamic_cast<PhosphorZones::LayoutRegistry*>(m_layoutManager);
-        if (oldManager) {
-            disconnect(oldManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this, nullptr);
-            disconnect(oldManager, &PhosphorZones::LayoutRegistry::layoutAssigned, this, nullptr);
-            disconnect(oldManager, &PhosphorZones::LayoutRegistry::layoutAdded, this, nullptr);
-            disconnect(oldManager, &PhosphorZones::LayoutRegistry::layoutRemoved, this, nullptr);
-        }
+        disconnect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::activeLayoutChanged, this, nullptr);
+        disconnect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAssigned, this, nullptr);
+        disconnect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAdded, this, nullptr);
+        disconnect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutRemoved, this, nullptr);
     }
     // Disconnect any per-PhosphorZones::Layout connections to active layouts the previous manager owned
     for (const QPointer<PhosphorZones::Layout>& layout : std::as_const(m_observedLayouts)) {
@@ -164,52 +163,49 @@ void OverlayService::setLayoutManager(PhosphorZones::LayoutRegistry* layoutManag
 
     m_layoutManager = layoutManager;
 
-    // Connect to layout change signals from the concrete PhosphorZones::LayoutRegistry
-    // PhosphorZones::LayoutRegistry is a pure interface without signals, so we need to cast
     if (m_layoutManager) {
-        auto* manager = dynamic_cast<PhosphorZones::LayoutRegistry*>(m_layoutManager);
-        if (manager) {
-            // Update visible zone selector and overlay windows when layout changes.
-            // Hidden windows are skipped — showZoneSelector()/show() refresh before showing.
-            connect(manager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
-                    [this](PhosphorZones::Layout* layout) {
-                        observeLayoutForLiveEdits(layout);
-                        refreshVisibleWindows();
-                    });
-            connect(manager, &PhosphorZones::LayoutRegistry::layoutAssigned, this,
-                    [this](const QString& /*screenId*/, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
-                        observeLayoutForLiveEdits(layout);
-                        refreshVisibleWindows();
-                    });
-            // Observe newly-created layouts so edits reach the overlay before
-            // the layout is ever activated/assigned (e.g. user creates a new
-            // layout in the editor and immediately tweaks its shader).
-            connect(manager, &PhosphorZones::LayoutRegistry::layoutAdded, this, [this](PhosphorZones::Layout* layout) {
-                observeLayoutForLiveEdits(layout);
-            });
-            // Drop per-layout connections + the m_observedLayouts entry when
-            // a layout is deleted. Without this, QPointer auto-null would
-            // leave tombstone entries in m_observedLayouts that only get
-            // compacted the next time observeLayoutForLiveEdits() runs —
-            // unbounded growth during editor create/delete sessions.
-            connect(manager, &PhosphorZones::LayoutRegistry::layoutRemoved, this, &OverlayService::stopObservingLayout);
+        // Update visible zone selector and overlay windows when layout changes.
+        // Hidden windows are skipped: showZoneSelector()/show() refresh before showing.
+        connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::activeLayoutChanged, this,
+                [this](PhosphorZones::Layout* layout) {
+                    observeLayoutForLiveEdits(layout);
+                    refreshVisibleWindows();
+                });
+        connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAssigned, this,
+                [this](const QString& /*screenId*/, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
+                    observeLayoutForLiveEdits(layout);
+                    refreshVisibleWindows();
+                });
+        // Observe newly-created layouts so edits reach the overlay before
+        // the layout is ever activated/assigned (e.g. user creates a new
+        // layout in the editor and immediately tweaks its shader).
+        connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAdded, this,
+                [this](PhosphorZones::Layout* layout) {
+                    observeLayoutForLiveEdits(layout);
+                });
+        // Drop per-layout connections + the m_observedLayouts entry when
+        // a layout is deleted. Without this, QPointer auto-null would
+        // leave tombstone entries in m_observedLayouts that only get
+        // compacted the next time observeLayoutForLiveEdits() runs:
+        // unbounded growth during editor create/delete sessions.
+        connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutRemoved, this,
+                &OverlayService::stopObservingLayout);
 
-            // Observe EVERY loaded layout, not just the globally-active one.
-            // A per-screen-assigned layout loaded from disk at startup never
-            // triggers activeLayoutChanged / layoutAssigned, so its
-            // layoutModified signal would otherwise be invisible to us —
-            // editor edits to its shader/zones required a daemon restart to
-            // take effect. Observing the whole set is cheap (one signal
-            // connection per layout) and idempotent thanks to the dedupe
-            // pass in observeLayoutForLiveEdits.
-            for (PhosphorZones::Layout* layout : manager->layouts()) {
-                observeLayoutForLiveEdits(layout);
-            }
-            // Redundant after the loop, but keeps the intent obvious in case
-            // activeLayout() is ever loaded through a different path than
-            // PhosphorZones::LayoutRegistry::layouts().
-            observeLayoutForLiveEdits(manager->activeLayout());
+        // Observe EVERY loaded layout, not just the globally-active one.
+        // A per-screen-assigned layout loaded from disk at startup never
+        // triggers activeLayoutChanged / layoutAssigned, so its
+        // layoutModified signal would otherwise be invisible to us:
+        // editor edits to its shader/zones required a daemon restart to
+        // take effect. Observing the whole set is cheap (one signal
+        // connection per layout) and idempotent thanks to the dedupe
+        // pass in observeLayoutForLiveEdits.
+        for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
+            observeLayoutForLiveEdits(layout);
         }
+        // Redundant after the loop, but keeps the intent obvious in case
+        // activeLayout() is ever loaded through a different path than
+        // PhosphorZones::IZoneLayoutRegistry::layouts().
+        observeLayoutForLiveEdits(m_layoutManager->activeLayout());
     }
 }
 
@@ -242,7 +238,7 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
     // PhosphorZones::Layout::layoutModified fires whenever any Q_PROPERTY changes (shaderId,
     // shaderParams, zones, appearance, etc.). Without this hook the editor's
     // changes only reach the live overlay after a layout switch or daemon
-    // restart, since PhosphorZones::LayoutRegistry::activeLayoutChanged only fires on switch.
+    // restart, since PhosphorZones::IZoneLayoutRegistry::activeLayoutChanged only fires on switch.
     //
     // Route through a coalescing shim: zone-drag in the editor can fire
     // layoutModified dozens of times per second; refreshVisibleWindows is
@@ -253,7 +249,7 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
             return;
         }
         m_refreshCoalescePending = true;
-        // 16 ms ≈ one display frame — small enough that live-edit feels
+        // 16 ms ≈ one display frame - small enough that live-edit feels
         // instant, large enough that a burst of Q_PROPERTY writes collapses
         // into one refresh.
         QTimer::singleShot(16, this, [this]() {
@@ -314,7 +310,7 @@ void OverlayService::syncCavaState()
                 if (!it_.value().overlayPhysScreen) {
                     continue;
                 }
-                auto* slot = it_.value().passiveShellMainOverlaySlot;
+                auto* slot = it_.value().mainOverlaySlot();
                 if (slot) {
                     writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
                 }

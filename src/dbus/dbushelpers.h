@@ -4,17 +4,21 @@
 #pragma once
 
 #include "plasmazones_export.h"
+
 #include "../core/interfaces.h"
+#include "../core/logging.h"
+#include "../core/utils.h"
+
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "../core/utils.h"
-#include "../core/logging.h"
+
 #include <QRectF>
 #include <QScreen>
-#include <QUuid>
 #include <QString>
+#include <QUuid>
+
 #include <optional>
-#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace Phosphor::Screens {
 class ScreenManager;
@@ -168,13 +172,11 @@ inline PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::IZoneLayoutRe
  * for hot-path zone lookups (use the IZoneLayoutRegistry by-id surface).
  */
 template<typename LogCategory>
-PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::LayoutRegistry* mgr, const QString& zoneId,
+PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::IZoneLayoutRegistry* mgr, const QString& zoneId,
                                          const QString& operation, LogCategory category)
 {
-    // Takes the full LayoutRegistry here (rather than IZoneLayoutRegistry
-    // alone) because the active-layout-first search walks the full
-    // assignment + enumeration surface that callers already hold via
-    // the registry.
+    // `activeLayout()` and `layouts()` are both on the interface - no
+    // need to require the concrete registry just to reach them.
     auto uuidOpt = parseAndValidateUuid(zoneId, operation, category);
     if (!uuidOpt) {
         return nullptr;
@@ -213,7 +215,7 @@ PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::LayoutRegistry* mgr, con
 /**
  * @brief Overload using default lcDbus category
  */
-inline PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::LayoutRegistry* mgr, const QString& zoneId,
+inline PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::IZoneLayoutRegistry* mgr, const QString& zoneId,
                                                 const QString& operation)
 {
     return findZoneInAnyLayout(mgr, zoneId, operation, lcDbus);
@@ -321,7 +323,7 @@ QString resolveScreenId(Phosphor::Screens::ScreenManager* mgr, const QString& sc
  * @brief Resolve a screen ID (physical or virtual) to its backing QScreen*
  *
  * Uses Phosphor::Screens::ScreenManager::physicalQScreenFor() when available, then falls back to
- * Phosphor::Screens::ScreenIdentity::findByIdOrName(). Does NOT fall back to primaryScreen — returns
+ * Phosphor::Screens::ScreenIdentity::findByIdOrName(). Does NOT fall back to primaryScreen - returns
  * nullptr so the caller can decide the appropriate fallback behavior.
  */
 QScreen* resolvePhysicalQScreen(Phosphor::Screens::ScreenManager* mgr, const QString& screenId);

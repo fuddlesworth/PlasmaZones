@@ -10,7 +10,7 @@
 #include <PhosphorConfig/IBackend.h>
 
 #include <QHash>
-#include <QSet>
+#include <QPair>
 #include <QString>
 #include <QUuid>
 #include <functional>
@@ -21,7 +21,7 @@ namespace PhosphorZones {
 /**
  * @brief Manual zone-layout registry + per-context assignment store.
  *
- * Concrete counterpart to @ref IZoneLayoutRegistry — mirrors the
+ * Concrete counterpart to @ref IZoneLayoutRegistry - mirrors the
  * PhosphorTiles @c AlgorithmRegistry shape (interface for the provider
  * contract, one concrete class for everything else). Composition roots
  * construct one instance per process and inject it into every consumer;
@@ -29,7 +29,7 @@ namespace PhosphorZones {
  *
  * Responsibilities:
  *   - In-memory catalog of @ref Layout instances (enumeration, add,
- *     remove, duplicate, active-layout selection — inherited from
+ *     remove, duplicate, active-layout selection - inherited from
  *     @ref IZoneLayoutRegistry).
  *   - Per-context @ref AssignmentEntry table keyed by
  *     (screenId, virtualDesktop, activity), with cascading fallback
@@ -41,7 +41,7 @@ namespace PhosphorZones {
  *
  * Schema strings (@c "Assignment:", @c "QuickLayouts", @c "ModeTracking")
  * are hardcoded lib-level constants inside @c layoutregistry_persistence.cpp.
- * They ARE the wire format — third-party compositors that reuse this
+ * They ARE the wire format - third-party compositors that reuse this
  * lib share them for free.
  */
 class PHOSPHORZONES_EXPORT LayoutRegistry : public IZoneLayoutRegistry
@@ -49,13 +49,14 @@ class PHOSPHORZONES_EXPORT LayoutRegistry : public IZoneLayoutRegistry
     Q_OBJECT
 
     Q_PROPERTY(int layoutCount READ layoutCount NOTIFY layoutsChanged)
-    Q_PROPERTY(Layout* activeLayout READ activeLayout NOTIFY activeLayoutChanged)
+    // `activeLayout` Q_PROPERTY moved to IZoneLayoutRegistry alongside its
+    // NOTIFY signal so the contract is visible to interface consumers.
     Q_PROPERTY(QString layoutDirectory READ layoutDirectory WRITE setLayoutDirectory NOTIFY layoutDirectoryChanged)
 
 public:
     /**
      * @param backend Owned config-store backend (typically
-     *                @c createAssignmentsBackend()). Required — asserted
+     *                @c createAssignmentsBackend()). Required - asserted
      *                non-null; every persistence method dereferences it.
      * @param layoutSubdirectory XDG-relative path used for layout JSON
      *                discovery (e.g. @c "plasmazones/layouts"). The registry
@@ -64,7 +65,7 @@ public:
      *                and reads the union of every @c GenericDataLocation
      *                entry containing that subdirectory, so system copies
      *                (in @c /usr/share/<subdir>) provide built-ins while
-     *                the user-writable copy overrides them. Required —
+     *                the user-writable copy overrides them. Required -
      *                asserted non-empty.
      * @param parent Qt parent.
      */
@@ -127,13 +128,13 @@ public:
     ///   3. nullptr if no layouts are registered.
     ///
     /// @note Snap-only fallback. Unlike @ref assignmentIdForScreen and
-    /// @ref assignmentEntryForScreen — which on cascade-miss consult
-    /// both the snap and autotile level-1 providers — this method only
+    /// @ref assignmentEntryForScreen - which on cascade-miss consult
+    /// both the snap and autotile level-1 providers - this method only
     /// consults the snap provider, because @ref Layout has no autotile
     /// counterpart. Autotile-mode resolution is the autotile engine's
     /// job, driven by @ref assignmentIdForScreen returning an
     /// @c "autotile:<algo>" id from the level-1 cascade.
-    Layout* defaultLayout() const;
+    Q_INVOKABLE Layout* defaultLayout() const override;
 
     /**
      * @brief Inject a callback that returns the user-configured default
@@ -153,7 +154,7 @@ public:
      *
      * Symmetric to @ref setDefaultLayoutIdProvider, completing the
      * level-1 (global) tier of the assignment hierarchy:
-     *   1. global default — snap layout id AND autotile algorithm id
+     *   1. global default - snap layout id AND autotile algorithm id
      *   2. monitor-level assignment
      *   3. virtual-desktop-level assignment
      *
@@ -161,7 +162,7 @@ public:
      * @ref assignmentEntryForScreen consult the snap provider first,
      * then the autotile provider; the first non-empty return wins.
      * Providers are pass-throughs from the composition root's settings
-     * layer — each is expected to return empty when its mode is
+     * layer - each is expected to return empty when its mode is
      * disabled in settings, which means "autotile-only" users see
      * autotile as the natural cascade fallback (snap provider returns
      * empty → autotile wins) without any mode-priority logic in the
@@ -189,17 +190,17 @@ public:
      * Without this provider, @ref resolveDefaultAssignmentEntry can only
      * tell whether snap has a non-empty default *layout id*. When a user
      * has snapping enabled but never configured a global default layout
-     * (a common, valid state — the user expects per-screen assignments
+     * (a common, valid state - the user expects per-screen assignments
      * to drive everything), the @ref m_defaultLayoutIdProvider returns
      * empty and the cascade silently falls through to the autotile
-     * branch — surfacing autotile content (e.g. "Tiling: Binary Split")
+     * branch - surfacing autotile content (e.g. "Tiling: Binary Split")
      * to a user who never wanted autotile.
      *
      * This provider lets the composition root express "snap mode is
      * preferred" independently of "snap has a default layout". When it
      * returns true, the resolver returns a Snapping entry with the
      * (possibly empty) snappingLayout from
-     * @ref m_defaultLayoutIdProvider — `activeLayoutId()` then yields
+     * @ref m_defaultLayoutIdProvider - `activeLayoutId()` then yields
      * empty, callers see "no assignment", and the OSD path correctly
      * suppresses rather than falling back to autotile.
      *
@@ -224,19 +225,19 @@ public:
                                       const QString& layoutId);
 
     /// Store a full entry directly (from KCM via D-Bus). Stores
-    /// regardless of @c isValid() — mode-only entries are valid when
+    /// regardless of @c isValid() - mode-only entries are valid when
     /// explicitly set.
     void setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
                                   const AssignmentEntry& entry);
 
     Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
-                                        const QString& activity = QString()) const;
+                                        const QString& activity = QString()) const override;
 
     /// Resolve layout for @p screenId using the current desktop/activity
     /// context. @ref layoutForScreen already falls back to
     /// @ref defaultLayout internally when no explicit assignment matches,
     /// so this helper is a thin context-filling forwarder.
-    Layout* resolveLayoutForScreen(const QString& screenId) const
+    Q_INVOKABLE Layout* resolveLayoutForScreen(const QString& screenId) const override
     {
         return layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
     }
@@ -256,14 +257,14 @@ public:
     /// cascade level misses AND both providers return empty. Callers
     /// that need to distinguish "stored" from "synthesized fallback"
     /// must pair this with @ref hasExplicitAssignment.
-    QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
-                                  const QString& activity = QString()) const;
+    Q_INVOKABLE QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
+                                              const QString& activity = QString()) const override;
 
     /// Full entry for a (screen, desktop, activity) context. Shares
     /// the per-context cascade with @ref layoutForScreen up through
     /// level-2 (per-screen base entry), but the two diverge at level-1
     /// (global defaults): on cascade-miss this method synthesizes from
-    /// BOTH providers — snap provider first, then autotile provider —
+    /// BOTH providers - snap provider first, then autotile provider -
     /// using the same precedence as @ref assignmentIdForScreen, while
     /// @ref layoutForScreen consults only the snap provider via
     /// @ref defaultLayout. This means a caller mixing both APIs may
@@ -291,7 +292,7 @@ public:
     /// @c layoutAssigned per affected screen; one save at end.
     void clearAutotileAssignments();
 
-    /// Batch setters — clear existing, set new, save once at end.
+    /// Batch setters - clear existing, set new, save once at end.
     void setAllScreenAssignments(const QHash<QString, QString>& assignments);
     void setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments);
     void setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments);
@@ -322,11 +323,11 @@ public:
 
     // ─── Context (desktop / activity) ─────────────────────────────────────
 
-    int currentVirtualDesktop() const
+    Q_INVOKABLE int currentVirtualDesktop() const override
     {
         return m_currentVirtualDesktop;
     }
-    QString currentActivity() const
+    Q_INVOKABLE QString currentActivity() const override
     {
         return m_currentActivity;
     }
@@ -345,11 +346,12 @@ public:
     QJsonObject loadAutotileOverrides(const QString& algorithmId) const;
 
 Q_SIGNALS:
+    // layoutAdded / layoutRemoved / activeLayoutChanged / layoutAssigned are
+    // inherited from IZoneLayoutRegistry - declared on the interface so
+    // consumers that target the contract can connect without depending on
+    // the concrete class. Emit sites still live in this TU and reach the
+    // inherited signal via Q_OBJECT's metaobject chain.
     void layoutsChanged();
-    void layoutAdded(Layout* layout);
-    void layoutRemoved(Layout* layout);
-    void activeLayoutChanged(Layout* layout);
-    void layoutAssigned(const QString& screenId, int virtualDesktop, Layout* layout);
     void layoutDirectoryChanged();
     void layoutsLoaded();
     void layoutsSaved();
@@ -367,13 +369,13 @@ private:
     /**
      * @brief Commit a targeted per-screen layout switch (from a quick-slot
      * shortcut, layout cycle, or any caller that wants to change ONLY the
-     * named screen — not fan activeLayoutChanged across every screen).
+     * named screen - not fan activeLayoutChanged across every screen).
      *
      * Writes the per-desktop assignment for @p screenId with empty activity
      * (so D-Bus/KCM lookups using empty activity see the entry), clears any
      * stale activity-keyed assignment that would shadow it in the cascade,
      * then updates the global active-layout pointer under a QSignalBlocker
-     * so @ref activeLayoutChanged does NOT fire — preventing resnap on the
+     * so @ref activeLayoutChanged does NOT fire - preventing resnap on the
      * other screens. Equivalent to the write+update pattern both
      * applyQuickLayout and cycleLayoutImpl were open-coding before the
      * extraction.
@@ -409,7 +411,7 @@ private:
     std::function<bool()> m_snappingPreferredProvider;
     std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
     PhosphorConfig::IBackend* m_configBackend = nullptr; ///< Borrowed alias of m_ownedBackend.get(); always non-null
-    QString m_layoutSubdirectory; ///< XDG-relative (e.g. "plasmazones/layouts") — drives locateAll discovery
+    QString m_layoutSubdirectory; ///< XDG-relative (e.g. "plasmazones/layouts") - drives locateAll discovery
     QString m_layoutDirectory; ///< Absolute user-writable path derived from m_layoutSubdirectory
     QVector<Layout*> m_layouts;
     Layout* m_activeLayout = nullptr;
