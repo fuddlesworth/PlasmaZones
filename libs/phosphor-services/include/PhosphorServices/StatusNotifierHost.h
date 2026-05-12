@@ -5,6 +5,12 @@
 
 #include <PhosphorServices/phosphorservices_export.h>
 
+// Qt's MOC needs fully-defined pointer types for Q_PROPERTY, signal
+// parameters, and Q_INVOKABLE returns (qmetatype.h's
+// `checkTypeIsSuitableForMetaType` static-asserts `is_complete<T>`).
+// Forward decls compile in older Qt but fail with Qt ≥ 6.10.
+#include <PhosphorServices/StatusNotifierItem.h>
+
 #include <QList>
 #include <QObject>
 #include <QPointer>
@@ -12,8 +18,6 @@
 #include <memory>
 
 namespace PhosphorServices {
-
-class StatusNotifierItem;
 
 /// The shell-side counterpart to StatusNotifierWatcher. One instance
 /// per process. Claims `org.kde.StatusNotifierHost-<pid>`, registers

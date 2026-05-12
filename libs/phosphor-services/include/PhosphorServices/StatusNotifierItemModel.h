@@ -5,14 +5,18 @@
 
 #include <PhosphorServices/phosphorservices_export.h>
 
+// Qt's MOC needs fully-defined pointer types for Q_PROPERTY, signal
+// parameters, and Q_INVOKABLE returns (qmetatype.h's
+// `checkTypeIsSuitableForMetaType` static-asserts `is_complete<T>`).
+// Forward decls compile in older Qt but fail with Qt ≥ 6.10.
+#include <PhosphorServices/StatusNotifierHost.h>
+#include <PhosphorServices/StatusNotifierItem.h>
+
 #include <QAbstractListModel>
 #include <QPointer>
 #include <QQmlEngine>
 
 namespace PhosphorServices {
-
-class StatusNotifierHost;
-class StatusNotifierItem;
 
 /// QAbstractListModel adapter over StatusNotifierHost::items(). Hand
 /// this to a QML Repeater / ListView. The roles cover everything a

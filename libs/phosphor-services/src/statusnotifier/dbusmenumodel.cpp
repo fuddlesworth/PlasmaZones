@@ -327,7 +327,16 @@ void DBusMenuModel::Private::refresh()
             // included at depth=1.
             const bool hasChildren =
                 child.properties.value(QStringLiteral("children-display")).toString() == QLatin1String("submenu");
-            nextRows.append({child.id, child.properties, hasChildren});
+            // Default-construct and assign the populated fields. GCC
+            // still emits -Wmissing-field-initializers on partial
+            // designated initializers (the cached-icon trio relies on
+            // in-class member defaults), and a positional brace-init
+            // would trip the same warning.
+            Row row;
+            row.id = child.id;
+            row.properties = child.properties;
+            row.hasChildren = hasChildren;
+            nextRows.append(std::move(row));
         }
 
         // Use dataChanged when the row count + id sequence hasn't

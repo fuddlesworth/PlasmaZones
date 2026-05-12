@@ -5,6 +5,15 @@
 
 #include <PhosphorShell/phosphorshell_export.h>
 
+// Qt's MOC needs fully-defined types for Q_PROPERTY pointer types
+// (qmetatype.h's `checkTypeIsSuitableForMetaType` static-asserts
+// `is_complete<T>`). Forward declarations compile in older Qt but
+// fail with Qt ≥ 6.10. ScreenModel and WallpaperService are both
+// part of this library and don't transitively pull ShellGlobal back
+// in, so the includes are cycle-free.
+#include <PhosphorShell/ScreenModel.h>
+#include <PhosphorShell/WallpaperService.h>
+
 #include <QHash>
 #include <QObject>
 #include <QPointer>
@@ -13,8 +22,6 @@
 namespace PhosphorShell {
 
 class PersistentProperties;
-class ScreenModel;
-class WallpaperService;
 
 // Exposed to QML as a context property (`PhosphorShell`) by ShellEngine —
 // not registered as a QML singleton. Q_INVOKABLE methods and Q_PROPERTYs
