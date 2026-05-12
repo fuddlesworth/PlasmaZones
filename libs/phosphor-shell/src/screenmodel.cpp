@@ -5,7 +5,6 @@
 
 #include <PhosphorLayer/IScreenProvider.h>
 
-#include <QGuiApplication>
 #include <QScreen>
 
 namespace PhosphorShell {
@@ -21,11 +20,14 @@ ScreenModel::ScreenModel(PhosphorLayer::IScreenProvider* provider, QObject* pare
             &ScreenModel::onScreensChanged);
     // The provider's screensChanged signal fires for set / geometry changes
     // but not for a primary-screen swap on the same set. KDE allows changing
-    // primary at runtime; without listening to QGuiApplication directly,
-    // bindings on IsPrimaryRole would stay stale.
-    if (qGuiApp) {
-        connect(qGuiApp, &QGuiApplication::primaryScreenChanged, this, &ScreenModel::onPrimaryScreenChanged);
-    }
+    // primary at runtime. We listen to the provider's primaryChanged
+    // signal (rather than qGuiApp directly) so a custom IScreenProvider
+    // implementation whose `primary()` diverges from qGuiApp — e.g. a
+    // virtual-screen provider with focused-monitor primary policy — gets
+    // its bindings refreshed via its own state machine. The default
+    // provider re-emits primaryChanged when qGuiApp does.
+    connect(m_provider->notifier(), &PhosphorLayer::ScreenProviderNotifier::primaryChanged, this,
+            &ScreenModel::onPrimaryScreenChanged);
 }
 
 ScreenModel::~ScreenModel() = default;
