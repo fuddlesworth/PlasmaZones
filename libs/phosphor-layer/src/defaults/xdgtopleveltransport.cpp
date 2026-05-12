@@ -10,6 +10,8 @@
 #include <QQuickWindow>
 #include <QScreen>
 
+#include <atomic>
+
 namespace PhosphorLayer {
 
 /**
@@ -39,18 +41,30 @@ public:
         // commit; latch on first-visible so hide()/show() cycles don't
         // flip the handle back to "unconfigured" — once the compositor has
         // ack'd the role, it stays ack'd for the lifetime of the surface.
+        //
+        // m_everConfigured is std::atomic<bool> because the
+        // ILayerShellTransport contract permits off-thread reads (its
+        // callback documentation explicitly mentions wayland event-
+        // dispatch threads).
         if (!m_window) {
             return false;
         }
         if (m_window->isVisible()) {
-            m_everConfigured = true;
+            m_everConfigured.store(true, std::memory_order_release);
         }
-        return m_everConfigured;
+        return m_everConfigured.load(std::memory_order_acquire);
     }
 
     QSize configuredSize() const override
     {
-        return m_window ? m_window->size() : QSize();
+        // Contract: zero before isConfigured() returns true. Returning
+        // m_window->size() pre-configure leaks the QWindow warmup size
+        // as if it were the compositor's reply, misleading consumers
+        // who pin layout to that value.
+        if (!m_window || !m_everConfigured.load(std::memory_order_acquire)) {
+            return {};
+        }
+        return m_window->size();
     }
 
     void setMargins(QMargins) override
@@ -116,7 +130,8 @@ public:
 
 private:
     QPointer<QQuickWindow> m_window;
-    mutable bool m_everConfigured = false; ///< Latched true on first isVisible()
+    mutable std::atomic<bool> m_everConfigured{
+        false}; ///< Latched true on first isVisible(); atomic for cross-thread reads.
     bool m_warnedKeyboardExclusive = false; ///< Latched true after first Exclusive-keyboard warning
     bool m_clampCleared = false; ///< Latched true after first setDesiredSize clears Qt min/max
 };

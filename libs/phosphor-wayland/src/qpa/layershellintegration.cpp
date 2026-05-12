@@ -38,6 +38,12 @@ LayerShellIntegration::~LayerShellIntegration()
         // reclaimed by libwayland's destructor handling for the
         // `finished` event; the wl_display teardown that runs
         // immediately after this destructor wipes everything anyway.
+        //
+        // `handleFinished` may have already called
+        // clearForeignToplevelManager() — in that case
+        // m_foreignToplevelManager is nullptr and we'd skip this
+        // block entirely (the outer `if` checks it). If we're here,
+        // `finished` hasn't fired yet, so the stop() is safe.
         zwlr_foreign_toplevel_manager_v1_stop(m_foreignToplevelManager);
         m_foreignToplevelManager = nullptr;
     }

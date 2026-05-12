@@ -63,6 +63,20 @@ bool ShellEngine::load(const QUrl& shellUrl)
         Q_EMIT failed(QStringLiteral("No shell.qml found"));
         return false;
     }
+    // Defensive null-check on the deps the load() body unconditionally
+    // dereferences. Without this, a consumer that constructs
+    // `ShellEngine(Deps{})` (both pointers default-null) crashes inside
+    // `m_screenModel = new ScreenModel(nullptr, this)` → screensChanged
+    // connect on a null notifier, which is harder to diagnose than a
+    // clean failed() signal.
+    if (!m_deps.screenProvider) {
+        Q_EMIT failed(QStringLiteral("ShellEngine: screenProvider must be non-null"));
+        return false;
+    }
+    if (!m_deps.surfaceFactory) {
+        Q_EMIT failed(QStringLiteral("ShellEngine: surfaceFactory must be non-null"));
+        return false;
+    }
 
     m_shellUrl = shellUrl;
 
@@ -201,6 +215,19 @@ void ShellEngine::onFileChanged()
     savePersistentState();
     teardown();
 
+    // Re-arm the file watch FIRST — editors that save via atomic
+    // rename invalidate the old watch on every save, and we want the
+    // next save to fire onFileChanged even if THIS reload fails. The
+    // earlier rev only re-armed in the success branch, so a single
+    // failed reload (broken QML) silenced the watcher and the user
+    // had to restart the shell to recover.
+    if (m_watcher) {
+        const QString filePath = m_shellUrl.toLocalFile();
+        if (!m_watcher->files().contains(filePath)) {
+            m_watcher->addPath(filePath);
+        }
+    }
+
     m_engine = std::make_unique<QQmlEngine>(this);
     m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
     // Re-bind the Environment singleton on the new engine. The previous
@@ -240,15 +267,6 @@ void ShellEngine::onFileChanged()
 
     materializePanels();
     restorePersistentState();
-
-    // Re-arm the file watch (editors that save via atomic rename invalidate the old watch).
-    // Guard m_watcher: setupWatcher() may not have run yet if initial load failed.
-    if (m_watcher) {
-        const QString filePath = m_shellUrl.toLocalFile();
-        if (!m_watcher->files().contains(filePath)) {
-            m_watcher->addPath(filePath);
-        }
-    }
 
     qCDebug(lcShellEngine) << "Reload complete," << m_surfaces.size() << "surface(s)";
     Q_EMIT reloaded();

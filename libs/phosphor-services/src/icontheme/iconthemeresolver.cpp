@@ -12,6 +12,7 @@
 #include <QImageReader>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStringList>
@@ -72,6 +73,8 @@ bool directoryMatchesSize(const DirectoryEntry& d, int size, int scale)
 
 int directorySizeDistance(const DirectoryEntry& d, int size, int scale)
 {
+    // XDG Icon Theme Spec 0.13, "Icon Lookup" — `DirectorySizeDistance`.
+    // Returned distance is in scaled-pixel units; smaller is better.
     if (d.type == QLatin1String("Fixed")) {
         return qAbs(d.size * d.scale - size * scale);
     }
@@ -84,12 +87,17 @@ int directorySizeDistance(const DirectoryEntry& d, int size, int scale)
         }
         return 0;
     }
-    // Threshold
+    // Threshold — spec formula uses `(Size ± Threshold) * Scale`, NOT
+    // `minSize` / `maxSize`. Earlier rev mixed the two and produced
+    // nonsense distances for Threshold directories whose minSize /
+    // maxSize defaulted to Size (giving the right magnitude by
+    // accident on most themes, but the wrong picks when the theme
+    // author tuned Threshold differently).
     if (size * scale < (d.size - d.threshold) * d.scale) {
-        return d.minSize * d.scale - size * scale;
+        return (d.size - d.threshold) * d.scale - size * scale;
     }
     if (size * scale > (d.size + d.threshold) * d.scale) {
-        return size * scale - d.maxSize * d.scale;
+        return size * scale - (d.size + d.threshold) * d.scale;
     }
     return 0;
 }
@@ -167,7 +175,8 @@ public:
     // mutex above already guards the same data).
     [[nodiscard]] const ThemeIndex& parseThemeIndex(const QString& themeName);
     [[nodiscard]] QString findIconHelper(const QString& iconName, int size, int scale, const QString& themeName);
-    [[nodiscard]] QString lookupIcon(const QString& iconName, int size, int scale, const QString& themeName);
+    [[nodiscard]] QString lookupIcon(const QString& iconName, int size, int scale, const QString& themeName,
+                                     QSet<QString>* visited = nullptr);
     [[nodiscard]] QString lookupFallbackIcon(const QString& iconName) const;
     [[nodiscard]] QString themeIconPath(const QString& iconName, int size, int scale, const QString& themeName,
                                         const QString& extraDir);
@@ -345,18 +354,28 @@ QString IconThemeResolver::Private::themeIconPath(const QString& iconName, int s
     return bestPath;
 }
 
-QString IconThemeResolver::Private::lookupIcon(const QString& iconName, int size, int scale, const QString& themeName)
+QString IconThemeResolver::Private::lookupIcon(const QString& iconName, int size, int scale, const QString& themeName,
+                                               QSet<QString>* visited)
 {
     // Walk this theme first, then each parent. Each parent gets a
     // fresh recursion so the inheritance chain is followed depth-first
-    // — matches the spec's algorithm.
+    // — matches the spec's algorithm. Cycle detection via `visited`:
+    // a malformed theme (A Inherits=B; B Inherits=A) used to recurse
+    // until stack overflow.
+    QSet<QString> visitedLocal;
+    QSet<QString>* v = visited ? visited : &visitedLocal;
+    if (v->contains(themeName)) {
+        return {};
+    }
+    v->insert(themeName);
+
     auto path = themeIconPath(iconName, size, scale, themeName, QString());
     if (!path.isEmpty())
         return path;
 
     const auto& idx = parseThemeIndex(themeName);
     for (const auto& parent : idx.inherits) {
-        path = lookupIcon(iconName, size, scale, parent);
+        path = lookupIcon(iconName, size, scale, parent, v);
         if (!path.isEmpty())
             return path;
     }
@@ -421,6 +440,13 @@ void IconThemeResolver::setThemeName(const QString& themeName)
     d->configuredTheme = themeName;
     d->themeCache.clear();
     d->resolvedCache.clear();
+    // Refresh the XDG search path on every theme switch. The
+    // singleton's constructor reads env vars once and caches; if a
+    // test or runtime caller mutates `XDG_DATA_HOME` / `XDG_DATA_DIRS`
+    // and then switches themes, the new theme would resolve against
+    // the stale paths without this refresh. Cheap (single Qt API
+    // call) and the test suite explicitly depends on it.
+    d->searchPath = xdgIconSearchPath();
     locker.unlock();
     Q_EMIT themeChanged();
 }
@@ -510,14 +536,34 @@ QImage IconThemeResolver::decodePixmaps(const QList<QPair<QSize, QByteArray>>& p
     }
 
     const auto& [pxSize, bytes] = pixmaps.at(bestIdx);
-    if (bytes.size() < pxSize.width() * pxSize.height() * 4)
+    // Validate against adversarial input from another process:
+    //   1. Width / height must be sane (cap matches argbBytesToImage
+    //      in statusnotifieritem.cpp).
+    //   2. Size check uses 64-bit arithmetic; signed `int * int * 4`
+    //      with adversarial dims (e.g. 65536 × 65536) wraps to a small
+    //      positive value, bypasses the bounds check, and the copy
+    //      loop overruns.
+    static constexpr int kMaxIconDim = 4096;
+    if (pxSize.width() <= 0 || pxSize.height() <= 0 || pxSize.width() > kMaxIconDim || pxSize.height() > kMaxIconDim) {
         return {};
+    }
+    const qint64 expected = qint64(pxSize.width()) * qint64(pxSize.height()) * 4;
+    if (bytes.size() < expected) {
+        return {};
+    }
 
     QImage img(pxSize.width(), pxSize.height(), QImage::Format_ARGB32);
-    const auto* src = reinterpret_cast<const quint32*>(bytes.constData());
-    auto* dst = reinterpret_cast<quint32*>(img.bits());
-    for (int i = 0; i < pxSize.width() * pxSize.height(); ++i) {
-        dst[i] = qFromBigEndian(src[i]);
+    // Source bytes from QByteArray are NOT guaranteed 4-byte aligned;
+    // use the unaligned-safe `qFromBigEndian<quint32>(const void*)`
+    // overload to avoid SIGBUS on ARM / RISC-V. Iterate per row via
+    // scanLine() so non-default row alignments (which QImage may
+    // insert for some widths) don't corrupt the output.
+    const char* src = bytes.constData();
+    for (int y = 0; y < pxSize.height(); ++y) {
+        auto* dstRow = reinterpret_cast<quint32*>(img.scanLine(y));
+        for (int x = 0; x < pxSize.width(); ++x) {
+            dstRow[x] = qFromBigEndian<quint32>(src + (qsizetype(y) * pxSize.width() + x) * 4);
+        }
     }
     return img;
 }

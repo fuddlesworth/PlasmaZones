@@ -37,16 +37,24 @@ DBusMenuLayoutItem unpackLayoutVariant(const QVariant& v)
     auto arg = v.value<QDBusArgument>();
     if (arg.currentType() == QDBusArgument::StructureType) {
         arg >> out;
-    } else {
-        // Some apps send the layout as a Variant<(ia{sv}av)> instead of
-        // a straight struct. Unwrap one level.
-        QDBusVariant dv;
-        if (v.canConvert<QDBusVariant>()) {
-            dv = v.value<QDBusVariant>();
-            arg = dv.variant().value<QDBusArgument>();
-            arg >> out;
-        }
+        return out;
     }
+    // Some apps send the layout as a Variant<(ia{sv}av)> instead of
+    // a straight struct. Unwrap one level — but ONLY after we've
+    // verified the unwrapped argument is itself a struct. A malicious
+    // (or buggy) sender can deliver a variant wrapping anything else
+    // (an integer, an array, an empty argument), and `arg >> out`
+    // against a non-struct argument is undefined per QtDBus's
+    // assertion semantics. Validate before dereferencing.
+    if (!v.canConvert<QDBusVariant>()) {
+        return out;
+    }
+    const QDBusVariant dv = v.value<QDBusVariant>();
+    auto inner = dv.variant().value<QDBusArgument>();
+    if (inner.currentType() != QDBusArgument::StructureType) {
+        return out;
+    }
+    inner >> out;
     return out;
 }
 
@@ -190,6 +198,12 @@ public:
     QStringList themePaths; ///< from Version/IconThemePath property
     uint revision = 0;
 
+    // Outstanding GetLayout watcher. Tracking it lets buildProxy()
+    // cancel an in-flight call when the menu source changes — without
+    // this guard the stale reply lands after the new proxy is set
+    // and overwrites the fresh menu's rows with the old menu's data.
+    QPointer<QDBusPendingCallWatcher> pendingLayoutWatcher;
+
     /// Flat child list at rootId. Built from the most recent
     /// GetLayout call.
     struct Row
@@ -197,6 +211,16 @@ public:
         int id = 0;
         QVariantMap properties;
         bool hasChildren = false;
+        // Cached PNG+base64 data URL for the row's icon. Populated on
+        // first IconUrlRole / IconImageRole read and reused; without
+        // this cache QML's `data()` is called many times per delegate
+        // (one per role binding × redraws) and each call re-runs the
+        // PNG encode → base64 encode pipeline, which dominates menu
+        // open latency for icon-heavy menus. Invalidated when the
+        // row's icon-name / icon-data properties change.
+        mutable QString cachedIconUrl;
+        mutable QImage cachedIconImage;
+        mutable bool iconCacheValid = false;
     };
     QList<Row> rows;
 
@@ -228,6 +252,15 @@ void DBusMenuModel::Private::buildProxy()
         valid = false;
         Q_EMIT q->validChanged();
     }
+    // Cancel any in-flight GetLayout from the previous proxy. The
+    // QDBusPendingCallWatcher is parented to `q` and would fire after
+    // the new proxy is set, overwriting fresh rows with stale data
+    // from the previous menu source.
+    if (pendingLayoutWatcher) {
+        pendingLayoutWatcher->disconnect();
+        pendingLayoutWatcher->deleteLater();
+        pendingLayoutWatcher.clear();
+    }
     if (service.isEmpty() || path.isEmpty())
         return;
     proxy = std::make_unique<ComCanonicalDbusmenuInterface>(service, path, QDBusConnection::sessionBus(), q);
@@ -257,6 +290,10 @@ void DBusMenuModel::Private::refresh()
     //   level; deeper submenus get their own DBusMenuModel instance.
     auto pending = proxy->GetLayout(rootId, 1, QStringList());
     auto* watcher = new QDBusPendingCallWatcher(pending, q);
+    // Track in-flight watcher so buildProxy() can cancel it if the
+    // source changes mid-call. Auto-clears via QPointer when the
+    // watcher self-destructs on finished.
+    pendingLayoutWatcher = watcher;
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, q, [this, watcher] {
         watcher->deleteLater();
         QDBusPendingReply<uint, DBusMenuLayoutItem> reply = *watcher;
@@ -325,15 +362,20 @@ void DBusMenuModel::Private::onLayoutUpdated(uint /*rev*/, int parent)
 void DBusMenuModel::Private::onPropertiesUpdated(const DBusMenuItemPropertiesList& updated,
                                                  const DBusMenuItemKeysList& removed)
 {
-    bool anyChanged = false;
+    // Invalidate icon cache if any of the visual properties change.
+    // Anything that affects iconFromProps' return value goes here.
+    static const QSet<QString> kIconProps{QStringLiteral("icon-name"), QStringLiteral("icon-data")};
+
     for (const auto& upd : updated) {
         for (int i = 0; i < rows.size(); ++i) {
             if (rows[i].id != upd.id)
                 continue;
             for (auto it = upd.properties.begin(); it != upd.properties.end(); ++it) {
                 rows[i].properties.insert(it.key(), it.value());
+                if (kIconProps.contains(it.key())) {
+                    rows[i].iconCacheValid = false;
+                }
             }
-            anyChanged = true;
             const auto idx = q->index(i);
             Q_EMIT q->dataChanged(idx, idx);
             break;
@@ -345,14 +387,15 @@ void DBusMenuModel::Private::onPropertiesUpdated(const DBusMenuItemPropertiesLis
                 continue;
             for (const auto& k : rem.keys) {
                 rows[i].properties.remove(k);
+                if (kIconProps.contains(k)) {
+                    rows[i].iconCacheValid = false;
+                }
             }
-            anyChanged = true;
             const auto idx = q->index(i);
             Q_EMIT q->dataChanged(idx, idx);
             break;
         }
     }
-    Q_UNUSED(anyChanged);
 }
 
 QString DBusMenuModel::Private::rowType(const Row& r) const
@@ -453,12 +496,23 @@ QVariant DBusMenuModel::data(const QModelIndex& index, int role) const
     case VisibleRole:
         return r.properties.value(QStringLiteral("visible"), true).toBool();
     case IconUrlRole: {
-        const int size = 16;
-        return iconToDataUrl(iconFromProps(r.properties, size, d->themePaths));
+        // Cache the PNG+base64 result per-row. data() is called many
+        // times per delegate; without caching, every read re-rasters
+        // the icon and re-encodes it. Invalidated on property update.
+        if (!r.iconCacheValid) {
+            r.cachedIconImage = iconFromProps(r.properties, 16, d->themePaths);
+            r.cachedIconUrl = iconToDataUrl(r.cachedIconImage);
+            r.iconCacheValid = true;
+        }
+        return r.cachedIconUrl;
     }
     case IconImageRole: {
-        const int size = 16; // typical menu icon
-        return iconFromProps(r.properties, size, d->themePaths);
+        if (!r.iconCacheValid) {
+            r.cachedIconImage = iconFromProps(r.properties, 16, d->themePaths);
+            r.cachedIconUrl = iconToDataUrl(r.cachedIconImage);
+            r.iconCacheValid = true;
+        }
+        return r.cachedIconImage;
     }
     case ToggleTypeRole:
         return d->toggleType(r);

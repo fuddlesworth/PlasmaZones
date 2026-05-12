@@ -3,9 +3,11 @@
 
 #include <PhosphorShell/FileView.h>
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
+#include <QStringDecoder>
 #include <QTimer>
 
 namespace PhosphorShell {
@@ -120,8 +122,15 @@ void FileView::readFile()
     }
 
     // Bounded read — protects against /dev/zero, multi-GB logs, etc.
+    // QStringDecoder rather than QString::fromUtf8(): when the read
+    // cuts off mid-UTF-8-sequence at the byte cap, a plain fromUtf8
+    // replaces the partial bytes with U+FFFD and the consumer sees a
+    // corrupt final character. The decoder's flush() at the natural
+    // end of input is fine; truncated partial-sequence tails get
+    // dropped instead of replaced.
     const QByteArray bytes = file.read(kMaxFileBytes);
-    const QString newContent = QString::fromUtf8(bytes);
+    QStringDecoder decoder(QStringDecoder::Utf8);
+    const QString newContent = decoder(bytes);
     if (newContent != m_content) {
         m_content = newContent;
         Q_EMIT contentChanged();
@@ -141,6 +150,17 @@ void FileView::onFileChanged()
     }
 }
 
+void FileView::onDirectoryChanged()
+{
+    // Parent-dir watch fired — the target file may have appeared
+    // (atomic-rename create, daemon socket pidfile, etc.). If so,
+    // upgrade to a file watch and read content.
+    if (m_watcher && !m_watcher->files().contains(m_path) && QFileInfo::exists(m_path)) {
+        m_watcher->addPath(m_path);
+        readFile();
+    }
+}
+
 void FileView::setupWatcher()
 {
     if (m_path.isEmpty()) {
@@ -150,10 +170,23 @@ void FileView::setupWatcher()
     if (!m_watcher) {
         m_watcher = new QFileSystemWatcher(this);
         connect(m_watcher, &QFileSystemWatcher::fileChanged, this, &FileView::onFileChanged);
+        connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, &FileView::onDirectoryChanged);
     }
 
     if (!m_watcher->files().contains(m_path) && QFileInfo::exists(m_path)) {
         m_watcher->addPath(m_path);
+    } else if (!QFileInfo::exists(m_path)) {
+        // File doesn't exist yet — watch the parent directory instead.
+        // When the file appears, onDirectoryChanged upgrades to a file
+        // watch. Without this, FileView pointed at a not-yet-existent
+        // path silently stays empty forever even after the file
+        // arrives (the original-file watch never installs because
+        // QFileSystemWatcher refuses paths that don't exist at the
+        // time of addPath).
+        const QString parent = QFileInfo(m_path).absolutePath();
+        if (!parent.isEmpty() && QFileInfo::exists(parent) && !m_watcher->directories().contains(parent)) {
+            m_watcher->addPath(parent);
+        }
     }
 }
 

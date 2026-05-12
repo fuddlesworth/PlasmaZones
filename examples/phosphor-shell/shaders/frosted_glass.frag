@@ -102,10 +102,16 @@ void main() {
     vec2 fragCoord = gl_FragCoord.xy;
     vec2 uv = fragCoord / iResolution.xy;
 
-    float tintOpacity = customParams[0].x > 0.0 ? customParams[0].x : 0.7;
-    float noiseAmount = customParams[0].y > 0.0 ? customParams[0].y : 0.03;
+    // `>= 0.0` for params where 0 is a meaningful value (transparent
+    // tint, no animation, no noise); `> 0.0` for params where 0 is
+    // degenerate (divide-by-zero on noiseScale; collapsed SDF on
+    // radius). Earlier rev used `> 0.0` uniformly, which silently
+    // rewrote explicit 0 to the default — surprising for QML authors
+    // who legitimately wanted "no tint" by passing 0.
+    float tintOpacity = customParams[0].x >= 0.0 ? customParams[0].x : 0.7;
+    float noiseAmount = customParams[0].y >= 0.0 ? customParams[0].y : 0.03;
     float noiseScale = customParams[0].z > 0.0 ? customParams[0].z : 40.0;
-    float animSpeed = customParams[0].w > 0.0 ? customParams[0].w : 0.3;
+    float animSpeed = customParams[0].w >= 0.0 ? customParams[0].w : 0.3;
     float radius = customParams[1].x > 0.0 ? customParams[1].x : 12.0;
 
     // SDF rounded rectangle mask - hard cutoff eliminates fringe

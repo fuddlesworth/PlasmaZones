@@ -229,8 +229,12 @@ void LayerShellWindow::applyProperties()
 
     QWindow* qwindow = m_waylandWindow->window();
 
-    // Anchors
-    int anchors = qwindow->property(LayerSurfaceProps::Anchors).toInt();
+    // Anchors — mask against AnchorAll. The property may carry stray
+    // bits set via direct `window->setProperty(...)` bypassing
+    // LayerSurface::setAnchors, and zwlr_layer_surface.set_anchor
+    // raises a protocol error (fatal disconnect) when handed flags
+    // outside the spec.
+    int anchors = qwindow->property(LayerSurfaceProps::Anchors).toInt() & static_cast<int>(LayerSurface::AnchorAll);
     zwlr_layer_surface_v1_set_anchor(m_layerSurface, static_cast<uint32_t>(anchors));
 
     // Layer — set_layer() requires protocol v2+; the initial layer is set at
@@ -284,8 +288,20 @@ void LayerShellWindow::applyProperties()
     zwlr_layer_surface_v1_set_size(m_layerSurface, w, h);
 
     if (m_integration && m_integration->boundVersion() >= 5) {
-        int exclusiveEdge = qwindow->property(LayerSurfaceProps::ExclusiveEdge).toInt();
-        zwlr_layer_surface_v1_set_exclusive_edge(m_layerSurface, static_cast<uint32_t>(exclusiveEdge));
+        const int exclusiveEdge = qwindow->property(LayerSurfaceProps::ExclusiveEdge).toInt();
+        // Spec: set_exclusive_edge must be either 0 or a single edge
+        // that's also in the anchor set. Compositors raise
+        // invalid_exclusive_edge (fatal disconnect) on violation. Drop
+        // the call when the edge doesn't satisfy both conditions.
+        const bool isSingleEdge = exclusiveEdge != 0 && (exclusiveEdge & (exclusiveEdge - 1)) == 0;
+        const bool isAnchored = (exclusiveEdge == 0) || ((anchors & exclusiveEdge) != 0);
+        if (exclusiveEdge == 0 || (isSingleEdge && isAnchored)) {
+            zwlr_layer_surface_v1_set_exclusive_edge(m_layerSurface, static_cast<uint32_t>(exclusiveEdge));
+        } else {
+            qCWarning(lcLayerShellWindow) << "Skipping set_exclusive_edge:" << exclusiveEdge
+                                          << "isn't a single anchored edge (anchors=" << anchors
+                                          << ") — compositor would disconnect on protocol error";
+        }
     }
 }
 

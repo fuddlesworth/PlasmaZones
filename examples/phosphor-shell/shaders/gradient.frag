@@ -134,10 +134,17 @@ void main() {
     vec2 fragCoord = gl_FragCoord.xy;
     vec2 uv = fragCoord / iResolution.xy;
 
-    float speed        = customParams[0].x > 0.0 ? customParams[0].x : 0.5;
+    // Per-param "use default when QML didn't set it" convention:
+    //   `>= 0.0`  — 0 is a meaningful value (no tint, no frost, …),
+    //              so the fallback fires only for negative sentinels.
+    //               Currently no caller passes negative, so the effective
+    //               behaviour is "0 is always honored as 0".
+    //   `> 0.0`   — 0 is invalid (divide-by-zero / degenerate math),
+    //              fallback fires to keep the shader producing valid output.
+    float speed        = customParams[0].x >= 0.0 ? customParams[0].x : 0.5;
     float angle        = customParams[0].y;
-    float tintOpacity  = customParams[0].z > 0.0 ? customParams[0].z : 0.7;
-    float frostAmount  = customParams[0].w > 0.0 ? customParams[0].w : 0.1;
+    float tintOpacity  = customParams[0].z >= 0.0 ? customParams[0].z : 0.7;
+    float frostAmount  = customParams[0].w >= 0.0 ? customParams[0].w : 0.1;
     // Lower-clamp at 1.0: the standard rounded-box SDF
     //   length(max(abs(p) - b + r, 0)) - r
     // degenerates at r == 0 — interior fragments return SDF=0 (not
@@ -152,11 +159,11 @@ void main() {
     // wallpaper height across the panel (visually wrong but won't NaN
     // when the QML side hasn't computed the ratio yet).
     float panelToScreenH = customParams[2].x > 0.0 ? customParams[2].x : 1.0;
-    float blurRadius     = customParams[2].y > 0.0 ? customParams[2].y : 8.0;
+    float blurRadius     = customParams[2].y >= 0.0 ? customParams[2].y : 8.0;
     // shadowFraction: ratio of the surface that's the shadow strip
     // (0..1). 0 disables the shadow branch entirely.
     float shadowFraction = clamp(customParams[3].x, 0.0, 1.0);
-    float shadowOpacity  = customParams[3].y > 0.0 ? customParams[3].y : 0.5;
+    float shadowOpacity  = customParams[3].y >= 0.0 ? customParams[3].y : 0.5;
     // cornerCarveFraction: radius of the concave corner carve as a
     // fraction of surface height. Hard-clamp to 0..0.5 so the carve
     // can never eat the whole panel.

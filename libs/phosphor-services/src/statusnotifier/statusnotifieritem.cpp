@@ -41,22 +41,35 @@ StatusNotifierItem::Status statusFromString(const QString& s)
 /// hosts.
 QImage argbBytesToImage(int width, int height, const QByteArray& bytes)
 {
-    if (width <= 0 || height <= 0) {
+    // Adversarial input from another process: validate dimensions,
+    // compute size in 64-bit to avoid the signed-int overflow that a
+    // malicious sender could weaponise (e.g. width=height=65536 wraps
+    // to a small positive int that "passes" the size check, then the
+    // copy loop overruns).
+    static constexpr int kMaxIconDim = 4096; ///< Generous cap; real icons are ≤512.
+    if (width <= 0 || height <= 0 || width > kMaxIconDim || height > kMaxIconDim) {
         return {};
     }
-    const int expected = width * height * 4;
+    const qint64 expected = qint64(width) * qint64(height) * 4;
     if (bytes.size() < expected) {
         return {};
     }
 
     QImage img(width, height, QImage::Format_ARGB32);
-    const auto* src = reinterpret_cast<const quint32*>(bytes.constData());
-    auto* dst = reinterpret_cast<quint32*>(img.bits());
-    for (int i = 0; i < width * height; ++i) {
-        // qFromBigEndian: no-op on big-endian hosts, byteswap on
-        // little-endian (the common case). This is what makes the
-        // network-byte-order spec work portably.
-        dst[i] = qFromBigEndian(src[i]);
+    // Source bytes from QByteArray::constData() are NOT guaranteed
+    // 4-byte aligned, so a direct `reinterpret_cast<const quint32*>`
+    // + dereference can SIGBUS on ARM / RISC-V. Use the unaligned-
+    // safe `qFromBigEndian<quint32>(const void*)` overload that does
+    // a byte-wise load + swap internally. Destination (QImage::bits())
+    // IS guaranteed aligned for ARGB32.
+    const char* src = bytes.constData();
+    for (int y = 0; y < height; ++y) {
+        auto* dstRow = reinterpret_cast<quint32*>(img.scanLine(y));
+        for (int x = 0; x < width; ++x) {
+            // qFromBigEndian on a pointer: unaligned load + swap on
+            // little-endian (the common case); no-op on big-endian.
+            dstRow[x] = qFromBigEndian<quint32>(src + (qsizetype(y) * width + x) * 4);
+        }
     }
     return img;
 }

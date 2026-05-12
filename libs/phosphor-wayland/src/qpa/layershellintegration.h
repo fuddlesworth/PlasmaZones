@@ -106,6 +106,26 @@ public:
     {
         return m_foreignToplevelManagerAvailable ? m_foreignToplevelManager : nullptr;
     }
+    /// Raw proxy accessor that bypasses the availability gate. Used
+    /// by ~ForeignToplevelManager to null its listener user_data even
+    /// when the global has already been removed — without this path,
+    /// the manager's destructor can't reach the proxy and a delayed
+    /// `finished` / `toplevel` event would dereference the freed
+    /// Private*. Returns nullptr only when the proxy itself was never
+    /// bound or has already been cleared by a previous destruction.
+    struct zwlr_foreign_toplevel_manager_v1* rawForeignToplevelManagerProxy() const
+    {
+        return m_foreignToplevelManager;
+    }
+    /// Mirror null-out: ~ForeignToplevelManager calls this after
+    /// nulling its listener data so a subsequent stop() in the
+    /// integration's destructor doesn't redo work on an effectively-
+    /// torn-down proxy. Idempotent.
+    void clearForeignToplevelManager()
+    {
+        m_foreignToplevelManager = nullptr;
+        m_foreignToplevelManagerAvailable = false;
+    }
     /// Negotiated version (1-3). Callers gate version-specific features:
     ///   v2: set_fullscreen / unset_fullscreen
     ///   v3: parent event

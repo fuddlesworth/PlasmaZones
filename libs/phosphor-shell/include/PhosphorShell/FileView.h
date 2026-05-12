@@ -47,6 +47,7 @@ Q_SIGNALS:
 private Q_SLOTS:
     void readFile();
     void onFileChanged();
+    void onDirectoryChanged();
 
 private:
     void setupWatcher();

@@ -17,6 +17,7 @@ class IWallpaperProvider;
 
 QT_BEGIN_NAMESPACE
 class QFileSystemWatcher;
+class QTimer;
 QT_END_NAMESPACE
 
 namespace PhosphorShell {
@@ -75,10 +76,23 @@ private:
     void scheduleLoad(const QString& path);
     void installImage(QImage image, const QString& path);
 
+    // Plasma config file is written via atomic rename, which can fire
+    // QFileSystemWatcher::fileChanged several times for one save.
+    // Debounce so a burst collapses to one refresh().
+    static constexpr int kRefreshDebounceMs = 200;
+    // QImageReader::setAllocationLimit unit is MiB. 512 MiB covers a
+    // ~16K × 16K RGBA8888 wallpaper while rejecting decompression
+    // bombs.
+    static constexpr int kMaxImageBytesMib = 512;
+    // Pixel-count cap: reject before decode runs, so a small-header
+    // image with huge declared dimensions can't make it to allocation.
+    static constexpr qint64 kMaxPixelCount = qint64(16384) * 16384;
+
     std::unique_ptr<PhosphorShaders::IWallpaperProvider> m_provider;
     QString m_currentPath;
     QImage m_image;
     QFileSystemWatcher* m_watcher = nullptr;
+    QTimer* m_refreshDebounce = nullptr;
     // Generation counter discards out-of-order async-load results: a
     // rapid wallpaper-change sequence could queue multiple decode
     // tasks; only the most recently scheduled one's result is

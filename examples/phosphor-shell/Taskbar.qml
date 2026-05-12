@@ -21,6 +21,12 @@ PanelWindow {
     }
 
     ShaderBackground {
+        // tintOpacity
+        // noiseAmount
+        // noiseScale
+        // animSpeed
+        // cornerRadius (px)
+
         anchors.fill: parent
         // Stop ticking when the panel is hidden (Toplevels not supported,
         // or the wayland surface isn't visible). ShaderEffect already
@@ -29,12 +35,16 @@ PanelWindow {
         // and avoids dirtying the scene at all.
         playing: root.visible
         shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
+        // Canonical slot keys (friendly names are silently dropped by
+        // ShaderEffect::setShaderParams). See frosted_glass.frag for
+        // the slot layout: customParams[0] = tint/noise/anim,
+        // customParams[1].x = cornerRadius.
         shaderParams: {
-            "tintOpacity": 0.8,
-            "noiseAmount": 0.15,
-            "noiseScale": 20,
-            "animSpeed": 0.5,
-            "cornerRadius": 12
+            "customParams1_x": 0.8,
+            "customParams1_y": 0.15,
+            "customParams1_z": 20,
+            "customParams1_w": 0.5,
+            "customParams2_x": 12
         }
         customColor1: "#1e1e2e"
     }

@@ -288,6 +288,16 @@ public:
 
     static void handleFinished(void* data, struct zwlr_foreign_toplevel_manager_v1*)
     {
+        // `finished` is the protocol's destructor event — libwayland
+        // will reclaim the proxy after this handler returns. Notify
+        // the integration so its destructor doesn't try to stop() a
+        // proxy that's about to be freed (CVE-class UAF if the
+        // integration's dtor runs after this handler but before
+        // wl_display teardown). The clear is idempotent — safe even
+        // if the integration is already torn down.
+        if (auto* integration = LayerShellIntegration::instance()) {
+            integration->clearForeignToplevelManager();
+        }
         // Same dangling-listener guard as handleToplevel: if the manager's
         // Private has already been destroyed, `data` was set to nullptr
         // and there's nothing left to mark stopped. The proxy itself is
@@ -463,8 +473,14 @@ ForeignToplevelManager::~ForeignToplevelManager()
     // dereference our about-to-be-freed Private. Without this, the
     // `finished` event the integration's stop() solicits could land on
     // dangling memory if it arrives after we go away.
+    //
+    // Use the raw-proxy accessor that bypasses the
+    // availability gate: when the compositor has already removed the
+    // global, `foreignToplevelManager()` returns nullptr and the
+    // listener-data nulling would be skipped — leaving the dangling
+    // pointer for any in-flight event to dereference.
     if (auto* integration = LayerShellIntegration::instance()) {
-        if (auto* manager = integration->foreignToplevelManager()) {
+        if (auto* manager = integration->rawForeignToplevelManagerProxy()) {
             wl_proxy_set_user_data(reinterpret_cast<wl_proxy*>(manager), nullptr);
         }
     }

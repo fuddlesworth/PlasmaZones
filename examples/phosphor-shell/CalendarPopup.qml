@@ -19,7 +19,29 @@ PopupWindow {
     popupWidth: 280
     popupHeight: 320
     gap: 8
-    popupVisible: shellState.calendarOpen
+    // popupVisible is imperative-driven from shellState.calendarOpen
+    // rather than a direct binding: when the Wayland compositor
+    // dismisses the popup on outside-click, it writes popupVisible
+    // to false from C++; a direct binding `popupVisible: shellState.<bool>`
+    // immediately re-evaluates to true and the popup re-maps, looping
+    // every outside click. Connections handler keeps state in sync
+    // both directions without the loop.
+    popupVisible: false
+    onPopupVisibleChanged: {
+        // Compositor-side dismissal — propagate back so the QML
+        // controlling state matches the actual surface state.
+        if (!popupVisible && shellState.calendarOpen)
+            shellState.calendarOpen = false;
+
+    }
+
+    Connections {
+        function onCalendarOpenChanged() {
+            root.popupVisible = shellState.calendarOpen;
+        }
+
+        target: shellState
+    }
 
     // Backdrop — frosted-glass shader only. An opaque base Rectangle
     // used to live here as a "shader still warming" fallback, but it
@@ -28,15 +50,27 @@ PopupWindow {
     // completely masked. The shader compiles synchronously by the
     // time the popup maps, so the fallback wasn't paying for itself.
     ShaderBackground {
+        // tintOpacity
+        // noiseAmount
+        // noiseScale
+        // animSpeed
+        // cornerRadius (px)
+
         anchors.fill: parent
         playing: root.popupVisible
         shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
+        // ShaderEffect::setShaderParams only honours canonical
+        // `customParams<N>_<x|y|z|w>` and `customColor<N>` keys —
+        // friendly names like "tintOpacity" / "cornerRadius" are
+        // silently dropped. Map to the slot layout documented in
+        // frosted_glass.frag (customParams[0] = tint/noise/anim,
+        // customParams[1].x = cornerRadius).
         shaderParams: {
-            "tintOpacity": 0.55,
-            "noiseAmount": 0.14,
-            "noiseScale": 22,
-            "animSpeed": 0.4,
-            "cornerRadius": 14
+            "customParams1_x": 0.55,
+            "customParams1_y": 0.14,
+            "customParams1_z": 22,
+            "customParams1_w": 0.4,
+            "customParams2_x": 14
         }
         customColor1: "#1e1e2e"
     }

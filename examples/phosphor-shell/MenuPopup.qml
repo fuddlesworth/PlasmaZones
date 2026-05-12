@@ -34,7 +34,22 @@ PopupWindow {
     popupWidth: 220
     popupHeight: 240
     gap: 8
-    popupVisible: shellState.menuOpen
+    // Imperative-driven from shellState (see CalendarPopup.qml for
+    // the rationale — direct binding loops on compositor dismissal).
+    popupVisible: false
+    onPopupVisibleChanged: {
+        if (!popupVisible && shellState.menuOpen)
+            shellState.menuOpen = false;
+
+    }
+
+    Connections {
+        function onMenuOpenChanged() {
+            root.popupVisible = shellState.menuOpen;
+        }
+
+        target: shellState
+    }
 
     Rectangle {
         anchors.fill: parent

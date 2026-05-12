@@ -14,6 +14,7 @@
 #include <QPointer>
 #include <QStandardPaths>
 #include <QThreadPool>
+#include <QTimer>
 
 Q_LOGGING_CATEGORY(lcWallpaperService, "phosphorshell.wallpaper")
 
@@ -23,6 +24,17 @@ WallpaperService::WallpaperService(QObject* parent)
     : QObject(parent)
     , m_provider(PhosphorShaders::createWallpaperProvider())
 {
+    // Debounce the config-watcher: KDE writes the file via temp-file
+    // + rename, which can fire `fileChanged` several times during a
+    // single save (delete → new inode → metadata sync). Without
+    // debouncing, each fire schedules a fresh `QImageReader` decode
+    // on the threadpool — wasted work because the generation counter
+    // discards stale results but the decode still runs.
+    m_refreshDebounce = new QTimer(this);
+    m_refreshDebounce->setSingleShot(true);
+    m_refreshDebounce->setInterval(kRefreshDebounceMs);
+    connect(m_refreshDebounce, &QTimer::timeout, this, &WallpaperService::refresh);
+
     // Watch the Plasma desktop-appletsrc config so a wallpaper change
     // via System Settings propagates automatically. Best-effort —
     // non-KDE desktops or a missing config just disable auto-refresh,
@@ -34,11 +46,13 @@ WallpaperService::WallpaperService(QObject* parent)
         m_watcher->addPath(plasmaConfig);
         connect(m_watcher, &QFileSystemWatcher::fileChanged, this, [this](const QString& path) {
             // KDE saves the config via atomic-rename, invalidating the
-            // watch on the original inode. Re-add and refresh.
+            // watch on the original inode. Re-add and (re)start the
+            // debounce so a burst of fileChanged events collapses to
+            // one refresh().
             if (m_watcher && !m_watcher->files().contains(path) && QFileInfo::exists(path)) {
                 m_watcher->addPath(path);
             }
-            refresh();
+            m_refreshDebounce->start();
         });
     }
     refresh();
@@ -89,6 +103,22 @@ void WallpaperService::scheduleLoad(const QString& path)
     QThreadPool::globalInstance()->start([self, generation, path]() {
         QImageReader reader(path);
         reader.setAutoTransform(true);
+        // Cap memory: a pathological wallpaper (multi-GB or a
+        // decompression bomb) decoded full-resolution can OOM the
+        // process. 512 MiB is generous for a 16K × 16K RGBA8888
+        // wallpaper (1 GB allocation) but rejects the truly absurd.
+        reader.setAllocationLimit(kMaxImageBytesMib);
+        // Sanity-check pixel dimensions up front so a "valid" small
+        // header pointing at a huge image still bails before decode.
+        const QSize probedSize = reader.size();
+        if (probedSize.isValid()) {
+            const qint64 pixels = qint64(probedSize.width()) * qint64(probedSize.height());
+            if (pixels > kMaxPixelCount) {
+                qCWarning(lcWallpaperService)
+                    << "Rejecting wallpaper at" << path << "— pixel count" << pixels << "exceeds" << kMaxPixelCount;
+                return;
+            }
+        }
         QImage img = reader.read();
         if (!img.isNull()) {
             // Pre-convert to RGBA8888 — ShaderEffect's upload path

@@ -167,8 +167,15 @@ void StatusNotifierHost::Private::onItemUnregistered(const QString& canonical)
     auto* item = itemsByCanonical.take(canonical);
     if (!item)
         return;
-    itemsList.removeOne(item);
+    // EMIT BEFORE removing from itemsList. The model's onItemRemoved
+    // resolves the row via host.items().indexOf(item); if we removed
+    // first, that lookup would return -1 and beginRemoveRows() would
+    // never be called — leaving the QML Repeater holding a delegate
+    // bound to a deleteLater()'d item. Order: signal first (model
+    // reads the still-valid index), then remove from the storage
+    // containers, then defer the QObject delete.
     Q_EMIT q->itemRemoved(item);
+    itemsList.removeOne(item);
     Q_EMIT q->itemCountChanged();
     item->deleteLater();
 }
