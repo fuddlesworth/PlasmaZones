@@ -182,6 +182,10 @@ jobs:
       - name: qmlformat
         run: |
           set -euo pipefail
+          # Arch's qt6-declarative installs qmlformat under
+          # /usr/lib/qt6/bin (not /usr/bin), so PATH doesn't pick it
+          # up by default. Prepend the qt6 bin dir for this step.
+          export PATH="/usr/lib/qt6/bin:$PATH"
           mapfile -t files < <(grep -E '\.qml$' changed.txt || true)
           if [ "${#files[@]}" -gt 0 ]; then
             qmlformat -n "${files[@]}"
