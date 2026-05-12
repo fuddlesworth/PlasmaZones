@@ -66,6 +66,24 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     Q_PROPERTY(QPointF iMouse READ iMouse WRITE setIMouse NOTIFY iMouseChanged FINAL)
     Q_PROPERTY(bool isReversed READ isReversed WRITE setIsReversed NOTIFY isReversedChanged FINAL)
 
+    /// Auto-tick mode. When true, this item hooks the host QQuickWindow's
+    /// per-frame signal and advances iTime / iTimeDelta / iFrame on every
+    /// rendered frame. The Shadertoy-style uniforms then "just work" for
+    /// QML callers — no FrameAnimation / Timer plumbing required.
+    ///
+    /// When false (default) the iTime/iTimeDelta/iFrame Q_PROPERTYs stay
+    /// fully under the caller's control. This is what kwin-effect's
+    /// SurfaceAnimator and phosphor-animation's transition shaders use:
+    /// they drive iTime by hand to map the animation curve through the
+    /// shader without committing to wall-clock pacing.
+    ///
+    /// Toggling at runtime is supported. While true, the manual setters
+    /// for iTime/iTimeDelta/iFrame are additive: the next frame's tick
+    /// adds the wall-clock delta to whatever value is currently stored,
+    /// so a manual write is preserved as a baseline rather than
+    /// overwritten. iFrame is incremented by 1 per tick.
+    Q_PROPERTY(bool playing READ isPlaying WRITE setPlaying NOTIFY playingChanged FINAL)
+
     // ── Shader source ────────────────────────────────────────────────
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
     Q_PROPERTY(QUrl vertexShaderUrl READ vertexShaderUrl WRITE setVertexShaderUrl NOTIFY vertexShaderUrlChanged FINAL)
@@ -188,6 +206,12 @@ public:
         return m_iFrame;
     }
     void setIFrame(int frame);
+
+    bool isPlaying() const
+    {
+        return m_playing;
+    }
+    void setPlaying(bool playing);
 
     bool isReversed() const
     {
@@ -576,7 +600,7 @@ public:
 
     Status status() const
     {
-        return m_status;
+        return m_status.load(std::memory_order_acquire);
     }
     QString errorLog() const
     {
@@ -595,6 +619,7 @@ Q_SIGNALS:
     void iResolutionChanged();
     void iMouseChanged();
     void isReversedChanged();
+    void playingChanged();
     void shaderSourceChanged();
     void vertexShaderUrlChanged();
     void shaderParamsChanged();
@@ -613,6 +638,13 @@ Q_SIGNALS:
     void wallpaperTextureChanged();
     void useWallpaperChanged();
     void useDepthBufferChanged();
+    /// Emitted when status() transitions. May be raised on the render
+    /// thread under Qt's threaded render loop (setStatus is called from
+    /// updatePaintNode). Connect with Qt::AutoConnection or
+    /// Qt::QueuedConnection only — Qt::DirectConnection from a slot on
+    /// another thread will run that slot on the render thread, which is
+    /// almost always wrong (V4 / QML JS / most app code is GUI-thread-
+    /// only).
     void statusChanged();
     void errorLogChanged();
 
@@ -663,16 +695,28 @@ protected:
     void setStatus(Status newStatus);
 
 private:
+    // ── Auto-tick (playing=true) plumbing ────────────────────────────
+    /// Subscribe / unsubscribe to the host QQuickWindow's per-frame
+    /// signal. Called from setPlaying and from itemChange when the item
+    /// moves between windows (or is removed from any window).
+    void updatePlayingConnection();
+    /// Per-frame slot when playing=true. Computes the wall-clock delta
+    /// from the previous frame and advances iTime / iTimeDelta / iFrame.
+    void onPlayingTick();
+
     // ── Animation state ──────────────────────────────────────────────
     // Field order minimises padding: 8-byte (qreal/QSizeF/QPointF) members
     // grouped together, followed by 4-byte (int), trailing 1-byte bool.
     // qreal-bool-int interleaving wastes 7 bytes via alignment padding.
     qreal m_iTime = 0.0;
     qreal m_iTimeDelta = 0.0;
+    qreal m_playingLastFrameSeconds = 0.0; ///< Wall-clock time of the previous tick
     QSizeF m_iResolution;
     QPointF m_iMouse;
     int m_iFrame = 0;
     bool m_isReversed = false;
+    bool m_playing = false;
+    QMetaObject::Connection m_playingConnection;
 
     // ── Shader source ────────────────────────────────────────────────
     QUrl m_shaderSource;
@@ -768,7 +812,14 @@ private:
     std::shared_ptr<PhosphorShaders::IUniformExtension> m_uniformExtension;
 
     // ── Status ───────────────────────────────────────────────────────
-    Status m_status = Status::Null;
+    // Atomic because setStatus is called from updatePaintNode (render
+    // thread under threaded render loop) while onPlayingTick reads it on
+    // the GUI thread. A torn read would only matter at status
+    // transitions, but the gate at `m_status != Status::Ready` would
+    // skip-or-tick spuriously around the boundary. Acquire/release
+    // semantics suffice — there's no associated data we need to publish
+    // alongside.
+    std::atomic<Status> m_status{Status::Null};
     QString m_errorLog;
 
     // ── Render node tracking ─────────────────────────────────────────

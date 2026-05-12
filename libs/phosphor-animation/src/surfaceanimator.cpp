@@ -284,8 +284,22 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
     // independent of iResolution which Qt auto-resets to the shader
     // item's bounds. Vertex shaders read this for the visible card's
     // size in pixels regardless of fboExtentKind.
+    //
+    // DPR scaling: iResolution lands in the UBO multiplied by the
+    // window's effectiveDevicePixelRatio (shadereffect.cpp's syncCustomNode
+    // path, so gl_FragCoord and iResolution agree on physical pixels).
+    // The animation-extension fields below (iAnchorSize, iAnchorPosInFbo,
+    // iSurfaceScreenPos) MUST land in the same units; otherwise vertex
+    // shaders that compute `cardSize / iResolution` ratios (fly-in,
+    // slide) and fragment shaders that compute `iAnchorPosInFbo /
+    // iResolution` UVs (morph, broken-glass) divide logical-pixel
+    // numerators by physical-pixel denominators and the result is
+    // 1/DPR of intended — the visible "card rendered smaller than its
+    // resting size during a fly-in" symptom at DPR > 1.
+    const qreal dpr =
+        (anchor->window() && anchor->window()->screen()) ? anchor->window()->effectiveDevicePixelRatio() : qreal(1.0);
     if (auto* ext = animExtensionFor(shaderItem)) {
-        ext->setIAnchorSize(QSizeF(w, h));
+        ext->setIAnchorSize(QSizeF(w * dpr, h * dpr));
 
         // iAnchorPosInFbo: anchor's top-left position inside the shader
         // item's FBO. shaderItem is parented to `anchor->parentItem()`
@@ -313,7 +327,7 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
         //            * (iResolution/iAnchorSize)
         // collapses to identity when iAnchorPosInFbo = 0 and
         // iAnchorSize = iResolution (default Anchor-extent case).
-        ext->setIAnchorPosInFbo(QPointF(anchor->x() - shaderItem->x(), anchor->y() - shaderItem->y()));
+        ext->setIAnchorPosInFbo(QPointF((anchor->x() - shaderItem->x()) * dpr, (anchor->y() - shaderItem->y()) * dpr));
 
         // iSurfaceScreenPos describes where the card sits within its
         // *playing field* and how big that field is. The "playing field"
@@ -362,9 +376,9 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
             fieldH = parent->height();
         }
         if (fieldW > 0.0 && fieldH > 0.0) {
-            ext->setISurfaceScreenPos(QVector4D(static_cast<float>(anchorScene.x()),
-                                                static_cast<float>(anchorScene.y()), static_cast<float>(fieldW),
-                                                static_cast<float>(fieldH)));
+            ext->setISurfaceScreenPos(QVector4D(static_cast<float>(anchorScene.x() * dpr),
+                                                static_cast<float>(anchorScene.y() * dpr),
+                                                static_cast<float>(fieldW * dpr), static_cast<float>(fieldH * dpr)));
         }
     }
 }

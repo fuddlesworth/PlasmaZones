@@ -1,0 +1,197 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorShell/PanelWindow.h>
+
+namespace PhosphorShell {
+
+PanelWindow::PanelWindow(QQuickItem* parent)
+    : QQuickItem(parent)
+{
+}
+
+PanelWindow::~PanelWindow() = default;
+
+PanelWindow::Edge PanelWindow::edge() const
+{
+    return m_edge;
+}
+
+void PanelWindow::setEdge(Edge edge)
+{
+    if (m_edge == edge) {
+        return;
+    }
+    m_edge = edge;
+    Q_EMIT edgeChanged();
+}
+
+int PanelWindow::thickness() const
+{
+    return m_thickness;
+}
+
+void PanelWindow::setThickness(int thickness)
+{
+    // Clamp to [1, INT_MAX]. Wayland rejects 0×N surfaces, and a negative
+    // thickness has no meaningful interpretation — silently coercing to
+    // 1 px is safer than passing nonsense to the layer-shell protocol.
+    const int clamped = qMax(1, thickness);
+    if (m_thickness == clamped) {
+        return;
+    }
+    m_thickness = clamped;
+    Q_EMIT thicknessChanged();
+}
+
+int PanelWindow::shadowSize() const
+{
+    return m_shadowSize;
+}
+
+void PanelWindow::setShadowSize(int size)
+{
+    // Clamp to [0, INT_MAX]. 0 = no shadow strip (default, backwards-
+    // compatible); negative values are nonsense.
+    const int clamped = qMax(0, size);
+    if (m_shadowSize == clamped) {
+        return;
+    }
+    m_shadowSize = clamped;
+    Q_EMIT shadowSizeChanged();
+}
+
+int PanelWindow::cornerCarveRadius() const
+{
+    return m_cornerCarveRadius;
+}
+
+void PanelWindow::setCornerCarveRadius(int radius)
+{
+    // Clamp to [0, INT_MAX]. 0 = sharp corners (default). The shader
+    // additionally clamps to half the surface height so the carve
+    // can't eat the whole panel, but we don't enforce that here
+    // because PanelWindow doesn't know the surface size at write
+    // time (it depends on thickness + shadowSize, which the property
+    // setters don't coordinate).
+    const int clamped = qMax(0, radius);
+    if (m_cornerCarveRadius == clamped) {
+        return;
+    }
+    m_cornerCarveRadius = clamped;
+    Q_EMIT cornerCarveRadiusChanged();
+}
+
+QScreen* PanelWindow::screen() const
+{
+    return m_screen;
+}
+
+void PanelWindow::setScreen(QScreen* screen)
+{
+    if (m_screen == screen) {
+        return;
+    }
+    m_screen = screen;
+    Q_EMIT screenChanged();
+}
+
+PanelWindow::Layer PanelWindow::panelLayer() const
+{
+    return m_layer;
+}
+
+void PanelWindow::setPanelLayer(Layer layer)
+{
+    if (m_layer == layer) {
+        return;
+    }
+    m_layer = layer;
+    Q_EMIT panelLayerChanged();
+}
+
+int PanelWindow::exclusiveZone() const
+{
+    return m_exclusiveZone;
+}
+
+void PanelWindow::setExclusiveZone(int zone)
+{
+    if (m_exclusiveZone == zone) {
+        return;
+    }
+    m_exclusiveZone = zone;
+    Q_EMIT exclusiveZoneChanged();
+}
+
+bool PanelWindow::exclusiveZoneEnabled() const
+{
+    return m_exclusiveZoneEnabled;
+}
+
+void PanelWindow::setExclusiveZoneEnabled(bool enabled)
+{
+    if (m_exclusiveZoneEnabled == enabled) {
+        return;
+    }
+    m_exclusiveZoneEnabled = enabled;
+    Q_EMIT exclusiveZoneEnabledChanged();
+}
+
+PanelWindow::Alignment PanelWindow::alignment() const
+{
+    return m_alignment;
+}
+
+void PanelWindow::setAlignment(Alignment alignment)
+{
+    if (m_alignment == alignment) {
+        return;
+    }
+    m_alignment = alignment;
+    Q_EMIT alignmentChanged();
+}
+
+int PanelWindow::panelLength() const
+{
+    return m_panelLength;
+}
+
+void PanelWindow::setPanelLength(int length)
+{
+    if (m_panelLength == length) {
+        return;
+    }
+    m_panelLength = length;
+    Q_EMIT panelLengthChanged();
+}
+
+QMargins PanelWindow::margins() const
+{
+    return m_margins;
+}
+
+void PanelWindow::setMargins(const QMargins& margins)
+{
+    if (m_margins == margins) {
+        return;
+    }
+    m_margins = margins;
+    Q_EMIT marginsChanged();
+}
+
+PanelWindow::KeyboardFocus PanelWindow::keyboardFocus() const
+{
+    return m_keyboardFocus;
+}
+
+void PanelWindow::setKeyboardFocus(KeyboardFocus focus)
+{
+    if (m_keyboardFocus == focus) {
+        return;
+    }
+    m_keyboardFocus = focus;
+    Q_EMIT keyboardFocusChanged();
+}
+
+} // namespace PhosphorShell

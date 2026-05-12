@@ -9,6 +9,8 @@
 
 #include <QQuickWindow>
 
+#include <atomic>
+
 namespace PhosphorLayer {
 
 namespace {
@@ -98,18 +100,31 @@ public:
         // consumer that gates setAnchors() on isConfigured() would get a
         // false negative after the first hide and incorrectly think the
         // layer_surface was never ack'd.
+        //
+        // m_everConfigured is std::atomic<bool> because callbacks
+        // documented in ILayerShellTransport.h can fire off the GUI
+        // thread; a plain bool with cross-thread reads is a data race.
         if (!m_window) {
             return false;
         }
         if (m_window->isVisible()) {
-            m_everConfigured = true;
+            m_everConfigured.store(true, std::memory_order_release);
         }
-        return m_everConfigured;
+        return m_everConfigured.load(std::memory_order_acquire);
     }
 
     QSize configuredSize() const override
     {
-        return m_window ? m_window->size() : QSize();
+        // ILayerShellTransport contract: return zero before
+        // isConfigured() flips true. Returning m_window->size() pre-
+        // configure leaks the warmup geometry (whatever Qt picked at
+        // QWindow creation) as if it were the compositor's reply,
+        // which lets consumer layout code commit to a phantom size
+        // that the real configure then overrides.
+        if (!m_window || !m_everConfigured.load(std::memory_order_acquire)) {
+            return {};
+        }
+        return m_window->size();
     }
 
     void setMargins(QMargins m) override
@@ -142,11 +157,18 @@ public:
             m_surface->setAnchors(toShellAnchors(a));
         }
     }
+    void setDesiredSize(QSize size) override
+    {
+        if (m_surface) {
+            m_surface->setDesiredSize(size);
+        }
+    }
 
 private:
     QPointer<QQuickWindow> m_window;
     QPointer<PhosphorWayland::LayerSurface> m_surface;
-    mutable bool m_everConfigured = false; ///< Latched true on first isVisible()
+    mutable std::atomic<bool> m_everConfigured{
+        false}; ///< Latched true on first isVisible(); atomic for cross-thread reads.
 };
 
 // ── Transport ──────────────────────────────────────────────────────────

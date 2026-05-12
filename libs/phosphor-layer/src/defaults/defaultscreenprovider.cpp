@@ -24,6 +24,7 @@ public:
     QSet<QScreen*> m_hookedScreens; // de-dup for Wayland platforms that re-announce screens
     bool m_screensChangedPending = false;
     bool m_focusChangedPending = false;
+    bool m_primaryChangedPending = false;
 };
 
 DefaultScreenProvider::DefaultScreenProvider(QObject* parent)
@@ -53,6 +54,16 @@ DefaultScreenProvider::DefaultScreenProvider(QObject* parent)
         QTimer::singleShot(0, this, [this] {
             m_impl->m_focusChangedPending = false;
             Q_EMIT m_impl->m_notifier->focusChanged();
+        });
+    };
+    auto schedulePrimary = [this] {
+        if (m_impl->m_primaryChangedPending) {
+            return;
+        }
+        m_impl->m_primaryChangedPending = true;
+        QTimer::singleShot(0, this, [this] {
+            m_impl->m_primaryChangedPending = false;
+            Q_EMIT m_impl->m_notifier->primaryChanged();
         });
     };
 
@@ -95,7 +106,8 @@ DefaultScreenProvider::DefaultScreenProvider(QObject* parent)
             m_impl->m_hookedScreens.remove(s);
             scheduleScreens();
         });
-        connect(app, &QGuiApplication::primaryScreenChanged, this, [scheduleScreens, scheduleFocus] {
+        connect(app, &QGuiApplication::primaryScreenChanged, this, [scheduleScreens, scheduleFocus, schedulePrimary] {
+            schedulePrimary();
             scheduleScreens();
             scheduleFocus();
         });

@@ -33,6 +33,8 @@ LayerSurface::LayerSurface(QWindow* window)
     window->setProperty(LayerSurfaceProps::MarginsRight, 0);
     window->setProperty(LayerSurfaceProps::MarginsBottom, 0);
     window->setProperty(LayerSurfaceProps::ExclusiveEdge, static_cast<int>(m_exclusiveEdge));
+    window->setProperty(LayerSurfaceProps::DesiredWidth, 0);
+    window->setProperty(LayerSurfaceProps::DesiredHeight, 0);
 
     QWindow* rawWindow = window;
     m_destroyedConnection = connect(window, &QObject::destroyed, this, [rawWindow]() {
@@ -245,6 +247,24 @@ void LayerSurface::setMargins(const QMargins& margins)
 QMargins LayerSurface::margins() const
 {
     return m_margins;
+}
+
+void LayerSurface::setDesiredSize(const QSize& size)
+{
+    if (m_desiredSize == size)
+        return;
+    m_desiredSize = size;
+    if (m_window) {
+        m_window->setProperty(LayerSurfaceProps::DesiredWidth, size.width());
+        m_window->setProperty(LayerSurfaceProps::DesiredHeight, size.height());
+    }
+    Q_EMIT desiredSizeChanged();
+    emitPropertiesChanged();
+}
+
+QSize LayerSurface::desiredSize() const
+{
+    return m_desiredSize;
 }
 
 void LayerSurface::setExclusiveEdge(Anchors edge)

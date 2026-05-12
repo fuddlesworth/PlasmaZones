@@ -567,6 +567,19 @@ private:
         // consumer's QML can override via its own properties.
         m_window->setFlag(Qt::FramelessWindowHint);
         m_window->setColor(Qt::transparent);
+        // Clear Qt's automatic size constraints. QQuickWindow derives implicit
+        // min/max sizing from its contentItem, and `setGeometry_helper` then
+        // silently clamps every resize against those bounds (QTBUG-118604).
+        // For a layer-shell surface where the compositor is the source of
+        // truth for the surface size, that clamp drops valid configure-
+        // initiated resizes and pins the buffer to the initially-bound size.
+        // Setting explicit (0, 0) → (max, max) bounds turns the clamp into a
+        // no-op so resizeFromApplyConfigure can grow the window freely.
+        // Qt's QWINDOWSIZE_MAX is 1<<24 - 1 (16777215), the maximum coordinate
+        // QWindowSystemInterface accepts. Using a smaller value would still
+        // re-introduce a clamp ceiling.
+        m_window->setMinimumSize(QSize(0, 0));
+        m_window->setMaximumSize(QSize((1 << 24) - 1, (1 << 24) - 1));
         applyWindowProperties(m_window);
 
         // Pre-size for the transport's first commit. Callers that pass
@@ -736,6 +749,16 @@ private:
 
         if (auto* win = qobject_cast<QQuickWindow*>(root)) {
             m_window = win;
+
+            // Same QTBUG-118604 mitigation as the wrapper-window path
+            // (ensureWrapperWindow): clear Qt's implicit min/max sizing so
+            // configure-driven resizes from the compositor aren't clamped
+            // against the contentItem's implicit bounds. Without this, a
+            // QML Window root with implicit-sized content silently caps
+            // every layer-shell configure to that initial size.
+            constexpr int kQtWindowSizeMax = (1 << 24) - 1;
+            win->setMinimumSize(QSize(0, 0));
+            win->setMaximumSize(QSize(kQtWindowSizeMax, kQtWindowSizeMax));
 
             // Dynamic-property writes (setProperty) for anything
             // windowProperties contains that is NOT declared via QML

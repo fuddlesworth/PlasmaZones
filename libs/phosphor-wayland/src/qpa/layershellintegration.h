@@ -15,6 +15,7 @@
 #include "single_pixel_buffer_protocol.h"
 #include "idle_notify_protocol.h"
 #include "xdg_toplevel_drag_protocol.h"
+#include "foreign_toplevel_protocol.h"
 
 namespace PhosphorWayland {
 
@@ -53,7 +54,7 @@ public:
     /// Must only be called from the GUI thread.
     static LayerShellIntegration* instance()
     {
-        Q_ASSERT(QThread::currentThread() == qApp->thread());
+        Q_ASSERT(!qApp || QThread::currentThread() == qApp->thread());
         return s_instance;
     }
 
@@ -101,6 +102,38 @@ public:
         return m_toplevelDragManagerAvailable ? m_toplevelDragManager : nullptr;
     }
 
+    struct zwlr_foreign_toplevel_manager_v1* foreignToplevelManager() const
+    {
+        return m_foreignToplevelManagerAvailable ? m_foreignToplevelManager : nullptr;
+    }
+    /// Raw proxy accessor that bypasses the availability gate. Used
+    /// by ~ForeignToplevelManager to null its listener user_data even
+    /// when the global has already been removed — without this path,
+    /// the manager's destructor can't reach the proxy and a delayed
+    /// `finished` / `toplevel` event would dereference the freed
+    /// Private*. Returns nullptr only when the proxy itself was never
+    /// bound or has already been cleared by a previous destruction.
+    struct zwlr_foreign_toplevel_manager_v1* rawForeignToplevelManagerProxy() const
+    {
+        return m_foreignToplevelManager;
+    }
+    /// Mirror null-out: ~ForeignToplevelManager calls this after
+    /// nulling its listener data so a subsequent stop() in the
+    /// integration's destructor doesn't redo work on an effectively-
+    /// torn-down proxy. Idempotent.
+    void clearForeignToplevelManager()
+    {
+        m_foreignToplevelManager = nullptr;
+        m_foreignToplevelManagerAvailable = false;
+    }
+    /// Negotiated version (1-3). Callers gate version-specific features:
+    ///   v2: set_fullscreen / unset_fullscreen
+    ///   v3: parent event
+    uint32_t foreignToplevelManagerVersion() const
+    {
+        return m_foreignToplevelManagerVersion;
+    }
+
     /// Access the Wayland display for explicit flushing after surface creation.
     QtWaylandClient::QWaylandDisplay* display() const
     {
@@ -131,8 +164,19 @@ private:
     uint32_t m_toplevelDragManagerId = 0;
     bool m_toplevelDragManagerAvailable = false;
 
+    struct zwlr_foreign_toplevel_manager_v1* m_foreignToplevelManager = nullptr;
+    uint32_t m_foreignToplevelManagerId = 0;
+    uint32_t m_foreignToplevelManagerVersion = 0;
+    bool m_foreignToplevelManagerAvailable = false;
+
     std::vector<std::pair<CallbackId, GlobalRemovedCallback>> m_globalRemovedCallbacks;
     CallbackId m_nextCallbackId = 1;
+
+    // Layer-shell proxies parked when the compositor re-advertises
+    // the global. Destroying them immediately on re-advertise is
+    // unsafe because in-flight events may still be dispatching; the
+    // destructor reaps them after dispatch has drained.
+    std::vector<struct wl_proxy*> m_staleProxies;
 
     // GUI-thread-only singleton. All access (initialize(), instance(), destructor)
     // happens on Qt's main thread. Do NOT access from worker threads.

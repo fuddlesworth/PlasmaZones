@@ -27,6 +27,7 @@ public:
     bool isExposed() const override;
     void applyConfigure() override;
     void setWindowGeometry(const QRect& rect) override;
+    void attachPopup(QtWaylandClient::QWaylandShellSurface* popup) override;
 
     /// Returns false if the constructor failed to create a layer surface (zombie object).
     [[nodiscard]] bool isValid() const
@@ -57,6 +58,8 @@ private:
     bool m_configured = false;
     uint32_t m_pendingWidth = 0;
     uint32_t m_pendingHeight = 0;
+    uint32_t m_pendingSerial = 0; ///< Serial of the most recent unacked configure
+    bool m_hasPendingConfigure = false;
     uint64_t m_globalRemovedCallbackId = 0;
 };
 

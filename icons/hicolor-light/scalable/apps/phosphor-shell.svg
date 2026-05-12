@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PhosphorShell brand mark (light variant).
+
+  Three nested rounded rectangles — the "shell" motif: a containment
+  framework wrapping inner surfaces. Corner radii scale proportionally
+  to the outer badge so the inner rings feel like the same shape family.
+-->
+<svg width="1024" height="1024" viewBox="96 96 832 832" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">PhosphorShell</title>
+  <desc id="desc">Three nested rounded rectangles in a gradient stroke, the "shell" motif of the PhosphorShell library — a containment framework wrapping inner surfaces.</desc>
+  <defs>
+    <linearGradient id="gBorder" x1="120" y1="120" x2="904" y2="904" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="0.45" stop-color="#3B82F6"/>
+      <stop offset="0.75" stop-color="#A855F7"/>
+      <stop offset="1" stop-color="#F43F5E"/>
+    </linearGradient>
+
+    <radialGradient id="gBgLight" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
+      gradientTransform="translate(420 360) rotate(135) scale(760)">
+      <stop offset="0" stop-color="#F6F9FF"/>
+      <stop offset="0.65" stop-color="#EEF3FF"/>
+      <stop offset="1" stop-color="#E8EEFF"/>
+    </radialGradient>
+
+    <linearGradient id="gZones" x1="260" y1="300" x2="820" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0EA5E9"/>
+      <stop offset="0.55" stop-color="#7C3AED"/>
+      <stop offset="1" stop-color="#E11D48"/>
+    </linearGradient>
+
+    <filter id="fGlowLight" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="1 0 0 0 0
+                0 1 0 0 0
+                0 0 1 0 0
+                0 0 0 0.45 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="fPanelShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feOffset dx="0" dy="10" in="SourceAlpha" result="off"/>
+      <feGaussianBlur stdDeviation="12" in="off" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 0
+                0 0 0 0 0
+                0 0 0 0 0
+                0 0 0 0.18 0" result="shadow"/>
+      <feMerge>
+        <feMergeNode in="shadow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="clip">
+      <rect x="96" y="96" width="832" height="832" rx="190"/>
+    </clipPath>
+  </defs>
+
+  <rect x="96" y="96" width="832" height="832" rx="190" fill="url(#gBorder)"/>
+  <rect x="132" y="132" width="760" height="760" rx="170" fill="url(#gBgLight)" filter="url(#fPanelShadow)"/>
+
+  <g clip-path="url(#clip)">
+    <!-- Very subtle tint glows -->
+    <circle cx="320" cy="310" r="440" fill="#22D3EE" opacity="0.035"/>
+    <circle cx="790" cy="580" r="460" fill="#A855F7" opacity="0.035"/>
+    <circle cx="740" cy="360" r="390" fill="#F43F5E" opacity="0.025"/>
+
+    <g filter="url(#fGlowLight)">
+      <rect x="232" y="232" width="560" height="560" rx="128" stroke="url(#gZones)" stroke-width="14" opacity="0.98"/>
+      <rect x="312" y="312" width="400" height="400" rx="92" stroke="url(#gZones)" stroke-width="14" opacity="0.82"/>
+      <rect x="392" y="392" width="240" height="240" rx="56" stroke="url(#gZones)" stroke-width="14" opacity="0.66"/>
+    </g>
+  </g>
+</svg>

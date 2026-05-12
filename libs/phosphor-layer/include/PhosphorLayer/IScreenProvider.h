@@ -38,6 +38,17 @@ Q_SIGNALS:
     /// IScreenProvider::focused() would now return a different QScreen*.
     /// Implementations that can't track focus omit emitting this.
     void focusChanged();
+
+    /// IScreenProvider::primary() would now return a different QScreen*.
+    /// Implementations that alias primary to qGuiApp's primary should
+    /// emit this on QGuiApplication::primaryScreenChanged; providers
+    /// with their own primary policy (focused-monitor primary, virtual-
+    /// screen primary) emit when their own state flips. Consumers
+    /// observing `isPrimary` roles rely on this rather than reaching
+    /// into qGuiApp directly — without it, multi-screen shells whose
+    /// provider disagrees with qGuiApp would report a stale primary
+    /// until the next full screensChanged.
+    void primaryChanged();
 };
 
 /**

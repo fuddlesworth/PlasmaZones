@@ -349,6 +349,13 @@ target_link_libraries(test_topleveldrag PRIVATE Qt6::Test Qt6::Core Qt6::Gui Pho
 add_test(NAME test_topleveldrag COMMAND test_topleveldrag)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ - ForeignToplevel Tests (wlr-foreign-toplevel-management offscreen)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_foreigntoplevel core/test_foreigntoplevel.cpp)
+target_link_libraries(test_foreigntoplevel PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorWayland::PhosphorWayland)
+add_test(NAME test_foreigntoplevel COMMAND test_foreigntoplevel)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Support Report Tests (redaction, generation)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_support_report core/test_support_report.cpp)

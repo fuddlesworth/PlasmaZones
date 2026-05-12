@@ -9,6 +9,7 @@
 #include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/IUniformExtension.h>
 
+#include <QElapsedTimer>
 #include <QMutexLocker>
 #include <QPainter>
 #include <QQuickWindow>
@@ -330,6 +331,101 @@ void ShaderEffect::setIFrame(int frame)
     m_iFrame = frame;
     Q_EMIT iFrameChanged();
     update();
+}
+
+void ShaderEffect::setPlaying(bool playing)
+{
+    if (m_playing == playing) {
+        return;
+    }
+    m_playing = playing;
+    if (m_playing) {
+        // Reset the wall-clock baseline so the next tick produces a sensible
+        // delta (not a several-second jump from the time the property was
+        // last toggled). iTime is *not* reset — toggling playing off and on
+        // resumes from whatever iTime value the shader was at.
+        m_playingLastFrameSeconds = 0.0;
+    }
+    updatePlayingConnection();
+    Q_EMIT playingChanged();
+}
+
+void ShaderEffect::updatePlayingConnection()
+{
+    // Always tear down the previous connection before deciding whether to
+    // re-establish it. itemChange (window changes) and setPlaying both call
+    // through here; tearing down unconditionally avoids leaking a stale
+    // connection to a previous window.
+    QObject::disconnect(m_playingConnection);
+    m_playingConnection = {};
+    if (!m_playing) {
+        return;
+    }
+    QQuickWindow* w = window();
+    if (!w) {
+        // Item not parented to a window yet. itemChange(ItemSceneChange)
+        // will re-call us when the item gets a window.
+        return;
+    }
+    // afterAnimating fires once per frame on the GUI thread, immediately
+    // before the render thread is asked to synchronize. That's the right
+    // place to advance per-frame uniforms — the values we set here land in
+    // the next sync without thread-marshalling. afterFrameEnd would fire on
+    // the render thread under Qt's threaded render loop, and emitting our
+    // *Changed signals from there could trigger QML JS bindings on the
+    // wrong thread (V4 is GUI-thread-only).
+    m_playingConnection = QObject::connect(w, &QQuickWindow::afterAnimating, this, &ShaderEffect::onPlayingTick);
+    // Kick a first frame so the shader paints the new state immediately
+    // (otherwise it'd wait until something else dirties the scene).
+    update();
+}
+
+void ShaderEffect::onPlayingTick()
+{
+    if (!m_playing) {
+        return;
+    }
+    // QElapsedTimer wall-clock seconds — monotonic, immune to NTP jumps.
+    // Static across this TU because nsecsElapsed() needs a fixed start
+    // anchor; the monotonic value is read into a per-instance baseline
+    // (m_playingLastFrameSeconds) so each instance's delta is fully
+    // independent of every other.
+    static QElapsedTimer s_clock;
+    if (!s_clock.isValid()) {
+        s_clock.start();
+    }
+    const qreal now = s_clock.nsecsElapsed() * 1e-9;
+
+    // Skip the per-frame property pump for invisible / off-screen /
+    // zero-sized items, and for shaders that aren't ready (compile
+    // failure, still loading, no source set). afterAnimating fires on
+    // EVERY frame of the host window, so without these gates every
+    // playing ShaderEffect on the window pays setITime / setITimeDelta /
+    // setIFrame / 3×update cost regardless. The visual side-effect of
+    // skipping is that animation appears frozen — desired behaviour.
+    //
+    // Crucially, update m_playingLastFrameSeconds even on the skip path
+    // so the next visible tick computes a SMALL delta (the time between
+    // two consecutive frames) instead of a huge one (the time since the
+    // item was last visible — which would produce a giant iTime jump
+    // and a visible animation skip on re-show).
+    if (!isVisible() || width() <= 0 || height() <= 0 || m_status.load(std::memory_order_acquire) != Status::Ready) {
+        m_playingLastFrameSeconds = now;
+        return;
+    }
+
+    const qreal delta = (m_playingLastFrameSeconds > 0.0) ? (now - m_playingLastFrameSeconds) : 0.0;
+    m_playingLastFrameSeconds = now;
+
+    // Increment iTime by the frame delta rather than assigning `now`
+    // directly so toggling `playing` off and on doesn't produce a giant
+    // visual jump — iTime is the shader's animation clock, not wall time.
+    setITime(m_iTime + delta);
+    setITimeDelta(delta);
+    setIFrame(m_iFrame + 1);
+    // setITime/setITimeDelta/setIFrame each call update(); the scene graph
+    // coalesces multiple update() requests on the same frame so this is
+    // cheap.
 }
 
 void ShaderEffect::setIsReversed(bool reverse)
@@ -1163,10 +1259,12 @@ void ShaderEffect::setError(const QString& error)
 
 void ShaderEffect::setStatus(Status newStatus)
 {
-    if (m_status != newStatus) {
-        m_status = newStatus;
-        Q_EMIT statusChanged();
+    Status expected = m_status.load(std::memory_order_acquire);
+    if (expected == newStatus) {
+        return;
     }
+    m_status.store(newStatus, std::memory_order_release);
+    Q_EMIT statusChanged();
 }
 
 // ============================================================================
@@ -1182,18 +1280,27 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     node->setTimeDelta(static_cast<float>(m_iTimeDelta));
     node->setFrame(m_iFrame);
     node->setIsReversed(m_isReversed);
-    // Use logical pixels for iResolution (shader params depend on consistent
-    // resolution; DPR mismatch handled by bilinear upscaling in the image
-    // pass). Read from `m_iResolution` so the public Q_PROPERTY setter
-    // actually drives the GPU value: previously this read width()/height()
-    // directly, which made `setIResolution` a no-op — the setter wrote the
-    // member, emitted the change signal, but the value never reached the
-    // node. `geometryChange` and `componentComplete` keep `m_iResolution`
-    // tracking the QQuickItem geometry by default, so unchanged callers
-    // see identical behaviour; an explicit override via the setter now
-    // actually takes effect (until the next geometry event clobbers it,
-    // matching the documented "current size for shaders" semantic).
-    node->setResolution(static_cast<float>(m_iResolution.width()), static_cast<float>(m_iResolution.height()));
+    // iResolution must be in PHYSICAL pixels (DPR-scaled), not logical, so it
+    // matches gl_FragCoord — which is the viewport coordinate of the
+    // rasterised fragment. QtQuick's QRhi viewport is set in physical pixels
+    // (item.size * DPR), so gl_FragCoord ranges 0..viewport.size in physical
+    // pixels too. Setting iResolution in logical pixels meant fragCoord and
+    // iResolution disagreed by a factor of DPR — at DPR > 1 the SDF rounded-
+    // rect mask covered only the *logical-sized* region of the *physical-
+    // sized* surface, leaving a transparent stripe on the trailing edge that
+    // looked exactly like content overflow. With DPR == 1 the bug was
+    // invisible (factor 1 — no mismatch) so it lay dormant on all the test
+    // setups that used 1.0 scaling.
+    //
+    // `m_iResolution` itself stays in logical units (Q_PROPERTY semantics —
+    // QML callers expect the same units they bound it from). Only the GPU-
+    // bound value is multiplied.
+    qreal dpr = 1.0;
+    if (window() && window()->screen()) {
+        dpr = window()->effectiveDevicePixelRatio();
+    }
+    node->setResolution(static_cast<float>(m_iResolution.width() * dpr),
+                        static_cast<float>(m_iResolution.height() * dpr));
     node->setMousePosition(m_iMouse);
 
     // ── Custom parameters (indexed API) ──────────────────────────────
@@ -1352,9 +1459,10 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     }
 
     // ── Update status from node state ────────────────────────────────
-    if (node->isShaderReady() && m_status != Status::Ready) {
+    const Status currentStatus = m_status.load(std::memory_order_acquire);
+    if (node->isShaderReady() && currentStatus != Status::Ready) {
         setStatus(Status::Ready);
-    } else if (!node->shaderError().isEmpty() && m_status != Status::Error) {
+    } else if (!node->shaderError().isEmpty() && currentStatus != Status::Error) {
         setError(node->shaderError());
     }
 
@@ -1390,6 +1498,13 @@ void ShaderEffect::itemChange(ItemChange change, const ItemChangeData& value)
         // destroys the swapchain; update() calls during the hidden period are lost.
         m_shaderDirty = true;
         update();
+    } else if (change == ItemSceneChange) {
+        // Re-hook the playing-mode tick connection to whatever window the
+        // item is now in (or tear it down if value.window is null). Without
+        // this, a ShaderEffect created with playing=true before being
+        // parented to a window would never tick — the connection in
+        // setPlaying short-circuits when window() is null.
+        updatePlayingConnection();
     }
 }
 

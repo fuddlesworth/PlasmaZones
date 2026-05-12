@@ -29,6 +29,8 @@ inline constexpr const char* MarginsTop = "_ps_margins_top";
 inline constexpr const char* MarginsRight = "_ps_margins_right";
 inline constexpr const char* MarginsBottom = "_ps_margins_bottom";
 inline constexpr const char* ExclusiveEdge = "_ps_exclusive_edge";
+inline constexpr const char* DesiredWidth = "_ps_desired_width";
+inline constexpr const char* DesiredHeight = "_ps_desired_height";
 } // namespace LayerSurfaceProps
 
 /// Wayland layer-shell surface backed by zwlr_layer_shell_v1.
@@ -36,6 +38,7 @@ inline constexpr const char* ExclusiveEdge = "_ps_exclusive_edge";
 class PHOSPHORWAYLAND_EXPORT LayerSurface : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(LayerSurface)
 
     Q_PROPERTY(Layer layer READ layer WRITE setLayer NOTIFY layerChanged)
     Q_PROPERTY(Anchors anchors READ anchors WRITE setAnchors NOTIFY anchorsChanged)
@@ -96,6 +99,16 @@ public:
     void setExclusiveEdge(Anchors edge);
     Anchors exclusiveEdge() const;
 
+    /// Override the layer-shell `set_size` value sent on the next configure-
+    /// triggering commit, decoupling it from `QQuickWindow::size()`. Use
+    /// QSize() (default-constructed) to clear the override and fall back to
+    /// the window's reported size. See ITransportHandle::setDesiredSize for
+    /// the architectural rationale (Qt's QWindow::resize is silently clamped
+    /// against min/max sizing constraints, so client-initiated layer-shell
+    /// resizes have to push the new value through the protocol directly).
+    void setDesiredSize(const QSize& size);
+    QSize desiredSize() const;
+
     // ── Immutable properties (must set before show()) ────────────────
     void setScope(const QString& scope);
     QString scope() const;
@@ -124,6 +137,7 @@ Q_SIGNALS:
     void marginsChanged();
     void exclusiveEdgeChanged();
     void screenChanged();
+    void desiredSizeChanged();
     void propertiesChanged();
 
 public:
@@ -177,6 +191,7 @@ private:
     QPointer<QScreen> m_screen;
     QMargins m_margins;
     Anchors m_exclusiveEdge;
+    QSize m_desiredSize; ///< Override for set_size; QSize() = use qwindow.size()
     QMetaObject::Connection m_destroyedConnection;
 };
 

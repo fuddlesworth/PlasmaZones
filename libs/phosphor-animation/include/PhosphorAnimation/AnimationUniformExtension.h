@@ -92,12 +92,18 @@ public:
         m_dirty.store(false, std::memory_order_release);
     }
 
-    /// Surface origin in logical-screen pixels (.xy) plus host screen
-    /// dimensions (.zw). Pushed by SurfaceAnimator on every leg attach
-    /// and on each anchor / window geometry signal. Initial value
-    /// (0,0,0,0) — vertex shaders that read `.zw` for screen size MUST
-    /// guard against zero (`max(.z, 1.0)`) to avoid NaN before the
-    /// first push lands.
+    /// Surface origin in **physical** screen pixels (.xy) plus host
+    /// screen dimensions (.zw). Pushed by SurfaceAnimator on every leg
+    /// attach and on each anchor / window geometry signal, after
+    /// multiplying the QQuickItem-derived logical pixels by the
+    /// window's effectiveDevicePixelRatio. Physical-pixel units match
+    /// `iResolution`'s unit convention on this runtime
+    /// (`shadereffect.cpp::syncCustomNode` DPR-scales iResolution so it
+    /// agrees with `gl_FragCoord`), so any shader math that divides
+    /// iSurfaceScreenPos values by iResolution is dimensionally
+    /// consistent. Initial value (0,0,0,0) — vertex shaders that read
+    /// `.zw` for screen size MUST guard against zero (`max(.z, 1.0)`)
+    /// to avoid NaN before the first push lands.
     void setISurfaceScreenPos(const QVector4D& pos)
     {
         QMutexLocker lock(&m_mutex);
@@ -112,11 +118,15 @@ public:
         m_dirty.store(true, std::memory_order_release);
     }
 
-    /// Anchor (card) pixel size in logical pixels. Decoupled from
-    /// `iResolution` because Qt auto-resets iResolution to the shader
-    /// item's bounds on any geometry event. For a `fboExtentKind: Surface`
-    /// shader item that auto-reset would clobber any anchor-size override.
-    /// Pushed alongside `iSurfaceScreenPos` from `syncShaderGeometryNow`.
+    /// Anchor (card) pixel size in **physical** pixels (DPR-scaled).
+    /// Decoupled from `iResolution` because Qt auto-resets iResolution
+    /// to the shader item's bounds on any geometry event. For a
+    /// `fboExtentKind: Surface` shader item that auto-reset would
+    /// clobber any anchor-size override. Pushed alongside
+    /// `iSurfaceScreenPos` from `syncShaderGeometryNow` after the
+    /// logical-pixel anchor size is multiplied by DPR; that keeps the
+    /// vertex-shader math `cardSize / iResolution` dimensionally
+    /// consistent (both operands physical).
     void setIAnchorSize(const QSizeF& size)
     {
         QMutexLocker lock(&m_mutex);
@@ -131,9 +141,10 @@ public:
     }
 
     /// Anchor's top-left position inside the shader item's FBO, in
-    /// logical pixels. Combined with `iAnchorSize` and `iResolution`
-    /// (which Qt auto-derives from the shader item's bounds), shaders
-    /// can compute the anchor's UV region inside the FBO:
+    /// **physical** pixels (DPR-scaled). Combined with `iAnchorSize`
+    /// and `iResolution` — all three in the same physical-pixel unit
+    /// on this runtime — shaders can compute the anchor's UV region
+    /// inside the FBO:
     /// ```
     /// vec2 anchorTopLeftUv = iAnchorPosInFbo / iResolution;
     /// vec2 anchorSizeUv    = iAnchorSize    / iResolution;
