@@ -98,9 +98,9 @@ KCMUtils.SimpleKCM {
 
             Button {
                 flat: true
-                text: i18n("Wiki")
+                text: i18n("Documentation")
                 icon.name: "documentation"
-                onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones/wiki")
+                onClicked: Qt.openUrlExternally("https://phosphor-works.github.io/plasmazones/")
             }
 
         }
