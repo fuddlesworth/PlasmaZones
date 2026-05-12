@@ -10,7 +10,6 @@
                 "Unified PassiveOverlayShell: OSDs, snap-assist, layout picker, zone selector, and zone overlay all run in one click-through shell with independent slot animations and explicit z-order, replacing the legacy NotificationOverlay",
                 "Krohnkite-style autotile: drag a tiled window onto another to reorder slots live, and a new Unlimited overflow lets the stack grow past the algorithm's natural cap instead of evicting windows",
                 "Animations settings overhauled into drill-down sub-pages with motion sets for themed override bundles, a per-event shader picker, a generic shader browser, and a separate Snapping Shaders page",
-                "What's New dialog: the dialog you are reading now ships in the settings app and opens on first launch after every upgrade, so per-release highlights are visible without reading the changelog",
                 "Layout ordering for cycling: cycle shortcuts follow a user-configurable order set per-mode under Settings → Snapping or Tiling → Ordering, instead of the implicit save-time order",
                 "Per-mode disable lists: snapping and autotiling each have their own exclusion lists for monitors, virtual desktops, and activities, with the disabled-context OSD pointing the user at the right toggle",
                 "Hold and toggle controls now work in always-active mode (#249): a binding like Right Mouse Button activates when always-active is off and deactivates when on, FancyZones-style",
