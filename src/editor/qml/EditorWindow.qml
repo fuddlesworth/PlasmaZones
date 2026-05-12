@@ -349,11 +349,11 @@ Window {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                // Direction is taken from the visibility condition so the leg
-                // is decided synchronously when fullscreen toggles. Reading
-                // the animated `opacity` would re-evaluate during the
-                // Behavior and flip the leg mid-animation.
-                profile: !editorWindow.fullscreenMode ? "widget.fadeIn" : "widget.fadeOut"
+                // Pinned to widget.fadeIn for both directions: the top bar
+                // is paired with the floating "Exit Fullscreen" pill, and
+                // asymmetric fade-in/fade-out durations break the visual
+                // handoff. widget-out curve decelerates symmetrically.
+                profile: "widget.fadeIn"
             }
 
         }
@@ -738,10 +738,9 @@ Window {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                // Direction is taken from the same condition driving the
-                // `opacity` binding above (`fullscreenMode ? 1 : 0`) so the
-                // leg is decided synchronously when fullscreen toggles.
-                profile: editorWindow.fullscreenMode ? "widget.fadeIn" : "widget.fadeOut"
+                // Pinned to widget.fadeIn for both directions: paired with
+                // the top bar fade above so they hand off symmetrically.
+                profile: "widget.fadeIn"
             }
 
         }

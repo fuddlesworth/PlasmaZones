@@ -1454,4 +1454,12 @@ private:
     ConfigDefaults() = delete;
 };
 
+// Compile-time bound checks for retuned animation defaults so a future
+// bump can never silently exceed the declared slider range. Mirrors the
+// pattern in AnimationLimits.h where library defaults assert against
+// their own min/max.
+static_assert(ConfigDefaults::animationDuration() >= ConfigDefaults::animationDurationMin()
+                  && ConfigDefaults::animationDuration() <= ConfigDefaults::animationDurationMax(),
+              "ConfigDefaults::animationDuration() outside declared [min, max] slider range");
+
 } // namespace PlasmaZones

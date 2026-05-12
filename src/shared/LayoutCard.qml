@@ -124,8 +124,6 @@ Item {
         readonly property real labelDimOpacity: 0.8
         // Badge ratios
         readonly property real checkmarkFontRatio: 0.6
-        // Animation
-        readonly property real badgeOvershoot: 1.08
         // Radii
         readonly property real cardRadius: Kirigami.Units.gridUnit
         readonly property real previewRadius: Kirigami.Units.smallSpacing * 1.5

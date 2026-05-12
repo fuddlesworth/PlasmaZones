@@ -143,7 +143,7 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
 }
 
 /// LayoutPicker: OSD-style fade-and-pop shape with a softer scale
-/// envelope (0.9→1 vs the OSD's 0.8→1) since the picker is a larger
+/// envelope (0.94→1 vs the OSD's 0.92→1) since the picker is a larger
 /// surface.
 ///
 /// **Popup surface family - dedicated path partition.** Every leg
