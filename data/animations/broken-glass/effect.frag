@@ -25,14 +25,11 @@
 // vTexCoord back into anchor-space coords (-0.5..1.5 for ring=0.5),
 // exactly what BMW's `iTexCoord*2 - 0.5` produced upstream.
 //
-// `bmw_compat.glsl`'s default `getInputColor` only divides by alpha,
-// it does NOT clip, so an off-window sample on a clamp-to-edge
-// `uTexture0` would smear edge pixels (visible artefact for opaque-
-// edged windows like terminals or most app chrome). The cascade
-// below calls the `getClippedInputColor` helper (defined in
-// bmw_compat.glsl) instead, which crops samples outside [0, 1] to
-// `vec4(0.0)` before delegating to `getInputColor`. Shards beyond
-// the window crop cleanly to transparent.
+// Sampling uses BMW's plain `getInputColor` (un-premultiply via the
+// bmw_compat shim, no out-of-[0,1] clip). The shardMap.x alpha gate
+// only fires where the atlas says a shard exists, so clamp-to-edge
+// on the captured anchor texture is naturally bounded by the shard
+// distribution itself — exactly how BMW's reference works.
 
 #version 450
 
@@ -66,12 +63,7 @@ layout(location = 0) out vec4 fragColor;
 // `[-ring, 1+ring]`, so `iTexCoord` already arrives in anchor-space.
 // `iAnchorPosInFbo` is pushed as (0, 0) and `iAnchorSize == iResolution`,
 // so the unified remap math collapses to coords == iTexCoord, giving
-// the same `[-ring, 1+ring]` range the daemon path produces. The
-// `getClippedInputColor` helper used in the cascade below (defined in
-// bmw_compat.glsl) crops samples outside [0, 1] to transparent so the
-// redirected texture's clamp-to-edge wrap mode doesn't smear edge
-// pixels into the ring. BMW visual parity (shards flying past the
-// natural frame) works on both runtimes.
+// the same `[-ring, 1+ring]` range the daemon path produces.
 vec2 anchorRemap(vec2 uv) {
     // Defence in depth: see morph/effect.frag's resSafe comment. The
     // runtime normally pushes positive iResolution / iAnchorSize at
@@ -158,7 +150,7 @@ void main() {
     float shardGroup = floor(shardMap.g * SHARD_LAYERS * 0.999);
 
     if (shardGroup == i && (shardMap.x - pow(progress + 0.1, 2.0)) > 0.0) {
-      oColor = getClippedInputColor(coords);
+      oColor = getInputColor(coords);
     }
   }
 

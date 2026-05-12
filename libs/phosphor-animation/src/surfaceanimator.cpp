@@ -204,8 +204,8 @@ inline qreal sanitiseFboExtentRing(qreal requested)
 ///     the captured-anchor's region within the surface-sized FBO via
 ///     iSurfaceScreenPos / iAnchorSize / iAnchorPosInFbo.
 inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderEffect* shaderItem,
-                                  QQuickShaderEffectSource* shaderSource, qreal requestedPad,
-                                  PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind extent)
+                                  QQuickShaderEffectSource* shaderSource, qreal /*requestedPad*/,
+                                  PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind /*extent*/)
 {
     if (!anchor || !shaderItem) {
         return;
@@ -215,66 +215,58 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
     if (w <= 0.0 || h <= 0.0) {
         return;
     }
-    const qreal pad = clampPaddingToParent(anchor, requestedPad);
-    const qreal padW = w * pad;
-    const qreal padH = h * pad;
-    if (extent == PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind::Surface) {
-        // Fill the anchor's enclosing QQuickWindow::contentItem (the
-        // surface scene root), NOT the immediate QML parentItem. The
-        // shader item is parented to anchor->parentItem() (see
-        // attachShaderToAnchor), but Qt scene-graph items render past
-        // their QML parent's bounds without explicit `clip: true`,
-        // the only hard clipping limit is the wl_surface FBO, which
-        // matches the contentItem 1:1. Sizing to the immediate parent
-        // would collapse Surface extent to a small inner container
-        // (e.g. a `PopupContent` around a `PopupFrame`), defeating the
-        // semantic intent (fly-in's "translate across the wl_surface"
-        // would only translate across the popup-content box). The
-        // shader item's local coord system stays parentItem-relative,
-        // so the size lookup uses the scene root but the position
-        // lookup converts via `parentItem->mapFromItem(sceneRoot)` to
-        // express the scene-root origin in parentItem-local pixels.
-        //
-        // iResolution naturally tracks the FBO size; Qt's
-        // QQuickItem::geometryChange auto-resets it to the shader
-        // item's bounds on every geometry event, so we DO NOT try to
-        // override it to anchor size here; that override would silently
-        // get clobbered mid-leg.
-        //
-        // Fall back to anchor->parentItem() if no QQuickWindow is
-        // reachable (headless tests, parentless anchors mid-construction);
-        // and to the Anchor branch if neither is available.
-        QQuickItem* sceneRoot = nullptr;
-        if (QQuickWindow* win = anchor->window()) {
-            sceneRoot = win->contentItem();
-        }
-        QQuickItem* parent = anchor->parentItem();
-        if (sceneRoot && parent) {
-            const QPointF rootOriginInParent = parent->mapFromItem(sceneRoot, QPointF(0.0, 0.0));
-            shaderItem->setX(rootOriginInParent.x());
-            shaderItem->setY(rootOriginInParent.y());
-            shaderItem->setWidth(sceneRoot->width());
-            shaderItem->setHeight(sceneRoot->height());
-        } else if (parent) {
-            const qreal pw = parent->width();
-            const qreal ph = parent->height();
-            shaderItem->setX(0.0);
-            shaderItem->setY(0.0);
-            shaderItem->setWidth(pw);
-            shaderItem->setHeight(ph);
-        } else {
-            shaderItem->setWidth(w + 2.0 * padW);
-            shaderItem->setHeight(h + 2.0 * padH);
-            shaderItem->setX(anchor->x() - padW);
-            shaderItem->setY(anchor->y() - padH);
-            shaderItem->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
-        }
+    // SINGLE EXTENT MODEL — daemon path always renders surface-scoped.
+    //
+    // The legacy `fboExtent: anchor+N` grammar grew the shader item to
+    // `anchor + 2·ring·anchor` and then clamped that against the
+    // QQuickWindow's contentItem. Popups anchored near a screen edge
+    // (e.g. zone-selector at scene-y=10 with a 270-tall anchor) lost
+    // 96% of the requested ring to the clamp, so BMW-derived shaders
+    // like broken-glass only had ~10px of vertical runway for their
+    // shards — visually a "horizontal glitch" instead of a shatter.
+    //
+    // Surface-scope sidesteps the clamp entirely: the shader item is
+    // the wl_surface scene root, every animation shader gets the full
+    // surface as its play area, and `iAnchorPosInFbo` / `iAnchorSize`
+    // / `iResolution` tell the shader where the captured anchor sits
+    // inside that surface. The metadata `fboExtent` field is still
+    // parsed (back-compat with existing pack JSONs) but ignored at
+    // dispatch — every leg renders the same way, matching how fly-in
+    // has always worked.
+    //
+    // Position the shader item so its (0, 0) corner aligns with the
+    // scene root's origin in parentItem-local coords. For anchors.fill
+    // ancestor chains this resolves to (0, 0) directly; for offset
+    // popup containers the conversion picks up the parent's local
+    // offset so the shader item still maps 1:1 onto the contentItem.
+    QQuickItem* sceneRoot = nullptr;
+    if (QQuickWindow* win = anchor->window()) {
+        sceneRoot = win->contentItem();
+    }
+    QQuickItem* parent = anchor->parentItem();
+    if (sceneRoot && parent) {
+        const QPointF rootOriginInParent = parent->mapFromItem(sceneRoot, QPointF(0.0, 0.0));
+        shaderItem->setX(rootOriginInParent.x());
+        shaderItem->setY(rootOriginInParent.y());
+        shaderItem->setWidth(sceneRoot->width());
+        shaderItem->setHeight(sceneRoot->height());
+    } else if (parent) {
+        // Headless / mid-construction fallback: fill the immediate
+        // parent. Qt's geometryChange will auto-resize iResolution.
+        shaderItem->setX(0.0);
+        shaderItem->setY(0.0);
+        shaderItem->setWidth(parent->width());
+        shaderItem->setHeight(parent->height());
     } else {
-        shaderItem->setWidth(w + 2.0 * padW);
-        shaderItem->setHeight(h + 2.0 * padH);
-        shaderItem->setX(anchor->x() - padW);
-        shaderItem->setY(anchor->y() - padH);
-        shaderItem->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
+        // Parentless anchor — drop back to anchor-relative sizing as a
+        // last-resort floor. Production code paths always parent the
+        // anchor to a QML scene, so this branch is essentially a test-
+        // fixture fallback.
+        shaderItem->setX(anchor->x());
+        shaderItem->setY(anchor->y());
+        shaderItem->setWidth(w);
+        shaderItem->setHeight(h);
+        shaderItem->setIResolution(QSizeF(w, h));
     }
     if (shaderSource) {
         shaderSource->setWidth(w);
@@ -821,17 +813,30 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // stage `vTexCoord` varying, not from `gl_FragCoord.xy / iResolution`
     // — gl_FragCoord is post-DPR pixel coords and would overshoot [0,1]
     // by a factor of DPR.
-    // Clamp the metadata pad to fit the anchor's parent bounds. See
-    // clampPaddingToParent docstring for why this matters (viewport
-    // clipping breaks the morph shader's UV remap).
-    const qreal pad = clampPaddingToParent(shaderAnchor, effect.fboExtentRing);
-    const qreal padW = shaderAnchor->width() * pad;
-    const qreal padH = shaderAnchor->height() * pad;
-    shaderItem->setWidth(shaderAnchor->width() + 2.0 * padW);
-    shaderItem->setHeight(shaderAnchor->height() + 2.0 * padH);
-    shaderItem->setX(shaderAnchor->x() - padW);
-    shaderItem->setY(shaderAnchor->y() - padH);
-    shaderItem->setIResolution(QSizeF(shaderAnchor->width() + 2.0 * padW, shaderAnchor->height() + 2.0 * padH));
+    //
+    // Surface-scoped initial sizing — the daemon path always renders
+    // every animation shader on the wl_surface scene root (see
+    // syncShaderGeometryNow's "SINGLE EXTENT MODEL" comment). The
+    // legacy `anchor + 2·ring` sizing here is dead; the syncGeometry()
+    // call below seeds the scene-root-sized geometry that the rest of
+    // the leg lives with. Pre-seeding to anchor size before that call
+    // would briefly produce an anchor-sized shader item on the first
+    // paint between attach and syncGeometry, defeating the surface-
+    // scope contract. Default to scene root immediately so the very
+    // first frame is correctly sized; syncGeometry() refreshes for
+    // any subsequent geometry events.
+    if (QQuickWindow* win = shaderAnchor->window()) {
+        if (QQuickItem* sceneRoot = win->contentItem()) {
+            QQuickItem* parent = shaderAnchor->parentItem();
+            const QPointF rootOriginInParent =
+                parent ? parent->mapFromItem(sceneRoot, QPointF(0.0, 0.0)) : QPointF(0.0, 0.0);
+            shaderItem->setX(rootOriginInParent.x());
+            shaderItem->setY(rootOriginInParent.y());
+            shaderItem->setWidth(sceneRoot->width());
+            shaderItem->setHeight(sceneRoot->height());
+            shaderItem->setIResolution(QSizeF(sceneRoot->width(), sceneRoot->height()));
+        }
+    }
 
     // No more customParams[7].x structural write: morph and broken-glass
     // (the only consumers) were ported to read the pad implicitly via
