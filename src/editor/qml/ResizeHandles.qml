@@ -657,11 +657,11 @@ Item {
 
             }
 
-            // Smooth hover transitions — original was 100 ms.
+            // Smooth hover transitions — theme-driven via Kirigami shortDuration.
             Behavior on color {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
-                    durationOverride: 100
+                    durationOverride: Kirigami.Units.shortDuration
                 }
 
             }
@@ -669,7 +669,7 @@ Item {
             Behavior on border.color {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
-                    durationOverride: 100
+                    durationOverride: Kirigami.Units.shortDuration
                 }
 
             }

@@ -65,12 +65,10 @@ Item {
         // Position transition when success banner fades and error slides up.
         // Banners are editor-shell surfaces (osd.show is for the in-shell OSD);
         // a y-slide isn't really a fade, so route through the widget family
-        // root for the generic ease-out shape. durationOverride preserves
-        // the original 200 ms timing.
+        // root for the generic ease-out shape.
         Behavior on y {
             PhosphorMotionAnimation {
                 profile: "widget"
-                durationOverride: 200
             }
 
         }

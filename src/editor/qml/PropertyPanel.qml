@@ -365,7 +365,7 @@ Rectangle {
                         Behavior on border.color {
                             PhosphorMotionAnimation {
                                 profile: "widget.tint.fast"
-                                durationOverride: 100
+                                durationOverride: Kirigami.Units.shortDuration
                             }
 
                         }
@@ -373,7 +373,7 @@ Rectangle {
                         Behavior on border.width {
                             PhosphorMotionAnimation {
                                 profile: "widget.tint.fast"
-                                durationOverride: 100
+                                durationOverride: Kirigami.Units.shortDuration
                             }
 
                         }

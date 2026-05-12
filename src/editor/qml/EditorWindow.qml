@@ -354,7 +354,6 @@ Window {
                 // the animated `opacity` would re-evaluate during the
                 // Behavior and flip the leg mid-animation.
                 profile: !editorWindow.fullscreenMode ? "widget.fadeIn" : "widget.fadeOut"
-                durationOverride: 200
             }
 
         }
@@ -743,7 +742,6 @@ Window {
                 // `opacity` binding above (`fullscreenMode ? 1 : 0`) so the
                 // leg is decided synchronously when fullscreen toggles.
                 profile: editorWindow.fullscreenMode ? "widget.fadeIn" : "widget.fadeOut"
-                durationOverride: 200
             }
 
         }

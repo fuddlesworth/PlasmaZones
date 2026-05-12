@@ -907,7 +907,7 @@ public:
     }
     static constexpr int animationDuration()
     {
-        return 300;
+        return 320;
     }
     static constexpr int animationDurationMin()
     {
@@ -931,7 +931,7 @@ public:
     }
     static int animationStaggerInterval()
     {
-        return 50;
+        return 40;
     }
     static constexpr int animationStaggerIntervalMin()
     {
@@ -943,7 +943,7 @@ public:
     }
     static QString animationEasingCurve()
     {
-        return QStringLiteral("0.33,1.00,0.68,1.00");
+        return QStringLiteral("0.22,0.61,0.36,1.00");
     }
     static int animationMinDistance()
     {

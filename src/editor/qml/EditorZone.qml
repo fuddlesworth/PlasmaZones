@@ -500,7 +500,7 @@ Item {
                     // selection state flips, not from the animated `opacity`
                     // (which interpolates during the Behavior).
                     profile: root.isPartOfMultiSelection ? "widget.fadeIn" : "widget.fadeOut"
-                    durationOverride: 100
+                    durationOverride: Kirigami.Units.shortDuration
                 }
 
             }
@@ -646,7 +646,6 @@ Item {
 
         PhosphorMotionAnimation {
             profile: "editor.snapResize"
-            durationOverride: 150
         }
 
     }
@@ -656,7 +655,6 @@ Item {
 
         PhosphorMotionAnimation {
             profile: "editor.snapResize"
-            durationOverride: 150
         }
 
     }
@@ -666,7 +664,6 @@ Item {
 
         PhosphorMotionAnimation {
             profile: "editor.snapResize"
-            durationOverride: 150
         }
 
     }
@@ -676,7 +673,6 @@ Item {
 
         PhosphorMotionAnimation {
             profile: "editor.snapResize"
-            durationOverride: 150
         }
 
     }

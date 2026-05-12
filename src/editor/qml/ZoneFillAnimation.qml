@@ -94,7 +94,6 @@ Item {
             properties: "visualX"
             to: fillAnimator.targetX
             profile: "editor.snapIn"
-            durationOverride: 150
         }
 
         PhosphorMotionAnimation {
@@ -102,7 +101,6 @@ Item {
             properties: "visualY"
             to: fillAnimator.targetY
             profile: "editor.snapIn"
-            durationOverride: 150
         }
 
         PhosphorMotionAnimation {
@@ -110,7 +108,6 @@ Item {
             properties: "visualWidth"
             to: fillAnimator.targetWidth
             profile: "editor.snapIn"
-            durationOverride: 150
         }
 
         PhosphorMotionAnimation {
@@ -118,7 +115,6 @@ Item {
             properties: "visualHeight"
             to: fillAnimator.targetHeight
             profile: "editor.snapIn"
-            durationOverride: 150
         }
 
     }

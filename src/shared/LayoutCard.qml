@@ -125,7 +125,7 @@ Item {
         // Badge ratios
         readonly property real checkmarkFontRatio: 0.6
         // Animation
-        readonly property real badgeOvershoot: 1.5
+        readonly property real badgeOvershoot: 1.08
         // Radii
         readonly property real cardRadius: Kirigami.Units.gridUnit
         readonly property real previewRadius: Kirigami.Units.smallSpacing * 1.5
