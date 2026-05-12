@@ -128,6 +128,15 @@ add_compile_definitions(PLASMAZONES_SHADERS_ENABLED)
 #      Shortcuts use XDG Portal or D-Bus trigger fallback.
 option(USE_KDE_FRAMEWORKS "Build with KDE Frameworks integration" ON)
 
+# Opt-in build for the in-progress phosphor-shell desktop shell and its
+# supporting libraries (libs/phosphor-shell, libs/phosphor-services) +
+# the bundled `phosphor-shell` example binary + the example QML/shader
+# tree under examples/phosphor-shell. Default OFF so packaging /
+# downstream installs of PlasmaZones don't pick up shell artefacts
+# before the shell ships. Enable explicitly for shell development:
+#   cmake -DBUILD_PHOSPHOR_SHELL=ON
+option(BUILD_PHOSPHOR_SHELL "Build the phosphor-shell desktop shell (work in progress)" OFF)
+
 if(USE_KDE_FRAMEWORKS)
     add_compile_definitions(USE_KDE_FRAMEWORKS)
 
@@ -346,7 +355,9 @@ add_subdirectory(libs/phosphor-animation)   # unified animation library: motion 
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mechanism (rides on layer/shell-patterns/surfaces/animation/screens)
-add_subdirectory(libs/phosphor-shell)       # shell infrastructure and QML types
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
+endif()
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts (INTERFACE)
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
@@ -354,7 +365,9 @@ add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutoti
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
-add_subdirectory(libs/phosphor-services)    # DBus + platform-integration primitives (SNI tray, dbusmenu, future: notifications/MPRIS/UPower)
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(libs/phosphor-services) # DBus + platform-integration primitives (SNI tray, dbusmenu, future: notifications/MPRIS/UPower)
+endif()
 
 # Source directories
 add_subdirectory(src)
@@ -484,33 +497,43 @@ install(PROGRAMS scripts/plasmazones-report.sh
     RENAME plasmazones-report
 )
 
-# Install icons (hicolor for dark themes, hicolor-light for light themes)
-install(FILES
+# Install icons (hicolor for dark themes, hicolor-light for light themes).
+# The phosphor-shell.svg icons are conditional on BUILD_PHOSPHOR_SHELL —
+# no point shipping the icon if the binary isn't built.
+set(_plasmazones_dark_icons
     icons/hicolor/scalable/apps/plasmazones.svg
     icons/hicolor/scalable/apps/plasmazones-editor.svg
     icons/hicolor/scalable/apps/plasmazones-settings.svg
-    icons/hicolor/scalable/apps/phosphor-shell.svg
-    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
 )
-install(FILES
+set(_plasmazones_light_icons
     icons/hicolor-light/scalable/apps/plasmazones.svg
     icons/hicolor-light/scalable/apps/plasmazones-editor.svg
     icons/hicolor-light/scalable/apps/plasmazones-settings.svg
-    icons/hicolor-light/scalable/apps/phosphor-shell.svg
+)
+if(BUILD_PHOSPHOR_SHELL)
+    list(APPEND _plasmazones_dark_icons icons/hicolor/scalable/apps/phosphor-shell.svg)
+    list(APPEND _plasmazones_light_icons icons/hicolor-light/scalable/apps/phosphor-shell.svg)
+endif()
+install(FILES ${_plasmazones_dark_icons}
+    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
+)
+install(FILES ${_plasmazones_light_icons}
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
 )
 
-# Install the example phosphor-shell QML/shaders so the executable has a
-# working default to fall back on when no user shell.qml exists yet.
-# ShellLoader::resolve() probes both GenericConfigLocation (~/.config) and
-# GenericDataLocation (this DATADIR install) so the executable runs out of
-# the box on a fresh install.
-install(DIRECTORY examples/phosphor-shell/
-    DESTINATION ${KDE_INSTALL_DATADIR}/phosphor-shell
-    FILES_MATCHING
-        PATTERN "*.qml"
-        PATTERN "*.frag"
-)
+if(BUILD_PHOSPHOR_SHELL)
+    # Install the example phosphor-shell QML/shaders so the executable has a
+    # working default to fall back on when no user shell.qml exists yet.
+    # ShellLoader::resolve() probes both GenericConfigLocation (~/.config) and
+    # GenericDataLocation (this DATADIR install) so the executable runs out of
+    # the box on a fresh install.
+    install(DIRECTORY examples/phosphor-shell/
+        DESTINATION ${KDE_INSTALL_DATADIR}/phosphor-shell
+        FILES_MATCHING
+            PATTERN "*.qml"
+            PATTERN "*.frag"
+    )
+endif()
 
 # Custom uninstall target that cleans up directories properly
 configure_file(

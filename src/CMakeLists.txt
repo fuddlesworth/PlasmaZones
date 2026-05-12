@@ -453,25 +453,32 @@ configure_file(
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Phosphor Shell
+# Phosphor Shell (opt-in via -DBUILD_PHOSPHOR_SHELL=ON at the top level)
 # ═══════════════════════════════════════════════════════════════════════════════
+# Gated alongside libs/phosphor-shell and libs/phosphor-services in the
+# root CMakeLists.txt — without the flag those library targets don't
+# exist, so the binary wouldn't link anyway. Wrapping the whole block
+# also keeps `install(TARGETS phosphor-shell …)` from running when the
+# target is absent.
 
-add_executable(phosphor-shell shell/main.cpp)
+if(BUILD_PHOSPHOR_SHELL)
+    add_executable(phosphor-shell shell/main.cpp)
 
-target_link_libraries(phosphor-shell
-    PRIVATE
-        PhosphorShell::PhosphorShell
-        PhosphorServices::PhosphorServices
-        PhosphorLayer::PhosphorLayer
-        PhosphorWayland::PhosphorWayland
-        PhosphorRendering::PhosphorRendering
-        Qt6::Core
-        Qt6::Gui
-        Qt6::Quick
-        Qt6::Qml
-)
+    target_link_libraries(phosphor-shell
+        PRIVATE
+            PhosphorShell::PhosphorShell
+            PhosphorServices::PhosphorServices
+            PhosphorLayer::PhosphorLayer
+            PhosphorWayland::PhosphorWayland
+            PhosphorRendering::PhosphorRendering
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Quick
+            Qt6::Qml
+    )
 
-install(TARGETS phosphor-shell DESTINATION ${KDE_INSTALL_BINDIR})
+    install(TARGETS phosphor-shell DESTINATION ${KDE_INSTALL_BINDIR})
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Layout Editor
