@@ -1,4 +1,5 @@
 # PlasmaZones Comprehensive Uninstall Script
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # This script removes all installed files under the install prefix (e.g. /usr):
@@ -53,19 +54,32 @@ message(STATUS "[2/5] Removing all known PlasmaZones files and directories...")
 set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazonesd"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-editor"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-settings"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.daemon.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.editor.desktop"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.settings.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Autotile.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.CompositorBridge.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Control.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.EditorApp.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.LayoutRegistry.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Overlay.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Screen.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Settings.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.SettingsApp.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Shader.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.WindowDrag.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.WindowTracking.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.ZoneDetection.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSSERVICEDIR@/org.plasmazones.service"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_METAINFODIR@/org.plasmazones.editor.metainfo.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_METAINFODIR@/org.plasmazones.settings.metainfo.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor/scalable/apps/plasmazones.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor/scalable/apps/plasmazones-editor.svg"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor/scalable/apps/plasmazones-settings.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor-light/scalable/apps/plasmazones.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor-light/scalable/apps/plasmazones-editor.svg"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor-light/scalable/apps/plasmazones-settings.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kwin/effects/plugins/kwin_effect_plasmazones.so"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kcm_plasmazones.so"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/plasma/kcms/systemsettings/kcm_plasmazones.so"
@@ -178,9 +192,11 @@ endif()
 message(STATUS "")
 message(STATUS "[5/5] Cleaning up KDE caches...")
 
-# Find kbuildsycoca6 to rebuild system configuration cache
+# Find kbuildsycoca6 to rebuild system configuration cache. Skip when
+# staging into a DESTDIR (matches the ldconfig guard above: an empty
+# string and an undefined env var both mean "real install, not staged").
 find_program(KBUILDSYCOCA kbuildsycoca6)
-if(KBUILDSYCOCA AND NOT DEFINED ENV{DESTDIR})
+if(KBUILDSYCOCA AND (NOT DEFINED ENV{DESTDIR} OR "$ENV{DESTDIR}" STREQUAL ""))
     message(STATUS "  Rebuilding KDE system configuration cache...")
     execute_process(COMMAND "${KBUILDSYCOCA}" --noincremental ERROR_QUIET)
 endif()

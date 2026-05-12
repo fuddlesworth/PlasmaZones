@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
 set -e
 
 case "$1" in
@@ -7,8 +9,23 @@ case "$1" in
         if command -v kbuildsycoca6 >/dev/null 2>&1; then
             kbuildsycoca6 --noincremental 2>/dev/null || true
         fi
+        # Desktop / MIME databases should be told the .desktop is gone.
+        if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database -q /usr/share/applications 2>/dev/null || true
+        fi
+        if command -v update-mime-database >/dev/null 2>&1; then
+            update-mime-database /usr/share/mime 2>/dev/null || true
+        fi
         ;;
 esac
+
+# Only break the systemd user-unit symlink on `purge`. On a `remove`
+# the unit file vanishes with the package but the user-side enable
+# state may still be wanted across a reinstall — Debian policy treats
+# remove vs purge as exactly that distinction.
+if [ "$1" = "purge" ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl --global disable plasmazones.service 2>/dev/null || true
+fi
 
 #DEBHELPER#
 

@@ -11,7 +11,7 @@
 ## Responsibility
 
 The PlasmaZones daemon dispatches every window-lifecycle and shortcut
-event through `PhosphorEngineApi::IPlacementEngine` so it doesn't have
+event through `PhosphorEngine::IPlacementEngine` so it doesn't have
 to branch on the current placement mode. `phosphor-snap-engine` is the
 manual-mode implementation: when a screen has a zone layout active,
 this engine owns the decisions about which zone a new window joins,
@@ -20,17 +20,17 @@ and what happens on float / unfloat.
 
 The engine reads from shared services (none of which it owns):
 
-- `PhosphorEngineApi::IWindowTrackingService` — the cross-engine
+- `PhosphorEngine::IWindowTrackingService` — the cross-engine
   shared store of zone assignments, pre-tile geometries, and floating
   state.
-- `PhosphorEngineApi::IVirtualDesktopManager` — current virtual
+- `PhosphorEngine::IVirtualDesktopManager` — current virtual
   desktop.
 - `PhosphorZones::LayoutRegistry` + `PhosphorZones::IZoneDetector` —
   layout catalogue and cursor-to-zone resolver from
   [`phosphor-zones`](../phosphor-zones/README.md).
-- `PhosphorEngineApi::ISnapSettings` — exclusions, sticky-window
+- `PhosphorEngine::ISnapSettings` — exclusions, sticky-window
   handling, "auto-assign all layouts" master toggle (declared inside
-  `PhosphorEngineApi` even though the implementation ships from this
+  `PhosphorEngine` even though the implementation ships from this
   library).
 - `INavigationStateProvider` — narrow read-only contract the daemon's
   `WindowTrackingAdaptor` implements so the engine doesn't reach
@@ -50,7 +50,7 @@ math).
 |------|---------|
 | `PhosphorSnapEngine::SnapEngine`                    | Concrete `IPlacementEngine` for manual zone layouts |
 | `PhosphorSnapEngine::SnapState`                     | Per-screen `IPlacementState`: zone assignments, pre-tile geometry, floating set |
-| `PhosphorEngineApi::ISnapSettings`                  | Settings the engine reads (exclusions, sticky-window handling, master toggle) |
+| `PhosphorEngine::ISnapSettings`                  | Settings the engine reads (exclusions, sticky-window handling, master toggle) |
 | `PhosphorSnapEngine::INavigationStateProvider`      | Narrow read-only state contract the daemon implements |
 | `PhosphorSnapEngine::IZoneAdjacencyResolver`        | Directional zone lookup contract the daemon implements |
 | `PhosphorSnapEngine::SnapNavigationTargetResolver`  | Pure compute for move / focus / swap / push / cycle / restore target geometries |
@@ -106,7 +106,7 @@ placementEngineRouter.bind("snap", snap);
 ## Dependencies
 
 - `QtCore`
-- [`phosphor-engine-api`](../phosphor-engine-api/README.md) — `IPlacementEngine`, `IPlacementState`, `PlacementEngineBase`, `IWindowTrackingService`, `IVirtualDesktopManager`
+- [`phosphor-engine`](../phosphor-engine/README.md) — `IPlacementEngine`, `IPlacementState`, `PlacementEngineBase`, `IWindowTrackingService`, `IVirtualDesktopManager`
 - [`phosphor-zones`](../phosphor-zones/README.md) — `LayoutRegistry`, `IZoneDetector`
 - [`phosphor-layout-api`](../phosphor-layout-api/README.md) — `EdgeGaps`
 - [`phosphor-protocol`](../phosphor-protocol/README.md) — navigation result types (`MoveTargetResult`, `FocusTargetResult`, …)

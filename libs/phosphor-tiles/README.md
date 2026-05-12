@@ -34,7 +34,7 @@ runtime engine that drives them lives in
   [`phosphor-zones`](../phosphor-zones/README.md) `LayoutRegistry` shape.
 - **State.** `TilingState` tracks per-screen window order, master count,
   split-tree, and floating set. Implements
-  `PhosphorEngineApi::IPlacementState` so the daemon's persistence and
+  `PhosphorEngine::IPlacementState` so the daemon's persistence and
   D-Bus surface treat it the same as `SnapState`.
 - **Layout source.** `AutotileLayoutSource` wraps a registry as an
   `ILayoutSource` so the rest of the stack consumes autotile output the
@@ -129,7 +129,7 @@ function calculateZones(params) {
 
 - `QtCore`, `QtGui`, `QtQml` (for `QJSEngine` in the sandbox)
 - [`phosphor-layout-api`](../phosphor-layout-api/README.md) — `ILayoutSource` + factory + registry contracts
-- [`phosphor-engine-api`](../phosphor-engine-api/README.md) — `IPlacementState` (implemented by `TilingState`)
+- [`phosphor-engine`](../phosphor-engine/README.md) — `IPlacementState` (implemented by `TilingState`)
 - [`phosphor-zones`](../phosphor-zones/README.md) — `Layout` and `Zone` value types
 
 ## See also

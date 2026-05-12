@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# D-Bus service activation file for the PlasmaZones daemon.
+# Allows clients (kwin-effect, editor, settings, etc.) to wake the daemon
+# on first method call against org.plasmazones, without requiring it to
+# be running ahead of time. The systemd user unit installed alongside
+# remains the recommended way to keep the daemon running session-wide;
+# this is the bus-side fallback for sessions where the unit isn't active.
+
+[D-BUS Service]
+Name=org.plasmazones
+Exec=@KDE_INSTALL_FULL_BINDIR@/plasmazonesd
+SystemdService=plasmazones.service

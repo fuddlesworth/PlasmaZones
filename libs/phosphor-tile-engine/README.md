@@ -49,7 +49,7 @@ The engine manages:
 |------|---------|
 | `PhosphorTileEngine::AutotileEngine`           | Concrete `IPlacementEngine` for autotile screens |
 | `PhosphorTileEngine::AutotileConfig`           | Global config: default algorithm, gaps, master count, per-algorithm `AlgorithmSettings` map |
-| `PhosphorEngineApi::IAutotileSettings`         | Settings contract the engine reads (declared in `PhosphorEngineApi`, implementation ships from here) |
+| `PhosphorEngine::IAutotileSettings`         | Settings contract the engine reads (declared in `PhosphorEngine`, implementation ships from here) |
 | `PhosphorTileEngine::NavigationController`     | Stateless helper for focus / swap / rotate / split-ratio / master-count |
 | `PhosphorTileEngine::OverflowManager`          | Per-screen tracking of auto-floated windows when `maxWindows` is exceeded |
 | `PhosphorTileEngine::PerScreenConfigResolver`  | Resolves per-screen overrides → global config |
@@ -101,7 +101,7 @@ placementEngineRouter.bind("autotile", autotile);
 ## Dependencies
 
 - `QtCore`
-- [`phosphor-engine-api`](../phosphor-engine-api/README.md) — `IPlacementEngine`, `PlacementEngineBase`, `IWindowRegistry`, `IWindowTrackingService`, `PerScreenKeys`
+- [`phosphor-engine`](../phosphor-engine/README.md) — `IPlacementEngine`, `PlacementEngineBase`, `IWindowRegistry`, `IWindowTrackingService`, `PerScreenKeys`
 - [`phosphor-tiles`](../phosphor-tiles/README.md) — `TilingAlgorithm`, `TilingState`, `ITileAlgorithmRegistry`, `AutotileConstants`
 - [`phosphor-zones`](../phosphor-zones/README.md) — `Layout`, `LayoutRegistry`
 - [`phosphor-layout-api`](../phosphor-layout-api/README.md) — `EdgeGaps`

@@ -17,7 +17,12 @@ QString writeLayoutJson(QTemporaryDir& dir, const QString& body)
 {
     const QString path = QDir(dir.path()).filePath(QStringLiteral("layout.json"));
     QFile f(path);
-    Q_ASSERT(f.open(QIODevice::WriteOnly | QIODevice::Text));
+    // Don't put the f.open() call inside Q_ASSERT — Q_ASSERT compiles
+    // out to `static_cast<void>(false && (cond))` in release builds,
+    // which short-circuits the open() and leaves the file unwritten.
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qFatal("writeLayoutJson: failed to open %s: %s", qPrintable(path), qPrintable(f.errorString()));
+    }
     f.write(body.toUtf8());
     return path;
 }

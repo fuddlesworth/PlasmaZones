@@ -10,3 +10,8 @@ Icon=plasmazones
 NoDisplay=true
 X-KDE-StartupNotify=false
 X-DBUS-ServiceName=org.plasmazones
+# Categories aren't user-visible (NoDisplay=true) but KWin's
+# fetchRestrictedDBusInterfacesFromPid + the portal layer both inspect
+# them, so keep at least one Qt/KDE marker present.
+Categories=Qt;KDE;Utility;
+Keywords=window;tiling;zones;daemon;

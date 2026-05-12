@@ -76,6 +76,12 @@ set(KF_MIN_VERSION "6.6.0")
 find_package(ECM ${KF_MIN_VERSION} REQUIRED NO_MODULE)
 set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
 
+# Test/tool toggles MUST be set before KDECMakeSettings, which calls
+# include(CTest) and locks BUILD_TESTING into the cache as ON. Declaring
+# them after KDECMakeSettings runs makes the option() call a no-op.
+option(BUILD_TESTING "Build the test suite" OFF)
+option(BUILD_TOOLS "Build developer tools (shader-render, etc.)" OFF)
+
 include(KDEInstallDirs)
 set(KDE_SKIP_UNINSTALL_TARGET ON)  # We provide our own uninstall target
 include(KDECMakeSettings)
@@ -169,19 +175,23 @@ else()
     message(STATUS "Building WITHOUT KDE Frameworks (portable Qt-only mode)")
 endif()
 
-# Wayland layer-shell support (direct zwlr_layer_shell_v1 protocol, no KDE dependency)
-# PlasmaZones requires Wayland for proper overlay functionality.
-# X11 support has been removed as of v1.2.0 - Plasma 6 is Wayland-first.
-find_package(Wayland REQUIRED COMPONENTS Client)
-find_package(Qt6 REQUIRED COMPONENTS WaylandClient)
+# Wayland layer-shell support (direct zwlr_layer_shell_v1 protocol, no KDE
+# dependency). PlasmaZones is Wayland-only — Plasma 6 dropped X11 as a
+# session target, and the layer-shell overlays we use have no X equivalent.
+find_package(Wayland 1.21 REQUIRED COMPONENTS Client)
+find_package(Qt6 6.6 REQUIRED COMPONENTS WaylandClient)
 if(NOT TARGET Qt6::WaylandClientPrivate)
     find_package(Qt6WaylandClientPrivate REQUIRED)
 endif()
 find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 
-# Systemd user unit directory (fallback if not provided by ECM)
+# Systemd user unit directory (fallback if not provided by ECM). Defer to
+# GNUInstallDirs' libdir so multilib distros land on the right path
+# (e.g. lib64/systemd/user on Fedora, lib/x86_64-linux-gnu/systemd/user
+# on Debian multiarch).
 if(NOT DEFINED KDE_INSTALL_SYSTEMDUSERUNITDIR)
-    set(KDE_INSTALL_SYSTEMDUSERUNITDIR "lib/systemd/user")
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_SYSTEMDUSERUNITDIR "${CMAKE_INSTALL_LIBDIR}/systemd/user")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -376,7 +386,9 @@ add_subdirectory(src)
 # plasmazones-shader-render (offscreen shader preview generator
 # used by the docs site).  Skipped by default so packagers don't
 # pick up CLI tools they didn't ask for.
-add_subdirectory(tools)
+if(BUILD_TOOLS)
+    add_subdirectory(tools)
+endif()
 
 option(BUILD_KWIN_EFFECT "Build KWin C++ effect plugin (needs KWin 6.6+)" ON)
 if(USE_KDE_FRAMEWORKS)
@@ -386,24 +398,31 @@ if(USE_KDE_FRAMEWORKS)
     add_subdirectory(kcm)          # KDE System Settings modules (KDE-only)
 endif()
 
-# Tests - enable with -DBUILD_TESTING=ON
-option(BUILD_TESTING "Build tests" OFF)
+# Tests - enable with -DBUILD_TESTING=ON. Option is declared at the top
+# of the file (before KDECMakeSettings) so the OFF default actually wins;
+# this block just gates the test subdirectory.
 if(BUILD_TESTING)
     enable_testing()
     add_subdirectory(tests)
 endif()
 
-# Install D-Bus interface XMLs (one per interface)
+# Install D-Bus interface XMLs (one per interface). Keep in sync with
+# dbus/*.xml on disk — third-party clients (and qdbus-qt6 introspection)
+# resolve interfaces against these files post-install.
 install(FILES
     dbus/org.plasmazones.Autotile.xml
+    dbus/org.plasmazones.CompositorBridge.xml
+    dbus/org.plasmazones.Control.xml
     dbus/org.plasmazones.EditorApp.xml
     dbus/org.plasmazones.LayoutRegistry.xml
     dbus/org.plasmazones.Overlay.xml
     dbus/org.plasmazones.Screen.xml
     dbus/org.plasmazones.Settings.xml
     dbus/org.plasmazones.SettingsApp.xml
+    dbus/org.plasmazones.Shader.xml
     dbus/org.plasmazones.WindowDrag.xml
     dbus/org.plasmazones.WindowTracking.xml
+    dbus/org.plasmazones.ZoneDetection.xml
     DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR}
 )
 
@@ -411,6 +430,13 @@ install(FILES
 install(DIRECTORY data/layouts/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/layouts
     FILES_MATCHING PATTERN "*.json"
+)
+
+# Settings embeds whatsnew.json as a Qt resource at build time. Also
+# install it on disk so docs/release tooling can read the user-facing
+# entries without grabbing the binary's resource bundle.
+install(FILES data/whatsnew.json
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones
 )
 
 # Install shared named curves. Profile JSONs reference these by name
@@ -439,8 +465,12 @@ install(DIRECTORY data/curves/
 # (DESTDIR-aware via $ENV{DESTDIR}). The wipe is bounded to our own
 # `plasmazones/profiles` subdirectory - never to a directory we don't
 # own - so an accidental wide install prefix can't cascade.
+# Use KDE_INSTALL_FULL_DATADIR (already prefix-resolved by ECM) so we
+# don't manually concatenate CMAKE_INSTALL_PREFIX with KDE_INSTALL_DATADIR
+# — that join produces `/usr//absolute/...` when ECM hands us an absolute
+# KDE_INSTALL_DATADIR (some distros override it that way).
 install(CODE "
-    set(_pz_profiles_install_dir \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${KDE_INSTALL_DATADIR}/plasmazones/profiles\")
+    set(_pz_profiles_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/profiles\")
     if(EXISTS \"\${_pz_profiles_install_dir}\")
         file(GLOB _pz_stale_profile_jsons \"\${_pz_profiles_install_dir}/*.json\")
         if(_pz_stale_profile_jsons)
@@ -562,3 +592,41 @@ set_package_properties(WrapVulkanHeaders PROPERTIES TYPE OPTIONAL)
 feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND
                      OPTIONAL_PACKAGES_FOUND OPTIONAL_PACKAGES_NOT_FOUND
                 FATAL_ON_MISSING_REQUIRED_PACKAGES)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CPack — source tarball generation (`cpack --config CPackSourceConfig.cmake`
+# or `make package_source`). Distro builds in release.yml still hand-roll
+# tarballs for filename-control reasons; this exists so a release engineer
+# can also bootstrap a tarball locally without the workflow.
+# ═══════════════════════════════════════════════════════════════════════════════
+set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_VENDOR "fuddlesworth")
+set(CPACK_PACKAGE_CONTACT "fuddlesworth <fuddlesworth@users.noreply.github.com>")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Window tiling and autotiling for KDE Plasma")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_SOURCE_GENERATOR "TXZ;TGZ")
+set(CPACK_SOURCE_PACKAGE_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}")
+set(CPACK_SOURCE_IGNORE_FILES
+    "/\\\\.git/"
+    "/\\\\.github/"
+    "/\\\\.claude/"
+    "/\\\\.zed/"
+    "/\\\\.ccache/"
+    "/build/"
+    "/build-.*/"
+    "/install/"
+    "/dist/"
+    "/node_modules/"
+    "/\\\\.cache/"
+    "/\\\\.idea/"
+    "/\\\\.vscode/"
+    "/\\\\.DS_Store"
+    "/CMakeUserPresets\\\\.json$"
+    "/CMakeLists\\\\.txt\\\\.user"
+    "/compile_commands\\\\.json$"
+    "\\\\.qm$"
+    "\\\\.swp$"
+    "~$"
+)
+include(CPack)

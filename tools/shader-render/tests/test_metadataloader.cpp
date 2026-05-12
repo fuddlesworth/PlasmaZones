@@ -15,7 +15,12 @@ QString writeMetadataJson(QTemporaryDir& dir, const QString& body)
 {
     const QString path = QDir(dir.path()).filePath(QStringLiteral("metadata.json"));
     QFile f(path);
-    Q_ASSERT(f.open(QIODevice::WriteOnly | QIODevice::Text));
+    // Don't put the f.open() call inside Q_ASSERT — Q_ASSERT compiles
+    // out to `static_cast<void>(false && (cond))` in release builds,
+    // which short-circuits the open() and leaves the file unwritten.
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qFatal("writeMetadataJson: failed to open %s: %s", qPrintable(path), qPrintable(f.errorString()));
+    }
     f.write(body.toUtf8());
     return path;
 }
@@ -24,7 +29,9 @@ void writeFile(QTemporaryDir& dir, const QString& name)
 {
     const QString path = QDir(dir.path()).filePath(name);
     QFile f(path);
-    Q_ASSERT(f.open(QIODevice::WriteOnly | QIODevice::Text));
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qFatal("writeFile: failed to open %s: %s", qPrintable(path), qPrintable(f.errorString()));
+    }
     f.write("// stub\n");
 }
 

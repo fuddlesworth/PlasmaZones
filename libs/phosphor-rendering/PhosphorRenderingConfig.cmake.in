@@ -5,13 +5,16 @@
 
 include(CMakeFindDependencyMacro)
 
-find_dependency(Qt6 COMPONENTS Core Gui Quick)
 # The public header <PhosphorRendering/ShaderNodeRhi.h> includes <rhi/qrhi.h>,
-# which lives in Qt6::GuiPrivate. Downstream consumers must therefore have the
-# private Gui module available; declare it here so find_package(PhosphorRendering)
-# fails fast if the dev package isn't installed (instead of failing on the first
-# #include).
-find_dependency(Qt6GuiPrivate)
+# which lives in Qt6::GuiPrivate. Distros split how that target is provided:
+# Arch / openSUSE ship a standalone Qt6GuiPrivateConfig.cmake, while Fedora
+# defines the Qt6::GuiPrivate target inside Qt6GuiConfig.cmake — see the
+# matching guarded pattern in the project's top-level CMakeLists.txt.
+# Mirror it here so find_package(PhosphorRendering) is portable across both.
+find_dependency(Qt6 6.6 COMPONENTS Core Gui Quick)
+if(NOT TARGET Qt6::GuiPrivate)
+    find_dependency(Qt6GuiPrivate 6.6)
+endif()
 find_dependency(PhosphorShaders)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorRenderingTargets.cmake")
