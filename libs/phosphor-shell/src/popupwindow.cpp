@@ -130,6 +130,11 @@ void PopupWindow::setPopupVisible(bool visible)
     Q_EMIT popupVisibleChanged();
 }
 
+void PopupWindow::close()
+{
+    setPopupVisible(false);
+}
+
 QRect PopupWindow::computeAnchorRect() const
 {
     if (!m_anchor) {

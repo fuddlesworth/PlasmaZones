@@ -194,14 +194,14 @@ PopupWindow {
                 spacing: 0
 
                 Repeater {
-                    model: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+                    model: 7
 
                     delegate: Text {
-                        required property string modelData
+                        required property int index
 
                         width: parent.width / 7
                         horizontalAlignment: Text.AlignHCenter
-                        text: modelData
+                        text: Qt.locale().dayName(index, Locale.ShortFormat)
                         color: calendarSource.colMuted
                         font.pixelSize: 10
                         font.weight: Font.Medium

@@ -302,7 +302,7 @@ PopupWindow {
                                 root.rootId = menuModel.aboutToShowSubmenu(menuRow.index);
                             } else {
                                 menuModel.triggerItem(menuRow.index);
-                                root.close();
+                                root.popupVisible = false;
                             }
                         }
                     }

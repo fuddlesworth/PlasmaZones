@@ -58,6 +58,8 @@ public:
     [[nodiscard]] bool isPopupVisible() const;
     void setPopupVisible(bool visible);
 
+    Q_INVOKABLE void close();
+
 Q_SIGNALS:
     void anchorChanged();
     void popupWidthChanged();

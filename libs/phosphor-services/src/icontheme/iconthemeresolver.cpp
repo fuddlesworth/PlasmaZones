@@ -145,27 +145,6 @@ public:
     QStringList searchPath; ///< from xdgIconSearchPath()
     QHash<QString, ThemeIndex> themeCache; ///< parsed index.theme per theme name
 
-    // Resolved-icon cache. Tray icons are looked up many times per
-    // frame (every paintEvent for some widget setups), so caching
-    // the final QImage by (theme, name, size, scale, extraDir) is
-    // worth the memory. Capped to avoid pathological tray growth.
-    struct CacheKey
-    {
-        QString theme, name, extraDir;
-        int size, scale;
-        bool operator==(const CacheKey& other) const noexcept
-        {
-            return theme == other.theme && name == other.name && extraDir == other.extraDir && size == other.size
-                && scale == other.scale;
-        }
-    };
-    struct CacheKeyHash
-    {
-        std::size_t operator()(const CacheKey& k) const noexcept
-        {
-            return qHash(k.theme) ^ qHash(k.name) ^ qHash(k.extraDir) ^ k.size ^ (k.scale << 16);
-        }
-    };
     mutable QHash<QString, QImage> resolvedCache;
     static constexpr int kCacheLimit = 256;
 

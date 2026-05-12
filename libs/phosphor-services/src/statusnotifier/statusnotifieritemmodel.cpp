@@ -231,9 +231,8 @@ void StatusNotifierItemModel::onItemRemoved(StatusNotifierItem* item)
     const int row = rowFor(item);
     if (row < 0)
         return;
-    // Host hasn't yet erased it from items() — actually, it HAS,
-    // because itemRemoved fires before deleteLater(). Recompute from
-    // the host snapshot we held.
+    // The host emits itemRemoved BEFORE removing the item from its
+    // internal list, so rowFor() still finds a valid index here.
     beginRemoveRows({}, row, row);
     disconnect(item, nullptr, this, nullptr);
     endRemoveRows();

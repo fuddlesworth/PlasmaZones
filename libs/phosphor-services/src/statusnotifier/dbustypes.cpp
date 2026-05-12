@@ -5,26 +5,25 @@
 
 #include <QDBusMetaType>
 
+#include <mutex>
+
 namespace PhosphorServices {
 
 void registerDBusTypes()
 {
-    static bool registered = false;
-    if (registered) {
-        return;
-    }
-    registered = true;
-
-    qDBusRegisterMetaType<DBusImage>();
-    qDBusRegisterMetaType<DBusImageList>();
-    qDBusRegisterMetaType<DBusToolTip>();
-    qDBusRegisterMetaType<DBusMenuLayoutItem>();
-    qDBusRegisterMetaType<DBusMenuItemProperties>();
-    qDBusRegisterMetaType<DBusMenuItemPropertiesList>();
-    qDBusRegisterMetaType<DBusMenuItemKeys>();
-    qDBusRegisterMetaType<DBusMenuItemKeysList>();
-    qDBusRegisterMetaType<DBusMenuEvent>();
-    qDBusRegisterMetaType<DBusMenuEventList>();
+    static std::once_flag s_flag;
+    std::call_once(s_flag, [] {
+        qDBusRegisterMetaType<DBusImage>();
+        qDBusRegisterMetaType<DBusImageList>();
+        qDBusRegisterMetaType<DBusToolTip>();
+        qDBusRegisterMetaType<DBusMenuLayoutItem>();
+        qDBusRegisterMetaType<DBusMenuItemProperties>();
+        qDBusRegisterMetaType<DBusMenuItemPropertiesList>();
+        qDBusRegisterMetaType<DBusMenuItemKeys>();
+        qDBusRegisterMetaType<DBusMenuItemKeysList>();
+        qDBusRegisterMetaType<DBusMenuEvent>();
+        qDBusRegisterMetaType<DBusMenuEventList>();
+    });
 }
 
 } // namespace PhosphorServices
