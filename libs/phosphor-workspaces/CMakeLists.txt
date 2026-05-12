@@ -51,14 +51,17 @@ target_link_libraries(PhosphorWorkspaces
 # Plasma 6 package; KF6Activities is the older KF6 name still shipped on
 # some 6.x distros. KF5 KActivities is intentionally not consulted —
 # Plasma 6 dropped KF5 entirely.
+set(_phosphorworkspaces_have_activities FALSE)
 find_package(PlasmaActivities QUIET)
-if(NOT PlasmaActivities_FOUND)
+if(PlasmaActivities_FOUND)
+    set(_phosphorworkspaces_have_activities TRUE)
+else()
     find_package(KF6Activities QUIET)
     if(KF6Activities_FOUND)
-        set(PlasmaActivities_FOUND TRUE)
+        set(_phosphorworkspaces_have_activities TRUE)
     endif()
 endif()
-if(PlasmaActivities_FOUND)
+if(_phosphorworkspaces_have_activities)
     target_compile_definitions(PhosphorWorkspaces PRIVATE HAVE_KACTIVITIES)
     if(TARGET Plasma::Activities)
         target_link_libraries(PhosphorWorkspaces PRIVATE Plasma::Activities)
