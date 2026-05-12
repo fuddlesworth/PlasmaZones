@@ -11,23 +11,35 @@
   <desc id="desc">Three nested rounded rectangles in a gradient stroke, the "shell" motif of the PhosphorShell library — a containment framework wrapping inner surfaces.</desc>
   <defs>
     <linearGradient id="gBorder" x1="120" y1="120" x2="904" y2="904" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="0" stop-color="#0EA5E9"/>
       <stop offset="0.45" stop-color="#3B82F6"/>
-      <stop offset="0.75" stop-color="#A855F7"/>
-      <stop offset="1" stop-color="#F43F5E"/>
+      <stop offset="0.75" stop-color="#7C3AED"/>
+      <stop offset="1" stop-color="#E11D48"/>
     </linearGradient>
 
-    <radialGradient id="gBgLight" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
-      gradientTransform="translate(420 360) rotate(135) scale(760)">
-      <stop offset="0" stop-color="#F6F9FF"/>
-      <stop offset="0.65" stop-color="#EEF3FF"/>
-      <stop offset="1" stop-color="#E8EEFF"/>
-    </radialGradient>
+    <!-- Light-variant inner panel uses the brand palette tinted
+         ~25% over the off-white base so the surface echoes the
+         border sweep instead of reading as a blank white card.
+         Stops match the border gradient direction so the panel
+         "follows through" the cyan→blue→purple→rose sweep. -->
+    <linearGradient id="gBgLight" x1="120" y1="120" x2="904" y2="904" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BCE4F9"/>
+      <stop offset="0.45" stop-color="#C7DBFC"/>
+      <stop offset="0.75" stop-color="#D7C9FA"/>
+      <stop offset="1" stop-color="#F0C2D1"/>
+    </linearGradient>
 
+    <!-- Foreground sits on the pastel-tinted panel — the brand
+         palette at sky-500/violet-600/rose-600 was readable on
+         the old near-white panel but blends into the pastel
+         stops at the matching corners (cyan on light-cyan, rose
+         on light-rose).  Drop two shades to sky-800 / violet-900
+         / rose-800 so the shell rings stay high-contrast across
+         the whole sweep. -->
     <linearGradient id="gZones" x1="260" y1="300" x2="820" y2="820" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#0EA5E9"/>
-      <stop offset="0.55" stop-color="#7C3AED"/>
-      <stop offset="1" stop-color="#E11D48"/>
+      <stop offset="0" stop-color="#075985"/>
+      <stop offset="0.55" stop-color="#4C1D95"/>
+      <stop offset="1" stop-color="#881337"/>
     </linearGradient>
 
     <filter id="fGlowLight" x="-20%" y="-20%" width="140%" height="140%">
@@ -66,10 +78,12 @@
   <rect x="132" y="132" width="760" height="760" rx="170" fill="url(#gBgLight)" filter="url(#fPanelShadow)"/>
 
   <g clip-path="url(#clip)">
-    <!-- Very subtle tint glows -->
-    <circle cx="320" cy="310" r="440" fill="#22D3EE" opacity="0.035"/>
-    <circle cx="790" cy="580" r="460" fill="#A855F7" opacity="0.035"/>
-    <circle cx="740" cy="360" r="390" fill="#F43F5E" opacity="0.025"/>
+    <!-- Volumetric accent glows.  The pastel base gradient
+         carries the palette; these add soft hot-spots so the
+         panel doesn't read as a flat tint. -->
+    <circle cx="320" cy="310" r="440" fill="#0EA5E9" opacity="0.10"/>
+    <circle cx="790" cy="580" r="460" fill="#7C3AED" opacity="0.10"/>
+    <circle cx="740" cy="360" r="390" fill="#E11D48" opacity="0.08"/>
 
     <g filter="url(#fGlowLight)">
       <rect x="232" y="232" width="560" height="560" rx="128" stroke="url(#gZones)" stroke-width="14" opacity="0.98"/>
