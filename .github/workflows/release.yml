@@ -623,11 +623,6 @@ jobs:
           # Source the pre-release verdict from the version job so this
           # workflow has one regex / one decision point — see the version
           # job's `is_prerelease` output.
-          PRERELEASE_FLAG=""
-          if [[ "$IS_PRERELEASE" == "true" ]]; then
-            PRERELEASE_FLAG="--prerelease"
-          fi
-
           # Collect all release assets
           ASSETS=()
           while IFS= read -r f; do
@@ -638,17 +633,19 @@ jobs:
           printf '  %s\n' "${ASSETS[@]}"
 
           # --latest implies "this is the canonical stable release";
-          # gh refuses to combine it with --prerelease. Only set --latest
-          # for stable tags, --prerelease for pre-release tags.
-          LATEST_FLAG="--latest"
-          if [[ -n "$PRERELEASE_FLAG" ]]; then
-              LATEST_FLAG=""
+          # gh refuses to combine it with --prerelease. Build the flag
+          # list as an array so empty entries don't add stray empty
+          # arguments to the command line.
+          RELEASE_FLAGS=()
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+              RELEASE_FLAGS+=(--prerelease)
+          else
+              RELEASE_FLAGS+=(--latest)
           fi
           gh release create "$VERSION" \
             --title "PlasmaZones $VERSION" \
             --notes-file release_notes.md \
-            $LATEST_FLAG \
-            $PRERELEASE_FLAG \
+            "${RELEASE_FLAGS[@]}" \
             "${ASSETS[@]}"
 
   # ═══════════════════════════════════════════════════════════════════════════
@@ -710,17 +707,30 @@ jobs:
           cp "$GITHUB_WORKSPACE/packaging/arch/plasmazones.install" ./
           cp "$GITHUB_WORKSPACE/packaging/arch/LICENSE" ./
 
-          # Update version and hash
+          # Update version and hash. Use the same awk-anchored array
+          # rewrite as the source PKGBUILD (below) so future additional
+          # `source=` entries don't silently leave a stale second hash.
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
-          sed -i "s/'[a-f0-9]\{64\}'/'$SHA256'/" PKGBUILD
+          awk -v sum="$SHA256" '
+            /^sha256sums=\(/ {
+              print "sha256sums=("
+              print "    \047" sum "\047"
+              print ")"
+              in_block = 1
+              next
+            }
+            in_block && /^\)/ { in_block = 0; next }
+            in_block { next }
+            { print }
+          ' PKGBUILD > PKGBUILD.new && mv PKGBUILD.new PKGBUILD
 
           # Generate .SRCINFO (mount files read-only to avoid chown breaking host git)
           docker run --rm \
             -v "$(pwd)/PKGBUILD:/build/PKGBUILD:ro" \
             -v "$(pwd)/plasmazones.install:/build/plasmazones.install:ro" \
             archlinux:latest bash -c "
-            pacman -Syu --noconfirm pacman >&2
+            pacman -Syu --noconfirm >&2
             useradd -m builder
             cp /build/* /home/builder/
             chown builder:builder /home/builder/*
@@ -781,7 +791,7 @@ jobs:
             -v "$(pwd)/PKGBUILD:/build/PKGBUILD:ro" \
             -v "$(pwd)/plasmazones.install:/build/plasmazones.install:ro" \
             archlinux:latest bash -c "
-            pacman -Syu --noconfirm pacman >&2
+            pacman -Syu --noconfirm >&2
             useradd -m builder
             cp /build/* /home/builder/
             chown builder:builder /home/builder/*
