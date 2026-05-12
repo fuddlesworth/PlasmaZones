@@ -126,9 +126,12 @@ QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
     map[AutoAssign] = layout->autoAssign();
 
     // Include reference aspect ratio for fixed-geometry layouts so previews
-    // render at the correct proportions even when aspectRatioClass is "any"
+    // render at the correct proportions even when aspectRatioClass is "any".
+    // fixedZoneReferenceGeometry() falls back to the zones' bounding box
+    // when lastRecalcGeometry is stale (e.g. cached against a different
+    // screen's orientation).
     if (layout->hasFixedGeometryZones()) {
-        QRectF refGeo = layout->lastRecalcGeometry();
+        const QRectF refGeo = layout->fixedZoneReferenceGeometry();
         if (refGeo.height() > 0) {
             map[QLatin1String("referenceAspectRatio")] = refGeo.width() / refGeo.height();
         }

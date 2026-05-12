@@ -30,13 +30,10 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout, c
 
     // Reference geometry for fixed-pixel zones. Prefer the caller's
     // canvas when provided so the projection is deterministic per-call;
-    // fall back to Layout::lastRecalcGeometry() when the caller didn't
-    // pass one (the historical single-screen path). The canvas parameter
-    // lets two callers on different screens share a Layout* without one
-    // poisoning the other's projection via the shared last-recalc cache.
-    const QRectF refGeo = !canvas.isEmpty()
-        ? QRectF(0, 0, canvas.width(), canvas.height())
-        : (layout->hasFixedGeometryZones() ? layout->lastRecalcGeometry() : QRectF());
+    // otherwise ask the layout for its own reference geometry (which
+    // resolves a stale lastRecalcGeometry to the fixed-zone bounding
+    // box — see Layout::fixedZoneReferenceGeometry).
+    const QRectF refGeo = !canvas.isEmpty() ? QRectF(QPointF(), canvas) : layout->fixedZoneReferenceGeometry();
 
     if (layout->hasFixedGeometryZones() && refGeo.height() > 0) {
         preview.referenceAspectRatio = refGeo.width() / refGeo.height();

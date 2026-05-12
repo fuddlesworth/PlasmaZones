@@ -16,6 +16,7 @@
 #include <PhosphorIdentity/VirtualScreenId.h>
 
 #include "pz_i18n.h"
+#include <memory>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusMessage>
@@ -141,23 +142,27 @@ void EditorController::setTargetScreen(const QString& screenName)
         cacheVirtualScreenGeometry(screenName);
 
         Q_EMIT targetScreenChanged();
-        Q_EMIT targetScreenSizeChanged();
         refreshUsableAreaInsets();
-        m_zoneManager->setReferenceScreenSize(targetScreenSize());
 
-        // Load the layout assigned to this screen
+        // Defer targetScreenSizeChanged + setReferenceScreenSize to
+        // loadLayout/createNewLayout, which know the final reference size
+        // (fixed-zone bounding box for fixed layouts; physical/VS size
+        // otherwise). Emitting here would make QML react with the old
+        // zones against the new size before the layout swap completes.
         if (!screenName.isEmpty() && m_layoutService) {
             QString layoutId = m_layoutService->getLayoutIdForScreen(screenName);
             qCDebug(lcEditor) << "setTargetScreen:" << screenName << "daemon returned layoutId:" << layoutId
                               << "current layoutId:" << previousLayout;
             if (!layoutId.isEmpty()) {
-                // Load the assigned layout
                 loadLayout(layoutId);
             } else {
-                // No layout assigned to this screen - create a new one
                 qCInfo(lcEditor) << "No layout assigned to screen" << screenName << "- creating new layout";
                 createNewLayout();
             }
+        } else {
+            // No layout will be loaded — publish the new size now.
+            Q_EMIT targetScreenSizeChanged();
+            m_zoneManager->setReferenceScreenSize(targetScreenSize());
         }
     }
 }
@@ -302,6 +307,13 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
  */
 void EditorController::createNewLayout()
 {
+    // A fresh layout has no fixed-zone bounding box to reference; if the
+    // previous layout overrode m_virtualScreenSize to its own bbox, revert
+    // to the screen geometry cached by setTargetScreen so QML normalizes
+    // against the real screen size.
+    const QSize prevSize = targetScreenSize();
+    cacheVirtualScreenGeometry(m_targetScreen);
+
     m_layoutId = QUuid::createUuid().toString();
     m_layoutName = PzI18n::tr("New Layout");
     if (m_zoneManager) {
@@ -331,6 +343,17 @@ void EditorController::createNewLayout()
 
     // Refresh available shaders from daemon
     refreshAvailableShaders();
+
+    // Publish the screen-derived reference size if the previous layout had
+    // overridden it to a fixed-zone bounding box, or if setTargetScreen
+    // deferred the emission to us.
+    const QSize newSize = targetScreenSize();
+    if (newSize != prevSize) {
+        Q_EMIT targetScreenSizeChanged();
+    }
+    if (m_zoneManager) {
+        m_zoneManager->setReferenceScreenSize(newSize);
+    }
 
     ++m_zonesVersion;
     Q_EMIT layoutIdChanged();
@@ -395,6 +418,36 @@ void EditorController::loadLayout(const QString& layoutId)
     QJsonObject layoutObj = doc.object();
     m_layoutId = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)].toString();
     m_layoutName = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)].toString();
+
+    // Resolve the final reference size before building zones. Fixed-geometry
+    // layouts normalize against their own zone bounding box (which may differ
+    // from the current screen — e.g. a 3840x2160 layout shown on a 3840x2126
+    // panel-reduced screen). Use a throwaway Layout to ask the canonical
+    // helper rather than re-walking the JSON here.
+    const QSize prevSize = targetScreenSize();
+    {
+        std::unique_ptr<PhosphorZones::Layout> tmp(PhosphorZones::Layout::fromJson(layoutObj));
+        if (tmp) {
+            const QRectF bbox = tmp->fixedZoneBoundingBox();
+            if (!bbox.isEmpty()) {
+                m_virtualScreenSize = QSize(qRound(bbox.width()), qRound(bbox.height()));
+            } else {
+                // Relative-only layout — revert any prior fixed-bbox override
+                // to the screen-derived size cached by setTargetScreen.
+                cacheVirtualScreenGeometry(m_targetScreen);
+            }
+        }
+    }
+    const QSize newSize = targetScreenSize();
+    if (newSize != prevSize) {
+        // Publish the new reference size *before* setZones below so the
+        // QML Repeater's delegate creation sees the correct dimensions on
+        // first sync (otherwise zones jump to recomputed positions).
+        Q_EMIT targetScreenSizeChanged();
+    }
+    if (m_zoneManager) {
+        m_zoneManager->setReferenceScreenSize(newSize);
+    }
 
     // Parse zones
     QVariantList zones;
