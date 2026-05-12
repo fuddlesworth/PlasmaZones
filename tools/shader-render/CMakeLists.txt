@@ -47,9 +47,9 @@ target_link_libraries(plasmazones-shader-render PRIVATE
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickPrivate
-    PhosphorRendering
-    PhosphorWayland
-    PhosphorAudio
+    PhosphorRendering::PhosphorRendering
+    PhosphorWayland::PhosphorWayland
+    PhosphorAudio::PhosphorAudio
 )
 
 # The tool reuses the daemon's ZoneUniformExtension header so the
@@ -89,7 +89,14 @@ if(BUILD_TESTING)
     target_link_libraries(test_shader_render_layoutloader PRIVATE
         Qt6::Test Qt6::Core Qt6::Gui)
     target_compile_features(test_shader_render_layoutloader PRIVATE cxx_std_20)
-    add_test(NAME test_shader_render_layoutloader COMMAND test_shader_render_layoutloader)
+    # WORKING_DIRECTORY pinned to the source tree so tests that read
+    # sample JSON / fixtures via relative paths don't depend on where
+    # ctest is invoked.
+    add_test(
+        NAME test_shader_render_layoutloader
+        COMMAND test_shader_render_layoutloader
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
 
     add_executable(test_shader_render_metadataloader
         tests/test_metadataloader.cpp
@@ -99,5 +106,9 @@ if(BUILD_TESTING)
     target_link_libraries(test_shader_render_metadataloader PRIVATE
         Qt6::Test Qt6::Core Qt6::Gui)
     target_compile_features(test_shader_render_metadataloader PRIVATE cxx_std_20)
-    add_test(NAME test_shader_render_metadataloader COMMAND test_shader_render_metadataloader)
+    add_test(
+        NAME test_shader_render_metadataloader
+        COMMAND test_shader_render_metadataloader
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
 endif()

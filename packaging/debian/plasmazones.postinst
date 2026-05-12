@@ -13,6 +13,16 @@ case "$1" in
             gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
         fi
 
+        # Refresh desktop / MIME databases. Triggers (plasmazones.triggers)
+        # cover /usr/share/applications via dpkg-trigger so these explicit
+        # calls just shorten the warmup window post-install.
+        if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database -q /usr/share/applications 2>/dev/null || true
+        fi
+        if command -v update-mime-database >/dev/null 2>&1; then
+            update-mime-database /usr/share/mime 2>/dev/null || true
+        fi
+
         echo ""
         echo "PlasmaZones: enable the daemon with:"
         echo "  systemctl --user enable --now plasmazones.service"

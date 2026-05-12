@@ -9,6 +9,10 @@ set(kcm_about_SRCS
     kcmabout.h
 )
 
+# kcmutils_add_qml_kcm auto-discovers QML under ui/ via a hardcoded
+# GLOB_RECURSE inside the macro — no QML_FILES arg needed (verify with
+# KCMUtilsMacros.cmake __kcmutils_target_qml_sources). Just keep ui/main.qml
+# in place.
 kcmutils_add_qml_kcm(kcm_plasmazones_about
     SOURCES ${kcm_about_SRCS}
 )

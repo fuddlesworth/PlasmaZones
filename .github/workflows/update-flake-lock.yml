@@ -19,15 +19,22 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        # cachix/install-nix-action v31 — pinned by SHA so a hijacked
+        # tag can't run arbitrary code in this workflow's write-scoped
+        # context.
+        uses: cachix/install-nix-action@08dcb3a5e62fa31e2da3d490afc4176ef55ecd72
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update flake.lock
-        uses: DeterminateSystems/update-flake-lock@main
+        # DeterminateSystems/update-flake-lock v24 — pinned by SHA, same
+        # rationale. Bump when verifying a newer commit on the action.
+        uses: DeterminateSystems/update-flake-lock@a2e3e8e30c66d57e6f64ef9aa6f3a35bb20ddf91
         with:
           pr-title: "chore(nix): update flake.lock"
           pr-labels: dependencies,nix
+          pr-assignees: fuddlesworth
+          pr-reviewers: fuddlesworth

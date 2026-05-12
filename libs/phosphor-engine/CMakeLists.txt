@@ -70,9 +70,18 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
 endif()
 
+# SONAME + symlinks for packagers. SOVERSION is the major (matches the
+# write_basic_package_version_file SameMajorVersion compatibility).
+set_target_properties(PhosphorEngine PROPERTIES
+    VERSION ${PHOSPHORENGINE_VERSION}
+    SOVERSION 0
+)
+
 install(TARGETS PhosphorEngine
     EXPORT PhosphorEngineTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
 )
 
 install(DIRECTORY include/PhosphorEngine

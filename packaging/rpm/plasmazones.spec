@@ -132,11 +132,18 @@ Features:
 %install
 %cmake_install
 
+Requires(post): hicolor-icon-theme
+Requires(post): /usr/bin/gtk-update-icon-cache
+Requires(post): /usr/bin/update-desktop-database
+Requires(post): /usr/bin/update-mime-database
+
 %post
 # Refresh KDE service cache
 /usr/bin/kbuildsycoca6 --noincremental 2>/dev/null || :
-# Update icon cache
+# Update icon / desktop / MIME caches
 /usr/bin/gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
+/usr/bin/update-desktop-database -q %{_datadir}/applications &>/dev/null || :
+/usr/bin/update-mime-database %{_datadir}/mime &>/dev/null || :
 %systemd_user_post plasmazones.service
 echo ""
 echo "PlasmaZones: the KWin effect is enabled by default, but KWin must"
@@ -150,6 +157,8 @@ echo ""
 %postun
 /usr/bin/kbuildsycoca6 --noincremental 2>/dev/null || :
 /usr/bin/gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
+/usr/bin/update-desktop-database -q %{_datadir}/applications &>/dev/null || :
+/usr/bin/update-mime-database %{_datadir}/mime &>/dev/null || :
 %systemd_user_postun_with_restart plasmazones.service
 
 %files
@@ -289,6 +298,13 @@ echo ""
 %{_datadir}/applications/org.plasmazones.settings.desktop
 %{_datadir}/applications/kcm_plasmazones_*.desktop
 
+# D-Bus session activation file (daemon auto-launch on first bus call)
+%{_datadir}/dbus-1/services/org.plasmazones.service
+
+# AppStream metainfo for distro app stores (Discover, GNOME Software, …)
+%{_datadir}/metainfo/org.plasmazones.editor.metainfo.xml
+%{_datadir}/metainfo/org.plasmazones.settings.metainfo.xml
+
 # KGlobalAccel component (display name + icon in Shortcuts KCM)
 %{_datadir}/kglobalaccel/plasmazonesd.desktop
 
@@ -314,3 +330,7 @@ echo ""
 %changelog
 # Generated from CHANGELOG.md by packaging/generate-changelog.sh during CI.
 # Do not edit manually — entries below are overwritten on release.
+# Seed entry so `rpmbuild -bs` against this spec without CI tooling
+# produces a valid SRPM (the generator script replaces it on release).
+* Mon Jan 01 1970 fuddlesworth - 0.0.0-1
+- placeholder

@@ -67,8 +67,6 @@ if(PlasmaActivities_FOUND)
         target_link_libraries(PhosphorWorkspaces PRIVATE Plasma::Activities)
     elseif(TARGET KF6::Activities)
         target_link_libraries(PhosphorWorkspaces PRIVATE KF6::Activities)
-    elseif(TARGET KF5::Activities)
-        target_link_libraries(PhosphorWorkspaces PRIVATE KF5::Activities)
     endif()
 endif()
 
@@ -82,9 +80,16 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
 endif()
 
+set_target_properties(PhosphorWorkspaces PROPERTIES
+    VERSION ${PHOSPHORWORKSPACES_VERSION}
+    SOVERSION 0
+)
+
 install(TARGETS PhosphorWorkspaces
     EXPORT PhosphorWorkspacesTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
 )
 
 install(DIRECTORY include/PhosphorWorkspaces

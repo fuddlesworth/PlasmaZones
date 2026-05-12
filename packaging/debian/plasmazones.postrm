@@ -7,6 +7,18 @@ case "$1" in
         if command -v kbuildsycoca6 >/dev/null 2>&1; then
             kbuildsycoca6 --noincremental 2>/dev/null || true
         fi
+        # Disable the systemd user unit so a stale symlink in any user's
+        # ~/.config/systemd/user/ doesn't point at the now-absent file.
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl --global disable plasmazones.service 2>/dev/null || true
+        fi
+        # Desktop / MIME databases should be told the .desktop is gone.
+        if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database -q /usr/share/applications 2>/dev/null || true
+        fi
+        if command -v update-mime-database >/dev/null 2>&1; then
+            update-mime-database /usr/share/mime 2>/dev/null || true
+        fi
         ;;
 esac
 

@@ -49,7 +49,7 @@ jobs:
           apt-get install -y --no-install-recommends git ca-certificates
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install build dependencies
         run: |
@@ -83,7 +83,7 @@ jobs:
           mv ../*.ddeb dist/ 2>/dev/null || true
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: deb-kde-neon
           path: dist/*.*deb
@@ -108,7 +108,7 @@ jobs:
         run: dnf install -y git rpm-build rpmdevtools
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install build dependencies
         run: |
@@ -127,6 +127,14 @@ jobs:
       - name: Setup rpmbuild
         run: rpmdev-setuptree
 
+      # Template the version FIRST so the source tarball baked into the
+      # SRPM carries the matching spec rather than the 0.0.0 placeholder.
+      - name: Generate RPM changelog and set version from CHANGELOG.md
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
+          bash packaging/generate-changelog.sh rpm
+
       - name: Create source tarball
         run: |
           VERSION="${{ needs.version.outputs.version }}"
@@ -134,12 +142,6 @@ jobs:
           # Copy source files (exclude .git and build artifacts)
           tar --exclude='.git' --exclude='build' -cf - . | tar -xf - -C PlasmaZones-${VERSION}/
           tar czf ~/rpmbuild/SOURCES/plasmazones-${VERSION}.tar.gz PlasmaZones-${VERSION}
-
-      - name: Generate RPM changelog and set version from CHANGELOG.md
-        run: |
-          VERSION="${{ needs.version.outputs.version }}"
-          sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
-          bash packaging/generate-changelog.sh rpm
 
       - name: Build RPM
         run: |
@@ -149,7 +151,7 @@ jobs:
           cp ~/rpmbuild/RPMS/*/*.rpm dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: rpm-fedora-${{ matrix.fedora }}
           path: dist/*.rpm
@@ -173,7 +175,7 @@ jobs:
           zypper -n install git rpm-build rpmdevtools
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install build dependencies
         run: |
@@ -195,18 +197,18 @@ jobs:
       - name: Setup rpmbuild
         run: rpmdev-setuptree
 
+      - name: Generate RPM changelog and set version from CHANGELOG.md
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
+          bash packaging/generate-changelog.sh rpm
+
       - name: Create source tarball
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           mkdir -p PlasmaZones-${VERSION}
           tar --exclude='.git' --exclude='build' -cf - . | tar -xf - -C PlasmaZones-${VERSION}/
           tar czf ~/rpmbuild/SOURCES/plasmazones-${VERSION}.tar.gz PlasmaZones-${VERSION}
-
-      - name: Generate RPM changelog and set version from CHANGELOG.md
-        run: |
-          VERSION="${{ needs.version.outputs.version }}"
-          sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
-          bash packaging/generate-changelog.sh rpm
 
       - name: Build RPM
         run: |
@@ -216,7 +218,7 @@ jobs:
           cp ~/rpmbuild/RPMS/*/*.rpm dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: rpm-opensuse-tumbleweed
           path: dist/*.rpm
@@ -239,7 +241,7 @@ jobs:
           pacman -S --noconfirm git tar
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install build dependencies
         run: |
@@ -295,7 +297,7 @@ jobs:
           tar czf plasmazones-${VERSION}-linux-x86_64.tar.gz "$DIRNAME"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: generic-linux-tarball
           path: plasmazones-*-linux-x86_64.tar.gz
@@ -322,7 +324,7 @@ jobs:
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install build dependencies
         run: |
@@ -406,7 +408,7 @@ jobs:
           mv packaging/arch/*.pkg.tar.zst dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: arch-package
           path: dist/*.pkg.tar.zst
@@ -422,10 +424,11 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        # SHA-pinned to match ci.yml; bump together when verifying a new release.
+        uses: cachix/install-nix-action@08dcb3a5e62fa31e2da3d490afc4176ef55ecd72
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -440,62 +443,14 @@ jobs:
 
       - name: Generate release package.nix
         run: |
-          VERSION="${{ needs.version.outputs.version }}"
-          TARBALL="https://github.com/fuddlesworth/PlasmaZones/archive/refs/tags/v${VERSION}.tar.gz"
-          echo "Fetching source hash for $TARBALL"
-          NIX_HASH=$(nix-prefetch-url --unpack "$TARBALL" 2>/dev/null)
-          SRI_HASH=$(nix hash to-sri --type sha256 "$NIX_HASH")
-          echo "SRI hash: $SRI_HASH"
-
-          # Transform packaging/nix/package.nix into a standalone release file
-          # by replacing src parameter with fetchFromGitHub and baking in version/hash
-          awk -v version="$VERSION" -v hash="$SRI_HASH" '
-            # Replace header comments with release usage
-            NR == 1 {
-              print "# PlasmaZones " version " — Nix package"
-              print "# SPDX-License-Identifier: GPL-3.0-or-later"
-              print "#"
-              print "# Usage:"
-              print "#   environment.systemPackages = ["
-              print "#     (pkgs.callPackage ./plasmazones.nix {})"
-              print "#   ];"
-              next
-            }
-            # Skip remaining header comments
-            !started && /^#/ { next }
-            !started && /^$/ { next }
-            # Begin processing at the parameter list
-            /^\{/ { started = 1 }
-            # Replace src parameter with fetchFromGitHub
-            started && /^  src,$/ { print "  fetchFromGitHub,"; next }
-            # Skip the extractVersion let/in block
-            /^let$/ { in_let = 1; next }
-            in_let && /^in$/ { in_let = 0; next }
-            in_let { next }
-            # Replace dynamic version with hardcoded
-            /version = extractVersion src;/ {
-              print "  version = \"" version "\";"
-              next
-            }
-            # Replace inherit src with fetchFromGitHub block
-            /inherit src;/ {
-              print "  src = fetchFromGitHub {"
-              print "    owner = \"fuddlesworth\";"
-              print "    repo = \"PlasmaZones\";"
-              print "    rev = \"v" version "\";"
-              print "    hash = \"" hash "\";"
-              print "  };"
-              next
-            }
-            # Pass through everything else
-            !in_let { print }
-          ' packaging/nix/package.nix > plasmazones.nix
-
+          # Delegate to the versioned script — keeps the awk pattern in
+          # one place and adds a `nix-instantiate --parse` smoke check.
+          bash packaging/nix/generate-release-nix.sh "${{ needs.version.outputs.version }}"
           echo "=== Generated plasmazones.nix ==="
           cat plasmazones.nix
 
       - name: Upload Nix package artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: nix-package
           path: plasmazones.nix
@@ -511,12 +466,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
 
@@ -626,7 +581,10 @@ jobs:
         run: |
           VERSION="v${{ needs.version.outputs.version }}"
           PRERELEASE_FLAG=""
-          if echo "$VERSION" | grep -qE '(alpha|beta|rc)'; then
+          # Match canonical pre-release suffixes only (semver-like):
+          #   -alpha / -alpha1 / -beta / -rc / -rc.1 / .alpha1 / .rc.2
+          # Tags like v3.0.0-arch1 or v3.0.0.archive are NOT pre-releases.
+          if echo "$VERSION" | grep -qE '[-.](alpha|beta|rc)[.0-9]*$'; then
             PRERELEASE_FLAG="--prerelease"
           fi
 
@@ -657,10 +615,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Download generic tarball artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           name: generic-linux-tarball
           path: dist
@@ -746,11 +704,27 @@ jobs:
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
 
-          # Calculate and update source tarball hash
+          # Calculate and update source tarball hash. Anchor inside the
+          # sha256sums=(...) block via awk so future additional hashes
+          # (e.g. for the .install file) aren't silently left stale.
           TARBALL_URL="https://github.com/fuddlesworth/PlasmaZones/archive/refs/tags/v${VERSION}.tar.gz"
           TARBALL_SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | cut -d' ' -f1)
           echo "Source tarball SHA256: $TARBALL_SHA256"
-          sed -i "s/'[a-f0-9]\{64\}'/'$TARBALL_SHA256'/" PKGBUILD
+          awk -v sum="$TARBALL_SHA256" '
+            /^sha256sums=\(/ {
+              # Replace the entire sha256sums array with a single sum (the
+              # source tarball). Add more entries here when PKGBUILD grows
+              # additional source= lines.
+              print "sha256sums=("
+              print "    \047" sum "\047"
+              print ")"
+              in_block = 1
+              next
+            }
+            in_block && /^\)/ { in_block = 0; next }
+            in_block { next }
+            { print }
+          ' PKGBUILD > PKGBUILD.new && mv PKGBUILD.new PKGBUILD
 
           # Generate .SRCINFO (mount files read-only to avoid chown breaking host git)
           docker run --rm \

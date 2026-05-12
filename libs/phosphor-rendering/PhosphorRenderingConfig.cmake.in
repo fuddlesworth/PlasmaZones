@@ -5,7 +5,7 @@
 
 include(CMakeFindDependencyMacro)
 
-find_dependency(Qt6 COMPONENTS Core Gui Quick)
+find_dependency(Qt6 6.6 COMPONENTS Core Gui Quick)
 # The public header <PhosphorRendering/ShaderNodeRhi.h> includes <rhi/qrhi.h>,
 # which lives in Qt6::GuiPrivate. Downstream consumers must therefore have the
 # private Gui module available; declare it here so find_package(PhosphorRendering)

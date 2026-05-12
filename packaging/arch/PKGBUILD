@@ -39,7 +39,10 @@ optdepends=(
 )
 conflicts=('plasmazones-bin' 'plasmazones-git')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('9661908abffb05fa01ebc8a870202b477f390dae20c80bc91e0a968aa2616b97')
+# 'SKIP' so local `makepkg -p PKGBUILD` doesn't fail integrity-check
+# on the placeholder pkgver. release.yml templates a real sha256 when
+# publishing to AUR (see the awk rewrite in the publish-aur job).
+sha256sums=('SKIP')
 install=plasmazones.install
 
 build() {

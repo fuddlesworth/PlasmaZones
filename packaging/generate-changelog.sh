@@ -34,6 +34,13 @@ parse_changelog() {
         version = substr($0, i+1, j-i-1)
         k = index($0, "] - ")
         date = substr($0, k+4)
+        # Skip the in-progress "Unreleased" section — it has no date and
+        # would produce invalid debian/changelog (Unreleased|<no-date>|...)
+        # entries that dpkg-buildpackage refuses to parse.
+        if (version == "Unreleased" || version == "unreleased") {
+            version = ""
+            date = ""
+        }
         next
     }
     /^### / { next }  # Skip section headers (Added, Fixed, etc.)
@@ -48,8 +55,10 @@ parse_changelog() {
         printf "%s|%s|  %s\n", version, date, $0
     }
     /^$/ { next }
-    /^[^#\-\[ ]/ && version {
-        # Paragraph text (like "Initial packaged release...")
+    /^[^#\-\[ *]/ && version {
+        # Paragraph text (like "Initial packaged release..."). Exclude
+        # markdown bullet "*" so an asterisk-bulleted entry doesnt land
+        # in this branch as a free-text paragraph.
         printf "%s|%s|%s\n", version, date, $0
     }
     ' "$CHANGELOG"
