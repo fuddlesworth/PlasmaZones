@@ -43,6 +43,34 @@ private Q_SLOTS:
         QVERIFY(paths.contains(PP::EditorSnapIn));
     }
 
+    // Pin the post-rename taxonomy: every new path constant from the
+    // zone.* → window.* / editor.* / widget.* split must appear in
+    // allBuiltInPaths(), and no legacy zone.* string may slip back in.
+    void testPostRenameTaxonomyComplete()
+    {
+        const QStringList paths = PP::allBuiltInPaths();
+        // Editor family (layout-editor zone-rect animations).
+        QVERIFY(paths.contains(PP::Editor));
+        QVERIFY(paths.contains(PP::EditorSnapIn));
+        QVERIFY(paths.contains(PP::EditorSnapOut));
+        QVERIFY(paths.contains(PP::EditorSnapResize));
+        // Window snap family (kwin-effect window-quad animations).
+        QVERIFY(paths.contains(PP::WindowSnapIn));
+        QVERIFY(paths.contains(PP::WindowSnapOut));
+        QVERIFY(paths.contains(PP::WindowSnapResize));
+        QVERIFY(paths.contains(PP::WindowLayoutSwitch));
+        // Widget zone-rect highlight family.
+        QVERIFY(paths.contains(PP::WidgetZoneHighlight));
+        QVERIFY(paths.contains(PP::WidgetZoneHighlightPop));
+        QVERIFY(paths.contains(PP::WidgetZoneHighlightBorder));
+        QVERIFY(paths.contains(PP::WidgetZoneOverlayFlash));
+        // No regression: legacy zone.* strings must not reappear.
+        for (const QString& path : paths) {
+            QVERIFY2(!path.startsWith(QLatin1String("zone.")) && path != QLatin1String("zone"),
+                     qPrintable(QStringLiteral("legacy zone.* path leaked back into allBuiltInPaths(): ") + path));
+        }
+    }
+
     // ─── Resolve walk-up ───
 
     void testResolveEmptyTreeReturnsLibraryDefaults()

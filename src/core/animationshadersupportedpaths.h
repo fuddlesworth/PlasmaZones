@@ -53,9 +53,16 @@ inline QStringList shaderConsumedLeafEventPaths()
         // applySnapGeometry / daemon_apply chokepoints. Each routes
         // through tryBeginShaderForEvent so the user can pick a
         // distinct shader per snap event.
+        //
+        // `window.snapResize` is intentionally NOT listed: no
+        // kwin-effect callsite passes it today (the resize-only
+        // branch of applySnapGeometry currently inherits the
+        // snap-in shader). Adding a resize-only shader leg is a
+        // feature, not a rename — the path constant exists for
+        // motion tuning but the shader picker stays hidden until
+        // a caller wires it through tryBeginShaderForEvent.
         PP::WindowSnapIn,
         PP::WindowSnapOut,
-        PP::WindowSnapResize,
         PP::WindowLayoutSwitch,
     };
 }

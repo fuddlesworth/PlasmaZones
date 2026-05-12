@@ -178,7 +178,7 @@ QString parentPath(const QString& path)
     }
     const int dotIdx = path.lastIndexOf(QLatin1Char('.'));
     if (dotIdx < 0) {
-        // Category root ("window", "zone", …) → Global.
+        // Category root ("window", "editor", "widget", …) → Global.
         return Global;
     }
     return path.left(dotIdx);

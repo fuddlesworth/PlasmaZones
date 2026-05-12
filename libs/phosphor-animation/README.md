@@ -118,7 +118,7 @@ shaders.refresh();
 
 ShaderProfile sp = shaderProfileTree.profileFor(QStringLiteral("window.open"));
 QString effectId    = sp.effectId.value_or(QStringLiteral("dissolve"));
-QVariantMap params  = sp.params.value_or(QVariantMap{});
+QVariantMap params  = sp.parameters.value_or(QVariantMap{});
 ```
 
 ## Design notes

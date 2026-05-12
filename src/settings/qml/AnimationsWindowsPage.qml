@@ -10,6 +10,11 @@ SettingsFlickable {
     Accessible.name: i18n("Window animation events")
 
     ColumnLayout {
+        // `window.snapResize` (resize-only branch of applySnapGeometry)
+        // is intentionally NOT exposed here: no kwin-effect callsite
+        // routes a resize-only event through tryBeginShaderForEvent
+        // today, so a card here would be runtime-dead.
+
         id: col
 
         width: parent.width
@@ -77,12 +82,6 @@ SettingsFlickable {
             Layout.fillWidth: true
             eventPath: "window.snapOut"
             eventLabel: i18n("Snap Out of Zone")
-        }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window.snapResize"
-            eventLabel: i18n("Snap Resize")
         }
 
         AnimationEventCard {

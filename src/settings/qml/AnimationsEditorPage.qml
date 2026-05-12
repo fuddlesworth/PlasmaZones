@@ -29,13 +29,13 @@ SettingsFlickable {
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "editor.snapIn"
-            eventLabel: i18n("Snap In (Fill)")
+            eventLabel: i18n("Snap Into Zone (Fill Preview)")
         }
 
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "editor.snapOut"
-            eventLabel: i18n("Snap Out")
+            eventLabel: i18n("Snap Out of Zone")
         }
 
         AnimationEventCard {

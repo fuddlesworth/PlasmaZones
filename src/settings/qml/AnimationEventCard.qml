@@ -135,7 +135,7 @@ Item {
 
     function parentChainText() {
         var chain = settingsController.animationsPage.parentChain(root.eventPath);
-        // Drop chain[0] (self) — show only ancestors as "zone ← global"
+        // Drop chain[0] (self) — show only ancestors as "window ← global"
         if (chain.length <= 1)
             return "";
 

@@ -136,10 +136,10 @@ private Q_SLOTS:
 
         // Find the "editor" section's "editor" entry — it should be flagged
         // isCategory=true because editor.snapIn etc. live under it.
-        bool foundZoneCategory = false;
-        bool zoneCategoryFlag = false;
-        bool foundZoneSnapIn = false;
-        bool zoneSnapInCategoryFlag = true; // pessimistic default
+        bool foundEditorCategory = false;
+        bool editorCategoryFlag = false;
+        bool foundEditorSnapIn = false;
+        bool editorSnapInCategoryFlag = true; // pessimistic default
         for (const QVariant& sectionVar : sections) {
             const QVariantMap section = sectionVar.toMap();
             if (section.value(QStringLiteral("section")).toString() != QLatin1String("editor"))
@@ -148,18 +148,18 @@ private Q_SLOTS:
                 const QVariantMap m = entry.toMap();
                 const QString path = m.value(QStringLiteral("path")).toString();
                 if (path == QLatin1String("editor")) {
-                    foundZoneCategory = true;
-                    zoneCategoryFlag = m.value(QStringLiteral("isCategory")).toBool();
+                    foundEditorCategory = true;
+                    editorCategoryFlag = m.value(QStringLiteral("isCategory")).toBool();
                 } else if (path == QLatin1String("editor.snapIn")) {
-                    foundZoneSnapIn = true;
-                    zoneSnapInCategoryFlag = m.value(QStringLiteral("isCategory")).toBool();
+                    foundEditorSnapIn = true;
+                    editorSnapInCategoryFlag = m.value(QStringLiteral("isCategory")).toBool();
                 }
             }
         }
-        QVERIFY(foundZoneCategory);
-        QVERIFY(foundZoneSnapIn);
-        QVERIFY2(zoneCategoryFlag, "'zone' should be flagged as a category — it has children");
-        QVERIFY2(!zoneSnapInCategoryFlag, "'editor.snapIn' is a leaf — not a category");
+        QVERIFY(foundEditorCategory);
+        QVERIFY(foundEditorSnapIn);
+        QVERIFY2(editorCategoryFlag, "'editor' should be flagged as a category: it has children");
+        QVERIFY2(!editorSnapInCategoryFlag, "'editor.snapIn' is a leaf: not a category");
     }
 
     // ─── Override CRUD ────────────────────────────────────────────────────
@@ -293,7 +293,7 @@ private Q_SLOTS:
         AnimationsPageController c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        // Override the parent (zone) but not the leaf (editor.snapIn). The
+        // Override the parent (editor) but not the leaf (editor.snapIn). The
         // leaf must inherit the parent's duration via walk-up.
         QVERIFY(c.setOverride(QStringLiteral("editor"), {{QStringLiteral("duration"), 222}}));
 
@@ -353,7 +353,7 @@ private Q_SLOTS:
         QVERIFY(!c.setOverride(QStringLiteral("../etc/passwd"), {{QStringLiteral("duration"), 100}}));
         QVERIFY(!c.setOverride(QStringLiteral("../../bad"), {{QStringLiteral("duration"), 100}}));
         QVERIFY(!c.setOverride(QStringLiteral("..\\windows-path"), {{QStringLiteral("duration"), 100}}));
-        QVERIFY(!c.setOverride(QStringLiteral("zone/../../etc"), {{QStringLiteral("duration"), 100}}));
+        QVERIFY(!c.setOverride(QStringLiteral("editor/../../etc"), {{QStringLiteral("duration"), 100}}));
         // Plausible-looking but unknown paths are also rejected
         // (membership in allBuiltInPaths is the gate, not just lexical
         // shape).

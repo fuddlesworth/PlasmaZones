@@ -30,7 +30,7 @@ namespace PhosphorAnimationShaders {
 ///   • **Compositor (window-content) execution** — `kwin-effect` running
 ///     inside the KWin compositor process. Uses classic OpenGL via
 ///     `KWin::GLShader`. Animates window contents during lifecycle
-///     events (`window.open`, `window.move`, `editor.snapIn`, …).
+///     events (`window.open`, `window.move`, `window.snapIn`, …).
 ///
 ///   • **Daemon (overlay-surface) execution** — `SurfaceAnimator::runLeg`
 ///     in the PlasmaZones daemon. Uses Qt RHI via
@@ -157,8 +157,10 @@ namespace AnimationShaderContract {
 ///   • Compositor (kwin-effect): `paintWindow` reads progress from either
 ///     the time-based (`(now - startTimeMs) / durationMs`, linear) or
 ///     `m_windowAnimator->animationFor(w)` (curved by the geometry
-///     animation's profile). Lifecycle events ride the linear branch;
-///     `zone.*` events ride the curved one.
+///     animation's profile). Lifecycle events (`window.open`,
+///     `window.close`, focus etc.) ride the linear branch;
+///     `window.snap*` / `window.layoutSwitch` events ride the curved
+///     one (their geometry tween drives progress).
 ///   • Daemon (SurfaceAnimator): the `shaderTime` AnimatedValue runs
 ///     under the resolved `showShaderProfile` / `hideShaderProfile`
 ///     curve, falling back to the opacity profile's curve when the
