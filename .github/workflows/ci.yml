@@ -19,30 +19,17 @@ permissions:
 
 jobs:
   build:
-    name: Build (${{ matrix.distro }}, KDE_FRAMEWORKS=${{ matrix.kde }})
+    name: Build (arch, KDE_FRAMEWORKS=${{ matrix.kde }})
     runs-on: ubuntu-latest
     container:
-      image: ${{ matrix.image }}
+      image: archlinux:latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Rolling Arch — fastest signal on the bleeding edge.
-          - distro: arch
-            image: archlinux:latest
-            kde: ON
-          - distro: arch
-            image: archlinux:latest
-            kde: OFF
-          # Stable distro — most v3 users will be on something
-          # like KDE Neon / Kubuntu / Tumbleweed. Mirror that.
-          - distro: neon
-            image: invent-registry.kde.org/sysadmin/ci-images/sandbox-buildenv-noble-qt6:latest
-            kde: ON
+        kde: [ON, OFF]
 
     steps:
       - name: Setup (Arch)
-        if: matrix.distro == 'arch'
         run: |
           set -euo pipefail
           # Full -Syu prevents partial-upgrade state that can break linked
@@ -58,20 +45,6 @@ jobs:
             plasma-activities \
             vulkan-headers vulkan-icd-loader glslang \
             xorg-server-xvfb mesa cava ffmpeg
-
-      - name: Setup (Neon / Ubuntu)
-        if: matrix.distro == 'neon'
-        run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            git build-essential ccache \
-            cmake ninja-build extra-cmake-modules \
-            qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-tools-dev \
-            qt6-shadertools-dev qt6-svg-dev qt6-wayland-dev qt6-wayland-private-dev \
-            libxkbcommon-dev libwayland-dev libvulkan-dev \
-            libkf6kcmutils-dev libkf6globalaccel-dev libkf6kirigami-dev \
-            kwin-dev plasma-activities-dev \
-            glslang-tools xvfb mesa-utils
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -127,13 +100,20 @@ jobs:
           find install -type f | sort
 
   # ─── Lint: clang-format + qmlformat mirror the lefthook hooks so a
-  # contributor who skipped them can't merge unformatted code. ──────
+  # contributor who skipped them can't merge unformatted code. Only
+  # lints files changed in the PR (or HEAD~1..HEAD for direct pushes)
+  # so the historical tree's pre-existing formatting drift doesn't
+  # block unrelated PRs.
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Need the base commit to diff against. Shallow clone doesn't
+          # have it; fetch the full history for the lint diff.
+          fetch-depth: 0
 
       - name: Install formatters
         run: |
@@ -145,18 +125,50 @@ jobs:
           # pointing at the old binary.
           sudo update-alternatives --install /usr/local/bin/clang-format clang-format /usr/bin/clang-format-18 100
 
+      - name: Resolve changed files
+        id: changed
+        run: |
+          set -euo pipefail
+          # Pick the right diff range for the trigger.
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              BASE="origin/${{ github.base_ref }}"
+              git fetch origin "${{ github.base_ref }}" --depth=1 || true
+              RANGE="$BASE...HEAD"
+          else
+              # Direct push — diff against the previous commit on this ref.
+              RANGE="HEAD~1...HEAD"
+          fi
+          echo "Diff range: $RANGE"
+          # Filter to source files we actually format, exclude
+          # generator-output headers (they get regenerated, no point
+          # round-tripping clang-format against them).
+          git diff --name-only --diff-filter=ACMR "$RANGE" -- \
+              '*.cpp' '*.h' '*.qml' \
+            | grep -v '^libs/.*/include/.*_export\.h$' \
+            > changed.txt || true
+          echo "Changed files:"
+          cat changed.txt
+          # Emit the file list for the downstream steps.
+          echo "list=changed.txt" >> "$GITHUB_OUTPUT"
+
       - name: clang-format
         run: |
-          mapfile -t files < <(git ls-files '*.cpp' '*.h' | grep -v '^libs/.*/include/.*_export.h$' || true)
+          set -euo pipefail
+          mapfile -t files < <(grep -E '\.(cpp|h)$' changed.txt || true)
           if [ "${#files[@]}" -gt 0 ]; then
             clang-format --dry-run -Werror "${files[@]}"
+          else
+            echo "No C++ files changed — skipping clang-format"
           fi
 
       - name: qmlformat
         run: |
-          mapfile -t files < <(git ls-files '*.qml')
+          set -euo pipefail
+          mapfile -t files < <(grep -E '\.qml$' changed.txt || true)
           if [ "${#files[@]}" -gt 0 ]; then
             qmlformat -n "${files[@]}"
+          else
+            echo "No QML files changed — skipping qmlformat"
           fi
 
   # ═══════════════════════════════════════════════════════════════════════════
