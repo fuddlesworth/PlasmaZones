@@ -59,7 +59,7 @@
     </filter>
 
     <clipPath id="clip">
-      <rect x="96" y="96" width="832" height="832" rx="190"/>
+      <rect x="132" y="132" width="760" height="760" rx="170"/>
     </clipPath>
   </defs>
 
