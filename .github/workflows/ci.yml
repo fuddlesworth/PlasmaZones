@@ -104,10 +104,34 @@ jobs:
   # lints files changed in the PR (or HEAD~1..HEAD for direct pushes)
   # so the historical tree's pre-existing formatting drift doesn't
   # block unrelated PRs.
+  #
+  # Runs in an Arch container so clang-format ships from the same
+  # `clang` package that contributors use locally (KDE/Plasma devs are
+  # overwhelmingly on Arch / rolling distros). clang-format's
+  # SpaceInEmptyBlock-style behaviour diverges between major versions
+  # (notably 18 vs 22 for empty lambda bodies and 22 vs 19/20 for
+  # initializer-list packing), so pinning CI to whatever Ubuntu ships
+  # would force every contributor to also keep an older clang-format
+  # on PATH for the pre-commit hook to agree with CI.
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
     steps:
+      - name: Setup (Arch)
+        run: |
+          set -euo pipefail
+          # Match the build job's full -Syu — partial-upgrade state
+          # can leave clang dynamically linked against stale base libs.
+          pacman -Syu --noconfirm
+          # `clang` package contains clang-format (no separate
+          # clang-format package on Arch). `qt6-declarative` provides
+          # qmlformat. `git` is needed for the diff range and isn't
+          # preinstalled in the base archlinux image.
+          pacman -S --noconfirm --needed clang qt6-declarative git
+          clang-format --version
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -115,20 +139,14 @@ jobs:
           # have it; fetch the full history for the lint diff.
           fetch-depth: 0
 
-      - name: Install formatters
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-format-18 qt6-declarative-dev-tools
-          # update-alternatives instead of a hand-rolled symlink so an
-          # image bump to clang-format-19 picks up the newer version
-          # without leaving a dangling /usr/local/bin/clang-format
-          # pointing at the old binary.
-          sudo update-alternatives --install /usr/local/bin/clang-format clang-format /usr/bin/clang-format-18 100
-
       - name: Resolve changed files
         id: changed
         run: |
           set -euo pipefail
+          # Container runs as root but the checkout files are owned by a
+          # different UID — git refuses operations on "dubiously owned"
+          # repos. Whitelist the workspace so the diff/fetch below run.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           # Pick the right diff range for the trigger.
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
               BASE="origin/${{ github.base_ref }}"
