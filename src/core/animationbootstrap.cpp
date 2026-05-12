@@ -176,7 +176,7 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         QLatin1StringView curveSpec;
         qreal durationMs;
     };
-    constexpr std::array<FamilySeed, 28> seeds{{
+    constexpr std::array<FamilySeed, 29> seeds{{
         // ── Popups ────────────────────────────────────────────────
         // Family parent — leaves (popup.layoutPicker.*,
         // popup.zoneSelector.*, popup.snapAssist.*) inherit from this.
@@ -238,10 +238,17 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         {QLatin1StringView{"window"}, QLatin1StringView{"widget-out"}, 200.0},
         {QLatin1StringView{"window.close"}, QLatin1StringView{"cubic-in"}, 150.0},
 
-        // ── Zones ─────────────────────────────────────────────────
-        // Snap in/out/resize, layout switch, and highlight all
-        // hover around 200 ms ease-out.
-        {QLatin1StringView{"zone"}, QLatin1StringView{"widget-out"}, 200.0},
+        // ── Editor ────────────────────────────────────────────────
+        // Layout-editor fill-preview / snap-resize animations on the
+        // editor's zone-rect outlines. NOT runtime window snapping —
+        // that's KWin's domain. ~200 ms ease-out family root.
+        {QLatin1StringView{"editor"}, QLatin1StringView{"widget-out"}, 200.0},
+
+        // ── Widget zone-rect ──────────────────────────────────────
+        // Reusable Zone widget (ZoneItem.qml et al.) embedded across
+        // overlay surfaces, settings dialogs, layout thumbnails. The
+        // highlight family root inherits the widget OutCubic feel.
+        {QLatin1StringView{"widget.zoneHighlight"}, QLatin1StringView{"widget-out"}, 200.0},
 
         // No `workspace.*` seeds: virtual-desktop transitions are KWin's
         // compositor-level domain (Slide / Fade Desktop / etc.). PZ does

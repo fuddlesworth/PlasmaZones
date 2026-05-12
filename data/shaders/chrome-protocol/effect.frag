@@ -548,48 +548,54 @@ float sideUI(vec2 p) {
 }
 
 // Combined overlay layout (mirrors original overlayUI positions).
-float overlayUI(vec2 p, float audioVal, float audioReact, bool useSpectrum) {
+//
+// xScale contracts the X anchor distances toward the zone centre when the
+// caller's aspect-corrected unit space is narrower than the HUD was
+// designed for (~|x| up to 0.85). Without it, narrow / square zones lose
+// every mirrored anchor past ±zAspect/2 to the rounded-rect mask — see
+// the call in renderZoneChrome where this is computed against zAspect.
+float overlayUI(vec2 p, float audioVal, float audioReact, bool useSpectrum, float xScale) {
     vec2 prevP = p;
-    float d = numberWithCircleUI(p - vec2(0.56, -0.34), audioVal);
+    float d = numberWithCircleUI(p - vec2(0.56 * xScale, -0.34), audioVal);
 
     // Bottom / top block strips — spectrum bars if audio, else original blockUI
-    p.x = abs(p.x) - 0.56;
+    p.x = abs(p.x) - 0.56 * xScale;
     p.y -= 0.45;
     float bars = useSpectrum ? spectrumBarsUI(p, audioReact) : blockUI(p);
     d = min(d, bars);
     p = prevP;
 
-    p.x = abs(p.x) - 0.72;
+    p.x = abs(p.x) - 0.72 * xScale;
     p.y -= 0.35;
     d = min(d, smallCircleUI2(p));
     p = prevP;
-    d = min(d, smallCircleUI2(p - vec2(-0.39, -0.42)));
+    d = min(d, smallCircleUI2(p - vec2(-0.39 * xScale, -0.42)));
 
     p = prevP;
-    p.x -= 0.58;
+    p.x -= 0.58 * xScale;
     p.y -= 0.07;
     p.y = abs(p.y) - 0.12;
     d = min(d, smallCircleUI(p));
 
     p = prevP;
-    d = min(d, rectUI(p - vec2(-0.58, -0.3)));
+    d = min(d, rectUI(p - vec2(-0.58 * xScale, -0.3)));
 
-    vec2 gp = prevP - vec2(-0.58, 0.1);
+    vec2 gp = prevP - vec2(-0.58 * xScale, 0.1);
     gp.x = abs(gp.x) - 0.05;
     d = min(d, graphUI(gp, audioReact));
 
     p = prevP;
-    p.x = abs(p.x) - 0.72;
+    p.x = abs(p.x) - 0.72 * xScale;
     p.y -= 0.13;
     d = min(d, staticUI(p));
 
     p = prevP;
-    p.x = abs(p.x) - 0.51;
+    p.x = abs(p.x) - 0.51 * xScale;
     p.y -= 0.35;
     d = min(d, arrowUI(p));
 
     p = prevP;
-    p.x = abs(p.x) - 0.82;
+    p.x = abs(p.x) - 0.82 * xScale;
     d = min(d, sideUI(p));
     return d;
 }
@@ -778,9 +784,17 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
             float zAspect = rectSize.x / max(rectSize.y, 1.0);
             vec2 ouv = (localUV - 0.5) * vec2(zAspect, 1.0);
             ouv.y = -ouv.y; // localUV is Y-down; overlay panels expect Y-up
+            // HUD anchor distances are designed for |ouv.x| up to ~0.85
+            // (sideUI sits at ±0.82). Narrow / square zones only reach
+            // ±zAspect/2 before hitting the rounded-rect mask, so contract
+            // the mirrored X anchors uniformly to keep every element
+            // inside the zone. Wider zones cap the scale at 1.0 so the
+            // layout matches the original design.
+            const float kHudHalfX = 0.85;
+            float xScale = min(1.0, (zAspect * 0.5) / kHudHalfX);
             bool useSpec = g.spectrumOn > 0.5 && g.hasAudio;
             float od = overlayUI(ouv, g.aAll / max(g.audioReact, 0.01),
-                                 g.audioReact, useSpec);
+                                 g.audioReact, useSpec, xScale);
             float om = 1.0 - smoothstep(0.0, 2.5 / max(rectSize.y, 1.0), od);
             vec3 overlayTint = mix(zChromeCol, g.scanCol, 0.3 + g.aBass * 0.3);
             col = mix(col, overlayTint * 1.3 * g.hudBright * highlightBoost, om);

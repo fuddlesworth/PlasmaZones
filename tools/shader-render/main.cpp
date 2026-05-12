@@ -176,6 +176,14 @@ int main(int argc, char* argv[])
         QStringLiteral("path"), defaultLayoutDir());
     parser.addOption(layoutDirOpt);
 
+    QCommandLineOption stillHighlightOpt(
+        QStringLiteral("still-highlight"),
+        QStringLiteral("Pin a specific zone (1-based zone number) as the only highlighted zone "
+                       "for every frame. Disables the cycling demo schedule. Useful for thumbnail "
+                       "captures that want a deterministic hero zone. Defaults to 0 (cycling)."),
+        QStringLiteral("ZONE_NUMBER"), QStringLiteral("0"));
+    parser.addOption(stillHighlightOpt);
+
     parser.process(app);
 
     if (!parser.isSet(shaderOpt)) {
@@ -272,6 +280,14 @@ int main(int argc, char* argv[])
     opts.frameCount = frameCount;
     opts.fps = fps;
     opts.audio = audio.get();
+
+    bool stillHighlightOk = false;
+    const int stillHighlightZone = parser.value(stillHighlightOpt).toInt(&stillHighlightOk);
+    if (!stillHighlightOk || stillHighlightZone < 0) {
+        std::cerr << "error: --still-highlight must be a non-negative integer (0 = disabled)\n";
+        return 2;
+    }
+    opts.stillHighlightZone = stillHighlightZone;
 
     auto sink = PlasmaZones::ShaderRender::makeFrameSink(outPath, outputSize, fps);
     if (!sink) {

@@ -151,7 +151,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             // dimensions. Logically a snap-out (the window is leaving zone-managed sizing),
             // not an in-zone resize.
             applySnapGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                              PhosphorAnimation::ProfilePaths::ZoneSnapOut);
+                              PhosphorAnimation::ProfilePaths::WindowSnapOut);
         }
         return;
     }
@@ -195,8 +195,8 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // autotile drag-to-float, drag-out unsnap). Non-empty zoneId = snap into a target zone. The
     // shader-tree path differs accordingly so users can give snap-in and snap-out distinct effects.
     applySnapGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                      zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::ZoneSnapOut
-                                       : PhosphorAnimation::ProfilePaths::ZoneSnapIn);
+                      zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
+                                       : PhosphorAnimation::ProfilePaths::WindowSnapIn);
     // Note: windowSnapped/recordSnapIntent are NOT called here. For daemon-driven
     // navigation, the daemon handles zone bookkeeping internally before emitting
     // applyGeometryRequested. For legacy callers (autotile float restore via
@@ -276,11 +276,11 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
 
     // Map the daemon's action string to a shader-tree ProfilePath. "resnap" / "retile" are layout
     // changes (different layout or autotile recompute) — semantically a layout switch. "rotate"
-    // moves windows between existing zones in the same layout — a snap-in. Default to ZoneSnapIn
+    // moves windows between existing zones in the same layout — a snap-in. Default to WindowSnapIn
     // for unknown actions (forward-compat with future daemon-emitted strings).
     const QString batchProfilePath = (action == QLatin1String("resnap") || action == QLatin1String("retile"))
-        ? PhosphorAnimation::ProfilePaths::ZoneLayoutSwitchIn
-        : PhosphorAnimation::ProfilePaths::ZoneSnapIn;
+        ? PhosphorAnimation::ProfilePaths::WindowLayoutSwitch
+        : PhosphorAnimation::ProfilePaths::WindowSnapIn;
 
     applyStaggeredOrImmediate(
         pending.size(),

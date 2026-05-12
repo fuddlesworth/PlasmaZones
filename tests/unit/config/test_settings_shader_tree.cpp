@@ -256,7 +256,7 @@ private Q_SLOTS:
             PhosphorAnimationShaders::ShaderProfile pixelate;
             pixelate.effectId = QStringLiteral("pixelate");
             // Stale leaf at an unsupported subtree.
-            tree.setOverride(QStringLiteral("zone.snapIn"), pixelate);
+            tree.setOverride(QStringLiteral("editor.snapIn"), pixelate);
             // Supported leaf the user has set since.
             PhosphorAnimationShaders::ShaderProfile slide;
             slide.effectId = QStringLiteral("slide");
@@ -268,7 +268,7 @@ private Q_SLOTS:
         // Settings::shaderProfileTree() must return the pruned view.
         Settings s;
         const auto loaded = s.shaderProfileTree();
-        QVERIFY2(!loaded.hasOverride(QStringLiteral("zone.snapIn")),
+        QVERIFY2(!loaded.hasOverride(QStringLiteral("editor.snapIn")),
                  "read-side prune must drop overrides on unsupported paths even before the next save");
         QVERIFY2(loaded.hasOverride(QStringLiteral("osd.show")), "supported path must survive read-side prune");
     }

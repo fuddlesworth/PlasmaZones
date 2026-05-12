@@ -190,7 +190,7 @@ Rectangle {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "zone.highlight"
+                profile: "widget.zoneHighlight"
                 durationOverride: constants.animationDuration
             }
 
@@ -257,7 +257,7 @@ Rectangle {
     // Color animation
     Behavior on color {
         PhosphorMotionAnimation {
-            profile: "zone.highlight"
+            profile: "widget.zoneHighlight"
             durationOverride: constants.animationDuration
         }
 
@@ -267,16 +267,16 @@ Rectangle {
     // (matches the original `duration: animationDuration / 2` pattern).
     Behavior on border.width {
         PhosphorMotionAnimation {
-            profile: "zone.highlight.border"
+            profile: "widget.zoneHighlight.border"
             durationOverride: Math.round(constants.animationDuration / 2)
         }
 
     }
 
-    // Scale uses zone.highlight.pop for the OutBack overshoot=1.20 feel.
+    // Scale uses widget.zoneHighlight.pop for the OutBack overshoot=1.20 feel.
     Behavior on scale {
         PhosphorMotionAnimation {
-            profile: "zone.highlight.pop"
+            profile: "widget.zoneHighlight.pop"
             durationOverride: constants.animationDuration
         }
 

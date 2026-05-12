@@ -475,7 +475,7 @@ QString AnimationsPageController::userProfilesDir() const
 
 QString AnimationsPageController::profileFilePath(const QString& path) const
 {
-    // Filenames mirror the path (e.g. `zone.snapIn.json`) — same
+    // Filenames mirror the path (e.g. `editor.snapIn.json`) — same
     // convention as the daemon's shipped defaults. Validation on @p
     // path happens at every call site so this helper trusts its input;
     // assert in debug builds so a future caller that forgets the gate

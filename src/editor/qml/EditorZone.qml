@@ -499,8 +499,12 @@ Item {
                     // so the leg is decided synchronously when the multi-
                     // selection state flips, not from the animated `opacity`
                     // (which interpolates during the Behavior).
+
+                    // The override shortcuts widget.fadeOut's seeded 400 ms
+                    // tail: a small confirmation badge needs snappy state
+                    // feedback in both directions, not a graceful exit.
                     profile: root.isPartOfMultiSelection ? "widget.fadeIn" : "widget.fadeOut"
-                    durationOverride: 100
+                    durationOverride: Kirigami.Units.shortDuration
                 }
 
             }
@@ -645,8 +649,7 @@ Item {
         enabled: root.animateFillPreview
 
         PhosphorMotionAnimation {
-            profile: "zone.snapResize"
-            durationOverride: 150
+            profile: "editor.snapResize"
         }
 
     }
@@ -655,8 +658,7 @@ Item {
         enabled: root.animateFillPreview
 
         PhosphorMotionAnimation {
-            profile: "zone.snapResize"
-            durationOverride: 150
+            profile: "editor.snapResize"
         }
 
     }
@@ -665,8 +667,7 @@ Item {
         enabled: root.animateFillPreview
 
         PhosphorMotionAnimation {
-            profile: "zone.snapResize"
-            durationOverride: 150
+            profile: "editor.snapResize"
         }
 
     }
@@ -675,8 +676,7 @@ Item {
         enabled: root.animateFillPreview
 
         PhosphorMotionAnimation {
-            profile: "zone.snapResize"
-            durationOverride: 150
+            profile: "editor.snapResize"
         }
 
     }

@@ -196,7 +196,7 @@ private:
      * live-reload watchers. Registers the daemon's active animation
      * Profile under every well-known `ProfilePaths` shell path that
      * maps to PlasmaZones's single-Profile settings surface so QML
-     * consumers can reference specific paths (`zone.highlight`,
+     * consumers can reference specific paths (`widget.zoneHighlight`,
      * `osd.show`, etc.) without the daemon carrying per-event
      * sub-profiles — future sub-commits can diverge paths when
      * per-event customisation is actually exposed to users.

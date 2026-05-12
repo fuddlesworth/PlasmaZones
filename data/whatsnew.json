@@ -1,6 +1,32 @@
 {
     "releases": [
         {
+            "version": "3.0.0",
+            "date": "2026-05-12",
+            "highlights": [
+                "Virtual screens for ultrawide monitors: subdivide a physical monitor into independent logical screens, each with its own layouts, autotile state, snap-assist, OSDs, shortcuts, and per-desktop or per-activity assignments. New swap and rotate actions with a confirmation OSD",
+                "Animation App Rules let you assign motion curves, shader overrides, and per-event timings to specific apps. A two-layer resolver with leaf seeds gives widgets distinctive tunings even when they share a parent rule",
+                "New animation engine with vertex-shader plumbing and live-texture sampling, plus 47 ported transition shaders: 28 from niri, 9 from Burn-My-Windows, 10 BMW-inspired originals, an audio-reactive neon-city cityscape, a Matrix rain port, a 3D chrome-protocol rewrite, and user-texture support",
+                "Unified PassiveOverlayShell: OSDs, snap-assist, layout picker, zone selector, and zone overlay all run in one click-through shell with independent slot animations and explicit z-order, replacing the legacy NotificationOverlay",
+                "Krohnkite-style autotile: drag a tiled window onto another to reorder slots live, and a new Unlimited overflow lets the stack grow past the algorithm's natural cap instead of evicting windows",
+                "Animations settings overhauled into drill-down sub-pages with motion sets for themed override bundles, a per-event shader picker, a generic shader browser, and a separate Snapping Shaders page",
+                "Layout ordering for cycling: cycle shortcuts follow a user-configurable order set per-mode under Settings → Snapping or Tiling → Ordering, instead of the implicit save-time order",
+                "Per-mode disable lists: snapping and autotiling each have their own exclusion lists for monitors, virtual desktops, and activities, with the disabled-context OSD pointing the user at the right toggle",
+                "Hold and toggle controls now work in always-active mode (#249): a binding like Right Mouse Button activates when always-active is off and deactivates when on, FancyZones-style",
+                "Global \"auto-assign new windows for all layouts\" master toggle (#370) and a separate \"Desktop switch OSD\" toggle (#372)",
+                "Drag protocol rewritten so the daemon owns all drag routing decisions (#310), eliminating the ~40s dead-drag stalls reported when settings reload mid-drag",
+                "Meta-F float toggle now runs daemon-local (#310): sub-50ms keypress to toggle instead of stalling on D-Bus backpressure across four hops",
+                "Native-feeling wheel scroll across every settings page (#405) using Kirigami.WheelHandler for Plasma-aware scroll speed",
+                "Phosphor SDK: core services are extracted into reusable LGPL libraries covering engine, layout-api, animation, shaders, workspaces, placement, tiles, zones, screens, snap-engine, tile-engine, config, fsloader, shell-patterns, wayland, and layer. A new phosphor-compositor SDK lets third-party Wayland compositors host the placement, tiling, and overlay services without depending on KWin",
+                "Fixed brand-new virtual desktops not picking up the user's default mode and layout (#368)",
+                "Fixed snap-assist showing windows from other virtual desktops as occupied (#323)",
+                "Fixed per-activity layout assignments losing to per-monitor defaults in the layout registry precedence order (#413)",
+                "Fixed the Layouts context menu eventually failing to open after enough show and hide cycles (#406)",
+                "Fixed autotile shortcut adjustments to master ratio and master count not persisting across reloads (#271)",
+                "Fixed a cycle-triggered resnap that affected windows on other virtual desktops"
+            ]
+        },
+        {
             "version": "2.8.7",
             "date": "2026-04-14",
             "highlights": [

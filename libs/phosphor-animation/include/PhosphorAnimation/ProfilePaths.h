@@ -27,7 +27,11 @@ namespace ProfilePaths {
 // Root
 PHOSPHORANIMATION_EXPORT extern const QString Global;
 
-// window.*
+// window.* — runtime window-lifecycle animations driven by the
+// kwin-effect's OffscreenEffect via tryBeginShaderForEvent. The
+// snap/layout-switch leaves are window events triggered by zone
+// interaction (the WINDOW animates when it snaps into/out of a zone
+// or when a layout switch repositions it).
 PHOSPHORANIMATION_EXPORT extern const QString Window;
 PHOSPHORANIMATION_EXPORT extern const QString WindowOpen;
 PHOSPHORANIMATION_EXPORT extern const QString WindowClose;
@@ -36,20 +40,20 @@ PHOSPHORANIMATION_EXPORT extern const QString WindowMaximize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMove;
 PHOSPHORANIMATION_EXPORT extern const QString WindowResize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowFocus;
+PHOSPHORANIMATION_EXPORT extern const QString WindowSnapIn;
+PHOSPHORANIMATION_EXPORT extern const QString WindowSnapOut;
+PHOSPHORANIMATION_EXPORT extern const QString WindowSnapResize;
+PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
 
-// zone.*
-PHOSPHORANIMATION_EXPORT extern const QString Zone;
-PHOSPHORANIMATION_EXPORT extern const QString ZoneSnapIn;
-PHOSPHORANIMATION_EXPORT extern const QString ZoneSnapOut;
-PHOSPHORANIMATION_EXPORT extern const QString ZoneSnapResize;
-PHOSPHORANIMATION_EXPORT extern const QString ZoneHighlight;
-PHOSPHORANIMATION_EXPORT extern const QString ZoneHighlightPop;
-PHOSPHORANIMATION_EXPORT extern const QString ZoneHighlightBorder;
-PHOSPHORANIMATION_EXPORT extern const QString ZoneLayoutSwitchIn;
-// `zone.layoutSwitchOut` is intentionally absent — the layout-switch
-// flash (`ZoneOverlay.qml`) is a one-shot fade that has no out-leg
-// surface. If a future consumer needs an out-leg shape, add the
-// constant in lockstep with the consumer.
+// editor.* — Layout-editor-only zone manipulation animations
+// (fill-preview, drag-resize-preview). NOT triggered by runtime
+// window snapping — window-snap animations are KWin's
+// compositor-level domain. These paths only fire inside the
+// PlasmaZones layout editor.
+PHOSPHORANIMATION_EXPORT extern const QString Editor;
+PHOSPHORANIMATION_EXPORT extern const QString EditorSnapIn;
+PHOSPHORANIMATION_EXPORT extern const QString EditorSnapOut;
+PHOSPHORANIMATION_EXPORT extern const QString EditorSnapResize;
 
 // osd.*
 PHOSPHORANIMATION_EXPORT extern const QString Osd;
@@ -110,6 +114,18 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetProgress; ///< 200 ms OutCub
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulse; ///< 1000 ms sinusoidal (family root)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulseFast; ///< 500 ms
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulseSlow; ///< 1500 ms
+// Zone-rect widget (used by ZoneItem.qml, LayoutPreview.qml,
+// ZonePreview.qml — i.e. the reusable QML zone-rectangle that gets
+// embedded in the runtime overlay, settings dialogs, layout
+// thumbnails, etc.). The animation lives with the widget; the
+// surface it's hosted on is incidental.
+PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneHighlight;
+PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneHighlightPop;
+PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneHighlightBorder;
+// One-shot flash on the main zone-overlay surface when the active
+// layout changes mid-drag (ZoneOverlayContent.qml). A widget-level
+// content effect on the overlay, not a per-zone animation.
+PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 
 /// Full list of built-in paths in taxonomy order.
 PHOSPHORANIMATION_EXPORT QStringList allBuiltInPaths();

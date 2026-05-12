@@ -132,8 +132,8 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
                                         .hideProfile = PP::OsdHide,
                                         .showScaleProfile = PP::OsdShow,
                                         .hideScaleProfile = PP::OsdHide,
-                                        .showScaleFrom = 0.8,
-                                        .hideScaleTo = 0.9,
+                                        .showScaleFrom = 0.92,
+                                        .hideScaleTo = 0.96,
                                         .showShaderEffectId = resolveShaderEffect(tree, PP::OsdShow),
                                         .hideShaderEffectId = resolveShaderEffect(tree, PP::OsdHide),
                                         .showShaderProfile = PP::OsdShow,
@@ -143,7 +143,7 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
 }
 
 /// LayoutPicker: OSD-style fade-and-pop shape with a softer scale
-/// envelope (0.9→1 vs the OSD's 0.8→1) since the picker is a larger
+/// envelope (0.94→1 vs the OSD's 0.92→1) since the picker is a larger
 /// surface.
 ///
 /// **Popup surface family - dedicated path partition.** Every leg
@@ -166,8 +166,8 @@ PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTre
         .hideProfile = PP::PopupLayoutPickerHide,
         .showScaleProfile = PP::PopupLayoutPickerShow,
         .hideScaleProfile = PP::PopupLayoutPickerHide,
-        .showScaleFrom = 0.9,
-        .hideScaleTo = 0.95,
+        .showScaleFrom = 0.94,
+        .hideScaleTo = 0.97,
         .showShaderEffectId = resolveShaderEffect(tree, PP::PopupLayoutPickerShow),
         .hideShaderEffectId = resolveShaderEffect(tree, PP::PopupLayoutPickerHide),
         .showShaderProfile = PP::PopupLayoutPickerShow,

@@ -414,6 +414,12 @@ static QScreen* findTargetScreen(const QString& targetScreen)
 
 QSize EditorController::targetScreenSize() const
 {
+    // Fixed-geometry layouts pin the reference to their own zone bounding
+    // box so previews/canvas render against the size the layout was authored
+    // for, not whichever screen happens to be live.
+    if (m_layoutBoundsOverride.isValid()) {
+        return m_layoutBoundsOverride;
+    }
     // Virtual screens: use cached geometry from daemon (set in setTargetScreen)
     if (m_virtualScreenSize.isValid()) {
         return m_virtualScreenSize;

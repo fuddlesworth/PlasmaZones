@@ -119,8 +119,8 @@ private Q_SLOTS:
 
         // Drop a profile JSON. Note: filename basename must match the
         // inner `name` field (ProfileLoader rejects mismatches).
-        writeFile(profileDir + QStringLiteral("/zone.highlight.json"), QStringLiteral(R"({
-            "name": "zone.highlight",
+        writeFile(profileDir + QStringLiteral("/widget.zoneHighlight.json"), QStringLiteral(R"({
+            "name": "widget.zoneHighlight",
             "duration": 175,
             "curve": "0.42,0.00,0.58,1.00"
         })"));
@@ -133,17 +133,17 @@ private Q_SLOTS:
 
         // Registry now contains the user profile.
         auto& registry = m_registry;
-        QVERIFY(registry.hasProfile(QStringLiteral("zone.highlight")));
+        QVERIFY(registry.hasProfile(QStringLiteral("widget.zoneHighlight")));
 
         // The owner tag is the loader's — partitioning means this
         // entry is subject to wholesale replacement by another
         // `reloadFromOwner(loaderTag, ...)` but invisible to direct
         // `registerProfile(path, profile)` calls (those land under the
         // empty/direct tag).
-        QCOMPARE(registry.ownerOf(QStringLiteral("zone.highlight")), kLoaderOwnerTag);
+        QCOMPARE(registry.ownerOf(QStringLiteral("widget.zoneHighlight")), kLoaderOwnerTag);
 
         // The resolved Profile carries the values from the JSON file.
-        const auto resolved = registry.resolve(QStringLiteral("zone.highlight"));
+        const auto resolved = registry.resolve(QStringLiteral("widget.zoneHighlight"));
         QVERIFY(resolved.has_value());
         QCOMPARE(resolved->effectiveDuration(), 175.0);
     }

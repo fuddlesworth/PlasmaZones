@@ -249,7 +249,7 @@ Item {
             // AlgorithmPreview) still drive the timing here.
             Behavior on color {
                 PhosphorMotionAnimation {
-                    profile: "zone.highlight"
+                    profile: "widget.zoneHighlight"
                     durationOverride: root.animationDuration
                 }
 
@@ -257,7 +257,7 @@ Item {
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "zone.highlight"
+                    profile: "widget.zoneHighlight"
                     durationOverride: root.animationDuration
                 }
 
@@ -265,20 +265,20 @@ Item {
 
             Behavior on scale {
                 // OutBack overshoot=1.20 feel — restored faithfully via the
-                // osd-pop curve referenced through zone.highlight.pop.
+                // osd-pop curve referenced through widget.zoneHighlight.pop.
                 PhosphorMotionAnimation {
-                    profile: "zone.highlight.pop"
+                    profile: "widget.zoneHighlight.pop"
                     durationOverride: root.animationDuration
                 }
 
             }
 
-            // Border feedback uses the half-duration zone.highlight.border
+            // Border feedback uses the half-duration widget.zoneHighlight.border
             // profile so the border snaps in twice as fast as the fill —
             // matches the pre-PR-344 `duration: animationDuration / 2` shape.
             Behavior on border.color {
                 PhosphorMotionAnimation {
-                    profile: "zone.highlight.border"
+                    profile: "widget.zoneHighlight.border"
                     durationOverride: Math.round(root.animationDuration / 2)
                 }
 
@@ -286,7 +286,7 @@ Item {
 
             Behavior on border.width {
                 PhosphorMotionAnimation {
-                    profile: "zone.highlight.border"
+                    profile: "widget.zoneHighlight.border"
                     durationOverride: Math.round(root.animationDuration / 2)
                 }
 

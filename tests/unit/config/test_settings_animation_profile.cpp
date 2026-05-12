@@ -95,7 +95,7 @@ private Q_SLOTS:
     /// An absent Profile blob on disk — the PhosphorConfig schema
     /// substitutes the PROJECT-wide default built by
     /// `ConfigDefaults::animationProfile()` (which composes per-field
-    /// defaults like `animationDuration() == 300` into a pre-serialised
+    /// defaults like `animationDuration() == 320` into a pre-serialised
     /// blob). Contrast with the malformed-blob path above, which falls
     /// through to LIBRARY defaults from `Profile::DefaultDuration`
     /// because the schema hand-off happens before the JSON parse gate.

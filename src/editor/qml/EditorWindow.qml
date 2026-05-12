@@ -349,12 +349,15 @@ Window {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                // Direction is taken from the visibility condition so the leg
-                // is decided synchronously when fullscreen toggles. Reading
-                // the animated `opacity` would re-evaluate during the
-                // Behavior and flip the leg mid-animation.
-                profile: !editorWindow.fullscreenMode ? "widget.fadeIn" : "widget.fadeOut"
-                durationOverride: 200
+                // Pinned to widget.fadeIn for both directions. The top bar
+                // and the floating "Exit Fullscreen" pill below are
+                // reciprocal opacity bindings during a fullscreen toggle,
+                // so they must share one profile (200 ms, widget-out
+                // curve) for a clean handoff. Deliberately NOT using
+                // widget.fadeOut for the 1->0 direction: its 400 ms
+                // cubic-in seed is for graceful standalone exits, which
+                // would desync the paired surfaces.
+                profile: "widget.fadeIn"
             }
 
         }
@@ -739,11 +742,11 @@ Window {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                // Direction is taken from the same condition driving the
-                // `opacity` binding above (`fullscreenMode ? 1 : 0`) so the
-                // leg is decided synchronously when fullscreen toggles.
-                profile: editorWindow.fullscreenMode ? "widget.fadeIn" : "widget.fadeOut"
-                durationOverride: 200
+                // Pinned to widget.fadeIn for both directions. Paired with
+                // the top bar fade above; same rationale (200 ms,
+                // widget-out curve, NOT widget.fadeOut's 400 ms tail) so
+                // the pill and the top bar exchange visibility cleanly.
+                profile: "widget.fadeIn"
             }
 
         }

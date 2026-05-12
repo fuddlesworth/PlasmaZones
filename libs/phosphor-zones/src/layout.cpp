@@ -309,6 +309,34 @@ bool Layout::hasFixedGeometryZones() const
     return false;
 }
 
+QRectF Layout::fixedZoneBoundingBox() const
+{
+    qreal maxX = 0;
+    qreal maxY = 0;
+    bool hasAny = false;
+    for (Zone* zone : m_zones) {
+        if (!zone || !zone->isFixedGeometry())
+            continue;
+        const QRectF& fg = zone->fixedGeometry();
+        maxX = std::max(maxX, fg.x() + fg.width());
+        maxY = std::max(maxY, fg.y() + fg.height());
+        hasAny = true;
+    }
+    return hasAny ? QRectF(0, 0, maxX, maxY) : QRectF();
+}
+
+QRectF Layout::fixedZoneReferenceGeometry() const
+{
+    const QRectF bbox = fixedZoneBoundingBox();
+    if (bbox.isEmpty())
+        return QRectF();
+    if (m_lastRecalcGeometry.height() > 0 && bbox.width() <= m_lastRecalcGeometry.width()
+        && bbox.height() <= m_lastRecalcGeometry.height()) {
+        return m_lastRecalcGeometry;
+    }
+    return bbox;
+}
+
 // Aspect ratio classification setters
 void Layout::setAspectRatioClass(::PhosphorLayout::AspectRatioClass cls)
 {

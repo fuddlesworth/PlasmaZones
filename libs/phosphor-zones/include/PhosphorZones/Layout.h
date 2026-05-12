@@ -343,6 +343,19 @@ public:
     /// Returns true if any zone uses fixed (pixel) geometry mode
     bool hasFixedGeometryZones() const;
 
+    /// Bounding box of all fixed-geometry zones in pixel coordinates,
+    /// anchored at (0, 0). Empty rect if no fixed-geometry zones exist.
+    QRectF fixedZoneBoundingBox() const;
+
+    /// Reference geometry suitable for normalizing fixed-pixel zones to
+    /// 0–1 relative coordinates. Returns @c lastRecalcGeometry() when it
+    /// accommodates @c fixedZoneBoundingBox(); falls back to the bounding
+    /// box itself when the recalc cache is stale (e.g. layout was recalced
+    /// against a different screen's orientation, leaving normalized coords
+    /// > 1 or a square reference frame). Empty rect when the layout has
+    /// no fixed-geometry zones.
+    QRectF fixedZoneReferenceGeometry() const;
+
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
     int defaultOrder() const
     {

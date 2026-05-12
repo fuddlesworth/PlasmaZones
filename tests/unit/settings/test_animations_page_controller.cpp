@@ -73,8 +73,8 @@ private Q_SLOTS:
     {
         AnimationsPageController c;
         QCOMPARE(c.sectionForPath(QStringLiteral("global")), QStringLiteral("global"));
-        QCOMPARE(c.sectionForPath(QStringLiteral("zone")), QStringLiteral("zone"));
-        QCOMPARE(c.sectionForPath(QStringLiteral("zone.snapIn")), QStringLiteral("zone"));
+        QCOMPARE(c.sectionForPath(QStringLiteral("editor")), QStringLiteral("editor"));
+        QCOMPARE(c.sectionForPath(QStringLiteral("editor.snapIn")), QStringLiteral("editor"));
         QCOMPARE(c.sectionForPath(QStringLiteral("popup.layoutPicker.show")), QStringLiteral("overlays"));
         QCOMPARE(c.sectionForPath(QString()), QString());
     }
@@ -83,7 +83,7 @@ private Q_SLOTS:
     {
         AnimationsPageController c;
         QCOMPARE(c.eventLabel(QStringLiteral("global")), QStringLiteral("Global"));
-        QCOMPARE(c.eventLabel(QStringLiteral("zone.snapIn")), QStringLiteral("Snap In"));
+        QCOMPARE(c.eventLabel(QStringLiteral("editor.snapIn")), QStringLiteral("Snap In"));
         QCOMPARE(c.eventLabel(QStringLiteral("popup.layoutPicker")), QStringLiteral("Layout Picker"));
         QCOMPARE(c.eventLabel(QStringLiteral("popup.layoutPicker.popIn")), QStringLiteral("Pop In"));
     }
@@ -91,8 +91,9 @@ private Q_SLOTS:
     void parentChain_walksToGlobal()
     {
         AnimationsPageController c;
-        const auto chain = c.parentChain(QStringLiteral("zone.snapIn"));
-        QCOMPARE(chain, (QStringList{QStringLiteral("zone.snapIn"), QStringLiteral("zone"), QStringLiteral("global")}));
+        const auto chain = c.parentChain(QStringLiteral("editor.snapIn"));
+        QCOMPARE(chain,
+                 (QStringList{QStringLiteral("editor.snapIn"), QStringLiteral("editor"), QStringLiteral("global")}));
     }
 
     void parentChain_globalIsRoot()
@@ -133,32 +134,32 @@ private Q_SLOTS:
         AnimationsPageController c;
         const QVariantList sections = c.eventSections();
 
-        // Find the "zone" section's "zone" entry — it should be flagged
-        // isCategory=true because zone.snapIn etc. live under it.
-        bool foundZoneCategory = false;
-        bool zoneCategoryFlag = false;
-        bool foundZoneSnapIn = false;
-        bool zoneSnapInCategoryFlag = true; // pessimistic default
+        // Find the "editor" section's "editor" entry — it should be flagged
+        // isCategory=true because editor.snapIn etc. live under it.
+        bool foundEditorCategory = false;
+        bool editorCategoryFlag = false;
+        bool foundEditorSnapIn = false;
+        bool editorSnapInCategoryFlag = true; // pessimistic default
         for (const QVariant& sectionVar : sections) {
             const QVariantMap section = sectionVar.toMap();
-            if (section.value(QStringLiteral("section")).toString() != QLatin1String("zone"))
+            if (section.value(QStringLiteral("section")).toString() != QLatin1String("editor"))
                 continue;
             for (const QVariant& entry : section.value(QStringLiteral("paths")).toList()) {
                 const QVariantMap m = entry.toMap();
                 const QString path = m.value(QStringLiteral("path")).toString();
-                if (path == QLatin1String("zone")) {
-                    foundZoneCategory = true;
-                    zoneCategoryFlag = m.value(QStringLiteral("isCategory")).toBool();
-                } else if (path == QLatin1String("zone.snapIn")) {
-                    foundZoneSnapIn = true;
-                    zoneSnapInCategoryFlag = m.value(QStringLiteral("isCategory")).toBool();
+                if (path == QLatin1String("editor")) {
+                    foundEditorCategory = true;
+                    editorCategoryFlag = m.value(QStringLiteral("isCategory")).toBool();
+                } else if (path == QLatin1String("editor.snapIn")) {
+                    foundEditorSnapIn = true;
+                    editorSnapInCategoryFlag = m.value(QStringLiteral("isCategory")).toBool();
                 }
             }
         }
-        QVERIFY(foundZoneCategory);
-        QVERIFY(foundZoneSnapIn);
-        QVERIFY2(zoneCategoryFlag, "'zone' should be flagged as a category — it has children");
-        QVERIFY2(!zoneSnapInCategoryFlag, "'zone.snapIn' is a leaf — not a category");
+        QVERIFY(foundEditorCategory);
+        QVERIFY(foundEditorSnapIn);
+        QVERIFY2(editorCategoryFlag, "'editor' should be flagged as a category: it has children");
+        QVERIFY2(!editorSnapInCategoryFlag, "'editor.snapIn' is a leaf: not a category");
     }
 
     // ─── Override CRUD ────────────────────────────────────────────────────
@@ -175,19 +176,19 @@ private Q_SLOTS:
         QVariantMap profile;
         profile.insert(QStringLiteral("duration"), 250);
         profile.insert(QStringLiteral("curve"), QStringLiteral("0.33,1,0.68,1"));
-        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), profile));
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), profile));
 
         QCOMPARE(spy.count(), 1);
-        QCOMPARE(spy.first().at(0).toString(), QStringLiteral("zone.snapIn"));
+        QCOMPARE(spy.first().at(0).toString(), QStringLiteral("editor.snapIn"));
 
-        const QString filePath = tmp.path() + QStringLiteral("/zone.snapIn.json");
+        const QString filePath = tmp.path() + QStringLiteral("/editor.snapIn.json");
         QVERIFY(QFileInfo::exists(filePath));
 
         // Verify the on-disk shape: name field present, Profile fields preserved.
         const auto doc = QJsonDocument::fromJson(readFile(filePath).toUtf8());
         QVERIFY(doc.isObject());
         const QJsonObject obj = doc.object();
-        QCOMPARE(obj.value(QStringLiteral("name")).toString(), QStringLiteral("zone.snapIn"));
+        QCOMPARE(obj.value(QStringLiteral("name")).toString(), QStringLiteral("editor.snapIn"));
         QCOMPARE(obj.value(QStringLiteral("duration")).toInt(), 250);
         QCOMPARE(obj.value(QStringLiteral("curve")).toString(), QStringLiteral("0.33,1,0.68,1"));
     }
@@ -199,9 +200,9 @@ private Q_SLOTS:
         AnimationsPageController c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        QVERIFY(!c.hasOverride(QStringLiteral("zone.snapIn")));
-        c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 200}});
-        QVERIFY(c.hasOverride(QStringLiteral("zone.snapIn")));
+        QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
+        c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 200}});
+        QVERIFY(c.hasOverride(QStringLiteral("editor.snapIn")));
     }
 
     void rawProfile_roundTripsProfileFieldsStripsName()
@@ -251,7 +252,7 @@ private Q_SLOTS:
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy spy(&c, &AnimationsPageController::overrideChanged);
-        QVERIFY(!c.clearOverride(QStringLiteral("zone.snapIn")));
+        QVERIFY(!c.clearOverride(QStringLiteral("editor.snapIn")));
         QCOMPARE(spy.count(), 0);
     }
 
@@ -277,7 +278,7 @@ private Q_SLOTS:
         c.setUserProfilesDirOverride(tmp.path());
 
         // No registry, no files. Walk falls through to library defaults.
-        const QVariantMap resolved = c.resolvedProfile(QStringLiteral("zone.snapIn"));
+        const QVariantMap resolved = c.resolvedProfile(QStringLiteral("editor.snapIn"));
         using P = PhosphorAnimation::Profile;
         QCOMPARE(resolved.value(QStringLiteral("duration")).toDouble(), P::DefaultDuration);
         QCOMPARE(resolved.value(QStringLiteral("minDistance")).toInt(), P::DefaultMinDistance);
@@ -292,11 +293,11 @@ private Q_SLOTS:
         AnimationsPageController c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        // Override the parent (zone) but not the leaf (zone.snapIn). The
+        // Override the parent (editor) but not the leaf (editor.snapIn). The
         // leaf must inherit the parent's duration via walk-up.
-        QVERIFY(c.setOverride(QStringLiteral("zone"), {{QStringLiteral("duration"), 222}}));
+        QVERIFY(c.setOverride(QStringLiteral("editor"), {{QStringLiteral("duration"), 222}}));
 
-        const QVariantMap resolved = c.resolvedProfile(QStringLiteral("zone.snapIn"));
+        const QVariantMap resolved = c.resolvedProfile(QStringLiteral("editor.snapIn"));
         QCOMPARE(resolved.value(QStringLiteral("duration")).toInt(), 222);
     }
 
@@ -307,10 +308,10 @@ private Q_SLOTS:
         AnimationsPageController c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        QVERIFY(c.setOverride(QStringLiteral("zone"), {{QStringLiteral("duration"), 100}}));
-        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 333}}));
+        QVERIFY(c.setOverride(QStringLiteral("editor"), {{QStringLiteral("duration"), 100}}));
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 333}}));
 
-        const QVariantMap resolved = c.resolvedProfile(QStringLiteral("zone.snapIn"));
+        const QVariantMap resolved = c.resolvedProfile(QStringLiteral("editor.snapIn"));
         QCOMPARE(resolved.value(QStringLiteral("duration")).toInt(), 333);
     }
 
@@ -324,10 +325,11 @@ private Q_SLOTS:
         // Parent supplies curve only; leaf supplies duration only.
         // Resolved should have BOTH from their respective sources, plus
         // library defaults for everything else.
-        QVERIFY(c.setOverride(QStringLiteral("zone"), {{QStringLiteral("curve"), QStringLiteral("spring:14.0,0.6")}}));
-        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 444}}));
+        QVERIFY(
+            c.setOverride(QStringLiteral("editor"), {{QStringLiteral("curve"), QStringLiteral("spring:14.0,0.6")}}));
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 444}}));
 
-        const QVariantMap resolved = c.resolvedProfile(QStringLiteral("zone.snapIn"));
+        const QVariantMap resolved = c.resolvedProfile(QStringLiteral("editor.snapIn"));
         QCOMPARE(resolved.value(QStringLiteral("duration")).toInt(), 444);
         QCOMPARE(resolved.value(QStringLiteral("curve")).toString(), QStringLiteral("spring:14.0,0.6"));
         // Library default for the unspecified field:
@@ -351,7 +353,7 @@ private Q_SLOTS:
         QVERIFY(!c.setOverride(QStringLiteral("../etc/passwd"), {{QStringLiteral("duration"), 100}}));
         QVERIFY(!c.setOverride(QStringLiteral("../../bad"), {{QStringLiteral("duration"), 100}}));
         QVERIFY(!c.setOverride(QStringLiteral("..\\windows-path"), {{QStringLiteral("duration"), 100}}));
-        QVERIFY(!c.setOverride(QStringLiteral("zone/../../etc"), {{QStringLiteral("duration"), 100}}));
+        QVERIFY(!c.setOverride(QStringLiteral("editor/../../etc"), {{QStringLiteral("duration"), 100}}));
         // Plausible-looking but unknown paths are also rejected
         // (membership in allBuiltInPaths is the gate, not just lexical
         // shape).
@@ -399,12 +401,12 @@ private Q_SLOTS:
         QSignalSpy overrideSpy(&c, &AnimationsPageController::overrideChanged);
         QSignalSpy pendingSpy(&c, &AnimationsPageController::pendingChangesChanged);
 
-        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), profile));
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), profile));
         QCOMPARE(overrideSpy.count(), 1);
         QCOMPARE(pendingSpy.count(), 1);
 
         // Second identical write — must short-circuit, no extra signals.
-        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), profile));
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), profile));
         QCOMPARE(overrideSpy.count(), 1);
         QCOMPARE(pendingSpy.count(), 1);
     }
@@ -471,8 +473,8 @@ private Q_SLOTS:
         // Paths the resolver never walks through — any assignment would
         // be runtime-dead and silently shadow what the user thought
         // they set on a sibling. Must stay unsupported.
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("zone")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("zone.snapIn")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("editor")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("editor.snapIn")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget.fadeIn")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("workspace")));

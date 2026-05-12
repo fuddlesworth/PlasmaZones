@@ -61,8 +61,8 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
                                                  .hideProfile = QStringLiteral("osd.hide"),
                                                  .showScaleProfile = QStringLiteral("osd.show"),
                                                  .hideScaleProfile = QStringLiteral("osd.hide"),
-                                                 .showScaleFrom = 0.8,
-                                                 .hideScaleTo = 0.9,
+                                                 .showScaleFrom = 0.92,
+                                                 .hideScaleTo = 0.96,
                                                  .showShaderEffectId = {},
                                                  .hideShaderEffectId = {},
                                                  .showShaderProfile = {},
@@ -80,8 +80,8 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
                                                           .hideProfile = QStringLiteral("popup.layoutPicker.hide"),
                                                           .showScaleProfile = QStringLiteral("popup.layoutPicker.show"),
                                                           .hideScaleProfile = QStringLiteral("popup.layoutPicker.hide"),
-                                                          .showScaleFrom = 0.9,
-                                                          .hideScaleTo = 0.95,
+                                                          .showScaleFrom = 0.94,
+                                                          .hideScaleTo = 0.97,
                                                           .showShaderEffectId = {},
                                                           .hideShaderEffectId = {},
                                                           .showShaderProfile = {},
@@ -171,7 +171,7 @@ private Q_SLOTS:
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.show"));
-        QCOMPARE(cfg.showScaleFrom, 0.8);
+        QCOMPARE(cfg.showScaleFrom, 0.92);
     }
 
     /// Different screen, different generation: the per-instance
@@ -233,9 +233,9 @@ private Q_SLOTS:
         QCOMPARE(cfg.showProfile, QStringLiteral("popup.layoutPicker.show"));
         QCOMPARE(cfg.hideProfile, QStringLiteral("popup.layoutPicker.hide"));
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("popup.layoutPicker.show"));
-        // LayoutPicker uses 0.9 (softer than OSD's 0.8) intentionally.
-        QCOMPARE(cfg.showScaleFrom, 0.9);
-        QCOMPARE(cfg.hideScaleTo, 0.95);
+        // LayoutPicker uses 0.94 (softer than OSD's 0.92) intentionally.
+        QCOMPARE(cfg.showScaleFrom, 0.94);
+        QCOMPARE(cfg.hideScaleTo, 0.97);
     }
 
     /// Surface-family separation invariant: a JSON edit to `osd.hide`
@@ -265,16 +265,16 @@ private Q_SLOTS:
     /// `plasmazones-osd-bar`) must not silently route to the wrong
     /// config. Verify the boundary check works by confirming a
     /// per-instance OSD scope picks up the OSD config (showScaleFrom
-    /// 0.8), not the picker (0.9).
+    /// 0.92), not the picker (0.94).
     void osd_does_not_cross_pollinate_to_layout_picker()
     {
         PhosphorAnimation::PhosphorProfileRegistry registry;
         const auto anim = buildAnimatorMatchingDaemon(registry);
         const auto role = perInstanceRole(PzRoles::Osd, QStringLiteral("DP-1"), 1);
         const auto cfg = anim->configForRole(role);
-        // OSD config has 0.8, picker has 0.9. Picking up the picker
+        // OSD config has 0.92, picker has 0.94. Picking up the picker
         // config here would mean the boundary check is broken.
-        QCOMPARE(cfg.showScaleFrom, 0.8);
+        QCOMPARE(cfg.showScaleFrom, 0.92);
     }
 
     /// Regression: the bare base role (no per-instance suffix) must

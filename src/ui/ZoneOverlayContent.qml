@@ -240,7 +240,7 @@ Item {
                     properties: "opacity"
                     from: 0.3
                     to: 0
-                    profile: "zone.layoutSwitchIn"
+                    profile: "widget.zoneOverlayFlash"
                 }
 
             }

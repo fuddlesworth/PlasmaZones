@@ -365,7 +365,6 @@ Rectangle {
                         Behavior on border.color {
                             PhosphorMotionAnimation {
                                 profile: "widget.tint.fast"
-                                durationOverride: 100
                             }
 
                         }
@@ -373,7 +372,6 @@ Rectangle {
                         Behavior on border.width {
                             PhosphorMotionAnimation {
                                 profile: "widget.tint.fast"
-                                durationOverride: 100
                             }
 
                         }

@@ -93,32 +93,28 @@ Item {
             target: zoneRoot
             properties: "visualX"
             to: fillAnimator.targetX
-            profile: "zone.snapIn"
-            durationOverride: 150
+            profile: "editor.snapIn"
         }
 
         PhosphorMotionAnimation {
             target: zoneRoot
             properties: "visualY"
             to: fillAnimator.targetY
-            profile: "zone.snapIn"
-            durationOverride: 150
+            profile: "editor.snapIn"
         }
 
         PhosphorMotionAnimation {
             target: zoneRoot
             properties: "visualWidth"
             to: fillAnimator.targetWidth
-            profile: "zone.snapIn"
-            durationOverride: 150
+            profile: "editor.snapIn"
         }
 
         PhosphorMotionAnimation {
             target: zoneRoot
             properties: "visualHeight"
             to: fillAnimator.targetHeight
-            profile: "zone.snapIn"
-            durationOverride: 150
+            profile: "editor.snapIn"
         }
 
     }

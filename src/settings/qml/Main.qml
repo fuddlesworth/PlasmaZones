@@ -191,10 +191,6 @@ ApplicationWindow {
             "label": i18n("Windows"),
             "iconName": "window-new"
         }, {
-            "name": "animations-zones",
-            "label": i18n("Zones"),
-            "iconName": "view-grid"
-        }, {
             "name": "animations-osds",
             "label": i18n("OSDs"),
             "iconName": "dialog-information"
@@ -210,6 +206,10 @@ ApplicationWindow {
             "name": "animations-widgets",
             "label": i18n("Widgets"),
             "iconName": "preferences-desktop-theme"
+        }, {
+            "name": "animations-editor",
+            "label": i18n("Layout Editor"),
+            "iconName": "document-edit"
         }],
         "animations-library": [{
             "name": "animations-presets",
@@ -260,7 +260,7 @@ ApplicationWindow {
         "animations-general": "AnimationsGeneralPage.qml",
         "animations-windows": "AnimationsWindowsPage.qml",
         "animations-app-rules": "AnimationsAppRulesPage.qml",
-        "animations-zones": "AnimationsZonesPage.qml",
+        "animations-editor": "AnimationsEditorPage.qml",
         "animations-osds": "AnimationsOsdsPage.qml",
         "animations-overlays": "AnimationsOverlaysPage.qml",
         "animations-side-panels": "AnimationsSidePanelsPage.qml",
