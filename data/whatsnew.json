@@ -1,6 +1,30 @@
 {
     "releases": [
         {
+            "version": "3.0.0",
+            "date": "2026-05-12",
+            "highlights": [
+                "Virtual screens for ultrawide monitors — subdivide a physical monitor into independent logical screens with their own layouts, autotile state, snap-assist, OSDs, shortcuts, and per-desktop / per-activity assignments; new swap and rotate actions with a confirmation OSD",
+                "Animation App Rules — assign motion curves, shader overrides, and per-event timings to specific apps, with a two-layer resolver that gives widgets distinctive tunings even when they share a parent rule",
+                "New animation engine with vertex-shader plumbing and live-texture sampling, plus 47 ported transition shaders: 28 from niri (niri_compat), 9 from Burn-My-Windows (bmw_compat), 10 BMW-inspired originals, neon-city audio-reactive cityscape, Matrix rain, 3D chrome-protocol, and user-texture support",
+                "Unified PassiveOverlayShell — OSDs, snap-assist, layout picker, zone selector, and zone overlay all run in one click-through shell with independent slot animations and explicit z-order, replacing the legacy NotificationOverlay",
+                "Krohnkite-style autotile — drag a tiled window onto another to reorder slots live, and a new Unlimited overflow lets the stack grow past the algorithm's natural cap instead of evicting windows",
+                "Animations settings overhauled into drill-down sub-pages with motion sets (themed override bundles), per-event shader picker, generic shader browser, and a separate Snapping Shaders page",
+                "What's New dialog — this dialog now ships in the settings app and opens on first launch after every upgrade, surfacing per-release highlights without needing to read the changelog",
+                "Layout ordering for cycling — cycle shortcuts now follow a user-configurable order set per-mode under Settings → Snapping / Tiling → Ordering, instead of the implicit save-time order",
+                "Per-mode disable lists — snapping and autotiling each have their own exclusion lists for monitors, virtual desktops, and activities, with the disabled-context OSD pointing the user at the right toggle",
+                "Hold/Toggle controls now work in always-active mode (#249) — bind e.g. Right Mouse Button to activate when always-active is off and deactivate when on, FancyZones-style",
+                "Global \"auto-assign new windows for all layouts\" master toggle (#370) and a separate \"Desktop switch OSD\" toggle (#372)",
+                "Drag protocol rewritten so the daemon owns all drag routing decisions (#310) — eliminates the ~40s dead-drag stalls reported when settings reload mid-drag",
+                "Meta-F float toggle now runs daemon-local (#310) — sub-50ms keypress-to-toggle instead of stalling on D-Bus backpressure across four hops",
+                "Native-feeling wheel scroll across every settings page using Kirigami.WheelHandler for Plasma-aware scroll speed",
+                "New phosphor-* libraries (LGPL) extract the daemon, engine, animation pipeline, screen / workspace / placement services, and a phosphor-compositor SDK with DaemonClient so third-party Wayland compositors can host the placement / tiling / overlay services without depending on KWin",
+                "Fixed snap-assist showing windows from other virtual desktops as occupied (#323) — the drag-path occupancy filter now scopes to the current desktop",
+                "Fixed per-activity layout assignments losing to per-monitor defaults in the layout registry precedence order",
+                "Fixed the Layouts context menu eventually failing to open after enough show/hide cycles, and a cycle-triggered resnap that affected windows on other virtual desktops"
+            ]
+        },
+        {
             "version": "2.8.7",
             "date": "2026-04-14",
             "highlights": [
