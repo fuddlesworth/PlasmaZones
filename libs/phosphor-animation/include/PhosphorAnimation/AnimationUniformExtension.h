@@ -92,6 +92,20 @@ public:
         m_dirty.store(false, std::memory_order_release);
     }
 
+    /// Animation shaders pair `iResolution` with logical-pixel
+    /// extension fields (`iAnchorSize`, `iAnchorPosInFbo`,
+    /// `iSurfaceScreenPos`) for UV / clip-space ratios, and use the
+    /// vertex-stage `vTexCoord` instead of `gl_FragCoord` — so the
+    /// legacy DPR-scaling of `iResolution` would mismatch units across
+    /// the UBO and shrink the rendered card by 1/DPR (fly-in) or
+    /// shift the anchor UV remap by the same factor (broken-glass,
+    /// morph). Override to publish `iResolution` in logical pixels so
+    /// every ratio in animation shaders is dimensionally consistent.
+    bool requiresPhysicalResolution() const override
+    {
+        return false;
+    }
+
     /// Surface origin in **logical** screen pixels (.xy) plus host
     /// screen dimensions (.zw). Pushed by SurfaceAnimator on every leg
     /// attach and on each anchor / window geometry signal. Logical-
