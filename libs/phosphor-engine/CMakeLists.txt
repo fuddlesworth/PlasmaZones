@@ -71,8 +71,9 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 endif()
 
-# SONAME + symlinks for packagers. SOVERSION is the major (matches the
-# write_basic_package_version_file SameMajorVersion compatibility).
+# SONAME + symlinks for packagers. SOVERSION is the stable ABI version,
+# decoupled from semver — kept at 0 across the phosphor-* catalog so
+# packagers ship `lib*.so.0` until we make a deliberate ABI break.
 set_target_properties(PhosphorEngine PROPERTIES
     VERSION ${PHOSPHORENGINE_VERSION}
     SOVERSION 0

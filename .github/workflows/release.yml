@@ -33,14 +33,19 @@ jobs:
     steps:
       - name: Extract version from tag
         id: version
+        # Pass the user-supplied dispatch input through env (not via ${{ … }}
+        # interpolation into the script body) so a malicious tag value can't
+        # break out of the string and run arbitrary shell — the standard
+        # GitHub Actions script-injection hardening pattern.
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           set -euo pipefail
           # On push the ref is refs/tags/v<x>; on manual dispatch we
           # accept an explicit tag input. Fail loudly if neither yields
           # a tag-shaped value so downstream packaging steps don't see
           # `heads/v3` or empty.
-          INPUT_TAG="${{ github.event.inputs.tag }}"
-          if [[ -n "$INPUT_TAG" ]]; then
+          if [[ -n "${INPUT_TAG:-}" ]]; then
               REF="refs/tags/${INPUT_TAG#refs/tags/}"
           else
               REF="$GITHUB_REF"
@@ -632,10 +637,17 @@ jobs:
           echo "Uploading ${#ASSETS[@]} assets:"
           printf '  %s\n' "${ASSETS[@]}"
 
+          # --latest implies "this is the canonical stable release";
+          # gh refuses to combine it with --prerelease. Only set --latest
+          # for stable tags, --prerelease for pre-release tags.
+          LATEST_FLAG="--latest"
+          if [[ -n "$PRERELEASE_FLAG" ]]; then
+              LATEST_FLAG=""
+          fi
           gh release create "$VERSION" \
             --title "PlasmaZones $VERSION" \
             --notes-file release_notes.md \
-            --latest \
+            $LATEST_FLAG \
             $PRERELEASE_FLAG \
             "${ASSETS[@]}"
 
@@ -708,7 +720,7 @@ jobs:
             -v "$(pwd)/PKGBUILD:/build/PKGBUILD:ro" \
             -v "$(pwd)/plasmazones.install:/build/plasmazones.install:ro" \
             archlinux:latest bash -c "
-            pacman -Sy --noconfirm pacman >&2
+            pacman -Syu --noconfirm pacman >&2
             useradd -m builder
             cp /build/* /home/builder/
             chown builder:builder /home/builder/*
@@ -769,7 +781,7 @@ jobs:
             -v "$(pwd)/PKGBUILD:/build/PKGBUILD:ro" \
             -v "$(pwd)/plasmazones.install:/build/plasmazones.install:ro" \
             archlinux:latest bash -c "
-            pacman -Sy --noconfirm pacman >&2
+            pacman -Syu --noconfirm pacman >&2
             useradd -m builder
             cp /build/* /home/builder/
             chown builder:builder /home/builder/*

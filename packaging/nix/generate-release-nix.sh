@@ -37,8 +37,9 @@ fi
 
 echo "Fetching source hash for $TARBALL" >&2
 # Don't muzzle stderr — surface curl / nix-prefetch-url failures (404 on
-# a missing tag, network errors) instead of producing an empty SRI hash
-# and writing a corrupt plasmazones.nix.
+# a missing tag, network errors). `set -e` aborts on nix-prefetch-url's
+# non-zero exit; the explicit empty-check is belt-and-suspenders for the
+# bizarre case where it succeeds-with-empty-output.
 NIX_HASH=$(nix-prefetch-url --unpack "$TARBALL")
 if [[ -z "$NIX_HASH" ]]; then
     echo "Error: nix-prefetch-url returned empty hash for $TARBALL" >&2
