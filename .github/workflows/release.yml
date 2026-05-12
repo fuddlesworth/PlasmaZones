@@ -673,9 +673,10 @@ jobs:
       - name: Calculate tarball hash
         id: hash
         run: |
+          set -euo pipefail
           TARBALL=$(ls dist/plasmazones-*-linux-x86_64.tar.gz | head -1)
           SHA256=$(sha256sum "$TARBALL" | cut -d' ' -f1)
-          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
           echo "Tarball: $TARBALL"
           echo "SHA256: $SHA256"
 
@@ -713,6 +714,13 @@ jobs:
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
           awk -v sum="$SHA256" '
+            # Single-line form: sha256sums=(\047hash\047) — replace inline.
+            /^sha256sums=\(.*\)$/ {
+              print "sha256sums=(\047" sum "\047)"
+              next
+            }
+            # Multi-line form: opening `sha256sums=(` on its own line,
+            # then entries, then a `)` on its own line.
             /^sha256sums=\(/ {
               print "sha256sums=("
               print "    \047" sum "\047"
@@ -725,15 +733,19 @@ jobs:
             { print }
           ' PKGBUILD > PKGBUILD.new && mv PKGBUILD.new PKGBUILD
 
-          # Generate .SRCINFO (mount files read-only to avoid chown breaking host git)
+          # Generate .SRCINFO (mount files read-only to avoid chown breaking host git).
+          # Enumerate inputs explicitly rather than `cp /build/*` so a future
+          # mount-path tweak fails loudly instead of producing a .SRCINFO from
+          # whatever happens to be lying around.
           docker run --rm \
             -v "$(pwd)/PKGBUILD:/build/PKGBUILD:ro" \
             -v "$(pwd)/plasmazones.install:/build/plasmazones.install:ro" \
             archlinux:latest bash -c "
+            set -euo pipefail
             pacman -Syu --noconfirm >&2
             useradd -m builder
-            cp /build/* /home/builder/
-            chown builder:builder /home/builder/*
+            cp /build/PKGBUILD /build/plasmazones.install /home/builder/
+            chown builder:builder /home/builder/PKGBUILD /home/builder/plasmazones.install
             su builder -c 'cd /home/builder && makepkg --printsrcinfo'
           " > .SRCINFO
 
@@ -771,10 +783,16 @@ jobs:
           TARBALL_SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | cut -d' ' -f1)
           echo "Source tarball SHA256: $TARBALL_SHA256"
           awk -v sum="$TARBALL_SHA256" '
+            # Single-line form: sha256sums=(\047hash\047) — replace inline.
+            /^sha256sums=\(.*\)$/ {
+              print "sha256sums=(\047" sum "\047)"
+              next
+            }
+            # Multi-line form: opening `sha256sums=(` on its own line, then
+            # entries, then a `)` on its own line. Replace the entire array
+            # with a single sum (the source tarball). Add more entries here
+            # when PKGBUILD grows additional source= lines.
             /^sha256sums=\(/ {
-              # Replace the entire sha256sums array with a single sum (the
-              # source tarball). Add more entries here when PKGBUILD grows
-              # additional source= lines.
               print "sha256sums=("
               print "    \047" sum "\047"
               print ")"
@@ -786,15 +804,18 @@ jobs:
             { print }
           ' PKGBUILD > PKGBUILD.new && mv PKGBUILD.new PKGBUILD
 
-          # Generate .SRCINFO (mount files read-only to avoid chown breaking host git)
+          # Generate .SRCINFO (mount files read-only to avoid chown breaking host git).
+          # Enumerate inputs explicitly — see the matching note in
+          # publish-aur-bin above.
           docker run --rm \
             -v "$(pwd)/PKGBUILD:/build/PKGBUILD:ro" \
             -v "$(pwd)/plasmazones.install:/build/plasmazones.install:ro" \
             archlinux:latest bash -c "
+            set -euo pipefail
             pacman -Syu --noconfirm >&2
             useradd -m builder
-            cp /build/* /home/builder/
-            chown builder:builder /home/builder/*
+            cp /build/PKGBUILD /build/plasmazones.install /home/builder/
+            chown builder:builder /home/builder/PKGBUILD /home/builder/plasmazones.install
             su builder -c 'cd /home/builder && makepkg --printsrcinfo'
           " > .SRCINFO
 
