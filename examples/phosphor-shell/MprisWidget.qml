@@ -6,21 +6,21 @@ import Phosphor.Shell 1.0
 import QtQuick
 
 // Compact MPRIS media controls for the top panel's right zone.
-// Shows the currently playing track with prev/play-pause/next buttons.
-// Hides when no MPRIS player is active. Inhibits idle while playing.
+// Selects the best player reactively (playing > paused > first),
+// hides when no player exists. Ported from the noctalia-shell
+// MediaService pattern.
 Item {
     id: root
 
-    readonly property var activePlayer: {
-        for (let i = 0; i < mprisHost.playerCount; i++) {
-            let p = mprisHost.playerAt(i);
-            if (p && p.isPlaying)
-                return p;
-        }
-        return mprisHost.playerCount > 0 ? mprisHost.playerAt(0) : null;
-    }
+    // Reactive player selection — re-evaluates on playerCount, playback
+    // state changes, and player add/remove. Uses a Connections block
+    // rather than a binding expression so intermediate signal changes
+    // don't cause stale reads.
+    property MprisPlayer currentPlayer: null
+    readonly property bool hasPlayer: currentPlayer !== null
+    readonly property bool isPlaying: hasPlayer && currentPlayer.isPlaying
 
-    visible: activePlayer !== null
+    visible: hasPlayer
     implicitWidth: visible ? mediaRow.implicitWidth : 0
     implicitHeight: parent ? parent.height : 26
 
@@ -28,14 +28,41 @@ Item {
         id: mprisHost
     }
 
-    // Prevent screen blanking while music is playing.
-    IdleInhibitor {
-        surface: Window.window
-        Component.onCompleted: {
-            if (!IdleInhibitor.isSupported())
-                console.log("IdleInhibitor: protocol not available");
-        }
+    MprisPlayerModel {
+        id: playerModel
+        host: mprisHost
     }
+
+    function selectPlayer() {
+        let playing = null;
+        let paused = null;
+        for (let i = 0; i < mprisHost.playerCount; i++) {
+            let p = mprisHost.playerAt(i);
+            if (!p) continue;
+            if (p.isPlaying) { playing = p; break; }
+            if (p.playbackState === MprisPlayer.Paused && !paused) paused = p;
+        }
+        let next = playing || paused || (mprisHost.playerCount > 0 ? mprisHost.playerAt(0) : null);
+        if (root.currentPlayer !== next)
+            root.currentPlayer = next;
+    }
+
+    Connections {
+        target: mprisHost
+        function onPlayerAdded() { root.selectPlayer(); }
+        function onPlayerRemoved() { root.selectPlayer(); }
+        function onPlayerCountChanged() { root.selectPlayer(); }
+    }
+
+    // Re-select when any player changes playback state.
+    Connections {
+        target: root.currentPlayer
+        enabled: root.currentPlayer !== null
+        function onPlaybackStateChanged() { root.selectPlayer(); }
+    }
+
+    // Scan on startup.
+    Component.onCompleted: selectPlayer()
 
     Row {
         id: mediaRow
@@ -43,33 +70,31 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: 6
 
-        // Track info — artist · title, truncated.
+        // Track info: artist · title
         Text {
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.min(implicitWidth, 140)
+            width: Math.min(implicitWidth, 160)
             elide: Text.ElideRight
             text: {
-                if (!root.activePlayer)
-                    return "";
+                if (!root.hasPlayer) return "";
                 let parts = [];
-                if (root.activePlayer.trackArtist)
-                    parts.push(root.activePlayer.trackArtist);
-                if (root.activePlayer.trackTitle)
-                    parts.push(root.activePlayer.trackTitle);
-                return parts.join(" · ") || root.activePlayer.identity || "";
+                if (root.currentPlayer.trackArtist)
+                    parts.push(root.currentPlayer.trackArtist);
+                if (root.currentPlayer.trackTitle)
+                    parts.push(root.currentPlayer.trackTitle);
+                return parts.join(" · ") || root.currentPlayer.identity || "";
             }
             color: "#1e1e2e"
             font.pixelSize: 11
         }
 
-        // Prev
+        // Previous
         Rectangle {
-            width: 20
-            height: 20
+            width: 20; height: 20
             anchors.verticalCenter: parent.verticalCenter
             radius: 4
             color: prevArea.containsMouse ? "#45475a" : "transparent"
-            visible: root.activePlayer && root.activePlayer.canGoPrevious
+            visible: root.hasPlayer && root.currentPlayer.canGoPrevious
 
             Text {
                 anchors.centerIn: parent
@@ -84,21 +109,20 @@ Item {
                 hoverEnabled: true
                 Accessible.role: Accessible.Button
                 Accessible.name: "Previous track"
-                onClicked: if (root.activePlayer) root.activePlayer.previous()
+                onClicked: root.currentPlayer.previous()
             }
         }
 
         // Play / Pause
         Rectangle {
-            width: 22
-            height: 22
+            width: 22; height: 22
             anchors.verticalCenter: parent.verticalCenter
             radius: 11
             color: playArea.containsMouse ? "#45475a" : "#313244"
 
             Text {
                 anchors.centerIn: parent
-                text: root.activePlayer && root.activePlayer.isPlaying ? "⏸" : "▶"
+                text: root.isPlaying ? "⏸" : "▶"
                 font.pixelSize: 10
                 color: "#cdd6f4"
             }
@@ -108,19 +132,18 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 Accessible.role: Accessible.Button
-                Accessible.name: root.activePlayer && root.activePlayer.isPlaying ? "Pause" : "Play"
-                onClicked: if (root.activePlayer) root.activePlayer.togglePlaying()
+                Accessible.name: root.isPlaying ? "Pause" : "Play"
+                onClicked: if (root.hasPlayer) root.currentPlayer.togglePlaying()
             }
         }
 
         // Next
         Rectangle {
-            width: 20
-            height: 20
+            width: 20; height: 20
             anchors.verticalCenter: parent.verticalCenter
             radius: 4
             color: nextArea.containsMouse ? "#45475a" : "transparent"
-            visible: root.activePlayer && root.activePlayer.canGoNext
+            visible: root.hasPlayer && root.currentPlayer.canGoNext
 
             Text {
                 anchors.centerIn: parent
@@ -135,7 +158,7 @@ Item {
                 hoverEnabled: true
                 Accessible.role: Accessible.Button
                 Accessible.name: "Next track"
-                onClicked: if (root.activePlayer) root.activePlayer.next()
+                onClicked: root.currentPlayer.next()
             }
         }
     }
