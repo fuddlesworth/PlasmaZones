@@ -21,6 +21,8 @@ PanelWindow {
     // Anchors exposed for popup positioning.
     property alias menuAnchor: menuButton
     property alias calendarAnchor: clockLabel
+    property alias mediaAnchor: mprisWidget.popupAnchor
+    property alias mediaPlayer: mprisWidget.currentPlayer
     required property var shellState
     required property string clockText
     required property string cpuPercent
@@ -434,7 +436,15 @@ PanelWindow {
             }
 
             MprisWidget {
+                id: mprisWidget
                 anchors.verticalCenter: parent.verticalCenter
+
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    propagateComposedEvents: true
+                    onClicked: root.shellState.mediaOpen = !root.shellState.mediaOpen
+                }
             }
 
             Row {

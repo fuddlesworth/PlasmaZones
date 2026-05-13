@@ -20,6 +20,7 @@ Item {
         property bool menuOpen: false
         property bool settingsOpen: false
         property bool calendarOpen: false
+        property bool mediaOpen: false
         property int activeWorkspace: 0
 
         reloadId: "main"
@@ -158,6 +159,12 @@ Item {
     CalendarPopup {
         shellState: shellState
         anchorItem: topPanel.calendarAnchor
+    }
+
+    MprisPopup {
+        shellState: shellState
+        anchorItem: topPanel.mediaAnchor
+        currentPlayer: topPanel.mediaPlayer
     }
 
     // ─── Floating windows ────────────────────────────────────────────────
