@@ -55,30 +55,9 @@ qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
     dbusmenu_interface
 )
 
-qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
-    ${phosphorservices_DBUS_ROOT}/org.mpris.MediaPlayer2.xml
-    mpris_mediaplayer2_interface
-)
-
-qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
-    ${phosphorservices_DBUS_ROOT}/org.mpris.MediaPlayer2.Player.xml
-    mpris_player_interface
-)
-
-qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
-    ${phosphorservices_DBUS_ROOT}/org.mpris.MediaPlayer2.TrackList.xml
-    mpris_tracklist_interface
-)
-
-qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
-    ${phosphorservices_DBUS_ROOT}/org.freedesktop.UPower.xml
-    upower_interface
-)
-
-qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
-    ${phosphorservices_DBUS_ROOT}/org.freedesktop.UPower.Device.xml
-    upower_device_interface
-)
+# MPRIS and UPower use hand-rolled QDBusInterface/QDBusMessage calls
+# (matching the pattern in phosphor-screens, the daemon, etc.) rather
+# than qt6_add_dbus_interface code generation.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Public Headers
@@ -157,6 +136,17 @@ target_include_directories(PhosphorServices
 
 target_compile_features(PhosphorServices PUBLIC cxx_std_20)
 
+# Force-include dbustypes.h in every TU — including AUTOMOC's
+# mocs_compilation.cpp. The generated D-Bus interface headers
+# (statusnotifieritem_interface.h, dbusmenu_interface.h) reference
+# PhosphorServices::DBusImageList/DBusToolTip/DBusMenuLayoutItem in
+# their signatures (via XML annotations), but the generated .h files
+# have no #include for dbustypes.h. AUTOMOC processes them in
+# isolation; without the forced include, the moc output fails.
+target_compile_options(PhosphorServices PRIVATE
+    -include ${CMAKE_CURRENT_SOURCE_DIR}/src/statusnotifier/dbustypes.h
+)
+
 target_link_libraries(PhosphorServices
     PUBLIC
         Qt6::Core
@@ -171,6 +161,12 @@ set_target_properties(PhosphorServices PROPERTIES
     SOVERSION 0
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
+    # Generated D-Bus interface headers reference custom types (DBusImageList,
+    # DBusMenuLayoutItem, etc.) that are only defined in dbustypes.h. In a unity
+    # build, the MOC output for these generated headers can compile before
+    # dbustypes.h is included, producing "not a member of" errors. Disabling
+    # unity build ensures each TU includes its own headers in the correct order.
+    UNITY_BUILD OFF
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

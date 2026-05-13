@@ -3,23 +3,39 @@
 
 #include <PhosphorServices/UPowerDevice.h>
 
-#include "upower_device_interface.h"
-
 #include <QDBusConnection>
+#include <QDBusInterface>
+#include <QDBusMessage>
+#include <QDBusReply>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcUPowerDevice, "phosphorservices.upower.device")
 
-static constexpr auto kUPowerService = "org.freedesktop.UPower";
+namespace {
+constexpr auto kService = "org.freedesktop.UPower";
+constexpr auto kDeviceIface = "org.freedesktop.UPower.Device";
+constexpr auto kPropsIface = "org.freedesktop.DBus.Properties";
+} // namespace
 
 namespace PhosphorServices {
+
+static QVariant deviceProp(QDBusConnection& bus, const QString& path, const char* prop)
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), path, QLatin1String(kPropsIface),
+                                                      QStringLiteral("Get"));
+    msg << QLatin1String(kDeviceIface) << QLatin1String(prop);
+    QDBusMessage reply = bus.call(msg, QDBus::Block, 200);
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        return reply.arguments().first().value<QDBusVariant>().variant();
+    return {};
+}
 
 class UPowerDevice::Private
 {
 public:
     UPowerDevice* owner = nullptr;
     QString path;
-    std::unique_ptr<OrgFreedesktopUPowerDeviceInterface> proxy;
+    QDBusConnection bus = QDBusConnection::systemBus();
 
     qreal percentage = 0.0;
     DeviceState state = UnknownState;
@@ -56,22 +72,23 @@ public:
             Q_EMIT(o->*signal)();
         };
 
-        setReal(percentage, proxy->percentage(), &UPowerDevice::percentageChanged, owner);
-        setReal(energy, proxy->energy(), &UPowerDevice::energyChanged, owner);
-        setReal(energyFull, proxy->energyFull(), &UPowerDevice::energyCapacityChanged, owner);
-        setReal(energyRate, proxy->energyRate(), &UPowerDevice::energyRateChanged, owner);
-        setStr(nativePath, proxy->nativePath(), &UPowerDevice::nativePathChanged, owner);
-        setStr(model, proxy->model(), &UPowerDevice::modelChanged, owner);
-        setStr(iconName, proxy->iconName(), &UPowerDevice::iconNameChanged, owner);
-        setBool(powerSupply, proxy->powerSupply(), &UPowerDevice::powerSupplyChanged, owner);
-        setBool(isPresent, proxy->isPresent(), &UPowerDevice::isPresentChanged, owner);
+        setReal(percentage, deviceProp(bus, path, "Percentage").toDouble(), &UPowerDevice::percentageChanged, owner);
+        setReal(energy, deviceProp(bus, path, "Energy").toDouble(), &UPowerDevice::energyChanged, owner);
+        setReal(energyFull, deviceProp(bus, path, "EnergyFull").toDouble(), &UPowerDevice::energyCapacityChanged,
+                owner);
+        setReal(energyRate, deviceProp(bus, path, "EnergyRate").toDouble(), &UPowerDevice::energyRateChanged, owner);
+        setStr(nativePath, deviceProp(bus, path, "NativePath").toString(), &UPowerDevice::nativePathChanged, owner);
+        setStr(model, deviceProp(bus, path, "Model").toString(), &UPowerDevice::modelChanged, owner);
+        setStr(iconName, deviceProp(bus, path, "IconName").toString(), &UPowerDevice::iconNameChanged, owner);
+        setBool(powerSupply, deviceProp(bus, path, "PowerSupply").toBool(), &UPowerDevice::powerSupplyChanged, owner);
+        setBool(isPresent, deviceProp(bus, path, "IsPresent").toBool(), &UPowerDevice::isPresentChanged, owner);
 
-        auto newState = static_cast<DeviceState>(proxy->state());
+        auto newState = static_cast<DeviceState>(deviceProp(bus, path, "State").toUInt());
         if (state != newState) {
             state = newState;
             Q_EMIT owner->stateChanged();
         }
-        auto newType = static_cast<DeviceType>(proxy->type());
+        auto newType = static_cast<DeviceType>(deviceProp(bus, path, "Type").toUInt());
         bool oldIsLaptop = (type == Battery && powerSupply);
         if (type != newType) {
             type = newType;
@@ -81,12 +98,12 @@ public:
         if (oldIsLaptop != newIsLaptop)
             Q_EMIT owner->isLaptopBatteryChanged();
 
-        qint64 newTTE = proxy->timeToEmpty();
+        qint64 newTTE = deviceProp(bus, path, "TimeToEmpty").toLongLong();
         if (timeToEmpty != newTTE) {
             timeToEmpty = newTTE;
             Q_EMIT owner->timeToEmptyChanged();
         }
-        qint64 newTTF = proxy->timeToFull();
+        qint64 newTTF = deviceProp(bus, path, "TimeToFull").toLongLong();
         if (timeToFull != newTTF) {
             timeToFull = newTTF;
             Q_EMIT owner->timeToFullChanged();
@@ -103,11 +120,9 @@ UPowerDevice::UPowerDevice(const QString& dbusPath, QObject* parent)
 {
     d->owner = this;
     d->path = dbusPath;
-    d->proxy = std::make_unique<OrgFreedesktopUPowerDeviceInterface>(QLatin1String(kUPowerService), dbusPath,
-                                                                     QDBusConnection::systemBus(), this);
 
     QDBusConnection::systemBus().connect(
-        QLatin1String(kUPowerService), dbusPath, QStringLiteral("org.freedesktop.DBus.Properties"),
+        QLatin1String(kService), dbusPath, QStringLiteral("org.freedesktop.DBus.Properties"),
         QStringLiteral("PropertiesChanged"), this, SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
 
     d->refreshAll();
@@ -186,7 +201,7 @@ qreal UPowerDevice::healthPercentage() const
 void UPowerDevice::_q_onPropertiesChanged(const QString& iface, const QVariantMap& /*changed*/,
                                           const QStringList& /*invalidated*/)
 {
-    if (iface != QLatin1String("org.freedesktop.UPower.Device"))
+    if (iface != QLatin1String(kDeviceIface))
         return;
     d->refreshAll();
 }

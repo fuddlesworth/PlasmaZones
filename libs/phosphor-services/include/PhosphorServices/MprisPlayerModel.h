@@ -5,12 +5,12 @@
 
 #include <PhosphorServices/phosphorservices_export.h>
 
+#include <PhosphorServices/MprisHost.h>
+#include <PhosphorServices/MprisPlayer.h>
+
 #include <QAbstractListModel>
 
 namespace PhosphorServices {
-
-class MprisHost;
-class MprisPlayer;
 
 class PHOSPHORSERVICES_EXPORT MprisPlayerModel : public QAbstractListModel
 {

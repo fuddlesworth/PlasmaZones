@@ -110,6 +110,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void _q_onPropertiesChanged(const QString& iface, const QVariantMap& changed, const QStringList& invalidated);
+    void _q_onSeeked(qlonglong position);
 
 private:
     class Private;

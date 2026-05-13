@@ -5,12 +5,13 @@
 
 #include <PhosphorServices/phosphorservices_export.h>
 
+#include <PhosphorServices/UPowerDevice.h>
+
+#include <QDBusObjectPath>
 #include <QList>
 #include <QObject>
 
 namespace PhosphorServices {
-
-class UPowerDevice;
 
 class PHOSPHORSERVICES_EXPORT UPowerHost : public QObject
 {
@@ -38,6 +39,8 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void _q_onPropertiesChanged(const QString& iface, const QVariantMap& changed, const QStringList& invalidated);
+    void _q_onDeviceAdded(const QDBusObjectPath& path);
+    void _q_onDeviceRemoved(const QDBusObjectPath& path);
 
 private:
     class Private;

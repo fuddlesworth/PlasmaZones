@@ -5,12 +5,12 @@
 
 #include <PhosphorServices/phosphorservices_export.h>
 
+#include <PhosphorServices/UPowerDevice.h>
+#include <PhosphorServices/UPowerHost.h>
+
 #include <QAbstractListModel>
 
 namespace PhosphorServices {
-
-class UPowerHost;
-class UPowerDevice;
 
 class PHOSPHORSERVICES_EXPORT UPowerDeviceModel : public QAbstractListModel
 {

@@ -4,18 +4,23 @@
 #include <PhosphorServices/UPowerHost.h>
 #include <PhosphorServices/UPowerDevice.h>
 
-#include "upower_interface.h"
-
 #include <QDBusConnection>
+#include <QDBusInterface>
+#include <QDBusMessage>
 #include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusReply>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcUPowerHost, "phosphorservices.upower.host")
 
-static constexpr auto kUPowerService = "org.freedesktop.UPower";
-static constexpr auto kUPowerPath = "/org/freedesktop/UPower";
+namespace {
+constexpr auto kService = "org.freedesktop.UPower";
+constexpr auto kPath = "/org/freedesktop/UPower";
+constexpr auto kIface = "org.freedesktop.UPower";
+constexpr auto kPropsIface = "org.freedesktop.DBus.Properties";
+} // namespace
 
 namespace PhosphorServices {
 
@@ -23,7 +28,6 @@ class UPowerHost::Private
 {
 public:
     UPowerHost* owner = nullptr;
-    std::unique_ptr<OrgFreedesktopUPowerInterface> proxy;
     QList<UPowerDevice*> devices;
     UPowerDevice* displayDevice = nullptr;
     bool onBattery = false;
@@ -68,35 +72,48 @@ UPowerHost::UPowerHost(QObject* parent)
         return;
     }
 
-    d->proxy = std::make_unique<OrgFreedesktopUPowerInterface>(QLatin1String(kUPowerService),
-                                                               QLatin1String(kUPowerPath), bus, this);
-
-    bus.connect(QLatin1String(kUPowerService), QLatin1String(kUPowerPath),
-                QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,
+    bus.connect(QLatin1String(kService), QLatin1String(kPath), QStringLiteral("org.freedesktop.DBus.Properties"),
+                QStringLiteral("PropertiesChanged"), this,
                 SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
 
-    connect(d->proxy.get(), &OrgFreedesktopUPowerInterface::DeviceAdded, this, [this](const QDBusObjectPath& path) {
-        d->addDevice(path.path());
-    });
-    connect(d->proxy.get(), &OrgFreedesktopUPowerInterface::DeviceRemoved, this, [this](const QDBusObjectPath& path) {
-        d->removeDevice(path.path());
-    });
+    bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kIface), QStringLiteral("DeviceAdded"),
+                this, SLOT(_q_onDeviceAdded(QDBusObjectPath)));
+    bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kIface), QStringLiteral("DeviceRemoved"),
+                this, SLOT(_q_onDeviceRemoved(QDBusObjectPath)));
 
-    d->onBattery = d->proxy->onBattery();
-
-    auto displayReply = d->proxy->GetDisplayDevice();
-    displayReply.waitForFinished();
-    if (displayReply.isValid() && !displayReply.value().path().isEmpty()) {
-        d->displayDevice = new UPowerDevice(displayReply.value().path(), this);
-        Q_EMIT displayDeviceChanged();
+    // Read OnBattery
+    {
+        QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
+                                                          QLatin1String(kPropsIface), QStringLiteral("Get"));
+        msg << QLatin1String(kIface) << QStringLiteral("OnBattery");
+        QDBusMessage reply = bus.call(msg, QDBus::Block, 500);
+        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+            d->onBattery = reply.arguments().first().value<QDBusVariant>().variant().toBool();
     }
 
-    auto enumReply = d->proxy->EnumerateDevices();
-    enumReply.waitForFinished();
-    if (enumReply.isValid()) {
-        const auto paths = enumReply.value();
-        for (const QDBusObjectPath& path : paths) {
-            d->addDevice(path.path());
+    // Get display device
+    {
+        QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
+                                                          QLatin1String(kIface), QStringLiteral("GetDisplayDevice"));
+        QDBusMessage reply = bus.call(msg, QDBus::Block, 500);
+        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+            QString devPath = reply.arguments().first().value<QDBusObjectPath>().path();
+            if (!devPath.isEmpty()) {
+                d->displayDevice = new UPowerDevice(devPath, this);
+                Q_EMIT displayDeviceChanged();
+            }
+        }
+    }
+
+    // Enumerate devices
+    {
+        QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
+                                                          QLatin1String(kIface), QStringLiteral("EnumerateDevices"));
+        QDBusMessage reply = bus.call(msg, QDBus::Block, 500);
+        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+            const auto paths = qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().first());
+            for (const QDBusObjectPath& p : paths)
+                d->addDevice(p.path());
         }
     }
 }
@@ -130,7 +147,7 @@ UPowerDevice* UPowerHost::deviceAt(int index) const
 void UPowerHost::_q_onPropertiesChanged(const QString& iface, const QVariantMap& changed,
                                         const QStringList& /*invalidated*/)
 {
-    if (iface != QLatin1String("org.freedesktop.UPower"))
+    if (iface != QLatin1String(kIface))
         return;
     if (changed.contains(QStringLiteral("OnBattery"))) {
         bool val = changed.value(QStringLiteral("OnBattery")).toBool();
@@ -139,6 +156,16 @@ void UPowerHost::_q_onPropertiesChanged(const QString& iface, const QVariantMap&
             Q_EMIT onBatteryChanged();
         }
     }
+}
+
+void UPowerHost::_q_onDeviceAdded(const QDBusObjectPath& path)
+{
+    d->addDevice(path.path());
+}
+
+void UPowerHost::_q_onDeviceRemoved(const QDBusObjectPath& path)
+{
+    d->removeDevice(path.path());
 }
 
 } // namespace PhosphorServices

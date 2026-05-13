@@ -3,32 +3,62 @@
 
 #include <PhosphorServices/MprisPlayer.h>
 
-#include "mpris_mediaplayer2_interface.h"
-#include "mpris_player_interface.h"
-
 #include <QDBusConnection>
+#include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusReply>
 #include <QLoggingCategory>
 #include <QTimer>
 #include <QVariantMap>
 
 Q_LOGGING_CATEGORY(lcMpris, "phosphorservices.mpris")
 
-static constexpr auto kMprisPath = "/org/mpris/MediaPlayer2";
-static constexpr int kPositionPollMs = 1000;
+namespace {
+constexpr auto kMprisPath = "/org/mpris/MediaPlayer2";
+constexpr auto kPlayerIface = "org.mpris.MediaPlayer2.Player";
+constexpr auto kRootIface = "org.mpris.MediaPlayer2";
+constexpr auto kPropsIface = "org.freedesktop.DBus.Properties";
+constexpr int kPositionPollMs = 1000;
+} // namespace
 
 namespace PhosphorServices {
+
+static QVariant dbusProperty(QDBusConnection& bus, const QString& service, const char* iface, const char* prop)
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(service, QLatin1String(kMprisPath), QLatin1String(kPropsIface),
+                                                      QStringLiteral("Get"));
+    msg << QLatin1String(iface) << QLatin1String(prop);
+    QDBusMessage reply = bus.call(msg, QDBus::Block, 200);
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        return reply.arguments().first().value<QDBusVariant>().variant();
+    return {};
+}
+
+static void dbusSetProperty(QDBusConnection& bus, const QString& service, const char* iface, const char* prop,
+                            const QVariant& value)
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(service, QLatin1String(kMprisPath), QLatin1String(kPropsIface),
+                                                      QStringLiteral("Set"));
+    msg << QLatin1String(iface) << QLatin1String(prop) << QVariant::fromValue(QDBusVariant(value));
+    bus.asyncCall(msg);
+}
+
+static void dbusCall(QDBusConnection& bus, const QString& service, const char* iface, const char* method)
+{
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(service, QLatin1String(kMprisPath), QLatin1String(iface), QLatin1String(method));
+    bus.asyncCall(msg);
+}
 
 class MprisPlayer::Private
 {
 public:
     MprisPlayer* owner = nullptr;
     QString service;
-    std::unique_ptr<OrgMprisMediaPlayer2Interface> rootProxy;
-    std::unique_ptr<OrgMprisMediaPlayer2PlayerInterface> playerProxy;
+    QDBusConnection bus = QDBusConnection::sessionBus();
     QTimer positionTimer;
 
     QString identity;
@@ -53,19 +83,21 @@ public:
 
     void refreshRoot()
     {
-        auto setStr = [](QString& field, const QString& val, auto signal, auto* o) {
-            if (field == val)
+        auto setStr = [](QString& field, const QVariant& val, auto signal, auto* o) {
+            QString s = val.toString();
+            if (field == s)
                 return;
-            field = val;
+            field = s;
             Q_EMIT(o->*signal)();
         };
-        setStr(identity, rootProxy->identity(), &MprisPlayer::identityChanged, owner);
-        setStr(desktopEntry, rootProxy->desktopEntry(), &MprisPlayer::desktopEntryChanged, owner);
+        setStr(identity, dbusProperty(bus, service, kRootIface, "Identity"), &MprisPlayer::identityChanged, owner);
+        setStr(desktopEntry, dbusProperty(bus, service, kRootIface, "DesktopEntry"), &MprisPlayer::desktopEntryChanged,
+               owner);
     }
 
     void refreshPlayer()
     {
-        const QString statusStr = playerProxy->playbackStatus();
+        const QString statusStr = dbusProperty(bus, service, kPlayerIface, "PlaybackStatus").toString();
         PlaybackState newState = Stopped;
         if (statusStr == QLatin1String("Playing"))
             newState = Playing;
@@ -76,7 +108,7 @@ public:
             Q_EMIT owner->playbackStateChanged();
         }
 
-        refreshMetadata(playerProxy->metadata());
+        refreshMetadata(dbusProperty(bus, service, kPlayerIface, "Metadata").toMap());
 
         auto setReal = [](qreal& field, qreal val, auto signal, auto* o) {
             if (qFuzzyCompare(field, val))
@@ -84,10 +116,11 @@ public:
             field = val;
             Q_EMIT(o->*signal)();
         };
-        setReal(volume, playerProxy->volume(), &MprisPlayer::volumeChanged, owner);
-        setReal(rate, playerProxy->rate(), &MprisPlayer::rateChanged, owner);
+        setReal(volume, dbusProperty(bus, service, kPlayerIface, "Volume").toDouble(), &MprisPlayer::volumeChanged,
+                owner);
+        setReal(rate, dbusProperty(bus, service, kPlayerIface, "Rate").toDouble(), &MprisPlayer::rateChanged, owner);
 
-        const QString loopStr = playerProxy->loopStatus();
+        const QString loopStr = dbusProperty(bus, service, kPlayerIface, "LoopStatus").toString();
         LoopState newLoop = LoopNone;
         if (loopStr == QLatin1String("Track"))
             newLoop = LoopTrack;
@@ -98,7 +131,7 @@ public:
             Q_EMIT owner->loopStateChanged();
         }
 
-        bool newShuffle = playerProxy->shuffle();
+        bool newShuffle = dbusProperty(bus, service, kPlayerIface, "Shuffle").toBool();
         if (shuffle != newShuffle) {
             shuffle = newShuffle;
             Q_EMIT owner->shuffleChanged();
@@ -110,14 +143,20 @@ public:
             field = val;
             Q_EMIT(o->*signal)();
         };
-        setBool(canPlay, playerProxy->canPlay(), &MprisPlayer::canPlayChanged, owner);
-        setBool(canPause, playerProxy->canPause(), &MprisPlayer::canPauseChanged, owner);
-        setBool(canSeek, playerProxy->canSeek(), &MprisPlayer::canSeekChanged, owner);
-        setBool(canGoNext, playerProxy->canGoNext(), &MprisPlayer::canGoNextChanged, owner);
-        setBool(canGoPrevious, playerProxy->canGoPrevious(), &MprisPlayer::canGoPreviousChanged, owner);
-        setBool(canControl, playerProxy->canControl(), &MprisPlayer::canControlChanged, owner);
+        setBool(canPlay, dbusProperty(bus, service, kPlayerIface, "CanPlay").toBool(), &MprisPlayer::canPlayChanged,
+                owner);
+        setBool(canPause, dbusProperty(bus, service, kPlayerIface, "CanPause").toBool(), &MprisPlayer::canPauseChanged,
+                owner);
+        setBool(canSeek, dbusProperty(bus, service, kPlayerIface, "CanSeek").toBool(), &MprisPlayer::canSeekChanged,
+                owner);
+        setBool(canGoNext, dbusProperty(bus, service, kPlayerIface, "CanGoNext").toBool(),
+                &MprisPlayer::canGoNextChanged, owner);
+        setBool(canGoPrevious, dbusProperty(bus, service, kPlayerIface, "CanGoPrevious").toBool(),
+                &MprisPlayer::canGoPreviousChanged, owner);
+        setBool(canControl, dbusProperty(bus, service, kPlayerIface, "CanControl").toBool(),
+                &MprisPlayer::canControlChanged, owner);
 
-        positionUs = playerProxy->position();
+        positionUs = dbusProperty(bus, service, kPlayerIface, "Position").toLongLong();
         Q_EMIT owner->positionChanged();
 
         updatePositionTimer();
@@ -160,9 +199,9 @@ public:
 
     void onPropertiesChanged(const QString& iface, const QVariantMap& changed, const QStringList& /*invalidated*/)
     {
-        if (iface == QLatin1String("org.mpris.MediaPlayer2")) {
+        if (iface == QLatin1String(kRootIface)) {
             refreshRoot();
-        } else if (iface == QLatin1String("org.mpris.MediaPlayer2.Player")) {
+        } else if (iface == QLatin1String(kPlayerIface)) {
             if (changed.contains(QStringLiteral("PlaybackStatus"))) {
                 const QString s = changed.value(QStringLiteral("PlaybackStatus")).toString();
                 PlaybackState ns = Stopped;
@@ -176,10 +215,8 @@ public:
                     updatePositionTimer();
                 }
             }
-            if (changed.contains(QStringLiteral("Metadata"))) {
-                const QVariant v = changed.value(QStringLiteral("Metadata"));
-                refreshMetadata(qdbus_cast<QVariantMap>(v));
-            }
+            if (changed.contains(QStringLiteral("Metadata")))
+                refreshMetadata(qdbus_cast<QVariantMap>(changed.value(QStringLiteral("Metadata"))));
             if (changed.contains(QStringLiteral("Volume"))) {
                 qreal v = changed.value(QStringLiteral("Volume")).toDouble();
                 if (!qFuzzyCompare(volume, v)) {
@@ -259,11 +296,6 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
     d->owner = this;
     d->service = serviceName;
 
-    d->rootProxy = std::make_unique<OrgMprisMediaPlayer2Interface>(serviceName, QLatin1String(kMprisPath),
-                                                                   QDBusConnection::sessionBus(), this);
-    d->playerProxy = std::make_unique<OrgMprisMediaPlayer2PlayerInterface>(serviceName, QLatin1String(kMprisPath),
-                                                                           QDBusConnection::sessionBus(), this);
-
     d->positionTimer.setSingleShot(false);
     connect(&d->positionTimer, &QTimer::timeout, this, [this]() {
         d->tickPosition();
@@ -273,9 +305,8 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
         serviceName, QLatin1String(kMprisPath), QStringLiteral("org.freedesktop.DBus.Properties"),
         QStringLiteral("PropertiesChanged"), this, SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
 
-    connect(d->playerProxy.get(), &OrgMprisMediaPlayer2PlayerInterface::Seeked, this, [this](qint64 pos) {
-        d->onSeeked(pos);
-    });
+    QDBusConnection::sessionBus().connect(serviceName, QLatin1String(kMprisPath), QLatin1String(kPlayerIface),
+                                          QStringLiteral("Seeked"), this, SLOT(_q_onSeeked(qlonglong)));
 
     d->refreshRoot();
     d->refreshPlayer();
@@ -370,11 +401,11 @@ bool MprisPlayer::canControl() const
 
 void MprisPlayer::setVolume(qreal v)
 {
-    d->playerProxy->setVolume(v);
+    dbusSetProperty(d->bus, d->service, kPlayerIface, "Volume", v);
 }
 void MprisPlayer::setShuffle(bool s)
 {
-    d->playerProxy->setShuffle(s);
+    dbusSetProperty(d->bus, d->service, kPlayerIface, "Shuffle", s);
 }
 
 void MprisPlayer::setLoopState(LoopState state)
@@ -384,50 +415,60 @@ void MprisPlayer::setLoopState(LoopState state)
         str = QStringLiteral("Track");
     else if (state == LoopPlaylist)
         str = QStringLiteral("Playlist");
-    d->playerProxy->setLoopStatus(str);
+    dbusSetProperty(d->bus, d->service, kPlayerIface, "LoopStatus", str);
 }
 
 void MprisPlayer::play()
 {
-    d->playerProxy->Play();
+    dbusCall(d->bus, d->service, kPlayerIface, "Play");
 }
 void MprisPlayer::pause()
 {
-    d->playerProxy->Pause();
+    dbusCall(d->bus, d->service, kPlayerIface, "Pause");
 }
 void MprisPlayer::stop()
 {
-    d->playerProxy->Stop();
+    dbusCall(d->bus, d->service, kPlayerIface, "Stop");
 }
 void MprisPlayer::togglePlaying()
 {
-    d->playerProxy->PlayPause();
+    dbusCall(d->bus, d->service, kPlayerIface, "PlayPause");
 }
 void MprisPlayer::next()
 {
-    d->playerProxy->Next();
+    dbusCall(d->bus, d->service, kPlayerIface, "Next");
 }
 void MprisPlayer::previous()
 {
-    d->playerProxy->Previous();
+    dbusCall(d->bus, d->service, kPlayerIface, "Previous");
 }
+
 void MprisPlayer::seek(qreal offsetSeconds)
 {
-    d->playerProxy->Seek(static_cast<qint64>(offsetSeconds * 1e6));
+    QDBusMessage msg = QDBusMessage::createMethodCall(d->service, QLatin1String(kMprisPath),
+                                                      QLatin1String(kPlayerIface), QStringLiteral("Seek"));
+    msg << static_cast<qint64>(offsetSeconds * 1e6);
+    d->bus.asyncCall(msg);
 }
+
 void MprisPlayer::raise()
 {
-    d->rootProxy->Raise();
+    dbusCall(d->bus, d->service, kRootIface, "Raise");
 }
 void MprisPlayer::quit()
 {
-    d->rootProxy->Quit();
+    dbusCall(d->bus, d->service, kRootIface, "Quit");
 }
 
 void MprisPlayer::_q_onPropertiesChanged(const QString& iface, const QVariantMap& changed,
                                          const QStringList& invalidated)
 {
     d->onPropertiesChanged(iface, changed, invalidated);
+}
+
+void MprisPlayer::_q_onSeeked(qlonglong position)
+{
+    d->onSeeked(position);
 }
 
 } // namespace PhosphorServices
