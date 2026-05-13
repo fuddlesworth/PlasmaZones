@@ -9,6 +9,19 @@ Type=simple
 ExecStart=@KDE_INSTALL_FULL_BINDIR@/plasmazonesd
 Restart=on-failure
 RestartSec=5
+# Don't retry after qFatal-driven SIGABRT. Qt's wayland QPA aborts
+# when wl_display disappears during user logout (Qt's design: qFatal
+# is "unrecoverable, do not retry me"). systemd's `Restart=on-failure`
+# blindly treated it as a transient failure and rescheduled the
+# daemon — sometimes into a phantom plasma-restore session that
+# briefly publishes a wl_display socket inside the still-dying
+# user@.service, which let the daemon fire welcome OSDs the user
+# saw flashing on the way to SDDM. The daemon's logind session-
+# state check (in daemon.cpp::queryLogindSessionState) is the
+# correct gate for "should I be running?"; systemd's blind retry
+# fights against it. SIGABRT here covers both Qt's qFatal path
+# and any explicit `abort()` in our code.
+RestartPreventExitStatus=SIGABRT
 Slice=session.slice
 Environment=QT_PLUGIN_PATH=@KDE_INSTALL_FULL_LIBDIR@/qt6/plugins
 Environment=LD_LIBRARY_PATH=@KDE_INSTALL_FULL_LIBDIR@

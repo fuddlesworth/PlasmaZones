@@ -9,7 +9,12 @@
 #include <QStandardPaths>
 #include <QtConcurrent>
 #include <QScreen>
+#include <QCoreApplication>
 #include <QDBusConnection>
+#include <QDBusInterface>
+#include <QDBusMessage>
+#include <QDBusObjectPath>
+#include <QDBusReply>
 #include <QDBusError>
 #include <QDir>
 #include <QFile>
@@ -1233,6 +1238,32 @@ void Daemon::start()
         return;
     }
 
+    // Permanently suppress OSDs once the application starts shutting down.
+    // SIGTERM (systemd logout) emits aboutToQuit before stop() runs; any
+    // OSD that fires between aboutToQuit and the daemon's actual exit
+    // captures a torn-down FBO and renders white. The lambda is
+    // self-contained — no captures beyond `this`, and `m_shuttingDown`
+    // is only read from the GUI thread, so no synchronisation needed.
+    if (qGuiApp) {
+        connect(qGuiApp, &QGuiApplication::aboutToQuit, this, [this]() {
+            m_shuttingDown = true;
+        });
+    }
+
+    // Query systemd's user bus for `plasma-workspace.target.ActiveState`.
+    // This is the only signal that uniquely distinguishes a real KDE
+    // Plasma session (orchestrated by `startplasma-wayland`, which is
+    // what flips the target to `active`) from a phantom plasma-restore
+    // session that systemd may spin up between user logout and SDDM.
+    // The phantom has a wl_display socket and a live user@.service —
+    // so neither main.cpp's wayland-socket pre-check nor
+    // `User.State` (which stays `active` while user@.service is up)
+    // can detect it. But the phantom has no `startplasma-wayland`
+    // leader, so `plasma-workspace.target` stays inactive. The query
+    // is also wired through `PropertiesChanged` so a running daemon
+    // flips `m_shuttingDown` when the target leaves active mid-flight.
+    queryPlasmaWorkspaceState();
+
     connectScreenSignals();
     connectDesktopActivity();
 
@@ -1273,6 +1304,12 @@ void Daemon::start()
 
 void Daemon::stop()
 {
+    // Mark shutdown ASAP so any signal handler that fires during the
+    // teardown window bails out of OSD shows. `aboutToQuit` already sets
+    // this on the SIGTERM path; programmatic `stop()` callers (tests,
+    // explicit shutdown) hit this branch instead.
+    m_shuttingDown = true;
+
     // Drop the layout-manager provider lambdas FIRST, before the m_running
     // gate. They capture `this` and dereference m_settings; m_settings is
     // declared after m_layoutManager, so reverse-order member destruction
@@ -1472,6 +1509,110 @@ void Daemon::stop()
     // m_running gate) so this point requires no further teardown.
 
     m_running = false;
+}
+
+void Daemon::queryPlasmaWorkspaceState()
+{
+    // Query the user-bus systemd for `plasma-workspace.target`'s
+    // ActiveState. This is the only signal that uniquely distinguishes
+    // a real KDE Plasma session (orchestrated by `startplasma-wayland`,
+    // which is what flips the target to `active`) from a phantom
+    // plasma-restore session that systemd may briefly spin up between
+    // user logout and SDDM. The phantom has a wl_display socket and a
+    // live user@.service — so neither main.cpp's wayland-socket
+    // pre-check nor logind's `User.State` (stays `active` while
+    // user@.service is up) detect it. But the phantom has no
+    // `startplasma-wayland` leader, so `plasma-workspace.target` stays
+    // inactive there.
+    //
+    // Three failure modes:
+    //   • systemd user bus unavailable (non-systemd, headless tests)
+    //     → leave `m_plasmaWorkspaceActive=true` (fail-open).
+    //   • systemd reachable but `GetUnit("plasma-workspace.target")`
+    //     fails (target not loaded; system without KDE Plasma) →
+    //     fail-open: same rationale, this code path wouldn't have
+    //     welcome OSDs to suppress.
+    //   • systemd reachable, GetUnit succeeds, ActiveState != "active"
+    //     → fail-closed: this is the phantom-session case.
+    QDBusConnection sessionBus = QDBusConnection::sessionBus();
+    if (!sessionBus.isConnected()) {
+        qCDebug(lcDaemon) << "queryPlasmaWorkspaceState: session bus unavailable, leaving m_plasmaWorkspaceActive=true";
+        return;
+    }
+
+    QDBusInterface manager(QStringLiteral("org.freedesktop.systemd1"), QStringLiteral("/org/freedesktop/systemd1"),
+                           QStringLiteral("org.freedesktop.systemd1.Manager"), sessionBus);
+    if (!manager.isValid()) {
+        qCDebug(lcDaemon) << "queryPlasmaWorkspaceState: systemd1.Manager not available, leaving fail-open";
+        return;
+    }
+
+    // Subscribe to systemd events so PropertiesChanged signals start
+    // flowing. Without this call, systemd only emits PropertiesChanged
+    // to clients that explicitly Subscribe()d. Idempotent and cheap.
+    manager.call(QStringLiteral("Subscribe"));
+
+    QDBusReply<QDBusObjectPath> pathReply =
+        manager.call(QStringLiteral("GetUnit"), QStringLiteral("plasma-workspace.target"));
+    if (!pathReply.isValid()) {
+        qCInfo(lcDaemon) << "queryPlasmaWorkspaceState: GetUnit('plasma-workspace.target') failed:"
+                         << pathReply.error().message() << "— leaving fail-open (target not loaded)";
+        return;
+    }
+    m_plasmaWorkspaceTargetPath = pathReply.value().path();
+    if (m_plasmaWorkspaceTargetPath.isEmpty()) {
+        return;
+    }
+
+    QDBusInterface props(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
+                         QStringLiteral("org.freedesktop.DBus.Properties"), sessionBus);
+    QDBusReply<QVariant> stateReply = props.call(QStringLiteral("Get"), QStringLiteral("org.freedesktop.systemd1.Unit"),
+                                                 QStringLiteral("ActiveState"));
+    if (!stateReply.isValid()) {
+        qCDebug(lcDaemon) << "queryPlasmaWorkspaceState: ActiveState Get failed:" << stateReply.error().message();
+        return;
+    }
+    const QString state = stateReply.value().toString();
+    m_plasmaWorkspaceActive = (state == QLatin1String("active"));
+    qCInfo(lcDaemon) << "plasma-workspace.target ActiveState at startup:" << state
+                     << "plasmaWorkspaceActive=" << m_plasmaWorkspaceActive << "path=" << m_plasmaWorkspaceTargetPath;
+
+    // Subscribe to PropertiesChanged on the Unit object so the
+    // running daemon notices when plasma-workspace.target leaves
+    // active (typical logout signal). Filtered to the systemd1.Unit
+    // interface in the slot.
+    const bool ok =
+        sessionBus.connect(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
+                           QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,
+                           SLOT(onPlasmaWorkspaceTargetPropertiesChanged(QString, QVariantMap, QStringList)));
+    if (!ok) {
+        qCWarning(lcDaemon) << "queryPlasmaWorkspaceState: failed to subscribe to Unit PropertiesChanged on"
+                            << m_plasmaWorkspaceTargetPath;
+    }
+}
+
+void Daemon::onPlasmaWorkspaceTargetPropertiesChanged(const QString& interfaceName,
+                                                      const QVariantMap& changedProperties,
+                                                      const QStringList& /*invalidatedProperties*/)
+{
+    if (interfaceName != QLatin1String("org.freedesktop.systemd1.Unit")) {
+        return;
+    }
+    const auto it = changedProperties.constFind(QStringLiteral("ActiveState"));
+    if (it == changedProperties.constEnd()) {
+        return;
+    }
+    const QString state = it->toString();
+    const bool nowActive = (state == QLatin1String("active"));
+    if (m_plasmaWorkspaceActive && !nowActive) {
+        // plasma-workspace.target left active — Plasma is being torn
+        // down. Treat exactly like aboutToQuit so any in-flight or
+        // deferred OSD bails.
+        m_shuttingDown = true;
+        qCInfo(lcDaemon) << "plasma-workspace.target left active state (now" << state
+                         << "); marking daemon as shutting down for OSD-suppression purposes";
+    }
+    m_plasmaWorkspaceActive = nowActive;
 }
 
 } // namespace PlasmaZones

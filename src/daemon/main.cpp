@@ -18,6 +18,7 @@
 #include <QCommandLineParser>
 #include <QDBusConnection>
 #include <QDBusInterface>
+#include <QFile>
 #include <QIcon>
 #include <QLibrary>
 #include <QMutex>
@@ -29,6 +30,7 @@
 #include <QtQml/qqml.h>
 #include "pz_i18n.h"
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
 #include <signal.h>
 
@@ -49,6 +51,48 @@ void signalHandler(int /*signal*/)
 
 int main(int argc, char* argv[])
 {
+    // Wayland-availability pre-check — runs BEFORE QGuiApplication
+    // construction. During logout the user's wl_display socket
+    // disappears while `plasmazones.service`'s `Restart=on-failure`
+    // is still active. If we let QGuiApplication run in that state,
+    // its wayland QPA plugin calls `qFatal("Failed to create
+    // wl_display")` → SIGABRT → systemd treats it as failure → schedules
+    // another restart → repeat. During the restart loop the brief
+    // moments when the SDDM transition leaves a Wayland socket reachable
+    // give just enough time for the daemon to start, fire its welcome
+    // OSDs against an output that's in mid-unbind (visible as a white
+    // OSD card on the way to the login screen), then die again.
+    //
+    // The clean fix is to exit with code 0 BEFORE QGuiApplication runs
+    // when WAYLAND_DISPLAY is set but the socket isn't accessible. A
+    // clean exit doesn't satisfy `Restart=on-failure`, so systemd stops
+    // restarting and the logout completes without further OSD flashes.
+    {
+        const QByteArray waylandDisplay = qgetenv("WAYLAND_DISPLAY");
+        if (!waylandDisplay.isEmpty()) {
+            QByteArray socketPath;
+            if (waylandDisplay.startsWith('/')) {
+                socketPath = waylandDisplay;
+            } else {
+                const QByteArray runtimeDir = qgetenv("XDG_RUNTIME_DIR");
+                if (!runtimeDir.isEmpty()) {
+                    socketPath = runtimeDir + '/' + waylandDisplay;
+                }
+            }
+            if (!socketPath.isEmpty() && !QFile::exists(QString::fromLocal8Bit(socketPath))) {
+                // Log via stderr (Qt logging machinery isn't initialised
+                // yet) so the journal entry surfaces the deferred-exit
+                // rationale and the systemd unit's restart cycle is
+                // explainable.
+                std::fprintf(stderr,
+                             "plasmazones: WAYLAND_DISPLAY=%s but socket %s missing — "
+                             "wayland session not available, exiting cleanly to avoid restart loop\n",
+                             waylandDisplay.constData(), socketPath.constData());
+                return 0;
+            }
+        }
+    }
+
     // Opt out of MangoHud's implicit Vulkan layer injection. MangoHud's
     // implicit_layer manifest attaches whenever MANGOHUD=1 is in the
     // environment (e.g. set globally for games), and its NVIDIA stat-polling

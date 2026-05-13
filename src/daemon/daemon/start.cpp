@@ -133,6 +133,16 @@ void Daemon::connectScreenSignals()
     });
 
     connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenRemoved, this, [this](QScreen* screen) {
+        // Bump the OSD-suppression deadline whenever a screen disappears.
+        // KWin tearing down outputs at logout fires `screenRemoved` for
+        // each output; the cascading `virtualScreensChanged` → recalc →
+        // layoutApplied / autotileApplied → showLayoutOsdDeferred chain
+        // would otherwise fire an OSD onto a wl_surface whose compositor
+        // output is mid-unbind, producing a brief white card on the way
+        // to SDDM. Also damps OSD churn on monitor hot-unplug. See
+        // `Daemon::shouldSuppressOsd` for the gating helper.
+        m_screensSettlingUntil = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+
         m_overlayService->handleScreenRemoved(screen);
 
         // Capture screen ID BEFORE invalidating cache (screenIdentifier reads cached EDID)

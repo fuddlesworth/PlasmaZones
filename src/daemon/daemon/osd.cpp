@@ -78,9 +78,46 @@ void Daemon::clearHighlight()
     m_zoneDetector->clearHighlights();
 }
 
+bool Daemon::shouldSuppressOsd() const
+{
+    // Shutdown path: aboutToQuit fired (SIGTERM, programmatic quit), or
+    // stop() was entered. Any OSD that lands now captures a torn-down
+    // FBO and renders white.
+    if (m_shuttingDown) {
+        return true;
+    }
+    // systemd reports `plasma-workspace.target` as non-active. The
+    // wayland-socket precheck in main.cpp passes during phantom
+    // plasma-restore sessions (a stray `kwin_wayland` publishes a
+    // fresh socket inside user@.service mid-logout), and logind's
+    // `User.State` stays `active` whenever user@.service is up — so
+    // neither catches the phantom. `plasma-workspace.target` is only
+    // flipped to `active` by `startplasma-wayland`'s orchestration
+    // after SDDM hands off; the phantom has no startplasma leader so
+    // the target stays inactive. See `Daemon::queryPlasmaWorkspaceState`
+    // for the subscription wiring.
+    if (!m_plasmaWorkspaceActive) {
+        return true;
+    }
+    // Screens-settling cooldown: a screenRemoved event fired recently
+    // (typically KWin tearing down outputs during logout). VS reconfig
+    // signals cascading off that removal can synchronously emit
+    // layoutApplied / autotileApplied → showLayoutOsdDeferred, which
+    // races against compositor output unbind and surfaces as a brief
+    // white card on the way to SDDM. Suppress for a short window after
+    // any screen removal — also damps OSD noise on monitor hot-unplug.
+    if (std::chrono::steady_clock::now() < m_screensSettlingUntil) {
+        return true;
+    }
+    return false;
+}
+
 void Daemon::showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId)
 {
     if (!layout) {
+        return;
+    }
+    if (shouldSuppressOsd()) {
         return;
     }
 
@@ -208,6 +245,9 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
 
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
+    if (shouldSuppressOsd()) {
+        return;
+    }
     auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
     if (!algo) {
         qCWarning(lcDaemon) << "OSD: algorithm not found, algorithmId=" << algorithmId;
@@ -293,8 +333,14 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
 
 void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenId)
 {
+    if (shouldSuppressOsd()) {
+        return;
+    }
     // Defer OSD display so first-time QML compilation of NotificationOverlay.qml
     // (~100-300ms) doesn't block the daemon event loop during layout switches.
+    // The inner `showLayoutOsd` re-checks `shouldSuppressOsd()` on dispatch —
+    // covers the case where a screenRemoved fires between this queue and
+    // the timer's tick.
     QTimer::singleShot(0, this, [this, layoutId, screenId]() {
         PhosphorZones::Layout* l = m_layoutManager ? m_layoutManager->layoutById(layoutId) : nullptr;
         if (l) {
@@ -305,6 +351,9 @@ void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenI
 
 void Daemon::showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName, const QString& screenId)
 {
+    if (shouldSuppressOsd()) {
+        return;
+    }
     QTimer::singleShot(0, this, [this, algorithmId, algorithmName, screenId]() {
         showLayoutOsdForAlgorithm(algorithmId, algorithmName, screenId);
     });
@@ -444,11 +493,17 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
     if (!m_layoutManager || !m_screenManager) {
         return;
     }
+    if (shouldSuppressOsd()) {
+        return;
+    }
     // Batch all per-screen OSD shows into one deferred call so every
     // screen's surface->show() fires in the same event loop pass and the
     // compositor renders them simultaneously.
     QTimer::singleShot(0, this, [this, desktop, activity]() {
         if (!m_layoutManager || !m_screenManager) {
+            return;
+        }
+        if (shouldSuppressOsd()) {
             return;
         }
         const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
