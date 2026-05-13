@@ -47,6 +47,9 @@ LayerShellIntegration::~LayerShellIntegration()
         zwlr_foreign_toplevel_manager_v1_stop(m_foreignToplevelManager);
         m_foreignToplevelManager = nullptr;
     }
+    if (m_idleInhibitManager) {
+        zwp_idle_inhibit_manager_v1_destroy(m_idleInhibitManager);
+    }
     if (m_toplevelDragManager) {
         xdg_toplevel_drag_manager_v1_destroy(m_toplevelDragManager);
     }
@@ -215,6 +218,17 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         self->m_idleNotifierId = id;
         self->m_idleNotifierAvailable = true;
         qCDebug(lcLayerShellIntegration).nospace() << "Bound ext_idle_notifier_v1 v" << bindVersion;
+    } else if (strcmp(interface, zwp_idle_inhibit_manager_v1_interface.name) == 0) {
+        if (self->m_idleInhibitManager && self->m_idleInhibitManagerAvailable)
+            return;
+        self->m_idleInhibitManager = nullptr;
+        static constexpr uint32_t kMaxVersion = 1;
+        uint32_t bindVersion = qMin(version, kMaxVersion);
+        self->m_idleInhibitManager = static_cast<struct zwp_idle_inhibit_manager_v1*>(
+            wl_registry_bind(registry, id, &zwp_idle_inhibit_manager_v1_interface, bindVersion));
+        self->m_idleInhibitManagerId = id;
+        self->m_idleInhibitManagerAvailable = true;
+        qCDebug(lcLayerShellIntegration).nospace() << "Bound zwp_idle_inhibit_manager_v1 v" << bindVersion;
     } else if (strcmp(interface, xdg_toplevel_drag_manager_v1_interface.name) == 0) {
         if (self->m_toplevelDragManager && self->m_toplevelDragManagerAvailable)
             return;
@@ -259,6 +273,10 @@ void LayerShellIntegration::registryRemoveHandler(void* data, struct wl_registry
         self->m_idleNotifierAvailable = false;
         self->m_idleNotifierId = 0;
         qCDebug(lcLayerShellIntegration) << "ext_idle_notifier_v1 global removed";
+    } else if (id == self->m_idleInhibitManagerId) {
+        self->m_idleInhibitManagerAvailable = false;
+        self->m_idleInhibitManagerId = 0;
+        qCDebug(lcLayerShellIntegration) << "zwp_idle_inhibit_manager_v1 global removed";
     } else if (id == self->m_toplevelDragManagerId) {
         self->m_toplevelDragManagerAvailable = false;
         self->m_toplevelDragManagerId = 0;

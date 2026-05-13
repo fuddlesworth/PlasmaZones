@@ -15,6 +15,9 @@
 #include <PhosphorShell/ShellGlobal.h>
 #include <PhosphorShell/Variants.h>
 
+#include <PhosphorWayland/IdleInhibitor.h>
+#include <PhosphorWayland/IdleNotifier.h>
+
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/IScreenProvider.h>
 #include <PhosphorLayer/Role.h>
@@ -112,6 +115,8 @@ bool ShellEngine::load(const QUrl& shellUrl)
         qmlRegisterUncreatableType<PhosphorWayland::ForeignToplevel>(
             "Phosphor.Shell", 1, 0, "ForeignToplevel",
             QStringLiteral("ForeignToplevel is owned by Toplevels and cannot be constructed from QML"));
+        qmlRegisterType<PhosphorWayland::IdleInhibitor>("Phosphor.Shell", 1, 0, "IdleInhibitor");
+        qmlRegisterType<PhosphorWayland::IdleNotifier>("Phosphor.Shell", 1, 0, "IdleNotifier");
         qmlRegisterSingletonType<Toplevels>("Phosphor.Shell", 1, 0, "Toplevels", &Toplevels::create);
     });
 
