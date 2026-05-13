@@ -55,6 +55,16 @@ qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
     dbusmenu_interface
 )
 
+qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
+    ${phosphorservices_DBUS_ROOT}/org.mpris.MediaPlayer2.xml
+    mpris_mediaplayer2_interface
+)
+
+qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
+    ${phosphorservices_DBUS_ROOT}/org.mpris.MediaPlayer2.Player.xml
+    mpris_player_interface
+)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Public Headers
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -67,6 +77,9 @@ set(phosphorservices_public_HDRS
     include/PhosphorServices/StatusNotifierHost.h
     include/PhosphorServices/DBusMenuModel.h
     include/PhosphorServices/IconThemeResolver.h
+    include/PhosphorServices/MprisPlayer.h
+    include/PhosphorServices/MprisHost.h
+    include/PhosphorServices/MprisPlayerModel.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -83,6 +96,9 @@ set(phosphorservices_SRCS
     src/statusnotifier/statusnotifieritemmodel.cpp
     src/statusnotifier/dbusmenumodel.cpp
     src/icontheme/iconthemeresolver.cpp
+    src/mpris/mprishost.cpp
+    src/mpris/mprisplayer.cpp
+    src/mpris/mprisplayermodel.cpp
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
