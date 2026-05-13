@@ -14,6 +14,7 @@
 // customParams[2]: x=panelToScreenH    y=blurRadius
 // customParams[3]: x=shadowFraction    y=shadowOpacity
 // customParams[4]: x=cornerCarveFraction
+// customParams[5]: y=screenYOffset (top edge of surface as fraction of screen height, for popups)
 //   - cornerCarveFraction: radius of the concave quarter-arc carved
 //     into each bottom corner of the visible panel, expressed as a
 //     fraction of total surface height (DPR-independent). 0 disables
@@ -168,6 +169,11 @@ void main() {
     // fraction of surface height. Hard-clamp to 0..0.5 so the carve
     // can never eat the whole panel.
     float cornerCarveFraction = clamp(customParams[4].x, 0.0, 0.5);
+    // screenYOffset: Y position of this surface's top edge as a fraction
+    // of total screen height. 0 = top-anchored panel (default). For popups
+    // floating in the middle of the screen, pass e.g. 0.3 so the wallpaper
+    // samples from the correct vertical position.
+    float screenYOffset = customParams[5].y;
 
     // Convert from Qt RHI's Y-up viewport coords (uv.y=0 at visual
     // BOTTOM, uv.y=1 at visual TOP) to top-down "panel surface" coords
@@ -291,7 +297,7 @@ void main() {
         // passed DPR-independently via panelToScreenH so we don't
         // have to reconcile QML's Screen.devicePixelRatio with the
         // panel's actual rendering DPR.
-        vec2 screenUv = vec2(visualUv.x, visualUv.y * panelToScreenH);
+        vec2 screenUv = vec2(visualUv.x, screenYOffset + visualUv.y * panelToScreenH);
         // Screen UV → wallpaper UV. KDE / GNOME / Hyprland default to
         // "scaled and cropped" wallpaper positioning; emulate center-
         // crop fit so the on-screen pixel maps to the right wallpaper
