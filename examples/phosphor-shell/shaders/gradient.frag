@@ -173,7 +173,7 @@ void main() {
     // of total screen height. 0 = top-anchored panel (default). For popups
     // floating in the middle of the screen, pass e.g. 0.3 so the wallpaper
     // samples from the correct vertical position.
-    float screenYOffset = customParams[5].y;
+    float screenYOffset = max(customParams[5].y, 0.0);
 
     // Convert from Qt RHI's Y-up viewport coords (uv.y=0 at visual
     // BOTTOM, uv.y=1 at visual TOP) to top-down "panel surface" coords

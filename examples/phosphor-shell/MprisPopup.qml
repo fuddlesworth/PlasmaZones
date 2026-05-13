@@ -138,7 +138,6 @@ PopupWindow {
                     anchors.fill: parent
                     source: root.stableArtUrl
                     fillMode: Image.PreserveAspectCrop
-                    sourceSize: Qt.size(320, 320)
                     asynchronous: true
                     cache: true
                     visible: status === Image.Ready || (source !== "" && status === Image.Loading)
