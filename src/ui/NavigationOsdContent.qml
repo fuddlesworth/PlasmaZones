@@ -170,18 +170,11 @@ Item {
             return i18n("Action completed");
         }
     }
-    // Per-side padding (fraction of container width/height) reserved for
-    // shader transition effects whose silhouette extends outside the
-    // container's rectangle. Set by the daemon based on the active shader's
-    // metadata.
-    property real shaderBoundsPadding: 0
     // Content-driven desired size, exposed for the unified host (which binds
     // its Window width/height to these readonly properties; C++ also reads
     // them after every property write to compute matching layer-shell margins).
-    // Inflated by `2 * shaderBoundsPadding` on each axis so the wayland surface
-    // has room for shader silhouettes that ripple outside the container.
-    readonly property int contentDesiredWidth: Math.round(container.width * (1 + 2 * shaderBoundsPadding)) + Math.round(Kirigami.Units.gridUnit * 2.5)
-    readonly property int contentDesiredHeight: Math.round(container.height * (1 + 2 * shaderBoundsPadding)) + Math.round(Kirigami.Units.gridUnit * 2.5)
+    readonly property int contentDesiredWidth: Math.round(container.width) + Math.round(Kirigami.Units.gridUnit * 2.5)
+    readonly property int contentDesiredHeight: Math.round(container.height) + Math.round(Kirigami.Units.gridUnit * 2.5)
 
     /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
     /// The unified NotificationOverlay host re-emits this as its own

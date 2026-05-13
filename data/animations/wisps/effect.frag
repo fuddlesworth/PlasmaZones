@@ -96,7 +96,17 @@ void main() {
   vec2 coords = iTexCoord.st * (scale + 1.0) - scale * 0.5;
 
   // Get the color of the window.
-  vec4 oColor = getInputColor(coords);
+  // boundaryMask (see noise.glsl) crops sample texels that drift outside
+  // [0, 1] — the `(scale + 1.0)` scale-down above pushes `coords` slightly
+  // past the anchor on every edge at progress > 0, and uTexture0's
+  // clamp-to-edge sampler would otherwise smear the edge texel into the
+  // surrounding region, producing a 1-pixel-wide smear instead of
+  // letting the dissolve mask take the surface cleanly to transparent.
+  // The mask's bands sit OUTSIDE [0, 1] so identity sampling at
+  // progress == 0 gets mask = 1 everywhere with no inner-edge clipping.
+  // Same fix glide, fade, morph, popin, inkwell-drop, plasma-flow,
+  // ripple, smoke, snap, and soft-warp-fade already apply.
+  vec4 oColor = getInputColor(coords) * boundaryMask(coords);
 
   // Compute several layers of moving wisps.
   vec2 uv = (iTexCoord.st - 0.5) / mix(1.0, 0.5, progress) + 0.5;

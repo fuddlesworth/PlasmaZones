@@ -23,39 +23,11 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
+#include <anchor_remap.glsl>
+
 void main()
 {
-    // Remap padded vTexCoord → anchor-space UV. SurfaceAnimator expands
-    // the shaderItem QUAD by metadata's `fboExtent: "anchor+N"` ring
-    // fraction and pushes `iAnchorPosInFbo` = (padW, padH) alongside
-    // `iAnchorSize` = the captured-anchor pixel size; Qt auto-derives
-    // `iResolution` from the padded shaderItem bounds. The unified
-    // remap below produces an anchorUv range of `[-ring, 1+ring]` for
-    // a ring fraction of `ring`. Replaces the previous
-    // `customParams[7].x`-based math.
-    //
-    // Kwin-effect path: actor expansion is implemented at quad-
-    // construction time. PlasmaZonesEffect::apply() (paint_pipeline.cpp)
-    // rebuilds the window's quads at `(1+2·ring) × frame` size and
-    // remaps the texCoord to `[-ring, 1+ring]`, so `vTexCoord` already
-    // arrives in anchor-space coordinates. iAnchorPosInFbo is pushed as
-    // (0, 0) and iAnchorSize == iResolution, so the math collapses to
-    // anchorUv == vTexCoord, giving the same `[-ring, 1+ring]` range
-    // the daemon path produces via uniform-driven remap. Different
-    // runtime mechanism, same shader source.
-    // Defence in depth: iResolution and iAnchorSize are runtime-pushed
-    // and normally positive by leg start, but in a few well-known
-    // transient windows (pre-attach paint, anchor mid-relayout where
-    // width / height drop to zero between bindings) they can land at
-    // zero. `max(..., 1.0)` keeps the divisor strictly positive so a
-    // stale frame samples a degenerate but finite UV rather than
-    // propagating Inf / NaN through the warp math and dropping the
-    // surface to transparent.
-    vec2 resSafe = max(iResolution, vec2(1.0));
-    vec2 anchorSizePx = max(iAnchorSize, vec2(1.0));
-    vec2 anchorTopLeftUv = iAnchorPosInFbo / resSafe;
-    vec2 anchorSizeUv = anchorSizePx / resSafe;
-    vec2 anchorUv = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;
+    vec2 anchorUv = anchorRemap(vTexCoord);
 
     // Envelope peaks at iTime == 0.5 (mid-transition) and returns to
     // 0 at the endpoints. Same shape as glitch; gives both show and

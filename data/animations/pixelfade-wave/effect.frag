@@ -20,6 +20,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots.
 // `peakBlocks` is the chunkiest endpoint of the wave (fewest blocks
@@ -46,7 +47,12 @@ void main() {
     float blocks = mix(baselineBlocks, peakBlocks, bump);
     vec2 q = floor(uv * blocks) / blocks + 0.5 / blocks;
 
-    vec4 win = texture(uTexture0, q);
+    // boundaryMask (see noise.glsl) crops the right/bottom-edge cell
+    // whose centre can exceed 1.0 by up to half a cell. Without it,
+    // uTexture0's clamp-to-edge sampler returns the last-column /
+    // last-row texel for that cell, smearing the window's edge alpha
+    // into a ~½-cell-wide band past the surface boundary.
+    vec4 win = texture(uTexture0, q) * boundaryMask(q);
 
     float reveal = smoothstep(0.0, 1.0, wave_p);
     fragColor = win * reveal;

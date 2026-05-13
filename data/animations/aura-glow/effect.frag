@@ -124,9 +124,15 @@ vec4 blurredInputColor(vec2 uv, float radius, float samples)
     // texture read saves 44 redundant samples per fragment on every
     // visible-state frame.
     if (radius < 0.5) {
-        return texture(uTexture0, uv);
+        // boundaryMask (see noise.glsl) crops the sample to transparent
+        // outside [0, 1] — at the "gone" state windowUV is scaled by 1.1
+        // around the centre so the corners drift ~5% past the anchor,
+        // and uTexture0's clamp-to-edge sampler would otherwise smear
+        // the edge texel into a halo around the shrinking-orb silhouette.
+        return texture(uTexture0, uv) * boundaryMask(uv);
     }
     vec4 acc = vec4(0.0);
+    float totalWeight = 0.0;
     const float tau = 6.28318530718;
     const float dirs = 15.0;
     // int loop bound so iteration count exactly matches the divisor —
@@ -145,10 +151,13 @@ vec4 blurredInputColor(vec2 uv, float radius, float samples)
         for (int i = 0; i < sampleCount; ++i) {
             float s = float(i) / sampleCountF;
             vec2 off = vec2(cos(d), sin(d)) * radius * (1.0 - s) / flooredResolution;
-            acc += texture(uTexture0, uv + off);
+            vec2 tap = uv + off;
+            float w = boundaryMask(tap);
+            acc += texture(uTexture0, tap) * w;
+            totalWeight += w;
         }
     }
-    return acc / sampleCountF / dirs;
+    return acc / max(totalWeight, 1.0);
 }
 
 void main()
@@ -202,9 +211,13 @@ void main()
     // at gone state the window has scaled up 10%. easeOutCubic
     // makes the scale-up gentle.
     vec2 windowUV  = (vTexCoord - 0.5) * mix(1.1, 1.0, easeOutCubic(progress)) + 0.5;
+    // Non-blur path mirrors the blurredInputColor mask above so off-
+    // anchor windowUV samples (the 1.1× scale at the gone state pushes
+    // corners ~5% past the anchor) clip cleanly to transparent instead
+    // of smearing the edge texel via clamp-to-edge.
     vec4 windowCol = (blurAmount > 0.0)
         ? blurredInputColor(windowUV, (1.0 - progress) * blurAmount, 3.0)
-        : texture(uTexture0, windowUV);
+        : texture(uTexture0, windowUV) * boundaryMask(windowUV);
 
     // Don't draw glow where the window itself is transparent
     // (window-content shaped, not square mask).

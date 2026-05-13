@@ -26,6 +26,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots.
 // `maxBlockSize` is interpreted in NORMALISED UV units (0..1 across
@@ -61,7 +62,13 @@ void main()
     // same texel — this is what produces the pixelation visual.
     vec2 cell = (floor(uv / blockPx) + 0.5) * blockPx;
 
-    vec4 sampled = texture(uTexture0, cell);
+    // boundaryMask (see noise.glsl) crops the right/bottom-edge cell
+    // whose centre can exceed 1.0 by up to half a cell. Without it,
+    // uTexture0's clamp-to-edge sampler returns the last-column /
+    // last-row texel for that cell, smearing the window's edge alpha
+    // (rounded corners, drop shadows) into a ~½-cell-wide band past
+    // the original surface boundary.
+    vec4 sampled = texture(uTexture0, cell) * boundaryMask(cell);
 
     // The captured surface already encodes its own alpha; the parent-
     // chain scene-graph opacity is applied at blend time, so the

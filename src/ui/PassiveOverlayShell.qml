@@ -104,11 +104,23 @@ Window {
     // syncPassiveShellSurfaceState, and the order is undefined.
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
-    // Initial size — the C++ side resizes to per-screen geometry on
-    // creation. The shell wl_surface is screen-sized so vertex-shader
-    // transitions have geometry runway equal to the screen.
-    width: Kirigami.Units.gridUnit * 15
-    height: Kirigami.Units.gridUnit * 4
+    // No explicit width/height — `OverlayService::createWarmedOsdSurface`
+    // passes `initialSize = screenGeom.size()` to `createLayerSurface`,
+    // and `surface.cpp::computeWarmupGeometry` calls `setGeometry` with
+    // that screen-sized rect BEFORE `completeCreate` fires QML
+    // evaluation. A QML `width: …` / `height: …` binding here would
+    // re-evaluate during `completeCreate` and OVERWRITE the C++-set
+    // screen-sized geometry — committing the wl_surface at the QML
+    // binding's value (15×4 gridUnits ≈ 270×72 px) and forcing the
+    // compositor to configure the first frame at that small size. The
+    // first OSD show on login then rendered with a wl_surface still
+    // sized to ~270×72 while the QML internal layout was at the
+    // (eventually-re-asserted) screen size — `container.centerIn` math
+    // produced negative scene Y, surfaceAnimator pushed
+    // `iSurfaceScreenPos.xy` with that negative Y, and fly-in's
+    // `cardCenterClip.y` landed above clip-y = -1, rendering the OSD
+    // card above the screen top with the bottom partially cut off.
+    // Leaving the size to C++ entirely closes the race.
     // Start hidden; first per-content show flips visible=true. The
     // surface stays mapped (keepMappedOnHide=true) for the daemon's
     // lifetime so swapchain + RHI pipelines stay warm across show
@@ -157,7 +169,6 @@ Window {
         property string sourceZoneId: ""
         property int windowCount: 1
         property color errorColor: Kirigami.Theme.negativeTextColor
-        property real shaderBoundsPadding: 0
 
         /// Restart the loaded OSD content's auto-dismiss timer. C++
         /// invokes this after every OSD show via QMetaObject::invokeMethod.
@@ -220,7 +231,6 @@ Window {
                 backgroundColor: osdSlot.backgroundColor
                 textColor: osdSlot.textColor
                 highlightColor: osdSlot.highlightColor
-                shaderBoundsPadding: osdSlot.shaderBoundsPadding
                 layoutId: osdSlot.layoutId
                 layoutName: osdSlot.layoutName
                 category: osdSlot.category
@@ -253,7 +263,6 @@ Window {
                 backgroundColor: osdSlot.backgroundColor
                 textColor: osdSlot.textColor
                 highlightColor: osdSlot.highlightColor
-                shaderBoundsPadding: osdSlot.shaderBoundsPadding
                 success: osdSlot.success
                 action: osdSlot.action
                 reason: osdSlot.reason
