@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import Phosphor.Services 1.0
 import Phosphor.Shell 1.0
 import QtQuick
 
@@ -24,31 +25,9 @@ Item {
         reloadId: "main"
     }
 
-    // Clock formatting via Qt's built-in `Qt.formatDateTime` driven by
-    // a 1 s Timer instead of a 1 Hz `date` subprocess. Earlier rev
-    // fork/exec'd `date` every second (~86 400 forks/day) for a value
-    // QML can compute natively. Sync to the wall-clock minute boundary
-    // by leaving the interval at 1 s — the worst-case visual lag from
-    // minute roll-over is one second, same as the prior subprocess.
-    Item {
-        id: clockProc
-
-        property string stdoutText: ""
-
-        function update() {
-            stdoutText = Qt.formatDateTime(new Date(), "HH:mm · ddd MMM dd");
-        }
-
-        Component.onCompleted: update()
-
-        Timer {
-            interval: 1000
-            running: true
-            repeat: true
-            triggeredOnStart: true
-            onTriggered: clockProc.update()
-        }
-
+    SystemClock {
+        id: clock
+        precision: SystemClock.Minutes
     }
 
     // CPU + memory readouts via /proc — avoids a `sh -c` subprocess
@@ -132,11 +111,11 @@ Item {
         }
     }
 
-    FileView {
-        id: batteryFile
-
-        path: "/sys/class/power_supply/BAT0/capacity"
-        interval: 30000
+    // Battery via UPower D-Bus — replaces the raw sysfs FileView.
+    // UPowerHost connects to org.freedesktop.UPower on the system bus;
+    // displayDevice is the aggregate battery (percentage, state, icon).
+    UPowerHost {
+        id: battery
     }
 
     FileView {
@@ -152,11 +131,19 @@ Item {
         id: topPanel
 
         shellState: shellState
-        clockText: clockProc.stdoutText.trim()
+        clockText: {
+            const pad = (n) => n < 10 ? "0" + n : "" + n;
+            const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            return pad(clock.hours) + ":" + pad(clock.minutes) + " · "
+                + days[clock.date.getDay()] + " " + months[clock.date.getMonth()]
+                + " " + pad(clock.date.getDate());
+        }
         cpuPercent: cpuStat.percent
         memPercent: memInfo.percent
-        batteryPercent: batteryFile.content.trim()
-        batteryVisible: batteryFile.exists
+        batteryPercent: battery.displayDevice ? Math.round(battery.displayDevice.percentage).toString() : ""
+        batteryVisible: battery.displayDevice !== null
     }
 
     Taskbar {

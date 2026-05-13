@@ -433,6 +433,10 @@ PanelWindow {
 
             }
 
+            MprisWidget {
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
             Row {
                 spacing: 4
                 anchors.verticalCenter: parent.verticalCenter

@@ -5,6 +5,7 @@
     <method name="GetTracksMetadata">
       <arg name="TrackIds" type="ao" direction="in"/>
       <arg name="Metadata" type="aa{sv}" direction="out"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QList&lt;QVariantMap&gt;"/>
     </method>
     <method name="AddTrack">
       <arg name="Uri" type="s" direction="in"/>
