@@ -167,14 +167,7 @@ Item {
                     fillMode: Image.PreserveAspectCrop
                     sourceSize: Qt.size(80, 80)
                     asynchronous: true
-                    // cache: false — the panel widget's 80x80 decode shares
-                    // the URL key with the popup's full-size decode in Qt's
-                    // QQuickPixmapCache. With cache: true on both, the
-                    // smaller panel decode lands in the cache slot first
-                    // and the popup re-uses the 80x80 pixmap on its next
-                    // re-bind. Disabling cache on the panel keeps the
-                    // popup's full-quality decode authoritative.
-                    cache: false
+                    cache: true
                     // Keep the last successfully loaded image visible during
                     // transient Loading states (e.g. same-URL re-evaluation).
                     visible: status === Image.Ready || (source !== "" && status === Image.Loading)

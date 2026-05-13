@@ -138,12 +138,21 @@ PopupWindow {
                     anchors.fill: parent
                     source: root.stableArtUrl
                     fillMode: Image.PreserveAspectCrop
-                    // Decode at the displayed size scaled by DPR so the
-                    // pixmap matches what the GPU samples. No upper cap
-                    // — high-res cover art decodes natively and gets
-                    // downsampled by Qt's bilinear filter at draw time,
-                    // which is sharper than a fixed 320 cap on HiDPI.
-                    sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
+                    // sourceSize MUST be a literal — Qt re-decodes the
+                    // image whenever sourceSize changes (per Qt docs:
+                    // "Changing this property dynamically causes the
+                    // image source to be reloaded"). Binding to width *
+                    // DPR triggered two decodes per open: first at the
+                    // initial-layout dimensions, then at the settled
+                    // 160*dpr dimensions, with the smaller decode
+                    // landing last and replacing the high-quality one
+                    // on screen — what the user observed as "refreshes
+                    // with lower quality". 320 covers 160 logical * 2
+                    // DPR; mipmap handles sharp downsampling on >2x
+                    // displays without forcing a per-frame re-decode.
+                    sourceSize: Qt.size(320, 320)
+                    mipmap: true
+                    smooth: true
                     asynchronous: true
                     cache: true
                     visible: status === Image.Ready || (source !== "" && status === Image.Loading)
