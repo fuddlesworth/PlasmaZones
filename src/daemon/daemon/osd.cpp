@@ -80,32 +80,14 @@ void Daemon::clearHighlight()
 
 bool Daemon::shouldSuppressOsd() const
 {
-    // Shutdown path: aboutToQuit fired (SIGTERM, programmatic quit), or
-    // stop() was entered. Any OSD that lands now captures a torn-down
-    // FBO and renders white.
     if (m_shuttingDown) {
         return true;
     }
-    // systemd reports `plasma-workspace.target` as non-active. The
-    // wayland-socket precheck in main.cpp passes during phantom
-    // plasma-restore sessions (a stray `kwin_wayland` publishes a
-    // fresh socket inside user@.service mid-logout), and logind's
-    // `User.State` stays `active` whenever user@.service is up — so
-    // neither catches the phantom. `plasma-workspace.target` is only
-    // flipped to `active` by `startplasma-wayland`'s orchestration
-    // after SDDM hands off; the phantom has no startplasma leader so
-    // the target stays inactive. See `Daemon::queryPlasmaWorkspaceState`
-    // for the subscription wiring.
+    // See queryPlasmaWorkspaceState() for why this catches phantom sessions.
     if (!m_plasmaWorkspaceActive) {
         return true;
     }
-    // Screens-settling cooldown: a screenRemoved event fired recently
-    // (typically KWin tearing down outputs during logout). VS reconfig
-    // signals cascading off that removal can synchronously emit
-    // layoutApplied / autotileApplied → showLayoutOsdDeferred, which
-    // races against compositor output unbind and surfaces as a brief
-    // white card on the way to SDDM. Suppress for a short window after
-    // any screen removal — also damps OSD noise on monitor hot-unplug.
+    // Screen-removal cooldown — see m_screensSettlingUntil in daemon.h.
     if (std::chrono::steady_clock::now() < m_screensSettlingUntil) {
         return true;
     }
@@ -345,11 +327,8 @@ void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenI
     if (shouldSuppressOsd()) {
         return;
     }
-    // Defer OSD display so first-time QML compilation of NotificationOverlay.qml
-    // (~100-300ms) doesn't block the daemon event loop during layout switches.
-    // The inner `showLayoutOsd` re-checks `shouldSuppressOsd()` on dispatch —
-    // covers the case where a screenRemoved fires between this queue and
-    // the timer's tick.
+    // Defer so first-time QML compilation doesn't block the event loop.
+    // Inner showLayoutOsd re-checks shouldSuppressOsd() on dispatch.
     QTimer::singleShot(0, this, [this, layoutId, screenId]() {
         PhosphorZones::Layout* l = m_layoutManager ? m_layoutManager->layoutById(layoutId) : nullptr;
         if (l) {

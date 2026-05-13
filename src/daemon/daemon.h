@@ -663,84 +663,33 @@ private:
     bool m_running = false;
     int m_suppressResnapOsd = 0;
 
-    /// Set true once Qt's `aboutToQuit` fires (SIGTERM, plasma session-
-    /// end, programmatic `quit()`) and at the very top of `stop()`. Once
-    /// set, every OSD entry point in `daemon/osd.cpp` bails — the OSD
-    /// surface's QQuickShaderEffectSource captures a torn-down FBO during
-    /// shutdown and renders a white card briefly before the daemon dies,
-    /// which is visible as a flash on the way to the SDDM login screen.
+    /// Shutdown flag — set by `aboutToQuit`, `stop()`. Gates `shouldSuppressOsd()`.
     bool m_shuttingDown = false;
 
-    /// Steady-clock deadline written by `screenRemoved` (in start.cpp).
-    /// Until this time, OSD shows are suppressed — KWin tearing down
-    /// outputs during logout fires `screenRemoved` → ScreenManager's
-    /// `virtualScreensChanged` → `onVirtualScreensReconfigured` →
-    /// layoutApplied / autotileApplied signals → `showLayoutOsdDeferred`,
-    /// and the resulting OSD lands on a wl_surface whose compositor
-    /// output is mid-unbind. A short cooldown lets those signals drain
-    /// without firing the deferred OSD. Same suppression covers monitor
-    /// hot-unplug noise. ~1 s window.
+    /// Deadline bumped by `screenRemoved` (start.cpp). ~1 s cooldown prevents
+    /// OSD shows during output teardown cascades and monitor hot-unplug.
     std::chrono::steady_clock::time_point m_screensSettlingUntil;
 
-    /// Mirrors `org.freedesktop.systemd1.Unit.ActiveState` for the
-    /// user-bus systemd unit `plasma-workspace.target`. Initialised by
-    /// `queryPlasmaWorkspaceState()` at `start()` time, updated by a
-    /// `PropertiesChanged` subscription on the target's object path.
-    /// `true` when ActiveState == "active" (real KDE Plasma session
-    /// orchestrated by `startplasma-wayland`); `false` when "inactive"
-    /// / "activating" / "deactivating" / "failed" (phantom plasma-
-    /// restore session mid-logout, SDDM-only state, headless tests).
-    ///
-    /// Why this signal: the user-logout → SDDM transition can leave
-    /// `user@.service` alive while `plasma-workspace.target` is
-    /// inactive. systemd may briefly re-spawn the daemon into that
-    /// transient window (or a stray `kwin_wayland` from a fallback
-    /// restore service can briefly publish a `wayland-N` socket the
-    /// daemon's main.cpp pre-check accepts). logind's `User.State`
-    /// reports `active` throughout that window because user@.service
-    /// is alive, so a logind-based gate doesn't help. But
-    /// `plasma-workspace.target` is the dependency root the daemon's
-    /// `WantedBy=` chain hooks onto — it is ONLY flipped to `active`
-    /// by `startplasma-wayland` after SDDM hands off. The phantom
-    /// session has no `startplasma-wayland` leader, so the target
-    /// stays inactive there.
-    ///
-    /// Defaults to `true` (fail-open) for environments without
-    /// systemd's user-bus (non-systemd setups, headless tests) so
-    /// the suppression doesn't accidentally silence OSDs there.
+    /// Mirrors `plasma-workspace.target` ActiveState on the user-bus systemd.
+    /// `true` = real session, `false` = phantom/inactive. Defaults to `true`
+    /// (fail-open for non-systemd / headless). See `queryPlasmaWorkspaceState()`
+    /// for the full rationale.
     bool m_plasmaWorkspaceActive = true;
 
-    /// Object path of the systemd Unit for `plasma-workspace.target`
-    /// on the user session bus, resolved via
-    /// `org.freedesktop.systemd1.Manager.GetUnit`. Empty when systemd
-    /// isn't reachable or the target isn't loaded. The
-    /// `PropertiesChanged` slot uses this to filter signals to the
-    /// right unit.
+    /// D-Bus object path for `plasma-workspace.target`, resolved by GetUnit.
     QString m_plasmaWorkspaceTargetPath;
 
-    /// Returns true when the daemon is shutting down, when a screen
-    /// was removed within the last ~1 s (see `m_screensSettlingUntil`),
-    /// or when systemd reports `plasma-workspace.target` as non-active
-    /// (phantom plasma-restore session mid-logout, SDDM-only state).
-    /// Every public OSD entry point in daemon/osd.cpp calls this and
-    /// bails on true.
     bool shouldSuppressOsd() const;
 
-    /// Synchronously queries systemd's user bus for
-    /// `plasma-workspace.target`'s `ActiveState`, sets
-    /// `m_plasmaWorkspaceActive` accordingly, and subscribes to
-    /// `PropertiesChanged` on the target object so subsequent state
-    /// transitions flip `m_plasmaWorkspaceActive` (and, when leaving
-    /// `active`, `m_shuttingDown`). Fail-open: D-Bus / systemd errors
-    /// leave `m_plasmaWorkspaceActive` at its default `true`. Called
-    /// once from `start()`.
+    /// Async query of systemd's user bus for `plasma-workspace.target` state.
+    /// Fail-open on all D-Bus errors. Called once from `start()`.
     void queryPlasmaWorkspaceState();
 
+    /// Continuation of `queryPlasmaWorkspaceState()` — fetches ActiveState
+    /// and subscribes to PropertiesChanged after GetUnit resolves.
+    void fetchPlasmaWorkspaceActiveState();
+
 private Q_SLOTS:
-    /// Slot for the systemd Unit PropertiesChanged signal subscribed in
-    /// `queryPlasmaWorkspaceState`. Filters by interface name and
-    /// updates `m_plasmaWorkspaceActive` / `m_shuttingDown` when
-    /// `ActiveState` changes.
     void onPlasmaWorkspaceTargetPropertiesChanged(const QString& interfaceName, const QVariantMap& changedProperties,
                                                   const QStringList& invalidatedProperties);
 
