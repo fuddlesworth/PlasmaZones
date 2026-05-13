@@ -28,7 +28,7 @@ public:
     [[nodiscard]] UPowerDevice* displayDevice() const;
     [[nodiscard]] int deviceCount() const;
     [[nodiscard]] QList<UPowerDevice*> devices() const;
-    [[nodiscard]] UPowerDevice* deviceAt(int index) const;
+    [[nodiscard]] Q_INVOKABLE PhosphorServices::UPowerDevice* deviceAt(int index) const;
 
 Q_SIGNALS:
     void onBatteryChanged();

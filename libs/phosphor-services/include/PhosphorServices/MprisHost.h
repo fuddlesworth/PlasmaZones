@@ -5,12 +5,12 @@
 
 #include <PhosphorServices/phosphorservices_export.h>
 
+#include <PhosphorServices/MprisPlayer.h>
+
 #include <QList>
 #include <QObject>
 
 namespace PhosphorServices {
-
-class MprisPlayer;
 
 class PHOSPHORSERVICES_EXPORT MprisHost : public QObject
 {
@@ -23,7 +23,7 @@ public:
 
     [[nodiscard]] int playerCount() const;
     [[nodiscard]] QList<MprisPlayer*> players() const;
-    [[nodiscard]] MprisPlayer* playerAt(int index) const;
+    [[nodiscard]] Q_INVOKABLE PhosphorServices::MprisPlayer* playerAt(int index) const;
 
 Q_SIGNALS:
     void playerAdded(PhosphorServices::MprisPlayer* player);
