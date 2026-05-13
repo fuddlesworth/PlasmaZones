@@ -31,6 +31,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -70,7 +71,16 @@ void main() {
     for (float i = 0.0; i < SHADOW_STEPS; ++i) {
       vec2 shadowTexCoord = iTexCoord.st - vec2(0.0, i * SHADOW_WIDTH / SHADOW_STEPS);
       float shadowMask = getMask(shadowTexCoord, uProgress);
-      float shadowAlpha = (1.0 - i / SHADOW_STEPS) * shadowMask * getInputColor(shadowTexCoord).a;
+      // boundaryMask (see noise.glsl) crops the alpha read to zero
+      // outside [0, 1] — shadowTexCoord.y goes negative for fragments
+      // near the top of the window (the shadow loop walks UP from
+      // each fragment), and uTexture0's clamp-to-edge sampler would
+      // otherwise read the top row's alpha (typically opaque content)
+      // as the shadow source, painting a phantom shadow above the
+      // window's top edge.
+      float shadowAlpha = (1.0 - i / SHADOW_STEPS) * shadowMask
+                        * getInputColor(shadowTexCoord).a
+                        * boundaryMask(shadowTexCoord);
 
       if (shadowAlpha > 0.0) {
         oColor = vec4(vec3(0.0), shadowAlpha * 0.2);

@@ -30,6 +30,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 #define maxPixelSize customParams[0].x
 #define spokeCount   customParams[0].y
@@ -52,7 +53,12 @@ void main()
     // this with the actual surface size.
     vec2 pixelGrid  = vec2(pixelSize) / max(iResolution, vec2(1.0));
     vec2 cellUV     = uv - mod(uv, pixelGrid) + pixelGrid * 0.5;
-    vec4 sampled    = texture(uTexture0, cellUV);
+    // boundaryMask (see noise.glsl) crops the right/bottom-edge cell
+    // whose centre can exceed 1.0 by up to half a cell. Without it,
+    // uTexture0's clamp-to-edge sampler returns the last-column /
+    // last-row texel for that cell, smearing the window's edge alpha
+    // into a ~½-cell-wide band past the surface boundary.
+    vec4 sampled    = texture(uTexture0, cellUV) * boundaryMask(cellUV);
 
     // Spoke parameterisation. `down = (0, 1)`; `dot(down, fragDir)`
     // is just `fragDir.y`. `acos(y)` ∈ [0, π], divided by 2π gives

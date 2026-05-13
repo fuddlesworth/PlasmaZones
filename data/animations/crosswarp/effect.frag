@@ -19,6 +19,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define frontSpeed customParams[0].x
@@ -32,9 +33,15 @@ void main() {
     vec2 uv = vTexCoord;
 
     float x = smoothstep(0.0, 1.0, (p * frontSpeed + uv.x - 1.0));
-    vec2 warped = clamp((uv - 0.5) * x + 0.5, vec2(0.0), vec2(1.0));
+    // niri's `clamp(warped, 0, 1)` was the bug: pinning off-window UVs
+    // to the edge texel via clamp-to-edge produced a smeared border
+    // around the warped silhouette. Drop the clamp and crop sampled
+    // texels via boundaryMask (see noise.glsl) instead — same shape
+    // as crosswarp wants (off-surface = transparent), but without the
+    // edge-pixel bleed.
+    vec2 warped = (uv - 0.5) * x + 0.5;
 
-    vec4 win = texture(uTexture0, warped);
+    vec4 win = texture(uTexture0, warped) * boundaryMask(warped);
 
     float in_bounds = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
     fragColor = win * x * in_bounds;

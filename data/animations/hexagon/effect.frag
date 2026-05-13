@@ -114,8 +114,13 @@ void main()
         // the cell centre as tileProgress grows. The (1-tileProgress)
         // divisor makes the offset diverge as the tile shrinks to
         // nothing, so the lookup eventually goes off the texture.
+        // boundaryMask (see noise.glsl) crops the off-texture lookup
+        // to transparent so the shrinking tile fades cleanly into the
+        // background instead of carrying smeared edge texels outward
+        // through the clamp-to-edge sampler.
         vec2 lookupOffset = tileProgress * hex.xy / texScale / max(1.0 - tileProgress, 0.001);
-        oColor = texture(uTexture0, uv + lookupOffset);
+        vec2 lookupCoords = uv + lookupOffset;
+        oColor = texture(uTexture0, lookupCoords) * boundaryMask(lookupCoords);
 
         vec4 glow = glowColor;
         vec4 line = lineColor;

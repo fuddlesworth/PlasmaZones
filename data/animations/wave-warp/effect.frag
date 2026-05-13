@@ -20,6 +20,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots.
 // `waveAngle` (radians) replaces niri's hardcoded `vec2 dir = (1, 0)`
@@ -47,8 +48,14 @@ void main() {
     float d = v.x * 0.5 + v.y * 0.5;
     float m = 1.0 - smoothstep(-waveSmoothness, 0.0, v.x * uv.x + v.y * uv.y - (d - 0.5 + p * (1.0 + waveSmoothness)));
 
-    vec2 warped = clamp((uv - 0.5) * m + 0.5, vec2(0.0), vec2(1.0));
-    vec4 win = texture(uTexture0, warped);
+    // niri's `clamp(warped, 0, 1)` was the bug: pinning off-window UVs
+    // to the edge texel via clamp-to-edge produced a smeared border
+    // around the contracted silhouette. Drop the clamp and crop
+    // sampled texels via boundaryMask (see noise.glsl) instead — same
+    // shape wave-warp wants (off-surface = transparent), but without
+    // the edge-pixel bleed.
+    vec2 warped = (uv - 0.5) * m + 0.5;
+    vec4 win = texture(uTexture0, warped) * boundaryMask(warped);
 
     float in_bounds = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
     fragColor = win * m * in_bounds;

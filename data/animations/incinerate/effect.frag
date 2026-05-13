@@ -138,7 +138,13 @@ void main() {
     }
 #endif
 
-    oColor = getInputColor(iTexCoord + distort);
+    // boundaryMask (see noise.glsl) crops the distorted sample to
+    // transparent outside [0, 1] — the dFdx/dFdy distort pushes the
+    // sample UV past the anchor edge along the scorch front, and
+    // uTexture0's clamp-to-edge sampler would otherwise smear the
+    // rim texel into the heat-distorted region.
+    vec2 sampleUv = iTexCoord + distort;
+    oColor = getInputColor(sampleUv) * boundaryMask(sampleUv);
   }
 
   // Add smoke and embers.

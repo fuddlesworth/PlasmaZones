@@ -20,6 +20,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define displacement    customParams[0].x
@@ -37,7 +38,12 @@ void main() {
     vec2 disp = displacement * vec2(cos(facetFrequency * uv.x), sin(facetFrequency * uv.y));
     vec2 sample_uv = uv + inv * disp;
 
-    vec4 win = texture(uTexture0, sample_uv);
+    // boundaryMask (see noise.glsl) crops samples outside [0, 1] —
+    // the cos/sin facet displacement carries `sample_uv` past the
+    // anchor edge along the lens facets, and uTexture0's clamp-to-
+    // edge sampler would otherwise smear the rim texels into the
+    // facet ripple.
+    vec4 win = texture(uTexture0, sample_uv) * boundaryMask(sample_uv);
 
     fragColor = win * p;
 }

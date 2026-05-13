@@ -26,6 +26,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define bounces customParams[0].x
@@ -47,7 +48,13 @@ void main() {
 
     vec2 sample_uv = uv;
     sample_uv.y = uv.y + (1.0 - yy);
-    vec4 win = texture(uTexture0, sample_uv);
+    // boundaryMask (see noise.glsl) crops samples outside [0, 1] —
+    // sample_uv.y is shifted by (1 - yy) which puts it past the top
+    // of the surface for most of the bounce, and uTexture0's clamp-to-
+    // edge sampler would otherwise smear the top row of texels along
+    // the leading edge of the drop. The mask bands sit OUTSIDE [0, 1]
+    // so identity sampling (idle end of the bounce) is unaffected.
+    vec4 win = texture(uTexture0, sample_uv) * boundaryMask(sample_uv);
 
     float reveal = step(d, 0.0);
     fragColor = win * reveal;

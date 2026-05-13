@@ -36,6 +36,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 #define brightness customParams[0].x
 #define speedR     customParams[0].y
@@ -109,9 +110,20 @@ void main()
     float mulG = speedGClamped - minSpeed + 1.0;
     float mulB = speedBClamped - minSpeed + 1.0;
 
-    vec4 colorR = texture(uTexture0, uv + vec2(0.0, offset * mulR));
-    vec4 colorG = texture(uTexture0, uv + vec2(0.0, offset * mulG));
-    vec4 colorB = texture(uTexture0, uv + vec2(0.0, offset * mulB));
+    // boundaryMask (see noise.glsl) crops each per-channel sample
+    // outside [0, 1] — the lift-off offset carries each sample UV
+    // past the top of the surface at different speeds, and
+    // uTexture0's clamp-to-edge sampler would otherwise smear the
+    // top row of texels into the lifted region, producing chromatic
+    // streaks pinned to the top edge. The downstream `edgeFade`
+    // smoothstep masks the OUTPUT uv, not the sample UVs, so it
+    // doesn't address this on its own.
+    vec2 sampleR = uv + vec2(0.0, offset * mulR);
+    vec2 sampleG = uv + vec2(0.0, offset * mulG);
+    vec2 sampleB = uv + vec2(0.0, offset * mulB);
+    vec4 colorR = texture(uTexture0, sampleR) * boundaryMask(sampleR);
+    vec4 colorG = texture(uTexture0, sampleG) * boundaryMask(sampleG);
+    vec4 colorB = texture(uTexture0, sampleB) * boundaryMask(sampleB);
 
     // Recombine. The texture is pre-multiplied; un-premultiply each
     // channel against its OWN alpha (those are the only valid divisors
