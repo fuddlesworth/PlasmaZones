@@ -152,6 +152,9 @@ void Daemon::showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenI
 
 void Daemon::showLockedOsd(const QString& screenId)
 {
+    if (shouldSuppressOsd()) {
+        return;
+    }
     OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
     if (style == OsdStyle::None) {
         return;
@@ -163,6 +166,9 @@ void Daemon::showLockedOsd(const QString& screenId)
 
 void Daemon::showLockedPreviewOsd(const QString& screenId)
 {
+    if (shouldSuppressOsd()) {
+        return;
+    }
     OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
     if (style == OsdStyle::None) {
         return;
@@ -186,6 +192,9 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
 void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity,
                                     DisabledReason reason)
 {
+    if (shouldSuppressOsd()) {
+        return;
+    }
     OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
     if (style == OsdStyle::None) {
         return;
@@ -479,6 +488,9 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
     // Skip during startup — the initial activity/desktop detection fires
     // before start() completes and should not produce an OSD flash.
     if (!m_running) {
+        return;
+    }
+    if (shouldSuppressOsd()) {
         return;
     }
     if (!m_settings || !m_settings->showOsdOnDesktopSwitch() || !m_overlayService || !m_layoutManager

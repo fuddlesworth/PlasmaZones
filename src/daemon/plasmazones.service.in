@@ -17,7 +17,7 @@ RestartSec=5
 # briefly publishes a wl_display socket inside the still-dying
 # user@.service, which let the daemon fire welcome OSDs the user
 # saw flashing on the way to SDDM. The daemon's logind session-
-# state check (in daemon.cpp::queryLogindSessionState) is the
+# state check (in daemon.cpp::queryPlasmaWorkspaceState) is the
 # correct gate for "should I be running?"; systemd's blind retry
 # fights against it. SIGABRT here covers both Qt's qFatal path
 # and any explicit `abort()` in our code.
