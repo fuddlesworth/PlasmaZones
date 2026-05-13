@@ -25,7 +25,9 @@
     <property name="LoopStatus" type="s" access="readwrite"/>
     <property name="Rate" type="d" access="readwrite"/>
     <property name="Shuffle" type="b" access="readwrite"/>
-    <property name="Metadata" type="a{sv}" access="read"/>
+    <property name="Metadata" type="a{sv}" access="read">
+      <annotation name="org.qtproject.QtDBus.QtTypeName" value="QVariantMap"/>
+    </property>
     <property name="Volume" type="d" access="readwrite"/>
     <property name="Position" type="x" access="read"/>
     <property name="MinimumRate" type="d" access="read"/>
