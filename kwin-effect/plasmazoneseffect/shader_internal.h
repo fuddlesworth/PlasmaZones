@@ -13,25 +13,6 @@
 
 namespace PlasmaZones::ShaderInternal {
 
-/// Inflate @p geo on every side by `ring * dimension` (BMW-style
-/// actor expansion). For `ring == 0.5` this returns the original
-/// rect inflated by half its width on left+right and half its height
-/// on top+bottom, total dimensions `2x` the original, matching
-/// BMW's `ACTOR_SCALE = 2`.
-///
-/// Single source of truth for the ring-rect math: `apply()` uses it
-/// to rebuild the WindowQuadList at expanded size, and
-/// `postPaintScreen` uses it to union the expanded rect into the
-/// addLayerRepaint region so KWin doesn't damage-clip the result.
-/// A future ring semantic change (asymmetric ring, percent vs
-/// fraction, etc.) only has to touch this helper.
-inline QRectF inflatedByRingFraction(const QRectF& geo, qreal ring)
-{
-    const qreal padW = ring * geo.width();
-    const qreal padH = ring * geo.height();
-    return QRectF(geo.x() - padW, geo.y() - padH, geo.width() + 2.0 * padW, geo.height() + 2.0 * padH);
-}
-
 /// Monotonic milliseconds since steady_clock epoch. Used by time-based shader
 /// transitions for elapsed-progress math. We deliberately avoid
 /// QDateTime::currentMSecsSinceEpoch — wall-clock isn't monotonic, and an NTP

@@ -26,15 +26,13 @@
 // anchor's region those coords land outside `[0, 1]` and the
 // `getClippedInputColor` helper crops the sample to transparent.
 //
-// Kwin-effect path: surface-extent transitions don't perform any quad
-// expansion — `PlasmaZonesEffect::apply` (paint_pipeline.cpp) early-
-// returns when `fboExtentRing <= 0.0`, so the rasterised quad is the
-// natural one-over-frameGeometry mesh. `iAnchorPosInFbo` is `(0, 0)`
-// and `iAnchorSize == iResolution`, so `anchorRemap` collapses to
-// identity (`coords == vTexCoord`, range `[0, 1]`). Shards stay
-// within the captured frame on kwin; the cascade still produces the
-// shatter look since the close-leg's progress sweeps the per-shard
-// alpha threshold past every visible shard.
+// Kwin-effect path: the rasterised quad is the natural one-over-
+// frameGeometry mesh. `iAnchorPosInFbo` is `(0, 0)` and
+// `iAnchorSize == iResolution`, so `anchorRemap` collapses to identity
+// (`coords == vTexCoord`, range `[0, 1]`). Shards stay within the
+// captured frame on kwin; the cascade still produces the shatter look
+// since the close-leg's progress sweeps the per-shard alpha threshold
+// past every visible shard.
 //
 // `bmw_compat.glsl`'s default `getInputColor` only un-premultiplies the
 // sample — it does NOT clip, so an off-anchor lookup on a clamp-to-edge

@@ -128,64 +128,33 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// can sample window depth. Daemon-only.
     bool useDepthBuffer = false;
 
-    /// Ring fraction for `FboExtentKind::Anchor`: enlarge the FBO beyond
-    /// the anchor's bounds by this fraction of the anchor's width/height
-    /// on each side. Set by the `"anchor+N"` form of the `fboExtent`
-    /// metadata grammar (see `parseFboExtent` in animationshadereffect.cpp).
-    /// At `fboExtentRing = 0.5` the FBO is `(1+2·0.5) = 2x` the anchor
-    /// on each axis, reproducing BMW's `ACTOR_SCALE=2, PADDING=0.5`
-    /// convention. Default 0.0; FBO matches the anchor exactly.
-    /// Shaders that opt in must remap `vTexCoord` through
-    /// `iAnchorPosInFbo / iAnchorSize / iResolution` to recover anchor-
-    /// space UV (see `data/animations/morph/effect.frag`).
-    ///
-    /// Ignored when `fboExtentKind == Surface`: the FBO already covers
-    /// the entire surface and adding ring padding would push it past the
-    /// rendering canvas.
-    qreal fboExtentRing = 0.0;
-
     /// How wide the shader effect's render target is — relative to its
     /// anchor (default), or filling the surface scene root.
     ///
-    ///   • `Anchor` (default): FBO covers `anchor + 2 · fboExtentRing ·
-    ///     anchor` on each axis. iResolution equals the FBO size, so
-    ///     `vTexCoord` 0..1 spans the padded FBO. Existing fragment-
-    ///     only effects (dissolve, glitch, …) leave the ring at 0;
-    ///     morph + broken-glass set `fboExtent: "anchor+0.5"` to get
-    ///     BMW-style overshoot room.
+    ///   • `Anchor` (default): FBO covers the captured anchor 1:1. Used
+    ///     by fragment-only effects (dissolve, glitch, …) whose math
+    ///     stays inside `vTexCoord ∈ [0, 1]` over the anchor.
     ///
     ///   • `Surface`: FBO covers the anchor's enclosing surface scene
-    ///     root (the wl_surface size on the daemon path). Vertex-stage
-    ///     effects that translate the rendered card across the surface
-    ///     (fly-in, slide) declare `fboExtent: "surface"` to get full-
-    ///     surface clip-space runway. Authors who pick `Surface` MUST
-    ///     ship a custom vertex shader that remaps `position` to the
-    ///     card's region within the FBO via `iAnchorPosInFbo /
-    ///     iAnchorSize / iResolution`; the default identity vertex
-    ///     stage stretches the card texture across the entire surface.
-    ///     See `data/animations/fly-in/effect.vert`.
+    ///     root (the wl_surface size on the daemon path). Used by
+    ///     effects that need to render past the captured anchor
+    ///     (fly-in translates the card across the surface, broken-glass
+    ///     fires shards into the surrounding screen). Authors who pick
+    ///     `Surface` typically ship a custom vertex shader that uses
+    ///     `iAnchorPosInFbo / iAnchorSize / iResolution` to position
+    ///     the card within the FBO; the fragment shader then either
+    ///     reads `vTexCoord` directly (if the vert remaps the quad to
+    ///     the anchor's region — fly-in) or calls `anchorRemap` to
+    ///     convert surface-UV back to anchor-space (broken-glass,
+    ///     morph).
     ///
-    /// Mirrors the public `fboExtent` JSON grammar: `"anchor"` /
-    /// `"anchor+N"` map to `Anchor`, `"surface"` maps to `Surface`.
+    /// Mirrors the public `fboExtent` JSON grammar: `"anchor"` →
+    /// `Anchor`, `"surface"` → `Surface`. No other forms are accepted.
     enum class FboExtentKind {
         Anchor,
         Surface,
     };
     FboExtentKind fboExtentKind = FboExtentKind::Anchor;
-
-    /// Hard ceiling on `fboExtentRing`. SHARED source-of-truth between
-    /// the metadata clamp in `parseFboExtent` (animationshadereffect.cpp)
-    /// and the runtime clamp in `surfaceanimator.cpp` (via the local
-    /// `kMaxFboExtentRingFraction` mirror). Drift between the two would
-    /// silently allow a programmatic in-memory effect to exceed the
-    /// FBO-size budget that the metadata clamp enforces. At ring=2.0 the
-    /// shader effect is 5x the anchor on each axis (k=1+2·ring=5) → 25x
-    /// area; a 1080p RGBA8 FBO at that scale is already ~200 MB, the
-    /// edge of what Vulkan validation passes on integrated GPUs. No
-    /// shipping shader needs >1.0 (morph + broken-glass use 0.5); 2.0
-    /// accommodates plugin authors with extreme silhouette warps
-    /// without permitting prior 4.0-cap excess (9x axis = 81x area).
-    static constexpr qreal kMaxFboExtentRing = 2.0;
 
     /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
     /// factor). 0.125 means a 1/8 downscale on each axis (1/64 area —

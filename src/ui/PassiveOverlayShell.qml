@@ -157,7 +157,6 @@ Window {
         property string sourceZoneId: ""
         property int windowCount: 1
         property color errorColor: Kirigami.Theme.negativeTextColor
-        property real shaderBoundsPadding: 0
 
         /// Restart the loaded OSD content's auto-dismiss timer. C++
         /// invokes this after every OSD show via QMetaObject::invokeMethod.
@@ -220,7 +219,6 @@ Window {
                 backgroundColor: osdSlot.backgroundColor
                 textColor: osdSlot.textColor
                 highlightColor: osdSlot.highlightColor
-                shaderBoundsPadding: osdSlot.shaderBoundsPadding
                 layoutId: osdSlot.layoutId
                 layoutName: osdSlot.layoutName
                 category: osdSlot.category
@@ -253,7 +251,6 @@ Window {
                 backgroundColor: osdSlot.backgroundColor
                 textColor: osdSlot.textColor
                 highlightColor: osdSlot.highlightColor
-                shaderBoundsPadding: osdSlot.shaderBoundsPadding
                 success: osdSlot.success
                 action: osdSlot.action
                 reason: osdSlot.reason

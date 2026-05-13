@@ -22,10 +22,6 @@
 #include "pz_slot_keys.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
-#include <PhosphorAnimation/AnimationShaderEffect.h>
-#include <PhosphorAnimation/AnimationShaderRegistry.h>
-#include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
 
 #include "../../core/isettings.h"
@@ -33,37 +29,6 @@
 namespace PlasmaZones {
 
 namespace {
-
-// Resolve the per-side padding (fraction of container size) the active
-// SurfaceAnimator shader leg needs reserved around the OSD's inner card.
-// The wl_surface itself is now screen-sized (see `createWarmedOsdSurface`)
-// and no longer needs to grow per-effect, but the QML side still consumes
-// this fraction to set `shaderBoundsPadding` so the inner card's
-// shader-anchor metadata stays consistent across legs.
-//
-// Returns 0.0 when no shader is selected for either leg, when the shader
-// id doesn't resolve in the registry, or when settings/registry are not
-// yet wired (pre-construction races). The QML side defaults shaderBounds-
-// Padding to 0.0 too - written to confirm intent each show, not to rely on
-// stale prior writes.
-qreal resolveOsdShaderPadding(ISettings* settings, PhosphorAnimationShaders::AnimationShaderRegistry* registry,
-                              const QString& showPath, const QString& hidePath)
-{
-    if (!settings || !registry) {
-        return 0.0;
-    }
-    const auto tree = settings->shaderProfileTree();
-    qreal pad = 0.0;
-    const QString showId = tree.resolve(showPath).effectiveEffectId();
-    if (!showId.isEmpty()) {
-        pad = qMax(pad, registry->effect(showId).fboExtentRing);
-    }
-    const QString hideId = tree.resolve(hidePath).effectiveEffectId();
-    if (!hideId.isEmpty()) {
-        pad = qMax(pad, registry->effect(hideId).fboExtentRing);
-    }
-    return pad;
-}
 
 // Size the OSD window to its target screen rect. The wl_surface is now
 // screen-sized (mirrors zone-selector / snap-assist) - anchors and
@@ -186,16 +151,6 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     p.screenAspectRatio = aspectRatio;
     p.aspectRatioClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());
     pushLayoutOsdContent(osdSlot, p);
-    // shaderBoundsPadding written BEFORE the mode flip so the Loader's
-    // freshly-instantiated content observes the correct padding on first
-    // binding evaluation. The wl_surface itself is screen-sized
-    // regardless (see `createWarmedOsdSurface`); this fraction propagates
-    // into the loaded content for shader-anchor bookkeeping.
-    {
-        namespace PP = PhosphorAnimation::ProfilePaths;
-        writeQmlProperty(osdSlot, QStringLiteral("shaderBoundsPadding"),
-                         resolveOsdShaderPadding(m_settings, m_animShaderRegistry, PP::OsdShow, PP::OsdHide));
-    }
     writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     sizeOsdToScreen(window, screenGeom);
@@ -290,13 +245,6 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     p.zoneNumberDisplay = zoneNumberDisplay;
     p.masterCount = masterCount;
     pushLayoutOsdContent(osdSlot, p);
-    // shaderBoundsPadding before mode - see the matching note in
-    // showLayoutOsdImpl above.
-    {
-        namespace PP = PhosphorAnimation::ProfilePaths;
-        writeQmlProperty(osdSlot, QStringLiteral("shaderBoundsPadding"),
-                         resolveOsdShaderPadding(m_settings, m_animShaderRegistry, PP::OsdShow, PP::OsdHide));
-    }
     writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     sizeOsdToScreen(window, screenGeom);
@@ -388,12 +336,6 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     pushLayoutOsdContent(osdSlot, p);
     writeQmlProperty(osdSlot, QStringLiteral("disabled"), true);
     writeQmlProperty(osdSlot, QStringLiteral("disabledReason"), reason);
-    // shaderBoundsPadding before mode - see showLayoutOsdImpl note.
-    {
-        namespace PP = PhosphorAnimation::ProfilePaths;
-        writeQmlProperty(osdSlot, QStringLiteral("shaderBoundsPadding"),
-                         resolveOsdShaderPadding(m_settings, m_animShaderRegistry, PP::OsdShow, PP::OsdHide));
-    }
     writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     sizeOsdToScreen(window, screenGeom);
@@ -621,16 +563,6 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         screenLayout, PhosphorZones::ZoneField::Minimal, QRectF(navScreenGeom));
     writeQmlProperty(osdSlot, QStringLiteral("zones"), zonesList);
 
-    // shaderBoundsPadding before mode - the Loader instantiates
-    // NavigationOsdContent on the mode flip and the inner card's
-    // shader-anchor bookkeeping reads this fraction at instantiation.
-    // Surface dimensions are screen-sized regardless (see
-    // `createWarmedOsdSurface`).
-    {
-        namespace PP = PhosphorAnimation::ProfilePaths;
-        writeQmlProperty(osdSlot, QStringLiteral("shaderBoundsPadding"),
-                         resolveOsdShaderPadding(m_settings, m_animShaderRegistry, PP::OsdShow, PP::OsdHide));
-    }
     // Write mode AFTER data properties so the Loader-instantiated
     // NavigationOsdContent picks up correct values on first binding pass.
     writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("navigation-osd"));
