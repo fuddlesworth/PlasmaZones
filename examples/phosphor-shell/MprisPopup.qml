@@ -5,8 +5,8 @@ import Phosphor.Services 1.0
 import Phosphor.Shell 1.0
 import QtQuick
 
-// Media player detail popup — opens below the MprisWidget capsule.
-// Uses the same frosted-glass look as the taskbar and calendar popup.
+// Media player detail popup — uses the same gradient shader as the top
+// panel for visual consistency across all shell surfaces.
 PopupWindow {
     id: root
 
@@ -45,19 +45,27 @@ PopupWindow {
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    // Same frosted-glass backdrop as the taskbar
+    // Same gradient shader as the top panel
     ShaderBackground {
         anchors.fill: parent
         playing: root.popupVisible
-        shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
+        shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
+        useWallpaper: true
+        wallpaperTexture: PhosphorShell.wallpaper.image
         shaderParams: {
             "customParams1_x": 0.8,
-            "customParams1_y": 0.15,
-            "customParams1_z": 20,
-            "customParams1_w": 0.5,
-            "customParams2_x": 14
+            "customParams1_y": 0,
+            "customParams1_z": 0.65,
+            "customParams1_w": 0.06,
+            "customParams2_x": 14,
+            "customParams2_y": 20,
+            "customParams3_x": 1.0,
+            "customParams3_y": 8,
+            "customParams4_x": 0,
+            "customParams4_y": 0
         }
-        customColor1: "#1e1e2e"
+        customColor1: "#cba6f7"
+        customColor2: "#89dceb"
     }
 
     Rectangle {
@@ -81,7 +89,7 @@ PopupWindow {
             Text {
                 width: parent.width
                 text: root.hasPlayer ? root.currentPlayer.identity : ""
-                color: "#a6adc8"; font.pixelSize: 10; font.weight: Font.Medium
+                color: "#1e1e2e"; font.pixelSize: 10; font.weight: Font.Medium
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
             }
@@ -90,7 +98,7 @@ PopupWindow {
             Rectangle {
                 width: 160; height: 160
                 anchors.horizontalCenter: parent.horizontalCenter
-                radius: 14; color: "#313244"; clip: true
+                radius: 14; color: "#20000000"; clip: true
 
                 Image {
                     id: popupArt
@@ -104,7 +112,7 @@ PopupWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "♪"; color: "#585b70"; font.pixelSize: 42
+                    text: "♪"; color: "#45475a"; font.pixelSize: 42
                     visible: popupArt.status !== Image.Ready
                 }
             }
@@ -116,7 +124,7 @@ PopupWindow {
                 Text {
                     width: parent.width
                     text: root.hasPlayer ? (root.currentPlayer.trackTitle || "") : ""
-                    color: "#cdd6f4"; font.pixelSize: 14; font.weight: Font.Bold
+                    color: "#1e1e2e"; font.pixelSize: 14; font.weight: Font.Bold
                     horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
                 }
                 Text {
@@ -128,7 +136,7 @@ PopupWindow {
                         if (root.currentPlayer.trackAlbum) p.push(root.currentPlayer.trackAlbum);
                         return p.join(" — ");
                     }
-                    color: "#a6adc8"; font.pixelSize: 11
+                    color: "#45475a"; font.pixelSize: 11
                     horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
                 }
             }
@@ -141,22 +149,22 @@ PopupWindow {
                 Text {
                     anchors.left: parent.left; anchors.top: parent.top
                     text: root.hasPlayer ? root.fmt(root.currentPlayer.position) : ""
-                    color: "#6c7086"; font.pixelSize: 9
+                    color: "#45475a"; font.pixelSize: 9
                 }
                 Text {
                     anchors.right: parent.right; anchors.top: parent.top
                     text: root.hasPlayer ? root.fmt(root.currentPlayer.length) : ""
-                    color: "#6c7086"; font.pixelSize: 9
+                    color: "#45475a"; font.pixelSize: 9
                 }
 
                 Rectangle {
                     anchors.left: parent.left; anchors.right: parent.right
                     anchors.bottom: parent.bottom
-                    height: 4; radius: 2; color: "#45475a"
+                    height: 4; radius: 2; color: "#30000000"
 
                     Rectangle {
                         width: parent.width * root.progress
-                        height: parent.height; radius: 2; color: "#89b4fa"
+                        height: parent.height; radius: 2; color: "#1e1e2e"
                     }
                 }
 
@@ -178,24 +186,24 @@ PopupWindow {
 
                 Rectangle {
                     width: 32; height: 32; radius: 8
-                    color: pp.containsMouse ? "#45475a" : "transparent"
+                    color: pp.containsMouse ? "#30000000" : "transparent"
                     visible: root.hasPlayer && root.currentPlayer.canGoPrevious
-                    Text { anchors.centerIn: parent; text: "⏮"; font.pixelSize: 14; color: "#cdd6f4" }
+                    Text { anchors.centerIn: parent; text: "⏮"; font.pixelSize: 14; color: "#1e1e2e" }
                     MouseArea { id: pp; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.currentPlayer.previous() }
                 }
 
                 Rectangle {
                     width: 44; height: 44; radius: 22
-                    color: ppla.containsMouse ? "#45475a" : "#313244"
-                    Text { anchors.centerIn: parent; text: root.isPlaying ? "⏸" : "▶"; font.pixelSize: 18; color: "#cdd6f4" }
+                    color: ppla.containsMouse ? "#30000000" : "#20000000"
+                    Text { anchors.centerIn: parent; text: root.isPlaying ? "⏸" : "▶"; font.pixelSize: 18; color: "#1e1e2e" }
                     MouseArea { id: ppla; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (root.hasPlayer) root.currentPlayer.togglePlaying() }
                 }
 
                 Rectangle {
                     width: 32; height: 32; radius: 8
-                    color: pn.containsMouse ? "#45475a" : "transparent"
+                    color: pn.containsMouse ? "#30000000" : "transparent"
                     visible: root.hasPlayer && root.currentPlayer.canGoNext
-                    Text { anchors.centerIn: parent; text: "⏭"; font.pixelSize: 14; color: "#cdd6f4" }
+                    Text { anchors.centerIn: parent; text: "⏭"; font.pixelSize: 14; color: "#1e1e2e" }
                     MouseArea { id: pn; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.currentPlayer.next() }
                 }
             }

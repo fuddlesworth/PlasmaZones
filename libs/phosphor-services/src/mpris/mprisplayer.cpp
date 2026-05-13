@@ -3,6 +3,7 @@
 
 #include <PhosphorServices/MprisPlayer.h>
 
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusMessage>
@@ -108,7 +109,17 @@ public:
             Q_EMIT owner->playbackStateChanged();
         }
 
-        refreshMetadata(qdbus_cast<QVariantMap>(dbusProperty(bus, service, kPlayerIface, "Metadata")));
+        {
+            QVariant metaVar = dbusProperty(bus, service, kPlayerIface, "Metadata");
+            QVariantMap meta;
+            if (metaVar.canConvert<QDBusArgument>())
+                meta = qdbus_cast<QVariantMap>(metaVar.value<QDBusArgument>());
+            else
+                meta = metaVar.toMap();
+            qCDebug(lcMpris) << "Metadata for" << service << "keys:" << meta.keys()
+                             << "artUrl:" << meta.value(QStringLiteral("mpris:artUrl"));
+            refreshMetadata(meta);
+        }
 
         auto setReal = [](qreal& field, qreal val, auto signal, auto* o) {
             if (qFuzzyCompare(field, val))

@@ -43,36 +43,27 @@ PopupWindow {
         target: shellState
     }
 
-    // Backdrop — frosted-glass shader only. An opaque base Rectangle
-    // used to live here as a "shader still warming" fallback, but it
-    // composited UNDER the 85%-opaque shader and the popup ended up
-    // looking like a solid dark-blue block with the wallpaper
-    // completely masked. The shader compiles synchronously by the
-    // time the popup maps, so the fallback wasn't paying for itself.
+    // Same gradient shader as the top panel for visual consistency.
     ShaderBackground {
-        // tintOpacity
-        // noiseAmount
-        // noiseScale
-        // animSpeed
-        // cornerRadius (px)
-
         anchors.fill: parent
         playing: root.popupVisible
-        shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
-        // ShaderEffect::setShaderParams only honours canonical
-        // `customParams<N>_<x|y|z|w>` and `customColor<N>` keys —
-        // friendly names like "tintOpacity" / "cornerRadius" are
-        // silently dropped. Map to the slot layout documented in
-        // frosted_glass.frag (customParams[0] = tint/noise/anim,
-        // customParams[1].x = cornerRadius).
+        shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
+        useWallpaper: true
+        wallpaperTexture: PhosphorShell.wallpaper.image
         shaderParams: {
-            "customParams1_x": 0.55,
-            "customParams1_y": 0.14,
-            "customParams1_z": 22,
-            "customParams1_w": 0.4,
-            "customParams2_x": 14
+            "customParams1_x": 0.8,
+            "customParams1_y": 0,
+            "customParams1_z": 0.65,
+            "customParams1_w": 0.06,
+            "customParams2_x": 14,
+            "customParams2_y": 20,
+            "customParams3_x": 1.0,
+            "customParams3_y": 8,
+            "customParams4_x": 0,
+            "customParams4_y": 0
         }
-        customColor1: "#1e1e2e"
+        customColor1: "#cba6f7"
+        customColor2: "#89dceb"
     }
 
     // Hairline border — kept as a Qt Quick Rectangle (not part of the
@@ -92,12 +83,12 @@ PopupWindow {
     Item {
         id: calendarSource
 
-        // Catppuccin palette
-        readonly property color colText: "#cdd6f4"
-        readonly property color colSubtle: "#a6adc8"
-        readonly property color colMuted: "#6c7086"
-        readonly property color colAccent: "#cba6f7"
-        readonly property color colToday: "#89dceb"
+        // Dark-on-gradient palette (matches the top panel text)
+        readonly property color colText: "#1e1e2e"
+        readonly property color colSubtle: "#45475a"
+        readonly property color colMuted: "#585b70"
+        readonly property color colAccent: "#1e1e2e"
+        readonly property color colToday: "#1e1e2e"
         // Currently displayed month — defaults to today, prev/next nav.
         property date displayDate: new Date()
 
