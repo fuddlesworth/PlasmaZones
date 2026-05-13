@@ -1239,13 +1239,12 @@ void Daemon::start()
     }
 
     // Suppress OSDs once Qt begins shutdown (SIGTERM, programmatic quit).
-    if (qGuiApp) {
-        connect(
-            qGuiApp, &QGuiApplication::aboutToQuit, this,
-            [this]() {
-                m_shuttingDown = true;
-            },
-            Qt::UniqueConnection);
+    // Connected once — m_aboutToQuitConnected prevents stacking on stop()→start().
+    if (qGuiApp && !m_aboutToQuitConnected) {
+        connect(qGuiApp, &QGuiApplication::aboutToQuit, this, [this]() {
+            m_shuttingDown = true;
+        });
+        m_aboutToQuitConnected = true;
     }
 
     // Detect phantom plasma-restore sessions via systemd's user bus.

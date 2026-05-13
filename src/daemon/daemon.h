@@ -665,6 +665,7 @@ private:
 
     /// Shutdown flag — set by `aboutToQuit`, `stop()`. Gates `shouldSuppressOsd()`.
     bool m_shuttingDown = false;
+    bool m_aboutToQuitConnected = false;
 
     /// Deadline bumped by `screenRemoved` (start.cpp). ~1 s cooldown prevents
     /// OSD shows during output teardown cascades and monitor hot-unplug.
