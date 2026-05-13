@@ -38,6 +38,26 @@ public:
 
     /// Mark as clean after a successful write.
     virtual void clearDirty() = 0;
+
+    /// Whether `iResolution` in this extension's UBO should be uploaded
+    /// in PHYSICAL pixels (DPR-scaled, matches `gl_FragCoord`) or
+    /// LOGICAL pixels (matches the QQuickItem's bounds and Qt's
+    /// auto-interpolated `vTexCoord`).
+    ///
+    /// Default `true` (physical) is the legacy overlay-shader contract
+    /// — zone-overlay fragment shaders sample `gl_FragCoord /
+    /// iResolution` for SDF masks and expect both sides in physical
+    /// pixels. Extensions whose shader contract uses `vTexCoord` (the
+    /// rasterised quad's 0..1 interpolated UV, DPR-independent) and
+    /// reads other-extension fields that ride on logical-pixel
+    /// semantics (animation shaders' `iAnchorSize` / `iAnchorPosInFbo`
+    /// / `iSurfaceScreenPos` magic-constant tuning) override to
+    /// `false` so the ratios stay dimensionally consistent across the
+    /// UBO.
+    virtual bool requiresPhysicalResolution() const
+    {
+        return true;
+    }
 };
 
 } // namespace PhosphorShaders

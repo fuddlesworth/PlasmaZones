@@ -6,7 +6,8 @@
     "version": "1.0",
     "category": "Distortion",
     "fragmentShader": "effect.frag",
-    "fboExtent": "anchor+0.5",
+    "vertexShader": "effect.vert",
+    "fboExtent": "surface",
     "parameters": [
         {
             "id": "warpStrength",
