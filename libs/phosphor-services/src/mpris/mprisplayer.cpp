@@ -7,6 +7,7 @@
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusMessage>
+#include <QDBusObjectPath>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
@@ -90,6 +91,7 @@ public:
     QString trackArtist;
     QString trackAlbum;
     QString trackArtUrl;
+    QString trackId;
     qint64 positionUs = 0;
     qint64 lengthUs = 0;
     qreal volume = 0.0;
@@ -214,6 +216,11 @@ public:
         setIfPresent(meta, QStringLiteral("xesam:title"), trackTitle);
         setIfPresent(meta, QStringLiteral("xesam:album"), trackAlbum);
         setIfPresent(meta, QStringLiteral("mpris:artUrl"), trackArtUrl);
+        if (meta.contains(QStringLiteral("mpris:trackid"))) {
+            QString id = metaString(meta.value(QStringLiteral("mpris:trackid")));
+            if (trackId != id)
+                trackId = id;
+        }
 
         if (meta.contains(QStringLiteral("xesam:artist"))) {
             const QVariant artistVar = meta.value(QStringLiteral("xesam:artist"));
@@ -531,6 +538,15 @@ void MprisPlayer::seek(qreal offsetSeconds)
     QDBusMessage msg = QDBusMessage::createMethodCall(d->service, QLatin1String(kMprisPath),
                                                       QLatin1String(kPlayerIface), QStringLiteral("Seek"));
     msg << static_cast<qint64>(offsetSeconds * 1e6);
+    d->bus.asyncCall(msg);
+}
+
+void MprisPlayer::setPosition(qreal absoluteSeconds)
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(d->service, QLatin1String(kMprisPath),
+                                                      QLatin1String(kPlayerIface), QStringLiteral("SetPosition"));
+    QString trackPath = d->trackId.isEmpty() ? QStringLiteral("/org/mpris/MediaPlayer2/TrackList/NoTrack") : d->trackId;
+    msg << QVariant::fromValue(QDBusObjectPath(trackPath)) << static_cast<qint64>(absoluteSeconds * 1e6);
     d->bus.asyncCall(msg);
 }
 

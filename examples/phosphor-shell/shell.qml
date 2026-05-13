@@ -160,7 +160,6 @@ Item {
         anchorItem: topPanel.mediaAnchor
         currentPlayer: topPanel.mediaPlayer
         panelSurfaceHeight: topPanel.panelSurfaceHeight
-        sharedArtUrl: topPanel.mediaArtUrl
     }
 
     // ─── Floating windows ────────────────────────────────────────────────

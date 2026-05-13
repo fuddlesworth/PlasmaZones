@@ -23,7 +23,6 @@ PanelWindow {
     property alias calendarAnchor: clockLabel
     property alias mediaAnchor: mprisWidget.popupAnchor
     property alias mediaPlayer: mprisWidget.currentPlayer
-    property alias mediaArtUrl: mprisWidget.stableArtUrl
     readonly property real panelSurfaceHeight: root.thickness + root.shadowSize
     required property var shellState
     required property string clockText
@@ -126,7 +125,8 @@ PanelWindow {
             "customParams3_y": 8,
             "customParams4_x": root.shadowFraction,
             "customParams4_y": 0.5,
-            "customParams5_x": root.cornerCarveFraction
+            "customParams5_x": root.cornerCarveFraction,
+            "customParams5_y": 0
         }
         // Catppuccin mocha mauve → macchiato sky.
         customColor1: "#cba6f7"

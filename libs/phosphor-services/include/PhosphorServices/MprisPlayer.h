@@ -88,6 +88,7 @@ public:
     Q_INVOKABLE void next();
     Q_INVOKABLE void previous();
     Q_INVOKABLE void seek(qreal offsetSeconds);
+    Q_INVOKABLE void setPosition(qreal absoluteSeconds);
     Q_INVOKABLE void raise();
     Q_INVOKABLE void quit();
 

@@ -16,7 +16,6 @@ PopupWindow {
     required property var anchorItem
     required property MprisPlayer currentPlayer
     required property real panelSurfaceHeight
-    required property string sharedArtUrl
 
     readonly property bool hasPlayer: currentPlayer !== null
     readonly property bool isPlaying: hasPlayer && currentPlayer.isPlaying
@@ -24,6 +23,21 @@ PopupWindow {
         if (!hasPlayer || currentPlayer.length <= 0)
             return 0;
         return Math.min(1.0, Math.max(0, currentPlayer.position / currentPlayer.length));
+    }
+
+    property string stableArtUrl: ""
+    function _updateArtUrl() {
+        let url = (hasPlayer && currentPlayer.trackArtUrl) ? currentPlayer.trackArtUrl : "";
+        if (stableArtUrl !== url)
+            stableArtUrl = url;
+    }
+    onCurrentPlayerChanged: _updateArtUrl()
+    Connections {
+        target: root.currentPlayer
+        enabled: root.currentPlayer !== null
+        function onMetadataChanged() {
+            root._updateArtUrl();
+        }
     }
 
     readonly property real popupToScreenH: root.popupHeight / Math.max(Screen.height, 1)
@@ -122,7 +136,7 @@ PopupWindow {
                 Image {
                     id: popupArt
                     anchors.fill: parent
-                    source: root.sharedArtUrl
+                    source: root.stableArtUrl
                     fillMode: Image.PreserveAspectCrop
                     sourceSize: Qt.size(320, 320)
                     asynchronous: true
@@ -207,7 +221,7 @@ PopupWindow {
                     onClicked: mouse => {
                         let ratio = mouse.x / width;
                         let target = ratio * root.currentPlayer.length;
-                        root.currentPlayer.seek(target - root.currentPlayer.position);
+                        root.currentPlayer.setPosition(target);
                     }
                 }
             }
