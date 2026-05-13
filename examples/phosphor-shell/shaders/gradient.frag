@@ -15,6 +15,7 @@
 // customParams[3]: x=shadowFraction    y=shadowOpacity
 // customParams[4]: x=cornerCarveFraction
 // customParams[5]: y=screenYOffset (top edge of surface as fraction of screen height, for popups)
+//   NOTE: QML keys are vec+1 — set customParams6_y from QML to write customParams[5].y here.
 //   - cornerCarveFraction: radius of the concave quarter-arc carved
 //     into each bottom corner of the visible panel, expressed as a
 //     fraction of total surface height (DPR-independent). 0 disables
@@ -169,10 +170,10 @@ void main() {
     // fraction of surface height. Hard-clamp to 0..0.5 so the carve
     // can never eat the whole panel.
     float cornerCarveFraction = clamp(customParams[4].x, 0.0, 0.5);
-    // screenYOffset: Y position of this surface's top edge as a fraction
-    // of total screen height. 0 = top-anchored panel (default). For popups
-    // floating in the middle of the screen, pass e.g. 0.3 so the wallpaper
-    // samples from the correct vertical position.
+    // screenYOffset: Y position of this surface's top edge as a fraction of
+    // total screen height. The default `customParams[5].y == -1.0` (the
+    // unset sentinel from ShaderEffect) gets clamped to 0 here, so callers
+    // who don't write the slot get the top-anchored panel behavior.
     float screenYOffset = max(customParams[5].y, 0.0);
 
     // Convert from Qt RHI's Y-up viewport coords (uv.y=0 at visual

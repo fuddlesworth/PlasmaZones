@@ -125,8 +125,7 @@ PanelWindow {
             "customParams3_y": 8,
             "customParams4_x": root.shadowFraction,
             "customParams4_y": 0.5,
-            "customParams5_x": root.cornerCarveFraction,
-            "customParams5_y": 0
+            "customParams5_x": root.cornerCarveFraction
         }
         // Catppuccin mocha mauve → macchiato sky.
         customColor1: "#cba6f7"

@@ -64,7 +64,7 @@ PopupWindow {
             "customParams3_y": 8,
             "customParams4_x": 0,
             "customParams4_y": 0,
-            "customParams5_y": root.popupScreenY
+            "customParams6_y": root.popupScreenY
         }
         customColor1: "#cba6f7"
         customColor2: "#89dceb"

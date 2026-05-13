@@ -90,7 +90,7 @@ PopupWindow {
             "customParams3_y": 8,
             "customParams4_x": 0,
             "customParams4_y": 0,
-            "customParams5_y": root.popupScreenY
+            "customParams6_y": root.popupScreenY
         }
         customColor1: "#cba6f7"
         customColor2: "#89dceb"
@@ -138,6 +138,12 @@ PopupWindow {
                     anchors.fill: parent
                     source: root.stableArtUrl
                     fillMode: Image.PreserveAspectCrop
+                    // Decode at the displayed size scaled by DPR so the
+                    // pixmap matches what the GPU samples. No upper cap
+                    // — high-res cover art decodes natively and gets
+                    // downsampled by Qt's bilinear filter at draw time,
+                    // which is sharper than a fixed 320 cap on HiDPI.
+                    sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
                     asynchronous: true
                     cache: true
                     visible: status === Image.Ready || (source !== "" && status === Image.Loading)
