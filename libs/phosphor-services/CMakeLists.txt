@@ -65,6 +65,16 @@ qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
     mpris_player_interface
 )
 
+qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
+    ${phosphorservices_DBUS_ROOT}/org.freedesktop.UPower.xml
+    upower_interface
+)
+
+qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
+    ${phosphorservices_DBUS_ROOT}/org.freedesktop.UPower.Device.xml
+    upower_device_interface
+)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Public Headers
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -80,6 +90,9 @@ set(phosphorservices_public_HDRS
     include/PhosphorServices/MprisPlayer.h
     include/PhosphorServices/MprisHost.h
     include/PhosphorServices/MprisPlayerModel.h
+    include/PhosphorServices/UPowerDevice.h
+    include/PhosphorServices/UPowerHost.h
+    include/PhosphorServices/UPowerDeviceModel.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -99,6 +112,9 @@ set(phosphorservices_SRCS
     src/mpris/mprishost.cpp
     src/mpris/mprisplayer.cpp
     src/mpris/mprisplayermodel.cpp
+    src/upower/upowerhost.cpp
+    src/upower/upowerdevice.cpp
+    src/upower/upowerdevicemodel.cpp
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -11,6 +11,9 @@
 #include <PhosphorServices/MprisHost.h>
 #include <PhosphorServices/MprisPlayer.h>
 #include <PhosphorServices/MprisPlayerModel.h>
+#include <PhosphorServices/UPowerDevice.h>
+#include <PhosphorServices/UPowerDeviceModel.h>
+#include <PhosphorServices/UPowerHost.h>
 
 #include "iconimageprovider.h"
 
@@ -47,6 +50,13 @@ void registerQmlTypes()
     qmlRegisterType<MprisPlayerModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "MprisPlayerModel");
     qmlRegisterUncreatableType<MprisPlayer>(kModule, kModuleVersionMajor, kModuleVersionMinor, "MprisPlayer",
                                             QStringLiteral("MprisPlayer is owned by MprisHost — bind via the model"));
+
+    // UPower battery/power host + model
+    qmlRegisterType<UPowerHost>(kModule, kModuleVersionMajor, kModuleVersionMinor, "UPowerHost");
+    qmlRegisterType<UPowerDeviceModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "UPowerDeviceModel");
+    qmlRegisterUncreatableType<UPowerDevice>(
+        kModule, kModuleVersionMajor, kModuleVersionMinor, "UPowerDevice",
+        QStringLiteral("UPowerDevice is owned by UPowerHost — bind via the model"));
 
     // Singleton resolver — exposes themeName + iconForName() to QML
     // shells that want to resolve their own theme icons (e.g. for an
