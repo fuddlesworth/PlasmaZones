@@ -68,12 +68,12 @@ PopupWindow {
         useWallpaper: true
         wallpaperTexture: PhosphorShell.wallpaper.image
         shaderParams: {
-            "customParams1_x": 0.8,
+            "customParams1_x": 1.2,
             "customParams1_y": 0,
-            "customParams1_z": 0.65,
-            "customParams1_w": 0.06,
+            "customParams1_z": 0.55,
+            "customParams1_w": 0,
             "customParams2_x": 14,
-            "customParams2_y": 20,
+            "customParams2_y": 24,
             "customParams3_x": root.popupToScreenH,
             "customParams3_y": 8,
             "customParams4_x": 0,
