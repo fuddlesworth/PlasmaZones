@@ -215,11 +215,32 @@ public:
         };
         setIfPresent(meta, QStringLiteral("xesam:title"), trackTitle);
         setIfPresent(meta, QStringLiteral("xesam:album"), trackAlbum);
-        setIfPresent(meta, QStringLiteral("mpris:artUrl"), trackArtUrl);
+
+        // Detect track change FIRST. Some players (Spotify in particular)
+        // publish a full-resolution mpris:artUrl on the initial track
+        // change, then re-publish a few hundred ms later with a smaller
+        // cached/cropped URL — both for the same trackid. Pin trackArtUrl
+        // for the lifetime of a trackid: take the first non-empty URL we
+        // see and ignore subsequent changes until the trackid changes
+        // (i.e. a real track switch). Without this, the popup's Image
+        // re-decodes at the smaller URL and the user sees high-quality
+        // art "refresh with lower quality" shortly after a track change.
         if (meta.contains(QStringLiteral("mpris:trackid"))) {
             QString id = metaString(meta.value(QStringLiteral("mpris:trackid")));
-            if (trackId != id)
+            if (trackId != id) {
                 trackId = id;
+                trackArtUrl.clear();  // new track — accept the next artUrl
+            }
+        }
+        if (meta.contains(QStringLiteral("mpris:artUrl"))) {
+            QString s = metaString(meta.value(QStringLiteral("mpris:artUrl")));
+            // First non-empty URL wins for this trackid. Allow clearing
+            // (empty → empty is a no-op, empty → non-empty is the first
+            // assignment, non-empty → anything else is suppressed).
+            if (trackArtUrl.isEmpty() && trackArtUrl != s) {
+                trackArtUrl = s;
+                changed = true;
+            }
         }
 
         if (meta.contains(QStringLiteral("xesam:artist"))) {
