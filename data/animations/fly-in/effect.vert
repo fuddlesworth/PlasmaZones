@@ -105,24 +105,29 @@ void main() {
     vec2 shifted = position + vec2(offsetPx, 0.0);
     gl_Position = modelViewProjectionMatrix * vec4(shifted, 0.0, 1.0);
 #else
-    // Daemon (fboExtent=surface): the FBO spans iResolution (= the
-    // shader item's bounds = the QQuickWindow's contentItem = host
-    // screen / VS rect post-fullscreen-OSD migration). Map the
-    // standard (-1..1) clip-space quad onto the card's region within
-    // the FBO so the captured anchor texture renders at native pixel
-    // size at the card's resting screen position, then add the
-    // fly-in offset.
+    // Daemon (fboExtent=surface): the FBO spans the QQuickWindow's
+    // contentItem (host screen / VS rect post-fullscreen-OSD
+    // migration). Map the standard (-1..1) clip-space quad onto the
+    // card's region within the FBO so the captured anchor texture
+    // renders at native pixel size at the card's resting screen
+    // position, then add the fly-in offset.
     //
-    // iResolution naturally tracks the FBO size (Qt auto-syncs it
-    // from the shader item's geometry). On the animation path
-    // `ShaderEffect::syncBasePropertiesToNode` keeps it in LOGICAL
-    // pixels (gated on the AnimationUniformExtension's
-    // `requiresPhysicalResolution() == false`), so it matches the
-    // logical-pixel units of `iAnchorSize` and `iSurfaceScreenPos`
-    // and the clip-space ratio math below cancels cleanly. For card
-    // pixel size we read iAnchorSize; see the comment above for why
-    // iResolution is unsafe for "size of the card."
-    vec2 fboSizePx = vec2(max(iResolution.x, 1.0), max(iResolution.y, 1.0));
+    // CRITICAL: use `iSurfaceScreenPos.zw` (logical pixels) — NOT
+    // `iResolution` — for the FBO-size denominator. iResolution is
+    // auto-synced by Qt from the shader item's geometry events; on
+    // the FIRST frame of a leg attached against a fresh-from-warmup
+    // Window (login / reboot), the geometry-change signal that
+    // would resize iResolution to the screen-sized FBO has not yet
+    // propagated. Reading iResolution there returns the QML
+    // Window-default size (15×4 gridUnits = ~210×60 px), and the
+    // clip-space math below collapses to placing the card at clip
+    // coords far outside [-1, 1], cropping the rendered output to
+    // a sliver at the FBO edge — the visible "OSD displayed at the
+    // very top, almost cut off" symptom reported at login. The
+    // `iSurfaceScreenPos.zw` field is pushed synchronously by
+    // SurfaceAnimator::syncShaderGeometryNow from the scene root's
+    // bounds and is fresh on the very first frame of every leg.
+    vec2 fboSizePx = vec2(max(iSurfaceScreenPos.z, 1.0), max(iSurfaceScreenPos.w, 1.0));
 
     // Card centre in clip space. Qt's QSGRenderNode convention matches
     // the screen: clip-space Y = -1 is the top of the FBO and Y = +1
