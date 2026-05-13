@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.8.8] - 2026-05-13
+
+### Fixed
+- **KWin effect plugin fails to load after a KWin patch update**: The kwin-effect plugin's IID embeds KWin's exact upstream version string (`KWIN_PLUGIN_VERSION_STRING` in `config-kwin.h`). KWin refuses to load any effect whose IID doesn't match its own version, even across patch releases (e.g. 6.6.4 to 6.6.5). All 2.8.7 packages were built against KWin 6.6.4 and stopped loading the moment distros shipped 6.6.5. Package metadata now pins KWin to the exact upstream patch version captured at build time (RPM `Requires: kwin = %{kwin_version}`, Debian `kwin-common (= ${kwin:Version})`, Arch `kwin=$_kwin_ver`). Packages now refuse to install on a mismatched KWin instead of installing silently broken; users get a clean dependency error and CI rebuilds against each KWin patch release.
+
 ## [2.8.7] - 2026-04-14
 
 ### Added

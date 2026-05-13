@@ -231,6 +231,8 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
+    outputs:
+      kwin-version: ${{ steps.kwin-version.outputs.version }}
 
     steps:
       - name: Install prerequisites
@@ -250,6 +252,16 @@ jobs:
             kconfig kconfigwidgets \
             kcmutils kglobalaccel \
             qt6-wayland plasma-activities
+
+      - name: Capture build-time KWin version
+        id: kwin-version
+        # The kwin-effect plugin's IID embeds KWin's exact upstream version.
+        # We record the version we built against so the binary AUR PKGBUILD
+        # can pin to it (KWin refuses to load effects with mismatched IIDs).
+        run: |
+          KWIN_VER=$(pacman -Q kwin | awk '{print $2}' | cut -d- -f1)
+          echo "version=$KWIN_VER" >> "$GITHUB_OUTPUT"
+          echo "Built against KWin $KWIN_VER"
 
       - name: Configure
         run: |
@@ -651,7 +663,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   publish-aur:
     name: Publish to AUR
-    needs: [version, release]
+    needs: [version, release, build-generic]
     runs-on: ubuntu-latest
     if: ${{ !contains(needs.version.outputs.version, 'alpha') && !contains(needs.version.outputs.version, 'beta') && !contains(needs.version.outputs.version, 'rc') }}
 
@@ -693,6 +705,7 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
           SHA256: ${{ steps.hash.outputs.sha256 }}
+          KWIN_VERSION: ${{ needs.build-generic.outputs.kwin-version }}
         run: |
           git clone ssh://aur@aur.archlinux.org/plasmazones-bin.git /tmp/aur-bin
           cd /tmp/aur-bin
@@ -702,10 +715,12 @@ jobs:
           cp "$GITHUB_WORKSPACE/packaging/arch/plasmazones.install" ./
           cp "$GITHUB_WORKSPACE/packaging/arch/LICENSE" ./
 
-          # Update version and hash
+          # Update version, hash, and the exact KWin version this binary was
+          # built against (effect plugin IID embeds KWin's version string).
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
           sed -i "s/'[a-f0-9]\{64\}'/'$SHA256'/" PKGBUILD
+          sed -i "s/^_kwin_ver=.*/_kwin_ver=$KWIN_VERSION/" PKGBUILD
 
           # Generate .SRCINFO (mount files read-only to avoid chown breaking host git)
           docker run --rm \
