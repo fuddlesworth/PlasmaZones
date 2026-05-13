@@ -20,6 +20,20 @@ Item {
         return Math.min(1.0, Math.max(0, currentPlayer.position / currentPlayer.length));
     }
 
+    // Stable art URL — only updates when the actual URL string changes,
+    // preventing Image reload flicker on unrelated metadataChanged signals.
+    property string stableArtUrl: ""
+    function _updateArtUrl() {
+        let url = (hasPlayer && currentPlayer.trackArtUrl) ? currentPlayer.trackArtUrl : "";
+        if (stableArtUrl !== url) stableArtUrl = url;
+    }
+    onCurrentPlayerChanged: _updateArtUrl()
+    Connections {
+        target: root.currentPlayer
+        enabled: root.currentPlayer !== null
+        function onMetadataChanged() { root._updateArtUrl(); }
+    }
+
     // Exposed so shell.qml can anchor the popup to us.
     property alias popupAnchor: artContainer
 
@@ -112,24 +126,30 @@ Item {
                 radius: 10
                 color: "#313244"
                 clip: true
+                // Ensure art renders above the progress ring Canvas
+                z: 1
 
                 Image {
                     id: artImage
                     anchors.fill: parent
-                    source: root.hasPlayer && root.currentPlayer.trackArtUrl
-                            ? root.currentPlayer.trackArtUrl : ""
+                    source: root.stableArtUrl
                     fillMode: Image.PreserveAspectCrop
                     sourceSize: Qt.size(40, 40)
                     asynchronous: true
+                    cache: true
+                    // Keep the last successfully loaded image visible during
+                    // transient Loading states (e.g. same-URL re-evaluation).
+                    visible: status === Image.Ready || (source !== "" && status === Image.Loading)
                 }
 
-                // Fallback: show when image isn't loaded (loading, error, or no URL)
+                // Fallback: only show when there is genuinely no art (empty URL
+                // or load error) — never during transient Loading states.
                 Text {
                     anchors.centerIn: parent
                     text: "♪"
                     color: "#a6adc8"
                     font.pixelSize: 10
-                    visible: artImage.status !== Image.Ready
+                    visible: !artImage.visible
                 }
             }
 

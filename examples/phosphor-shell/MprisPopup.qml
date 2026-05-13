@@ -5,8 +5,10 @@ import Phosphor.Services 1.0
 import Phosphor.Shell 1.0
 import QtQuick
 
-// Media player detail popup — uses the same gradient shader as the top
-// panel for visual consistency across all shell surfaces.
+// Media player detail popup — frosted glass shader tinted to match the
+// panel's Catppuccin mauve palette. Avoids gradient.frag's screen-
+// relative UV params (panelToScreenH) which produce wrong wallpaper
+// sampling when the surface isn't at a known screen position.
 PopupWindow {
     id: root
 
@@ -19,6 +21,21 @@ PopupWindow {
     readonly property real progress: {
         if (!hasPlayer || currentPlayer.length <= 0) return 0;
         return Math.min(1.0, Math.max(0, currentPlayer.position / currentPlayer.length));
+    }
+
+    // Stable art URL — only updates when the actual URL string changes,
+    // preventing Image reload flicker on unrelated metadataChanged signals.
+    property string stableArtUrl: ""
+    function _updateArtUrl() {
+        let url = (hasPlayer && currentPlayer.trackArtUrl) ? currentPlayer.trackArtUrl : "";
+        if (stableArtUrl !== url) stableArtUrl = url;
+    }
+    onCurrentPlayerChanged: _updateArtUrl()
+    Connections {
+        id: popupMetaConn
+        target: root.currentPlayer
+        enabled: root.currentPlayer !== null
+        function onMetadataChanged() { root._updateArtUrl(); }
     }
 
     anchor: anchorItem
@@ -45,27 +62,22 @@ PopupWindow {
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    // Same gradient shader as the top panel
+    // Frosted glass shader tinted to match the panel's mauve palette.
+    // Uses frosted_glass.frag which is self-contained (no screen-relative
+    // UV params), avoiding the wallpaper-sampling distortion that
+    // gradient.frag produces when panelToScreenH is unknown.
     ShaderBackground {
         anchors.fill: parent
         playing: root.popupVisible
-        shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
-        useWallpaper: true
-        wallpaperTexture: PhosphorShell.wallpaper.image
+        shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
         shaderParams: {
-            "customParams1_x": 0.8,
-            "customParams1_y": 0,
-            "customParams1_z": 0.65,
-            "customParams1_w": 0.06,
-            "customParams2_x": 14,
-            "customParams2_y": 20,
-            "customParams3_x": 1.0,
-            "customParams3_y": 8,
-            "customParams4_x": 0,
-            "customParams4_y": 0
+            "customParams1_x": 0.85,
+            "customParams1_y": 0.06,
+            "customParams1_z": 24,
+            "customParams1_w": 0.8,
+            "customParams2_x": 14
         }
         customColor1: "#cba6f7"
-        customColor2: "#89dceb"
     }
 
     Rectangle {
@@ -103,17 +115,20 @@ PopupWindow {
                 Image {
                     id: popupArt
                     anchors.fill: parent
-                    source: root.hasPlayer ? (root.currentPlayer.trackArtUrl || "") : ""
+                    source: root.stableArtUrl
                     fillMode: Image.PreserveAspectCrop
                     sourceSize: Qt.size(320, 320)
                     asynchronous: true
                     cache: true
+                    // Keep the last loaded image visible during Loading states
+                    // to prevent flicker when metadata changes re-trigger load.
+                    visible: status === Image.Ready || (source !== "" && status === Image.Loading)
                 }
 
                 Text {
                     anchors.centerIn: parent
                     text: "♪"; color: "#45475a"; font.pixelSize: 42
-                    visible: popupArt.status !== Image.Ready
+                    visible: !popupArt.visible
                 }
             }
 

@@ -6,8 +6,8 @@ import QtQuick
 
 // Calendar popup — click the clock → MonthGrid scales/fades in via QML
 // scale + opacity Behaviors with an OutBack-overshoot easing. Demonstrates
-// PopupWindow anchored to a panel item via Wayland xdg-popup with the
-// frosted-glass shader for the backdrop.
+// PopupWindow anchored to a panel item via Wayland xdg-popup with a
+// frosted-glass shader tinted to match the panel's mauve palette.
 PopupWindow {
     id: root
 
@@ -43,27 +43,22 @@ PopupWindow {
         target: shellState
     }
 
-    // Same gradient shader as the top panel for visual consistency.
+    // Frosted glass shader tinted to match the panel's mauve palette.
+    // Uses frosted_glass.frag which is self-contained (no screen-relative
+    // UV params), avoiding the wallpaper-sampling distortion that
+    // gradient.frag produces when panelToScreenH is unknown.
     ShaderBackground {
         anchors.fill: parent
         playing: root.popupVisible
-        shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
-        useWallpaper: true
-        wallpaperTexture: PhosphorShell.wallpaper.image
+        shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
         shaderParams: {
-            "customParams1_x": 0.8,
-            "customParams1_y": 0,
-            "customParams1_z": 0.65,
-            "customParams1_w": 0.06,
-            "customParams2_x": 14,
-            "customParams2_y": 20,
-            "customParams3_x": 1.0,
-            "customParams3_y": 8,
-            "customParams4_x": 0,
-            "customParams4_y": 0
+            "customParams1_x": 0.85,
+            "customParams1_y": 0.06,
+            "customParams1_z": 24,
+            "customParams1_w": 0.8,
+            "customParams2_x": 14
         }
         customColor1: "#cba6f7"
-        customColor2: "#89dceb"
     }
 
     // Hairline border — kept as a Qt Quick Rectangle (not part of the
@@ -259,7 +254,7 @@ PopupWindow {
                         Text {
                             anchors.centerIn: parent
                             text: cellDate.getDate()
-                            color: isToday ? "#1e1e2e" : (inCurrentMonth ? calendarSource.colText : calendarSource.colMuted)
+                            color: isToday ? "#cdd6f4" : (inCurrentMonth ? calendarSource.colText : calendarSource.colMuted)
                             font.pixelSize: 12
                             font.weight: isToday ? Font.Bold : Font.Normal
                         }
