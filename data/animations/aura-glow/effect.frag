@@ -132,6 +132,7 @@ vec4 blurredInputColor(vec2 uv, float radius, float samples)
         return texture(uTexture0, uv) * boundaryMask(uv);
     }
     vec4 acc = vec4(0.0);
+    float totalWeight = 0.0;
     const float tau = 6.28318530718;
     const float dirs = 15.0;
     // int loop bound so iteration count exactly matches the divisor —
@@ -150,19 +151,13 @@ vec4 blurredInputColor(vec2 uv, float radius, float samples)
         for (int i = 0; i < sampleCount; ++i) {
             float s = float(i) / sampleCountF;
             vec2 off = vec2(cos(d), sin(d)) * radius * (1.0 - s) / flooredResolution;
-            // Per-tap boundaryMask — the radial blur kernel reaches
-            // outside [0, 1] for taps near the anchor edge even when
-            // the centre `uv` is in-bounds; without this each off-
-            // window tap would inherit a smeared edge texel via the
-            // clamp-to-edge sampler and the average would carry the
-            // smear inward. Taps that fall outside contribute zero
-            // (transparent), so the average naturally fades the blur
-            // toward the surface boundary.
             vec2 tap = uv + off;
-            acc += texture(uTexture0, tap) * boundaryMask(tap);
+            float w = boundaryMask(tap);
+            acc += texture(uTexture0, tap) * w;
+            totalWeight += w;
         }
     }
-    return acc / sampleCountF / dirs;
+    return acc / max(totalWeight, 1.0);
 }
 
 void main()

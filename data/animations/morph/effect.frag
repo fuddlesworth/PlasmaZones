@@ -23,20 +23,7 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-// Surface-UV → anchor-relative UV. With pass-through vTexCoord covering
-// the full surface FBO, this maps the captured anchor's region back to
-// `[0, 1]` for the warp math; fragments outside the anchor land at
-// `anchorUv < 0` or `> 1` and the `mask` block at the bottom clips
-// them to transparent. On the kwin-effect path `iAnchorPosInFbo` is
-// `(0, 0)` and `iAnchorSize == iResolution == frame`, so the remap
-// collapses to identity (`anchorUv == vTexCoord`).
-vec2 anchorRemap(vec2 uv) {
-    vec2 resSafe = max(iResolution, vec2(1.0));
-    vec2 anchorSizePx = max(iAnchorSize, vec2(1.0));
-    vec2 anchorTopLeftUv = iAnchorPosInFbo / resSafe;
-    vec2 anchorSizeUv = anchorSizePx / resSafe;
-    return (uv - anchorTopLeftUv) / anchorSizeUv;
-}
+#include <anchor_remap.glsl>
 
 void main()
 {

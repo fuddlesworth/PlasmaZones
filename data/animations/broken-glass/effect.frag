@@ -56,28 +56,7 @@ layout(location = 0) out vec4 fragColor;
 #define uBlowForce  customParams[0].y
 #define uGravity    customParams[0].z
 
-// Surface-UV → anchor-relative UV. On the daemon path the shader item
-// covers the entire wl_surface, so `vTexCoord` spans the full surface
-// FBO; this remap converts it to the captured anchor's UV space, where
-// `[0, 1]` is the anchor itself and values outside that range land in
-// the surface area surrounding the anchor. The BMW shard cascade below
-// operates in this anchor-space directly — there's no `iTexCoord*2 -
-// 0.5` because the surface naturally provides more room than BMW's
-// 2x-padded actor.
-//
-// Defence in depth: `iResolution` and `iAnchorSize` are runtime-pushed
-// and normally positive by leg start, but transient pre-attach paints
-// or mid-relayout frames can land at zero. `max(..., 1.0)` keeps the
-// divisor strictly positive so a stale frame samples a degenerate but
-// finite UV rather than propagating Inf / NaN through the shard
-// cascade. Mirrors morph/effect.frag's resSafe pattern.
-vec2 anchorRemap(vec2 uv) {
-    vec2 resSafe = max(iResolution, vec2(1.0));
-    vec2 anchorSizePx = max(iAnchorSize, vec2(1.0));
-    vec2 anchorTopLeftUv = iAnchorPosInFbo / resSafe;
-    vec2 anchorSizeUv = anchorSizePx / resSafe;
-    return (uv - anchorTopLeftUv) / anchorSizeUv;
-}
+#include <anchor_remap.glsl>
 
 // uEpicenter: BMW defaults to (0.5, 0.5) and only overrides via the
 // `broken-glass-use-pointer` setting. PlasmaZones doesn't carry a

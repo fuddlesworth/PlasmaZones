@@ -697,17 +697,30 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // correctly sized; syncGeometry() refreshes on subsequent geometry
     // events.
     if (effect.fboExtentKind == PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind::Surface) {
+        QQuickItem* sceneRoot = nullptr;
         if (QQuickWindow* win = shaderAnchor->window()) {
-            if (QQuickItem* sceneRoot = win->contentItem()) {
-                QQuickItem* parent = shaderAnchor->parentItem();
-                const QPointF rootOriginInParent =
-                    parent ? parent->mapFromItem(sceneRoot, QPointF(0.0, 0.0)) : QPointF(0.0, 0.0);
-                shaderItem->setX(rootOriginInParent.x());
-                shaderItem->setY(rootOriginInParent.y());
-                shaderItem->setWidth(sceneRoot->width());
-                shaderItem->setHeight(sceneRoot->height());
-                shaderItem->setIResolution(QSizeF(sceneRoot->width(), sceneRoot->height()));
-            }
+            sceneRoot = win->contentItem();
+        }
+        QQuickItem* parent = shaderAnchor->parentItem();
+        if (sceneRoot && parent) {
+            const QPointF rootOriginInParent = parent->mapFromItem(sceneRoot, QPointF(0.0, 0.0));
+            shaderItem->setX(rootOriginInParent.x());
+            shaderItem->setY(rootOriginInParent.y());
+            shaderItem->setWidth(sceneRoot->width());
+            shaderItem->setHeight(sceneRoot->height());
+            shaderItem->setIResolution(QSizeF(sceneRoot->width(), sceneRoot->height()));
+        } else if (parent) {
+            shaderItem->setX(0.0);
+            shaderItem->setY(0.0);
+            shaderItem->setWidth(parent->width());
+            shaderItem->setHeight(parent->height());
+            shaderItem->setIResolution(QSizeF(parent->width(), parent->height()));
+        } else {
+            shaderItem->setX(shaderAnchor->x());
+            shaderItem->setY(shaderAnchor->y());
+            shaderItem->setWidth(shaderAnchor->width());
+            shaderItem->setHeight(shaderAnchor->height());
+            shaderItem->setIResolution(QSizeF(shaderAnchor->width(), shaderAnchor->height()));
         }
     } else {
         // Anchor mode (default) — shader item exactly covers the anchor.
