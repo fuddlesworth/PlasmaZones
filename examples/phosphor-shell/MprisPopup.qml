@@ -6,9 +6,7 @@ import Phosphor.Shell 1.0
 import QtQuick
 
 // Media player detail popup — opens below the MprisWidget capsule.
-// Shows large album art, full track metadata, seek slider, volume,
-// and playback controls. Follows the CalendarPopup pattern (imperative
-// popupVisible to avoid the outside-click rebind loop).
+// Uses the same frosted-glass look as the taskbar and calendar popup.
 PopupWindow {
     id: root
 
@@ -26,7 +24,7 @@ PopupWindow {
     anchor: anchorItem
     popupEdge: PopupWindow.Below
     popupWidth: 300
-    popupHeight: 340
+    popupHeight: 360
     gap: 8
     popupVisible: false
 
@@ -36,29 +34,27 @@ PopupWindow {
     }
 
     Connections {
-        function onMediaOpenChanged() {
-            root.popupVisible = shellState.mediaOpen;
-        }
+        function onMediaOpenChanged() { root.popupVisible = shellState.mediaOpen; }
         target: shellState
     }
 
-    function formatTime(secs) {
+    function fmt(secs) {
         if (isNaN(secs) || secs < 0) return "0:00";
         let m = Math.floor(secs / 60);
         let s = Math.floor(secs % 60);
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    // Frosted glass backdrop
+    // Same frosted-glass backdrop as the taskbar
     ShaderBackground {
         anchors.fill: parent
         playing: root.popupVisible
         shaderSource: Qt.resolvedUrl("shaders/frosted_glass.frag")
         shaderParams: {
-            "customParams1_x": 0.55,
-            "customParams1_y": 0.14,
-            "customParams1_z": 22,
-            "customParams1_w": 0.4,
+            "customParams1_x": 0.8,
+            "customParams1_y": 0.15,
+            "customParams1_z": 20,
+            "customParams1_w": 0.5,
             "customParams2_x": 14
         }
         customColor1: "#1e1e2e"
@@ -66,134 +62,102 @@ PopupWindow {
 
     Rectangle {
         anchors.fill: parent
-        color: "transparent"
-        radius: 14
-        border.color: "#80a6adc8"
-        border.width: 1
+        color: "transparent"; radius: 14
+        border.color: "#40a6adc8"; border.width: 1
     }
 
-    // Content
     Item {
         id: content
         anchors.fill: parent
         anchors.margins: 16
-        scale: shellState.mediaOpen ? 1 : 0.7
+        scale: shellState.mediaOpen ? 1 : 0.85
         opacity: shellState.mediaOpen ? 1 : 0
 
         Column {
             anchors.fill: parent
-            spacing: 12
+            spacing: 10
 
             // Player identity
             Text {
                 width: parent.width
                 text: root.hasPlayer ? root.currentPlayer.identity : ""
-                color: "#a6adc8"
-                font.pixelSize: 10
-                font.weight: Font.Medium
+                color: "#a6adc8"; font.pixelSize: 10; font.weight: Font.Medium
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
             }
 
             // Large album art
             Rectangle {
-                width: 140; height: 140
+                width: 160; height: 160
                 anchors.horizontalCenter: parent.horizontalCenter
-                radius: 12
-                color: "#313244"
-                clip: true
+                radius: 14; color: "#313244"; clip: true
 
                 Image {
                     id: popupArt
                     anchors.fill: parent
-                    source: root.hasPlayer && root.currentPlayer.trackArtUrl
-                            ? root.currentPlayer.trackArtUrl : ""
+                    source: root.hasPlayer ? (root.currentPlayer.trackArtUrl || "") : ""
                     fillMode: Image.PreserveAspectCrop
-                    sourceSize: Qt.size(280, 280)
+                    sourceSize: Qt.size(320, 320)
                     asynchronous: true
+                    cache: true
                 }
 
                 Text {
                     anchors.centerIn: parent
-                    text: "♪"
-                    color: "#585b70"
-                    font.pixelSize: 36
+                    text: "♪"; color: "#585b70"; font.pixelSize: 42
                     visible: popupArt.status !== Image.Ready
                 }
             }
 
             // Track info
             Column {
-                width: parent.width
-                spacing: 2
+                width: parent.width; spacing: 2
 
                 Text {
                     width: parent.width
-                    text: root.hasPlayer ? root.currentPlayer.trackTitle : ""
-                    color: "#cdd6f4"
-                    font.pixelSize: 14
-                    font.weight: Font.Bold
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
+                    text: root.hasPlayer ? (root.currentPlayer.trackTitle || "") : ""
+                    color: "#cdd6f4"; font.pixelSize: 14; font.weight: Font.Bold
+                    horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
                 }
-
                 Text {
                     width: parent.width
                     text: {
                         if (!root.hasPlayer) return "";
-                        let parts = [];
-                        if (root.currentPlayer.trackArtist)
-                            parts.push(root.currentPlayer.trackArtist);
-                        if (root.currentPlayer.trackAlbum)
-                            parts.push(root.currentPlayer.trackAlbum);
-                        return parts.join(" — ");
+                        let p = [];
+                        if (root.currentPlayer.trackArtist) p.push(root.currentPlayer.trackArtist);
+                        if (root.currentPlayer.trackAlbum) p.push(root.currentPlayer.trackAlbum);
+                        return p.join(" — ");
                     }
-                    color: "#a6adc8"
-                    font.pixelSize: 11
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
+                    color: "#a6adc8"; font.pixelSize: 11
+                    horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
                 }
             }
 
-            // Seek bar
+            // Seek bar + time
             Item {
-                width: parent.width
-                height: 20
+                width: parent.width; height: 24
                 visible: root.hasPlayer && root.currentPlayer.length > 0
 
-                // Track background
+                Text {
+                    anchors.left: parent.left; anchors.top: parent.top
+                    text: root.hasPlayer ? root.fmt(root.currentPlayer.position) : ""
+                    color: "#6c7086"; font.pixelSize: 9
+                }
+                Text {
+                    anchors.right: parent.right; anchors.top: parent.top
+                    text: root.hasPlayer ? root.fmt(root.currentPlayer.length) : ""
+                    color: "#6c7086"; font.pixelSize: 9
+                }
+
                 Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    height: 4
-                    radius: 2
-                    color: "#45475a"
+                    anchors.left: parent.left; anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 4; radius: 2; color: "#45475a"
 
                     Rectangle {
                         width: parent.width * root.progress
-                        height: parent.height
-                        radius: 2
-                        color: "#89b4fa"
+                        height: parent.height; radius: 2; color: "#89b4fa"
                     }
-                }
-
-                // Time labels
-                Text {
-                    anchors.left: parent.left
-                    anchors.bottom: parent.top
-                    anchors.bottomMargin: 1
-                    text: root.hasPlayer ? root.formatTime(root.currentPlayer.position) : ""
-                    color: "#6c7086"
-                    font.pixelSize: 9
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.bottom: parent.top
-                    anchors.bottomMargin: 1
-                    text: root.hasPlayer ? root.formatTime(root.currentPlayer.length) : ""
-                    color: "#6c7086"
-                    font.pixelSize: 9
                 }
 
                 MouseArea {
@@ -207,57 +171,37 @@ PopupWindow {
                 }
             }
 
-            // Playback controls (centered)
+            // Controls
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 16
+                spacing: 20
 
                 Rectangle {
                     width: 32; height: 32; radius: 8
-                    color: pprevArea.containsMouse ? "#45475a" : "transparent"
+                    color: pp.containsMouse ? "#45475a" : "transparent"
                     visible: root.hasPlayer && root.currentPlayer.canGoPrevious
                     Text { anchors.centerIn: parent; text: "⏮"; font.pixelSize: 14; color: "#cdd6f4" }
-                    MouseArea {
-                        id: pprevArea; anchors.fill: parent; hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.currentPlayer.previous()
-                    }
+                    MouseArea { id: pp; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.currentPlayer.previous() }
                 }
 
                 Rectangle {
-                    width: 40; height: 40; radius: 20
-                    color: pplayArea.containsMouse ? "#45475a" : "#313244"
-                    Text {
-                        anchors.centerIn: parent
-                        text: root.isPlaying ? "⏸" : "▶"
-                        font.pixelSize: 16; color: "#cdd6f4"
-                    }
-                    MouseArea {
-                        id: pplayArea; anchors.fill: parent; hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: if (root.hasPlayer) root.currentPlayer.togglePlaying()
-                    }
+                    width: 44; height: 44; radius: 22
+                    color: ppla.containsMouse ? "#45475a" : "#313244"
+                    Text { anchors.centerIn: parent; text: root.isPlaying ? "⏸" : "▶"; font.pixelSize: 18; color: "#cdd6f4" }
+                    MouseArea { id: ppla; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (root.hasPlayer) root.currentPlayer.togglePlaying() }
                 }
 
                 Rectangle {
                     width: 32; height: 32; radius: 8
-                    color: pnextArea.containsMouse ? "#45475a" : "transparent"
+                    color: pn.containsMouse ? "#45475a" : "transparent"
                     visible: root.hasPlayer && root.currentPlayer.canGoNext
                     Text { anchors.centerIn: parent; text: "⏭"; font.pixelSize: 14; color: "#cdd6f4" }
-                    MouseArea {
-                        id: pnextArea; anchors.fill: parent; hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.currentPlayer.next()
-                    }
+                    MouseArea { id: pn; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.currentPlayer.next() }
                 }
             }
         }
 
-        Behavior on scale {
-            NumberAnimation { duration: 350; easing.type: Easing.OutBack; easing.overshoot: 1.4 }
-        }
-        Behavior on opacity {
-            NumberAnimation { duration: 250 }
-        }
+        Behavior on scale { NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+        Behavior on opacity { NumberAnimation { duration: 200 } }
     }
 }

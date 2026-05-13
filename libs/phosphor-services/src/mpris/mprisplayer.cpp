@@ -108,7 +108,7 @@ public:
             Q_EMIT owner->playbackStateChanged();
         }
 
-        refreshMetadata(dbusProperty(bus, service, kPlayerIface, "Metadata").toMap());
+        refreshMetadata(qdbus_cast<QVariantMap>(dbusProperty(bus, service, kPlayerIface, "Metadata")));
 
         auto setReal = [](qreal& field, qreal val, auto signal, auto* o) {
             if (qFuzzyCompare(field, val))
