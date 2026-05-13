@@ -176,51 +176,59 @@ public:
     void refreshMetadata(const QVariantMap& meta)
     {
         bool changed = false;
-        // Helper that unwraps QDBusVariant before converting to string —
-        // some players deliver metadata values wrapped in an extra variant.
         auto metaString = [](const QVariant& val) -> QString {
             if (val.canConvert<QDBusVariant>())
                 return val.value<QDBusVariant>().variant().toString();
             return val.toString();
         };
-        auto setMeta = [&changed, &metaString](QString& field, const QVariant& val) {
-            QString s = metaString(val);
+        // Only update a field if the key is present in the map.
+        // PropertiesChanged delivers PARTIAL metadata — missing keys
+        // mean "unchanged", not "cleared". Without this guard, a
+        // partial update (e.g. just mpris:length) wipes trackArtUrl.
+        auto setIfPresent = [&changed, &metaString](const QVariantMap& m, const QString& key, QString& field) {
+            if (!m.contains(key))
+                return;
+            QString s = metaString(m.value(key));
             if (field == s)
                 return;
             field = s;
             changed = true;
         };
-        setMeta(trackTitle, meta.value(QStringLiteral("xesam:title")));
-        setMeta(trackAlbum, meta.value(QStringLiteral("xesam:album")));
-        setMeta(trackArtUrl, meta.value(QStringLiteral("mpris:artUrl")));
+        setIfPresent(meta, QStringLiteral("xesam:title"), trackTitle);
+        setIfPresent(meta, QStringLiteral("xesam:album"), trackAlbum);
+        setIfPresent(meta, QStringLiteral("mpris:artUrl"), trackArtUrl);
 
-        const QVariant artistVar = meta.value(QStringLiteral("xesam:artist"));
-        QString artistStr;
-        if (artistVar.canConvert<QDBusVariant>()) {
-            QVariant inner = artistVar.value<QDBusVariant>().variant();
-            if (inner.typeId() == QMetaType::QStringList)
-                artistStr = inner.toStringList().join(QStringLiteral(", "));
-            else
-                artistStr = inner.toString();
-        } else if (artistVar.typeId() == QMetaType::QStringList) {
-            artistStr = artistVar.toStringList().join(QStringLiteral(", "));
-        } else {
-            artistStr = artistVar.toString();
-        }
-        if (trackArtist != artistStr) {
-            trackArtist = artistStr;
-            changed = true;
+        if (meta.contains(QStringLiteral("xesam:artist"))) {
+            const QVariant artistVar = meta.value(QStringLiteral("xesam:artist"));
+            QString artistStr;
+            if (artistVar.canConvert<QDBusVariant>()) {
+                QVariant inner = artistVar.value<QDBusVariant>().variant();
+                if (inner.typeId() == QMetaType::QStringList)
+                    artistStr = inner.toStringList().join(QStringLiteral(", "));
+                else
+                    artistStr = inner.toString();
+            } else if (artistVar.typeId() == QMetaType::QStringList) {
+                artistStr = artistVar.toStringList().join(QStringLiteral(", "));
+            } else {
+                artistStr = artistVar.toString();
+            }
+            if (trackArtist != artistStr) {
+                trackArtist = artistStr;
+                changed = true;
+            }
         }
 
-        auto metaLongLong = [](const QVariant& val) -> qint64 {
-            if (val.canConvert<QDBusVariant>())
-                return val.value<QDBusVariant>().variant().toLongLong();
-            return val.toLongLong();
-        };
-        qint64 newLength = metaLongLong(meta.value(QStringLiteral("mpris:length")));
-        if (lengthUs != newLength) {
-            lengthUs = newLength;
-            changed = true;
+        if (meta.contains(QStringLiteral("mpris:length"))) {
+            auto metaLongLong = [](const QVariant& val) -> qint64 {
+                if (val.canConvert<QDBusVariant>())
+                    return val.value<QDBusVariant>().variant().toLongLong();
+                return val.toLongLong();
+            };
+            qint64 newLength = metaLongLong(meta.value(QStringLiteral("mpris:length")));
+            if (lengthUs != newLength) {
+                lengthUs = newLength;
+                changed = true;
+            }
         }
 
         if (changed)
