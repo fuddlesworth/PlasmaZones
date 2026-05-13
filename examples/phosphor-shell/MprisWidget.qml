@@ -16,7 +16,8 @@ Item {
     readonly property bool hasPlayer: currentPlayer !== null
     readonly property bool isPlaying: hasPlayer && currentPlayer.isPlaying
     readonly property real progress: {
-        if (!hasPlayer || currentPlayer.length <= 0) return 0;
+        if (!hasPlayer || currentPlayer.length <= 0)
+            return 0;
         return Math.min(1.0, Math.max(0, currentPlayer.position / currentPlayer.length));
     }
 
@@ -25,14 +26,19 @@ Item {
     property string stableArtUrl: ""
     function _updateArtUrl() {
         let url = (hasPlayer && currentPlayer.trackArtUrl) ? currentPlayer.trackArtUrl : "";
-        if (stableArtUrl !== url) stableArtUrl = url;
+        if (stableArtUrl !== url)
+            stableArtUrl = url;
     }
     onCurrentPlayerChanged: _updateArtUrl()
     Connections {
         target: root.currentPlayer
         enabled: root.currentPlayer !== null
-        function onMetadataChanged() { root._updateArtUrl(); }
+        function onMetadataChanged() {
+            root._updateArtUrl();
+        }
     }
+
+    signal popupRequested
 
     // Exposed so shell.qml can anchor the popup to us.
     property alias popupAnchor: artContainer
@@ -41,8 +47,13 @@ Item {
     implicitWidth: visible ? capsule.implicitWidth : 0
     implicitHeight: parent ? parent.height : 30
 
-    MprisHost { id: mprisHost }
-    MprisPlayerModel { id: playerModel; host: mprisHost }
+    MprisHost {
+        id: mprisHost
+    }
+    MprisPlayerModel {
+        id: playerModel
+        host: mprisHost
+    }
 
     // ─── Player selection ────────────────────────────────────────────
     function selectPlayer() {
@@ -50,33 +61,51 @@ Item {
         let paused = null;
         for (let i = 0; i < mprisHost.playerCount; i++) {
             let p = mprisHost.playerAt(i);
-            if (!p) continue;
-            if (p.isPlaying) { playing = p; break; }
-            if (p.playbackState === MprisPlayer.Paused && !paused) paused = p;
+            if (!p)
+                continue;
+            if (p.isPlaying) {
+                playing = p;
+                break;
+            }
+            if (p.playbackState === MprisPlayer.Paused && !paused)
+                paused = p;
         }
         let next = playing || paused || (mprisHost.playerCount > 0 ? mprisHost.playerAt(0) : null);
-        if (root.currentPlayer !== next) root.currentPlayer = next;
+        if (root.currentPlayer !== next)
+            root.currentPlayer = next;
     }
 
     function cyclePlayer() {
-        if (mprisHost.playerCount <= 1) return;
+        if (mprisHost.playerCount <= 1)
+            return;
         let idx = 0;
         for (let i = 0; i < mprisHost.playerCount; i++) {
-            if (mprisHost.playerAt(i) === currentPlayer) { idx = i; break; }
+            if (mprisHost.playerAt(i) === currentPlayer) {
+                idx = i;
+                break;
+            }
         }
         root.currentPlayer = mprisHost.playerAt((idx + 1) % mprisHost.playerCount);
     }
 
     Connections {
         target: mprisHost
-        function onPlayerAdded() { root.selectPlayer(); }
-        function onPlayerRemoved() { root.selectPlayer(); }
-        function onPlayerCountChanged() { root.selectPlayer(); }
+        function onPlayerAdded() {
+            root.selectPlayer();
+        }
+        function onPlayerRemoved() {
+            root.selectPlayer();
+        }
+        function onPlayerCountChanged() {
+            root.selectPlayer();
+        }
     }
     Connections {
         target: root.currentPlayer
         enabled: root.currentPlayer !== null
-        function onPlaybackStateChanged() { root.selectPlayer(); }
+        function onPlaybackStateChanged() {
+            root.selectPlayer();
+        }
     }
     Component.onCompleted: selectPlayer()
 
@@ -89,7 +118,8 @@ Item {
         // Album art with progress ring
         Item {
             id: artContainer
-            width: 26; height: 26
+            width: 26
+            height: 26
             anchors.verticalCenter: parent.verticalCenter
 
             Canvas {
@@ -122,7 +152,8 @@ Item {
             Rectangle {
                 id: artClip
                 anchors.centerIn: parent
-                width: 20; height: 20
+                width: 20
+                height: 20
                 radius: 10
                 color: "#313244"
                 clip: true
@@ -157,24 +188,37 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                acceptedButtons: Qt.RightButton
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 Accessible.role: Accessible.Button
-                Accessible.name: "Cycle media player"
-                onClicked: root.cyclePlayer()
+                Accessible.name: "Media player controls"
+                onClicked: mouse => {
+                    if (mouse.button === Qt.RightButton)
+                        root.cyclePlayer();
+                    else
+                        root.popupRequested();
+                }
             }
         }
 
-        // Scrolling title
+        // Scrolling title — left-click opens popup
         Item {
-            width: 120; height: parent.height
+            width: 120
+            height: parent.height
             anchors.verticalCenter: parent.verticalCenter
             clip: true
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.popupRequested()
+            }
 
             Text {
                 id: titleText
                 y: (parent.height - height) / 2
                 text: {
-                    if (!root.hasPlayer) return "";
+                    if (!root.hasPlayer)
+                        return "";
                     let parts = [];
                     if (root.currentPlayer.trackArtist)
                         parts.push(root.currentPlayer.trackArtist);
@@ -189,16 +233,23 @@ Item {
                 SequentialAnimation on x {
                     running: titleText.needsScroll && root.visible
                     loops: Animation.Infinite
-                    PauseAnimation { duration: 2000 }
+                    PauseAnimation {
+                        duration: 2000
+                    }
                     NumberAnimation {
-                        from: 0; to: -(titleText.implicitWidth - 110)
+                        from: 0
+                        to: -(titleText.implicitWidth - 110)
                         duration: titleText.implicitWidth * 25
                         easing.type: Easing.Linear
                     }
-                    PauseAnimation { duration: 1500 }
+                    PauseAnimation {
+                        duration: 1500
+                    }
                     NumberAnimation {
-                        from: -(titleText.implicitWidth - 110); to: 0
-                        duration: 400; easing.type: Easing.OutQuad
+                        from: -(titleText.implicitWidth - 110)
+                        to: 0
+                        duration: 400
+                        easing.type: Easing.OutQuad
                     }
                 }
             }
@@ -210,44 +261,70 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
 
             Rectangle {
-                width: 20; height: 20; radius: 4
+                width: 20
+                height: 20
+                radius: 4
                 color: prevArea.containsMouse ? "#45475a" : "transparent"
                 visible: root.hasPlayer && root.currentPlayer.canGoPrevious
-                Text { anchors.centerIn: parent; text: "⏮"; font.pixelSize: 9; color: "#1e1e2e" }
+                Text {
+                    anchors.centerIn: parent
+                    text: "⏮"
+                    font.pixelSize: 9
+                    color: "#1e1e2e"
+                }
                 MouseArea {
-                    id: prevArea; anchors.fill: parent; hoverEnabled: true
+                    id: prevArea
+                    anchors.fill: parent
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    Accessible.role: Accessible.Button; Accessible.name: "Previous track"
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Previous track"
                     onClicked: root.currentPlayer.previous()
                 }
             }
 
             Rectangle {
-                width: 22; height: 22; radius: 11
+                width: 22
+                height: 22
+                radius: 11
                 color: playArea.containsMouse ? "#45475a" : "#313244"
                 Text {
                     anchors.centerIn: parent
                     text: root.isPlaying ? "⏸" : "▶"
-                    font.pixelSize: 9; color: "#cdd6f4"
+                    font.pixelSize: 9
+                    color: "#cdd6f4"
                 }
                 MouseArea {
-                    id: playArea; anchors.fill: parent; hoverEnabled: true
+                    id: playArea
+                    anchors.fill: parent
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     Accessible.role: Accessible.Button
                     Accessible.name: root.isPlaying ? "Pause" : "Play"
-                    onClicked: if (root.hasPlayer) root.currentPlayer.togglePlaying()
+                    onClicked: if (root.hasPlayer)
+                        root.currentPlayer.togglePlaying()
                 }
             }
 
             Rectangle {
-                width: 20; height: 20; radius: 4
+                width: 20
+                height: 20
+                radius: 4
                 color: nextArea.containsMouse ? "#45475a" : "transparent"
                 visible: root.hasPlayer && root.currentPlayer.canGoNext
-                Text { anchors.centerIn: parent; text: "⏭"; font.pixelSize: 9; color: "#1e1e2e" }
+                Text {
+                    anchors.centerIn: parent
+                    text: "⏭"
+                    font.pixelSize: 9
+                    color: "#1e1e2e"
+                }
                 MouseArea {
-                    id: nextArea; anchors.fill: parent; hoverEnabled: true
+                    id: nextArea
+                    anchors.fill: parent
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    Accessible.role: Accessible.Button; Accessible.name: "Next track"
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Next track"
                     onClicked: root.currentPlayer.next()
                 }
             }
@@ -259,9 +336,11 @@ Item {
         anchors.fill: capsule
         acceptedButtons: Qt.MiddleButton
         propagateComposedEvents: true
-        onClicked: if (root.hasPlayer) root.currentPlayer.togglePlaying()
-        onWheel: (wheel) => {
-            if (!root.hasPlayer) return;
+        onClicked: if (root.hasPlayer)
+            root.currentPlayer.togglePlaying()
+        onWheel: wheel => {
+            if (!root.hasPlayer)
+                return;
             let delta = wheel.angleDelta.y > 0 ? 0.05 : -0.05;
             root.currentPlayer.setVolume(Math.max(0, Math.min(1, root.currentPlayer.volume + delta)));
         }

@@ -49,9 +49,10 @@ public:
     {
         for (int i = 0; i < devices.size(); ++i) {
             if (devices.at(i)->dbusPath() == path) {
-                auto* device = devices.takeAt(i);
+                auto* device = devices.at(i);
                 qCDebug(lcUPowerHost) << "Device removed:" << path;
                 Q_EMIT owner->deviceRemoved(device);
+                devices.removeAt(i);
                 Q_EMIT owner->deviceCountChanged();
                 device->deleteLater();
                 return;

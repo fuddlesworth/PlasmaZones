@@ -41,9 +41,10 @@ public:
     {
         for (int i = 0; i < players.size(); ++i) {
             if (players.at(i)->serviceName() == service) {
-                auto* player = players.takeAt(i);
+                auto* player = players.at(i);
                 qCDebug(lcMprisHost) << "Player removed:" << service;
                 Q_EMIT owner->playerRemoved(player);
+                players.removeAt(i);
                 Q_EMIT owner->playerCountChanged();
                 player->deleteLater();
                 return;

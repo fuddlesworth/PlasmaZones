@@ -14,6 +14,7 @@ PopupWindow {
 
     required property var shellState
     required property var anchorItem
+    required property real panelSurfaceHeight
 
     anchor: anchorItem
     popupEdge: PopupWindow.Below
@@ -33,7 +34,6 @@ PopupWindow {
         // controlling state matches the actual surface state.
         if (!popupVisible && shellState.calendarOpen)
             shellState.calendarOpen = false;
-
     }
 
     Connections {
@@ -45,7 +45,7 @@ PopupWindow {
     }
 
     readonly property real popupToScreenH: root.popupHeight / Math.max(Screen.height, 1)
-    readonly property real popupScreenY: (52 + root.gap) / Math.max(Screen.height, 1)
+    readonly property real popupScreenY: (root.panelSurfaceHeight + root.gap) / Math.max(Screen.height, 1)
 
     ShaderBackground {
         anchors.fill: parent
@@ -91,8 +91,8 @@ PopupWindow {
         readonly property color colText: "#1e1e2e"
         readonly property color colSubtle: "#45475a"
         readonly property color colMuted: "#585b70"
-        readonly property color colAccent: "#1e1e2e"
-        readonly property color colToday: "#1e1e2e"
+        readonly property color colAccent: "#7c3aed"
+        readonly property color colToday: "#0891b2"
         // Currently displayed month — defaults to today, prev/next nav.
         property date displayDate: new Date()
 
@@ -138,7 +138,6 @@ PopupWindow {
                             calendarSource.displayDate = d;
                         }
                     }
-
                 }
 
                 Text {
@@ -178,9 +177,7 @@ PopupWindow {
                             calendarSource.displayDate = d;
                         }
                     }
-
                 }
-
             }
 
             // Day-of-week header row
@@ -201,9 +198,7 @@ PopupWindow {
                         font.pixelSize: 10
                         font.weight: Font.Medium
                     }
-
                 }
-
             }
 
             // Month grid — 6 weeks × 7 days = 42 cells. Each cell shows
@@ -255,9 +250,7 @@ PopupWindow {
                                 ColorAnimation {
                                     duration: 100
                                 }
-
                             }
-
                         }
 
                         Text {
@@ -275,13 +268,9 @@ PopupWindow {
                             hoverEnabled: true
                             Accessible.name: cellDate.getDate() + " " + Qt.formatDate(cellDate, "MMMM yyyy")
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         Behavior on scale {
@@ -290,16 +279,12 @@ PopupWindow {
                 easing.type: Easing.OutBack
                 easing.overshoot: 1.4
             }
-
         }
 
         Behavior on opacity {
             NumberAnimation {
                 duration: 250
             }
-
         }
-
     }
-
 }

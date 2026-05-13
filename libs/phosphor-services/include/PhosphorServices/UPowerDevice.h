@@ -23,6 +23,7 @@ class PHOSPHORSERVICES_EXPORT UPowerDevice : public QObject
     Q_PROPERTY(qreal timeToFull READ timeToFull NOTIFY timeToFullChanged)
     Q_PROPERTY(qreal energy READ energy NOTIFY energyChanged)
     Q_PROPERTY(qreal energyCapacity READ energyCapacity NOTIFY energyCapacityChanged)
+    Q_PROPERTY(qreal energyFullDesign READ energyFullDesign NOTIFY energyFullDesignChanged)
     Q_PROPERTY(qreal energyRate READ energyRate NOTIFY energyRateChanged)
     Q_PROPERTY(QString nativePath READ nativePath NOTIFY nativePathChanged)
     Q_PROPERTY(QString model READ model NOTIFY modelChanged)
@@ -69,6 +70,7 @@ public:
     [[nodiscard]] qreal timeToFull() const;
     [[nodiscard]] qreal energy() const;
     [[nodiscard]] qreal energyCapacity() const;
+    [[nodiscard]] qreal energyFullDesign() const;
     [[nodiscard]] qreal energyRate() const;
     [[nodiscard]] QString nativePath() const;
     [[nodiscard]] QString model() const;
@@ -86,6 +88,7 @@ Q_SIGNALS:
     void timeToFullChanged();
     void energyChanged();
     void energyCapacityChanged();
+    void energyFullDesignChanged();
     void energyRateChanged();
     void nativePathChanged();
     void modelChanged();

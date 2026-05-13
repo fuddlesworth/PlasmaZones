@@ -3,6 +3,8 @@
 
 #include <PhosphorServices/UPowerDevice.h>
 
+#include <type_traits>
+
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusMessage>
@@ -44,6 +46,7 @@ public:
     qint64 timeToFull = 0;
     qreal energy = 0.0;
     qreal energyFull = 0.0;
+    qreal energyFullDesign = 0.0;
     qreal energyRate = 0.0;
     QString nativePath;
     QString model;
@@ -51,37 +54,34 @@ public:
     bool powerSupply = false;
     bool isPresent = false;
 
-    void refreshAll()
+    template <typename T, typename Signal>
+    static void setField(T& field, T val, Signal signal, UPowerDevice* o)
     {
-        auto setReal = [](qreal& field, qreal val, auto signal, auto* o) {
+        if constexpr (std::is_same_v<T, qreal>) {
             if (qFuzzyCompare(field + 1.0, val + 1.0))
                 return;
-            field = val;
-            Q_EMIT(o->*signal)();
-        };
-        auto setStr = [](QString& field, const QString& val, auto signal, auto* o) {
+        } else {
             if (field == val)
                 return;
-            field = val;
-            Q_EMIT(o->*signal)();
-        };
-        auto setBool = [](bool& field, bool val, auto signal, auto* o) {
-            if (field == val)
-                return;
-            field = val;
-            Q_EMIT(o->*signal)();
-        };
+        }
+        field = val;
+        Q_EMIT(o->*signal)();
+    }
 
-        setReal(percentage, deviceProp(bus, path, "Percentage").toDouble(), &UPowerDevice::percentageChanged, owner);
-        setReal(energy, deviceProp(bus, path, "Energy").toDouble(), &UPowerDevice::energyChanged, owner);
-        setReal(energyFull, deviceProp(bus, path, "EnergyFull").toDouble(), &UPowerDevice::energyCapacityChanged,
+    void refreshAll()
+    {
+        setField(percentage, deviceProp(bus, path, "Percentage").toDouble(), &UPowerDevice::percentageChanged, owner);
+        setField(energy, deviceProp(bus, path, "Energy").toDouble(), &UPowerDevice::energyChanged, owner);
+        setField(energyFull, deviceProp(bus, path, "EnergyFull").toDouble(), &UPowerDevice::energyCapacityChanged,
                 owner);
-        setReal(energyRate, deviceProp(bus, path, "EnergyRate").toDouble(), &UPowerDevice::energyRateChanged, owner);
-        setStr(nativePath, deviceProp(bus, path, "NativePath").toString(), &UPowerDevice::nativePathChanged, owner);
-        setStr(model, deviceProp(bus, path, "Model").toString(), &UPowerDevice::modelChanged, owner);
-        setStr(iconName, deviceProp(bus, path, "IconName").toString(), &UPowerDevice::iconNameChanged, owner);
-        setBool(powerSupply, deviceProp(bus, path, "PowerSupply").toBool(), &UPowerDevice::powerSupplyChanged, owner);
-        setBool(isPresent, deviceProp(bus, path, "IsPresent").toBool(), &UPowerDevice::isPresentChanged, owner);
+        setField(energyFullDesign, deviceProp(bus, path, "EnergyFullDesign").toDouble(),
+                &UPowerDevice::energyFullDesignChanged, owner);
+        setField(energyRate, deviceProp(bus, path, "EnergyRate").toDouble(), &UPowerDevice::energyRateChanged, owner);
+        setField(nativePath, deviceProp(bus, path, "NativePath").toString(), &UPowerDevice::nativePathChanged, owner);
+        setField(model, deviceProp(bus, path, "Model").toString(), &UPowerDevice::modelChanged, owner);
+        setField(iconName, deviceProp(bus, path, "IconName").toString(), &UPowerDevice::iconNameChanged, owner);
+        setField(powerSupply, deviceProp(bus, path, "PowerSupply").toBool(), &UPowerDevice::powerSupplyChanged, owner);
+        setField(isPresent, deviceProp(bus, path, "IsPresent").toBool(), &UPowerDevice::isPresentChanged, owner);
 
         auto newState = static_cast<DeviceState>(deviceProp(bus, path, "State").toUInt());
         if (state != newState) {
@@ -107,6 +107,76 @@ public:
         if (timeToFull != newTTF) {
             timeToFull = newTTF;
             Q_EMIT owner->timeToFullChanged();
+        }
+
+        Q_EMIT owner->healthPercentageChanged();
+        Q_EMIT owner->propertiesRefreshed();
+    }
+
+    void refreshChanged(const QVariantMap& changed, const QStringList& invalidated)
+    {
+        auto propVal = [this, &changed, &invalidated](const char* name) -> QVariant {
+            QString key = QLatin1String(name);
+            if (changed.contains(key))
+                return changed.value(key);
+            if (invalidated.contains(key))
+                return deviceProp(bus, path, name);
+            return {};
+        };
+
+        QVariant v;
+        if ((v = propVal("Percentage")).isValid())
+            setField(percentage, v.toDouble(), &UPowerDevice::percentageChanged, owner);
+        if ((v = propVal("Energy")).isValid())
+            setField(energy, v.toDouble(), &UPowerDevice::energyChanged, owner);
+        if ((v = propVal("EnergyFull")).isValid())
+            setField(energyFull, v.toDouble(), &UPowerDevice::energyCapacityChanged, owner);
+        if ((v = propVal("EnergyFullDesign")).isValid())
+            setField(energyFullDesign, v.toDouble(), &UPowerDevice::energyFullDesignChanged, owner);
+        if ((v = propVal("EnergyRate")).isValid())
+            setField(energyRate, v.toDouble(), &UPowerDevice::energyRateChanged, owner);
+        if ((v = propVal("NativePath")).isValid())
+            setField(nativePath, v.toString(), &UPowerDevice::nativePathChanged, owner);
+        if ((v = propVal("Model")).isValid())
+            setField(model, v.toString(), &UPowerDevice::modelChanged, owner);
+        if ((v = propVal("IconName")).isValid())
+            setField(iconName, v.toString(), &UPowerDevice::iconNameChanged, owner);
+        if ((v = propVal("PowerSupply")).isValid())
+            setField(powerSupply, v.toBool(), &UPowerDevice::powerSupplyChanged, owner);
+        if ((v = propVal("IsPresent")).isValid())
+            setField(isPresent, v.toBool(), &UPowerDevice::isPresentChanged, owner);
+
+        if ((v = propVal("State")).isValid()) {
+            auto newState = static_cast<DeviceState>(v.toUInt());
+            if (state != newState) {
+                state = newState;
+                Q_EMIT owner->stateChanged();
+            }
+        }
+        if ((v = propVal("Type")).isValid()) {
+            auto newType = static_cast<DeviceType>(v.toUInt());
+            bool oldIsLaptop = (type == Battery && powerSupply);
+            if (type != newType) {
+                type = newType;
+                Q_EMIT owner->typeChanged();
+            }
+            bool newIsLaptop = (type == Battery && powerSupply);
+            if (oldIsLaptop != newIsLaptop)
+                Q_EMIT owner->isLaptopBatteryChanged();
+        }
+        if ((v = propVal("TimeToEmpty")).isValid()) {
+            qint64 newTTE = v.toLongLong();
+            if (timeToEmpty != newTTE) {
+                timeToEmpty = newTTE;
+                Q_EMIT owner->timeToEmptyChanged();
+            }
+        }
+        if ((v = propVal("TimeToFull")).isValid()) {
+            qint64 newTTF = v.toLongLong();
+            if (timeToFull != newTTF) {
+                timeToFull = newTTF;
+                Q_EMIT owner->timeToFullChanged();
+            }
         }
 
         Q_EMIT owner->healthPercentageChanged();
@@ -162,6 +232,10 @@ qreal UPowerDevice::energyCapacity() const
 {
     return d->energyFull;
 }
+qreal UPowerDevice::energyFullDesign() const
+{
+    return d->energyFullDesign;
+}
 qreal UPowerDevice::energyRate() const
 {
     return d->energyRate;
@@ -193,17 +267,17 @@ bool UPowerDevice::isLaptopBattery() const
 
 qreal UPowerDevice::healthPercentage() const
 {
-    if (d->energyFull <= 0.0)
+    if (d->energyFullDesign <= 0.0)
         return 0.0;
-    return (d->energy / d->energyFull) * 100.0;
+    return (d->energyFull / d->energyFullDesign) * 100.0;
 }
 
-void UPowerDevice::_q_onPropertiesChanged(const QString& iface, const QVariantMap& /*changed*/,
-                                          const QStringList& /*invalidated*/)
+void UPowerDevice::_q_onPropertiesChanged(const QString& iface, const QVariantMap& changed,
+                                          const QStringList& invalidated)
 {
     if (iface != QLatin1String(kDeviceIface))
         return;
-    d->refreshAll();
+    d->refreshChanged(changed, invalidated);
 }
 
 } // namespace PhosphorServices

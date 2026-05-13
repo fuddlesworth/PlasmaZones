@@ -25,7 +25,7 @@
     <signal name="TrackAdded">
       <arg name="Metadata" type="a{sv}"/>
       <arg name="AfterTrack" type="o"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QVariantMap"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="QVariantMap"/>
     </signal>
     <signal name="TrackRemoved">
       <arg name="TrackId" type="o"/>
@@ -33,7 +33,7 @@
     <signal name="TrackMetadataChanged">
       <arg name="TrackId" type="o"/>
       <arg name="Metadata" type="a{sv}"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="QVariantMap"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
     </signal>
     <property name="Tracks" type="ao" access="read"/>
     <property name="CanEditTracks" type="b" access="read"/>

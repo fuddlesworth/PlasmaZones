@@ -16,5 +16,6 @@
     <property name="IconName" type="s" access="read"/>
     <property name="NativePath" type="s" access="read"/>
     <property name="Model" type="s" access="read"/>
+    <property name="EnergyFullDesign" type="d" access="read"/>
   </interface>
 </node>

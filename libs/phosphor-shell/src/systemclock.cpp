@@ -101,6 +101,9 @@ void SystemClock::update()
         m_date = today;
         Q_EMIT dateChanged();
     }
+
+    if (m_enabled && (m_precision == Hours || m_precision == Minutes))
+        reconfigureTimer();
 }
 
 void SystemClock::reconfigureTimer()
@@ -109,18 +112,28 @@ void SystemClock::reconfigureTimer()
         m_timer->stop();
         return;
     }
+    const QTime now = QTime::currentTime();
     int intervalMs = 1000;
     switch (m_precision) {
-    case Hours:
-        intervalMs = 60000;
-        break;
-    case Minutes:
-        intervalMs = 1000;
-        break;
+    case Hours: {
+        int msUntilNextHour = ((59 - now.minute()) * 60 + (60 - now.second())) * 1000 - now.msec();
+        intervalMs = qMax(msUntilNextHour, 1000);
+        m_timer->setSingleShot(true);
+        m_timer->start(intervalMs);
+        return;
+    }
+    case Minutes: {
+        int msUntilNextMinute = (60 - now.second()) * 1000 - now.msec();
+        intervalMs = qMax(msUntilNextMinute, 500);
+        m_timer->setSingleShot(true);
+        m_timer->start(intervalMs);
+        return;
+    }
     case Seconds:
         intervalMs = 1000;
         break;
     }
+    m_timer->setSingleShot(false);
     m_timer->start(intervalMs);
 }
 

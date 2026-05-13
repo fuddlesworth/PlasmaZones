@@ -81,6 +81,7 @@ public:
     QString service;
     QDBusConnection bus = QDBusConnection::sessionBus();
     QTimer positionTimer;
+    int positionTickCount = 0;
 
     QString identity;
     QString desktopEntry;
@@ -132,15 +133,13 @@ public:
         {
             QVariant metaVar = dbusProperty(bus, service, kPlayerIface, "Metadata");
             QVariantMap meta = demarshallMetadata(metaVar);
-            qCDebug(lcMpris) << "Metadata for" << service
-                             << "type:" << metaVar.typeName()
-                             << "keys:" << meta.keys()
+            qCDebug(lcMpris) << "Metadata for" << service << "type:" << metaVar.typeName() << "keys:" << meta.keys()
                              << "artUrl:" << meta.value(QStringLiteral("mpris:artUrl"));
             refreshMetadata(meta);
         }
 
         auto setReal = [](qreal& field, qreal val, auto signal, auto* o) {
-            if (qFuzzyCompare(field, val))
+            if (qFuzzyCompare(field + 1.0, val + 1.0))
                 return;
             field = val;
             Q_EMIT(o->*signal)();
@@ -227,6 +226,8 @@ public:
                     artistStr = inner.toString();
             } else if (artistVar.typeId() == QMetaType::QStringList) {
                 artistStr = artistVar.toStringList().join(QStringLiteral(", "));
+            } else if (artistVar.canConvert<QDBusArgument>()) {
+                artistStr = qdbus_cast<QStringList>(artistVar.value<QDBusArgument>()).join(QStringLiteral(", "));
             } else {
                 artistStr = artistVar.toString();
             }
@@ -253,8 +254,27 @@ public:
             Q_EMIT owner->metadataChanged();
     }
 
-    void onPropertiesChanged(const QString& iface, const QVariantMap& changed, const QStringList& /*invalidated*/)
+    void refetchProperties(const QStringList& invalidated)
     {
+        for (const QString& prop : invalidated) {
+            if (prop == QLatin1String("PlaybackStatus") || prop == QLatin1String("Metadata")
+                || prop == QLatin1String("Position")) {
+                refreshPlayer();
+                return;
+            }
+        }
+        for (const QString& prop : invalidated) {
+            if (prop == QLatin1String("Identity") || prop == QLatin1String("DesktopEntry")) {
+                refreshRoot();
+                return;
+            }
+        }
+    }
+
+    void onPropertiesChanged(const QString& iface, const QVariantMap& changed, const QStringList& invalidated)
+    {
+        if (!invalidated.isEmpty())
+            refetchProperties(invalidated);
         if (iface == QLatin1String(kRootIface)) {
             refreshRoot();
         } else if (iface == QLatin1String(kPlayerIface)) {
@@ -276,7 +296,7 @@ public:
             }
             if (changed.contains(QStringLiteral("Volume"))) {
                 qreal v = changed.value(QStringLiteral("Volume")).toDouble();
-                if (!qFuzzyCompare(volume, v)) {
+                if (!qFuzzyCompare(volume + 1.0, v + 1.0)) {
                     volume = v;
                     Q_EMIT owner->volumeChanged();
                 }
@@ -331,10 +351,16 @@ public:
 
     void tickPosition()
     {
-        if (playbackState == Playing) {
+        if (playbackState != Playing)
+            return;
+        ++positionTickCount;
+        if (positionTickCount >= 30) {
+            positionTickCount = 0;
+            positionUs = dbusProperty(bus, service, kPlayerIface, "Position").toLongLong();
+        } else {
             positionUs += static_cast<qint64>(rate * kPositionPollMs * 1000);
-            Q_EMIT owner->positionChanged();
         }
+        Q_EMIT owner->positionChanged();
     }
 
     void updatePositionTimer()
