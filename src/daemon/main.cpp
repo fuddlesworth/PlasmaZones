@@ -18,6 +18,7 @@
 #include <QCommandLineParser>
 #include <QDBusConnection>
 #include <QDBusInterface>
+#include <QFile>
 #include <QIcon>
 #include <QLibrary>
 #include <QMutex>
@@ -29,6 +30,7 @@
 #include <QtQml/qqml.h>
 #include "pz_i18n.h"
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
 #include <signal.h>
 
@@ -49,6 +51,31 @@ void signalHandler(int /*signal*/)
 
 int main(int argc, char* argv[])
 {
+    // Exit cleanly (code 0) if the Wayland socket is already gone — avoids
+    // a SIGABRT → Restart=on-failure loop. See queryPlasmaWorkspaceState()
+    // in daemon.cpp for the full phantom-session analysis.
+    {
+        const QByteArray waylandDisplay = qgetenv("WAYLAND_DISPLAY");
+        if (!waylandDisplay.isEmpty()) {
+            QByteArray socketPath;
+            if (waylandDisplay.startsWith('/')) {
+                socketPath = waylandDisplay;
+            } else {
+                const QByteArray runtimeDir = qgetenv("XDG_RUNTIME_DIR");
+                if (!runtimeDir.isEmpty()) {
+                    socketPath = runtimeDir + '/' + waylandDisplay;
+                }
+            }
+            if (!socketPath.isEmpty() && !QFile::exists(QString::fromLocal8Bit(socketPath))) {
+                std::fprintf(stderr,
+                             "plasmazones: WAYLAND_DISPLAY=%s but socket %s missing — "
+                             "wayland session not available, exiting cleanly to avoid restart loop\n",
+                             waylandDisplay.constData(), socketPath.constData());
+                return 0;
+            }
+        }
+    }
+
     // Opt out of MangoHud's implicit Vulkan layer injection. MangoHud's
     // implicit_layer manifest attaches whenever MANGOHUD=1 is in the
     // environment (e.g. set globally for games), and its NVIDIA stat-polling

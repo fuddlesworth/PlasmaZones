@@ -78,9 +78,28 @@ void Daemon::clearHighlight()
     m_zoneDetector->clearHighlights();
 }
 
+bool Daemon::shouldSuppressOsd() const
+{
+    if (m_shuttingDown) {
+        return true;
+    }
+    // See queryPlasmaWorkspaceState() for why this catches phantom sessions.
+    if (!m_plasmaWorkspaceActive) {
+        return true;
+    }
+    // Screen-removal cooldown — see m_screensSettlingUntil in daemon.h.
+    if (std::chrono::steady_clock::now() < m_screensSettlingUntil) {
+        return true;
+    }
+    return false;
+}
+
 void Daemon::showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId)
 {
     if (!layout) {
+        return;
+    }
+    if (shouldSuppressOsd()) {
         return;
     }
 
@@ -115,6 +134,9 @@ void Daemon::showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenI
 
 void Daemon::showLockedOsd(const QString& screenId)
 {
+    if (shouldSuppressOsd()) {
+        return;
+    }
     OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
     if (style == OsdStyle::None) {
         return;
@@ -126,6 +148,9 @@ void Daemon::showLockedOsd(const QString& screenId)
 
 void Daemon::showLockedPreviewOsd(const QString& screenId)
 {
+    if (shouldSuppressOsd()) {
+        return;
+    }
     OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
     if (style == OsdStyle::None) {
         return;
@@ -149,6 +174,9 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
 void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity,
                                     DisabledReason reason)
 {
+    if (shouldSuppressOsd()) {
+        return;
+    }
     OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
     if (style == OsdStyle::None) {
         return;
@@ -208,6 +236,9 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
 
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
+    if (shouldSuppressOsd()) {
+        return;
+    }
     auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
     if (!algo) {
         qCWarning(lcDaemon) << "OSD: algorithm not found, algorithmId=" << algorithmId;
@@ -293,8 +324,11 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
 
 void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenId)
 {
-    // Defer OSD display so first-time QML compilation of NotificationOverlay.qml
-    // (~100-300ms) doesn't block the daemon event loop during layout switches.
+    if (shouldSuppressOsd()) {
+        return;
+    }
+    // Defer so first-time QML compilation doesn't block the event loop.
+    // Inner showLayoutOsd re-checks shouldSuppressOsd() on dispatch.
     QTimer::singleShot(0, this, [this, layoutId, screenId]() {
         PhosphorZones::Layout* l = m_layoutManager ? m_layoutManager->layoutById(layoutId) : nullptr;
         if (l) {
@@ -305,6 +339,9 @@ void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenI
 
 void Daemon::showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName, const QString& screenId)
 {
+    if (shouldSuppressOsd()) {
+        return;
+    }
     QTimer::singleShot(0, this, [this, algorithmId, algorithmName, screenId]() {
         showLayoutOsdForAlgorithm(algorithmId, algorithmName, screenId);
     });
@@ -432,6 +469,9 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
     if (!m_running) {
         return;
     }
+    if (shouldSuppressOsd()) {
+        return;
+    }
     if (!m_settings || !m_settings->showOsdOnDesktopSwitch() || !m_overlayService || !m_layoutManager
         || !m_screenManager) {
         return;
@@ -444,11 +484,17 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
     if (!m_layoutManager || !m_screenManager) {
         return;
     }
+    if (shouldSuppressOsd()) {
+        return;
+    }
     // Batch all per-screen OSD shows into one deferred call so every
     // screen's surface->show() fires in the same event loop pass and the
     // compositor renders them simultaneously.
     QTimer::singleShot(0, this, [this, desktop, activity]() {
         if (!m_layoutManager || !m_screenManager) {
+            return;
+        }
+        if (shouldSuppressOsd()) {
             return;
         }
         const QStringList effectiveIds = m_screenManager->effectiveScreenIds();

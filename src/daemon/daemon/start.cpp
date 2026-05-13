@@ -133,6 +133,9 @@ void Daemon::connectScreenSignals()
     });
 
     connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenRemoved, this, [this](QScreen* screen) {
+        // Suppress OSD shows for ~1 s after any screen removal — see m_screensSettlingUntil.
+        m_screensSettlingUntil = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+
         m_overlayService->handleScreenRemoved(screen);
 
         // Capture screen ID BEFORE invalidating cache (screenIdentifier reads cached EDID)

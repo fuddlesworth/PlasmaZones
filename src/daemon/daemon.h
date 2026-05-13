@@ -10,6 +10,7 @@
 #include <QHash>
 #include <QSet>
 #include <QThreadPool>
+#include <chrono>
 #include <memory>
 
 #include "shortcutmanager.h"
@@ -662,6 +663,38 @@ private:
     bool m_running = false;
     int m_suppressResnapOsd = 0;
 
+    /// Shutdown flag — set by `aboutToQuit`, `stop()`. Gates `shouldSuppressOsd()`.
+    bool m_shuttingDown = false;
+    bool m_aboutToQuitConnected = false;
+
+    /// Deadline bumped by `screenRemoved` (start.cpp). ~1 s cooldown prevents
+    /// OSD shows during output teardown cascades and monitor hot-unplug.
+    std::chrono::steady_clock::time_point m_screensSettlingUntil;
+
+    /// Mirrors `plasma-workspace.target` ActiveState on the user-bus systemd.
+    /// `true` = real session, `false` = phantom/inactive. Defaults to `true`
+    /// (fail-open for non-systemd / headless). See `queryPlasmaWorkspaceState()`
+    /// for the full rationale.
+    bool m_plasmaWorkspaceActive = true;
+
+    /// D-Bus object path for `plasma-workspace.target`, resolved by GetUnit.
+    QString m_plasmaWorkspaceTargetPath;
+
+    bool shouldSuppressOsd() const;
+
+    /// Async query of systemd's user bus for `plasma-workspace.target` state.
+    /// Fail-open on all D-Bus errors. Called once from `start()`.
+    void queryPlasmaWorkspaceState();
+
+    /// Continuation of `queryPlasmaWorkspaceState()` — fetches ActiveState
+    /// and subscribes to PropertiesChanged after GetUnit resolves.
+    void fetchPlasmaWorkspaceActiveState();
+
+private Q_SLOTS:
+    void onPlasmaWorkspaceTargetPropertiesChanged(const QString& interfaceName, const QVariantMap& changedProperties,
+                                                  const QStringList& invalidatedProperties);
+
+private:
     // Debounce timers for shortcuts that generate expensive work (Vulkan surface
     // creation, geometry batches, OSD churn) when triggered faster than ~100ms
     // by keyboard auto-repeat. Checked at the top of each handler.
