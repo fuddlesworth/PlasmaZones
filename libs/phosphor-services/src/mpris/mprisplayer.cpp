@@ -54,6 +54,26 @@ static void dbusCall(QDBusConnection& bus, const QString& service, const char* i
     bus.asyncCall(msg);
 }
 
+static QVariantMap demarshallMetadata(const QVariant& var)
+{
+    // Case 1: already a QVariantMap (some Qt versions demarshal a{sv} directly)
+    if (var.typeId() == QMetaType::QVariantMap)
+        return var.toMap();
+    // Case 2: QDBusArgument wrapping a{sv}
+    if (var.canConvert<QDBusArgument>())
+        return qdbus_cast<QVariantMap>(var.value<QDBusArgument>());
+    // Case 3: QDBusVariant wrapping a QDBusArgument (double-wrapped)
+    if (var.canConvert<QDBusVariant>()) {
+        QVariant inner = var.value<QDBusVariant>().variant();
+        if (inner.canConvert<QDBusArgument>())
+            return qdbus_cast<QVariantMap>(inner.value<QDBusArgument>());
+        if (inner.typeId() == QMetaType::QVariantMap)
+            return inner.toMap();
+    }
+    // Case 4: try qdbus_cast directly on the variant
+    return qdbus_cast<QVariantMap>(var);
+}
+
 class MprisPlayer::Private
 {
 public:
@@ -111,12 +131,10 @@ public:
 
         {
             QVariant metaVar = dbusProperty(bus, service, kPlayerIface, "Metadata");
-            QVariantMap meta;
-            if (metaVar.canConvert<QDBusArgument>())
-                meta = qdbus_cast<QVariantMap>(metaVar.value<QDBusArgument>());
-            else
-                meta = metaVar.toMap();
-            qCDebug(lcMpris) << "Metadata for" << service << "keys:" << meta.keys()
+            QVariantMap meta = demarshallMetadata(metaVar);
+            qCDebug(lcMpris) << "Metadata for" << service
+                             << "type:" << metaVar.typeName()
+                             << "keys:" << meta.keys()
                              << "artUrl:" << meta.value(QStringLiteral("mpris:artUrl"));
             refreshMetadata(meta);
         }
@@ -254,13 +272,7 @@ public:
                 }
             }
             if (changed.contains(QStringLiteral("Metadata"))) {
-                QVariant metaVar = changed.value(QStringLiteral("Metadata"));
-                QVariantMap meta;
-                if (metaVar.canConvert<QDBusArgument>())
-                    meta = qdbus_cast<QVariantMap>(metaVar.value<QDBusArgument>());
-                else
-                    meta = metaVar.toMap();
-                refreshMetadata(meta);
+                refreshMetadata(demarshallMetadata(changed.value(QStringLiteral("Metadata"))));
             }
             if (changed.contains(QStringLiteral("Volume"))) {
                 qreal v = changed.value(QStringLiteral("Volume")).toDouble();

@@ -134,7 +134,7 @@ Item {
                     anchors.fill: parent
                     source: root.stableArtUrl
                     fillMode: Image.PreserveAspectCrop
-                    sourceSize: Qt.size(40, 40)
+                    sourceSize: Qt.size(80, 80)
                     asynchronous: true
                     cache: true
                     // Keep the last successfully loaded image visible during
