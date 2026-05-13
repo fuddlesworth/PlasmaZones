@@ -61,6 +61,7 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/LazyLoader.h
     include/PhosphorShell/Toplevels.h
     include/PhosphorShell/WallpaperService.h
+    include/PhosphorShell/SystemClock.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -83,6 +84,7 @@ set(phosphorshell_SRCS
     src/lazyloader.cpp
     src/toplevels.cpp
     src/wallpaperservice.cpp
+    src/systemclock.cpp
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
