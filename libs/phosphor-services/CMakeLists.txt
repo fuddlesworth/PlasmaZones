@@ -66,6 +66,11 @@ qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
 )
 
 qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
+    ${phosphorservices_DBUS_ROOT}/org.mpris.MediaPlayer2.TrackList.xml
+    mpris_tracklist_interface
+)
+
+qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
     ${phosphorservices_DBUS_ROOT}/org.freedesktop.UPower.xml
     upower_interface
 )
