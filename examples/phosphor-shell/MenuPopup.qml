@@ -12,22 +12,28 @@ PopupWindow {
     // Menu items hoisted to a property so the binding is evaluated once,
     // not every time the Repeater re-runs the inline literal — re-running
     // would rebuild every delegate and reset hover state.
-    readonly property var menuItems: [{
-        "name": "Terminal",
-        "icon": ">"
-    }, {
-        "name": "Files",
-        "icon": "📁"
-    }, {
-        "name": "Browser",
-        "icon": "🌐"
-    }, {
-        "name": "Editor",
-        "icon": "✎"
-    }, {
-        "name": "Settings",
-        "icon": "⚙"
-    }]
+    readonly property var menuItems: [
+        {
+            "name": "Terminal",
+            "icon": ">"
+        },
+        {
+            "name": "Files",
+            "icon": "📁"
+        },
+        {
+            "name": "Browser",
+            "icon": "🌐"
+        },
+        {
+            "name": "Editor",
+            "icon": "✎"
+        },
+        {
+            "name": "Settings",
+            "icon": "⚙"
+        }
+    ]
 
     anchor: anchorItem
     popupEdge: PopupWindow.Below
@@ -40,12 +46,15 @@ PopupWindow {
     onPopupVisibleChanged: {
         if (!popupVisible && shellState.menuOpen)
             shellState.menuOpen = false;
-
     }
 
     Connections {
+        // See CalendarPopup.qml for the deferred-open rationale.
         function onMenuOpenChanged() {
-            root.popupVisible = shellState.menuOpen;
+            if (shellState.menuOpen)
+                Qt.callLater(() => root.popupVisible = shellState.menuOpen);
+            else
+                root.popupVisible = false;
         }
 
         target: shellState
@@ -100,7 +109,6 @@ PopupWindow {
                             color: "#cdd6f4"
                             font.pixelSize: 13
                         }
-
                     }
 
                     MouseArea {
@@ -112,13 +120,8 @@ PopupWindow {
                         Accessible.name: modelData.name
                         onClicked: root.shellState.menuOpen = false
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }
