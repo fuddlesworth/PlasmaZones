@@ -36,6 +36,29 @@ Item {
     // Internal queue: kind to open after the current popup unmaps.
     property string _pendingKind: ""
 
+    // Wayland xdg_popup has grab semantics: only one popup-with-grab
+    // per parent surface at a time. When we close popup A and open B
+    // synchronously, Qt's QQuickWindow::hide() returns immediately but
+    // the compositor's wl_surface destroy + grab release hasn't been
+    // processed yet — we're still in the same event-loop iteration.
+    // Qt fires popupVisibleChanged(false) synchronously inside hide(),
+    // which is before the compositor confirms unmap. If we open B at
+    // that point, the compositor sees a new grab while A's grab is
+    // still pending and dismisses B as non-topmost ("opens then closes
+    // immediately"). Qt's xdg-shell client doesn't expose any signal
+    // that fires *after* the wl_surface is actually destroyed, so we
+    // bridge the round-trip with a short timer. 80ms is below human
+    // perception of latency for click-to-show and is enough for any
+    // common compositor (KWin/Mutter/wlroots) to round-trip the
+    // unmap. Same approach noctalia/quickshell don't need because
+    // they use wlr-layer-shell which has no grab semantics.
+    Timer {
+        id: switchTimer
+        interval: 80
+        repeat: false
+        onTriggered: host._maybeOpenPending()
+    }
+
     function toggle(kind) {
         // Toggle off if the requested kind is already open.
         if (currentKind === kind) {
@@ -43,10 +66,12 @@ Item {
             return;
         }
         // If something else is open, queue and close. The unmap will
-        // trigger the queued open via _maybeOpenPending.
+        // be acknowledged by the compositor ~tens of ms later; the
+        // switchTimer fires the queued open then.
         if (currentKind !== "none") {
             _pendingKind = kind;
             _closeAll();
+            switchTimer.restart();
             return;
         }
         // Nothing open — open immediately.
@@ -83,10 +108,6 @@ Item {
         shellState.calendarOpen = currentKind === "calendar";
         shellState.mediaOpen = currentKind === "media";
         shellState.menuOpen = currentKind === "menu";
-        // When the active popup unmaps and currentKind drops to "none",
-        // open whatever was queued.
-        if (currentKind === "none")
-            _maybeOpenPending();
     }
 
     PopupWindow {
