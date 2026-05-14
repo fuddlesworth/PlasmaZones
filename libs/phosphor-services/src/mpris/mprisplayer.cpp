@@ -226,32 +226,19 @@ public:
         setIfPresent(meta, QStringLiteral("xesam:title"), trackTitle);
         setIfPresent(meta, QStringLiteral("xesam:album"), trackAlbum);
 
-        // Detect track change FIRST. Some players (Spotify in particular)
-        // publish a full-resolution mpris:artUrl on the initial track
-        // change, then re-publish a few hundred ms later with a smaller
-        // cached/cropped URL — both for the same trackid. Pin trackArtUrl
-        // for the lifetime of a trackid: take the first non-empty URL we
-        // see and ignore subsequent changes until the trackid changes
-        // (i.e. a real track switch). Without this, the popup's Image
-        // re-decodes at the smaller URL and the user sees high-quality
-        // art "refresh with lower quality" shortly after a track change.
-        if (meta.contains(QStringLiteral("mpris:trackid"))) {
-            QString id = metaString(meta.value(QStringLiteral("mpris:trackid")));
-            if (trackId != id) {
-                trackId = id;
-                trackArtUrl.clear();  // new track — accept the next artUrl
-            }
-        }
-        if (meta.contains(QStringLiteral("mpris:artUrl"))) {
-            QString s = metaString(meta.value(QStringLiteral("mpris:artUrl")));
-            // First non-empty URL wins for this trackid. Allow clearing
-            // (empty → empty is a no-op, empty → non-empty is the first
-            // assignment, non-empty → anything else is suppressed).
-            if (trackArtUrl.isEmpty() && trackArtUrl != s) {
-                trackArtUrl = s;
-                changed = true;
-            }
-        }
+        // mpris:trackid is tracked for SetPosition (which requires the
+        // current track's object path); we don't gate any field updates
+        // on it. Earlier revs pinned trackArtUrl for the lifetime of a
+        // trackid to defend against players that "downgraded" the URL
+        // mid-track, but Firefox does the opposite — publishes a
+        // thumbnail first then upgrades to the full-resolution
+        // file:// URL once the background write completes. Pinning
+        // froze the user on the thumbnail. The player is the source of
+        // truth for what URL is currently correct; treat every artUrl
+        // change as authoritative.
+        if (meta.contains(QStringLiteral("mpris:trackid")))
+            trackId = metaString(meta.value(QStringLiteral("mpris:trackid")));
+        setIfPresent(meta, QStringLiteral("mpris:artUrl"), trackArtUrl);
 
         if (meta.contains(QStringLiteral("xesam:artist"))) {
             const QVariant artistVar = meta.value(QStringLiteral("xesam:artist"));
@@ -331,6 +318,22 @@ public:
             }
             if (changed.contains(QStringLiteral("Metadata"))) {
                 refreshMetadata(demarshallMetadata(changed.value(QStringLiteral("Metadata"))));
+            } else if (changed.contains(QStringLiteral("PlaybackStatus")) && trackArtUrl.isEmpty()) {
+                // Firefox/Spotify routinely emit PropertiesChanged with
+                // ONLY {PlaybackStatus} in the changed map when the user
+                // toggles play on an already-loaded track — Metadata is
+                // omitted because, from the player's view, it didn't
+                // change. But our trackArtUrl can still be empty: the
+                // construction-time Get(Metadata) raced the lazy artUrl
+                // file write (Firefox writes ~/.local/share/firefox-mpris/
+                // <pid>_<n>.png on a background thread and only stamps
+                // mpris:artUrl after the write completes). The state
+                // transition we just observed is the canonical signal
+                // that the player's metadata is now consistent — refetch
+                // Metadata once to pick up the artUrl that's now there.
+                // Event-driven, not a timer poll.
+                QVariant metaVar = dbusProperty(bus, service, kPlayerIface, "Metadata");
+                refreshMetadata(demarshallMetadata(metaVar));
             }
             if (changed.contains(QStringLiteral("Volume"))) {
                 qreal v = changed.value(QStringLiteral("Volume")).toDouble();
