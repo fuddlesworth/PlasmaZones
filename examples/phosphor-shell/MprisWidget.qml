@@ -183,7 +183,7 @@ Item {
                     // Keep the last successfully loaded image visible during
                     // transient Loading states (e.g. same-URL re-evaluation).
                     visible: status === Image.Ready || (source !== "" && status === Image.Loading)
-                    onStatusChanged: console.log("[MprisWidget] artImage status=", status, "source=", source, "error=", errorString)
+                    onStatusChanged: console.log("[MprisWidget] artImage status=", status, "source=", source)
                 }
 
                 // Fallback: only show when there is genuinely no art (empty URL
