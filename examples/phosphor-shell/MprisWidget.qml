@@ -252,6 +252,12 @@ Item {
 
             MouseArea {
                 anchors.fill: parent
+                // hoverEnabled is required for cursorShape to take
+                // effect — without it Qt only sets the cursor on
+                // press, not on hover. The pointer-hand cue is the
+                // primary affordance signaling that the title strip
+                // opens the media popup.
+                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.popupRequested()
             }
