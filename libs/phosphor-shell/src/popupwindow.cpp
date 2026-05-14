@@ -30,9 +30,7 @@ namespace {
 // approach because Qt's xdg-shell module headers aren't exported.
 //
 // Bind version 6 — matches quickshell's pick. Reposition needs ≥3.
-class XdgWmBaseExt
-    : public QWaylandClientExtensionTemplate<XdgWmBaseExt>
-    , public QtWayland::xdg_wm_base
+class XdgWmBaseExt : public QWaylandClientExtensionTemplate<XdgWmBaseExt>, public QtWayland::xdg_wm_base
 {
 public:
     static XdgWmBaseExt* instance()
@@ -57,19 +55,27 @@ PopupWindow::PopupWindow(QQuickItem* parent)
     : QQuickItem(parent)
     , m_contentItem(new QQuickItem(this))
 {
-    // m_contentItem is the persistent QML default-property host. Until
-    // showPopup() materialises a QQuickWindow, m_contentItem lives as
-    // a child of `this` (the PopupWindow QQuickItem) so the QML scope
-    // chain works during component construction. On first show we
-    // re-parent m_contentItem ONCE to the popup's QQuickWindow content
-    // root and never move it again — children declared via the default
-    // property remain attached to m_contentItem and their binding
-    // contexts stay stable through any subsequent show/hide/reposition
-    // cycles. The previous implementation moved every direct child to
-    // the popup window's contentItem on first show, which severed the
-    // property-change notification path for bindings reaching
-    // back into the host's properties — manifesting as content not
-    // updating when the host swapped state while the popup was mapped.
+    // m_contentItem is the persistent QML default-property host.
+    // QQuickItem(this) installs `this` as BOTH the QObject parent
+    // (lifetime) and the visual parent (rendering). We KEEP the QObject
+    // parent (via setParent below) so destruction is automatic, but we
+    // CLEAR the visual parent: when a PopupWindow is declared inside a
+    // PanelWindow that becomes a live QQuickWindow surface, leaving the
+    // visual parent pointed at `this` causes m_contentItem and every
+    // QML default-property child to render in the panel's surface at
+    // (0,0) regardless of popupVisible — manifesting as a giant
+    // popup-content-shaped overlay on top of the panel covering the
+    // panel widgets. With no visual parent, m_contentItem has no scene
+    // to paint into until showPopup() re-parents it to the popup
+    // window's contentItem.
+    //
+    // QML children's binding contexts are established at parse time
+    // and are independent of the visual-parent state, so root.<...>
+    // bindings inside default-property children resolve correctly
+    // regardless of whether m_contentItem currently has a visual
+    // parent.
+    m_contentItem->setParentItem(nullptr);
+    m_contentItem->setParent(this);
     m_contentItem->setObjectName(QStringLiteral("PopupWindowContent"));
 }
 
