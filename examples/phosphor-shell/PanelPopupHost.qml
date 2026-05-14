@@ -120,32 +120,48 @@ PopupWindow {
         border.width: 1
     }
 
-    // All three contents are instantiated up-front so toggling between
-    // them is just a visibility flip — no QML reload, no Loader latency,
-    // no state-loss between switches (e.g. the calendar's displayDate
-    // is preserved if you navigate forward then switch and switch back).
-    CalendarContent {
+    // Loader-based content swap. PopupWindow reparents its child
+    // QQuickItems to its internal QQuickWindow::contentItem() on first
+    // show (popupwindow.cpp:160-167) — using a Loader keeps the
+    // currently-active content as a single child whose sourceComponent
+    // we swap, sidestepping any binding-context issues that arise from
+    // having three sibling Items become re-parented descendants of a
+    // different root.
+    Loader {
+        id: contentLoader
         anchors.fill: parent
-        anchors.margins: 14
-        active: root.currentKind === "calendar"
-        visible: active
-        shellState: root.shellState
+        anchors.margins: root.currentKind === "menu" ? 8 : (root.currentKind === "media" ? 16 : 14)
+        sourceComponent: {
+            if (root.currentKind === "calendar")
+                return calendarComp;
+            if (root.currentKind === "media")
+                return mediaComp;
+            if (root.currentKind === "menu")
+                return menuComp;
+            return null;
+        }
     }
 
-    MprisContent {
-        anchors.fill: parent
-        anchors.margins: 16
-        active: root.currentKind === "media"
-        visible: active
-        shellState: root.shellState
-        currentPlayer: root.topPanel.mediaPlayer
+    Component {
+        id: calendarComp
+        CalendarContent {
+            active: true
+            shellState: root.shellState
+        }
     }
-
-    MenuContent {
-        anchors.fill: parent
-        anchors.margins: 8
-        active: root.currentKind === "menu"
-        visible: active
-        shellState: root.shellState
+    Component {
+        id: mediaComp
+        MprisContent {
+            active: true
+            shellState: root.shellState
+            currentPlayer: root.topPanel.mediaPlayer
+        }
+    }
+    Component {
+        id: menuComp
+        MenuContent {
+            active: true
+            shellState: root.shellState
+        }
     }
 }
