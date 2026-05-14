@@ -77,9 +77,17 @@ private:
     [[nodiscard]] QRect computeAnchorRect() const;
     void reparentChildToWindow(QQuickItem* child);
     /// Re-apply the xdg-positioner / size when a live property change
-    /// requires re-showing the popup (anchor, edge, gap, geometry only
-    /// take effect at popup creation time per xdg-shell semantics).
+    /// requires re-showing the popup. With xdg-shell ≥ v3 (KWin, Mutter,
+    /// wlroots all support this) we issue xdg_popup.reposition on the
+    /// existing popup proxy instead of destroying and recreating it,
+    /// which preserves the grab and avoids the popup-switching race.
+    /// Falls back to hide+show on older compositors.
     void reapplyIfVisible();
+    /// Issue xdg_popup.reposition with a freshly-built positioner that
+    /// reflects current anchor/edge/gap/size. Returns true if the
+    /// reposition request was sent; false if no live xdg_popup exists
+    /// (e.g. popup hidden) or xdg-shell version < 3.
+    bool repositionInPlace();
 
     // Externally owned anchor item — QPointer lets us detect destruction
     // (the QML author may delete the anchor while the popup is alive).

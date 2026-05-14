@@ -23,7 +23,10 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Quick Qml)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Quick Qml WaylandClient)
+if(NOT TARGET Qt6::WaylandClientPrivate)
+    find_package(Qt6WaylandClientPrivate REQUIRED)
+endif()
 
 if(NOT TARGET PhosphorLayer::PhosphorLayer)
     find_package(PhosphorLayer CONFIG REQUIRED)
@@ -129,6 +132,14 @@ target_link_libraries(PhosphorShell
         PhosphorRendering::PhosphorRendering
         PhosphorShaders::PhosphorShaders
         PhosphorWayland::PhosphorWayland
+    PRIVATE
+        # WaylandClient + private headers needed by popupwindow.cpp to call
+        # xdg_popup.reposition directly. Qt's xdg-shell client plugin owns
+        # the xdg_popup proxy lifecycle, but reposition is just a stateless
+        # request on the same proxy — same approach quickshell uses
+        # (src/wayland/popupanchor.cpp).
+        Qt6::WaylandClient
+        Qt6::WaylandClientPrivate
 )
 
 set_target_properties(PhosphorShell PROPERTIES
