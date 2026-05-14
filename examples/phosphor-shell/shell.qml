@@ -22,77 +22,17 @@ Item {
         property bool calendarOpen: false
         property bool mediaOpen: false
         property int activeWorkspace: 0
-        // Function alias so TopPanel/widget MouseAreas can route panel-
-        // popup toggles through the wall-clock-deferred switcher rather
-        // than writing the *Open booleans directly. Set below.
+        // Function reference assigned in Component.onCompleted.
+        // TopPanel and widget MouseAreas call this to toggle panel
+        // popups; the host swaps the active popup in-place inside a
+        // single shared xdg_popup so popup-to-popup transitions
+        // can't race the Wayland grab handoff.
         property var togglePopup
 
         reloadId: "main"
     }
-    Component.onCompleted: shellState.togglePopup = togglePanelPopup
-
-    // Wayland xdg-popups grab the seat. When the user clicks a panel
-    // toggle while a popup is already open, the compositor sends
-    // popup_done to dismiss the existing popup AND forwards the click
-    // to the panel surface. Two things race: the existing popup's
-    // unmap (asynchronous, requires a compositor round-trip) and the
-    // new popup's xdg_popup.grab request. If the new popup grabs
-    // before the old one finishes tearing down, the compositor sees
-    // a grab from a non-topmost-popup client and either dismisses
-    // the new popup outright (the "flash then hide" symptom) or
-    // chains it under the old popup's anchor (right-offset symptom).
-    //
-    // Workaround: when one panel popup is open and the user toggles
-    // another, defer the new popup's open by ~80 ms so the compositor's
-    // popup_done round-trip completes and the old grab is fully
-    // released before the new one is requested. This is wall-clock,
-    // not event-loop tick — Qt.callLater (sub-ms) is not enough.
-    Timer {
-        id: popupSwitchTimer
-        interval: 80
-        repeat: false
-        property string pending: ""
-        onTriggered: {
-            if (pending === "calendar")
-                shellState.calendarOpen = true;
-            else if (pending === "media")
-                shellState.mediaOpen = true;
-            else if (pending === "menu")
-                shellState.menuOpen = true;
-            pending = "";
-        }
-    }
-
-    function togglePanelPopup(which) {
-        const isOpen = which === "calendar" ? shellState.calendarOpen : which === "media" ? shellState.mediaOpen : which === "menu" ? shellState.menuOpen : false;
-        if (isOpen) {
-            // Toggle off — close synchronously, no other popup is mapped.
-            if (which === "calendar")
-                shellState.calendarOpen = false;
-            else if (which === "media")
-                shellState.mediaOpen = false;
-            else if (which === "menu")
-                shellState.menuOpen = false;
-            return;
-        }
-        // Toggle on — close any other open popup first, then defer the
-        // new open until the compositor confirms the unmap.
-        const otherOpen = (which !== "calendar" && shellState.calendarOpen) || (which !== "media" && shellState.mediaOpen) || (which !== "menu" && shellState.menuOpen);
-        shellState.calendarOpen = false;
-        shellState.mediaOpen = false;
-        shellState.menuOpen = false;
-        if (otherOpen) {
-            popupSwitchTimer.pending = which;
-            popupSwitchTimer.restart();
-        } else {
-            // No other popup open — open immediately.
-            if (which === "calendar")
-                shellState.calendarOpen = true;
-            else if (which === "media")
-                shellState.mediaOpen = true;
-            else if (which === "menu")
-                shellState.menuOpen = true;
-        }
+    Component.onCompleted: shellState.togglePopup = function (kind) {
+        panelPopupHost.currentKind = (panelPopupHost.currentKind === kind) ? "none" : kind;
     }
 
     SystemClock {
@@ -213,22 +153,12 @@ Item {
     Taskbar {}
 
     // ─── Popups ──────────────────────────────────────────────────────────
-    MenuPopup {
+    // Single shared xdg_popup that hosts the calendar / media / menu
+    // contents. See PanelPopupHost.qml.
+    PanelPopupHost {
+        id: panelPopupHost
         shellState: shellState
-        anchorItem: topPanel.menuAnchor
-    }
-
-    CalendarPopup {
-        shellState: shellState
-        anchorItem: topPanel.calendarAnchor
-        panelSurfaceHeight: topPanel.panelSurfaceHeight
-    }
-
-    MprisPopup {
-        shellState: shellState
-        anchorItem: topPanel.mediaAnchor
-        currentPlayer: topPanel.mediaPlayer
-        panelSurfaceHeight: topPanel.panelSurfaceHeight
+        topPanel: topPanel
     }
 
     // ─── Floating windows ────────────────────────────────────────────────
