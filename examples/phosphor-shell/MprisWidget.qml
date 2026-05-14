@@ -347,7 +347,7 @@ Item {
             if (!root.hasPlayer)
                 return;
             let delta = wheel.angleDelta.y > 0 ? 0.05 : -0.05;
-            root.currentPlayer.setVolume(Math.max(0, Math.min(1, root.currentPlayer.volume + delta)));
+            root.currentPlayer.volume = Math.max(0, Math.min(1, root.currentPlayer.volume + delta));
         }
     }
 }
