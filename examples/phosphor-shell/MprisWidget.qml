@@ -131,54 +131,16 @@ Item {
             height: 26
             anchors.verticalCenter: parent.verticalCenter
 
-            Canvas {
-                id: progressRing
-                anchors.fill: parent
-                // Only sample progress while the widget is visible and we
-                // have a player. When there's no player or the widget is
-                // hidden (occluded/no-player branch), keep `prog` at 0
-                // and skip the per-second requestPaint cycle that would
-                // otherwise re-rasterize the ring once per MPRIS position
-                // tick regardless of visibility.
-                property real prog: (root.visible && root.hasPlayer) ? root.progress : 0
-                onProgChanged: if (root.visible) requestPaint()
-
-                onPaint: {
-                    let ctx = getContext("2d");
-                    let cx = width / 2, cy = height / 2;
-                    let r = Math.min(width, height) / 2 - 2;
-                    ctx.reset();
-                    ctx.beginPath();
-                    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-                    ctx.lineWidth = 2;
-                    ctx.strokeStyle = "#40585b70";
-                    ctx.stroke();
-                    if (prog > 0) {
-                        ctx.beginPath();
-                        ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + prog * 2 * Math.PI);
-                        ctx.lineWidth = 2;
-                        ctx.strokeStyle = "#89b4fa";
-                        ctx.lineCap = "round";
-                        ctx.stroke();
-                    }
-                }
-            }
-
-            // Art clip fits INSIDE the progress ring. The ring is drawn
-            // at radius (artContainer.width/2 - 2) = 11px with a 2px
-            // stroke, so its inner edge is at 10px from center. An 18x18
-            // circle (radius 9) leaves a 1px breathing gap between the
-            // art and the ring stroke.
+            // Album art fills the entire container; a circular Rectangle
+            // mask (radius == half the size) clips it to a circle. The
+            // progress ring is drawn ON TOP of the art so the outer
+            // ring stroke overlays the artwork edge.
             Rectangle {
                 id: artClip
-                anchors.centerIn: parent
-                width: 18
-                height: 18
-                radius: 9
+                anchors.fill: parent
+                radius: width / 2
                 color: "#313244"
                 clip: true
-                // Ensure art renders above the progress ring Canvas
-                z: 1
 
                 Image {
                     id: artImage
@@ -201,6 +163,43 @@ Item {
                     color: "#a6adc8"
                     font.pixelSize: 10
                     visible: !artImage.visible
+                }
+            }
+
+            // Progress ring drawn ON TOP of the art so the outer ring
+            // stroke overlays the artwork edge.
+            Canvas {
+                id: progressRing
+                anchors.fill: parent
+                z: 1
+                // Only sample progress while the widget is visible and we
+                // have a player. When there's no player or the widget is
+                // hidden (occluded/no-player branch), keep `prog` at 0
+                // and skip the per-second requestPaint cycle that would
+                // otherwise re-rasterize the ring once per MPRIS position
+                // tick regardless of visibility.
+                property real prog: (root.visible && root.hasPlayer) ? root.progress : 0
+                onProgChanged: if (root.visible)
+                    requestPaint()
+
+                onPaint: {
+                    let ctx = getContext("2d");
+                    let cx = width / 2, cy = height / 2;
+                    let r = Math.min(width, height) / 2 - 1;
+                    ctx.reset();
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = "#40585b70";
+                    ctx.stroke();
+                    if (prog > 0) {
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + prog * 2 * Math.PI);
+                        ctx.lineWidth = 2;
+                        ctx.strokeStyle = "#89b4fa";
+                        ctx.lineCap = "round";
+                        ctx.stroke();
+                    }
                 }
             }
 
