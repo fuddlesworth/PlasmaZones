@@ -30,6 +30,13 @@ Q_SIGNALS:
     void playerRemoved(PhosphorServices::MprisPlayer* player);
     void playerCountChanged();
 
+private Q_SLOTS:
+    /// org.freedesktop.DBus.NameOwnerChanged handler. Connected via
+    /// QDBusConnection::connect with a SLOT() string match because Qt's
+    /// D-Bus API doesn't expose a lambda-friendly overload. Routed to
+    /// the Private to add/remove the corresponding MprisPlayer.
+    void _q_nameOwnerChanged(const QString& service, const QString& oldOwner, const QString& newOwner);
+
 private:
     class Private;
     std::unique_ptr<Private> d;

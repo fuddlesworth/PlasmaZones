@@ -6,7 +6,6 @@
 
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
-#include <QDBusServiceWatcher>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcMprisHost, "phosphorservices.mpris.host")
@@ -20,7 +19,6 @@ class MprisHost::Private
 public:
     MprisHost* owner = nullptr;
     QList<MprisPlayer*> players;
-    QDBusServiceWatcher* watcher = nullptr;
 
     void addService(const QString& service)
     {
@@ -60,17 +58,26 @@ MprisHost::MprisHost(QObject* parent)
     d->owner = this;
 
     auto bus = QDBusConnection::sessionBus();
-    d->watcher = new QDBusServiceWatcher(this);
-    d->watcher->setConnection(bus);
-    d->watcher->setWatchMode(QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration);
-    d->watcher->addWatchedService(QStringLiteral("org.mpris.MediaPlayer2.*"));
 
-    connect(d->watcher, &QDBusServiceWatcher::serviceRegistered, this, [this](const QString& service) {
-        d->addService(service);
-    });
-    connect(d->watcher, &QDBusServiceWatcher::serviceUnregistered, this, [this](const QString& service) {
-        d->removeService(service);
-    });
+    // Subscribe to NameOwnerChanged directly. QDBusServiceWatcher does
+    // NOT support wildcards — addWatchedService("org.mpris.MediaPlayer2.*")
+    // builds a match rule with arg0 set to that literal string, which
+    // never fires for real MPRIS service names like
+    // "org.mpris.MediaPlayer2.spotify". The startup scan below would
+    // catch already-running players, but a player launched AFTER the
+    // host's construction would never produce a serviceRegistered
+    // signal — symptom: the panel widget stays hidden until the shell
+    // is restarted with the player already up.
+    //
+    // The bus-wide NameOwnerChanged subscription has no arg0 filter so
+    // it sees every name change on the session bus. We filter by
+    // prefix in the handler. The volume of NameOwnerChanged on a
+    // typical session is low (handfuls per second at peak), so the
+    // global subscription cost is negligible and is the canonical fix
+    // used by playerctld, plasma-mpris, and friends.
+    bus.connect(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
+                QStringLiteral("org.freedesktop.DBus"), QStringLiteral("NameOwnerChanged"), this,
+                SLOT(_q_nameOwnerChanged(QString, QString, QString)));
 
     const QStringList services = bus.interface()->registeredServiceNames().value();
     for (const QString& service : services) {
@@ -79,6 +86,25 @@ MprisHost::MprisHost(QObject* parent)
 }
 
 MprisHost::~MprisHost() = default;
+
+void MprisHost::_q_nameOwnerChanged(const QString& service, const QString& oldOwner, const QString& newOwner)
+{
+    if (!service.startsWith(kMprisPrefix))
+        return;
+    // NameOwnerChanged semantics: oldOwner empty + newOwner non-empty
+    // = service registered. oldOwner non-empty + newOwner empty =
+    // service unregistered. Both non-empty = ownership transferred
+    // (rare for MPRIS, but treat as add — the player object will
+    // re-resolve its proxy).
+    if (newOwner.isEmpty()) {
+        d->removeService(service);
+    } else if (oldOwner.isEmpty()) {
+        d->addService(service);
+    } else {
+        d->removeService(service);
+        d->addService(service);
+    }
+}
 
 int MprisHost::playerCount() const
 {
