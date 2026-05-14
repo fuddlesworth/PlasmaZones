@@ -6,160 +6,234 @@ import Phosphor.Shell 1.0
 import QtQuick
 import QtQuick.Window
 
-// Single-surface host for the panel's three popups (calendar / media /
-// menu). Owns one PopupWindow whose anchor + size + content swap when
-// `currentKind` changes. There is only ever one xdg_popup mapped from
-// this client at a time, so popup-to-popup transitions can't race the
-// xdg_popup grab handoff that bit the previous three-PopupWindow
-// implementation. PopupWindow.setAnchor (libs/phosphor-shell/src/
-// popupwindow.cpp:32) calls reapplyIfVisible which destroys + recreates
-// the xdg_popup in the same JS callstack — Qt batches the Wayland
-// destroy+create messages, so the compositor sees an atomic switch
-// rather than two simultaneous popups from the same parent.
-PopupWindow {
-    id: root
+// Coordinator + three independent PopupWindows (one per panel kind).
+//
+// Pattern lifted from noctalia-shell — each panel is its own permanently-
+// instantiated entity with its own content, and a coordinator
+// (PanelService.willOpenPanel) closes the previously-open panel before
+// opening the next one. There is no shared content host whose child
+// Loader gets reassigned at runtime — that pattern doesn't work cleanly
+// with Qt's PopupWindow + xdg_popup grab semantics, because the
+// content-swap inside an already-mapped popup leaves either bindings
+// disconnected (post-reparent) or animations interrupted.
+//
+// Switching popups: when the user clicks a different panel toggle while
+// one popup is open, we set `pendingKind = "<new>"` and close the
+// current popup synchronously. The current popup's `popupVisibleChanged`
+// fires when the compositor confirms unmap (event-driven, not timed),
+// at which point we open the queued popup. This is correct without any
+// timer because each popup is a separate xdg_popup — no grab transfer
+// needed, just a clean unmap-then-map sequence.
+Item {
+    id: host
 
     required property var shellState
     required property var topPanel
 
-    // "calendar" | "media" | "menu" | "none"
-    property string currentKind: "none"
+    // "calendar" | "media" | "menu" | "none". External read-only state.
+    readonly property string currentKind: calendarPopup.popupVisible ? "calendar" : mediaPopup.popupVisible ? "media" : menuPopup.popupVisible ? "menu" : "none"
 
-    function _anchorFor(kind) {
-        if (kind === "calendar")
-            return topPanel.calendarAnchor;
-        if (kind === "media")
-            return topPanel.mediaAnchor;
-        if (kind === "menu")
-            return topPanel.menuAnchor;
-        return null;
-    }
-    function _widthFor(kind) {
-        if (kind === "calendar")
-            return 280;
-        if (kind === "media")
-            return 300;
-        if (kind === "menu")
-            return 220;
-        return 1;
-    }
-    function _heightFor(kind) {
-        if (kind === "calendar")
-            return 320;
-        if (kind === "media")
-            return 360;
-        if (kind === "menu")
-            return 240;
-        return 1;
+    // Internal queue: kind to open after the current popup unmaps.
+    property string _pendingKind: ""
+
+    function toggle(kind) {
+        // Toggle off if the requested kind is already open.
+        if (currentKind === kind) {
+            _closeAll();
+            return;
+        }
+        // If something else is open, queue and close. The unmap will
+        // trigger the queued open via _maybeOpenPending.
+        if (currentKind !== "none") {
+            _pendingKind = kind;
+            _closeAll();
+            return;
+        }
+        // Nothing open — open immediately.
+        _open(kind);
     }
 
+    function _closeAll() {
+        calendarPopup.popupVisible = false;
+        mediaPopup.popupVisible = false;
+        menuPopup.popupVisible = false;
+    }
+
+    function _open(kind) {
+        if (kind === "calendar")
+            calendarPopup.popupVisible = true;
+        else if (kind === "media")
+            mediaPopup.popupVisible = true;
+        else if (kind === "menu")
+            menuPopup.popupVisible = true;
+    }
+
+    function _maybeOpenPending() {
+        if (_pendingKind === "")
+            return;
+        if (currentKind !== "none")
+            return;
+        const next = _pendingKind;
+        _pendingKind = "";
+        _open(next);
+    }
+
+    // Mirror to shellState booleans for any external binding.
     onCurrentKindChanged: {
-        // Mirror to shellState.*Open booleans for any external binding
-        // that still keys on them.
         shellState.calendarOpen = currentKind === "calendar";
         shellState.mediaOpen = currentKind === "media";
         shellState.menuOpen = currentKind === "menu";
+        // When the active popup unmaps and currentKind drops to "none",
+        // open whatever was queued.
+        if (currentKind === "none")
+            _maybeOpenPending();
+    }
 
-        if (currentKind === "none") {
-            popupVisible = false;
-            return;
+    PopupWindow {
+        id: calendarPopup
+        anchor: host.topPanel.calendarAnchor
+        popupEdge: PopupWindow.Below
+        popupWidth: 280
+        popupHeight: 320
+        gap: 8
+        popupVisible: false
+
+        readonly property real popupToScreenH: popupHeight / Math.max(Screen.height, 1)
+        readonly property real popupScreenY: (host.topPanel.panelSurfaceHeight + gap) / Math.max(Screen.height, 1)
+
+        ShaderBackground {
+            anchors.fill: parent
+            playing: calendarPopup.popupVisible
+            shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
+            useWallpaper: true
+            wallpaperTexture: PhosphorShell.wallpaper.image
+            shaderParams: {
+                "customParams1_x": 1.2,
+                "customParams1_y": 0,
+                "customParams1_z": 0.55,
+                "customParams1_w": 0,
+                "customParams2_x": 14,
+                "customParams2_y": 24,
+                "customParams3_x": calendarPopup.popupToScreenH,
+                "customParams3_y": 8,
+                "customParams4_x": 0,
+                "customParams4_y": 0,
+                "customParams6_y": calendarPopup.popupScreenY
+            }
+            customColor1: "#cba6f7"
+            customColor2: "#89dceb"
         }
-        popupWidth = _widthFor(currentKind);
-        popupHeight = _heightFor(currentKind);
-        anchor = _anchorFor(currentKind);
-        popupVisible = true;
-    }
-
-    onPopupVisibleChanged: {
-        // Compositor-side dismissal (click outside, Esc) — drop back
-        // to "none" so the next toggle sees a clean state.
-        if (!popupVisible && currentKind !== "none")
-            currentKind = "none";
-    }
-
-    popupEdge: PopupWindow.Below
-    popupWidth: 280
-    popupHeight: 320
-    gap: 8
-    popupVisible: false
-
-    readonly property real popupToScreenH: popupHeight / Math.max(Screen.height, 1)
-    readonly property real popupScreenY: (topPanel.panelSurfaceHeight + gap) / Math.max(Screen.height, 1)
-
-    ShaderBackground {
-        anchors.fill: parent
-        playing: root.popupVisible
-        shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
-        useWallpaper: true
-        wallpaperTexture: PhosphorShell.wallpaper.image
-        shaderParams: {
-            "customParams1_x": 1.2,
-            "customParams1_y": 0,
-            "customParams1_z": 0.55,
-            "customParams1_w": 0,
-            "customParams2_x": 14,
-            "customParams2_y": 24,
-            "customParams3_x": root.popupToScreenH,
-            "customParams3_y": 8,
-            "customParams4_x": 0,
-            "customParams4_y": 0,
-            "customParams6_y": root.popupScreenY
+        Rectangle {
+            anchors.fill: parent
+            color: "transparent"
+            radius: 14
+            border.color: "#80a6adc8"
+            border.width: 1
         }
-        customColor1: "#cba6f7"
-        customColor2: "#89dceb"
+        CalendarContent {
+            anchors.fill: parent
+            anchors.margins: 14
+            active: calendarPopup.popupVisible
+            shellState: host.shellState
+        }
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: "transparent"
-        radius: 14
-        border.color: "#80a6adc8"
-        border.width: 1
+    PopupWindow {
+        id: mediaPopup
+        anchor: host.topPanel.mediaAnchor
+        popupEdge: PopupWindow.Below
+        popupWidth: 300
+        popupHeight: 360
+        gap: 8
+        popupVisible: false
+
+        readonly property real popupToScreenH: popupHeight / Math.max(Screen.height, 1)
+        readonly property real popupScreenY: (host.topPanel.panelSurfaceHeight + gap) / Math.max(Screen.height, 1)
+
+        ShaderBackground {
+            anchors.fill: parent
+            playing: mediaPopup.popupVisible
+            shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
+            useWallpaper: true
+            wallpaperTexture: PhosphorShell.wallpaper.image
+            shaderParams: {
+                "customParams1_x": 1.2,
+                "customParams1_y": 0,
+                "customParams1_z": 0.55,
+                "customParams1_w": 0,
+                "customParams2_x": 14,
+                "customParams2_y": 24,
+                "customParams3_x": mediaPopup.popupToScreenH,
+                "customParams3_y": 8,
+                "customParams4_x": 0,
+                "customParams4_y": 0,
+                "customParams6_y": mediaPopup.popupScreenY
+            }
+            customColor1: "#cba6f7"
+            customColor2: "#89dceb"
+        }
+        Rectangle {
+            anchors.fill: parent
+            color: "transparent"
+            radius: 14
+            border.color: "#80a6adc8"
+            border.width: 1
+        }
+        MprisContent {
+            anchors.fill: parent
+            anchors.margins: 16
+            active: mediaPopup.popupVisible
+            shellState: host.shellState
+            currentPlayer: host.topPanel.mediaPlayer
+        }
     }
 
-    // Three sibling content Items, all instantiated up-front. The
-    // active one is shown via z-order and the inactive ones are hidden
-    // by setting `active: false` (which their internal Behaviors fade
-    // to opacity 0) AND `visible: false` so they don't intercept input.
-    //
-    // PopupWindow reparents direct children to QQuickWindow::contentItem
-    // on first show (popupwindow.cpp:160-167), and itemChange does the
-    // same for late-added children (popupwindow.cpp:323-334). Both work
-    // here because each content is a direct child of the PopupWindow
-    // QQuickItem, not nested inside a Loader/Item wrapper.
-    // visible follows opacity (NOT active) so the outgoing item stays
-    // rendered through its fade-out Behavior. Binding visible directly
-    // to active flipped it false synchronously, which yanked the item
-    // from the scene before its opacity Behavior could play — and
-    // worse, interrupted the Behavior mid-transition so the next
-    // re-show animated from a stale partial value, making the popup
-    // look stuck on the previous content. z raised on the active item
-    // keeps input routing on the right one during the cross-fade.
-    CalendarContent {
-        anchors.fill: parent
-        anchors.margins: 14
-        active: root.currentKind === "calendar"
-        visible: opacity > 0
-        z: active ? 1 : 0
-        shellState: root.shellState
-    }
+    PopupWindow {
+        id: menuPopup
+        anchor: host.topPanel.menuAnchor
+        popupEdge: PopupWindow.Below
+        popupWidth: 220
+        popupHeight: 240
+        gap: 8
+        popupVisible: false
 
-    MprisContent {
-        anchors.fill: parent
-        anchors.margins: 16
-        active: root.currentKind === "media"
-        visible: opacity > 0
-        z: active ? 1 : 0
-        shellState: root.shellState
-        currentPlayer: root.topPanel.mediaPlayer
-    }
+        readonly property real popupToScreenH: popupHeight / Math.max(Screen.height, 1)
+        readonly property real popupScreenY: (host.topPanel.panelSurfaceHeight + gap) / Math.max(Screen.height, 1)
 
-    MenuContent {
-        anchors.fill: parent
-        anchors.margins: 8
-        active: root.currentKind === "menu"
-        visible: opacity > 0
-        z: active ? 1 : 0
-        shellState: root.shellState
+        ShaderBackground {
+            anchors.fill: parent
+            playing: menuPopup.popupVisible
+            shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
+            useWallpaper: true
+            wallpaperTexture: PhosphorShell.wallpaper.image
+            shaderParams: {
+                "customParams1_x": 1.2,
+                "customParams1_y": 0,
+                "customParams1_z": 0.55,
+                "customParams1_w": 0,
+                "customParams2_x": 14,
+                "customParams2_y": 24,
+                "customParams3_x": menuPopup.popupToScreenH,
+                "customParams3_y": 8,
+                "customParams4_x": 0,
+                "customParams4_y": 0,
+                "customParams6_y": menuPopup.popupScreenY
+            }
+            customColor1: "#cba6f7"
+            customColor2: "#89dceb"
+        }
+        Rectangle {
+            anchors.fill: parent
+            color: "transparent"
+            radius: 14
+            border.color: "#80a6adc8"
+            border.width: 1
+        }
+        MenuContent {
+            anchors.fill: parent
+            anchors.margins: 8
+            active: menuPopup.popupVisible
+            shellState: host.shellState
+        }
     }
 }

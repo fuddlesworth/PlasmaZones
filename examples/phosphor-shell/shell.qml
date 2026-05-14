@@ -31,9 +31,7 @@ Item {
 
         reloadId: "main"
     }
-    Component.onCompleted: shellState.togglePopup = function (kind) {
-        panelPopupHost.currentKind = (panelPopupHost.currentKind === kind) ? "none" : kind;
-    }
+    Component.onCompleted: shellState.togglePopup = panelPopupHost.toggle
 
     SystemClock {
         id: clock
