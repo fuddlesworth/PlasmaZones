@@ -483,6 +483,13 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorLayer::PhosphorLayer
             PhosphorWayland::PhosphorWayland
             PhosphorRendering::PhosphorRendering
+            # Linked from examples/phosphor-shell — bakes the default shell.qml
+            # tree into the binary as a qt-qml-module resource. Two effects:
+            # (1) qmlcachegen / qmlsc run at build time (faster cold start,
+            # typed bindings compile to C++); (2) when no user config exists
+            # under XDG paths, ShellLoader falls back to qrc:/qt/qml/...
+            # so the binary works without the optional DATADIR install.
+            phosphor_shell_exampleplugin
             Qt6::Core
             Qt6::Gui
             Qt6::Quick

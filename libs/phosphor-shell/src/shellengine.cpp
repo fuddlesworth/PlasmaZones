@@ -183,6 +183,14 @@ void ShellEngine::teardown()
         surface->hide();
     }
     m_surfaces.clear(); // unique_ptr destructors run, no manual delete
+    // Drop singleton entries before the QQmlEngine destroys their backing
+    // PersistentProperties. QPointer auto-nulls on destruction, so the map
+    // stays safe to query, but we'd accumulate one stale (null) entry per
+    // reloadId per hot-reload cycle — and the next reload's
+    // materializePanels() rebuild walks that growing hash.
+    if (m_shellGlobal) {
+        m_shellGlobal->clearSingletons();
+    }
     m_rootObject.reset();
     m_engine.reset();
 }
@@ -551,12 +559,13 @@ void ShellEngine::materializePanels()
         }
     }
 
-    m_shellGlobal->clearSingletons();
-    // Use m_rootRef rather than m_rootObject. The loop above releases
-    // m_rootObject when the QML root is a PanelWindow (Surface takes
-    // ownership via cfg.contentItem). m_rootRef (QPointer) still tracks
-    // the live root regardless of which path we took, so findChildren
-    // works for both rootPanel and Item-rooted shells.
+    // Singletons were cleared in teardown() before this engine was built;
+    // the registerSingleton() loop below populates the map for this
+    // generation. Use m_rootRef rather than m_rootObject — the loop above
+    // releases m_rootObject when the QML root is a PanelWindow (Surface
+    // takes ownership via cfg.contentItem). m_rootRef (QPointer) still
+    // tracks the live root regardless of which path we took, so
+    // findChildren works for both rootPanel and Item-rooted shells.
     if (m_rootRef) {
         const auto persists = m_rootRef->findChildren<PersistentProperties*>();
         for (auto* p : persists) {

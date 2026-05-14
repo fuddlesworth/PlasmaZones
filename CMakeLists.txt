@@ -373,6 +373,48 @@ add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts (IN
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
+
+# ─── Engine QML firewall ─────────────────────────────────────────────────────
+#
+# Engine libraries hold authoritative placement/snap/zone state and must
+# stay free of the QML/JS engine. The moment one of them links Qt6::Qml or
+# Qt6::Quick, the cost model changes: every QObject in the engine gets a
+# JS scope, bindings cross language boundaries, and ownership becomes
+# implicit through QQmlEngine. That's the trajectory Noctalia couldn't
+# escape — their engines and config were both QML, so multi-day uptime
+# leaks (FD exhaustion, GC pauses, JSValue retention across reloads) had
+# nowhere to be fixed without a full rewrite.
+#
+# Refuse to configure if any engine target ever picks up a Qml/Quick
+# link. Cheap guardrail; failures here mean someone added a dependency
+# that drags Qml in transitively or wired a target up wrong.
+foreach(_pz_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine PhosphorEngine)
+    if(TARGET ${_pz_engine_lib})
+        get_target_property(_pz_engine_links ${_pz_engine_lib} LINK_LIBRARIES)
+        if(_pz_engine_links)
+            foreach(_pz_link IN LISTS _pz_engine_links)
+                if(_pz_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
+                    message(FATAL_ERROR
+                        "Engine library '${_pz_engine_lib}' links '${_pz_link}'. "
+                        "Engine libs must stay QML-free — see comment above this "
+                        "check in CMakeLists.txt for rationale.")
+                endif()
+            endforeach()
+        endif()
+        get_target_property(_pz_engine_iface ${_pz_engine_lib} INTERFACE_LINK_LIBRARIES)
+        if(_pz_engine_iface)
+            foreach(_pz_link IN LISTS _pz_engine_iface)
+                if(_pz_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
+                    message(FATAL_ERROR
+                        "Engine library '${_pz_engine_lib}' publicly links '${_pz_link}'. "
+                        "Engine libs must stay QML-free — see comment above this "
+                        "check in CMakeLists.txt for rationale.")
+                endif()
+            endforeach()
+        endif()
+    endif()
+endforeach()
+
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
 if(BUILD_PHOSPHOR_SHELL)
@@ -552,11 +594,19 @@ install(FILES ${_plasmazones_light_icons}
 )
 
 if(BUILD_PHOSPHOR_SHELL)
-    # Install the example phosphor-shell QML/shaders so the executable has a
-    # working default to fall back on when no user shell.qml exists yet.
-    # ShellLoader::resolve() probes both GenericConfigLocation (~/.config) and
-    # GenericDataLocation (this DATADIR install) so the executable runs out of
-    # the box on a fresh install.
+    # Build the bundled example shell as a Qt QML module so qmlcachegen
+    # and qmlsc run at build time. The resulting static module gets linked
+    # into the phosphor-shell binary in src/CMakeLists.txt so the
+    # executable has a working default that doesn't depend on filesystem
+    # install (qrc fallback in ShellLoader::resolve()).
+    add_subdirectory(examples/phosphor-shell)
+
+    # Install the example phosphor-shell QML/shaders so users can copy
+    # them into their config dir and edit. Same source as the qrc above —
+    # qrc is the build-time frozen copy used as final fallback, this is
+    # the user-editable copy. ShellLoader::resolve() probes
+    # GenericConfigLocation (~/.config) → GenericDataLocation (this
+    # install) → qrc:/ (linked-in fallback) in that order.
     install(DIRECTORY examples/phosphor-shell/
         DESTINATION ${KDE_INSTALL_DATADIR}/phosphor-shell
         FILES_MATCHING
