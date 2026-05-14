@@ -37,18 +37,8 @@ PopupWindow {
     }
 
     Connections {
-        // Closes are synchronous (let the popup unmap immediately so
-        // any other popup waiting to open can chain off the panel).
-        // Opens defer one event tick via Qt.callLater so a previously
-        // open popup fully unmaps before this one tries to map —
-        // otherwise xdg-popup positioning chains the new popup off
-        // the old one's geometry and the new popup either renders in
-        // the wrong spot or gets dismissed when the old one closes.
         function onCalendarOpenChanged() {
-            if (shellState.calendarOpen)
-                Qt.callLater(() => root.popupVisible = shellState.calendarOpen);
-            else
-                root.popupVisible = false;
+            root.popupVisible = shellState.calendarOpen;
         }
 
         target: shellState

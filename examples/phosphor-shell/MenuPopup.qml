@@ -49,12 +49,8 @@ PopupWindow {
     }
 
     Connections {
-        // See CalendarPopup.qml for the deferred-open rationale.
         function onMenuOpenChanged() {
-            if (shellState.menuOpen)
-                Qt.callLater(() => root.popupVisible = shellState.menuOpen);
-            else
-                root.popupVisible = false;
+            root.popupVisible = shellState.menuOpen;
         }
 
         target: shellState

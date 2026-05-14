@@ -179,7 +179,7 @@ PanelWindow {
                     cursorShape: Qt.PointingHandCursor
                     Accessible.role: Accessible.Button
                     Accessible.name: root.shellState.menuOpen ? "Close menu" : "Open menu"
-                    onClicked: root.shellState.menuOpen = !root.shellState.menuOpen
+                    onClicked: root.shellState.togglePopup("menu")
                 }
             }
 
@@ -245,7 +245,7 @@ PanelWindow {
                 cursorShape: Qt.PointingHandCursor
                 Accessible.role: Accessible.Button
                 Accessible.name: root.shellState.calendarOpen ? "Close calendar" : "Open calendar"
-                onClicked: root.shellState.calendarOpen = !root.shellState.calendarOpen
+                onClicked: root.shellState.togglePopup("calendar")
             }
         }
 
@@ -427,7 +427,7 @@ PanelWindow {
             MprisWidget {
                 id: mprisWidget
                 anchors.verticalCenter: parent.verticalCenter
-                onPopupRequested: root.shellState.mediaOpen = !root.shellState.mediaOpen
+                onPopupRequested: root.shellState.togglePopup("media")
             }
 
             Row {

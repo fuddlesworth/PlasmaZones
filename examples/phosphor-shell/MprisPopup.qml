@@ -55,15 +55,8 @@ PopupWindow {
             shellState.mediaOpen = false;
     }
     Connections {
-        // See CalendarPopup.qml for the deferred-open rationale —
-        // mutually exclusive popups need the previous one to fully
-        // unmap before the next maps, or xdg-popup chains the new
-        // popup off the old one's anchor.
         function onMediaOpenChanged() {
-            if (shellState.mediaOpen)
-                Qt.callLater(() => root.popupVisible = shellState.mediaOpen);
-            else
-                root.popupVisible = false;
+            root.popupVisible = shellState.mediaOpen;
         }
         target: shellState
     }
