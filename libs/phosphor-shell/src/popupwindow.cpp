@@ -7,70 +7,13 @@
 #include <QQuickWindow>
 #include <QtMath>
 
-// Qt private headers for direct xdg_popup.reposition support — same
-// pattern quickshell uses (src/wayland/popupanchor.cpp). The public
-// _q_waylandPopup* properties are read once at xdg_popup creation
-// time; changing them later doesn't trigger reposition. To switch a
-// mapped popup's anchor/size without destroying and recreating the
-// xdg_popup (which races the grab handoff and gets the new popup
-// dismissed by the compositor), we have to call xdg_popup.reposition
-// on the same proxy directly.
-#include <qwaylandclientextension.h>
-#include <private/qwayland-xdg-shell.h>
-#include <private/qwaylandwindow_p.h>
-#include <private/wayland-xdg-shell-client-protocol.h>
-
 Q_LOGGING_CATEGORY(lcPopup, "phosphorshell.popup")
-
-namespace {
-
-// Singleton wrapper that binds xdg_wm_base from the Wayland registry
-// via Qt's QWaylandClientExtensionTemplate. Quickshell uses the same
-// "bind it ourselves rather than reach into Qt's private state"
-// approach because Qt's xdg-shell module headers aren't exported.
-//
-// Bind version 6 — matches quickshell's pick. Reposition needs ≥3.
-class XdgWmBaseExt
-    : public QWaylandClientExtensionTemplate<XdgWmBaseExt>
-    , public QtWayland::xdg_wm_base
-{
-public:
-    static XdgWmBaseExt* instance()
-    {
-        static auto* inst = new XdgWmBaseExt();
-        return inst;
-    }
-
-private:
-    XdgWmBaseExt()
-        : QWaylandClientExtensionTemplate(6)
-    {
-        initialize();
-    }
-};
-
-} // namespace
 
 namespace PhosphorShell {
 
 PopupWindow::PopupWindow(QQuickItem* parent)
     : QQuickItem(parent)
-    , m_contentItem(new QQuickItem(this))
 {
-    // m_contentItem is the persistent QML default-property host. Until
-    // showPopup() materialises a QQuickWindow, m_contentItem lives as
-    // a child of `this` (the PopupWindow QQuickItem) so the QML scope
-    // chain works during component construction. On first show we
-    // re-parent m_contentItem ONCE to the popup's QQuickWindow content
-    // root and never move it again — children declared via the default
-    // property remain attached to m_contentItem and their binding
-    // contexts stay stable through any subsequent show/hide/reposition
-    // cycles. The previous implementation moved every direct child to
-    // the popup window's contentItem on first show, which severed the
-    // property-change notification path for bindings reaching
-    // back into the host's properties — manifesting as content not
-    // updating when the host swapped state while the popup was mapped.
-    m_contentItem->setObjectName(QStringLiteral("PopupWindowContent"));
 }
 
 PopupWindow::~PopupWindow()
@@ -79,16 +22,6 @@ PopupWindow::~PopupWindow()
     // is destroyed by ~QQuickWindow.
     hidePopup();
     // unique_ptr destructor reclaims m_popupWindow.
-}
-
-QQmlListProperty<QObject> PopupWindow::data()
-{
-    // Forward `data` to m_contentItem so QML children added via the
-    // default property go directly to the persistent content host.
-    // m_contentItem is itself a QQuickItem whose `data` QQmlListProperty
-    // accepts both visual children and non-visual QObjects (timers,
-    // Connections, Components, etc.) — same semantics as Item's default.
-    return m_contentItem->property("data").value<QQmlListProperty<QObject>>();
 }
 
 QQuickItem* PopupWindow::anchor() const
@@ -126,13 +59,6 @@ void PopupWindow::setPopupWidth(int width)
     if (m_popupWindow) {
         m_popupWindow->setWidth(m_popupWidth);
     }
-    m_contentItem->setWidth(m_popupWidth);
-    // The xdg-positioner's set_size is part of the popup's initial
-    // configuration; live size changes need a reposition (or hide+show
-    // fallback). Without this, calling popupWidth = 300 on an already-
-    // mapped popup just resizes the QML/RHI surface but leaves the
-    // compositor positioning the popup with the original size.
-    reapplyIfVisible();
 }
 
 int PopupWindow::popupHeight() const
@@ -151,8 +77,6 @@ void PopupWindow::setPopupHeight(int height)
     if (m_popupWindow) {
         m_popupWindow->setHeight(m_popupHeight);
     }
-    m_contentItem->setHeight(m_popupHeight);
-    reapplyIfVisible();
 }
 
 PopupWindow::PopupEdge PopupWindow::popupEdge() const
@@ -237,19 +161,14 @@ void PopupWindow::showPopup()
         m_popupWindow->setFlag(Qt::Popup);
         m_popupWindow->setColor(Qt::transparent);
 
-        // Move the persistent content host into the popup window. This
-        // is the only re-parent ever performed — children declared in
-        // QML are children of m_contentItem, never of `this`, so they
-        // don't get touched.
-        m_contentItem->setParentItem(m_popupWindow->contentItem());
+        const auto children = childItems();
+        for (QQuickItem* child : children) {
+            reparentChildToWindow(child);
+        }
     }
 
     m_popupWindow->setTransientParent(m_anchor->window());
     m_popupWindow->resize(m_popupWidth, m_popupHeight);
-    // Keep the content host sized to the popup so anchors.fill on QML
-    // children resolves to the popup's full client area.
-    m_contentItem->setWidth(m_popupWidth);
-    m_contentItem->setHeight(m_popupHeight);
 
     // Translate popupEdge → Wayland xdg-popup positioner anchor + gravity.
     //
@@ -352,92 +271,22 @@ void PopupWindow::hidePopup()
     }
 }
 
-bool PopupWindow::repositionInPlace()
+void PopupWindow::itemChange(ItemChange change, const ItemChangeData& value)
 {
-    if (!m_popupVisible || !m_popupWindow || !m_anchor || !m_anchor->window()) {
-        return false;
+    // Late-added children (created after the popup window has been
+    // materialised) need to be migrated to the popup's contentItem,
+    // otherwise they'd live on the PopupWindow QQuickItem and never
+    // appear inside the floating popup surface. Same pattern as
+    // FloatingWindow::itemChange.
+    if (change == ItemChildAddedChange && m_popupWindow && value.item) {
+        reparentChildToWindow(value.item);
     }
-    // Walk Qt's xdg-shell client to get the live xdg_popup proxy. Pattern
-    // lifted from quickshell/src/wayland/popupanchor.cpp:20.
-    auto* waylandWindow = dynamic_cast<QtWaylandClient::QWaylandWindow*>(m_popupWindow->handle());
-    if (!waylandWindow)
-        return false;
-    auto* popupRole = waylandWindow->surfaceRole<::xdg_popup>();
-    if (!popupRole)
-        return false;
+    QQuickItem::itemChange(change, value);
+}
 
-    auto* xdgWmBase = XdgWmBaseExt::instance();
-    if (!xdgWmBase->isInitialized()) {
-        qCDebug(lcPopup) << "xdg_wm_base not bound — cannot reposition; falling back to hide+show";
-        return false;
-    }
-    if (xdgWmBase->QtWayland::xdg_wm_base::version() < XDG_POPUP_REPOSITION_SINCE_VERSION) {
-        qCDebug(lcPopup) << "xdg_wm_base version < 3 — reposition unsupported, falling back to hide+show";
-        return false;
-    }
-
-    // Compute the anchor rect + edge/gravity flags exactly as showPopup does.
-    QRect anchorRect = computeAnchorRect();
-    QtWayland::xdg_positioner::anchor anchorFlag = QtWayland::xdg_positioner::anchor_none;
-    QtWayland::xdg_positioner::gravity gravityFlag = QtWayland::xdg_positioner::gravity_none;
-    switch (m_popupEdge) {
-    case Above:
-        anchorFlag = QtWayland::xdg_positioner::anchor_top;
-        gravityFlag = QtWayland::xdg_positioner::gravity_top;
-        anchorRect.adjust(0, -m_gap, 0, 0);
-        break;
-    case Below:
-        anchorFlag = QtWayland::xdg_positioner::anchor_bottom;
-        gravityFlag = QtWayland::xdg_positioner::gravity_bottom;
-        anchorRect.adjust(0, 0, 0, m_gap);
-        break;
-    case LeftOf:
-        anchorFlag = QtWayland::xdg_positioner::anchor_left;
-        gravityFlag = QtWayland::xdg_positioner::gravity_left;
-        anchorRect.adjust(-m_gap, 0, 0, 0);
-        break;
-    case RightOf:
-        anchorFlag = QtWayland::xdg_positioner::anchor_right;
-        gravityFlag = QtWayland::xdg_positioner::gravity_right;
-        anchorRect.adjust(0, 0, m_gap, 0);
-        break;
-    }
-    // Same surface-bounds clamp as showPopup — empty rect would crash
-    // the connection.
-    if (auto* parentWindow = m_anchor->window()) {
-        const QRect surfaceBounds(0, 0, parentWindow->width(), parentWindow->height());
-        anchorRect = anchorRect.intersected(surfaceBounds);
-        if (anchorRect.isEmpty())
-            anchorRect = computeAnchorRect().intersected(surfaceBounds);
-        if (anchorRect.isEmpty()) {
-            qCWarning(lcPopup) << "repositionInPlace: anchor rect empty after clamp — skipping";
-            return false;
-        }
-    }
-
-    // Build a fresh positioner. xdg_positioner is a one-shot resource:
-    // create, configure, hand to reposition, destroy.
-    auto positioner = QtWayland::xdg_positioner(xdgWmBase->create_positioner());
-    positioner.set_anchor_rect(anchorRect.x(), anchorRect.y(), anchorRect.width(), anchorRect.height());
-    positioner.set_anchor(anchorFlag);
-    positioner.set_gravity(gravityFlag);
-    positioner.set_size(m_popupWidth, m_popupHeight);
-    positioner.set_constraint_adjustment(0xF); // SlideX|SlideY|FlipX|FlipY
-
-    // The token is echoed back via xdg_popup.repositioned for clients that
-    // want to correlate request-with-configure. We don't, so 0 is fine.
-    xdg_popup_reposition(popupRole, positioner.object(), 0);
-    positioner.destroy();
-
-    // Resize the QQuickWindow so Qt's RHI surface matches the new popup
-    // size — the compositor will issue xdg_popup.configure with the
-    // constrained size eventually, but locally we want geometry to be
-    // right for the initial paint.
-    m_popupWindow->resize(m_popupWidth, m_popupHeight);
-
-    qCDebug(lcPopup) << "Repositioned popup in-place: rect=" << anchorRect << "size=" << m_popupWidth << "x"
-                     << m_popupHeight << "edge=" << m_popupEdge;
-    return true;
+void PopupWindow::reparentChildToWindow(QQuickItem* child)
+{
+    child->setParentItem(m_popupWindow->contentItem());
 }
 
 void PopupWindow::reapplyIfVisible()
@@ -445,19 +294,9 @@ void PopupWindow::reapplyIfVisible()
     if (!m_popupVisible || !m_popupWindow) {
         return;
     }
-    // Try the in-place reposition path first — preserves the xdg_popup
-    // grab so the popup stays mapped across the transition. This is the
-    // path that makes anchor/size switching between sibling popups work
-    // without flashing or chaining (the xdg-shell grab handoff between
-    // sibling popups under the same parent is forbidden by the spec).
-    if (repositionInPlace())
-        return;
-
-    // Fallback for compositors that don't support xdg_popup.reposition
-    // (xdg_wm_base < v3): hide+show cycle re-creates the xdg-popup with
-    // a fresh positioner. The QQuickWindow itself is reused (children
-    // stay parented to its contentItem); only the wl_surface role is
-    // replayed.
+    // Hide+show cycle re-creates the xdg-popup with a fresh positioner.
+    // The QQuickWindow itself is reused (children stay parented to its
+    // contentItem); only the wl_surface role/positioner is replayed.
     //
     // Capture the focused item before hiding so we can restore focus
     // after the show — without this a TextField / SpinBox / Button that
