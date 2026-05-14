@@ -24,6 +24,31 @@ Item {
         property int activeWorkspace: 0
 
         reloadId: "main"
+
+        // Popups are mutually exclusive. xdg-popup positioning gets
+        // confused when a second popup tries to anchor to the panel
+        // while another is still mapped — the new popup ends up
+        // chained off the first one's geometry instead of its own
+        // anchor item. Close any other open popup before letting a
+        // new one map.
+        onCalendarOpenChanged: {
+            if (calendarOpen) {
+                mediaOpen = false;
+                menuOpen = false;
+            }
+        }
+        onMediaOpenChanged: {
+            if (mediaOpen) {
+                calendarOpen = false;
+                menuOpen = false;
+            }
+        }
+        onMenuOpenChanged: {
+            if (menuOpen) {
+                calendarOpen = false;
+                mediaOpen = false;
+            }
+        }
     }
 
     SystemClock {
