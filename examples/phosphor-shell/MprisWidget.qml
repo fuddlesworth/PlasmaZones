@@ -149,12 +149,17 @@ Item {
                 }
             }
 
+            // Art clip fits INSIDE the progress ring. The ring is drawn
+            // at radius (artContainer.width/2 - 2) = 11px with a 2px
+            // stroke, so its inner edge is at 10px from center. An 18x18
+            // circle (radius 9) leaves a 1px breathing gap between the
+            // art and the ring stroke.
             Rectangle {
                 id: artClip
                 anchors.centerIn: parent
-                width: 20
-                height: 20
-                radius: 10
+                width: 18
+                height: 18
+                radius: 9
                 color: "#313244"
                 clip: true
                 // Ensure art renders above the progress ring Canvas
