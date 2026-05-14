@@ -380,10 +380,25 @@ Item {
         }
     }
 
-    // Middle-click = play/pause, scroll = volume
+    // Middle-click = play/pause, scroll = volume.
+    //
+    // This MouseArea is anchors.fill: capsule and is declared AFTER
+    // the per-element MouseAreas inside the Row, which puts it on top
+    // of them in stacking order. Even though acceptedButtons filters
+    // it to MiddleButton for click events, Qt's cursor-shape lookup
+    // walks the topmost MouseArea regardless of acceptedButtons —
+    // so without an explicit cursorShape here this MouseArea's
+    // default Qt.ArrowCursor would override the PointingHandCursor
+    // set on the title-strip MouseArea below it (the art-container
+    // MouseArea wins because it lives INSIDE artContainer, a deeper
+    // child, but the title strip's MouseArea is at the same level
+    // as this overlay and loses the stack). Set the shape here so
+    // the entire capsule reads as clickable.
     MouseArea {
         anchors.fill: capsule
         acceptedButtons: Qt.MiddleButton
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
         propagateComposedEvents: true
         onClicked: if (root.hasPlayer)
             root.currentPlayer.togglePlaying()
