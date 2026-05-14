@@ -33,7 +33,17 @@ static QVariant dbusProperty(QDBusConnection& bus, const QString& service, const
     QDBusMessage msg = QDBusMessage::createMethodCall(service, QLatin1String(kMprisPath), QLatin1String(kPropsIface),
                                                       QStringLiteral("Get"));
     msg << QLatin1String(iface) << QLatin1String(prop);
-    QDBusMessage reply = bus.call(msg, QDBus::Block, 200);
+    // Timeout was 200 ms originally — too aggressive for slow players.
+    // Spotify on Linux is well known to take 500+ ms to respond to
+    // Properties.Get on startup (single-threaded UI work, lazy
+    // metadata generation). When Get(Metadata) times out at 200 ms,
+    // the call returns an error reply, dbusProperty returns QVariant(),
+    // and refreshMetadata's meta.contains() guards skip every field —
+    // leaving trackArtUrl empty and stuck that way until the user
+    // manually changes track (which triggers a fresh PropertiesChanged
+    // signal). 2 s is enough for any reasonable player while still
+    // bounding shell startup latency at ~2 s per stuck player.
+    QDBusMessage reply = bus.call(msg, QDBus::Block, 2000);
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().value<QDBusVariant>().variant();
     return {};
@@ -421,6 +431,18 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
 
     d->refreshRoot();
     d->refreshPlayer();
+
+    // Retry once at +500 ms if metadata came back without an artUrl
+    // but playback is active. Some players (Spotify) populate the
+    // mpris:artUrl field lazily — the initial Get(Metadata) returns
+    // before the player has finished generating the URL even though
+    // the track is already playing. Without this, the user would see
+    // empty art on every shell startup until they manually changed
+    // tracks. The retry is a no-op once trackArtUrl is populated.
+    QTimer::singleShot(500, this, [this]() {
+        if (d->trackArtUrl.isEmpty() && d->playbackState != Stopped)
+            d->refreshPlayer();
+    });
 }
 
 MprisPlayer::~MprisPlayer() = default;

@@ -26,7 +26,10 @@ static QVariant deviceProp(QDBusConnection& bus, const QString& path, const char
     QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), path, QLatin1String(kPropsIface),
                                                       QStringLiteral("Get"));
     msg << QLatin1String(kDeviceIface) << QLatin1String(prop);
-    QDBusMessage reply = bus.call(msg, QDBus::Block, 200);
+    // 2 s timeout — see mprisplayer.cpp:dbusProperty for the rationale.
+    // UPower is usually fast (system bus, kernel-side state) but a slow
+    // initial response would silently leave the battery indicator empty.
+    QDBusMessage reply = bus.call(msg, QDBus::Block, 2000);
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().value<QDBusVariant>().variant();
     return {};

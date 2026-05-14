@@ -87,7 +87,7 @@ UPowerHost::UPowerHost(QObject* parent)
         QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
                                                           QLatin1String(kPropsIface), QStringLiteral("Get"));
         msg << QLatin1String(kIface) << QStringLiteral("OnBattery");
-        QDBusMessage reply = bus.call(msg, QDBus::Block, 500);
+        QDBusMessage reply = bus.call(msg, QDBus::Block, 2000);
         if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
             d->onBattery = reply.arguments().first().value<QDBusVariant>().variant().toBool();
     }
@@ -96,7 +96,7 @@ UPowerHost::UPowerHost(QObject* parent)
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
                                                           QLatin1String(kIface), QStringLiteral("GetDisplayDevice"));
-        QDBusMessage reply = bus.call(msg, QDBus::Block, 500);
+        QDBusMessage reply = bus.call(msg, QDBus::Block, 2000);
         if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
             QString devPath = reply.arguments().first().value<QDBusObjectPath>().path();
             if (!devPath.isEmpty()) {
@@ -110,7 +110,7 @@ UPowerHost::UPowerHost(QObject* parent)
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
                                                           QLatin1String(kIface), QStringLiteral("EnumerateDevices"));
-        QDBusMessage reply = bus.call(msg, QDBus::Block, 500);
+        QDBusMessage reply = bus.call(msg, QDBus::Block, 2000);
         if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
             const auto paths = qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().first());
             for (const QDBusObjectPath& p : paths)
