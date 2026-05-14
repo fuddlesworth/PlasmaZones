@@ -55,7 +55,16 @@ PopupWindow {
 
     onCurrentKindChanged: {
         // Mirror to shellState.*Open booleans for compatibility with
-        // any binding that still keys on them.
+        // any binding that still keys on them. shellState is a
+        // PersistentProperties singleton; bindings on it propagate
+        // properly across the PopupWindow → QQuickWindow::contentItem
+        // re-parent that happens on first show (popupwindow.cpp:213).
+        // Bindings that walk through `root.currentKind` directly do
+        // NOT re-evaluate after the reparent (likely because the
+        // property-change notification path is severed when the child's
+        // ancestry no longer includes the original root). So content
+        // visibility is keyed on shellState.*Open booleans below
+        // instead of root.currentKind.
         shellState.calendarOpen = currentKind === "calendar";
         shellState.mediaOpen = currentKind === "media";
         shellState.menuOpen = currentKind === "menu";
@@ -120,48 +129,38 @@ PopupWindow {
         border.width: 1
     }
 
-    // Loader-based content swap. PopupWindow reparents its child
-    // QQuickItems to its internal QQuickWindow::contentItem() on first
-    // show (popupwindow.cpp:160-167) — using a Loader keeps the
-    // currently-active content as a single child whose sourceComponent
-    // we swap, sidestepping any binding-context issues that arise from
-    // having three sibling Items become re-parented descendants of a
-    // different root.
-    Loader {
-        id: contentLoader
+    // Three sibling content Items, all instantiated up-front. The
+    // active one is shown via z-order and the inactive ones are hidden
+    // by setting `active: false` (which their internal Behaviors fade
+    // to opacity 0) AND `visible: false` so they don't intercept input.
+    //
+    // PopupWindow reparents direct children to QQuickWindow::contentItem
+    // on first show (popupwindow.cpp:160-167), and itemChange does the
+    // same for late-added children (popupwindow.cpp:323-334). Both work
+    // here because each content is a direct child of the PopupWindow
+    // QQuickItem, not nested inside a Loader/Item wrapper.
+    CalendarContent {
         anchors.fill: parent
-        anchors.margins: root.currentKind === "menu" ? 8 : (root.currentKind === "media" ? 16 : 14)
-        sourceComponent: {
-            if (root.currentKind === "calendar")
-                return calendarComp;
-            if (root.currentKind === "media")
-                return mediaComp;
-            if (root.currentKind === "menu")
-                return menuComp;
-            return null;
-        }
+        anchors.margins: 14
+        active: root.shellState.calendarOpen
+        visible: active
+        shellState: root.shellState
     }
 
-    Component {
-        id: calendarComp
-        CalendarContent {
-            active: true
-            shellState: root.shellState
-        }
+    MprisContent {
+        anchors.fill: parent
+        anchors.margins: 16
+        active: root.shellState.mediaOpen
+        visible: active
+        shellState: root.shellState
+        currentPlayer: root.topPanel.mediaPlayer
     }
-    Component {
-        id: mediaComp
-        MprisContent {
-            active: true
-            shellState: root.shellState
-            currentPlayer: root.topPanel.mediaPlayer
-        }
-    }
-    Component {
-        id: menuComp
-        MenuContent {
-            active: true
-            shellState: root.shellState
-        }
+
+    MenuContent {
+        anchors.fill: parent
+        anchors.margins: 8
+        active: root.shellState.menuOpen
+        visible: active
+        shellState: root.shellState
     }
 }
