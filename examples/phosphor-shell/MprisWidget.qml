@@ -26,6 +26,7 @@ Item {
     property string stableArtUrl: ""
     function _updateArtUrl() {
         let url = (hasPlayer && currentPlayer.trackArtUrl) ? currentPlayer.trackArtUrl : "";
+        console.log("[MprisWidget] _updateArtUrl: hasPlayer=", hasPlayer, "trackArtUrl=", currentPlayer ? currentPlayer.trackArtUrl : "no-player", "→ stableArtUrl=", url);
         if (stableArtUrl !== url)
             stableArtUrl = url;
     }
@@ -125,8 +126,14 @@ Item {
             Canvas {
                 id: progressRing
                 anchors.fill: parent
-                property real prog: root.progress
-                onProgChanged: requestPaint()
+                // Only sample progress while the widget is visible and we
+                // have a player. When there's no player or the widget is
+                // hidden (occluded/no-player branch), keep `prog` at 0
+                // and skip the per-second requestPaint cycle that would
+                // otherwise re-rasterize the ring once per MPRIS position
+                // tick regardless of visibility.
+                property real prog: (root.visible && root.hasPlayer) ? root.progress : 0
+                onProgChanged: if (root.visible) requestPaint()
 
                 onPaint: {
                     let ctx = getContext("2d");
@@ -176,6 +183,7 @@ Item {
                     // Keep the last successfully loaded image visible during
                     // transient Loading states (e.g. same-URL re-evaluation).
                     visible: status === Image.Ready || (source !== "" && status === Image.Loading)
+                    onStatusChanged: console.log("[MprisWidget] artImage status=", status, "source=", source, "error=", errorString)
                 }
 
                 // Fallback: only show when there is genuinely no art (empty URL
