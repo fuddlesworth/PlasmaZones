@@ -81,14 +81,64 @@ PopupWindow::~PopupWindow()
     // unique_ptr destructor reclaims m_popupWindow.
 }
 
+// QQmlListProperty static dispatch functions for our `data` override.
+// Forwarding via `m_contentItem->property("data").value<QQmlListProperty<QObject>>()`
+// doesn't survive — QQmlListProperty's function-pointer table captures
+// internal QQuickItem state that doesn't round-trip through QVariant
+// copies, so QML's default-property installer ends up with a list
+// whose append() is a no-op. Children land nowhere visible and the
+// QML hierarchy fails to construct (manifesting as missing widgets).
+//
+// Instead we expose our OWN list property whose dispatch functions
+// reach into m_contentItem and call its real `data` property at the
+// QQuickItem level. The four functions (append/count/at/clear) are
+// the standard QQmlListProperty contract.
+static QQuickItem* contentItemFromData(QQmlListProperty<QObject>* prop)
+{
+    return static_cast<QQuickItem*>(prop->data);
+}
+
+static QQmlListProperty<QObject> contentDataList(QQuickItem* item)
+{
+    QVariant v = item->property("data");
+    Q_ASSERT(v.canConvert<QQmlListProperty<QObject>>());
+    return v.value<QQmlListProperty<QObject>>();
+}
+
+static void popupDataAppend(QQmlListProperty<QObject>* prop, QObject* obj)
+{
+    auto list = contentDataList(contentItemFromData(prop));
+    if (list.append)
+        list.append(&list, obj);
+}
+
+static qsizetype popupDataCount(QQmlListProperty<QObject>* prop)
+{
+    auto list = contentDataList(contentItemFromData(prop));
+    return list.count ? list.count(&list) : 0;
+}
+
+static QObject* popupDataAt(QQmlListProperty<QObject>* prop, qsizetype i)
+{
+    auto list = contentDataList(contentItemFromData(prop));
+    return list.at ? list.at(&list, i) : nullptr;
+}
+
+static void popupDataClear(QQmlListProperty<QObject>* prop)
+{
+    auto list = contentDataList(contentItemFromData(prop));
+    if (list.clear)
+        list.clear(&list);
+}
+
 QQmlListProperty<QObject> PopupWindow::data()
 {
-    // Forward `data` to m_contentItem so QML children added via the
-    // default property go directly to the persistent content host.
-    // m_contentItem is itself a QQuickItem whose `data` QQmlListProperty
-    // accepts both visual children and non-visual QObjects (timers,
-    // Connections, Components, etc.) — same semantics as Item's default.
-    return m_contentItem->property("data").value<QQmlListProperty<QObject>>();
+    // `data` property pointer is m_contentItem; the dispatch functions
+    // above forward each operation to m_contentItem's real `data`
+    // QQmlListProperty in-place. This avoids the QVariant round-trip
+    // that loses the list's function-pointer table.
+    return QQmlListProperty<QObject>(this, m_contentItem, &popupDataAppend, &popupDataCount, &popupDataAt,
+                                     &popupDataClear);
 }
 
 QQuickItem* PopupWindow::anchor() const
