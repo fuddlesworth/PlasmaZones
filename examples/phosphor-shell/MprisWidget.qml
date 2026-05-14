@@ -4,6 +4,7 @@
 import Phosphor.Services 1.0
 import Phosphor.Shell 1.0
 import QtQuick
+import QtQuick.Effects
 
 // Media player capsule for the top panel. Shows album art (circular with
 // progress ring), scrolling title, and prev/play/next controls. Left-click
@@ -131,47 +132,61 @@ Item {
             height: 26
             anchors.verticalCenter: parent.verticalCenter
 
-            // Album art fills the entire container; a circular Rectangle
-            // mask (radius == half the size) clips it to a circle. The
-            // progress ring is drawn ON TOP of the art so the outer
-            // ring stroke overlays the artwork edge.
-            //
-            // `clip: true` on a Rectangle only clips by the bounding
-            // rect — children spill out the corner regions. Enabling
-            // layer rendering (layer.enabled: true) rasterizes the
-            // Rectangle's contents through its rounded shape, giving
-            // a real circular mask. layer.smooth keeps the AA edge
-            // crisp at panel sizes.
+            // Background fill (visible while art loads / when no art).
             Rectangle {
-                id: artClip
                 anchors.fill: parent
                 radius: width / 2
                 color: "#313244"
-                clip: true
+            }
+
+            // Fallback glyph (sits underneath the masked art).
+            Text {
+                anchors.centerIn: parent
+                text: "♪"
+                color: "#a6adc8"
+                font.pixelSize: 10
+                visible: !artImage.visible
+            }
+
+            // Circular mask source for MultiEffect. Lives off-screen
+            // (visible: false + hideSource: true). White circle on
+            // transparent background — only the circle composites
+            // through to the visible scene.
+            Item {
+                id: artMaskShape
+                width: artContainer.width
+                height: artContainer.height
+                visible: false
                 layer.enabled: true
                 layer.smooth: true
 
-                Image {
-                    id: artImage
+                Rectangle {
                     anchors.fill: parent
-                    source: root.stableArtUrl
-                    fillMode: Image.PreserveAspectCrop
-                    sourceSize: Qt.size(80, 80)
-                    asynchronous: true
-                    cache: true
-                    // Keep the last successfully loaded image visible during
-                    // transient Loading states (e.g. same-URL re-evaluation).
-                    visible: status === Image.Ready || (source !== "" && status === Image.Loading)
+                    radius: width / 2
+                    color: "white"
                 }
+            }
 
-                // Fallback: only show when there is genuinely no art (empty URL
-                // or load error) — never during transient Loading states.
-                Text {
-                    anchors.centerIn: parent
-                    text: "♪"
-                    color: "#a6adc8"
-                    font.pixelSize: 10
-                    visible: !artImage.visible
+            // Album art masked to the circle via MultiEffect.maskSource
+            // (QtQuick.Effects, Qt 6.5+). Qt6 has no built-in "rounded
+            // clip" — Rectangle.radius is paint-only, clip: true is
+            // bounding-box only. MultiEffect is the canonical mask path.
+            Image {
+                id: artImage
+                anchors.fill: parent
+                source: root.stableArtUrl
+                fillMode: Image.PreserveAspectCrop
+                sourceSize: Qt.size(80, 80)
+                asynchronous: true
+                cache: true
+                visible: status === Image.Ready || (source !== "" && status === Image.Loading)
+                layer.enabled: true
+                layer.smooth: true
+                layer.effect: MultiEffect {
+                    maskEnabled: true
+                    maskSource: artMaskShape
+                    maskThresholdMin: 0.5
+                    maskSpreadAtMin: 1.0
                 }
             }
 
