@@ -239,7 +239,7 @@ public:
             QString id = metaString(meta.value(QStringLiteral("mpris:trackid")));
             if (trackId != id) {
                 trackId = id;
-                trackArtUrl.clear();  // new track — accept the next artUrl
+                trackArtUrl.clear(); // new track — accept the next artUrl
             }
         }
         if (meta.contains(QStringLiteral("mpris:artUrl"))) {
@@ -324,9 +324,23 @@ public:
                 else if (s == QLatin1String("Paused"))
                     ns = Paused;
                 if (playbackState != ns) {
+                    const bool wasStopped = (playbackState == Stopped);
                     playbackState = ns;
                     Q_EMIT owner->playbackStateChanged();
                     updatePositionTimer();
+                    // Stopped → Playing/Paused with empty trackArtUrl
+                    // means the player went hot but its lazy artUrl
+                    // wasn't ready when we constructed (or the
+                    // construction-time retries already fired against
+                    // a Stopped state and bailed). Re-arm the retry
+                    // chain so the art appears without requiring the
+                    // user to skip tracks. Spotify and Firefox both
+                    // publish PropertiesChanged with PlaybackStatus
+                    // ONLY (no Metadata) when starting an
+                    // already-loaded track, so we can't rely on the
+                    // Metadata branch below.
+                    if (wasStopped && ns != Stopped && trackArtUrl.isEmpty())
+                        scheduleArtRetries();
                 }
             }
             if (changed.contains(QStringLiteral("Metadata"))) {
@@ -408,6 +422,29 @@ public:
         else
             positionTimer.stop();
     }
+
+    /// Re-arm the lazy-artUrl retry chain. Called from the constructor
+    /// (cold-start case) and from every PlaybackStatus transition (warm
+    /// transitions like Stopped→Playing on first track click).
+    ///
+    /// Why warm transitions need it: many players (Spotify, Firefox)
+    /// publish PropertiesChanged with ONLY {PlaybackStatus: Playing}
+    /// when starting playback of a track they've already had loaded.
+    /// `Metadata` isn't re-included because, from the player's view,
+    /// it hasn't changed. But our trackArtUrl might still be empty
+    /// because at construction time the player's mpris:artUrl was
+    /// lazily-computed and not yet populated. Without this re-arm, the
+    /// art only appears after the user hits next/previous (which forces
+    /// a real track change and a full Metadata payload).
+    void scheduleArtRetries()
+    {
+        for (int delayMs : {500, 1500, 3000}) {
+            QTimer::singleShot(delayMs, owner, [this]() {
+                if (trackArtUrl.isEmpty() && playbackState != Stopped)
+                    refreshPlayer();
+            });
+        }
+    }
 };
 
 MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
@@ -450,13 +487,11 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
     //     to Firefox, file:// URL written after a short delay.
     // Three retries cover the typical 0.5/1.5/3 s windows. Each is a
     // cheap one-shot Get; the guard returns early once trackArtUrl
-    // is populated. Capped at 3 s after construction.
-    for (int delayMs : {500, 1500, 3000}) {
-        QTimer::singleShot(delayMs, this, [this]() {
-            if (d->trackArtUrl.isEmpty() && d->playbackState != Stopped)
-                d->refreshPlayer();
-        });
-    }
+    // is populated. The retry helper is also re-armed on every
+    // Stopped → Playing transition (see onPropertiesChanged) so a
+    // user who launches the player BEFORE pressing play still gets
+    // the art without having to skip tracks first.
+    d->scheduleArtRetries();
 }
 
 MprisPlayer::~MprisPlayer() = default;
