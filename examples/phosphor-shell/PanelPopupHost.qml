@@ -127,11 +127,20 @@ PopupWindow {
     // same for late-added children (popupwindow.cpp:323-334). Both work
     // here because each content is a direct child of the PopupWindow
     // QQuickItem, not nested inside a Loader/Item wrapper.
+    // visible follows opacity (NOT active) so the outgoing item stays
+    // rendered through its fade-out Behavior. Binding visible directly
+    // to active flipped it false synchronously, which yanked the item
+    // from the scene before its opacity Behavior could play — and
+    // worse, interrupted the Behavior mid-transition so the next
+    // re-show animated from a stale partial value, making the popup
+    // look stuck on the previous content. z raised on the active item
+    // keeps input routing on the right one during the cross-fade.
     CalendarContent {
         anchors.fill: parent
         anchors.margins: 14
         active: root.currentKind === "calendar"
-        visible: active
+        visible: opacity > 0
+        z: active ? 1 : 0
         shellState: root.shellState
     }
 
@@ -139,7 +148,8 @@ PopupWindow {
         anchors.fill: parent
         anchors.margins: 16
         active: root.currentKind === "media"
-        visible: active
+        visible: opacity > 0
+        z: active ? 1 : 0
         shellState: root.shellState
         currentPlayer: root.topPanel.mediaPlayer
     }
@@ -148,7 +158,8 @@ PopupWindow {
         anchors.fill: parent
         anchors.margins: 8
         active: root.currentKind === "menu"
-        visible: active
+        visible: opacity > 0
+        z: active ? 1 : 0
         shellState: root.shellState
     }
 }
