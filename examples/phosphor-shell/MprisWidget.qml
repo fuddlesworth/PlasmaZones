@@ -25,8 +25,16 @@ Item {
     // preventing Image reload flicker on unrelated metadataChanged signals.
     property string stableArtUrl: ""
     function _updateArtUrl() {
-        let url = (hasPlayer && currentPlayer.trackArtUrl) ? currentPlayer.trackArtUrl : "";
-        console.log("[MprisWidget] _updateArtUrl: hasPlayer=", hasPlayer, "trackArtUrl=", currentPlayer ? currentPlayer.trackArtUrl : "no-player", "→ stableArtUrl=", url);
+        // Gate on currentPlayer directly, not hasPlayer. hasPlayer is a
+        // bound property derived from currentPlayer; when this function
+        // is invoked from onCurrentPlayerChanged the assignment to
+        // currentPlayer has happened but hasPlayer's binding may not
+        // have re-evaluated yet (Qt evaluates property dependencies
+        // lazily, and the change handler runs before downstream
+        // re-evaluations are flushed). Result: hasPlayer reads `false`
+        // even though currentPlayer is non-null, the ternary falls to
+        // "" and stableArtUrl never gets the URL.
+        let url = (currentPlayer && currentPlayer.trackArtUrl) ? currentPlayer.trackArtUrl : "";
         if (stableArtUrl !== url)
             stableArtUrl = url;
     }
@@ -183,7 +191,6 @@ Item {
                     // Keep the last successfully loaded image visible during
                     // transient Loading states (e.g. same-URL re-evaluation).
                     visible: status === Image.Ready || (source !== "" && status === Image.Loading)
-                    onStatusChanged: console.log("[MprisWidget] artImage status=", status, "source=", source)
                 }
 
                 // Fallback: only show when there is genuinely no art (empty URL

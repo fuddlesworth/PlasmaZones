@@ -15,15 +15,24 @@ Item {
 
     readonly property bool hasPlayer: currentPlayer !== null
     readonly property bool isPlaying: hasPlayer && currentPlayer.isPlaying
+    // Only re-evaluate against `position` (1Hz tick from MprisPlayer's
+    // poll loop) while the popup is open. When closed, freeze at 0 — the
+    // child progress bar / time labels are off-screen and the binding
+    // would otherwise wake the JS engine once per second per panel popup
+    // for state nobody can see.
     readonly property real progress: {
-        if (!hasPlayer || currentPlayer.length <= 0)
+        if (!active || !hasPlayer || currentPlayer.length <= 0)
             return 0;
         return Math.min(1.0, Math.max(0, currentPlayer.position / currentPlayer.length));
     }
 
     property string stableArtUrl: ""
     function _updateArtUrl() {
-        let url = (hasPlayer && currentPlayer.trackArtUrl) ? currentPlayer.trackArtUrl : "";
+        // Gate on currentPlayer directly, not hasPlayer. hasPlayer is
+        // a bound property; when this is invoked from
+        // onCurrentPlayerChanged its binding may not have re-evaluated
+        // yet — see MprisWidget.qml for the full rationale.
+        let url = (currentPlayer && currentPlayer.trackArtUrl) ? currentPlayer.trackArtUrl : "";
         if (stableArtUrl !== url)
             stableArtUrl = url;
     }
@@ -128,7 +137,10 @@ Item {
         Item {
             width: parent.width
             height: 24
-            visible: root.hasPlayer && root.currentPlayer.length > 0
+            // Cull the seek bar entirely while the popup is closed —
+            // `position` text otherwise re-renders once per second from
+            // the 1Hz MPRIS position tick even when nothing's visible.
+            visible: root.active && root.hasPlayer && root.currentPlayer.length > 0
             Text {
                 anchors.left: parent.left
                 anchors.top: parent.top
