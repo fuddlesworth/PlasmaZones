@@ -6,6 +6,7 @@
 #include <PhosphorShell/phosphorshell_export.h>
 
 #include <QPointer>
+#include <QQmlListProperty>
 #include <QQuickItem>
 #include <QRect>
 
@@ -20,6 +21,21 @@ namespace PhosphorShell {
 class PHOSPHORSHELL_EXPORT PopupWindow : public QQuickItem
 {
     Q_OBJECT
+
+    // QML default property — children declared inside PopupWindow {}
+    // land on the persistent m_contentItem rather than on PopupWindow
+    // itself. This matters because m_contentItem is the only thing that
+    // ever gets re-parented to the popup's QQuickWindow contentItem;
+    // declared children stay rooted in m_contentItem from creation,
+    // which keeps QML scope/binding-context paths stable across the
+    // popup's first show. Without this, declared children become
+    // direct children of the PopupWindow QQuickItem, get reparented to
+    // the popup's window contentItem on first show, and bindings that
+    // walk back through `root.<...>` lose their property-change
+    // notifications post-reparent — manifests as content not updating
+    // when the host swaps state while the popup stays mapped.
+    Q_PROPERTY(QQmlListProperty<QObject> data READ data)
+    Q_CLASSINFO("DefaultProperty", "data")
 
     Q_PROPERTY(QQuickItem* anchor READ anchor WRITE setAnchor NOTIFY anchorChanged)
     Q_PROPERTY(int popupWidth READ popupWidth WRITE setPopupWidth NOTIFY popupWidthChanged)
@@ -39,6 +55,11 @@ public:
 
     explicit PopupWindow(QQuickItem* parent = nullptr);
     ~PopupWindow() override;
+
+    /// QML default-property accessor. Forwards to m_contentItem's
+    /// `data` property so QML children land on the persistent content
+    /// holder rather than on PopupWindow itself.
+    [[nodiscard]] QQmlListProperty<QObject> data();
 
     [[nodiscard]] QQuickItem* anchor() const;
     void setAnchor(QQuickItem* anchor);
@@ -68,14 +89,10 @@ Q_SIGNALS:
     void gapChanged();
     void popupVisibleChanged();
 
-protected:
-    void itemChange(ItemChange change, const ItemChangeData& value) override;
-
 private:
     void showPopup();
     void hidePopup();
     [[nodiscard]] QRect computeAnchorRect() const;
-    void reparentChildToWindow(QQuickItem* child);
     /// Re-apply the xdg-positioner / size when a live property change
     /// requires re-showing the popup. With xdg-shell ≥ v3 (KWin, Mutter,
     /// wlroots all support this) we issue xdg_popup.reposition on the
@@ -98,6 +115,13 @@ private:
     int m_gap = 4;
     bool m_popupVisible = false;
     std::unique_ptr<QQuickWindow> m_popupWindow;
+    /// Persistent host for QML-declared children. Created in the
+    /// constructor and re-parented to m_popupWindow->contentItem() once
+    /// on first show. Children added via the QML default property never
+    /// move from m_contentItem after that, so their binding contexts
+    /// remain stable across state changes that previously triggered a
+    /// hide+show cycle.
+    QQuickItem* m_contentItem = nullptr;
 };
 
 } // namespace PhosphorShell

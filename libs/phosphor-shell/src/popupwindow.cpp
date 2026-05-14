@@ -55,7 +55,22 @@ namespace PhosphorShell {
 
 PopupWindow::PopupWindow(QQuickItem* parent)
     : QQuickItem(parent)
+    , m_contentItem(new QQuickItem(this))
 {
+    // m_contentItem is the persistent QML default-property host. Until
+    // showPopup() materialises a QQuickWindow, m_contentItem lives as
+    // a child of `this` (the PopupWindow QQuickItem) so the QML scope
+    // chain works during component construction. On first show we
+    // re-parent m_contentItem ONCE to the popup's QQuickWindow content
+    // root and never move it again — children declared via the default
+    // property remain attached to m_contentItem and their binding
+    // contexts stay stable through any subsequent show/hide/reposition
+    // cycles. The previous implementation moved every direct child to
+    // the popup window's contentItem on first show, which severed the
+    // property-change notification path for bindings reaching
+    // back into the host's properties — manifesting as content not
+    // updating when the host swapped state while the popup was mapped.
+    m_contentItem->setObjectName(QStringLiteral("PopupWindowContent"));
 }
 
 PopupWindow::~PopupWindow()
@@ -64,6 +79,16 @@ PopupWindow::~PopupWindow()
     // is destroyed by ~QQuickWindow.
     hidePopup();
     // unique_ptr destructor reclaims m_popupWindow.
+}
+
+QQmlListProperty<QObject> PopupWindow::data()
+{
+    // Forward `data` to m_contentItem so QML children added via the
+    // default property go directly to the persistent content host.
+    // m_contentItem is itself a QQuickItem whose `data` QQmlListProperty
+    // accepts both visual children and non-visual QObjects (timers,
+    // Connections, Components, etc.) — same semantics as Item's default.
+    return m_contentItem->property("data").value<QQmlListProperty<QObject>>();
 }
 
 QQuickItem* PopupWindow::anchor() const
@@ -101,6 +126,7 @@ void PopupWindow::setPopupWidth(int width)
     if (m_popupWindow) {
         m_popupWindow->setWidth(m_popupWidth);
     }
+    m_contentItem->setWidth(m_popupWidth);
     // The xdg-positioner's set_size is part of the popup's initial
     // configuration; live size changes need a reposition (or hide+show
     // fallback). Without this, calling popupWidth = 300 on an already-
@@ -125,6 +151,7 @@ void PopupWindow::setPopupHeight(int height)
     if (m_popupWindow) {
         m_popupWindow->setHeight(m_popupHeight);
     }
+    m_contentItem->setHeight(m_popupHeight);
     reapplyIfVisible();
 }
 
@@ -210,14 +237,19 @@ void PopupWindow::showPopup()
         m_popupWindow->setFlag(Qt::Popup);
         m_popupWindow->setColor(Qt::transparent);
 
-        const auto children = childItems();
-        for (QQuickItem* child : children) {
-            reparentChildToWindow(child);
-        }
+        // Move the persistent content host into the popup window. This
+        // is the only re-parent ever performed — children declared in
+        // QML are children of m_contentItem, never of `this`, so they
+        // don't get touched.
+        m_contentItem->setParentItem(m_popupWindow->contentItem());
     }
 
     m_popupWindow->setTransientParent(m_anchor->window());
     m_popupWindow->resize(m_popupWidth, m_popupHeight);
+    // Keep the content host sized to the popup so anchors.fill on QML
+    // children resolves to the popup's full client area.
+    m_contentItem->setWidth(m_popupWidth);
+    m_contentItem->setHeight(m_popupHeight);
 
     // Translate popupEdge → Wayland xdg-popup positioner anchor + gravity.
     //
@@ -318,24 +350,6 @@ void PopupWindow::hidePopup()
         m_popupWindow->hide();
         qCDebug(lcPopup) << "Popup hidden";
     }
-}
-
-void PopupWindow::itemChange(ItemChange change, const ItemChangeData& value)
-{
-    // Late-added children (created after the popup window has been
-    // materialised) need to be migrated to the popup's contentItem,
-    // otherwise they'd live on the PopupWindow QQuickItem and never
-    // appear inside the floating popup surface. Same pattern as
-    // FloatingWindow::itemChange.
-    if (change == ItemChildAddedChange && m_popupWindow && value.item) {
-        reparentChildToWindow(value.item);
-    }
-    QQuickItem::itemChange(change, value);
-}
-
-void PopupWindow::reparentChildToWindow(QQuickItem* child)
-{
-    child->setParentItem(m_popupWindow->contentItem());
 }
 
 bool PopupWindow::repositionInPlace()

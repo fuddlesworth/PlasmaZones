@@ -54,17 +54,8 @@ PopupWindow {
     }
 
     onCurrentKindChanged: {
-        // Mirror to shellState.*Open booleans for compatibility with
-        // any binding that still keys on them. shellState is a
-        // PersistentProperties singleton; bindings on it propagate
-        // properly across the PopupWindow → QQuickWindow::contentItem
-        // re-parent that happens on first show (popupwindow.cpp:213).
-        // Bindings that walk through `root.currentKind` directly do
-        // NOT re-evaluate after the reparent (likely because the
-        // property-change notification path is severed when the child's
-        // ancestry no longer includes the original root). So content
-        // visibility is keyed on shellState.*Open booleans below
-        // instead of root.currentKind.
+        // Mirror to shellState.*Open booleans for any external binding
+        // that still keys on them.
         shellState.calendarOpen = currentKind === "calendar";
         shellState.mediaOpen = currentKind === "media";
         shellState.menuOpen = currentKind === "menu";
@@ -76,9 +67,6 @@ PopupWindow {
         popupWidth = _widthFor(currentKind);
         popupHeight = _heightFor(currentKind);
         anchor = _anchorFor(currentKind);
-        // setAnchor's reapplyIfVisible already replays the positioner;
-        // setting popupVisible = true here is the open path when no
-        // popup was previously mapped.
         popupVisible = true;
     }
 
@@ -142,7 +130,7 @@ PopupWindow {
     CalendarContent {
         anchors.fill: parent
         anchors.margins: 14
-        active: root.shellState.calendarOpen
+        active: root.currentKind === "calendar"
         visible: active
         shellState: root.shellState
     }
@@ -150,7 +138,7 @@ PopupWindow {
     MprisContent {
         anchors.fill: parent
         anchors.margins: 16
-        active: root.shellState.mediaOpen
+        active: root.currentKind === "media"
         visible: active
         shellState: root.shellState
         currentPlayer: root.topPanel.mediaPlayer
@@ -159,7 +147,7 @@ PopupWindow {
     MenuContent {
         anchors.fill: parent
         anchors.margins: 8
-        active: root.shellState.menuOpen
+        active: root.currentKind === "menu"
         visible: active
         shellState: root.shellState
     }
