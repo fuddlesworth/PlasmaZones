@@ -432,17 +432,31 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
     d->refreshRoot();
     d->refreshPlayer();
 
-    // Retry once at +500 ms if metadata came back without an artUrl
-    // but playback is active. Some players (Spotify) populate the
-    // mpris:artUrl field lazily — the initial Get(Metadata) returns
-    // before the player has finished generating the URL even though
-    // the track is already playing. Without this, the user would see
-    // empty art on every shell startup until they manually changed
-    // tracks. The retry is a no-op once trackArtUrl is populated.
-    QTimer::singleShot(500, this, [this]() {
-        if (d->trackArtUrl.isEmpty() && d->playbackState != Stopped)
-            d->refreshPlayer();
-    });
+    // Retry Get(Metadata) on a backoff schedule if the initial reply
+    // lacked mpris:artUrl. Different players publish the artUrl on
+    // different timelines:
+    //   - Spotify desktop: ~500 ms after track start (lazy URL gen).
+    //   - Firefox: 1-3 s after track start. mpris:artUrl is a
+    //     `file://` path to an image Firefox decodes and writes to
+    //     ~/.local/share/firefox-mpris/<pid>_<n>.png on a background
+    //     thread; the path is only set in MPRISServiceHandler once
+    //     the file write completes. PropertiesChanged eventually
+    //     fires with the full Metadata, but on a clean shell startup
+    //     where the user is mid-track in Firefox, the image may have
+    //     been written long ago and Firefox won't re-emit
+    //     PropertiesChanged until the page changes metadata — so we
+    //     have to poll Get instead of relying on the signal.
+    //   - Plain Spotify-Web-via-plasma-browser-integration: similar
+    //     to Firefox, file:// URL written after a short delay.
+    // Three retries cover the typical 0.5/1.5/3 s windows. Each is a
+    // cheap one-shot Get; the guard returns early once trackArtUrl
+    // is populated. Capped at 3 s after construction.
+    for (int delayMs : {500, 1500, 3000}) {
+        QTimer::singleShot(delayMs, this, [this]() {
+            if (d->trackArtUrl.isEmpty() && d->playbackState != Stopped)
+                d->refreshPlayer();
+        });
+    }
 }
 
 MprisPlayer::~MprisPlayer() = default;
