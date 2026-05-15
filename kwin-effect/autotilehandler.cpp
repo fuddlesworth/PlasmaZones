@@ -615,13 +615,17 @@ void AutotileHandler::connectSignals()
 
 void AutotileHandler::loadSettings()
 {
-    // Query initial autotile screen set from daemon asynchronously.
+    // Query initial autotile screen set from daemon asynchronously. The
+    // foreign org.freedesktop.DBus.Properties interface is correct for D-Bus
+    // property access; ClientHelpers can't be used here because it hard-wires
+    // the org.plasmazones interface. Bound by SyncCallTimeoutMs so a wedged
+    // daemon doesn't leak a watcher for Qt's default 25 s.
     QDBusMessage msg =
         QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     msg << PhosphorProtocol::Service::Interface::Autotile << QStringLiteral("autotileScreens");
 
-    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg);
+    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();

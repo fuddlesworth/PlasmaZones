@@ -20,7 +20,6 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDBusReply>
 
 #include "pz_i18n.h"
 #include <QGuiApplication>
