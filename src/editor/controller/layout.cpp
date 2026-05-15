@@ -505,13 +505,10 @@ void EditorController::loadLayout(const QString& layoutId)
             appearance.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::BorderRadius))
             ? appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::BorderRadius)].toInt()
             : ::PhosphorZones::ZoneDefaults::BorderRadius;
-        // Use consistent key format - normalize to QString for QVariantMap storage
-        // QVariantMap uses QString keys, so convert QLatin1String to QString
-        QString useCustomColorsKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::UseCustomColors);
         bool useCustomColorsValue = appearance.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::UseCustomColors))
             ? appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseCustomColors)].toBool()
             : false;
-        zone[useCustomColorsKey] = useCustomColorsValue;
+        zone[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseCustomColors)] = useCustomColorsValue;
 
         // Per-zone overlay display mode override (-1 = use layout/global)
         zone[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode] =
@@ -780,11 +777,10 @@ void EditorController::saveLayout()
             zone.contains(::PhosphorZones::ZoneJsonKeys::BorderRadius)
             ? zone[::PhosphorZones::ZoneJsonKeys::BorderRadius].toInt()
             : ::PhosphorZones::ZoneDefaults::BorderRadius;
-        // Use consistent key format - normalize to QString for QVariantMap lookup
-        // QVariantMap uses QString keys, so convert QLatin1String to QString
-        QString useCustomColorsKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::UseCustomColors);
         appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseCustomColors)] =
-            zone.contains(useCustomColorsKey) ? zone[useCustomColorsKey].toBool() : false;
+            zone.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::UseCustomColors))
+            ? zone[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseCustomColors)].toBool()
+            : false;
         // Per-zone overlay display mode override (only if set)
         int zoneOverlayMode = zone.value(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode, -1).toInt();
         if (zoneOverlayMode >= 0) {
