@@ -99,21 +99,21 @@ host.destroyShell(screenId);
 ## Dependencies
 
 - `QtCore`, `QtQuick`
-- [`phosphor-layer`](../phosphor-layer/README.md): `Role`, `Surface`,
+- [`phosphor-layer`](../phosphor-layer/README.md) — `Role`, `Surface`,
   wlr-layer-shell wire primitives.
-- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md) -
+- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md) —
   UI-pattern recipes the consumer composes base roles from.
-- [`phosphor-surfaces`](../phosphor-surfaces/README.md): managed
+- [`phosphor-surfaces`](../phosphor-surfaces/README.md) — managed
   surface lifecycle + scope-generation counter.
-- [`phosphor-animation`](../phosphor-animation/README.md) -
+- [`phosphor-animation`](../phosphor-animation/README.md) —
   `SurfaceAnimator` that drives every overlay show / hide leg.
-- [`phosphor-screens`](../phosphor-screens/README.md): screen
+- [`phosphor-screens`](../phosphor-screens/README.md) — screen
   topology + stable identifiers (consumer-facing dep; the lib itself
   only forward-declares `QScreen`).
 
 ## See also
 
-- [`phosphor-layer`](../phosphor-layer/README.md): lower-level
+- [`phosphor-layer`](../phosphor-layer/README.md) — lower-level
   surface / role primitives this library coordinates.
-- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md) -
+- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md) —
   axis-2 UI-pattern recipes consumers use to build their base roles.

@@ -12,7 +12,7 @@
 #pragma once
 
 #include <PhosphorWayland/CompositorLost.h>
-#include <PhosphorWayland/IdleNotifier>
-#include <PhosphorWayland/LayerSurface>
-#include <PhosphorWayland/SinglePixelBuffer>
-#include <PhosphorWayland/ToplevelDrag>
+#include <PhosphorWayland/IdleNotifier.h>
+#include <PhosphorWayland/LayerSurface.h>
+#include <PhosphorWayland/SinglePixelBuffer.h>
+#include <PhosphorWayland/ToplevelDrag.h>

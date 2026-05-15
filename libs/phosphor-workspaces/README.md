@@ -3,14 +3,14 @@
 
 # phosphor-workspaces
 
-> Virtual desktop and activity management for compositors. Tracks KWin
-> virtual desktops via D-Bus and KDE Activities via KActivities/PlasmaActivities.
+> Virtual desktop and activity tracking. KWin virtual desktops via
+> D-Bus; KDE Activities via KActivities / PlasmaActivities.
 
 ## Responsibility
 
-Tracks the active virtual desktop and KDE Activity, with change signals
-on switch. Independent of the PlasmaZones daemon — consumers that need
-workspace awareness link this library directly.
+Tracks the active virtual desktop and current Activity, with change
+signals on switch. Independent of the PlasmaZones daemon — consumers
+that need workspace awareness link this library directly.
 
 ## Key types
 

@@ -47,14 +47,14 @@ The engine manages:
 
 | Type | Purpose |
 |------|---------|
-| `PhosphorTileEngine::AutotileEngine`           | Concrete `IPlacementEngine` for autotile screens |
-| `PhosphorTileEngine::AutotileConfig`           | Global config: default algorithm, gaps, master count, per-algorithm `AlgorithmSettings` map |
-| `PhosphorEngine::IAutotileSettings`         | Settings contract the engine reads (declared in `PhosphorEngine`, implementation ships from here) |
-| `PhosphorTileEngine::NavigationController`     | Stateless helper for focus / swap / rotate / split-ratio / master-count |
-| `PhosphorTileEngine::OverflowManager`          | Per-screen tracking of auto-floated windows when `maxWindows` is exceeded |
-| `PhosphorTileEngine::PerScreenConfigResolver`  | Resolves per-screen overrides → global config |
-| `PhosphorTileEngine::PendingAutotileRestore`   | Saved position for an autotile-removed window, keyed by `appId` |
-| `PhosphorTileEngine::AlgorithmSettings`        | Per-algorithm split ratio + master count + custom params (saved on switch-away) |
+| `PhosphorTileEngine::AutotileEngine`          | Concrete `IPlacementEngine` for autotile screens |
+| `PhosphorTileEngine::AutotileConfig`          | Global config: default algorithm, gaps, master count, per-algorithm `AlgorithmSettings` map |
+| `PhosphorEngine::IAutotileSettings`           | Settings contract the engine reads (declared in `PhosphorEngine`, implementation ships from here) |
+| `PhosphorTileEngine::NavigationController`    | Stateless helper for focus / swap / rotate / split-ratio / master-count |
+| `PhosphorTileEngine::OverflowManager`         | Per-screen tracking of auto-floated windows when `maxWindows` is exceeded |
+| `PhosphorTileEngine::PerScreenConfigResolver` | Resolves per-screen overrides → global config |
+| `PhosphorTileEngine::PendingAutotileRestore`  | Saved position for an autotile-removed window, keyed by `appId` |
+| `PhosphorTileEngine::AlgorithmSettings`       | Per-algorithm split ratio + master count + custom params (saved on switch-away) |
 
 ## Typical use
 

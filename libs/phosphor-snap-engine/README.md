@@ -46,12 +46,12 @@ keyboard-navigation target geometries).
 
 | Type | Purpose |
 |------|---------|
-| `PhosphorSnapEngine::SnapEngine`                    | Concrete `IPlacementEngine` for manual zone layouts |
-| `PhosphorSnapEngine::SnapState`                     | Per-screen `IPlacementState`: zone assignments, pre-tile geometry, floating set |
-| `PhosphorEngine::ISnapSettings`                  | Settings the engine reads (exclusions, sticky-window handling, master toggle) |
-| `PhosphorSnapEngine::INavigationStateProvider`      | Narrow read-only state contract the daemon implements |
-| `PhosphorSnapEngine::IZoneAdjacencyResolver`        | Directional zone lookup contract the daemon implements |
-| `PhosphorSnapEngine::SnapNavigationTargetResolver`  | Pure compute for move / focus / swap / push / cycle / restore target geometries |
+| `PhosphorSnapEngine::SnapEngine`                   | Concrete `IPlacementEngine` for manual zone layouts |
+| `PhosphorSnapEngine::SnapState`                    | Per-screen `IPlacementState`: zone assignments, pre-tile geometry, floating set |
+| `PhosphorEngine::ISnapSettings`                    | Settings the engine reads (exclusions, sticky-window handling, master toggle) |
+| `PhosphorSnapEngine::INavigationStateProvider`     | Narrow read-only state contract the daemon implements |
+| `PhosphorSnapEngine::IZoneAdjacencyResolver`       | Directional zone lookup contract the daemon implements |
+| `PhosphorSnapEngine::SnapNavigationTargetResolver` | Pure compute for move / focus / swap / push / cycle / restore target geometries |
 
 ## Typical use
 

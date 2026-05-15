@@ -6,17 +6,15 @@
 # A Qt6/C++20 library that wraps zwlr_layer_shell_v1 behind a Qt-friendly
 # QPA shell-integration plugin (`phosphorwayland-qpa`) plus a thin
 # `LayerSurface` helper for setting layer-surface properties on a
-# QWindow. The shader pipeline (BaseUniforms, IUniformExtension,
-# ShaderIncludeResolver, IWallpaperProvider, ShaderRegistry) lives
-# in the sibling `phosphor-shaders` library — this lib is now purely
-# the Wayland integration.
+# QWindow. Shader-domain headers live in the sibling
+# `phosphor-shaders` library.
 #
 # Can be built standalone or as a subdirectory of PlasmaZones.
 
 cmake_minimum_required(VERSION 3.16)
 
-# PhosphorWayland's own version — used for SOVERSION. When split to a
-# standalone repo, this becomes the project() version.
+# Library version — used for SOVERSION and as the project() version when
+# built standalone.
 set(PHOSPHORWAYLAND_VERSION "0.1.0")
 
 # When built as a subdirectory, inherit the parent project's settings.

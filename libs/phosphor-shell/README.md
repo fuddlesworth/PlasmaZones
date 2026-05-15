@@ -53,6 +53,6 @@ working reference for consumers.
 
 ## See also
 
-- [`phosphor-services`](../phosphor-services/README.md) — system tray, dbusmenu, future notification and MPRIS bridges.
+- [`phosphor-services`](../phosphor-services/README.md) — system tray and dbusmenu.
 - [`phosphor-layer`](../phosphor-layer/README.md) — Role vocabulary the window types compose from.
 - [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md) — named Role recipes the panels use.

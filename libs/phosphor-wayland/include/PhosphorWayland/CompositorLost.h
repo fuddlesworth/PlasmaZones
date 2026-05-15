@@ -28,9 +28,10 @@ namespace PhosphorWayland {
 ///   the standard QGuiApplication setup); marshal to your own thread if the
 ///   work isn't safe there.
 /// - Registration is valid before the QPA plugin is initialised. The
-///   broadcaster is independent of the integration singleton; the integration
-///   wires its own forwarder during `initialize()` so callbacks registered
-///   pre-load are still reached when the compositor signals removal later.
+///   broadcaster is independent of the integration singleton; the QPA
+///   plugin's `wl_registry::global_remove` handler forwards into it, so
+///   callbacks registered pre-load are still reached when the compositor
+///   signals removal later.
 ///
 /// Cleanup
 /// Long-lived consumers MUST `removeCompositorLostCallback()` before the

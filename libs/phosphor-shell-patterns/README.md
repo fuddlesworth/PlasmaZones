@@ -89,8 +89,8 @@ inline const PhosphorLayer::Role MyAppToast =
 ## Dependencies
 
 - `QtCore`, `QtGui` (for `QMargins`)
-- [`phosphor-layer`](../phosphor-layer/README.md). The `Role` struct
-  Patterns produces.
+- [`phosphor-layer`](../phosphor-layer/README.md) — the `Role` struct
+  patterns produce.
 
 ## See also
 
