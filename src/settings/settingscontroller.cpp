@@ -29,6 +29,8 @@
 #include "dbusutils.h"
 #include "version.h"
 
+#include <PhosphorProtocol/ClientHelpers.h>
+
 #include "../core/shaderregistry.h"
 #include "snappingshaderspagecontroller.h"
 
@@ -942,16 +944,15 @@ void SettingsController::loadLayoutsAsync()
     // that the local composite can't know about. On reply the enriched
     // list replaces m_layouts; if the call errors we keep the local
     // previews from Step 1 visible rather than blanking the page.
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("getLayoutList"));
-
     // Gate the local-path layoutsChanged emit (see the ctor-wired lambda
     // on PhosphorZones::LayoutRegistry::layoutsChanged). The reply lambda clears this
     // unconditionally so any subsequent local-only refresh (daemon down)
     // emits as usual.
     m_awaitingDaemonLayouts = true;
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::LayoutRegistry,
+                                                   QStringLiteral("getLayoutList")),
+        this);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
@@ -1132,22 +1133,16 @@ QVariantMap SettingsController::physicalScreenResolution(const QString& screenId
 
 void SettingsController::editLayout(const QString& layoutId)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("openEditorForLayoutOnScreen"));
-    msg << layoutId << QString();
-    QDBusConnection::sessionBus().asyncCall(msg);
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
+                                                QStringLiteral("openEditorForLayoutOnScreen"), {layoutId, QString()});
 }
 
 void SettingsController::editLayoutOnScreen(const QString& layoutId, const QString& screenId)
 {
     if (layoutId.isEmpty() || screenId.isEmpty())
         return;
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("openEditorForLayoutOnScreen"));
-    msg << layoutId << screenId;
-    QDBusConnection::sessionBus().asyncCall(msg);
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
+                                                QStringLiteral("openEditorForLayoutOnScreen"), {layoutId, screenId});
 }
 
 void SettingsController::openLayoutsFolder()
@@ -1180,11 +1175,8 @@ void SettingsController::exportLayout(const QString& layoutId, const QString& fi
 {
     if (layoutId.isEmpty() || filePath.isEmpty())
         return;
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("exportLayout"));
-    msg << layoutId << filePath;
-    QDBusConnection::sessionBus().asyncCall(msg);
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
+                                                QStringLiteral("exportLayout"), {layoutId, filePath});
 }
 
 void SettingsController::setLayoutHidden(const QString& layoutId, bool hidden)

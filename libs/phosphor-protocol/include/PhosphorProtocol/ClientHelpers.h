@@ -65,6 +65,29 @@ inline void fireAndForget(QObject* parent, const QString& interface, const QStri
 }
 
 /**
+ * @brief Send a one-way notification with no expected reply.
+ *
+ * Marshals via @c QDBusConnection::send rather than @c asyncCall, so no
+ * watcher is allocated and no reply timeout applies. Use for genuinely
+ * fire-and-forget notifications (window-opened pings, drag ticks, etc.)
+ * where allocating a watcher just to ignore the reply is wasted state.
+ *
+ * If you need error visibility on the call, use @ref fireAndForget instead.
+ *
+ * @param interface  D-Bus interface (e.g., DBus::Interface::Autotile)
+ * @param method     D-Bus method name
+ * @param args       Method arguments
+ */
+inline void sendOneWay(const QString& interface, const QString& method, const QVariantList& args = {})
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, interface, method);
+    for (const QVariant& arg : args) {
+        msg << arg;
+    }
+    QDBusConnection::sessionBus().send(msg);
+}
+
+/**
  * @brief Create an async D-Bus method call and return the pending result.
  *
  * @param interface  D-Bus interface name
