@@ -492,7 +492,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         QDBusMessage introspect = QDBusMessage::createMethodCall(
             PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
             QStringLiteral("org.freedesktop.DBus.Introspectable"), QStringLiteral("Introspect"));
-        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(introspect, 3000), this);
+        auto* watcher = new QDBusPendingCallWatcher(
+            QDBusConnection::sessionBus().asyncCall(introspect, PhosphorProtocol::Service::DaemonReadyProbeTimeoutMs),
+            this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<QString> reply = *w;

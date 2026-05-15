@@ -105,6 +105,32 @@ inline QDBusPendingCall asyncCall(const QString& interface, const QString& metho
 }
 
 /**
+ * @brief Synchronous D-Bus method call bounded by `Service::SyncCallTimeoutMs`.
+ *
+ * For the rare paths that legitimately need a blocking reply (settings
+ * editor pre-load, layout import/export). Prefer @ref asyncCall whenever
+ * the caller can tolerate a callback.
+ *
+ * Returns the raw `QDBusMessage`; check `reply.type() == ReplyMessage`
+ * before reading `reply.arguments()`. Unlike `QDBusInterface::call`, this
+ * does NOT perform synchronous wire introspection — it crafts the
+ * `QDBusMessage` directly.
+ *
+ * @param interface  D-Bus interface name
+ * @param method     D-Bus method name
+ * @param args       Method arguments
+ * @return Reply message (type ErrorMessage on failure / timeout)
+ */
+inline QDBusMessage syncCall(const QString& interface, const QString& method, const QVariantList& args = {})
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, interface, method);
+    for (const QVariant& arg : args) {
+        msg << arg;
+    }
+    return QDBusConnection::sessionBus().call(msg, QDBus::Block, Service::SyncCallTimeoutMs);
+}
+
+/**
  * @brief Async helper for loading a single daemon setting.
  *
  * Sends getSetting(name) via raw QDBusMessage, unwraps the QDBusVariant,

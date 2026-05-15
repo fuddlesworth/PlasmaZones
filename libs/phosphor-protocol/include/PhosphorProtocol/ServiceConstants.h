@@ -85,6 +85,21 @@ inline constexpr int MinPeerApiVersion = 3;
 // gracefully to caller-side defaults when the daemon is unresponsive.
 inline constexpr int SyncCallTimeoutMs = 500;
 
+// Timeout for the kwin-effect's daemon-readiness probe (an Introspect call
+// fired against the org.plasmazones service to detect "daemon up but the
+// daemonReady signal was emitted before the effect connected"). 3 s gives
+// the daemon ample time to answer once its event loop is responsive while
+// still keeping the effect from hanging on a wedged daemon.
+inline constexpr int DaemonReadyProbeTimeoutMs = 3000;
+
+// Timeout for the kwin-effect's snap-assist thumbnail post (carries an
+// ARGB32 pixel payload). 2 s is "definitely something is wrong, drop the
+// watcher" rather than expected latency. Without it, the effect would
+// otherwise leak a watcher per snap-assist candidate per show until Qt's
+// default 25 s timeout expires, which under daemon stress turns a
+// transient hang into accumulated compositor-process state.
+inline constexpr int SnapAssistThumbnailPostTimeoutMs = 2000;
+
 // Shared cap for the snap-assist thumbnail LRU. The daemon sizes its
 // QCache<QString, QImage> against this; the kwin-effect mirrors it for the
 // "skip recently-posted handle" dedup window. Keeping the literal here
