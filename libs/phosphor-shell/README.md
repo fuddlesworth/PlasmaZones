@@ -45,15 +45,11 @@ configs port with minimal rework.
 ## Dependencies
 
 - `Qt6::Core`, `Qt6::Gui`, `Qt6::Quick`, `Qt6::Qml`
-- `PhosphorLayer`, `PhosphorRendering`, `PhosphorShaders`, `PhosphorWayland`
+- [`phosphor-layer`](../phosphor-layer/README.md), [`phosphor-rendering`](../phosphor-rendering/README.md), [`phosphor-shaders`](../phosphor-shaders/README.md), [`phosphor-wayland`](../phosphor-wayland/README.md)
 
-## Status
-
-In active development. The shell example under
-`examples/phosphor-shell/` exercises the surface and serves as the
-working reference; the API is stable enough to build against but
-extensions may land. The shell binary is gated behind the
-`BUILD_PHOSPHOR_SHELL` CMake option (default OFF).
+The shell binary is gated behind the `BUILD_PHOSPHOR_SHELL` CMake option
+(default OFF). The example under `examples/phosphor-shell/` is the
+working reference for consumers.
 
 ## See also
 

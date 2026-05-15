@@ -9,13 +9,13 @@
 
 ## Responsibility
 
-The zones library and the autotiling library both produce "a layout for
-this screen at this moment." They do it differently: zones from a
-user-drawn JSON description, autotiling from a dynamic algorithm over the
-current window set. Downstream consumers like a snap engine, an overlay,
-or a settings-UI preview shouldn't care which source a layout came from.
+Both the zones library and the autotiling library produce "a layout for
+this screen at this moment" — zones from a user-drawn JSON description,
+autotiling from a dynamic algorithm over the current window set.
+Downstream consumers (snap engine, overlay, settings-UI preview)
+shouldn't care which source a layout came from.
 
-`phosphor-layout-api` is the **tiny shared vocabulary** both sides agree on:
+`phosphor-layout-api` is the shared vocabulary both sides agree on:
 
 - **`ILayoutSource`.** The interface every layout producer implements.
   Given a screen and window-set, return a `Layout`.

@@ -36,7 +36,7 @@ placement logic directly — the daemon decides *where*, the plugin applies
 | `DebouncedAction` | Generic debounce utility for screen-change coalescing |
 | `GeometryHelpers` | Fractional-scaling-safe rounding |
 
-## Writing a plugin
+## Typical use
 
 ```cpp
 #include <PhosphorCompositor/DaemonClient.h>
@@ -72,17 +72,6 @@ class MyPlugin : public PhosphorCompositor::IGeometryHandler,
 };
 ```
 
-## Link dependencies
-
-```cmake
-target_link_libraries(my_plugin PRIVATE
-    PhosphorCompositor::PhosphorCompositor
-)
-```
-
-Transitive deps (pulled automatically): Qt6::Core, Qt6::Gui, Qt6::DBus,
-PhosphorProtocol, PhosphorIdentity, PhosphorAnimation.
-
 ## Existing adapters
 
 | Compositor | Adapter | Location |
@@ -105,4 +94,9 @@ ICompositorBridge (plugin implements, wraps native window APIs)
 ```
 
 The daemon always runs. The plugin is stateless with respect to placement
-— it just applies what the daemon tells it and reports window events back.
+— it applies what the daemon tells it and reports window events back.
+
+## Dependencies
+
+- `Qt6::Core`, `Qt6::Gui`, `Qt6::DBus`
+- [`phosphor-protocol`](../phosphor-protocol/README.md), [`phosphor-identity`](../phosphor-identity/README.md), [`phosphor-animation`](../phosphor-animation/README.md)

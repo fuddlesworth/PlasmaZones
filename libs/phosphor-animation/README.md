@@ -3,47 +3,41 @@
 
 # phosphor-animation
 
-> Two cooperating runtimes in one library: a **motion runtime** that
-> drives `AnimatedValue<T>` through curves, springs, and easings; and a
-> **shader-transition runtime** that picks and parameterises the GPU
-> effect played at each animation event. Plus the JSON-backed `Profile`
-> trees that round-trip both through settings, D-Bus, and QML.
+> Motion runtime (`AnimatedValue<T>` driven by curves / springs /
+> easings) and shader-transition runtime (per-event GPU effect
+> selection), plus the JSON-backed `Profile` trees that configure both.
 
 ## Responsibility
 
-Window snap-in, drag ghost, zone flash, and ambient shader-time updates
-all want the same behaviour: a per-output clock, a typed `AnimatedValue`
-that interpolates toward a target, a curve family that decides *how*
-(ease, spring, custom Bézier), and an event-keyed profile that decides
-*how strong / how long / which curve* without recompiling.
+Per-output clock, typed `AnimatedValue` interpolating toward a target,
+polymorphic curves, and event-keyed profiles that map names like
+`window.open` and `editor.snapIn` to motion configs.
 
-`phosphor-animation` ships two parallel runtimes:
+The library ships two parallel runtimes:
 
-- **Motion** (namespace `PhosphorAnimation`) — the `AnimatedValue<T>`
-  family, polymorphic `Curve`s, the `IMotionClock` clock contract,
-  retarget policy, snap policy, stagger, and the `Profile` /
-  `ProfileTree` / `PhosphorProfileRegistry` system that maps event
-  names like `window.open` and `editor.snapIn` to motion configs.
-- **Shader transitions** (namespace `PhosphorAnimationShaders`) — the
-  `AnimationShaderRegistry` that discovers transition shader packs from
-  search paths, parameter metadata for a picker UI, and the parallel
-  `ShaderProfile` / `ShaderProfileTree` that maps the same event names
-  to a chosen effect plus its parameter values.
+- **Motion** (`PhosphorAnimation`) — `AnimatedValue<T>`, polymorphic
+  `Curve`s, `IMotionClock`, retarget / snap policy, stagger, and the
+  `Profile` / `ProfileTree` / `PhosphorProfileRegistry` system.
+- **Shader transitions** (`PhosphorAnimationShaders`) —
+  `AnimationShaderRegistry` discovers transition shader packs from
+  search paths; the parallel `ShaderProfile` / `ShaderProfileTree` maps
+  the same event names to an effect plus parameter values.
 
 Both profile trees use `std::optional` fields so a leaf can inherit
-(`nullopt`) or override (engaged) anything its parent declares. They share
-the dot-path event namespace but resolve through separate trees so the
-two concerns evolve independently.
+(`nullopt`) or override (engaged) anything its parent declares. They
+share the dot-path event namespace but resolve through separate trees,
+so a user can change the curve without touching the visual effect.
 
-`SurfaceAnimator` is the one place the two halves meet: it implements
+`SurfaceAnimator` implements
 [`phosphor-layer`](../phosphor-layer/README.md)'s `ISurfaceAnimator` and,
 for a given event, asks both registries what to play.
 
 User-edited curves and profiles hot-reload from the user data dir
-through [`phosphor-fsloader`](../phosphor-fsloader/README.md) without a
-daemon restart.
+through [`phosphor-fsloader`](../phosphor-fsloader/README.md).
 
-## Key types — motion runtime
+## Key types
+
+### Motion runtime
 
 | Type | Purpose |
 |------|---------|
@@ -65,7 +59,7 @@ daemon restart.
 | `PhosphorAnimation::StaggerTimer`             | Schedules animation starts across a group of windows |
 | `PhosphorAnimation::SurfaceAnimator`          | `ISurfaceAnimator` impl that wires both runtimes into [`phosphor-layer`](../phosphor-layer/README.md) |
 
-## Key types — shader-transition runtime
+### Shader-transition runtime
 
 | Type | Purpose |
 |------|---------|

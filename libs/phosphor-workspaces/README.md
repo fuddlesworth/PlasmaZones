@@ -8,10 +8,9 @@
 
 ## Responsibility
 
-Compositors and window managers need to know which virtual desktop is
-active and react to desktop/activity switches. This library provides that
-state independently of the PlasmaZones daemon — any consumer that needs
-workspace awareness links it directly.
+Tracks the active virtual desktop and KDE Activity, with change signals
+on switch. Independent of the PlasmaZones daemon — consumers that need
+workspace awareness link this library directly.
 
 ## Key types
 
@@ -20,7 +19,7 @@ workspace awareness links it directly.
 | `VirtualDesktopManager` | Tracks KWin virtual desktops via D-Bus — current desktop, count, names, UUID mapping |
 | `ActivityManager` | Tracks KDE Activities via KActivities/PlasmaActivities (optional compile-time dep) |
 
-## Usage
+## Typical use
 
 ```cpp
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
@@ -39,17 +38,10 @@ activities.start();
 // activities.currentActivity() — empty string if KActivities unavailable
 ```
 
-## Link dependencies
+## Dependencies
 
-```cmake
-target_link_libraries(my_target PRIVATE
-    PhosphorWorkspaces::PhosphorWorkspaces
-)
-```
-
-## Optional dependencies
-
-KActivities/PlasmaActivities is detected at CMake time. If absent,
-`ActivityManager` compiles but `isAvailable()` returns false and all
-activity queries return empty results. Virtual desktop tracking works
-regardless.
+- `QtCore`, `QtDBus`
+- KActivities / PlasmaActivities (optional, detected at CMake time;
+  `ActivityManager::isAvailable()` returns false when absent and
+  activity queries return empty results — virtual desktop tracking
+  works regardless).

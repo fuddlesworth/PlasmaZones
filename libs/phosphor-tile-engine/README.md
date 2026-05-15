@@ -82,10 +82,10 @@ placementEngineRouter.bind("autotile", autotile);
 - **Inherits `PlacementEngineBase`.** Same FSM as the snap engine; the
   base owns Unmanaged / EngineOwned / Floated, this engine adds the
   autotile-specific intent dispatch.
-- **`NavigationController` is stateless.** It exists to lift ~1k lines
-  of navigation logic out of `AutotileEngine` without forking any
-  member state. Every method dispatches back to the engine for
-  reads / writes; `NavigationController` carries only the back-pointer.
+- **`NavigationController` is stateless.** Every method dispatches back
+  to the engine for reads / writes; the controller carries only a
+  back-pointer, so it isolates navigation logic without forking any
+  member state.
 - **`OverflowManager` doesn't mutate `TilingState`.** It returns the
   lists of windows to float / unfloat; the engine performs the
   mutations and emits signals. This keeps `TilingState` the sole

@@ -8,15 +8,15 @@
 
 ## Responsibility
 
-Helper library on top of [`phosphor-layer`](../phosphor-layer/README.md),
+Helper layer on top of [`phosphor-layer`](../phosphor-layer/README.md),
 [`phosphor-surfaces`](../phosphor-surfaces/README.md), and
 [`phosphor-animation`](../phosphor-animation/README.md). Given a
 consumer-provided surface factory, `ShellHost` owns the per-screen
 layer-shell shell lifecycle (create / destroy / rekey), the slot map
 keyed by consumer-chosen slot names, animator-driven slot hides, and
-per-role animator-config registration. The library does not know about
-zones, layouts, or any specific content: consumers wire their own
-slot vocabulary through callbacks.
+per-role animator-config registration. The library knows nothing about
+zones, layouts, or specific content; consumers wire their slot
+vocabulary through callbacks.
 
 ## Key types
 
