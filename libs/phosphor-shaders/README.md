@@ -17,14 +17,12 @@ extension contract that lets a consumer append application-specific
 data after the base region, and the metadata that turns a directory of
 shader files into a discoverable, parameterised effect.
 
-The library is the home for everything that used to live in the now-
-removed `phosphor-shell`'s shader stack. It is consumed by
-[`phosphor-rendering`](../phosphor-rendering/README.md) (which writes
-the base UBO and calls `IUniformExtension::write()` for the
-remainder), [`phosphor-animation`](../phosphor-animation/README.md)
-(whose `AnimationShaderRegistry` reuses `MetadataPackRegistryBase`
-to discover transition packs), and the PlasmaZones overlay (which
-hosts the resulting `ShaderEffect` items in QML).
+Consumed by
+[`phosphor-rendering`](../phosphor-rendering/README.md) (writes the base
+UBO, calls `IUniformExtension::write()` for the remainder),
+[`phosphor-animation`](../phosphor-animation/README.md) (whose
+`AnimationShaderRegistry` reuses `MetadataPackRegistryBase`), and the
+PlasmaZones overlay (hosts `ShaderEffect` items in QML).
 
 ## Key types
 
@@ -99,11 +97,6 @@ private:
 - **Inherits `MetadataPackRegistryBase`.** Search-path management is
   in `phosphor-fsloader`; `ShaderRegistry` adds only the
   shader-specific lookup surface.
-- **Split out of `phosphor-shell`.** The Phase B refactor moved the
-  shader-domain headers (`BaseUniforms`, `IUniformExtension`,
-  `ShaderIncludeResolver`, `IWallpaperProvider`, `ShaderRegistry`)
-  here. Wayland layer-shell integration stayed in
-  [`phosphor-wayland`](../phosphor-wayland/README.md).
 
 ## Dependencies
 
@@ -114,4 +107,3 @@ private:
 
 - [`phosphor-rendering`](../phosphor-rendering/README.md) — `ShaderEffect` + `ShaderNodeRhi` consume `BaseUniforms` and `IUniformExtension`.
 - [`phosphor-animation`](../phosphor-animation/README.md) — `AnimationShaderRegistry` is a parallel registry for transition effects.
-- [`phosphor-wayland`](../phosphor-wayland/README.md) — sibling lib that owns the QPA plugin + raw layer-shell binding.

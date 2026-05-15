@@ -9,21 +9,14 @@
 
 ## Responsibility
 
-A grab-bag of small D-Bus and spec-driven services every desktop shell
-needs, exposed under a single `PhosphorServices::` namespace so a shell
-can pull them in piecewise without growing a giant dependency on a
-single integration crate.
+D-Bus and spec-driven services every desktop shell needs, under a single
+`PhosphorServices::` namespace so a shell can pull them in piecewise.
 
-First tenant: **StatusNotifierItem** (system tray) host + watcher with
-full XDG icon-theme spec lookup and `com.canonical.dbusmenu` support. A
-shell registers a `StatusNotifierHost` instance, points its QML tray
-view at `StatusNotifierItemModel`, and the library handles the watcher
-registration, item discovery, icon resolution, and dbusmenu activation
-end-to-end.
-
-Future siblings live behind the same namespace as they're added:
-`org.freedesktop.Notifications`, MPRIS, UPower, NetworkManager, logind,
-`ext-session-lock-v1`, `ext-idle-notify-v1`.
+Shipped: **StatusNotifierItem** (system tray) host + watcher with full
+XDG icon-theme spec lookup and `com.canonical.dbusmenu` support. A shell
+registers a `StatusNotifierHost`, points its QML tray view at
+`StatusNotifierItemModel`, and the library handles watcher registration,
+item discovery, icon resolution, and dbusmenu activation.
 
 ## Key types
 

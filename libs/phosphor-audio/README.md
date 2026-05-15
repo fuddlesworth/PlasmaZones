@@ -7,11 +7,10 @@
 
 ## Responsibility
 
-Give shader effects and QML overlays a lightweight audio-spectrum feed
-without linking Qt Multimedia or writing a PulseAudio / PipeWire client.
-The lib offers one contract and one bundled implementation that shells out
-to the user's existing `cava` install; consumers wire the emitted bar
-vector into a `ShaderEffect` UBO and get audio-reactive visuals for free.
+A lightweight audio-spectrum feed for shader effects and QML overlays.
+One contract (`IAudioSpectrumProvider`) and one bundled implementation
+that shells out to the user's `cava` install; consumers wire the emitted
+bar vector into a `ShaderEffect` UBO.
 
 ## Key types
 
@@ -33,9 +32,9 @@ provider->start();
 
 ## Design notes
 
-- **No direct audio backend.** `CavaSpectrumProvider` calls out to `cava`
-  because `cava` already handles PulseAudio vs PipeWire vs ALSA detection
-  and owns the FFT. The lib just parses its framed byte output.
+- **No direct audio backend.** `CavaSpectrumProvider` shells out to
+  `cava`, which handles PulseAudio / PipeWire / ALSA detection and owns
+  the FFT. The lib parses its framed byte output.
 - **Graceful degradation.** `isAvailable()` returns false when `cava` is
   not installed; consumers should hide or disable audio-reactive overlays
   in that case rather than hard-fail.

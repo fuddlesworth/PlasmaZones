@@ -9,17 +9,13 @@
 ## Responsibility
 
 Wayland doesn't expose a reliable numeric window ID the way X11 does, and
-each compositor surfaces a slightly different shape for "which window."
-KWin scripts refer to windows by their `internalId`; the daemon's
-compositor-bridge D-Bus interface carries string IDs over the wire;
-application QObjects own `QWindow` pointers with their own lifetimes.
+each compositor surfaces "which window" differently. KWin scripts use
+`internalId`; the daemon's compositor-bridge D-Bus interface carries
+string IDs over the wire; application QObjects own `QWindow` pointers.
 
-`phosphor-identity` is the **single source of truth** for the wire
-formats every layer of the stack uses to spell those identities. It is
-an INTERFACE library — every helper is `inline` and lives in the public
-header — so the daemon, the KWin effect, the KCM, and any future
-compositor plugin all link the same definitions without anyone shipping
-an extra `.so`.
+`phosphor-identity` owns the wire formats for those identities. It is an
+INTERFACE library — every helper is `inline` in the public header — so
+all consumers link the same definitions without an extra `.so`.
 
 The three identity formats it owns:
 
@@ -69,9 +65,9 @@ if (VirtualScreenId::isVirtual(screenId)) {
 - **Header-only by design.** The function-local static caches in
   `ScreenId.h` are guaranteed unique across translation units by the
   C++17 inline-function-static rule.
-- **Wire format owns the spelling.** Daemon, KWin effect, and any future
-  compositor plugin all use these helpers rather than hand-rolling the
-  format. To change the format, change it here once.
+- **Wire format owns the spelling.** Every consumer uses these helpers
+  rather than hand-rolling the format. To change the format, change it
+  here once.
 
 ## Dependencies
 

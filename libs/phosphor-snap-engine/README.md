@@ -39,21 +39,19 @@ The engine reads from shared services (none of which it owns):
   lookups; same shape as the navigation-state provider.
 
 The engine **owns** `SnapState` (per-screen mutable state implementing
-`IPlacementState`) and `SnapNavigationTargetResolver` (pure compute
-for keyboard-navigation target geometries; extracted so the daemon's
-`WindowTrackingAdaptor` no longer carries ~400 lines of snap-internal
-math).
+`IPlacementState`) and `SnapNavigationTargetResolver` (pure compute for
+keyboard-navigation target geometries).
 
 ## Key types
 
 | Type | Purpose |
 |------|---------|
-| `PhosphorSnapEngine::SnapEngine`                    | Concrete `IPlacementEngine` for manual zone layouts |
-| `PhosphorSnapEngine::SnapState`                     | Per-screen `IPlacementState`: zone assignments, pre-tile geometry, floating set |
-| `PhosphorEngine::ISnapSettings`                  | Settings the engine reads (exclusions, sticky-window handling, master toggle) |
-| `PhosphorSnapEngine::INavigationStateProvider`      | Narrow read-only state contract the daemon implements |
-| `PhosphorSnapEngine::IZoneAdjacencyResolver`        | Directional zone lookup contract the daemon implements |
-| `PhosphorSnapEngine::SnapNavigationTargetResolver`  | Pure compute for move / focus / swap / push / cycle / restore target geometries |
+| `PhosphorSnapEngine::SnapEngine`                   | Concrete `IPlacementEngine` for manual zone layouts |
+| `PhosphorSnapEngine::SnapState`                    | Per-screen `IPlacementState`: zone assignments, pre-tile geometry, floating set |
+| `PhosphorEngine::ISnapSettings`                    | Settings the engine reads (exclusions, sticky-window handling, master toggle) |
+| `PhosphorSnapEngine::INavigationStateProvider`     | Narrow read-only state contract the daemon implements |
+| `PhosphorSnapEngine::IZoneAdjacencyResolver`       | Directional zone lookup contract the daemon implements |
+| `PhosphorSnapEngine::SnapNavigationTargetResolver` | Pure compute for move / focus / swap / push / cycle / restore target geometries |
 
 ## Typical use
 
@@ -83,11 +81,10 @@ placementEngineRouter.bind("snap", snap);
   Floated FSM lives once in the base class; this engine only adds
   the manual-zone-specific decisions (which zone, when to auto-snap,
   how to navigate).
-- **Typed interfaces, not `QObject*` + invokeMethod.** Earlier
-  iterations dispatched into the daemon via
-  `QMetaObject::invokeMethod`. The narrow `INavigationStateProvider`
-  and `IZoneAdjacencyResolver` contracts replace that — strictly
-  typed, no string method names, no opaque pointers.
+- **Typed interfaces, not `QObject*` + invokeMethod.** Daemon dispatch
+  uses the narrow `INavigationStateProvider` and `IZoneAdjacencyResolver`
+  contracts — strictly typed, no string method names, no opaque
+  pointers.
 - **State is shared, not owned.** Window-tracking, virtual-desktop,
   layout-registry, and zone-detector all live outside the engine.
   `SnapState` is the one thing this lib owns mutably; everything else

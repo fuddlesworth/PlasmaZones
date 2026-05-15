@@ -9,10 +9,9 @@
 
 ## Responsibility
 
-Qt Quick's built-in `ShaderEffect` item is fine for toy demos but doesn't
-support multipass, compute shaders, custom UBO layouts, or including one
-shader file from another. `phosphor-rendering` replaces it with three
-cooperating pieces:
+Qt Quick's built-in `ShaderEffect` doesn't support multipass, compute
+shaders, custom UBO layouts, or shader-file `#include`. This library
+replaces it with three cooperating pieces:
 
 - **`ShaderEffect`** — a `QQuickItem` subclass that owns one render node,
   exposes shader source and parameters as `Q_PROPERTY`s, and delegates

@@ -17,17 +17,23 @@ namespace PhosphorLayer {
  * Stateless — isSupported() proxies to LayerSurface::isSupported(), and
  * attach() creates exactly one LayerSurface per QWindow.
  *
- * Compositor-lost detection: PhosphorWayland's QPA plugin owns the
- * wlr-layer-shell global-removal signal but does not expose it through
- * a public API, so this transport currently fires compositor-lost
- * callbacks on `QGuiApplication::aboutToQuit` only (clean exit). Mid-
- * session compositor crashes are not detected until PhosphorWayland gains
- * a public global-removal accessor.
+ * Compositor-lost detection covers two edges:
+ *  - Mid-session: PhosphorWayland's QPA plugin observes
+ *    `wl_registry::global_remove` for `zwlr_layer_shell_v1` and forwards
+ *    the edge through `PhosphorWayland::addCompositorLostCallback`. This
+ *    transport subscribes at construction so a compositor crash / restart
+ *    fires registered callbacks before Qt tears the connection down.
+ *  - Clean exit: `QGuiApplication::aboutToQuit` covers the case where the
+ *    application terminates before the compositor sent a removal.
+ *
+ * Both feed the same one-shot internal broadcaster, so consumer callbacks
+ * fire at most once.
  *
  * Thread-safe: addCompositorLostCallback() may be called from any thread.
- * Callbacks fire on the GUI thread (where `aboutToQuit` is emitted) and
- * are invoked outside the internal mutex, so callbacks may freely
- * re-enter the transport without deadlocking.
+ * Callbacks fire on the GUI thread (where `aboutToQuit` is emitted and
+ * where the QPA plugin dispatches Wayland events under the standard
+ * QGuiApplication setup) and are invoked outside the internal mutex, so
+ * callbacks may freely re-enter the transport without deadlocking.
  */
 class PHOSPHORLAYER_EXPORT PhosphorWaylandTransport : public ILayerShellTransport
 {

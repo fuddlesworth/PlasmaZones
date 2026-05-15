@@ -47,14 +47,14 @@ The engine manages:
 
 | Type | Purpose |
 |------|---------|
-| `PhosphorTileEngine::AutotileEngine`           | Concrete `IPlacementEngine` for autotile screens |
-| `PhosphorTileEngine::AutotileConfig`           | Global config: default algorithm, gaps, master count, per-algorithm `AlgorithmSettings` map |
-| `PhosphorEngine::IAutotileSettings`         | Settings contract the engine reads (declared in `PhosphorEngine`, implementation ships from here) |
-| `PhosphorTileEngine::NavigationController`     | Stateless helper for focus / swap / rotate / split-ratio / master-count |
-| `PhosphorTileEngine::OverflowManager`          | Per-screen tracking of auto-floated windows when `maxWindows` is exceeded |
-| `PhosphorTileEngine::PerScreenConfigResolver`  | Resolves per-screen overrides → global config |
-| `PhosphorTileEngine::PendingAutotileRestore`   | Saved position for an autotile-removed window, keyed by `appId` |
-| `PhosphorTileEngine::AlgorithmSettings`        | Per-algorithm split ratio + master count + custom params (saved on switch-away) |
+| `PhosphorTileEngine::AutotileEngine`          | Concrete `IPlacementEngine` for autotile screens |
+| `PhosphorTileEngine::AutotileConfig`          | Global config: default algorithm, gaps, master count, per-algorithm `AlgorithmSettings` map |
+| `PhosphorEngine::IAutotileSettings`           | Settings contract the engine reads (declared in `PhosphorEngine`, implementation ships from here) |
+| `PhosphorTileEngine::NavigationController`    | Stateless helper for focus / swap / rotate / split-ratio / master-count |
+| `PhosphorTileEngine::OverflowManager`         | Per-screen tracking of auto-floated windows when `maxWindows` is exceeded |
+| `PhosphorTileEngine::PerScreenConfigResolver` | Resolves per-screen overrides → global config |
+| `PhosphorTileEngine::PendingAutotileRestore`  | Saved position for an autotile-removed window, keyed by `appId` |
+| `PhosphorTileEngine::AlgorithmSettings`       | Per-algorithm split ratio + master count + custom params (saved on switch-away) |
 
 ## Typical use
 
@@ -82,10 +82,10 @@ placementEngineRouter.bind("autotile", autotile);
 - **Inherits `PlacementEngineBase`.** Same FSM as the snap engine; the
   base owns Unmanaged / EngineOwned / Floated, this engine adds the
   autotile-specific intent dispatch.
-- **`NavigationController` is stateless.** It exists to lift ~1k lines
-  of navigation logic out of `AutotileEngine` without forking any
-  member state. Every method dispatches back to the engine for
-  reads / writes; `NavigationController` carries only the back-pointer.
+- **`NavigationController` is stateless.** Every method dispatches back
+  to the engine for reads / writes; the controller carries only a
+  back-pointer, so it isolates navigation logic without forking any
+  member state.
 - **`OverflowManager` doesn't mutate `TilingState`.** It returns the
   lists of windows to float / unfloat; the engine performs the
   mutations and emits signals. This keeps `TilingState` the sole
