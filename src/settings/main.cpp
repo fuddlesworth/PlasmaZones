@@ -13,6 +13,7 @@
 #include "pz_qml_i18n.h"
 
 #include "../core/constants.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
@@ -27,9 +28,9 @@
 
 namespace {
 
-constexpr PlasmaZones::SingleInstanceIds kSettingsIds{PlasmaZones::DBus::SettingsApp::ServiceName,
-                                                      PlasmaZones::DBus::SettingsApp::ObjectPath,
-                                                      PlasmaZones::DBus::SettingsApp::Interface};
+constexpr PlasmaZones::SingleInstanceIds kSettingsIds{PhosphorProtocol::Service::Apps::Settings::ServiceName,
+                                                      PhosphorProtocol::Service::Apps::Settings::ObjectPath,
+                                                      PhosphorProtocol::Service::Apps::Settings::Interface};
 
 /// Try to forward a --page request to an already-running instance.
 /// Returns true if a running instance exists (caller should exit).

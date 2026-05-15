@@ -5,8 +5,9 @@
 
 #include "EditorAppAdaptor.h"
 #include "EditorController.h"
-#include "../core/constants.h"
 #include "../core/logging.h"
+
+#include <PhosphorProtocol/ServiceConstants.h>
 
 namespace PlasmaZones {
 
@@ -14,7 +15,9 @@ EditorLaunchController::EditorLaunchController(EditorController* controller, QOb
     : QObject(parent)
     , m_controller(controller)
     , m_singleInstance(std::make_unique<SingleInstanceService>(
-          SingleInstanceIds{DBus::EditorApp::ServiceName, DBus::EditorApp::ObjectPath, DBus::EditorApp::Interface},
+          SingleInstanceIds{PhosphorProtocol::Service::Apps::Editor::ServiceName,
+                            PhosphorProtocol::Service::Apps::Editor::ObjectPath,
+                            PhosphorProtocol::Service::Apps::Editor::Interface},
           this))
 {
     Q_ASSERT(m_controller);

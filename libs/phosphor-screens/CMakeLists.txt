@@ -50,6 +50,13 @@ if(NOT TARGET PhosphorWayland::PhosphorWayland)
     find_package(PhosphorWayland CONFIG REQUIRED)
 endif()
 
+# PhosphorProtocol ships the canonical org.plasmazones.* service / object /
+# interface constants and shared timeouts. Resolver.h pulls them in for the
+# default endpoint, so PUBLIC link.
+if(NOT TARGET PhosphorProtocol::PhosphorProtocol)
+    find_package(PhosphorProtocol CONFIG REQUIRED)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -120,6 +127,7 @@ target_link_libraries(PhosphorScreens
         Qt6::Gui   # QRect / QRectF / QScreen in public headers
         Qt6::DBus  # QDBusAbstractAdaptor in DBusScreenAdaptor.h public surface
         PhosphorIdentity::PhosphorIdentity
+        PhosphorProtocol::PhosphorProtocol  # Service::* constants in Resolver.h
     PRIVATE
         PhosphorWayland::PhosphorWayland  # LayerSurface for geometry sensors
 )

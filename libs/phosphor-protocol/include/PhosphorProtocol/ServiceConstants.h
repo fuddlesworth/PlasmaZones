@@ -29,6 +29,30 @@ inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridg
 inline constexpr QLatin1String Snap("org.plasmazones.Snap");
 }
 
+/// D-Bus error names returned via `QDBusMessage::createErrorReply`. Centralised
+/// so adaptors emit identical strings and consumers can match on them without
+/// relying on free-form text.
+namespace Error {
+inline constexpr QLatin1String Busy("org.plasmazones.Error.Busy");
+inline constexpr QLatin1String Shutdown("org.plasmazones.Error.Shutdown");
+}
+
+/// Single-instance app identities. Each PlasmaZones sub-process (settings,
+/// editor) advertises its own service name and a small controller object so
+/// the launcher can detect "already running" without scanning the bus.
+namespace Apps {
+namespace Settings {
+inline constexpr QLatin1String ServiceName("org.plasmazones.Settings.App");
+inline constexpr QLatin1String ObjectPath("/SettingsApp");
+inline constexpr QLatin1String Interface("org.plasmazones.SettingsController");
+}
+namespace Editor {
+inline constexpr QLatin1String ServiceName("org.plasmazones.Editor.App");
+inline constexpr QLatin1String ObjectPath("/EditorApp");
+inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
+}
+}
+
 // Protocol version. Bumped when the D-Bus method/signal schema changes in a
 // backwards-incompatible way (e.g. dragStopped out-params changed, new
 // required signal). Both sides check the peer's version at bridge registration

@@ -17,7 +17,6 @@
 #include "pz_i18n.h"
 #include <QColor>
 #include <QDBusConnection>
-#include <QDBusInterface>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>

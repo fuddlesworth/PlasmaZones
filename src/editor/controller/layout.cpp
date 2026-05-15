@@ -18,9 +18,7 @@
 #include "pz_i18n.h"
 #include <memory>
 #include <QDBusConnection>
-#include <QDBusInterface>
 #include <QDBusMessage>
-#include <QDBusReply>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -49,7 +47,8 @@ void EditorController::cacheVirtualScreenGeometry(const QString& screenName)
         QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
         QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("getScreenGeometry"));
     msg << screenName;
-    QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 2000);
+    QDBusMessage reply =
+        QDBusConnection::sessionBus().call(msg, QDBus::Block, PhosphorProtocol::Service::SyncCallTimeoutMs);
     if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 1) {
         QRect geo = qdbus_cast<QRect>(reply.arguments().at(0));
         if (geo.isValid()) {
@@ -98,7 +97,8 @@ QVariantList EditorController::screenModel() const
                         QString(PhosphorProtocol::Service::Interface::Screen),
                         QStringLiteral("getVirtualScreenConfig"));
                     msg << physId;
-                    QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 2000);
+                    QDBusMessage reply = QDBusConnection::sessionBus().call(
+                        msg, QDBus::Block, PhosphorProtocol::Service::SyncCallTimeoutMs);
                     if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 1) {
                         QJsonObject root =
                             QJsonDocument::fromJson(reply.arguments().at(0).toString().toUtf8()).object();
@@ -555,43 +555,55 @@ void EditorController::loadLayout(const QString& layoutId)
     m_activitiesAvailable = false;
     m_availableActivities.clear();
     {
-        QDBusInterface iface{QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-                             QString(PhosphorProtocol::Service::Interface::LayoutRegistry)};
-        if (iface.isValid()) {
-            // Screen IDs (stable EDID-based identifiers).
-            // getAllScreenAssignments only emits screens with stored
-            // entries — use the dedicated enumeration method so freshly-
-            // configured systems with no per-screen assignments still
-            // populate the editor's screen list.
-            QDBusReply<QStringList> screensReply = iface.call(QStringLiteral("getAvailableScreenIds"));
-            if (screensReply.isValid()) {
-                m_availableScreenIds = screensReply.value();
+        // QDBusMessage::createMethodCall + bus.call() (not QDBusInterface)
+        // because QDBusInterface does a synchronous wire introspection on
+        // construction; the daemon's LayoutRegistry interface is published
+        // via Q_CLASSINFO-driven adaptors so introspection is unnecessary.
+        // Call sites are gated on the daemon being on the bus, so a missing
+        // service yields one timeout-bounded round trip instead of a hung
+        // call.
+        const auto callDaemon = [](const QString& method, const QVariantList& args = {}) -> QDBusMessage {
+            QDBusMessage msg = QDBusMessage::createMethodCall(
+                QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+                QString(PhosphorProtocol::Service::Interface::LayoutRegistry), method);
+            if (!args.isEmpty()) {
+                msg.setArguments(args);
             }
+            return QDBusConnection::sessionBus().call(msg, QDBus::Block, PhosphorProtocol::Service::SyncCallTimeoutMs);
+        };
+        const auto firstArg = [](const QDBusMessage& reply) -> QVariant {
+            return (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+                ? reply.arguments().constFirst()
+                : QVariant{};
+        };
 
-            // Virtual desktops
-            QDBusReply<int> countReply = iface.call(QStringLiteral("getVirtualDesktopCount"));
-            if (countReply.isValid()) {
-                m_virtualDesktopCount = countReply.value();
-            }
-            QDBusReply<QStringList> namesReply = iface.call(QStringLiteral("getVirtualDesktopNames"));
-            if (namesReply.isValid()) {
-                m_virtualDesktopNames = namesReply.value();
-            }
+        // Screen IDs (stable EDID-based identifiers). getAllScreenAssignments
+        // only emits screens with stored entries — use the dedicated
+        // enumeration method so freshly-configured systems with no per-screen
+        // assignments still populate the editor's screen list.
+        if (auto v = firstArg(callDaemon(QStringLiteral("getAvailableScreenIds"))); v.isValid()) {
+            m_availableScreenIds = v.toStringList();
+        }
 
-            // Activities
-            QDBusReply<bool> activitiesReply = iface.call(QStringLiteral("isActivitiesAvailable"));
-            if (activitiesReply.isValid()) {
-                m_activitiesAvailable = activitiesReply.value();
-            }
-            if (m_activitiesAvailable) {
-                QDBusReply<QString> allActivitiesReply = iface.call(QStringLiteral("getAllActivitiesInfo"));
-                if (allActivitiesReply.isValid()) {
-                    QJsonDocument activitiesDoc = QJsonDocument::fromJson(allActivitiesReply.value().toUtf8());
-                    if (activitiesDoc.isArray()) {
-                        const auto arr = activitiesDoc.array();
-                        for (const auto& v : arr) {
-                            m_availableActivities.append(v.toObject().toVariantMap());
-                        }
+        // Virtual desktops
+        if (auto v = firstArg(callDaemon(QStringLiteral("getVirtualDesktopCount"))); v.isValid()) {
+            m_virtualDesktopCount = v.toInt();
+        }
+        if (auto v = firstArg(callDaemon(QStringLiteral("getVirtualDesktopNames"))); v.isValid()) {
+            m_virtualDesktopNames = v.toStringList();
+        }
+
+        // Activities
+        if (auto v = firstArg(callDaemon(QStringLiteral("isActivitiesAvailable"))); v.isValid()) {
+            m_activitiesAvailable = v.toBool();
+        }
+        if (m_activitiesAvailable) {
+            if (auto v = firstArg(callDaemon(QStringLiteral("getAllActivitiesInfo"))); v.isValid()) {
+                QJsonDocument activitiesDoc = QJsonDocument::fromJson(v.toString().toUtf8());
+                if (activitiesDoc.isArray()) {
+                    const auto arr = activitiesDoc.array();
+                    for (const auto& a : arr) {
+                        m_availableActivities.append(a.toObject().toVariantMap());
                     }
                 }
             }
@@ -917,26 +929,20 @@ void EditorController::importLayout(const QString& filePath)
         return;
     }
 
-    QDBusInterface layoutManager(
+    QDBusMessage msg = QDBusMessage::createMethodCall(
         QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QDBusConnection::sessionBus());
-
-    if (!layoutManager.isValid()) {
-        QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("importLayout"));
+    msg << filePath;
+    QDBusMessage reply =
+        QDBusConnection::sessionBus().call(msg, QDBus::Block, PhosphorProtocol::Service::SyncCallTimeoutMs);
+    if (reply.type() != QDBusMessage::ReplyMessage) {
+        QString error = PzI18n::tr("Failed to import layout: %1").arg(reply.errorMessage());
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
     }
 
-    QDBusReply<QString> reply = layoutManager.call(QStringLiteral("importLayout"), filePath);
-    if (!reply.isValid()) {
-        QString error = PzI18n::tr("Failed to import layout: %1").arg(reply.error().message());
-        qCWarning(lcEditor) << error;
-        Q_EMIT layoutLoadFailed(error);
-        return;
-    }
-
-    QString newLayoutId = reply.value();
+    const QString newLayoutId = reply.arguments().value(0).toString();
     if (newLayoutId.isEmpty()) {
         QString error = PzI18n::tr("Imported layout but received empty ID");
         qCWarning(lcEditor) << error;
@@ -967,20 +973,14 @@ void EditorController::exportLayout(const QString& filePath)
         return;
     }
 
-    QDBusInterface layoutManager(
+    QDBusMessage msg = QDBusMessage::createMethodCall(
         QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QDBusConnection::sessionBus());
-
-    if (!layoutManager.isValid()) {
-        QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");
-        qCWarning(lcEditor) << error;
-        Q_EMIT layoutSaveFailed(error);
-        return;
-    }
-
-    QDBusReply<void> reply = layoutManager.call(QStringLiteral("exportLayout"), m_layoutId, filePath);
-    if (!reply.isValid()) {
-        QString error = PzI18n::tr("Failed to export layout: %1").arg(reply.error().message());
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("exportLayout"));
+    msg << m_layoutId << filePath;
+    QDBusMessage reply =
+        QDBusConnection::sessionBus().call(msg, QDBus::Block, PhosphorProtocol::Service::SyncCallTimeoutMs);
+    if (reply.type() != QDBusMessage::ReplyMessage) {
+        QString error = PzI18n::tr("Failed to export layout: %1").arg(reply.errorMessage());
         qCWarning(lcEditor) << error;
         Q_EMIT layoutSaveFailed(error);
         return;

@@ -193,32 +193,10 @@ inline constexpr QLatin1String ZoneSelectorIdPrefix{"zoneselector-"};
  */
 inline constexpr auto& RestoreSentinel = PhosphorEngine::RestoreSentinel;
 
-/**
- * @brief D-Bus identity constants for PlasmaZones sub-applications
- *
- * The daemon protocol constants (service name, object path, interfaces,
- * API version, timeout) live in PhosphorProtocol::Service
- * (libs/phosphor-protocol). Consumers reference them qualified directly.
- *
- * This namespace holds only the app-specific D-Bus identities for the
- * settings and editor processes (single-instance management, not
- * daemon protocol).
- */
-namespace DBus {
-
-namespace SettingsApp {
-inline constexpr QLatin1String ServiceName{"org.plasmazones.Settings.App"};
-inline constexpr QLatin1String ObjectPath{"/SettingsApp"};
-inline constexpr QLatin1String Interface{"org.plasmazones.SettingsController"};
-}
-
-namespace EditorApp {
-inline constexpr QLatin1String ServiceName{"org.plasmazones.Editor.App"};
-inline constexpr QLatin1String ObjectPath{"/EditorApp"};
-inline constexpr QLatin1String Interface{"org.plasmazones.EditorController"};
-}
-
-}
+// D-Bus identity constants for the daemon protocol AND the settings / editor
+// sub-application instances live in PhosphorProtocol::Service (daemon
+// interfaces) and PhosphorProtocol::Service::Apps (sub-app instances).
+// Consumers reference them qualified directly — no aliases here.
 
 // LayoutId lives in libs/phosphor-layout-api as `PhosphorLayout::LayoutId`.
 // All PlasmaZones-side callers reference it qualified directly — no alias
