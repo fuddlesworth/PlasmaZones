@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <PhosphorWayland/CompositorLost.h>
 #include <PhosphorWayland/IdleNotifier>
 #include <PhosphorWayland/LayerSurface>
 #include <PhosphorWayland/SinglePixelBuffer>

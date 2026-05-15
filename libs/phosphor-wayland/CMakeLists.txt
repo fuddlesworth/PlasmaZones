@@ -145,6 +145,7 @@ set(phosphorwayland_public_HDRS
     include/PhosphorWayland/IdleNotifier.h
     include/PhosphorWayland/ToplevelDrag.h
     include/PhosphorWayland/ForeignToplevel.h
+    include/PhosphorWayland/CompositorLost.h
 )
 
 # --- Layer-shell sources ---
@@ -154,6 +155,8 @@ set(phosphorwayland_layershell_SRCS
     src/idlenotifier.cpp
     src/topleveldrag.cpp
     src/foreigntoplevel.cpp
+    src/compositorlost.cpp
+    src/compositorlost_internal.h
     src/qpa/layershellintegration.cpp
     src/qpa/layershellintegration.h
     src/qpa/layershellwindow.cpp

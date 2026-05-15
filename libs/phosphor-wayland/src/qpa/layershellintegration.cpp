@@ -3,6 +3,7 @@
 
 #include "layershellintegration.h"
 #include "layershellwindow.h"
+#include "../compositorlost_internal.h"
 #include <PhosphorWayland/LayerSurface.h>
 
 #include <algorithm>
@@ -297,6 +298,13 @@ void LayerShellIntegration::fireGlobalRemovedCallbacks()
     for (const auto& [cbId, cb] : callbacks) {
         cb();
     }
+    // Forward the same edge to the public CompositorLost broadcaster so
+    // out-of-tree consumers (PhosphorLayer's PhosphorWaylandTransport, app-
+    // level subscribers) react to mid-session compositor crashes without
+    // depending on QGuiApplication::aboutToQuit. The broadcaster fires at
+    // most once per process and tolerates the duplicate emit if a future
+    // path also reaches it.
+    fireCompositorLost();
 }
 
 LayerShellIntegration::CallbackId LayerShellIntegration::addGlobalRemovedCallback(GlobalRemovedCallback cb)
