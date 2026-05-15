@@ -302,14 +302,15 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
     msg << compositorHandle << width << height << pixels;
 
     // Bound watcher accumulation if the daemon's main thread wedges. The
-    // post is genuinely async — 2 s is "definitely something is wrong,
-    // drop the watcher" rather than a meaningful expected latency. Without
-    // an explicit timeout the kwin-effect could otherwise leak a watcher
-    // per snap-assist candidate per show until Qt's default 25 s timeout
-    // expires, which under daemon stress turns a transient hang into
-    // accumulated compositor-process state.
-    constexpr int PostTimeoutMs = 2000;
-    QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg, PostTimeoutMs);
+    // post is genuinely async — `SnapAssistThumbnailPostTimeoutMs` is
+    // "definitely something is wrong, drop the watcher" rather than a
+    // meaningful expected latency. Without an explicit timeout the
+    // kwin-effect could otherwise leak a watcher per snap-assist candidate
+    // per show until Qt's default 25 s timeout expires, which under daemon
+    // stress turns a transient hang into accumulated compositor-process
+    // state.
+    QDBusPendingCall pending =
+        QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SnapAssistThumbnailPostTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
     // Capture @c this — the connect's context arg auto-disconnects the
     // lambda if `this` dies, so capture-by-pointer is safe across the

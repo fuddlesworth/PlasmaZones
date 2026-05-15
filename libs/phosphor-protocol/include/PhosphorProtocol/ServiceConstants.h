@@ -29,6 +29,30 @@ inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridg
 inline constexpr QLatin1String Snap("org.plasmazones.Snap");
 }
 
+/// D-Bus error names returned via `QDBusMessage::createErrorReply`. Centralised
+/// so adaptors emit identical strings and consumers can match on them without
+/// relying on free-form text.
+namespace Error {
+inline constexpr QLatin1String Busy("org.plasmazones.Error.Busy");
+inline constexpr QLatin1String Shutdown("org.plasmazones.Error.Shutdown");
+}
+
+/// Single-instance app identities. Each PlasmaZones sub-process (settings,
+/// editor) advertises its own service name and a small controller object so
+/// the launcher can detect "already running" without scanning the bus.
+namespace Apps {
+namespace Settings {
+inline constexpr QLatin1String ServiceName("org.plasmazones.Settings.App");
+inline constexpr QLatin1String ObjectPath("/SettingsApp");
+inline constexpr QLatin1String Interface("org.plasmazones.SettingsController");
+}
+namespace Editor {
+inline constexpr QLatin1String ServiceName("org.plasmazones.Editor.App");
+inline constexpr QLatin1String ObjectPath("/EditorApp");
+inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
+}
+}
+
 // Protocol version. Bumped when the D-Bus method/signal schema changes in a
 // backwards-incompatible way (e.g. dragStopped out-params changed, new
 // required signal). Both sides check the peer's version at bridge registration
@@ -60,6 +84,21 @@ inline constexpr int MinPeerApiVersion = 3;
 // in the healthy case), so 500 ms is generous while still degrading
 // gracefully to caller-side defaults when the daemon is unresponsive.
 inline constexpr int SyncCallTimeoutMs = 500;
+
+// Timeout for the kwin-effect's daemon-readiness probe (an Introspect call
+// fired against the org.plasmazones service to detect "daemon up but the
+// daemonReady signal was emitted before the effect connected"). 3 s gives
+// the daemon ample time to answer once its event loop is responsive while
+// still keeping the effect from hanging on a wedged daemon.
+inline constexpr int DaemonReadyProbeTimeoutMs = 3000;
+
+// Timeout for the kwin-effect's snap-assist thumbnail post (carries an
+// ARGB32 pixel payload). 2 s is "definitely something is wrong, drop the
+// watcher" rather than expected latency. Without it, the effect would
+// otherwise leak a watcher per snap-assist candidate per show until Qt's
+// default 25 s timeout expires, which under daemon stress turns a
+// transient hang into accumulated compositor-process state.
+inline constexpr int SnapAssistThumbnailPostTimeoutMs = 2000;
 
 // Shared cap for the snap-assist thumbnail LRU. The daemon sizes its
 // QCache<QString, QImage> against this; the kwin-effect mirrors it for the

@@ -77,12 +77,12 @@ void PlasmaZonesEffect::slotDaemonReady()
     // we never send a single stateful call to an incompatible daemon. Any such
     // call would either fail noisily or risk silent marshalling mismatches —
     // the very failure mode this PR is designed to prevent.
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-        PhosphorProtocol::Service::Interface::CompositorBridge, QStringLiteral("registerBridge"));
-    msg << QStringLiteral("kwin") << QString::number(PhosphorProtocol::Service::ApiVersion)
-        << QStringList{QStringLiteral("borderless"), QStringLiteral("animation")};
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(
+            PhosphorProtocol::Service::Interface::CompositorBridge, QStringLiteral("registerBridge"),
+            {QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+             QStringList{QStringLiteral("borderless"), QStringLiteral("animation")}}),
+        this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         // Clear the in-flight flag on EVERY return path (success, error,
@@ -202,10 +202,10 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // session would persist in the effect, causing isWindowFloating() to return true
     // for windows that are no longer floating.
     {
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-            PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
-        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+        auto* watcher = new QDBusPendingCallWatcher(
+            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("getFloatingWindows")),
+            this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<QStringList> reply = *w;
@@ -276,10 +276,10 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
     // Fire-and-forget: the cache is populated asynchronously. Windows that open
     // before the reply arrives fall back to the normal async restore path.
     {
-        QDBusMessage geoMsg = QDBusMessage::createMethodCall(
-            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-            PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getPendingRestoreGeometries"));
-        auto* geoWatcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(geoMsg), this);
+        auto* geoWatcher = new QDBusPendingCallWatcher(
+            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("getPendingRestoreGeometries")),
+            this);
         connect(geoWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<QString> reply = *w;
@@ -313,10 +313,10 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
     // Now that the daemon is confirmed ready, retry the restore flow using raw
     // QDBusMessage (no QDBusInterface) to avoid synchronous introspection.
     {
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-            PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
-        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+        auto* watcher = new QDBusPendingCallWatcher(
+            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("getSnappedWindows")),
+            this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
 

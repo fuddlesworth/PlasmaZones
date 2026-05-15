@@ -6,6 +6,7 @@
 #include "../core/animationbootstrap.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
 #include <PhosphorWayland/LayerShellPluginLoader.h>
@@ -37,8 +38,9 @@ using namespace PlasmaZones;
 
 namespace {
 
-constexpr PlasmaZones::SingleInstanceIds kEditorIds{DBus::EditorApp::ServiceName, DBus::EditorApp::ObjectPath,
-                                                    DBus::EditorApp::Interface};
+constexpr PlasmaZones::SingleInstanceIds kEditorIds{PhosphorProtocol::Service::Apps::Editor::ServiceName,
+                                                    PhosphorProtocol::Service::Apps::Editor::ObjectPath,
+                                                    PhosphorProtocol::Service::Apps::Editor::Interface};
 
 /// Try to forward a launch request to an already-running editor instance.
 /// Returns true if the running instance accepted the request (caller should exit).
@@ -237,7 +239,7 @@ int main(int argc, char* argv[])
         if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
             return 0;
         }
-        qCCritical(lcEditor) << "Editor D-Bus name" << DBus::EditorApp::ServiceName
+        qCCritical(lcEditor) << "Editor D-Bus name" << PhosphorProtocol::Service::Apps::Editor::ServiceName
                              << "is held by an unreachable instance. The existing editor may be hung —"
                              << "kill the stale plasmazones-editor process and try again.";
         return 1;

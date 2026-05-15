@@ -12,10 +12,12 @@
 
 namespace PlasmaZones::DaemonDBus {
 
-/// Unified D-Bus timeout for KCM <-> daemon calls (milliseconds)
-constexpr int TimeoutMs = 3000;
-
-/// Call a daemon method synchronously and return the reply
+/// Call a daemon method synchronously and return the reply.
+///
+/// Bounded with `PhosphorProtocol::Service::SyncCallTimeoutMs` (500 ms) — the
+/// shared cap for blocking daemon calls. Daemon settings handlers are
+/// in-memory hash lookups, so 500 ms is "definitely something is wrong"
+/// rather than an expected latency.
 inline QDBusMessage callDaemon(const QString& interface, const QString& method, const QVariantList& args = {})
 {
     QDBusMessage msg = QDBusMessage::createMethodCall(
@@ -23,7 +25,7 @@ inline QDBusMessage callDaemon(const QString& interface, const QString& method, 
     if (!args.isEmpty()) {
         msg.setArguments(args);
     }
-    return QDBusConnection::sessionBus().call(msg, QDBus::Block, TimeoutMs);
+    return QDBusConnection::sessionBus().call(msg, QDBus::Block, PhosphorProtocol::Service::SyncCallTimeoutMs);
 }
 
 /// Send a synchronous reloadSettings call to the daemon.
@@ -37,7 +39,7 @@ inline void notifyReload()
     QDBusMessage msg = QDBusMessage::createMethodCall(
         QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
         QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("reloadSettings"));
-    QDBusConnection::sessionBus().call(msg, QDBus::Block, TimeoutMs);
+    QDBusConnection::sessionBus().call(msg, QDBus::Block, PhosphorProtocol::Service::SyncCallTimeoutMs);
 }
 
 /// Batch-set settings on the daemon. Synchronous call.

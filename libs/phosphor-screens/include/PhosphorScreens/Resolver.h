@@ -5,6 +5,8 @@
 
 #include "phosphorscreens_export.h"
 
+#include <PhosphorProtocol/ServiceConstants.h>
+
 #include <QString>
 
 class QPoint;
@@ -14,10 +16,9 @@ namespace Phosphor::Screens {
 /**
  * @brief D-Bus endpoint that ScreenResolver queries.
  *
- * Defaults match the PlasmaZones daemon's canonical org.plasmazones.Screen
- * interface so the existing PlasmaZones editor / KCM / launcher call sites
- * keep working without touching them. A future Phosphor WM ships its own
- * service name and overrides these.
+ * Defaults match the PlasmaZones daemon's canonical `org.plasmazones.Screen`
+ * interface (sourced from `PhosphorProtocol::Service::*`). A consumer that
+ * runs against a different service overrides them per call.
  *
  * Top-level (not nested in ScreenResolver) so its default member initialisers
  * are usable as default-argument values on `ScreenResolver::effectiveScreenAt`
@@ -29,9 +30,9 @@ namespace Phosphor::Screens {
  */
 struct ResolverEndpoint
 {
-    QString service = QStringLiteral("org.plasmazones");
-    QString path = QStringLiteral("/PlasmaZones");
-    QString interfaceName = QStringLiteral("org.plasmazones.Screen");
+    QString service = QString(PhosphorProtocol::Service::Name);
+    QString path = QString(PhosphorProtocol::Service::ObjectPath);
+    QString interfaceName = QString(PhosphorProtocol::Service::Interface::Screen);
     QString method = QStringLiteral("getEffectiveScreenAt");
 };
 
@@ -79,10 +80,11 @@ public:
      *                     user's shortcut keypress.
      */
     static QString effectiveScreenAt(const QPoint& pos, const ResolverEndpoint& endpoint = ResolverEndpoint{},
-                                     int timeoutMs = 2000);
+                                     int timeoutMs = PhosphorProtocol::Service::SyncCallTimeoutMs);
 
     /// Convenience wrapper: resolve at the current `QCursor::pos()`.
-    static QString effectiveScreenAtCursor(const ResolverEndpoint& endpoint = ResolverEndpoint{}, int timeoutMs = 2000);
+    static QString effectiveScreenAtCursor(const ResolverEndpoint& endpoint = ResolverEndpoint{},
+                                           int timeoutMs = PhosphorProtocol::Service::SyncCallTimeoutMs);
 };
 
 } // namespace Phosphor::Screens

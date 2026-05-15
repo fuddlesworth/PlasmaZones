@@ -469,18 +469,9 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenId)
                     confirmEntries.append(entry);
                 }
                 if (!confirmEntries.isEmpty()) {
-                    QDBusMessage msg = QDBusMessage::createMethodCall(
-                        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                        PhosphorProtocol::Service::Interface::Snap, QStringLiteral("windowsSnappedBatch"));
-                    msg << QVariant::fromValue(confirmEntries);
-                    auto* batchWatcher =
-                        new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
-                    connect(batchWatcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher* bw) {
-                        if (bw->isError()) {
-                            qCWarning(lcEffect) << "windowsSnappedBatch D-Bus call failed:" << bw->error().message();
-                        }
-                        bw->deleteLater();
-                    });
+                    PhosphorProtocol::ClientHelpers::fireAndForget(
+                        this, PhosphorProtocol::Service::Interface::Snap, QStringLiteral("windowsSnappedBatch"),
+                        {QVariant::fromValue(confirmEntries)}, QStringLiteral("windowsSnappedBatch"));
                 }
             }
         });

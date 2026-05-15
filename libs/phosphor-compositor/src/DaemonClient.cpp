@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorCompositor/DaemonClient.h>
+#include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <QDBusConnection>
@@ -85,34 +86,25 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
 
 void DaemonClient::notifyWindowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, Service::Interface::Autotile,
-                                                      QStringLiteral("windowOpened"));
-    msg << windowId << screenId << minWidth << minHeight;
-    QDBusConnection::sessionBus().send(msg);
+    ClientHelpers::sendOneWay(Service::Interface::Autotile, QStringLiteral("windowOpened"),
+                              {windowId, screenId, minWidth, minHeight});
 }
 
 void DaemonClient::notifyWindowOpenedBatch(const PhosphorProtocol::WindowOpenedList& windows)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, Service::Interface::Autotile,
-                                                      QStringLiteral("windowsOpenedBatch"));
-    msg << QVariant::fromValue(windows);
-    QDBusConnection::sessionBus().send(msg);
+    ClientHelpers::sendOneWay(Service::Interface::Autotile, QStringLiteral("windowsOpenedBatch"),
+                              {QVariant::fromValue(windows)});
 }
 
 void DaemonClient::notifyWindowClosed(const QString& windowId)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, Service::Interface::Autotile,
-                                                      QStringLiteral("windowClosed"));
-    msg << windowId;
-    QDBusConnection::sessionBus().send(msg);
+    ClientHelpers::sendOneWay(Service::Interface::Autotile, QStringLiteral("windowClosed"), {windowId});
 }
 
 void DaemonClient::notifyWindowActivated(const QString& windowId, const QString& screenId)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        Service::Name, Service::ObjectPath, Service::Interface::WindowTracking, QStringLiteral("windowActivated"));
-    msg << windowId << screenId;
-    QDBusConnection::sessionBus().send(msg);
+    ClientHelpers::sendOneWay(Service::Interface::WindowTracking, QStringLiteral("windowActivated"),
+                              {windowId, screenId});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -121,26 +113,20 @@ void DaemonClient::notifyWindowActivated(const QString& windowId, const QString&
 
 void DaemonClient::dragStarted(const QString& windowId, const QString& screenId, const QRect& geometry)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath,
-                                                      Service::Interface::WindowDrag, QStringLiteral("dragStarted"));
-    msg << windowId << screenId << geometry.x() << geometry.y() << geometry.width() << geometry.height();
-    QDBusConnection::sessionBus().send(msg);
+    ClientHelpers::sendOneWay(Service::Interface::WindowDrag, QStringLiteral("dragStarted"),
+                              {windowId, screenId, geometry.x(), geometry.y(), geometry.width(), geometry.height()});
 }
 
 void DaemonClient::dragMoved(const QString& windowId, int cursorX, int cursorY)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath,
-                                                      Service::Interface::WindowDrag, QStringLiteral("dragMoved"));
-    msg << windowId << cursorX << cursorY;
-    QDBusConnection::sessionBus().send(msg);
+    ClientHelpers::sendOneWay(Service::Interface::WindowDrag, QStringLiteral("dragMoved"),
+                              {windowId, cursorX, cursorY});
 }
 
 void DaemonClient::dragStopped(const QString& windowId, const QString& screenId, const QString& zoneId)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath,
-                                                      Service::Interface::WindowDrag, QStringLiteral("dragStopped"));
-    msg << windowId << screenId << zoneId;
-    QDBusConnection::sessionBus().send(msg);
+    ClientHelpers::sendOneWay(Service::Interface::WindowDrag, QStringLiteral("dragStopped"),
+                              {windowId, screenId, zoneId});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -149,18 +135,12 @@ void DaemonClient::dragStopped(const QString& windowId, const QString& screenId,
 
 void DaemonClient::notifyCursorScreenChanged(const QString& screenId)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        Service::Name, Service::ObjectPath, Service::Interface::WindowTracking, QStringLiteral("cursorScreenChanged"));
-    msg << screenId;
-    QDBusConnection::sessionBus().send(msg);
+    ClientHelpers::sendOneWay(Service::Interface::WindowTracking, QStringLiteral("cursorScreenChanged"), {screenId});
 }
 
 void DaemonClient::notifyPrimaryScreen(const QString& screenName)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, Service::Interface::Screen,
-                                                      QStringLiteral("setPrimaryScreenFromKWin"));
-    msg << screenName;
-    QDBusConnection::sessionBus().send(msg);
+    ClientHelpers::sendOneWay(Service::Interface::Screen, QStringLiteral("setPrimaryScreenFromKWin"), {screenName});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -169,9 +149,8 @@ void DaemonClient::notifyPrimaryScreen(const QString& screenName)
 
 void DaemonClient::queryFloatingWindows()
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        Service::Name, Service::ObjectPath, Service::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    auto* watcher = new QDBusPendingCallWatcher(
+        ClientHelpers::asyncCall(Service::Interface::WindowTracking, QStringLiteral("getFloatingWindows")), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         if (w->isError())
@@ -185,9 +164,8 @@ void DaemonClient::queryFloatingWindows()
 
 void DaemonClient::querySnappedWindows()
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        Service::Name, Service::ObjectPath, Service::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    auto* watcher = new QDBusPendingCallWatcher(
+        ClientHelpers::asyncCall(Service::Interface::WindowTracking, QStringLiteral("getSnappedWindows")), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         if (w->isError())
@@ -201,10 +179,9 @@ void DaemonClient::querySnappedWindows()
 
 void DaemonClient::queryPendingRestoreGeometries()
 {
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                                       QStringLiteral("getPendingRestoreGeometries"));
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    auto* watcher = new QDBusPendingCallWatcher(
+        ClientHelpers::asyncCall(Service::Interface::WindowTracking, QStringLiteral("getPendingRestoreGeometries")),
+        this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         if (w->isError())
@@ -218,10 +195,8 @@ void DaemonClient::queryPendingRestoreGeometries()
 
 void DaemonClient::queryVirtualScreens(const QString& screenId)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, Service::Interface::Screen,
-                                                      QStringLiteral("getVirtualScreens"));
-    msg << screenId;
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    auto* watcher = new QDBusPendingCallWatcher(
+        ClientHelpers::asyncCall(Service::Interface::Screen, QStringLiteral("getVirtualScreens"), {screenId}), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, screenId](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         if (w->isError())
@@ -235,10 +210,7 @@ void DaemonClient::queryVirtualScreens(const QString& screenId)
 
 void DaemonClient::pruneStaleWindows(const QStringList& liveWindowIds)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        Service::Name, Service::ObjectPath, Service::Interface::WindowTracking, QStringLiteral("pruneStaleWindows"));
-    msg << liveWindowIds;
-    QDBusConnection::sessionBus().send(msg);
+    ClientHelpers::sendOneWay(Service::Interface::WindowTracking, QStringLiteral("pruneStaleWindows"), {liveWindowIds});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -459,10 +431,8 @@ void DaemonClient::handleSnapAssistReady(const QString& windowId, const QString&
 
 void DaemonClient::querySetting(const QString& key)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, Service::Interface::Settings,
-                                                      QStringLiteral("getSetting"));
-    msg << key;
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    auto* watcher = new QDBusPendingCallWatcher(
+        ClientHelpers::asyncCall(Service::Interface::Settings, QStringLiteral("getSetting"), {key}), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, key](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         if (w->isError())

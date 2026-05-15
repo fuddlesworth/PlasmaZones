@@ -407,10 +407,10 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // Non-blocking: the old synchronous QDBus::Block call (500ms timeout) froze the
             // compositor thread, causing jerky first-retile animations since QElapsedTimer
             // kept advancing while no frames were rendered.
-            QDBusMessage fetchMsg = QDBusMessage::createMethodCall(
-                PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getPreTileGeometries"));
-            auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(fetchMsg), this);
+            auto* watcher = new QDBusPendingCallWatcher(
+                PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                           QStringLiteral("getPreTileGeometries")),
+                this);
             // Capture expected screen set for staleness detection — if the user
             // rapidly toggles autotile, a stale reply must not overwrite fresh data.
             const QSet<QString> expectedScreens = newScreens;

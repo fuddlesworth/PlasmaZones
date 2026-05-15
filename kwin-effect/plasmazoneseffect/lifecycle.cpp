@@ -207,13 +207,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
                 const QString startScreenId = getWindowScreenId(w);
                 const QRect frame = geometry.toRect();
-                QDBusMessage beginMsg = QDBusMessage::createMethodCall(
-                    PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                    PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("beginDrag"));
-                beginMsg << windowId << frame.x() << frame.y() << frame.width() << frame.height() << startScreenId
-                         << static_cast<int>(m_currentMouseButtons);
-                QDBusPendingCall beginPending = QDBusConnection::sessionBus().asyncCall(beginMsg);
-                auto* beginWatcher = new QDBusPendingCallWatcher(beginPending, this);
+                auto* beginWatcher = new QDBusPendingCallWatcher(
+                    PhosphorProtocol::ClientHelpers::asyncCall(
+                        PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("beginDrag"),
+                        {windowId, frame.x(), frame.y(), frame.width(), frame.height(), startScreenId,
+                         static_cast<int>(m_currentMouseButtons)}),
+                    this);
                 QPointer<KWin::EffectWindow> safeW = w;
                 const QString capturedWindowId = windowId;
                 const QString capturedScreenId = startScreenId;
@@ -493,7 +492,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         QDBusMessage introspect = QDBusMessage::createMethodCall(
             PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
             QStringLiteral("org.freedesktop.DBus.Introspectable"), QStringLiteral("Introspect"));
-        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(introspect, 3000), this);
+        auto* watcher = new QDBusPendingCallWatcher(
+            QDBusConnection::sessionBus().asyncCall(introspect, PhosphorProtocol::Service::DaemonReadyProbeTimeoutMs),
+            this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<QString> reply = *w;
@@ -601,15 +602,10 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
 {
     qCInfo(lcEffect) << "Clearing daemon compositor drag/overlay state before effect shutdown";
 
-    auto sendNoReply = [](const QString& interfaceName, const QString& methodName) {
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath, interfaceName, methodName);
-        QDBusConnection::sessionBus().send(msg);
-    };
-
-    sendNoReply(PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("clearForCompositorReconnect"));
-
-    sendNoReply(PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("hideOverlay"));
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
+                                                QStringLiteral("clearForCompositorReconnect"));
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Overlay,
+                                                QStringLiteral("hideOverlay"));
 }
 
 PlasmaZonesEffect::~PlasmaZonesEffect()

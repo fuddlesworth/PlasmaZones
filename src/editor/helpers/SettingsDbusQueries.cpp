@@ -2,22 +2,32 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "SettingsDbusQueries.h"
-#include "../../core/constants.h"
 #include "../../core/dbusvariantutils.h"
 #include "../../core/logging.h"
-#include "DbusHelpers.h"
+
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 
 #include <QDBusError>
-#include <QDBusInterface>
-#include <QDBusReply>
+#include <QDBusMessage>
 #include <QDBusVariant>
 
 namespace PlasmaZones {
 namespace SettingsDbusQueries {
 
-using DbusHelpers::createSettingsInterface;
-
 namespace {
+
+/// Unwrap a getSetting() reply into a plain QVariant. Returns an invalid
+/// QVariant on D-Bus error or if the reply shape is wrong. The daemon
+/// answers with an `sv` (variant-of-variant) so we have to step through
+/// QDBusVariant once.
+QVariant unwrapGetSetting(const QDBusMessage& reply)
+{
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        return {};
+    }
+    return reply.arguments().constFirst().value<QDBusVariant>().variant();
+}
 
 // WARNING: Only safe for settings whose values are never legitimately the
 // empty string. getSetting() in settingsadaptor.cpp returns an empty-
@@ -33,20 +43,12 @@ namespace {
 QVariantMap querySettingsPerKey_NonStringOnly(const QStringList& keys)
 {
     QVariantMap result;
-    QDBusInterface iface = createSettingsInterface();
-    if (!iface.isValid()) {
-        return result;
-    }
-    iface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
     for (const QString& key : keys) {
         if (key.isEmpty()) {
             continue;
         }
-        QDBusReply<QDBusVariant> reply = iface.call(QStringLiteral("getSetting"), key);
-        if (!reply.isValid()) {
-            continue;
-        }
-        QVariant value = reply.value().variant();
+        const QVariant value = unwrapGetSetting(PhosphorProtocol::ClientHelpers::syncCall(
+            PhosphorProtocol::Service::Interface::Settings, QStringLiteral("getSetting"), {key}));
         if (!value.isValid()) {
             continue;
         }
@@ -69,14 +71,9 @@ QVariantMap querySettingsBatch(const QStringList& keys)
         return QVariantMap();
     }
 
-    QDBusInterface settingsIface = createSettingsInterface();
-    if (!settingsIface.isValid()) {
-        return QVariantMap();
-    }
-    settingsIface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
-
-    QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("getSettings"), keys);
-    if (reply.isValid()) {
+    const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::Settings,
+                                                                         QStringLiteral("getSettings"), {keys});
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         // Defensively unwrap any QDBusArgument/QDBusVariant wrappers Qt may
         // leave in the map. For a flat a{sv} of scalar int/bool Qt normally
         // demarshals cleanly into plain types, but nested compound values
@@ -85,7 +82,7 @@ QVariantMap querySettingsBatch(const QStringList& keys)
         // handle — the result would silently fall through to caller-side
         // defaults. ShaderDbusQueries::queryShaderInfo does the same thing
         // against the same daemon object for the same reason.
-        QVariant converted = DBusVariantUtils::convertDbusArgument(QVariant::fromValue(reply.value()));
+        QVariant converted = DBusVariantUtils::convertDbusArgument(reply.arguments().constFirst());
         return converted.toMap();
     }
 
@@ -95,53 +92,41 @@ QVariantMap querySettingsBatch(const QStringList& keys)
     // Other error types (timeout, service unreachable) would also fail
     // per-key, so there's no point retrying those — return empty and let
     // callers fall back to hardcoded defaults.
-    const QDBusError::ErrorType errType = reply.error().type();
-    if (errType == QDBusError::UnknownMethod) {
-        qCWarning(lcDbus) << "getSettings() unavailable on daemon — falling back to per-key getSetting()."
-                          << "Restart plasmazones-daemon to pick up the batched path.";
-        return querySettingsPerKey_NonStringOnly(keys);
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        const QDBusError err(reply);
+        if (err.type() == QDBusError::UnknownMethod) {
+            qCWarning(lcDbus) << "getSettings() unavailable on daemon — falling back to per-key getSetting()."
+                              << "Restart plasmazones-daemon to pick up the batched path.";
+            return querySettingsPerKey_NonStringOnly(keys);
+        }
+        qCWarning(lcDbus) << "getSettings() failed:" << err.message() << "(type" << err.type() << ")";
     }
-
-    qCWarning(lcDbus) << "getSettings() failed:" << reply.error().message() << "(type" << errType << ")";
     return QVariantMap();
 }
 
 int queryIntSetting(const QString& settingKey, int defaultValue)
 {
-    QDBusInterface settingsIface = createSettingsInterface();
-    if (!settingsIface.isValid()) {
+    const QVariant value = unwrapGetSetting(PhosphorProtocol::ClientHelpers::syncCall(
+        PhosphorProtocol::Service::Interface::Settings, QStringLiteral("getSetting"), {settingKey}));
+    if (!value.isValid()) {
         return defaultValue;
     }
-    settingsIface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
-
-    QDBusReply<QDBusVariant> reply = settingsIface.call(QStringLiteral("getSetting"), settingKey);
-    if (!reply.isValid()) {
-        return defaultValue;
-    }
-
     bool ok = false;
-    const int value = reply.value().variant().toInt(&ok);
-    if (!ok || value < 0) {
+    const int result = value.toInt(&ok);
+    if (!ok || result < 0) {
         return defaultValue;
     }
-
-    return value;
+    return result;
 }
 
 bool queryBoolSetting(const QString& settingKey, bool defaultValue)
 {
-    QDBusInterface settingsIface = createSettingsInterface();
-    if (!settingsIface.isValid()) {
+    const QVariant value = unwrapGetSetting(PhosphorProtocol::ClientHelpers::syncCall(
+        PhosphorProtocol::Service::Interface::Settings, QStringLiteral("getSetting"), {settingKey}));
+    if (!value.isValid()) {
         return defaultValue;
     }
-    settingsIface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
-
-    QDBusReply<QDBusVariant> reply = settingsIface.call(QStringLiteral("getSetting"), settingKey);
-    if (!reply.isValid()) {
-        return defaultValue;
-    }
-
-    return reply.value().variant().toBool();
+    return value.toBool();
 }
 
 } // namespace SettingsDbusQueries

@@ -13,6 +13,7 @@
 #include <PhosphorScreens/Manager.h>
 #include "../core/supportreport.h"
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 
 #include <QDBusConnection>
 #include <QFutureWatcher>
@@ -162,7 +163,7 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
     // instead of having to parse the report string for "ERROR:".
     if (m_reportWatcher) {
         message.setDelayedReply(true);
-        auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Busy"),
+        auto error = message.createErrorReply(QString(PhosphorProtocol::Service::Error::Busy),
                                               QStringLiteral("A support report is already being generated"));
         QDBusConnection::sessionBus().send(error);
         return {};
@@ -172,7 +173,7 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
     // instead of feeding null pointers into collectSnapshot.
     if (!m_screenManager || !m_layoutManager || !m_autotileEngine) {
         message.setDelayedReply(true);
-        auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Shutdown"),
+        auto error = message.createErrorReply(QString(PhosphorProtocol::Service::Error::Shutdown),
                                               QStringLiteral("Daemon shutting down"));
         QDBusConnection::sessionBus().send(error);
         return {};
@@ -214,7 +215,7 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
             return; // Already cleaned up by the finished handler
         QObject::disconnect(weakWatcher, &QFutureWatcher<QString>::finished, nullptr, nullptr);
         weakWatcher->cancel();
-        auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Shutdown"),
+        auto error = message.createErrorReply(QString(PhosphorProtocol::Service::Error::Shutdown),
                                               QStringLiteral("Daemon shutting down"));
         QDBusConnection::sessionBus().send(error);
         weakWatcher->deleteLater();

@@ -17,11 +17,9 @@
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <QDBusConnection>
 #include <QDBusMessage>
-#include <QDBusInterface>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDBusReply>
 
 #include "pz_i18n.h"
 #include <QGuiApplication>

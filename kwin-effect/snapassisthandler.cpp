@@ -118,17 +118,10 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                 }
                 m_capture->captureCandidates(captureList);
 
-                QDBusMessage msg = QDBusMessage::createMethodCall(
-                    PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                    PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("showSnapAssist"));
-                msg << screenId << QVariant::fromValue(emptyZones) << QVariant::fromValue(candidates);
-                auto* callWatcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), m_effect);
-                connect(callWatcher, &QDBusPendingCallWatcher::finished, m_effect, [](QDBusPendingCallWatcher* cw) {
-                    if (cw->isError()) {
-                        qCWarning(lcSnapAssist) << "showSnapAssist D-Bus call failed:" << cw->error().message();
-                    }
-                    cw->deleteLater();
-                });
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("showSnapAssist"),
+                    {screenId, QVariant::fromValue(emptyZones), QVariant::fromValue(candidates)},
+                    QStringLiteral("showSnapAssist"));
                 qCInfo(lcSnapAssist) << "Snap Assist shown with" << candidates.size() << "candidates";
             });
 }

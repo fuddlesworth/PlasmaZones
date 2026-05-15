@@ -4,6 +4,7 @@
 #include "../plasmazoneseffect.h"
 
 #include <PhosphorIdentity/ScreenId.h>
+#include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <core/output.h>
@@ -158,13 +159,10 @@ QString PlasmaZonesEffect::resolveEffectiveScreenId(const QPoint& pos, const KWi
 
 void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId, uint64_t generation)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-        PhosphorProtocol::Service::Interface::Screen, QStringLiteral("getVirtualScreenConfig"));
-    msg << physicalScreenId;
-
-    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg);
-    auto* watcher = new QDBusPendingCallWatcher(call, this);
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Screen,
+                                                   QStringLiteral("getVirtualScreenConfig"), {physicalScreenId}),
+        this);
     QPointer<PlasmaZonesEffect> self(this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [self, physicalScreenId, generation](QDBusPendingCallWatcher* w) {
