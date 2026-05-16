@@ -2,7 +2,7 @@
     "releases": [
         {
             "version": "3.0.0",
-            "date": "2026-05-12",
+            "date": "2026-05-16",
             "highlights": [
                 "Virtual screens for ultrawide monitors: subdivide a physical monitor into independent logical screens, each with its own layouts, autotile state, snap-assist, OSDs, shortcuts, and per-desktop or per-activity assignments. New swap and rotate actions with a confirmation OSD",
                 "Animation App Rules let you assign motion curves, shader overrides, and per-event timings to specific apps. A two-layer resolver with leaf seeds gives widgets distinctive tunings even when they share a parent rule",
