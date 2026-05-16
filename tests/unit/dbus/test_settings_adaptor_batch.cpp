@@ -14,10 +14,21 @@
  */
 
 #include <QTest>
+#include <QDBusVariant>
+#include <QHash>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSignalSpy>
 #include <QString>
 #include <QStringList>
 #include <QVariant>
 #include <QVariantMap>
+
+#include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
+#include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/ProfileTree.h>
 
 #include "dbus/settingsadaptor.h"
 #include "../helpers/StubSettings.h"
@@ -25,6 +36,18 @@
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
+
+namespace {
+// Build a Profile carrying only an explicit duration — enough to assert
+// the motionProfileTree getter's baseline/override placement and the
+// debounced motionProfileTreeChanged emission.
+PhosphorAnimation::Profile profileWithDuration(qreal ms)
+{
+    PhosphorAnimation::Profile p;
+    p.duration = ms;
+    return p;
+}
+} // namespace
 
 // Counting-stub: overrides one setter so the guard-fires test can
 // distinguish "setter not invoked" (guard hit) from "setter invoked,
@@ -54,7 +77,7 @@ private Q_SLOTS:
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_settings = new CountingStubSettings(nullptr);
         m_parent = new QObject(nullptr);
-        m_adaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, m_parent);
+        m_adaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, /*profileRegistry=*/nullptr, m_parent);
     }
 
     void cleanup()
@@ -246,6 +269,82 @@ private Q_SLOTS:
         values[QStringLiteral("masterCount")] = 2;
         const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("autotile"), values);
         QVERIFY(ok);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Per-event motion-profile tree surface (PR #457).
+    //
+    // The motionProfileTree getter and the motionProfileTreeChanged signal
+    // only exist when SettingsAdaptor is constructed with a real
+    // PhosphorProfileRegistry. The init() fixture passes nullptr, so the
+    // getter must not be registered there at all — consumers fall back to
+    // the global animation duration.
+    // ─────────────────────────────────────────────────────────────────────
+    void testMotionProfileTree_absentWhenNoRegistry()
+    {
+        QVERIFY(!m_adaptor->getSettingKeys().contains(QStringLiteral("motionProfileTree")));
+    }
+
+    // With a registry injected, the getter flattens the merged profile set
+    // into a ProfileTree JSON blob: the Global profile becomes the tree
+    // baseline, every other path an override. Round-tripped back through
+    // ProfileTree so the assertion pins resolved durations, not wire shape.
+    void testMotionProfileTree_getterSerializesBaselineAndOverrides()
+    {
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        registry.registerProfile(PhosphorAnimation::ProfilePaths::Global, profileWithDuration(400.0));
+        registry.registerProfile(QStringLiteral("window.open"), profileWithDuration(900.0));
+
+        QObject parent;
+        auto* adaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, &registry, &parent);
+
+        QVERIFY(adaptor->getSettingKeys().contains(QStringLiteral("motionProfileTree")));
+
+        const QString json = adaptor->getSetting(QStringLiteral("motionProfileTree")).variant().toString();
+        QVERIFY(!json.isEmpty());
+
+        const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+        QVERIFY(doc.isObject());
+
+        PhosphorAnimation::CurveRegistry curves;
+        const PhosphorAnimation::ProfileTree tree = PhosphorAnimation::ProfileTree::fromJson(doc.object(), curves);
+
+        // Global landed as the baseline: a path with no override resolves
+        // to the baseline duration.
+        QCOMPARE(qRound(tree.resolve(QStringLiteral("window.close")).effectiveDuration()), 400);
+        // window.open landed as an override and wins over the baseline.
+        QVERIFY(tree.hasOverride(QStringLiteral("window.open")));
+        QCOMPARE(qRound(tree.resolve(QStringLiteral("window.open")).effectiveDuration()), 900);
+    }
+
+    // A single reloadFromOwner() batch emits one profileChanged per touched
+    // path plus a closing ownerReloaded — N+1 registry signals for one
+    // logical change. The adaptor's debounce timer must collapse that burst
+    // into exactly one motionProfileTreeChanged D-Bus emission.
+    void testMotionProfileTreeChanged_coalescesRegistryBurst()
+    {
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        registry.registerProfile(PhosphorAnimation::ProfilePaths::Global, profileWithDuration(400.0));
+
+        QObject parent;
+        auto* adaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, &registry, &parent);
+
+        QSignalSpy spy(adaptor, &SettingsAdaptor::motionProfileTreeChanged);
+        QVERIFY(spy.isValid());
+
+        QHash<QString, PhosphorAnimation::Profile> batch;
+        batch.insert(QStringLiteral("window.open"), profileWithDuration(100.0));
+        batch.insert(QStringLiteral("window.close"), profileWithDuration(200.0));
+        batch.insert(QStringLiteral("window.focus"), profileWithDuration(300.0));
+        registry.reloadFromOwner(QStringLiteral("test-owner"), batch);
+
+        // The registry signals fire synchronously; the single-shot debounce
+        // timer has only been (re)started, not yet fired.
+        QCOMPARE(spy.count(), 0);
+
+        // Spin the event loop until the coalesced emission lands.
+        QVERIFY(spy.wait(1000));
+        QCOMPARE(spy.count(), 1);
     }
 
 private:

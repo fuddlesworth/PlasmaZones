@@ -388,6 +388,12 @@ QString PhosphorProfileRegistry::ownerOf(const QString& path) const
     return m_owners.value(path);
 }
 
+QHash<QString, Profile> PhosphorProfileRegistry::snapshot() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_profiles;
+}
+
 int PhosphorProfileRegistry::profileCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);

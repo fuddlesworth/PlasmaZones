@@ -6,6 +6,9 @@
 #include "../config/settings.h" // For concrete Settings type
 #include "../core/dbusvariantutils.h"
 #include <PhosphorAnimation/AnimationAppRule.h>
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/ProfileTree.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
@@ -25,11 +28,14 @@ constexpr qsizetype kMaxShaderProfileTreeBytes = 64 * 1024;
 constexpr qsizetype kMaxAnimationAppRulesBytes = 64 * 1024;
 }
 
-SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry, QObject* parent)
+SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry,
+                                 PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_settings(settings)
     , m_shaderRegistry(shaderRegistry)
+    , m_profileRegistry(profileRegistry)
     , m_saveTimer(new QTimer(this))
+    , m_motionTreeNotifyTimer(new QTimer(this))
 {
     Q_ASSERT(settings);
     initializeRegistry();
@@ -42,8 +48,42 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegi
         qCInfo(lcDbusSettings) << "Settings save completed";
     });
 
+    // Configure the debounced motion-profile-tree notifier (see member doc).
+    m_motionTreeNotifyTimer->setSingleShot(true);
+    m_motionTreeNotifyTimer->setInterval(MotionTreeNotifyDebounceMs);
+    connect(m_motionTreeNotifyTimer, &QTimer::timeout, this, &SettingsAdaptor::motionProfileTreeChanged);
+
     // Connect to interface signals (DIP)
     connect(m_settings, &ISettings::settingsChanged, this, &SettingsAdaptor::settingsChanged);
+
+    // The per-event motion-profile registry is a second source of
+    // settings-shaped state: editing a `window.open` duration rewrites
+    // a `profiles/*.json` file, the daemon's ProfileLoader file-watch
+    // rescans it into the registry, and the registry fires
+    // profileChanged / profilesReloaded / ownerReloaded. The kwin-effect
+    // (a separate process) must re-fetch `motionProfileTree` when that
+    // happens, so bridge the registry mutations to a DEDICATED
+    // `motionProfileTreeChanged` D-Bus signal — NOT the generic
+    // `settingsChanged`. The Settings app listens only to
+    // `settingsChanged`; routing registry mutations there made the
+    // daemon echo the app's own immediate profile-file writes back
+    // through onExternalSettingsChanged(), which reset its value-change
+    // / save-discard detection. The effect subscribes to
+    // `motionProfileTreeChanged` specifically; the app never sees it.
+    //
+    // The three registry signals feed the debounce timer rather than
+    // motionProfileTreeChanged directly: a reloadFromOwner() batch emits
+    // one profileChanged per path plus a closing ownerReloaded, so a
+    // direct bridge would fan one logical change out into N+1 D-Bus
+    // emissions. start() on a single-shot timer collapses the burst.
+    if (m_profileRegistry) {
+        connect(m_profileRegistry, &PhosphorAnimation::PhosphorProfileRegistry::profileChanged, m_motionTreeNotifyTimer,
+                qOverload<>(&QTimer::start));
+        connect(m_profileRegistry, &PhosphorAnimation::PhosphorProfileRegistry::profilesReloaded,
+                m_motionTreeNotifyTimer, qOverload<>(&QTimer::start));
+        connect(m_profileRegistry, &PhosphorAnimation::PhosphorProfileRegistry::ownerReloaded, m_motionTreeNotifyTimer,
+                qOverload<>(&QTimer::start));
+    }
 
     // Drop shader caches whenever the registry reloads from disk. The
     // registry is per-process and injected via constructor; unit tests
@@ -88,6 +128,14 @@ void SettingsAdaptor::detach()
     if (m_shaderRegistry) {
         disconnect(m_shaderRegistry, nullptr, this, nullptr);
     }
+    if (m_profileRegistry) {
+        disconnect(m_profileRegistry, nullptr, this, nullptr);
+    }
+    // Cancel any pending coalesced motion-tree notification — its inputs
+    // are severed above and the daemon is tearing down. Constructed in
+    // the initializer list and never nulled, so no null-check (same as
+    // m_saveTimer).
+    m_motionTreeNotifyTimer->stop();
     // Clear the registries before nulling m_settings so a queued D-Bus
     // call that slipped past unregisterObject() lands on an empty-getter
     // hash (returning an empty QVariant) instead of the registered
@@ -100,6 +148,7 @@ void SettingsAdaptor::detach()
     m_cachedShaderDefaults.clear();
     m_settings = nullptr;
     m_shaderRegistry = nullptr;
+    m_profileRegistry = nullptr;
 }
 
 void SettingsAdaptor::scheduleSave()
@@ -544,6 +593,40 @@ void SettingsAdaptor::initializeRegistry()
             return true;
         };
         m_schemas[QStringLiteral("animationAppRules")] = QStringLiteral("string");
+    }
+
+    // Per-event motion-profile tree (read-only, JSON blob round-trip).
+    //
+    // The merged per-event `PhosphorAnimation::Profile` set — every
+    // entry the daemon's `m_profileRegistry` holds, which is the SAME
+    // registry the OverlayService SurfaceAnimator resolves OSD / popup
+    // durations from. Settings persists per-event overrides as one
+    // `profiles/<path>.json` file each; the daemon's ProfileLoader
+    // scans them into the registry, and `publishActiveAnimationProfile`
+    // registers the settings-driven `Global` profile on top.
+    //
+    // The kwin-effect lives in a separate process and cannot share the
+    // registry object, so the merged set is flattened into a
+    // `ProfileTree` and shipped over the bus: `Global` becomes the
+    // tree baseline, every other path an override. The effect resolves
+    // per-event durations from the tree exactly as the SurfaceAnimator
+    // resolves them from the registry. Read-only — Settings owns the
+    // authoritative per-event files, never the effect.
+    if (m_profileRegistry) {
+        auto* registry = m_profileRegistry;
+        m_getters[QStringLiteral("motionProfileTree")] = [registry]() {
+            const QHash<QString, PhosphorAnimation::Profile> profiles = registry->snapshot();
+            PhosphorAnimation::ProfileTree tree;
+            for (auto it = profiles.constBegin(); it != profiles.constEnd(); ++it) {
+                if (it.key() == PhosphorAnimation::ProfilePaths::Global) {
+                    tree.setBaseline(it.value());
+                } else {
+                    tree.setOverride(it.key(), it.value());
+                }
+            }
+            return QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
+        };
+        m_schemas[QStringLiteral("motionProfileTree")] = QStringLiteral("string");
     }
 
     // Phase 6: shader search paths (read-only, for KWin effect registry population).
