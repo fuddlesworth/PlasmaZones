@@ -159,13 +159,19 @@ QString PlasmaZonesEffect::resolveEffectiveScreenId(const QPoint& pos, const KWi
 
 void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId, uint64_t generation)
 {
+    // Bump this physId's fetch sequence. The async reply below applies to
+    // m_virtualScreenDefs only if this is still the latest fetch for the
+    // screen — otherwise a slower reply for an older config could land last
+    // and clobber a newer one (remove-then-readd raced through D-Bus).
+    const uint64_t seq = ++m_vsFetchSeqPerPhysId[physicalScreenId];
+
     auto* watcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Screen,
                                                    QStringLiteral("getVirtualScreenConfig"), {physicalScreenId}),
         this);
     QPointer<PlasmaZonesEffect> self(this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [self, physicalScreenId, generation](QDBusPendingCallWatcher* w) {
+            [self, physicalScreenId, generation, seq](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
                 if (!self)
                     return;
@@ -186,10 +192,26 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 };
 
                 QDBusPendingReply<QString> reply = *w;
+
+                // A newer fetch for this physId issued after this one makes
+                // this reply stale: its payload describes a superseded
+                // config. Drop it without touching m_virtualScreenDefs or
+                // m_virtualScreensReady — the latest fetch's reply owns those
+                // — but still run countdownVsGate so a startup batch's reply
+                // tally isn't left hanging on the superseded call.
+                const bool isLatest = self->m_vsFetchSeqPerPhysId.value(physicalScreenId) == seq;
+
                 if (reply.isError()) {
                     qCDebug(lcEffect) << "fetchVirtualScreenConfig: no virtual screens for" << physicalScreenId
                                       << reply.error().message();
-                    self->m_virtualScreenDefs.remove(physicalScreenId);
+                    if (isLatest) {
+                        self->m_virtualScreenDefs.remove(physicalScreenId);
+                    }
+                    countdownVsGate();
+                    return;
+                }
+
+                if (!isLatest) {
                     countdownVsGate();
                     return;
                 }

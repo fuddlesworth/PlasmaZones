@@ -457,18 +457,30 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         m_lastEffectiveScreenId.clear();
     });
 
-    // Connect to daemon's settingsChanged D-Bus signal
-    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                          PhosphorProtocol::Service::Interface::Settings,
-                                          QStringLiteral("settingsChanged"), this, SLOT(slotSettingsChanged()));
-    qCInfo(lcEffect) << "Connected to daemon settingsChanged D-Bus signal";
+    // Connect to daemon's settingsChanged D-Bus signal. A failed connect is
+    // silent otherwise — check the return so a broken subscription is
+    // debuggable instead of looking like a daemon that never emits.
+    const bool settingsConnected =
+        QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                              PhosphorProtocol::Service::Interface::Settings,
+                                              QStringLiteral("settingsChanged"), this, SLOT(slotSettingsChanged()));
+    if (settingsConnected) {
+        qCInfo(lcEffect) << "Connected to daemon settingsChanged D-Bus signal";
+    } else {
+        qCWarning(lcEffect) << "Failed to connect to daemon settingsChanged D-Bus signal";
+    }
 
     // Connect to virtual screen changes — daemon emits this when a physical screen's
     // virtual subdivisions are added, removed, or modified.
-    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                          PhosphorProtocol::Service::Interface::Screen,
-                                          QStringLiteral("virtualScreensChanged"), this,
-                                          SLOT(onVirtualScreensChanged(QString)));
+    const bool vsChangedConnected = QDBusConnection::sessionBus().connect(
+        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+        PhosphorProtocol::Service::Interface::Screen, QStringLiteral("virtualScreensChanged"), this,
+        SLOT(onVirtualScreensChanged(QString)));
+    if (vsChangedConnected) {
+        qCInfo(lcEffect) << "Connected to daemon virtualScreensChanged D-Bus signal";
+    } else {
+        qCWarning(lcEffect) << "Failed to connect to daemon virtualScreensChanged D-Bus signal";
+    }
 
     // Connect to keyboard navigation D-Bus signals
     connectNavigationSignals();

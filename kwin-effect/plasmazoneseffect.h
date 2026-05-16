@@ -743,6 +743,13 @@ private:
     bool m_inDaemonGeometryApply = false;
     int m_pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
     uint64_t m_vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs
+    /// Per-physId fetchVirtualScreenConfig sequence. Every fetch bumps its
+    /// physId's entry; the async reply applies to m_virtualScreenDefs only if
+    /// it is still the latest. Without this, two live changes in quick
+    /// succession (e.g. remove-then-readd a VS) race: replies can land
+    /// out-of-order and a stale payload clobbers the fresh one, leaving
+    /// resolveEffectiveScreenId tagging windows with dead "physId/vs:N" ids.
+    QHash<QString, uint64_t> m_vsFetchSeqPerPhysId;
     bool m_daemonReadyWindowStateProcessed = false; ///< re-entrancy guard for processDaemonReadyWindowState
 
     // Screen ID cache: connector name → EDID screen ID (manufacturer:model:serial).
