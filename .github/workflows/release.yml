@@ -254,7 +254,7 @@ jobs:
         run: |
           zypper -n install \
             cmake ninja extra-cmake-modules gcc-c++ \
-            qt6-core-private-devel qt6-gui-private-devel \
+            qt6-core-private-devel qt6-gui-private-devel qt6-quick-private-devel \
             'cmake(Qt6Core)' 'cmake(Qt6DBus)' 'cmake(Qt6Gui)' \
             'cmake(Qt6Qml)' 'cmake(Qt6Quick)' 'cmake(Qt6QuickControls2)' \
             'cmake(Qt6Widgets)' 'cmake(Qt6Concurrent)' \
@@ -558,6 +558,13 @@ jobs:
     name: Create GitHub Release
     needs: [version, build-deb, build-rpm, build-rpm-opensuse, build-arch, build-generic, build-nix]
     runs-on: ubuntu-latest
+    # Create the release even if some package builds failed — a release
+    # with most packages beats no release at all. always() is required so
+    # a failed job in needs doesn't skip this; the version guard still
+    # blocks publishing on an unparsed/invalid tag. The asset step globs
+    # whatever artifacts exist, so a missing distro just means one fewer
+    # asset. Re-running the tag re-cuts cleanly (delete-and-recreate).
+    if: ${{ always() && needs.version.result == 'success' }}
     # Only this job writes release assets back to the repo.
     permissions:
       contents: write
