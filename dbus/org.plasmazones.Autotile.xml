@@ -145,7 +145,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Algorithm ID to query."/>
             </arg>
             <arg name="info" type="(sssbbbbdibsbb)" direction="out">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::AlgorithmInfoEntry"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::AlgorithmInfoEntry"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Struct: (id, name, description, supportsMasterCount, supportsSplitRatio, centerLayout, producesOverlappingZones, defaultSplitRatio, defaultMaxWindows, isScripted, zoneNumberDisplay, isUserScript, supportsMemory)."/>
             </arg>
         </method>
@@ -188,7 +188,7 @@
         <signal name="windowsTileRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows should be moved to new geometries (batch)."/>
             <arg name="tileRequests" type="a(siiiissbb)">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::TileRequestList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::TileRequestList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, zoneId, screenId, monocle, floating)."/>
             </arg>
         </signal>
@@ -247,7 +247,7 @@
         <method name="windowsOpenedBatch">
             <annotation name="org.gtk.GDBus.DocString" value="Batch window-opened notifications: process multiple windowOpened in one D-Bus call. Used on daemon startup/restart and autotile toggle-on. Array of (windowId, screenId, minWidth, minHeight)."/>
             <arg name="entries" type="a(ssii)" direction="in">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PlasmaZones::WindowOpenedList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PhosphorProtocol::WindowOpenedList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of window-opened entry structs."/>
             </arg>
         </method>

@@ -57,7 +57,7 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
                                  &SnapAdaptor::handleBatchedResnap));
 
     // Batched geometry application: rotate / resnap / snap-all paths build
-    // a WindowGeometryList and emit it here. WTA's applyGeometriesBatch
+    // a PhosphorProtocol::WindowGeometryList and emit it here. WTA's applyGeometriesBatch
     // signal is the D-Bus surface.
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::applyGeometriesBatch, adaptor,
                                  &WindowTrackingAdaptor::applyGeometriesBatch));

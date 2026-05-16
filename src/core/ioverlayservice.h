@@ -29,9 +29,6 @@ class Zone;
 
 namespace PlasmaZones {
 
-using PhosphorProtocol::EmptyZoneList;
-using PhosphorProtocol::SnapAssistCandidateList;
-
 class ISettings;
 
 /**
@@ -110,8 +107,8 @@ public:
     virtual void hideShaderPreview() = 0;
 
     // Snap Assist overlay (window picker after snapping)
-    virtual void showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
-                                const SnapAssistCandidateList& candidates) = 0;
+    virtual void showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
+                                const PhosphorProtocol::SnapAssistCandidateList& candidates) = 0;
     virtual void hideSnapAssist() = 0;
     virtual bool isSnapAssistVisible() const = 0;
     /// Deliver a thumbnail as raw ARGB32 pixels. @p pixels MUST be exactly
@@ -164,8 +161,8 @@ Q_SIGNALS:
      * `showSnapAssist` call sequence (not in response to this signal); the
      * signal is exposed for external observers (KCMs, debugging tools).
      */
-    void snapAssistShown(const QString& screenId, const EmptyZoneList& emptyZones,
-                         const SnapAssistCandidateList& candidates);
+    void snapAssistShown(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
+                         const PhosphorProtocol::SnapAssistCandidateList& candidates);
 
     /**
      * @brief Emitted when Snap Assist overlay is dismissed (by selection, Escape, or any other means).

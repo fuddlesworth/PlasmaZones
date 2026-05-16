@@ -26,7 +26,7 @@ namespace PlasmaZones {
 void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons,
                                     int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
                                     QString& releaseScreenIdOut, bool& restoreSizeOnlyOut, bool& snapAssistRequestedOut,
-                                    EmptyZoneList& emptyZonesOut, QString& resolvedZoneIdOut)
+                                    PhosphorProtocol::EmptyZoneList& emptyZonesOut, QString& resolvedZoneIdOut)
 {
     // Initialize output parameters
     // shouldApplyGeometry: true = KWin should set window to (snapX, snapY, snapWidth, snapHeight)
@@ -34,7 +34,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // (drag-to-unsnap)
     // resolvedZoneIdOut: the primary zone ID the window snapped to, across every snap
     //   path (hover-detect, zone selector, modifier multi-zone). Empty when no snap
-    //   happened. The caller uses this for DragOutcome.zoneId, which the post-Phase-1B
+    //   happened. The caller uses this for PhosphorProtocol::DragOutcome.zoneId, which the post-Phase-1B
     //   validator requires on ApplySnap — see drag_protocol.cpp.
     snapX = 0;
     snapY = 0;
@@ -221,7 +221,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                         zoneUuid = QStringLiteral("zoneselector-%1-%2").arg(selectedLayoutId).arg(selectedZoneIndex);
                     }
                     // Publish the resolved id so drag_protocol.cpp can populate
-                    // DragOutcome.zoneId. Without this, the zone-selector path
+                    // PhosphorProtocol::DragOutcome.zoneId. Without this, the zone-selector path
                     // would still surface m_currentZoneId (which is never written
                     // by this branch) and the post-Phase-1B validator would drop
                     // the ApplySnap outcome for an empty zoneId.
@@ -430,10 +430,10 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // by PhosphorPlacement::WindowTrackingService::getEmptyZones()/calculateSnapAllWindows().
     const int desktopFilter = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
     QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(screenId, desktopFilter);
-    EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(m_screenManager, layout, screenId, releaseScreen,
-                                                                 m_settings, [&occupied](const PhosphorZones::Zone* z) {
-                                                                     return !occupied.contains(z->id());
-                                                                 });
+    PhosphorProtocol::EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(
+        m_screenManager, layout, screenId, releaseScreen, m_settings, [&occupied](const PhosphorZones::Zone* z) {
+            return !occupied.contains(z->id());
+        });
 
     if (emptyZones.isEmpty()) {
         return;

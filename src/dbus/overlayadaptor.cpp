@@ -55,11 +55,11 @@ OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDet
         Q_EMIT zoneHighlightChanged(QString());
     });
 
-    connect(
-        m_overlayService, &IOverlayService::snapAssistShown, this,
-        [this](const QString& screenId, const EmptyZoneList& emptyZones, const SnapAssistCandidateList& candidates) {
-            Q_EMIT snapAssistShown(screenId, emptyZones, candidates);
-        });
+    connect(m_overlayService, &IOverlayService::snapAssistShown, this,
+            [this](const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
+                   const PhosphorProtocol::SnapAssistCandidateList& candidates) {
+                Q_EMIT snapAssistShown(screenId, emptyZones, candidates);
+            });
 
     // Mirror snapAssistShown's path on the way out so external observers
     // (KCMs, debugging tools, the kwin-effect's thumbnail-injection
@@ -216,8 +216,8 @@ void OverlayAdaptor::hideShaderPreview()
     m_overlayService->hideShaderPreview();
 }
 
-bool OverlayAdaptor::showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
-                                    const SnapAssistCandidateList& candidates)
+bool OverlayAdaptor::showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
+                                    const PhosphorProtocol::SnapAssistCandidateList& candidates)
 {
     if (!m_overlayService) {
         qCWarning(lcDbus) << "showSnapAssist: overlay service not wired";
@@ -239,7 +239,7 @@ bool OverlayAdaptor::showSnapAssist(const QString& screenId, const EmptyZoneList
     if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         auto* mgr = m_screenManager;
         if (mgr && mgr->hasVirtualScreens(screenId) && !emptyZones.isEmpty()) {
-            const EmptyZoneEntry& first = emptyZones.first();
+            const PhosphorProtocol::EmptyZoneEntry& first = emptyZones.first();
             QPoint center(first.x + first.width / 2, first.y + first.height / 2);
             QString vsId = mgr->effectiveScreenAt(center);
             if (!vsId.isEmpty()) {

@@ -65,7 +65,7 @@ void SnapAdaptor::windowUnsnapped(const QString& windowId)
     m_engine->uncommitSnap(windowId);
 }
 
-void SnapAdaptor::windowsSnappedBatch(const SnapConfirmationList& entries)
+void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationList& entries)
 {
     qCInfo(lcDbusWindow) << "windowsSnappedBatch: processing" << entries.size() << "entries";
 
@@ -233,25 +233,26 @@ void SnapAdaptor::setWindowFloat(const QString& windowId, bool floating)
     }
 }
 
-PlasmaZones::UnfloatRestoreResult SnapAdaptor::calculateUnfloatRestore(const QString& windowId, const QString& screenId)
+PhosphorProtocol::UnfloatRestoreResult SnapAdaptor::calculateUnfloatRestore(const QString& windowId,
+                                                                            const QString& screenId)
 {
     if (windowId.isEmpty()) {
-        return UnfloatRestoreResult{};
+        return PhosphorProtocol::UnfloatRestoreResult{};
     }
 
     if (!m_engine) {
-        return UnfloatRestoreResult{};
+        return PhosphorProtocol::UnfloatRestoreResult{};
     }
 
     UnfloatResult unfloat = m_engine->resolveUnfloatGeometry(windowId, screenId);
     if (!unfloat.found) {
         qCDebug(lcDbusWindow) << "calculateUnfloatRestore: no restore target for" << windowId;
-        return UnfloatRestoreResult{};
+        return PhosphorProtocol::UnfloatRestoreResult{};
     }
 
     qCDebug(lcDbusWindow) << "calculateUnfloatRestore for" << windowId << "-> zones:" << unfloat.zoneIds
                           << "geo:" << unfloat.geometry;
-    return UnfloatRestoreResult{
+    return PhosphorProtocol::UnfloatRestoreResult{
         true,
         unfloat.zoneIds,
         unfloat.screenId,

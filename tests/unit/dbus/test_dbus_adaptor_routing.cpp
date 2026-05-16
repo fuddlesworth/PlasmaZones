@@ -6,8 +6,8 @@
  * @brief End-to-end D-Bus routing test for typed-struct slot dispatch.
  *
  * Regression guard for the 2026-04-10 resnap crash. Root cause: slots written
- * as `void slot(const WindowOpenedList&)` inside `namespace PlasmaZones` were
- * recorded by moc with the unqualified type name "WindowOpenedList", but the
+ * as `void slot(const PhosphorProtocol::WindowOpenedList&)` inside `namespace PlasmaZones` were
+ * recorded by moc with the unqualified type name "PhosphorProtocol::WindowOpenedList", but the
  * metatype was registered via `Q_DECLARE_METATYPE(PhosphorProtocol::WindowOpenedList)`
  * under the qualified name "PhosphorProtocol::WindowOpenedList". QDBusAbstractAdaptor
  * dispatch couldn't resolve the type → "Could not find slot ..." at runtime →
@@ -231,15 +231,15 @@ private Q_SLOTS:
     void metatypesAreRegisteredUnderBothNames()
     {
         QVERIFY(QMetaType::fromName("PhosphorProtocol::WindowOpenedList").isValid());
-        QVERIFY(QMetaType::fromName("WindowOpenedList").isValid());
+        QVERIFY(QMetaType::fromName("PhosphorProtocol::WindowOpenedList").isValid());
         QCOMPARE(QMetaType::fromName("PhosphorProtocol::WindowOpenedList").id(),
-                 QMetaType::fromName("WindowOpenedList").id());
+                 QMetaType::fromName("PhosphorProtocol::WindowOpenedList").id());
 
         QVERIFY(QMetaType::fromName("PhosphorProtocol::MoveTargetResult").isValid());
-        QVERIFY(QMetaType::fromName("MoveTargetResult").isValid());
+        QVERIFY(QMetaType::fromName("PhosphorProtocol::MoveTargetResult").isValid());
 
         QVERIFY(QMetaType::fromName("PhosphorProtocol::WindowStateEntry").isValid());
-        QVERIFY(QMetaType::fromName("WindowStateEntry").isValid());
+        QVERIFY(QMetaType::fromName("PhosphorProtocol::WindowStateEntry").isValid());
     }
 
 private:

@@ -19,11 +19,6 @@ class SnapEngine;
 
 namespace PlasmaZones {
 
-using PhosphorProtocol::SnapAllResultList;
-using PhosphorProtocol::SnapConfirmationList;
-using PhosphorProtocol::UnfloatRestoreResult;
-using PhosphorProtocol::WindowGeometryList;
-
 class ScreenModeRouter;
 class WindowTrackingAdaptor;
 class ISettings;
@@ -114,7 +109,7 @@ public Q_SLOTS:
     /**
      * @brief Batch snap confirmations from the KWin effect
      */
-    void windowsSnappedBatch(const PlasmaZones::SnapConfirmationList& entries);
+    void windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationList& entries);
 
     /**
      * @brief Record that a window class was USER-snapped (not auto-snapped)
@@ -178,7 +173,7 @@ public Q_SLOTS:
     /**
      * @brief Calculate snap assignments for all provided windows
      */
-    PlasmaZones::SnapAllResultList calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId);
+    PhosphorProtocol::SnapAllResultList calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId);
 
     /**
      * @brief Trigger snap-all-windows from daemon shortcut
@@ -283,9 +278,9 @@ public Q_SLOTS:
      * @brief Calculate unfloat restore geometry and zone IDs in a single call
      * @param windowId Window identifier
      * @param screenId Screen for geometry calculation
-     * @return UnfloatRestoreResult with found, zoneIds, screenName, x, y, width, height
+     * @return PhosphorProtocol::UnfloatRestoreResult with found, zoneIds, screenName, x, y, width, height
      */
-    PlasmaZones::UnfloatRestoreResult calculateUnfloatRestore(const QString& windowId, const QString& screenId);
+    PhosphorProtocol::UnfloatRestoreResult calculateUnfloatRestore(const QString& windowId, const QString& screenId);
 
     /**
      * @brief Unsnap a window for floating: save its zone to restore on unfloat

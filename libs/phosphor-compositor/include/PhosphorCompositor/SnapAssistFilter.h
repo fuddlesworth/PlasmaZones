@@ -14,9 +14,6 @@
 
 namespace PhosphorCompositor {
 
-using PhosphorProtocol::SnapAssistCandidate;
-using PhosphorProtocol::SnapAssistCandidateList;
-
 /**
  * @brief Compositor-agnostic snap assist candidate builder
  *
@@ -41,10 +38,9 @@ namespace SnapAssistFilter {
  * @param snappedWindowIds  Set of window IDs that are already snapped
  * @return Typed list of candidates (windowId, icon, caption; compositorHandle left empty — compositor fills it)
  */
-PHOSPHORCOMPOSITOR_EXPORT SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge,
-                                                                  const QString& excludeWindowId,
-                                                                  const QString& screenId,
-                                                                  const QSet<QString>& snappedWindowIds);
+PHOSPHORCOMPOSITOR_EXPORT PhosphorProtocol::SnapAssistCandidateList
+buildCandidates(ICompositorBridge* bridge, const QString& excludeWindowId, const QString& screenId,
+                const QSet<QString>& snappedWindowIds);
 
 } // namespace SnapAssistFilter
 } // namespace PhosphorCompositor

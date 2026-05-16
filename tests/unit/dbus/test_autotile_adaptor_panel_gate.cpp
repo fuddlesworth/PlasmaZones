@@ -78,9 +78,11 @@ private Q_SLOTS:
         // Batch-open path: queues atomically on top of the existing entry,
         // preserving order so flush replays them as if the batch had arrived
         // after panel ready.
-        WindowOpenedList batch;
-        batch.append(WindowOpenedEntry{QStringLiteral("firefox|uuid-b"), QStringLiteral("HDMI-1"), 800, 600});
-        batch.append(WindowOpenedEntry{QStringLiteral("vesktop|uuid-c"), QStringLiteral("HDMI-1"), 940, 500});
+        PhosphorProtocol::WindowOpenedList batch;
+        batch.append(
+            PhosphorProtocol::WindowOpenedEntry{QStringLiteral("firefox|uuid-b"), QStringLiteral("HDMI-1"), 800, 600});
+        batch.append(
+            PhosphorProtocol::WindowOpenedEntry{QStringLiteral("vesktop|uuid-c"), QStringLiteral("HDMI-1"), 940, 500});
         adaptor.windowsOpenedBatch(batch);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 3);
 
@@ -131,9 +133,10 @@ private Q_SLOTS:
         QObject adaptorParent;
         AutotileAdaptor adaptor(&engine, &mgr, PlasmaZones::TestHelpers::testRegistry(), &adaptorParent);
 
-        WindowOpenedList batch;
+        PhosphorProtocol::WindowOpenedList batch;
         for (int i = 0; i < 5; ++i) {
-            batch.append(WindowOpenedEntry{QStringLiteral("app|uuid-%1").arg(i), QStringLiteral("HDMI-1"), 0, 0});
+            batch.append(PhosphorProtocol::WindowOpenedEntry{QStringLiteral("app|uuid-%1").arg(i),
+                                                             QStringLiteral("HDMI-1"), 0, 0});
         }
         adaptor.windowsOpenedBatch(batch);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 5);

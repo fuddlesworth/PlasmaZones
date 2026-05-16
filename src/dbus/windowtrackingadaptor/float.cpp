@@ -110,7 +110,7 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
 
     // Emit unified state change
     Q_EMIT windowStateChanged(windowId,
-                              WindowStateEntry{
+                              PhosphorProtocol::WindowStateEntry{
                                   windowId,
                                   m_service->zoneForWindow(windowId),
                                   screen,

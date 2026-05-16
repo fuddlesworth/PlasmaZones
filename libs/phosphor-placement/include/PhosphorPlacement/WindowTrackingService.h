@@ -52,11 +52,6 @@ class ScreenManager;
 
 namespace PhosphorPlacement {
 
-using PhosphorProtocol::EmptyZoneList;
-using PhosphorProtocol::WindowGeometryEntry;
-using PhosphorProtocol::WindowGeometryList;
-using PhosphorProtocol::WindowStateEntry;
-
 /**
  * @brief Window-zone tracking service (business logic layer)
  *
@@ -455,9 +450,9 @@ public:
     /**
      * @brief Get typed list of all empty zones for Snap Assist continuation
      * @param screenId Screen to find layout for (e.g. DP-1)
-     * @return EmptyZoneList of empty zone entries with overlay-local geometry
+     * @return PhosphorProtocol::EmptyZoneList of empty zone entries with overlay-local geometry
      */
-    EmptyZoneList getEmptyZones(const QString& screenId) const;
+    PhosphorProtocol::EmptyZoneList getEmptyZones(const QString& screenId) const;
 
     /**
      * @brief Get geometry for a zone on a specific screen

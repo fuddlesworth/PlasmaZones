@@ -14,9 +14,6 @@
 
 namespace PlasmaZones {
 
-using PhosphorProtocol::BridgeRegistrationResult;
-using PhosphorProtocol::WindowGeometryList;
-
 /**
  * @brief D-Bus adaptor for the compositor bridge protocol
  *
@@ -75,7 +72,7 @@ public Q_SLOTS:
      * @param compositorName Name of the compositor (e.g. "kwin", "hyprland", "sway")
      * @param version Compositor version string
      * @param capabilities List of supported capabilities
-     * @return BridgeRegistrationResult struct: {apiVersion, bridgeName, sessionId}
+     * @return PhosphorProtocol::BridgeRegistrationResult struct: {apiVersion, bridgeName, sessionId}
      *
      * Capabilities:
      *   "borderless"  — bridge supports setWindowBorderless
@@ -84,8 +81,8 @@ public Q_SLOTS:
      *   "borders"     — bridge supports native window border rendering
      *   "modifiers"   — bridge reports keyboard modifier state
      */
-    PlasmaZones::BridgeRegistrationResult registerBridge(const QString& compositorName, const QString& version,
-                                                         const QStringList& capabilities);
+    PhosphorProtocol::BridgeRegistrationResult registerBridge(const QString& compositorName, const QString& version,
+                                                              const QStringList& capabilities);
 
     /**
      * @brief Report keyboard modifier and mouse button state
@@ -111,7 +108,7 @@ Q_SIGNALS:
      * @param batchJson JSON array of [{windowId, x, y, width, height, targetZoneId, ...}]
      * @param action Operation type ("rotate", "resnap", "snap_all")
      */
-    void applyWindowGeometriesBatch(const PlasmaZones::WindowGeometryList& geometries, const QString& action);
+    void applyWindowGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Window focus and stacking commands (daemon → compositor)

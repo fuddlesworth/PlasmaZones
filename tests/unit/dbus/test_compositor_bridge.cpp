@@ -166,7 +166,7 @@ private Q_SLOTS:
 
     void testRegisterBridge_returnsApiVersion()
     {
-        BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
+        PhosphorProtocol::BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
             QStringLiteral("kwin"), QStringLiteral("3"), {QStringLiteral("borderless"), QStringLiteral("animation")});
 
         QCOMPARE(result.apiVersion, QStringLiteral("3"));
@@ -210,8 +210,8 @@ private Q_SLOTS:
     {
         QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
 
-        BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"),
-                                                                          {QStringLiteral("borderless")});
+        PhosphorProtocol::BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
+            QStringLiteral("kwin"), QStringLiteral("2"), {QStringLiteral("borderless")});
 
         QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));
         QCOMPARE(result.apiVersion, QStringLiteral("3"));
@@ -223,7 +223,7 @@ private Q_SLOTS:
     // below MinPeerApiVersion and must also be rejected.
     void testRegisterBridge_rejectsNonNumericVersion()
     {
-        BridgeRegistrationResult result =
+        PhosphorProtocol::BridgeRegistrationResult result =
             m_bridgeAdaptor->registerBridge(QStringLiteral("weird-compositor"), QStringLiteral("garbage"), {});
 
         QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));

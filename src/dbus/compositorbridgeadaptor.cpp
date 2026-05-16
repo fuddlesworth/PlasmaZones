@@ -25,8 +25,9 @@ CompositorBridgeAdaptor::CompositorBridgeAdaptor(QObject* parent)
 {
 }
 
-BridgeRegistrationResult CompositorBridgeAdaptor::registerBridge(const QString& compositorName, const QString& version,
-                                                                 const QStringList& capabilities)
+PhosphorProtocol::BridgeRegistrationResult CompositorBridgeAdaptor::registerBridge(const QString& compositorName,
+                                                                                   const QString& version,
+                                                                                   const QStringList& capabilities)
 {
     if (!m_bridgeName.isEmpty()) {
         qCWarning(lcDbusWindow) << "Compositor bridge re-registration: replacing" << m_bridgeName << m_bridgeVersion
@@ -40,7 +41,7 @@ BridgeRegistrationResult CompositorBridgeAdaptor::registerBridge(const QString& 
         qCWarning(lcDbusWindow) << "Compositor bridge REJECTED: peer apiVersion" << peerApiVersion << "is below minimum"
                                 << DaemonMinPeerApiVersion << "(compositor:" << compositorName << ")."
                                 << "Update the effect to match the daemon.";
-        BridgeRegistrationResult result;
+        PhosphorProtocol::BridgeRegistrationResult result;
         result.apiVersion = QString::number(DaemonApiVersion);
         result.bridgeName = compositorName;
         result.sessionId = QStringLiteral("REJECTED");
@@ -56,7 +57,7 @@ BridgeRegistrationResult CompositorBridgeAdaptor::registerBridge(const QString& 
 
     Q_EMIT bridgeRegistered(compositorName, version, capabilities);
 
-    BridgeRegistrationResult result;
+    PhosphorProtocol::BridgeRegistrationResult result;
     result.apiVersion = QString::number(DaemonApiVersion);
     result.bridgeName = compositorName;
     result.sessionId = QUuid::createUuid().toString(QUuid::WithoutBraces);

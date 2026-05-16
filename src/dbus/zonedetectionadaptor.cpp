@@ -75,7 +75,7 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
     if (foundZone) {
         m_zoneDetector->highlightZone(foundZone);
         // Trigger overlay update via signal (decoupled)
-        ZoneGeometryRect geom = getZoneGeometry(foundZone->id().toString());
+        PhosphorProtocol::ZoneGeometryRect geom = getZoneGeometry(foundZone->id().toString());
         Q_EMIT zoneDetected(foundZone->id().toString(), geom);
         return foundZone->id().toString();
     }
@@ -84,20 +84,21 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
     return QString();
 }
 
-ZoneGeometryRect ZoneDetectionAdaptor::getZoneGeometry(const QString& zoneId)
+PhosphorProtocol::ZoneGeometryRect ZoneDetectionAdaptor::getZoneGeometry(const QString& zoneId)
 {
     // Use empty screen name to fall back to primary screen
     return getZoneGeometryForScreen(zoneId, QString());
 }
 
-ZoneGeometryRect ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenId)
+PhosphorProtocol::ZoneGeometryRect ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId,
+                                                                                  const QString& screenId)
 {
     // Find the zone - it may be in any layout (not just activeLayout)
     // when per-screen layout assignments are used
     PhosphorZones::Zone* zone =
         DbusHelpers::findZoneInAnyLayout(m_layoutManager, zoneId, QStringLiteral("get zone geometry"));
     if (!zone) {
-        return ZoneGeometryRect{};
+        return PhosphorProtocol::ZoneGeometryRect{};
     }
 
     // Find target screen - use specified screen ID or fall back to primary
@@ -108,7 +109,7 @@ ZoneGeometryRect ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& z
         qCWarning(lcDbus) << "getZoneGeometryForScreen: screen not found:" << screenId;
     }
     if (!screen) {
-        return ZoneGeometryRect{};
+        return PhosphorProtocol::ZoneGeometryRect{};
     }
 
     // Use geometry with gaps (matches snap behavior), auto-resolving virtual screen geometry
@@ -119,7 +120,7 @@ ZoneGeometryRect ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& z
     QRect snapped = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, resolvedScreenId, zoneLayout,
                                                             m_settings);
 
-    return ZoneGeometryRect::fromRect(snapped);
+    return PhosphorProtocol::ZoneGeometryRect::fromRect(snapped);
 }
 
 QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenId)
@@ -332,9 +333,9 @@ QString ZoneDetectionAdaptor::getZoneByNumber(int zoneNumber, const QString& scr
     return zone->id().toString();
 }
 
-NamedZoneGeometryList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenId)
+PhosphorProtocol::NamedZoneGeometryList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenId)
 {
-    NamedZoneGeometryList result;
+    PhosphorProtocol::NamedZoneGeometryList result;
 
     QString resolvedScreenId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
     auto* layout = m_layoutManager->resolveLayoutForScreen(resolvedScreenId);
@@ -362,7 +363,7 @@ NamedZoneGeometryList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& 
         // Use geometry with gaps (matches snap behavior), auto-resolving virtual screen geometry
         QRect snapped = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, resolvedScreenId, layout,
                                                                 m_settings);
-        NamedZoneGeometry entry;
+        PhosphorProtocol::NamedZoneGeometry entry;
         entry.zoneId = zone->id().toString();
         entry.x = snapped.x();
         entry.y = snapped.y();

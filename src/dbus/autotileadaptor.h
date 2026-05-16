@@ -28,12 +28,6 @@ class AutotileEngine;
 
 namespace PlasmaZones {
 
-using PhosphorProtocol::AlgorithmInfoEntry;
-using PhosphorProtocol::TileRequestEntry;
-using PhosphorProtocol::TileRequestList;
-using PhosphorProtocol::WindowOpenedEntry;
-using PhosphorProtocol::WindowOpenedList;
-
 /**
  * @brief D-Bus adaptor for autotiling control
  *
@@ -206,7 +200,7 @@ public Q_SLOTS:
      *
      * @param entries Array of (windowId, screenId, minWidth, minHeight) structs
      */
-    void windowsOpenedBatch(const PlasmaZones::WindowOpenedList& entries);
+    void windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList& entries);
 
     /**
      * @brief Update a window's minimum size at runtime
@@ -285,9 +279,9 @@ public Q_SLOTS:
     /**
      * @brief Get information about a specific algorithm
      * @param algorithmId Algorithm ID to query
-     * @return AlgorithmInfoEntry struct with algorithm metadata
+     * @return PhosphorProtocol::AlgorithmInfoEntry struct with algorithm metadata
      */
-    AlgorithmInfoEntry algorithmInfo(const QString& algorithmId);
+    PhosphorProtocol::AlgorithmInfoEntry algorithmInfo(const QString& algorithmId);
 
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -328,7 +322,7 @@ Q_SIGNALS:
      *
      * @param tileRequestsJson JSON array of {windowId,x,y,width,height}
      */
-    void windowsTileRequested(const PlasmaZones::TileRequestList& tileRequests);
+    void windowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
 
     /**
      * @brief Emitted when a window should be focused
@@ -406,7 +400,7 @@ private:
      * flushPendingWindowOpens() so all three paths validate arguments and
      * invoke the engine identically.
      */
-    void dispatchWindowOpened(const WindowOpenedEntry& entry);
+    void dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEntry& entry);
 
     /**
      * @brief Decide whether an incoming windowOpened must be deferred
@@ -425,7 +419,7 @@ private:
     // Processing them immediately would compute zones against the unreserved screen rect
     // (the s_availableGeometryCache in Phosphor::Screens::ScreenManager is still empty), so we queue them
     // until panelGeometryReady fires. Non-blocking — no nested event loops, no reentrancy.
-    WindowOpenedList m_pendingOpens;
+    PhosphorProtocol::WindowOpenedList m_pendingOpens;
     bool m_pendingOpensListenerInstalled = false;
 
 public:

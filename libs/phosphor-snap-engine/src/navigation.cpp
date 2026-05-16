@@ -13,8 +13,6 @@
 namespace PhosphorSnapEngine {
 
 using PhosphorEngine::ZoneAssignmentEntry;
-using PhosphorProtocol::SnapAllResultEntry;
-using PhosphorProtocol::SnapAllResultList;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Snap-mode resnap coordination
@@ -114,14 +112,15 @@ void SnapEngine::emitBatchedResnap(const QVector<ZoneAssignmentEntry>& entries)
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }
 
-SnapAllResultList SnapEngine::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId)
+PhosphorProtocol::SnapAllResultList SnapEngine::calculateSnapAllWindows(const QStringList& windowIds,
+                                                                        const QString& screenId)
 {
     QVector<ZoneAssignmentEntry> entries = calculateSnapAllWindowEntries(windowIds, screenId);
 
-    SnapAllResultList result;
+    PhosphorProtocol::SnapAllResultList result;
     result.reserve(entries.size());
     for (const auto& entry : entries) {
-        SnapAllResultEntry r;
+        PhosphorProtocol::SnapAllResultEntry r;
         r.windowId = entry.windowId;
         r.targetZoneId = entry.targetZoneId;
         r.sourceZoneId = entry.sourceZoneId;

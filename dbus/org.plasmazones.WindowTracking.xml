@@ -43,7 +43,7 @@
         <method name="windowsSnappedBatch">
             <annotation name="org.gtk.GDBus.DocString" value="Batch snap confirmations: process multiple windowSnapped/windowUnsnapped in one D-Bus call. Used by the KWin effect after resnap stagger completes. Array of (windowId, zoneId, screenId, isRestore)."/>
             <arg name="entries" type="a(sssb)" direction="in">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PlasmaZones::SnapConfirmationList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PhosphorProtocol::SnapConfirmationList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of snap confirmation structs."/>
             </arg>
         </method>
@@ -93,7 +93,7 @@
             </arg>
             <arg name="emptyZones" type="a(siiiiiibsssdd)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Array of EmptyZoneEntry structs: (zoneId, x, y, width, height, borderWidth, borderRadius, useCustomColors, highlightColor, inactiveColor, borderColor, activeOpacity, inactiveOpacity)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::EmptyZoneList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::EmptyZoneList"/>
             </arg>
         </method>
         <method name="getLastUsedZoneId">
@@ -220,7 +220,7 @@
             </arg>
             <arg name="result" type="(bassiiii)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="UnfloatRestoreResult: (found, zoneIds, screenName, x, y, width, height)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::UnfloatRestoreResult"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::UnfloatRestoreResult"/>
             </arg>
         </method>
         <method name="getZoneGeometry">
@@ -230,7 +230,7 @@
             </arg>
             <arg name="geometry" type="(iiii)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="ZoneGeometryRect: (x, y, width, height)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::ZoneGeometryRect"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::ZoneGeometryRect"/>
             </arg>
         </method>
         <method name="getZoneGeometryForScreen">
@@ -243,7 +243,7 @@
             </arg>
             <arg name="geometry" type="(iiii)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="ZoneGeometryRect: (x, y, width, height)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::ZoneGeometryRect"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::ZoneGeometryRect"/>
             </arg>
         </method>
         <method name="snapToAppRule">
@@ -384,7 +384,7 @@
         <method name="getUpdatedWindowGeometries">
             <annotation name="org.gtk.GDBus.DocString" value="Return updated window geometries after resolution change."/>
             <arg name="geometries" type="a(siiii)" direction="out">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::WindowGeometryList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::WindowGeometryList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height)."/>
             </arg>
         </method>
@@ -505,7 +505,7 @@
         <signal name="applyGeometriesBatch">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests compositor to apply geometries for a batch of windows."/>
             <arg name="geometries" type="a(siiiis)">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::WindowGeometryList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::WindowGeometryList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId). screenId is the daemon-authoritative target screen — compositor uses it to seed its tracked-screen cache without re-deriving from geometry. Empty screenId means no authoritative answer (fall back to geometry-based resolution)."/>
             </arg>
             <arg name="action" type="s">
@@ -585,7 +585,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Screen for layout/geometry resolution."/>
             </arg>
             <arg name="snapResults" type="a(sssiiii)" direction="out">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::SnapAllResultList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::SnapAllResultList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, targetZoneId, sourceZoneId, x, y, width, height)."/>
             </arg>
         </method>
@@ -596,7 +596,7 @@
             <arg name="screenId" type="s" direction="in"/>
             <arg name="result" type="(bssiiiiss)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="MoveTargetResult: (success, reason, zoneId, x, y, width, height, sourceZoneId, screenName)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::MoveTargetResult"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::MoveTargetResult"/>
             </arg>
         </method>
         <method name="getFocusTargetForWindow">
@@ -606,7 +606,7 @@
             <arg name="screenId" type="s" direction="in"/>
             <arg name="result" type="(bsssss)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="FocusTargetResult: (success, reason, windowIdToActivate, sourceZoneId, targetZoneId, screenName)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::FocusTargetResult"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::FocusTargetResult"/>
             </arg>
         </method>
         <method name="getRestoreForWindow">
@@ -615,7 +615,7 @@
             <arg name="screenId" type="s" direction="in"/>
             <arg name="result" type="(bbiiii)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="RestoreTargetResult: (success, found, x, y, width, height)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::RestoreTargetResult"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::RestoreTargetResult"/>
             </arg>
         </method>
         <method name="getCycleTargetForWindow">
@@ -625,7 +625,7 @@
             <arg name="screenId" type="s" direction="in"/>
             <arg name="result" type="(bssss)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="CycleTargetResult: (success, reason, windowIdToActivate, zoneId, screenName)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::CycleTargetResult"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::CycleTargetResult"/>
             </arg>
         </method>
         <method name="getSwapTargetForWindow">
@@ -635,7 +635,7 @@
             <arg name="screenId" type="s" direction="in"/>
             <arg name="result" type="(bssiiiissiiiissss)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="SwapTargetResult: (success, reason, windowId1, x1, y1, w1, h1, zoneId1, windowId2, x2, y2, w2, h2, zoneId2, screenName, sourceZoneId, targetZoneId)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::SwapTargetResult"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::SwapTargetResult"/>
             </arg>
         </method>
         <method name="getPushTargetForWindow">
@@ -644,7 +644,7 @@
             <arg name="screenId" type="s" direction="in"/>
             <arg name="result" type="(bssiiiiss)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="MoveTargetResult: (success, reason, zoneId, x, y, width, height, sourceZoneId, screenName)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::MoveTargetResult"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::MoveTargetResult"/>
             </arg>
         </method>
         <method name="getSnapToZoneByNumberTarget">
@@ -654,7 +654,7 @@
             <arg name="screenId" type="s" direction="in"/>
             <arg name="result" type="(bssiiiiss)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="MoveTargetResult: (success, reason, zoneId, x, y, width, height, sourceZoneId, screenName)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::MoveTargetResult"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::MoveTargetResult"/>
             </arg>
         </method>
         <signal name="snapAllWindowsRequested">
@@ -698,14 +698,14 @@
             </arg>
             <arg name="state" type="(sssbsasb)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="WindowStateEntry: (windowId, zoneId, screenId, isFloating, changeType, zoneIds, isSticky)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::WindowStateEntry"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::WindowStateEntry"/>
             </arg>
         </method>
         <method name="getAllWindowStates">
             <annotation name="org.gtk.GDBus.DocString" value="Get state for all tracked windows (TUI dashboard)."/>
             <arg name="states" type="a(sssbsasb)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Array of WindowStateEntry structs."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::WindowStateList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::WindowStateList"/>
             </arg>
         </method>
         <signal name="windowStateChanged">
@@ -715,7 +715,7 @@
             </arg>
             <arg name="state" type="(sssbsasb)">
                 <annotation name="org.gtk.GDBus.DocString" value="WindowStateEntry: (windowId, zoneId, screenId, isFloating, changeType, zoneIds, isSticky). changeType: snapped, unsnapped, floated, unfloated, screen_changed."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="PlasmaZones::WindowStateEntry"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="PhosphorProtocol::WindowStateEntry"/>
             </arg>
         </signal>
     </interface>
