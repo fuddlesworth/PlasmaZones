@@ -613,6 +613,7 @@ if(BUILD_PHOSPHOR_SHELL)
         FILES_MATCHING
             PATTERN "*.qml"
             PATTERN "*.frag"
+            PATTERN "*.glsl"
     )
 endif()
 

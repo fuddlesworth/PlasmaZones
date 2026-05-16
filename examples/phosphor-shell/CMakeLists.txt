@@ -33,6 +33,13 @@ qt_add_qml_module(phosphor_shell_example
     VERSION 1.0
     STATIC
     RESOURCE_PREFIX /qt/qml
+    # The module's build-tree output directory must END in the URI path
+    # (Phosphor/Shell/Example) or qmllint and other QML tooling can't
+    # resolve the module. The default is CMAKE_CURRENT_BINARY_DIR, which
+    # doesn't — so place it under a URI-shaped subdirectory. This is a
+    # build-tree path only; the linked-in resource still lives at
+    # qrc:/qt/qml/Phosphor/Shell/Example via RESOURCE_PREFIX above.
+    OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Phosphor/Shell/Example
     QML_FILES
         shell.qml
         TopPanel.qml
@@ -49,4 +56,6 @@ qt_add_qml_module(phosphor_shell_example
     RESOURCES
         shaders/frosted_glass.frag
         shaders/gradient.frag
+        shaders/corners.glsl
+        shaders/shadow.glsl
 )
