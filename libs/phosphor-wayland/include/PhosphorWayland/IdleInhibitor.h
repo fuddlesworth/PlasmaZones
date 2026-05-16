@@ -21,8 +21,8 @@ namespace PhosphorWayland {
 ///
 ///     IdleInhibitor { surface: Window.window }
 ///
-/// The `surface` property is required — constructing without it logs a
-/// warning and leaves `active` as false.
+/// Until `surface` is set the inhibitor stays inactive (`active` is
+/// false); nothing happens and no inhibitor object is created.
 class PHOSPHORWAYLAND_EXPORT IdleInhibitor : public QObject
 {
     Q_OBJECT

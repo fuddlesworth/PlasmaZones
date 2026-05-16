@@ -163,6 +163,11 @@ Item {
                 anchors.fill: parent
                 enabled: root.hasPlayer && root.currentPlayer.canSeek
                 onClicked: (mouse) => {
+                    // Defensive: don't depend on the enclosing Item's
+                    // `visible` (length > 0) clause to keep this safe.
+                    if (!root.hasPlayer || root.currentPlayer.length <= 0)
+                        return ;
+
                     let ratio = mouse.x / width;
                     let target = ratio * root.currentPlayer.length;
                     root.currentPlayer.setPosition(target);
@@ -181,8 +186,6 @@ Item {
                 radius: 8
                 color: pp.containsMouse ? "#30000000" : "transparent"
                 visible: root.hasPlayer && root.currentPlayer.canGoPrevious && root.currentPlayer.canControl
-                Accessible.role: Accessible.Button
-                Accessible.name: "Previous track"
 
                 Text {
                     anchors.centerIn: parent
@@ -191,12 +194,16 @@ Item {
                     color: "#1e1e2e"
                 }
 
+                // Accessible.* lives on the MouseArea — the element that
+                // actually handles activation — not the visual Rectangle.
                 MouseArea {
                     id: pp
 
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Previous track"
                     onClicked: root.currentPlayer.previous()
                 }
 
@@ -208,8 +215,6 @@ Item {
                 radius: 22
                 color: ppla.containsMouse ? "#30000000" : "#20000000"
                 visible: root.hasPlayer && root.currentPlayer.canControl
-                Accessible.role: Accessible.Button
-                Accessible.name: root.isPlaying ? "Pause" : "Play"
 
                 Text {
                     anchors.centerIn: parent
@@ -224,10 +229,12 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    Accessible.role: Accessible.Button
+                    Accessible.name: root.isPlaying ? "Pause" : "Play"
                     onClicked: {
-                        if (root.hasPlayer) {
+                        if (root.hasPlayer)
                             root.currentPlayer.togglePlaying();
-                        }
+
                     }
                 }
 
@@ -239,8 +246,6 @@ Item {
                 radius: 8
                 color: pn.containsMouse ? "#30000000" : "transparent"
                 visible: root.hasPlayer && root.currentPlayer.canGoNext && root.currentPlayer.canControl
-                Accessible.role: Accessible.Button
-                Accessible.name: "Next track"
 
                 Text {
                     anchors.centerIn: parent
@@ -255,6 +260,8 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Next track"
                     onClicked: root.currentPlayer.next()
                 }
 

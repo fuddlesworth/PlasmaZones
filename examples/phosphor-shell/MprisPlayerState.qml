@@ -26,37 +26,12 @@ QtObject {
 
         return Math.min(1, Math.max(0, player.position / player.length));
     }
-    // Stable art URL — only updates when the actual URL string changes,
-    // preventing Image reload flicker on unrelated metadataChanged
-    // signals.
-    property string stableArtUrl: ""
-    // metadataChanged on the active player re-evaluates the art URL.
-    // Held in a property because QtObject has no default child list.
-    property var _metaConn
-
-    _metaConn: Connections {
-        function onMetadataChanged() {
-            state._updateArtUrl();
-        }
-
-        target: state.player
-        enabled: state.player !== null
-    }
-
-    function _updateArtUrl() {
-        // Gate on `player` directly, not `hasPlayer`. hasPlayer is a
-        // bound property derived from player; when this runs from
-        // onPlayerChanged the assignment to player has happened but
-        // hasPlayer's binding may not have re-evaluated yet (Qt
-        // evaluates property dependencies lazily, and the change handler
-        // runs before downstream re-evaluations flush). Reading hasPlayer
-        // here can still see `false` even though player is non-null —
-        // the ternary then falls to "" and stableArtUrl never gets set.
-        let url = (player && player.trackArtUrl) ? player.trackArtUrl : "";
-        if (stableArtUrl !== url)
-            stableArtUrl = url;
-
-    }
+    // Album-art URL. A plain binding is already flicker-free: it tracks
+    // both `player` and `player.trackArtUrl` (NOTIFY metadataChanged),
+    // and QML suppresses the change signal when the recomputed string is
+    // identical — so an Image bound to this never reloads on an
+    // unrelated metadataChanged.
+    readonly property string stableArtUrl: (player && player.trackArtUrl) ? player.trackArtUrl : ""
 
     // Formats a duration in seconds as H:MM:SS / M:SS.
     function fmt(secs) {
@@ -73,5 +48,4 @@ QtObject {
         return m + ":" + ms;
     }
 
-    onPlayerChanged: _updateArtUrl()
 }

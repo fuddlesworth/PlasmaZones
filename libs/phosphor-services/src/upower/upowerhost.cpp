@@ -31,6 +31,14 @@ public:
     UPowerDevice* displayDevice = nullptr;
     bool onBattery = false;
 
+    void setOnBattery(bool value)
+    {
+        if (onBattery == value)
+            return;
+        onBattery = value;
+        Q_EMIT owner->onBatteryChanged();
+    }
+
     void addDevice(const QString& path)
     {
         for (auto* dev : std::as_const(devices)) {
@@ -97,11 +105,7 @@ UPowerHost::UPowerHost(QObject* parent)
             const QDBusPendingReply<QDBusVariant> reply = *call;
             if (reply.isError())
                 return;
-            bool val = reply.value().variant().toBool();
-            if (d->onBattery != val) {
-                d->onBattery = val;
-                Q_EMIT onBatteryChanged();
-            }
+            d->setOnBattery(reply.value().variant().toBool());
         });
     }
 
@@ -173,13 +177,8 @@ void UPowerHost::_q_onPropertiesChanged(const QString& iface, const QVariantMap&
 {
     if (iface != QLatin1String(kIface))
         return;
-    if (changed.contains(QStringLiteral("OnBattery"))) {
-        bool val = changed.value(QStringLiteral("OnBattery")).toBool();
-        if (d->onBattery != val) {
-            d->onBattery = val;
-            Q_EMIT onBatteryChanged();
-        }
-    }
+    if (changed.contains(QStringLiteral("OnBattery")))
+        d->setOnBattery(changed.value(QStringLiteral("OnBattery")).toBool());
 }
 
 void UPowerHost::_q_onDeviceAdded(const QDBusObjectPath& path)

@@ -68,12 +68,14 @@ Item {
     Component.onCompleted: selectPlayer()
 
     // Shared MPRIS derived-state + flicker-free art URL (see
-    // MprisPlayerState.qml). `sampling` is left at its default true —
-    // the progress ring's own Canvas culls repaints by visibility.
+    // MprisPlayerState.qml). `sampling` is gated on visibility so the
+    // 1 Hz position binding sleeps entirely when the widget is hidden —
+    // the Canvas only culls its own repaints, not the upstream binding.
     MprisPlayerState {
         id: playerState
 
         player: root.currentPlayer
+        sampling: root.visible
     }
 
     MprisHost {
@@ -205,9 +207,9 @@ Item {
                 anchors.fill: parent
                 z: 1
                 onProgChanged: {
-                    if (root.visible) {
+                    if (root.visible)
                         requestPaint();
-                    }
+
                 }
                 onPaint: {
                     let ctx = getContext("2d");
@@ -374,9 +376,9 @@ Item {
                     Accessible.role: Accessible.Button
                     Accessible.name: root.isPlaying ? "Pause" : "Play"
                     onClicked: {
-                        if (root.hasPlayer) {
+                        if (root.hasPlayer)
                             root.currentPlayer.togglePlaying();
-                        }
+
                     }
                 }
 
@@ -432,9 +434,9 @@ Item {
         cursorShape: Qt.PointingHandCursor
         propagateComposedEvents: true
         onClicked: {
-            if (root.hasPlayer) {
+            if (root.hasPlayer)
                 root.currentPlayer.togglePlaying();
-            }
+
         }
         onWheel: (wheel) => {
             if (!root.hasPlayer)

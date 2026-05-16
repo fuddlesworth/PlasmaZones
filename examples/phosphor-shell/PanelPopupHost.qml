@@ -34,17 +34,19 @@ Item {
             _closeAll();
             return ;
         }
-        // If something else is open, queue and close. The unmap will
-        // be acknowledged by the compositor ~tens of ms later; the
-        // switchTimer fires the queued open then.
-        if (currentKind !== "none") {
+        // If something else is open — OR a switch is already in flight —
+        // queue and close. `currentKind` flips to "none" synchronously
+        // when _closeAll() clears the popupVisible flags, but the
+        // compositor has not yet acked the unmap; opening immediately in
+        // that window races the xdg_popup grab handoff. switchTimer.running
+        // is the true "switch in progress" signal, so gate on it too.
+        if (currentKind !== "none" || switchTimer.running) {
             _pendingKind = kind;
             _closeAll();
             switchTimer.restart();
             return ;
         }
-        // Nothing open — open immediately. Clear any stale queue entry
-        // so a half-finished switch can't open a second popup on top.
+        // Nothing open and no switch pending — open immediately.
         _pendingKind = "";
         _open(kind);
     }

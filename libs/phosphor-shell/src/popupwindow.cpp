@@ -24,6 +24,10 @@ Q_LOGGING_CATEGORY(lcPopup, "phosphorshell.popup")
 
 namespace {
 
+// xdg_positioner constraint adjustment: SlideX|SlideY|FlipX|FlipY — lets
+// the compositor reposition the popup if it would run off-screen.
+constexpr uint kConstraintAdjustAll = 0xF;
+
 // Singleton wrapper that binds xdg_wm_base from the Wayland registry
 // via Qt's QWaylandClientExtensionTemplate. Quickshell uses the same
 // "bind it ourselves rather than reach into Qt's private state"
@@ -251,6 +255,7 @@ void PopupWindow::setPopupVisible(bool visible)
     if (m_popupVisible == visible) {
         return;
     }
+    const bool previous = m_popupVisible;
     m_popupVisible = visible;
 
     if (visible) {
@@ -259,7 +264,12 @@ void PopupWindow::setPopupVisible(bool visible)
         hidePopup();
     }
 
-    Q_EMIT popupVisibleChanged();
+    // showPopup() rolls m_popupVisible back to false when the anchor is
+    // off-surface — only notify if the value actually changed, so an
+    // aborted show doesn't emit a no-op popupVisibleChanged.
+    if (m_popupVisible != previous) {
+        Q_EMIT popupVisibleChanged();
+    }
 }
 
 void PopupWindow::close()
@@ -407,9 +417,7 @@ void PopupWindow::showPopup()
     // observed misplacement).
     m_popupWindow->setProperty("_q_waylandPopupAnchor", static_cast<uint>(anchorEdges));
     m_popupWindow->setProperty("_q_waylandPopupGravity", static_cast<uint>(gravityEdges));
-    // 0xF = SlideX|SlideY|FlipX|FlipY — let the compositor reposition the
-    // popup if it'd run off-screen.
-    m_popupWindow->setProperty("_q_waylandPopupConstraintAdjustment", static_cast<uint>(0xF));
+    m_popupWindow->setProperty("_q_waylandPopupConstraintAdjustment", kConstraintAdjustAll);
 
     qCDebug(lcPopup) << "Showing popup: anchorRect=" << anchorRect << "size=" << m_popupWidth << "x" << m_popupHeight
                      << "edge=" << m_popupEdge << "anchor=" << static_cast<uint>(anchorEdges)
@@ -488,7 +496,7 @@ bool PopupWindow::repositionInPlace()
     positioner.set_anchor(anchorFlag);
     positioner.set_gravity(gravityFlag);
     positioner.set_size(m_popupWidth, m_popupHeight);
-    positioner.set_constraint_adjustment(0xF); // SlideX|SlideY|FlipX|FlipY
+    positioner.set_constraint_adjustment(kConstraintAdjustAll);
 
     // The token is echoed back via xdg_popup.repositioned for clients that
     // want to correlate request-with-configure. We don't, so 0 is fine.

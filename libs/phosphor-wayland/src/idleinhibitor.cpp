@@ -102,6 +102,10 @@ void IdleInhibitor::createInhibitor()
     d->inhibitor = zwp_idle_inhibit_manager_v1_create_inhibitor(manager, wlSurface);
     if (d->inhibitor) {
         qCDebug(lcIdleInhibitor) << "Idle inhibitor created for surface" << d->window;
+        // The deferred-creation hook (if any) has done its job — drop it
+        // so it doesn't linger for the object's lifetime.
+        QObject::disconnect(d->visibleConn);
+        d->visibleConn = {};
         Q_EMIT activeChanged();
     }
 }

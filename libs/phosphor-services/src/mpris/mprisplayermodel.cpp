@@ -24,8 +24,13 @@ void MprisPlayerModel::setHost(MprisHost* host)
     if (m_host == host)
         return;
     beginResetModel();
-    if (m_host)
+    if (m_host) {
         disconnect(m_host, nullptr, this, nullptr);
+        // The old players belong to the old host (which lives on), so
+        // their connections to this model would otherwise leak.
+        for (auto* player : std::as_const(m_rows))
+            disconnect(player, nullptr, this, nullptr);
+    }
     m_host = host;
     m_rows.clear();
     if (m_host) {
@@ -34,6 +39,16 @@ void MprisPlayerModel::setHost(MprisHost* host)
             connectPlayer(player);
         connect(m_host, &MprisHost::playerAdded, this, &MprisPlayerModel::onPlayerAdded);
         connect(m_host, &MprisHost::playerRemoved, this, &MprisPlayerModel::onPlayerRemoved);
+        // The host owns the players; if it is destroyed while still set,
+        // m_host and every m_rows entry would dangle. Drop them all.
+        connect(m_host, &QObject::destroyed, this, [this]() {
+            beginResetModel();
+            m_rows.clear();
+            m_host = nullptr;
+            endResetModel();
+            Q_EMIT hostChanged();
+            Q_EMIT countChanged();
+        });
     }
     endResetModel();
     Q_EMIT hostChanged();
@@ -97,6 +112,7 @@ void MprisPlayerModel::onPlayerRemoved(MprisPlayer* player)
     const int row = m_rows.indexOf(player);
     if (row < 0)
         return;
+    disconnect(player, nullptr, this, nullptr);
     beginRemoveRows({}, row, row);
     m_rows.removeAt(row);
     endRemoveRows();

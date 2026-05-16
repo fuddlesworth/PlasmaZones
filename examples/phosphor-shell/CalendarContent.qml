@@ -15,7 +15,6 @@ Item {
     // scale/opacity Behaviors so the panel still gets the OutBack
     // pop-in transition on each switch.
     property bool active: false
-
     // Dark-on-gradient palette (matches the top panel text)
     readonly property color colText: "#1e1e2e"
     readonly property color colSubtle: "#45475a"
@@ -54,6 +53,7 @@ Item {
 
                 MouseArea {
                     id: prevHover
+
                     anchors.fill: parent
                     hoverEnabled: true
                     Accessible.role: Accessible.Button
@@ -64,11 +64,14 @@ Item {
                         root.displayDate = d;
                     }
                 }
+
             }
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - 64
+                // Fill the row minus the two 24px nav buttons and the
+                // gaps on either side of this label.
+                width: parent.width - 2 * (24 + parent.spacing)
                 horizontalAlignment: Text.AlignHCenter
                 text: Qt.formatDate(root.displayDate, "MMMM yyyy")
                 color: root.colText
@@ -92,6 +95,7 @@ Item {
 
                 MouseArea {
                     id: nextHover
+
                     anchors.fill: parent
                     hoverEnabled: true
                     Accessible.role: Accessible.Button
@@ -102,7 +106,9 @@ Item {
                         root.displayDate = d;
                     }
                 }
+
             }
+
         }
 
         // Day-of-week header row
@@ -123,7 +129,9 @@ Item {
                     font.pixelSize: 10
                     font.weight: Font.Medium
                 }
+
             }
+
         }
 
         // Month grid — 6 weeks × 7 days = 42 cells.
@@ -169,7 +177,9 @@ Item {
                             ColorAnimation {
                                 duration: 100
                             }
+
                         }
+
                     }
 
                     Text {
@@ -182,13 +192,18 @@ Item {
 
                     MouseArea {
                         id: cellHover
+
                         anchors.fill: parent
                         hoverEnabled: true
                         Accessible.name: cellDate.getDate() + " " + Qt.formatDate(cellDate, "MMMM yyyy")
                     }
+
                 }
+
             }
+
         }
+
     }
 
     Behavior on scale {
@@ -197,11 +212,14 @@ Item {
             easing.type: Easing.OutBack
             easing.overshoot: 1.4
         }
+
     }
 
     Behavior on opacity {
         NumberAnimation {
             duration: 250
         }
+
     }
+
 }

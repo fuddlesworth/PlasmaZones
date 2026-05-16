@@ -12,8 +12,12 @@ SystemClock::SystemClock(QObject* parent)
     : QObject(parent)
     , m_timer(new QTimer(this))
 {
-    m_timer->setSingleShot(false);
-    connect(m_timer, &QTimer::timeout, this, &SystemClock::update);
+    // Single-shot at every precision: each tick is aligned to the next
+    // wall-clock boundary and re-armed in onTimerFired(), so the clock
+    // never drifts away from the boundary the way a fixed-interval
+    // repeating timer would.
+    m_timer->setSingleShot(true);
+    connect(m_timer, &QTimer::timeout, this, &SystemClock::onTimerFired);
     update();
     reconfigureTimer();
 }
@@ -31,9 +35,9 @@ void SystemClock::setEnabled(bool enabled)
         return;
     m_enabled = enabled;
     Q_EMIT enabledChanged();
-    reconfigureTimer();
     if (m_enabled)
         update();
+    reconfigureTimer();
 }
 
 SystemClock::Precision SystemClock::precision() const
@@ -47,8 +51,9 @@ void SystemClock::setPrecision(Precision precision)
         return;
     m_precision = precision;
     Q_EMIT precisionChanged();
+    // Field values do not depend on precision (update() always populates
+    // all three) — only the tick cadence changes, so just re-arm.
     reconfigureTimer();
-    update();
 }
 
 int SystemClock::hours() const
@@ -73,27 +78,25 @@ QDate SystemClock::date() const
 
 void SystemClock::update()
 {
-    const QTime now = QTime::currentTime();
-    const QDate today = QDate::currentDate();
+    // Single wall-clock read — taking QTime and QDate separately would
+    // let the two land on different sides of a midnight boundary.
+    const QDateTime nowDt = QDateTime::currentDateTime();
+    const QTime now = nowDt.time();
+    const QDate today = nowDt.date();
+
     bool anyTimeChanged = false;
-
-    const int h = now.hour();
-    const int m = now.minute();
-    const int s = now.second();
-
-    if (m_hours != h) {
-        m_hours = h;
+    if (m_hours != now.hour()) {
+        m_hours = now.hour();
         anyTimeChanged = true;
     }
-    if (m_precision >= Minutes && m_minutes != m) {
-        m_minutes = m;
+    if (m_minutes != now.minute()) {
+        m_minutes = now.minute();
         anyTimeChanged = true;
     }
-    if (m_precision >= Seconds && m_seconds != s) {
-        m_seconds = s;
+    if (m_seconds != now.second()) {
+        m_seconds = now.second();
         anyTimeChanged = true;
     }
-
     if (anyTimeChanged)
         Q_EMIT timeChanged();
 
@@ -101,9 +104,6 @@ void SystemClock::update()
         m_date = today;
         Q_EMIT dateChanged();
     }
-
-    if (m_enabled && (m_precision == Hours || m_precision == Minutes))
-        reconfigureTimer();
 }
 
 void SystemClock::reconfigureTimer()
@@ -115,26 +115,26 @@ void SystemClock::reconfigureTimer()
     const QTime now = QTime::currentTime();
     int intervalMs = 1000;
     switch (m_precision) {
-    case Hours: {
-        int msUntilNextHour = ((59 - now.minute()) * 60 + (60 - now.second())) * 1000 - now.msec();
-        intervalMs = qMax(msUntilNextHour, 1000);
-        m_timer->setSingleShot(true);
-        m_timer->start(intervalMs);
-        return;
-    }
-    case Minutes: {
-        int msUntilNextMinute = (60 - now.second()) * 1000 - now.msec();
-        intervalMs = qMax(msUntilNextMinute, 500);
-        m_timer->setSingleShot(true);
-        m_timer->start(intervalMs);
-        return;
-    }
+    case Hours:
+        intervalMs = ((59 - now.minute()) * 60 + (60 - now.second())) * 1000 - now.msec();
+        break;
+    case Minutes:
+        intervalMs = (60 - now.second()) * 1000 - now.msec();
+        break;
     case Seconds:
-        intervalMs = 1000;
+        intervalMs = 1000 - now.msec();
         break;
     }
-    m_timer->setSingleShot(false);
-    m_timer->start(intervalMs);
+    // A near-boundary computation can yield a tiny or zero interval;
+    // never arm below 1 ms — the following tick re-aligns cleanly.
+    m_timer->start(qMax(intervalMs, 1));
+}
+
+void SystemClock::onTimerFired()
+{
+    update();
+    // The timer is single-shot — re-arm for the next aligned boundary.
+    reconfigureTimer();
 }
 
 } // namespace PhosphorShell

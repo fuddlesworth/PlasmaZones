@@ -33,7 +33,9 @@ public:
         }
         auto* player = new MprisPlayer(service, owner);
         players.append(player);
-        qCDebug(lcMprisHost) << "Player added:" << service << player->identity();
+        // identity() is still empty here — it populates from an async
+        // GetAll — so it is deliberately not logged.
+        qCDebug(lcMprisHost) << "Player added:" << service;
         Q_EMIT owner->playerAdded(player);
         Q_EMIT owner->playerCountChanged();
     }
@@ -113,8 +115,8 @@ void MprisHost::_q_nameOwnerChanged(const QString& service, const QString& oldOw
     // NameOwnerChanged semantics: oldOwner empty + newOwner non-empty
     // = service registered. oldOwner non-empty + newOwner empty =
     // service unregistered. Both non-empty = ownership transferred
-    // (rare for MPRIS, but treat as add — the player object will
-    // re-resolve its proxy).
+    // (rare for MPRIS) — handled by destroying the old MprisPlayer and
+    // constructing a fresh one against the new owner.
     if (newOwner.isEmpty()) {
         d->removeService(service);
     } else if (oldOwner.isEmpty()) {

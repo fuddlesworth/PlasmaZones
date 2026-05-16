@@ -16,9 +16,12 @@ namespace PhosphorShell {
 
 /// Real-time clock for status bar widgets.
 ///
-/// Emits `timeChanged` at the cadence set by `precision` (every second,
-/// minute, or hour). The timer is stopped entirely when `enabled` is
-/// false, so inactive clocks consume zero CPU.
+/// `hours`, `minutes` and `seconds` are always populated; `precision`
+/// governs only how often the clock re-samples the wall clock (every
+/// second, minute, or hour) — a coarser precision simply means the
+/// finer fields refresh less often, never that they are invalid. The
+/// timer is stopped entirely when `enabled` is false, so inactive
+/// clocks consume zero CPU.
 ///
 /// Usage from QML:
 ///
@@ -70,6 +73,7 @@ Q_SIGNALS:
 private:
     void update();
     void reconfigureTimer();
+    void onTimerFired();
 
     QTimer* m_timer = nullptr;
     Precision m_precision = Seconds;

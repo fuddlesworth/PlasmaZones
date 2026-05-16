@@ -14,6 +14,8 @@
 #include <QTimer>
 #include <QVariantMap>
 
+#include <cmath>
+
 Q_LOGGING_CATEGORY(lcMpris, "phosphorservices.mpris")
 
 namespace {
@@ -252,6 +254,19 @@ public:
                 return val.value<QDBusVariant>().variant().toString();
             return val.toString();
         };
+        // mpris:trackid is a D-Bus object path (`o`). QVariant::toString()
+        // does not unwrap a QDBusObjectPath, so metaString() would yield
+        // an empty string — extract the path explicitly. An empty trackId
+        // breaks both SetPosition() and track-change detection (which
+        // gates the art-URL pin).
+        auto metaObjectPath = [](const QVariant& val) -> QString {
+            QVariant inner = val;
+            if (inner.canConvert<QDBusVariant>())
+                inner = inner.value<QDBusVariant>().variant();
+            if (inner.canConvert<QDBusObjectPath>())
+                return inner.value<QDBusObjectPath>().path();
+            return inner.toString();
+        };
         // Only update a field if the key is present in the map.
         // PropertiesChanged delivers PARTIAL metadata — missing keys
         // mean "unchanged", not "cleared". Without this guard, a
@@ -278,10 +293,16 @@ public:
         // re-decodes at the smaller URL and the user sees high-quality
         // art "refresh with lower quality" shortly after a track change.
         if (meta.contains(QStringLiteral("mpris:trackid"))) {
-            QString id = metaString(meta.value(QStringLiteral("mpris:trackid")));
+            QString id = metaObjectPath(meta.value(QStringLiteral("mpris:trackid")));
             if (trackId != id) {
                 trackId = id;
-                trackArtUrl.clear(); // new track — accept the next artUrl
+                // A new track invalidates the pinned art URL. Clearing a
+                // URL we actually held is an observable change even when
+                // this metadata map carries no replacement artUrl yet.
+                if (!trackArtUrl.isEmpty()) {
+                    trackArtUrl.clear();
+                    changed = true;
+                }
             }
         }
         if (meta.contains(QStringLiteral("mpris:artUrl"))) {
@@ -350,6 +371,9 @@ public:
     void onSeeked(qint64 posUs)
     {
         positionUs = posUs;
+        // The reported position is now authoritative — restart the
+        // resync cadence so interpolation drifts from this fresh base.
+        positionTickCount = 0;
         Q_EMIT owner->positionChanged();
     }
 
@@ -370,10 +394,12 @@ public:
 
     void updatePositionTimer()
     {
-        if (playbackState == Playing)
+        if (playbackState == Playing) {
+            positionTickCount = 0;
             positionTimer.start(kPositionPollMs);
-        else
+        } else {
             positionTimer.stop();
+        }
     }
 };
 
@@ -389,9 +415,9 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
         d->tickPosition();
     });
 
-    QDBusConnection::sessionBus().connect(
-        serviceName, QLatin1String(kMprisPath), QStringLiteral("org.freedesktop.DBus.Properties"),
-        QStringLiteral("PropertiesChanged"), this, SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
+    QDBusConnection::sessionBus().connect(serviceName, QLatin1String(kMprisPath), QLatin1String(kPropsIface),
+                                          QStringLiteral("PropertiesChanged"), this,
+                                          SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
 
     QDBusConnection::sessionBus().connect(serviceName, QLatin1String(kMprisPath), QLatin1String(kPlayerIface),
                                           QStringLiteral("Seeked"), this, SLOT(_q_onSeeked(qlonglong)));
@@ -517,6 +543,10 @@ bool MprisPlayer::canControl() const
 
 void MprisPlayer::setVolume(qreal v)
 {
+    // Reject non-finite input at the boundary — a NaN/inf would be
+    // marshalled straight onto the bus to the player.
+    if (!std::isfinite(v))
+        return;
     dbusSetProperty(d->bus, d->service, kPlayerIface, "Volume", v);
 }
 void MprisPlayer::setShuffle(bool s)
@@ -561,6 +591,9 @@ void MprisPlayer::previous()
 
 void MprisPlayer::seek(qreal offsetSeconds)
 {
+    // A non-finite offset would make the static_cast<qint64> below UB.
+    if (!std::isfinite(offsetSeconds))
+        return;
     QDBusMessage msg = QDBusMessage::createMethodCall(d->service, QLatin1String(kMprisPath),
                                                       QLatin1String(kPlayerIface), QStringLiteral("Seek"));
     msg << static_cast<qint64>(offsetSeconds * 1e6);
@@ -569,6 +602,9 @@ void MprisPlayer::seek(qreal offsetSeconds)
 
 void MprisPlayer::setPosition(qreal absoluteSeconds)
 {
+    // A non-finite position would make the static_cast<qint64> below UB.
+    if (!std::isfinite(absoluteSeconds))
+        return;
     QDBusMessage msg = QDBusMessage::createMethodCall(d->service, QLatin1String(kMprisPath),
                                                       QLatin1String(kPlayerIface), QStringLiteral("SetPosition"));
     QString trackPath = d->trackId.isEmpty() ? QStringLiteral("/org/mpris/MediaPlayer2/TrackList/NoTrack") : d->trackId;

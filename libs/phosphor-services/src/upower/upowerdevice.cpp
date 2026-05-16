@@ -119,45 +119,22 @@ public:
         if ((v = val("IsPresent")).isValid())
             changed |= setField(isPresent, v.toBool(), &UPowerDevice::isPresentChanged, owner);
 
-        if ((v = val("State")).isValid()) {
-            auto newState = static_cast<DeviceState>(v.toUInt());
-            if (state != newState) {
-                state = newState;
-                changed = true;
-                Q_EMIT owner->stateChanged();
-            }
-        }
-        if ((v = val("Type")).isValid()) {
-            auto newType = static_cast<DeviceType>(v.toUInt());
-            if (type != newType) {
-                type = newType;
-                changed = true;
-                Q_EMIT owner->typeChanged();
-            }
-        }
-        if ((v = val("TimeToEmpty")).isValid()) {
-            qint64 newTTE = v.toLongLong();
-            if (timeToEmpty != newTTE) {
-                timeToEmpty = newTTE;
-                changed = true;
-                Q_EMIT owner->timeToEmptyChanged();
-            }
-        }
-        if ((v = val("TimeToFull")).isValid()) {
-            qint64 newTTF = v.toLongLong();
-            if (timeToFull != newTTF) {
-                timeToFull = newTTF;
-                changed = true;
-                Q_EMIT owner->timeToFullChanged();
-            }
-        }
+        if ((v = val("State")).isValid())
+            changed |= setField(state, static_cast<DeviceState>(v.toUInt()), &UPowerDevice::stateChanged, owner);
+        if ((v = val("Type")).isValid())
+            changed |= setField(type, static_cast<DeviceType>(v.toUInt()), &UPowerDevice::typeChanged, owner);
+        if ((v = val("TimeToEmpty")).isValid())
+            changed |= setField(timeToEmpty, v.toLongLong(), &UPowerDevice::timeToEmptyChanged, owner);
+        if ((v = val("TimeToFull")).isValid())
+            changed |= setField(timeToFull, v.toLongLong(), &UPowerDevice::timeToFullChanged, owner);
 
         // Derived-state transitions — emitted only on an actual change,
         // catching the case where only one input (e.g. powerSupply)
         // moved without the other.
         if (oldIsLaptop != (type == Battery && powerSupply))
             Q_EMIT owner->isLaptopBatteryChanged();
-        if (!qFuzzyCompare(oldHealth + 1.0, owner->healthPercentage() + 1.0))
+        const qreal newHealth = owner->healthPercentage();
+        if (!qFuzzyCompare(oldHealth + 1.0, newHealth + 1.0))
             Q_EMIT owner->healthPercentageChanged();
 
         // propertiesRefreshed is the model's data-changed hook — fire it
@@ -174,9 +151,8 @@ UPowerDevice::UPowerDevice(const QString& dbusPath, QObject* parent)
     d->owner = this;
     d->path = dbusPath;
 
-    QDBusConnection::systemBus().connect(
-        QLatin1String(kService), dbusPath, QStringLiteral("org.freedesktop.DBus.Properties"),
-        QStringLiteral("PropertiesChanged"), this, SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
+    d->bus.connect(QLatin1String(kService), dbusPath, QLatin1String(kPropsIface), QStringLiteral("PropertiesChanged"),
+                   this, SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
 
     d->requestAll();
 }
