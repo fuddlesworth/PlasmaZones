@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "phosphorscreens_export.h"
+#include "phosphorscreenscore_export.h"
 
 #include <QObject>
 
@@ -29,7 +29,7 @@ namespace Phosphor::Screens {
  * GUI thread (use `QMetaObject::invokeMethod(this, ..., Qt::QueuedConnection)`
  * if the implementation queries from a worker).
  */
-class PHOSPHORSCREENS_EXPORT IPanelSource : public QObject
+class PHOSPHORSCREENSCORE_EXPORT IPanelSource : public QObject
 {
     Q_OBJECT
 public:

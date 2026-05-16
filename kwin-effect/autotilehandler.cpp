@@ -8,7 +8,8 @@
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/AutotileMarshalling.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>

@@ -6,6 +6,12 @@
 // Internal logging category for PhosphorScreens. NOT installed; this header
 // stays under src/ so consumers don't accidentally inherit our category and
 // drown their own logs in our debug output.
+//
+// The category is defined in PhosphorScreensCore but used by the D-Bus
+// translation units in the PhosphorScreens target, so it is exported across
+// that library boundary.
+
+#include "phosphorscreenscore_export.h"
 
 #include <QCoreApplication>
 #include <QLoggingCategory>
@@ -13,7 +19,7 @@
 
 namespace Phosphor::Screens {
 
-Q_DECLARE_LOGGING_CATEGORY(lcPhosphorScreens)
+Q_DECLARE_EXPORTED_LOGGING_CATEGORY(lcPhosphorScreens, PHOSPHORSCREENSCORE_EXPORT)
 
 /// Debug-only GUI-thread guard for ScreenManager accessors that touch the
 /// mutable lazy caches (m_availableGeometryCache, m_cachedEffectiveScreenIds,

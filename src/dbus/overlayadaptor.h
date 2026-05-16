@@ -4,7 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/ZoneMarshalling.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QDBusContext>

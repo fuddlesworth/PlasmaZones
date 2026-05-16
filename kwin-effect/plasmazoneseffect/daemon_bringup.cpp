@@ -14,7 +14,10 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/BridgeMarshalling.h>
+#include <PhosphorProtocol/DragMarshalling.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
+#include <PhosphorProtocol/ZoneMarshalling.h>
 
 #include <effect/effecthandler.h>
 #include <core/output.h>

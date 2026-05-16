@@ -10,7 +10,7 @@
 #include "../windowanimator.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>

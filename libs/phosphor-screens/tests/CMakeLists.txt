@@ -18,17 +18,19 @@ function(ps_add_test _name)
     target_include_directories(${_name}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    # Default to the QtDBus-free core; D-Bus tests opt into the full
+    # PhosphorScreens target below.
     target_link_libraries(${_name}
         PRIVATE
             Qt6::Test
             Qt6::Core
             Qt6::Gui
-            PhosphorScreens::PhosphorScreens
+            PhosphorScreens::Core
     )
     add_test(NAME ${_name} COMMAND ${_name})
     # Offscreen QPA so QTimer-based tests work without a display server.
     set_tests_properties(${_name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphorscreens.debug=false"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphor.screens.debug=false"
         LABELS "phosphorscreens"
     )
 endfunction()
@@ -40,7 +42,10 @@ ps_add_test(ps_test_manager_lifecycle test_manager_lifecycle.cpp)
 ps_add_test(ps_test_resolver test_resolver.cpp)
 ps_add_test(ps_test_plasma_panel_source test_plasma_panel_source.cpp)
 ps_add_test(ps_test_dbusscreenadaptor test_dbusscreenadaptor.cpp)
-# DBus-component link — only this test needs it; the lib itself already
-# exposes QDBusAbstractAdaptor publicly, so this target inherits the
-# compile-time include surface but still needs the symbol.
-target_link_libraries(ps_test_dbusscreenadaptor PRIVATE Qt6::DBus)
+
+# These exercise the D-Bus surface (DBusScreenAdaptor, PlasmaPanelSource,
+# Resolver), so they link the full PhosphorScreens target rather than the
+# QtDBus-free core. PhosphorScreens carries Qt6::DBus PUBLIC.
+target_link_libraries(ps_test_resolver PRIVATE PhosphorScreens::PhosphorScreens)
+target_link_libraries(ps_test_plasma_panel_source PRIVATE PhosphorScreens::PhosphorScreens)
+target_link_libraries(ps_test_dbusscreenadaptor PRIVATE PhosphorScreens::PhosphorScreens)

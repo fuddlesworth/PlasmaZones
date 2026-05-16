@@ -4,7 +4,7 @@
 #pragma once
 
 #include "VirtualScreen.h"
-#include "phosphorscreens_export.h"
+#include "phosphorscreenscore_export.h"
 
 #include <QHash>
 #include <QObject>
@@ -33,7 +33,7 @@ namespace Phosphor::Screens {
  * false from `save` is an explicit "rejected"; ScreenManager logs and
  * leaves its cache untouched.
  */
-class PHOSPHORSCREENS_EXPORT IConfigStore : public QObject
+class PHOSPHORSCREENSCORE_EXPORT IConfigStore : public QObject
 {
     Q_OBJECT
 public:
