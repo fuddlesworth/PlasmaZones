@@ -20,7 +20,9 @@
 #include <QObject>
 #include <QTest>
 
-#include <PhosphorProtocol/Marshalling.h>
+#include <PhosphorProtocol/AutotileMarshalling.h>
+#include <PhosphorProtocol/BridgeMarshalling.h>
+#include <PhosphorProtocol/DragMarshalling.h>
 
 using namespace PhosphorProtocol;
 

@@ -7,7 +7,7 @@
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
-#include <PhosphorProtocol/Marshalling.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>

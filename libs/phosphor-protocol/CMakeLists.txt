@@ -52,8 +52,20 @@ endif()
 # PhosphorProtocol::Types — QtCore-only value vocabulary
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Per-interface value-type headers + the QtCore-only service constants. A
+# consumer recompiles only when the interface group it uses changes.
+set(phosphorprotocol_types_HDRS
+    include/PhosphorProtocol/ZoneTypes.h
+    include/PhosphorProtocol/WindowTypes.h
+    include/PhosphorProtocol/AutotileTypes.h
+    include/PhosphorProtocol/NavigationTypes.h
+    include/PhosphorProtocol/DragTypes.h
+    include/PhosphorProtocol/BridgeTypes.h
+    include/PhosphorProtocol/ServiceConstants.h
+)
+
 add_library(PhosphorProtocolTypes SHARED
-    include/PhosphorProtocol/Types.h
+    ${phosphorprotocol_types_HDRS}
     src/types.cpp
 )
 
@@ -93,10 +105,16 @@ set(phosphorprotocol_SRCS
     src/logging.cpp
 )
 
+# Per-interface D-Bus marshalling headers + registration + client helpers.
 set(phosphorprotocol_public_HDRS
     include/PhosphorProtocol/PhosphorProtocol.h
-    include/PhosphorProtocol/Marshalling.h
-    include/PhosphorProtocol/ServiceConstants.h
+    include/PhosphorProtocol/ZoneMarshalling.h
+    include/PhosphorProtocol/WindowMarshalling.h
+    include/PhosphorProtocol/AutotileMarshalling.h
+    include/PhosphorProtocol/NavigationMarshalling.h
+    include/PhosphorProtocol/DragMarshalling.h
+    include/PhosphorProtocol/BridgeMarshalling.h
+    include/PhosphorProtocol/Registration.h
     include/PhosphorProtocol/ClientHelpers.h
 )
 
@@ -155,7 +173,7 @@ install(TARGETS PhosphorProtocolTypes PhosphorProtocol
 )
 
 install(FILES
-    include/PhosphorProtocol/Types.h
+    ${phosphorprotocol_types_HDRS}
     ${phosphorprotocol_public_HDRS}
     ${CMAKE_CURRENT_BINARY_DIR}/PhosphorProtocol/phosphorprotocoltypes_export.h
     ${CMAKE_CURRENT_BINARY_DIR}/PhosphorProtocol/phosphorprotocol_export.h

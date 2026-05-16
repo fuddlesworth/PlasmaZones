@@ -11,7 +11,8 @@
 #include "core/logging.h"
 #include <PhosphorScreens/Manager.h>
 
-#include <PhosphorProtocol/Marshalling.h>
+#include <PhosphorProtocol/AutotileMarshalling.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>

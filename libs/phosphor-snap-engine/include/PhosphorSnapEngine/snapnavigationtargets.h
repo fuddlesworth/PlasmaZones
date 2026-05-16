@@ -5,7 +5,7 @@
 
 #include <phosphorsnapengine_export.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
-#include <PhosphorProtocol/Types.h>
+#include <PhosphorProtocol/NavigationTypes.h>
 
 #include <QString>
 
@@ -50,7 +50,7 @@ class IZoneAdjacencyResolver;
  * This class is deliberately not a QObject — it needs no signals of
  * its own, and the absence of QObject machinery makes it trivially
  * constructable for unit tests. The single dependency on Qt is the
- * shared result-struct types (MoveTargetResult etc. from PhosphorProtocol/Types.h).
+ * shared result-struct types (MoveTargetResult etc. from PhosphorProtocol/NavigationTypes.h).
  *
  * All methods are intended to be called only for screens that the
  * router (ScreenModeRouter) has confirmed are in Snapping mode. The

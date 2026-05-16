@@ -5,7 +5,8 @@
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorProtocol/Marshalling.h>
+#include <PhosphorProtocol/DragMarshalling.h>
+#include <PhosphorProtocol/Registration.h>
 
 #include <effect/effecthandler.h>
 #include <core/output.h>

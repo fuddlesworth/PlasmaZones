@@ -8,7 +8,9 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
-#include <PhosphorProtocol/Marshalling.h>
+#include <PhosphorProtocol/AutotileMarshalling.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
+#include <PhosphorProtocol/ZoneMarshalling.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>

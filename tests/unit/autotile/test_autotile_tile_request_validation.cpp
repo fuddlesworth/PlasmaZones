@@ -36,7 +36,7 @@
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
-#include <PhosphorProtocol/Types.h>
+#include <PhosphorProtocol/AutotileTypes.h>
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;

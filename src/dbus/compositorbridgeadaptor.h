@@ -4,7 +4,8 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include <PhosphorProtocol/Marshalling.h>
+#include <PhosphorProtocol/BridgeMarshalling.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>

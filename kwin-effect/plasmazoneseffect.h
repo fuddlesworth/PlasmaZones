@@ -6,7 +6,9 @@
 #include <cstdint>
 
 #include <PhosphorCompositor/ICompositorBridge.h>
-#include <PhosphorProtocol/Marshalling.h>
+#include <PhosphorProtocol/DragMarshalling.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
+#include <PhosphorProtocol/ZoneMarshalling.h>
 #include <PhosphorCompositor/TriggerParser.h>
 
 #include <PhosphorAnimation/AnimationLimits.h>

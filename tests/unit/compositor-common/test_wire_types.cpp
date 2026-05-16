@@ -13,7 +13,12 @@
 #include <QDBusArgument>
 #include <QTest>
 
-#include <PhosphorProtocol/Marshalling.h>
+#include <PhosphorProtocol/AutotileMarshalling.h>
+#include <PhosphorProtocol/BridgeMarshalling.h>
+#include <PhosphorProtocol/NavigationMarshalling.h>
+#include <PhosphorProtocol/Registration.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
+#include <PhosphorProtocol/ZoneMarshalling.h>
 
 namespace {
 
