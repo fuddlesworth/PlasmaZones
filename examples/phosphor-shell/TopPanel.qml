@@ -66,7 +66,7 @@ PanelWindow {
         shaderParams: {
             "customParams1_x": 1.2,
             "customParams1_y": 0,
-            "customParams1_z": 0.55,
+            "customParams1_z": 0.9,
             "customParams1_w": 0.08,
             "customParams2_x": 0,
             "customParams2_y": 24,
