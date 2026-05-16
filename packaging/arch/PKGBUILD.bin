@@ -14,6 +14,14 @@ url='https://github.com/fuddlesworth/PlasmaZones'
 # libPhosphorLayer) are LGPL-2.1-or-later. The binary tarball contains all
 # of them so both licenses apply to this package.
 license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
+
+# Exact KWin upstream version this binary was built against. The kwin-effect
+# plugin's IID embeds KWin's exact upstream version string; KWin refuses to
+# load effects whose IID doesn't match its own version, including across patch
+# bumps (e.g. 6.6.4 -> 6.6.5). CI substitutes this value at release time from
+# the build-host's installed kwin (see .github/workflows/release.yml).
+_kwin_ver=0.0.0
+
 depends=(
     'qt6-base'
     'qt6-declarative'
@@ -25,6 +33,7 @@ depends=(
     'kcmutils'
     'kglobalaccel'
     'qt6-wayland'
+    "kwin=${_kwin_ver}"
 )
 optdepends=(
     'plasma-activities: activity-based layouts'
