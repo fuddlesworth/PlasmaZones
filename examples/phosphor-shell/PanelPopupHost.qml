@@ -115,7 +115,6 @@ Item {
         anchor: host.topPanel.calendarAnchor
         popupWidth: 280
         popupHeight: 320
-        panelSurfaceHeight: host.topPanel.panelSurfaceHeight
         contentMargins: 14
 
         content: CalendarContent {
@@ -132,7 +131,6 @@ Item {
         anchor: host.topPanel.mediaAnchor
         popupWidth: 300
         popupHeight: 360
-        panelSurfaceHeight: host.topPanel.panelSurfaceHeight
         contentMargins: 16
 
         content: MprisContent {
@@ -150,7 +148,6 @@ Item {
         anchor: host.topPanel.menuAnchor
         popupWidth: 220
         popupHeight: 240
-        panelSurfaceHeight: host.topPanel.panelSurfaceHeight
         contentMargins: 8
 
         content: MenuContent {

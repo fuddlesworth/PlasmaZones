@@ -14,8 +14,13 @@
 // customParams[2]: x=panelToScreenH    y=blurRadius
 // customParams[3]: x=shadowFraction    y=shadowOpacity
 // customParams[4]: x=cornerCarveFraction
-// customParams[5]: y=screenYOffset (top edge of surface as fraction of screen height, for popups)
-//   NOTE: QML keys are vec+1 — set customParams6_y from QML to write customParams[5].y here.
+// customParams[5]: x=screenXOffset  y=screenYOffset  z=panelToScreenW
+//   Surface placement within the screen, for popups. screenXOffset /
+//   screenYOffset are the surface's top-left corner as a fraction of
+//   screen size; panelToScreenW is surface width / screen width (the X
+//   analogue of panelToScreenH). A full-width top-anchored panel leaves
+//   all three unset → the defaults reproduce the original behaviour.
+//   NOTE: QML keys are vec+1 — customParams6_{x,y,z} write [5].{x,y,z}.
 //   - cornerCarveFraction: radius of the concave quarter-arc carved
 //     into each bottom corner of the visible panel, expressed as a
 //     fraction of total surface height (DPR-independent). 0 disables
@@ -170,11 +175,15 @@ void main() {
     // fraction of surface height. Hard-clamp to 0..0.5 so the carve
     // can never eat the whole panel.
     float cornerCarveFraction = clamp(customParams[4].x, 0.0, 0.5);
-    // screenYOffset: Y position of this surface's top edge as a fraction of
-    // total screen height. The default `customParams[5].y == -1.0` (the
-    // unset sentinel from ShaderEffect) gets clamped to 0 here, so callers
-    // who don't write the slot get the top-anchored panel behavior.
+    // Surface placement within the screen (popups). screenXOffset /
+    // screenYOffset are the surface's top-left corner as a fraction of
+    // screen size; panelToScreenW is surface width / screen width. Unset
+    // slots arrive as the -1.0 ShaderEffect sentinel → the clamp and the
+    // `> 0` fallback reproduce the full-width top-anchored panel: offset
+    // 0, width ratio 1.
+    float screenXOffset = max(customParams[5].x, 0.0);
     float screenYOffset = max(customParams[5].y, 0.0);
+    float panelToScreenW = customParams[5].z > 0.0 ? customParams[5].z : 1.0;
 
     // Convert from Qt RHI's Y-up viewport coords (uv.y=0 at visual
     // BOTTOM, uv.y=1 at visual TOP) to top-down "panel surface" coords
@@ -288,26 +297,26 @@ void main() {
     vec2 wpSize = vec2(textureSize(uWallpaper, 0));
     if (wpSize.x > 1.0 && wpSize.y > 1.0) {
         hasWallpaper = true;
-        // Panel UV → screen UV. Panel is at the top of the screen
-        // spanning full width, so screenU == panelU and screenV ramps
-        // 0 .. (panel total height / screen height) as VISUAL panel y
-        // ramps 0 .. 1. Using visualUv (top-down) here means the top
-        // of the panel samples the top of the wallpaper — the
-        // alternative (raw uv from Y-up viewport) would sample the
-        // wallpaper UPSIDE-DOWN within the panel strip. The ratio is
-        // passed DPR-independently via panelToScreenH so we don't
-        // have to reconcile QML's Screen.devicePixelRatio with the
-        // panel's actual rendering DPR.
-        vec2 screenUv = vec2(visualUv.x, screenYOffset + visualUv.y * panelToScreenH);
+        // Surface UV → screen UV. The surface occupies the screen rect
+        // with top-left (screenXOffset, screenYOffset) and size
+        // (panelToScreenW, panelToScreenH) in screen fractions, so visual
+        // UV 0..1 maps into that sub-rect. A full-width top-anchored panel
+        // has offset 0 and panelToScreenW 1 → screenU == visualU. Using
+        // visualUv (top-down) means the top of the surface samples the
+        // top of the wallpaper; raw uv (Y-up viewport) would sample it
+        // upside-down. Ratios are DPR-independent so we never reconcile
+        // QML's Screen.devicePixelRatio with the actual rendering DPR.
+        vec2 screenUv = vec2(screenXOffset + visualUv.x * panelToScreenW,
+                             screenYOffset + visualUv.y * panelToScreenH);
         // Screen UV → wallpaper UV. KDE / GNOME / Hyprland default to
         // "scaled and cropped" wallpaper positioning; emulate center-
         // crop fit so the on-screen pixel maps to the right wallpaper
         // pixel.
-        // Derive screen aspect from `panelToScreenH`: panel surface
-        // is full screen width, so screen width = iResolution.x and
-        // screen height = iResolution.y / panelToScreenH.
+        // Derive screen aspect from the surface→screen ratios:
+        //   screen width  = iResolution.x / panelToScreenW
+        //   screen height = iResolution.y / panelToScreenH
         float wpAspect = wpSize.x / max(wpSize.y, 1.0);
-        float scrAspect = (iResolution.x * panelToScreenH) / max(iResolution.y, 1.0);
+        float scrAspect = (iResolution.x * panelToScreenH) / max(iResolution.y * panelToScreenW, 1.0);
         vec2 wpUv = screenUv;
         if (wpAspect > scrAspect) {
             float scale = scrAspect / wpAspect;
