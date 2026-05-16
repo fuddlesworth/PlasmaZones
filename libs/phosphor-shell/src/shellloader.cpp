@@ -24,11 +24,23 @@ bool isValidShellName(const QString& name)
     if (name.isEmpty()) {
         return false;
     }
+    // A whitespace-only name is non-empty but resolves to a nonsense
+    // directory ("<config>/   /shell.qml") — reject it.
+    if (name.trimmed().isEmpty()) {
+        return false;
+    }
     if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))) {
         return false;
     }
     if (name == QLatin1String(".") || name == QLatin1String("..")) {
         return false;
+    }
+    // Control characters (NUL, newline, etc.) never belong in a
+    // directory name — they corrupt log output and path comparisons.
+    for (const QChar ch : name) {
+        if (ch.category() == QChar::Other_Control) {
+            return false;
+        }
     }
     return true;
 }

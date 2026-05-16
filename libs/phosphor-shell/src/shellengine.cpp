@@ -69,11 +69,10 @@ bool ShellEngine::load(const QUrl& shellUrl)
         return false;
     }
     // Defensive null-check on the deps the load() body unconditionally
-    // dereferences. Without this, a consumer that constructs
-    // `ShellEngine(Deps{})` (both pointers default-null) crashes inside
-    // `m_screenModel = new ScreenModel(nullptr, this)` → screensChanged
-    // connect on a null notifier, which is harder to diagnose than a
-    // clean failed() signal.
+    // dereferences (ScreenModel construction, the notifier connect, and
+    // surface creation in materializePanels). A consumer that constructs
+    // `ShellEngine(Deps{})` with default-null pointers gets a clean
+    // failed() signal instead of a crash deep inside the load path.
     if (!m_deps.screenProvider) {
         Q_EMIT failed(QStringLiteral("ShellEngine: screenProvider must be non-null"));
         return false;
@@ -89,8 +88,16 @@ bool ShellEngine::load(const QUrl& shellUrl)
     m_shellGlobal = new ShellGlobal(this);
     m_shellGlobal->setScreenModel(m_screenModel);
 
-    connect(m_deps.screenProvider->notifier(), &PhosphorLayer::ScreenProviderNotifier::screensChanged, this,
-            &ShellEngine::onScreensChanged);
+    // Screen-topology changes drive a hot reload. The notifier is
+    // optional — a screen provider need not expose one — so guard the
+    // connect; a null notifier means no automatic reload on monitor
+    // hotplug / resolution changes (the shell still loads and runs).
+    if (auto* notifier = m_deps.screenProvider->notifier()) {
+        connect(notifier, &PhosphorLayer::ScreenProviderNotifier::screensChanged, this, &ShellEngine::onScreensChanged);
+    } else {
+        qCWarning(lcShellEngine)
+            << "screenProvider exposes no notifier — shell will not reload on screen-topology changes";
+    }
 
     // QML type registration is process-global (Qt's registry, not per-
     // engine). Guard with std::call_once so multiple ShellEngines in
@@ -122,20 +129,34 @@ bool ShellEngine::load(const QUrl& shellUrl)
         qmlRegisterSingletonType<Toplevels>("Phosphor.Shell", 1, 0, "Toplevels", &Toplevels::create);
     });
 
+    if (!buildAndMaterialize()) {
+        return false;
+    }
+    setupWatcher();
+    Q_EMIT loaded();
+    return true;
+}
+
+bool ShellEngine::buildAndMaterialize()
+{
     m_engine = std::make_unique<QQmlEngine>(this);
     m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
+    // Bind the Environment singleton on the (possibly fresh) engine. On
+    // hot-reload the previous engine's Environment was destroyed with it;
+    // QML looking up `Environment.get(...)` on an engine without this
+    // line silently returns undefined.
     m_engine->rootContext()->setContextProperty(QStringLiteral("Environment"), new Environment(m_engine.get()));
-    // Run the per-engine hooks AFTER our own context-property setup
-    // and BEFORE the shell QML is parsed. Image providers, custom
-    // context properties, and engine-scoped singletons all need to be
-    // in place by the time QQmlComponent walks the QML tree.
+    // Run the per-engine hooks AFTER our own context-property setup and
+    // BEFORE the shell QML is parsed. Image providers, custom context
+    // properties, and engine-scoped singletons all need to be in place
+    // by the time QQmlComponent walks the QML tree.
     for (const auto& hook : m_engineHooks) {
         if (hook) {
             hook(m_engine.get());
         }
     }
 
-    QQmlComponent component(m_engine.get(), shellUrl, QQmlComponent::PreferSynchronous);
+    QQmlComponent component(m_engine.get(), m_shellUrl, QQmlComponent::PreferSynchronous);
     if (component.isError()) {
         const QString errors = component.errorString();
         qCWarning(lcShellEngine) << "Failed to load shell.qml:" << errors;
@@ -153,8 +174,6 @@ bool ShellEngine::load(const QUrl& shellUrl)
     m_rootRef = m_rootObject.get();
 
     materializePanels();
-    setupWatcher();
-    Q_EMIT loaded();
     return true;
 }
 
@@ -233,7 +252,10 @@ void ShellEngine::onScreensChanged()
 
 void ShellEngine::onFileChanged()
 {
-    qCDebug(lcShellEngine) << "Shell config changed, reloading...";
+    // Triggered by both the file watcher and screen-topology changes
+    // (onScreensChanged routes through the same debounce timer), so the
+    // message stays neutral about the cause.
+    qCDebug(lcShellEngine) << "Reloading shell...";
 
     savePersistentState();
     teardown();
@@ -251,44 +273,16 @@ void ShellEngine::onFileChanged()
         }
     }
 
-    m_engine = std::make_unique<QQmlEngine>(this);
-    m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
-    // Re-bind the Environment singleton on the new engine. The previous
-    // engine's Environment instance was destroyed with the old engine; QML
-    // looking up `Environment.get(...)` on a fresh engine without this
-    // line silently returns undefined and the example settings panel
-    // would render blank after every hot reload.
-    m_engine->rootContext()->setContextProperty(QStringLiteral("Environment"), new Environment(m_engine.get()));
-    // Re-run the engine hooks on the fresh engine — image providers
-    // and engine-scoped singletons need to be installed on every
-    // QQmlEngine, not just the first one.
-    for (const auto& hook : m_engineHooks) {
-        if (hook) {
-            hook(m_engine.get());
-        }
-    }
-    // No qmlRegisterType call here: those are PROCESS-global, set up
-    // once in load() at startup. A new QQmlEngine sees the existing
-    // registrations and resolves "Phosphor.Shell" types correctly. If
-    // a future Qt scopes registrations per-engine, this assumption
-    // would need revisiting — current Qt 6.x keeps the registry global.
-
-    QQmlComponent component(m_engine.get(), m_shellUrl, QQmlComponent::PreferSynchronous);
-    if (component.isError()) {
-        qCWarning(lcShellEngine) << "Reload failed:" << component.errorString();
-        Q_EMIT failed(component.errorString());
+    // buildAndMaterialize() rebuilds the QQmlEngine and re-runs the
+    // engine hooks. It deliberately does NOT call qmlRegisterType: those
+    // are PROCESS-global, set up once in load() at startup. A new
+    // QQmlEngine sees the existing registrations and resolves
+    // "Phosphor.Shell" types correctly. If a future Qt scopes
+    // registrations per-engine, that assumption would need revisiting —
+    // current Qt 6.x keeps the registry global.
+    if (!buildAndMaterialize()) {
         return;
     }
-
-    m_rootObject.reset(component.create());
-    if (!m_rootObject) {
-        qCWarning(lcShellEngine) << "Reload instantiation failed:" << component.errorString();
-        Q_EMIT failed(component.errorString());
-        return;
-    }
-    m_rootRef = m_rootObject.get();
-
-    materializePanels();
     restorePersistentState();
 
     qCDebug(lcShellEngine) << "Reload complete," << m_surfaces.size() << "surface(s)";
