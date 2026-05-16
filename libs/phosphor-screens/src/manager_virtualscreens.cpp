@@ -241,10 +241,16 @@ QRect ScreenManager::screenGeometry(const QString& screenId) const
         }
         QRect cached = m_virtualGeometryCache.value(screenId);
         if (cached.isValid()) {
+            // Resolved — clear any stale warn-once entry so a later,
+            // genuinely-new miss on this id surfaces again.
+            m_warnedVirtualGeometryMisses.remove(screenId);
             return cached;
         }
-        qCWarning(lcPhosphorScreens) << "screenGeometry: virtual screen" << screenId
-                                     << "not found in cache, returning invalid geometry";
+        if (!m_warnedVirtualGeometryMisses.contains(screenId)) {
+            m_warnedVirtualGeometryMisses.insert(screenId);
+            qCWarning(lcPhosphorScreens) << "screenGeometry: virtual screen" << screenId
+                                         << "not found in cache, returning invalid geometry";
+        }
         return QRect();
     }
     QScreen* screen = ScreenIdentity::findByIdOrName(screenId);
@@ -370,6 +376,7 @@ void ScreenManager::invalidateVirtualGeometryCache(const QString& physicalScreen
 {
     if (physicalScreenId.isEmpty()) {
         m_virtualGeometryCache.clear();
+        m_warnedVirtualGeometryMisses.clear();
         return;
     }
     auto it = m_virtualGeometryCache.begin();
@@ -378,6 +385,14 @@ void ScreenManager::invalidateVirtualGeometryCache(const QString& physicalScreen
             it = m_virtualGeometryCache.erase(it);
         } else {
             ++it;
+        }
+    }
+    auto wit = m_warnedVirtualGeometryMisses.begin();
+    while (wit != m_warnedVirtualGeometryMisses.end()) {
+        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(*wit) == physicalScreenId) {
+            wit = m_warnedVirtualGeometryMisses.erase(wit);
+        } else {
+            ++wit;
         }
     }
 }

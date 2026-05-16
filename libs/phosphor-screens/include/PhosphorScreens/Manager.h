@@ -258,6 +258,14 @@ private:
     // loudly once per physId per session instead of burying it at qCDebug.
     mutable QSet<QString> m_warnedEffectiveIdMisses;
 
+    // Warn-once set for screenGeometry() virtual-screen cache misses. A stale
+    // "physId/vs:N" id that survives a VS-config change gets queried
+    // repeatedly (per cursor move, per snap commit) — warn once per id rather
+    // than flooding the journal. Pruned by invalidateVirtualGeometryCache and
+    // cleared on a successful resolve so a genuinely-new miss after a
+    // reconfigure still surfaces.
+    mutable QSet<QString> m_warnedVirtualGeometryMisses;
+
     void invalidateVirtualGeometryCache(const QString& physicalScreenId = {}) const;
     void rebuildVirtualGeometryCache(const QString& physicalScreenId) const;
 

@@ -382,8 +382,13 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
         if (it.value().mainOverlaySlot()) {
             const QRect targetGeom = it.value().overlayGeometry;
             if (!targetGeom.isValid()) {
-                qCWarning(lcOverlay) << "updateMousePosition: no overlay geometry for screen" << it.key()
-                                     << ": skipping mouse position update";
+                // Expected-transient: during a virtual-screen reconfigure an
+                // overlay slot can exist for a beat before its geometry is
+                // resolved. updateMousePosition runs once per cursor-move
+                // event (~30 Hz), so warning here floods the journal for a
+                // condition that self-heals on the next geometry update.
+                qCDebug(lcOverlay) << "updateMousePosition: no overlay geometry for screen" << it.key()
+                                   << ": skipping mouse position update";
                 continue;
             }
             const QPointF local(cursorX - targetGeom.x(), cursorY - targetGeom.y());
