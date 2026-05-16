@@ -8,7 +8,7 @@
 #include "types.h"
 #include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorZones/GeometryUtils.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Types.h>
 #include <QRectF>
 #include <QScreen>
 #include <QVariantMap>

@@ -14,7 +14,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Marshalling.h>
 
 #include <effect/effecthandler.h>
 #include <core/output.h>

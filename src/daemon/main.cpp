@@ -13,7 +13,7 @@
 #include "rendering/zoneshaderitem.h"
 #include "vulkan_support.h"
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Marshalling.h>
 #include <QGuiApplication>
 #include <QCommandLineParser>
 #include <QDBusConnection>

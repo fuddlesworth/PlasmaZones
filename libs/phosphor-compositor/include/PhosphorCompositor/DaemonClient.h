@@ -7,7 +7,7 @@
 #include <PhosphorCompositor/IGeometryHandler.h>
 #include <PhosphorCompositor/IDragHandler.h>
 #include <PhosphorCompositor/ILifecycleHandler.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Marshalling.h>
 
 #include <QObject>
 #include <QRect>

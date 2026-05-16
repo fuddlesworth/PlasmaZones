@@ -9,7 +9,7 @@
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowRegistry.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Types.h>
 #include <QObject>
 #include <QString>
 #include <QStringList>

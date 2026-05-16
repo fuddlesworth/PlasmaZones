@@ -7,7 +7,7 @@
 
 #include <PhosphorCompositor/ICompositorBridge.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Types.h>
 
 #include <QSet>
 #include <QString>

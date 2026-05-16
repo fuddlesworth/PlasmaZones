@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Marshalling.h>
 
 #include <QObject>
 #include <QSet>

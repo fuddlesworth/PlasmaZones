@@ -58,7 +58,7 @@ target_link_libraries(PhosphorPlacement
         PhosphorEngine::PhosphorEngine
         PhosphorSnapEngine::PhosphorSnapEngine
         PhosphorZones::PhosphorZones
-        PhosphorProtocol::PhosphorProtocol
+        PhosphorProtocol::Types
     PRIVATE
         PhosphorScreens::PhosphorScreens
         PhosphorIdentity::PhosphorIdentity

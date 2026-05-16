@@ -10,7 +10,7 @@
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Types.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>

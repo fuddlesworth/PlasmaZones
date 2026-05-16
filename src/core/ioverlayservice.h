@@ -12,7 +12,7 @@
 
 #include "plasmazones_export.h"
 
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Types.h>
 
 #include <QObject>
 #include <QRect>

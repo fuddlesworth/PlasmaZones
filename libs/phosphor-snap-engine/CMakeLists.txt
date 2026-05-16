@@ -63,7 +63,7 @@ target_link_libraries(PhosphorSnapEngine
         Qt6::Gui
         PhosphorEngine::PhosphorEngine
         PhosphorZones::PhosphorZones
-        PhosphorProtocol::PhosphorProtocol
+        PhosphorProtocol::Types
     PRIVATE
         PhosphorScreens::PhosphorScreens
         PhosphorIdentity::PhosphorIdentity

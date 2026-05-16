@@ -6,7 +6,7 @@
 #include <cstdint>
 
 #include <PhosphorCompositor/ICompositorBridge.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Marshalling.h>
 #include <PhosphorCompositor/TriggerParser.h>
 
 #include <PhosphorAnimation/AnimationLimits.h>

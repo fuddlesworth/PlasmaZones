@@ -37,7 +37,7 @@
 #include <QUuid>
 #include <QVariant>
 
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Marshalling.h>
 
 using namespace PhosphorProtocol;
 

@@ -3,12 +3,17 @@
 #
 # PhosphorProtocol — D-Bus wire types and service constants for Phosphor IPC.
 #
-# Provides:
-#   - Wire-format structs for D-Bus marshalling/demarshalling
-#   - Service name and path constants
-#   - Client-side helper utilities
+# Two targets, layered so the value vocabulary does not drag QtDBus into
+# pure-compute consumers:
 #
-# Depends on Qt6::Core, Qt6::DBus.
+#   PhosphorProtocol::Types  — value structs/enums. Depends only on Qt6::Core.
+#                              Domain libraries (snap engine, placement) link
+#                              this to name protocol results without QtDBus.
+#   PhosphorProtocol::PhosphorProtocol
+#                            — D-Bus marshalling, metatype registration,
+#                              service constants, client helpers. Depends on
+#                              ::Types + Qt6::DBus. Linked by adaptors and the
+#                              daemon/effect entry points.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -29,18 +34,68 @@ include(GenerateExportHeader)
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus)
 
+# PhosphorDBus provides the generic D-Bus client / streaming utilities the
+# marshalling + client-helper layer is built on. Available as an in-tree
+# target during the umbrella build; resolved as a package otherwise.
+if(NOT TARGET PhosphorDBus::PhosphorDBus)
+    find_package(PhosphorDBus CONFIG REQUIRED)
+endif()
+
+if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# PhosphorProtocol Library
+# PhosphorProtocol::Types — QtCore-only value vocabulary
+# ═══════════════════════════════════════════════════════════════════════════════
+
+add_library(PhosphorProtocolTypes SHARED
+    include/PhosphorProtocol/Types.h
+    src/types.cpp
+)
+
+add_library(PhosphorProtocol::Types ALIAS PhosphorProtocolTypes)
+
+generate_export_header(PhosphorProtocolTypes
+    BASE_NAME PhosphorProtocolTypes
+    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/PhosphorProtocol/phosphorprotocoltypes_export.h
+    EXPORT_MACRO_NAME PHOSPHORPROTOCOLTYPES_EXPORT
+)
+
+target_include_directories(PhosphorProtocolTypes
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+)
+
+target_compile_features(PhosphorProtocolTypes PUBLIC cxx_std_20)
+
+target_link_libraries(PhosphorProtocolTypes
+    PUBLIC
+        Qt6::Core
+)
+
+set_target_properties(PhosphorProtocolTypes PROPERTIES
+    VERSION ${PHOSPHORPROTOCOL_VERSION}
+    SOVERSION 0
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PhosphorProtocol — D-Bus marshalling + service constants + client helpers
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(phosphorprotocol_SRCS
-    src/wiretypes.cpp
+    src/marshalling.cpp
     src/logging.cpp
 )
 
 set(phosphorprotocol_public_HDRS
     include/PhosphorProtocol/PhosphorProtocol.h
-    include/PhosphorProtocol/WireTypes.h
+    include/PhosphorProtocol/Marshalling.h
     include/PhosphorProtocol/ServiceConstants.h
     include/PhosphorProtocol/ClientHelpers.h
 )
@@ -57,13 +112,6 @@ generate_export_header(PhosphorProtocol
     EXPORT_MACRO_NAME PHOSPHORPROTOCOL_EXPORT
 )
 
-if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
-    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
-    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
-endif()
-
 target_include_directories(PhosphorProtocol
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -75,6 +123,8 @@ target_compile_features(PhosphorProtocol PUBLIC cxx_std_20)
 
 target_link_libraries(PhosphorProtocol
     PUBLIC
+        PhosphorProtocol::Types
+        PhosphorDBus::PhosphorDBus
         Qt6::Core
         Qt6::DBus
 )
@@ -97,17 +147,18 @@ endif()
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════
 
-install(TARGETS PhosphorProtocol
+install(TARGETS PhosphorProtocolTypes PhosphorProtocol
     EXPORT PhosphorProtocolTargets
     RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
 )
 
-install(FILES ${phosphorprotocol_public_HDRS}
-    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorProtocol
-)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorProtocol/phosphorprotocol_export.h
+install(FILES
+    include/PhosphorProtocol/Types.h
+    ${phosphorprotocol_public_HDRS}
+    ${CMAKE_CURRENT_BINARY_DIR}/PhosphorProtocol/phosphorprotocoltypes_export.h
+    ${CMAKE_CURRENT_BINARY_DIR}/PhosphorProtocol/phosphorprotocol_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorProtocol
 )
 

@@ -4,7 +4,7 @@
 #pragma once
 
 #include <PhosphorCompositor/AutotileState.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Marshalling.h>
 
 #include <QHash>
 #include <QObject>

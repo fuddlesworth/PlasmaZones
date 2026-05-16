@@ -20,7 +20,7 @@
 #include <QObject>
 #include <QTest>
 
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Marshalling.h>
 
 using namespace PhosphorProtocol;
 

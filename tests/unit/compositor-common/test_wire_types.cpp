@@ -13,7 +13,7 @@
 #include <QDBusArgument>
 #include <QTest>
 
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/Marshalling.h>
 
 namespace {
 
