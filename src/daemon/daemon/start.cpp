@@ -511,7 +511,14 @@ void Daemon::connectShortcutSignals()
         if (!m_unifiedLayoutController) {
             return;
         }
-        const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+        // The layout picker is screen-targeted — it picks the layout for a
+        // screen — not window-targeted. Resolve cursor-first: the user's
+        // intent is "the screen I am looking at". resolveShortcutScreenId
+        // (focused-window-first) misroutes the picker to the wrong virtual
+        // screen when the cursor rests on a different VS than the focused
+        // window (e.g. just dropped a window on vs:1 while the focused
+        // window is still on vs:0).
+        const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
         if (screenId.isEmpty()) {
             qCDebug(lcDaemon) << "LayoutPicker shortcut: no screen info";
             return;
