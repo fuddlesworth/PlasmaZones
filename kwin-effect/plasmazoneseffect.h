@@ -546,6 +546,7 @@ private:
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();
     void loadAnimationAppRulesFromDbus();
+    void loadMotionProfileTreeFromDbus();
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                 bool reverse = false, bool holdCloseGrab = false);
@@ -808,6 +809,13 @@ private:
 private Q_SLOTS:
     /// Handle daemon signal when virtual screen definitions change
     void onVirtualScreensChanged(const QString& physicalScreenId);
+
+    /// Handle daemon signal when the per-event motion-profile tree
+    /// changes (a per-event animation duration was edited). Re-fetches
+    /// `motionProfileTree` so per-event durations apply without a
+    /// logout/login. Dedicated signal (not settingsChanged) so the
+    /// Settings app's change detection is unaffected.
+    void slotMotionProfileTreeChanged();
 };
 
 } // namespace PlasmaZones

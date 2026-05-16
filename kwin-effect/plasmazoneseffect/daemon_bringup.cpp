@@ -542,6 +542,7 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     loadShaderProfileFromDbus();
     loadAnimationAppRulesFromDbus();
+    loadMotionProfileTreeFromDbus();
     loadShaderRegistryFromDbus();
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
         m_cachedToggleActivation = v.toBool();

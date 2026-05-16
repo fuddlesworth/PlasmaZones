@@ -105,6 +105,15 @@ public:
     /// Current owner tag for @p path, or empty string.
     QString ownerOf(const QString& path) const;
 
+    /// Thread-safe copy of every registered (path → Profile) pair,
+    /// owner tags discarded. Intended for publishers that need to
+    /// serialize the merged per-event profile set out of process
+    /// (e.g. the daemon broadcasting a `ProfileTree` to the
+    /// kwin-effect over D-Bus). For in-process resolution prefer
+    /// `resolveWithInheritance` — it applies the parent-chain overlay
+    /// the registry cannot encode in a flat snapshot.
+    QHash<QString, Profile> snapshot() const;
+
     /// Current path count. Thread-safe.
     int profileCount() const;
 
