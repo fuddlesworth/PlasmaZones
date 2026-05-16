@@ -87,9 +87,12 @@ BuildRequires:  cmake(Qt6WaylandClientPrivate)
 BuildRequires:  wayland-devel
 BuildRequires:  cmake(PlasmaActivities)
 BuildRequires:  pkgconfig(systemd)
-# systemd-rpm-macros defines %systemd_user_post / %systemd_user_postun_*
+# systemd-rpm-macros defines %%systemd_user_post / %%systemd_user_postun_*
 # — without it those macros expand to empty and the user-unit hooks at
-# %post / %postun silently no-op on openSUSE.
+# %%post / %%postun silently no-op on openSUSE. The %% escapes keep rpm
+# from expanding the macro names inside this comment: on openSUSE
+# %%systemd_user_post expands to a multi-line helper invocation, which
+# lands in the preamble as an "Unknown tag" error.
 BuildRequires:  systemd-rpm-macros
 %else
 BuildRequires:  kwin-devel >= 6.6.0
