@@ -42,12 +42,6 @@ namespace PhosphorSnapEngine {
 using PhosphorEngine::NavigationContext;
 using PhosphorEngine::SnapIntent;
 using PhosphorEngine::ZoneAssignmentEntry;
-using PhosphorProtocol::CycleTargetResult;
-using PhosphorProtocol::FocusTargetResult;
-using PhosphorProtocol::MoveTargetResult;
-using PhosphorProtocol::RestoreTargetResult;
-using PhosphorProtocol::SwapTargetResult;
-using PhosphorProtocol::WindowGeometryList;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Private helpers
@@ -176,7 +170,7 @@ void SnapEngine::focusInDirection(const QString& direction, const NavigationCont
         return;
     }
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
-    FocusTargetResult result = resolver->getFocusTargetForWindow(windowId, direction, screenId);
+    PhosphorProtocol::FocusTargetResult result = resolver->getFocusTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
         return; // resolver already emitted feedback via its callback
     }
@@ -212,7 +206,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
         return;
     }
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
-    MoveTargetResult result = resolver->getMoveTargetForWindow(windowId, direction, screenId);
+    PhosphorProtocol::MoveTargetResult result = resolver->getMoveTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
         return;
     }
@@ -255,7 +249,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
         return;
     }
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
-    SwapTargetResult result = resolver->getSwapTargetForWindow(windowId, direction, screenId);
+    PhosphorProtocol::SwapTargetResult result = resolver->getSwapTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
         return;
     }
@@ -306,7 +300,8 @@ void SnapEngine::moveFocusedToPosition(int zoneNumber, const NavigationContext& 
         return;
     }
     const QString effectiveScreen = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
-    MoveTargetResult result = resolver->getSnapToZoneByNumberTarget(windowId, zoneNumber, effectiveScreen);
+    PhosphorProtocol::MoveTargetResult result =
+        resolver->getSnapToZoneByNumberTarget(windowId, zoneNumber, effectiveScreen);
     if (!result.success) {
         return;
     }
@@ -344,7 +339,7 @@ void SnapEngine::pushFocusedToEmptyZone(const NavigationContext& ctx)
         return;
     }
     const QString effectiveScreen = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
-    MoveTargetResult result = resolver->getPushTargetForWindow(windowId, effectiveScreen);
+    PhosphorProtocol::MoveTargetResult result = resolver->getPushTargetForWindow(windowId, effectiveScreen);
     if (!result.success) {
         return;
     }
@@ -379,7 +374,7 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
         return;
     }
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
-    RestoreTargetResult result = resolver->getRestoreForWindow(windowId, screenId);
+    PhosphorProtocol::RestoreTargetResult result = resolver->getRestoreForWindow(windowId, screenId);
     if (!result.success) {
         return;
     }
@@ -445,7 +440,7 @@ void SnapEngine::cycleFocus(bool forward, const NavigationContext& ctx)
         return;
     }
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
-    CycleTargetResult result = resolver->getCycleTargetForWindow(windowId, forward, screenId);
+    PhosphorProtocol::CycleTargetResult result = resolver->getCycleTargetForWindow(windowId, forward, screenId);
     if (!result.success) {
         return;
     }
@@ -485,16 +480,17 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
     // cursor/active-screen shadows via INavigationStateProvider — only
     // used when none of the built-in strategies (targetScreenId /
     // geometry.center() / QGuiApplication::screens()) yield a screen.
-    WindowGeometryList geometries = applyBatchAssignments(entries, SnapIntent::UserInitiated, [this]() -> QString {
-        if (!m_navState) {
-            return QString();
-        }
-        QString cursor = m_navState->lastCursorScreenName();
-        if (cursor.isEmpty()) {
-            cursor = m_navState->lastActiveScreenName();
-        }
-        return cursor;
-    });
+    PhosphorProtocol::WindowGeometryList geometries =
+        applyBatchAssignments(entries, SnapIntent::UserInitiated, [this]() -> QString {
+            if (!m_navState) {
+                return QString();
+            }
+            QString cursor = m_navState->lastCursorScreenName();
+            if (cursor.isEmpty()) {
+                cursor = m_navState->lastActiveScreenName();
+            }
+            return cursor;
+        });
     if (!geometries.isEmpty()) {
         Q_EMIT applyGeometriesBatch(geometries, QStringLiteral("rotate"));
     }

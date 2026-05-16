@@ -46,7 +46,7 @@ class TestWireTypes : public QObject
 private Q_SLOTS:
 
     // =================================================================
-    // D-Bus types: WindowGeometryEntry roundtrip
+    // D-Bus types: PhosphorProtocol::WindowGeometryEntry roundtrip
     // =================================================================
 
     void testWindowGeometryEntryRoundtrip()
@@ -82,7 +82,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: TileRequestEntry roundtrip
+    // D-Bus types: PhosphorProtocol::TileRequestEntry roundtrip
     // =================================================================
 
     void testTileRequestEntryRoundtrip()
@@ -119,7 +119,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: SnapAllResultEntry roundtrip
+    // D-Bus types: PhosphorProtocol::SnapAllResultEntry roundtrip
     // =================================================================
 
     void testSnapAllResultEntryRoundtrip()
@@ -158,7 +158,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // WindowGeometryEntry::toRect() and fromRect()
+    // PhosphorProtocol::WindowGeometryEntry::toRect() and fromRect()
     // =================================================================
 
     void testWindowGeometryToRect()
@@ -177,7 +177,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // TileRequestEntry::toRect()
+    // PhosphorProtocol::TileRequestEntry::toRect()
     // =================================================================
 
     void testTileRequestToRect()
@@ -188,7 +188,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // SnapAllResultEntry::toGeometryEntry()
+    // PhosphorProtocol::SnapAllResultEntry::toGeometryEntry()
     // =================================================================
 
     void testSnapAllResultToGeometryEntry()
@@ -212,7 +212,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: WindowStateEntry roundtrip
+    // D-Bus types: PhosphorProtocol::WindowStateEntry roundtrip
     // =================================================================
 
     void testWindowStateEntryRoundtrip()
@@ -248,7 +248,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: UnfloatRestoreResult roundtrip
+    // D-Bus types: PhosphorProtocol::UnfloatRestoreResult roundtrip
     // =================================================================
 
     void testUnfloatRestoreResultRoundtrip()
@@ -276,7 +276,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: ZoneGeometryRect roundtrip
+    // D-Bus types: PhosphorProtocol::ZoneGeometryRect roundtrip
     // =================================================================
 
     void testZoneGeometryRectRoundtrip()
@@ -302,7 +302,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: EmptyZoneEntry roundtrip
+    // D-Bus types: PhosphorProtocol::EmptyZoneEntry roundtrip
     // =================================================================
 
     void testEmptyZoneEntryRoundtrip()
@@ -347,7 +347,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: SnapAssistCandidate roundtrip
+    // D-Bus types: PhosphorProtocol::SnapAssistCandidate roundtrip
     // =================================================================
 
     void testSnapAssistCandidateRoundtrip()
@@ -370,7 +370,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: NamedZoneGeometry roundtrip
+    // D-Bus types: PhosphorProtocol::NamedZoneGeometry roundtrip
     // =================================================================
 
     void testNamedZoneGeometryRoundtrip()
@@ -389,7 +389,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: AlgorithmInfoEntry roundtrip
+    // D-Bus types: PhosphorProtocol::AlgorithmInfoEntry roundtrip
     // =================================================================
 
     void testAlgorithmInfoEntryRoundtrip()
@@ -431,7 +431,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: BridgeRegistrationResult roundtrip
+    // D-Bus types: PhosphorProtocol::BridgeRegistrationResult roundtrip
     // =================================================================
 
     void testBridgeRegistrationResultRoundtrip()
@@ -452,7 +452,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: MoveTargetResult roundtrip
+    // D-Bus types: PhosphorProtocol::MoveTargetResult roundtrip
     // =================================================================
 
     void testMoveTargetResultRoundtrip()
@@ -483,7 +483,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: FocusTargetResult roundtrip
+    // D-Bus types: PhosphorProtocol::FocusTargetResult roundtrip
     // =================================================================
 
     void testFocusTargetResultRoundtrip()
@@ -510,7 +510,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: CycleTargetResult roundtrip
+    // D-Bus types: PhosphorProtocol::CycleTargetResult roundtrip
     // =================================================================
 
     void testCycleTargetResultRoundtrip()
@@ -532,7 +532,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: SwapTargetResult roundtrip
+    // D-Bus types: PhosphorProtocol::SwapTargetResult roundtrip
     // =================================================================
 
     void testSwapTargetResultRoundtrip()
@@ -581,7 +581,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: RestoreTargetResult roundtrip
+    // D-Bus types: PhosphorProtocol::RestoreTargetResult roundtrip
     // =================================================================
 
     void testRestoreTargetResultRoundtrip()
@@ -606,7 +606,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // D-Bus types: WindowOpenedEntry roundtrip
+    // D-Bus types: PhosphorProtocol::WindowOpenedEntry roundtrip
     // =================================================================
 
     void testWindowOpenedEntryRoundtrip()

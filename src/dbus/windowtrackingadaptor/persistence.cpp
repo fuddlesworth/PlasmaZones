@@ -108,15 +108,15 @@ void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
     }
 }
 
-PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometries()
+PhosphorProtocol::PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometries()
 {
-    PreTileGeometryList result;
+    PhosphorProtocol::PreTileGeometryList result;
     if (!m_snapEngine) {
         return result;
     }
     const auto& map = m_snapEngine->unmanagedGeometries();
     for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
-        PreTileGeometryEntry entry;
+        PhosphorProtocol::PreTileGeometryEntry entry;
         entry.appId = m_service->currentAppIdFor(it.key());
         entry.x = it.value().geometry.x();
         entry.y = it.value().geometry.y();
@@ -190,13 +190,13 @@ bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int heig
     return false;
 }
 
-WindowGeometryList WindowTrackingAdaptor::getUpdatedWindowGeometries()
+PhosphorProtocol::WindowGeometryList WindowTrackingAdaptor::getUpdatedWindowGeometries()
 {
     QHash<QString, QRect> geometries = m_service->updatedWindowGeometries();
-    WindowGeometryList result;
+    PhosphorProtocol::WindowGeometryList result;
     result.reserve(geometries.size());
     for (auto it = geometries.constBegin(); it != geometries.constEnd(); ++it) {
-        result.append(WindowGeometryEntry::fromRect(it.key(), it.value()));
+        result.append(PhosphorProtocol::WindowGeometryEntry::fromRect(it.key(), it.value()));
     }
     qCDebug(lcDbusWindow) << "Returning updated geometries for" << result.size() << "windows";
     return result;

@@ -31,8 +31,8 @@ namespace PlasmaZones {
 
 namespace {
 
-/// Convert EmptyZoneList to QVariantList for QML property push
-QVariantList emptyZonesToVariantList(const EmptyZoneList& zones)
+/// Convert PhosphorProtocol::EmptyZoneList to QVariantList for QML property push
+QVariantList emptyZonesToVariantList(const PhosphorProtocol::EmptyZoneList& zones)
 {
     QVariantList result;
     result.reserve(zones.size());
@@ -58,8 +58,8 @@ QVariantList emptyZonesToVariantList(const EmptyZoneList& zones)
     return result;
 }
 
-/// Convert SnapAssistCandidateList to QVariantList for QML property push
-QVariantList candidatesToVariantList(const SnapAssistCandidateList& candidates)
+/// Convert PhosphorProtocol::SnapAssistCandidateList to QVariantList for QML property push
+QVariantList candidatesToVariantList(const PhosphorProtocol::SnapAssistCandidateList& candidates)
 {
     QVariantList result;
     result.reserve(candidates.size());
@@ -76,8 +76,8 @@ QVariantList candidatesToVariantList(const SnapAssistCandidateList& candidates)
 
 } // namespace
 
-void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
-                                    const SnapAssistCandidateList& candidates)
+void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
+                                    const PhosphorProtocol::SnapAssistCandidateList& candidates)
 {
     if (emptyZones.isEmpty() || candidates.isEmpty()) {
         qCDebug(lcOverlay) << "showSnapAssist: no empty zones or candidates";

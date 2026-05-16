@@ -17,7 +17,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Supported capabilities: borderless, maximize, animation, borders, modifiers."/>
             </arg>
             <arg name="result" type="(sss)" direction="out">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::BridgeRegistrationResult"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::BridgeRegistrationResult"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Struct: (apiVersion, bridgeName, sessionId)."/>
             </arg>
         </method>
@@ -45,7 +45,7 @@
         <signal name="applyWindowGeometriesBatch">
             <annotation name="org.gtk.GDBus.DocString" value="Apply geometry to a batch of windows."/>
             <arg name="geometries" type="a(siiii)">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::WindowGeometryList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::WindowGeometryList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height)."/>
             </arg>
             <arg name="action" type="s">

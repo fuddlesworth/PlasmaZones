@@ -114,11 +114,11 @@
             </arg>
             <arg name="emptyZones" type="a(siiiiiibsssdd)" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Array of EmptyZoneEntry structs: (zoneId, x, y, width, height, borderWidth, borderRadius, useCustomColors, highlightColor, inactiveColor, borderColor, activeOpacity, inactiveOpacity)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="PlasmaZones::EmptyZoneList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="PhosphorProtocol::EmptyZoneList"/>
             </arg>
             <arg name="candidates" type="a(ssss)" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Array of SnapAssistCandidate structs: (windowId, compositorHandle, icon, caption)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="PlasmaZones::SnapAssistCandidateList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="PhosphorProtocol::SnapAssistCandidateList"/>
             </arg>
             <arg name="success" type="b" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="True if overlay was shown."/>
@@ -171,11 +171,11 @@
             </arg>
             <arg name="emptyZones" type="a(siiiiiibsssdd)">
                 <annotation name="org.gtk.GDBus.DocString" value="Array of EmptyZoneEntry structs: (zoneId, x, y, width, height, borderWidth, borderRadius, useCustomColors, highlightColor, inactiveColor, borderColor, activeOpacity, inactiveOpacity)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="PlasmaZones::EmptyZoneList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="PhosphorProtocol::EmptyZoneList"/>
             </arg>
             <arg name="candidates" type="a(ssss)">
                 <annotation name="org.gtk.GDBus.DocString" value="Array of SnapAssistCandidate structs: (windowId, compositorHandle, icon, caption)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="PlasmaZones::SnapAssistCandidateList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="PhosphorProtocol::SnapAssistCandidateList"/>
             </arg>
         </signal>
         <signal name="snapAssistDismissed">

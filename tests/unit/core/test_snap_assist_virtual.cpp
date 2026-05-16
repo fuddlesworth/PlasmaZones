@@ -261,7 +261,7 @@ private Q_SLOTS:
         // getEmptyZones with virtual screen ID should return a list
         // (may be empty in headless mode since there's no QScreen, but must not crash)
         QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
-        EmptyZoneList result = m_service->getEmptyZones(vsId);
+        PhosphorProtocol::EmptyZoneList result = m_service->getEmptyZones(vsId);
         // Just verify it doesn't crash and returns a valid (possibly empty) list
         Q_UNUSED(result);
     }
@@ -269,7 +269,7 @@ private Q_SLOTS:
     void testGetEmptyZones_emptyScreenId_returnsValidList()
     {
         // Empty screen ID fallback should not crash
-        EmptyZoneList result = m_service->getEmptyZones(QString());
+        PhosphorProtocol::EmptyZoneList result = m_service->getEmptyZones(QString());
         Q_UNUSED(result);
     }
 

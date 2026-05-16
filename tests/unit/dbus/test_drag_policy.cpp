@@ -14,7 +14,7 @@
  * three inputs that can change routing:
  *
  *   (snap_enabled, screen_is_autotile, context_disabled)
- *     → DragPolicy.bypassReason + flags
+ *     → PhosphorProtocol::DragPolicy.bypassReason + flags
  *
  * Precedence (first match wins, strongest disable first):
  *   context_disabled → autotile_screen → snapping_disabled → canonical_snap
@@ -111,10 +111,10 @@ private Q_SLOTS:
         settings.m_monitorDisabled = false;
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
-        DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
-                                                            QStringLiteral("DP-1"), 1, QString());
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, DragBypassReason::None);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::None);
         QVERIFY(p.streamDragMoved);
         QVERIFY(p.showOverlay);
         QVERIFY(p.grabKeyboard);
@@ -139,10 +139,10 @@ private Q_SLOTS:
         settings.m_snapEnabled = true;
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
-        DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
-                                                            QStringLiteral("HP-1"), 1, QString());
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
         QVERIFY(!p.streamDragMoved);
         QVERIFY(!p.showOverlay);
         QVERIFY(!p.grabKeyboard);
@@ -167,10 +167,10 @@ private Q_SLOTS:
         settings.m_snapEnabled = false;
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
-        DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
-                                                            QStringLiteral("DP-1"), 1, QString());
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, DragBypassReason::SnappingDisabled);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::SnappingDisabled);
         QVERIFY(!p.streamDragMoved);
         QVERIFY(!p.showOverlay);
         QVERIFY(!p.grabKeyboard);
@@ -194,10 +194,10 @@ private Q_SLOTS:
         settings.m_snapEnabled = false;
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
-        DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
-                                                            QStringLiteral("HP-1"), 1, QString());
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
         QVERIFY(p.captureGeometry);
         QVERIFY(p.validationError().isEmpty());
     }
@@ -214,10 +214,10 @@ private Q_SLOTS:
         settings.m_monitorDisabled = true;
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
-        DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
-                                                            QStringLiteral("HP-1"), 1, QString());
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, DragBypassReason::ContextDisabled);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::ContextDisabled);
         QVERIFY(!p.streamDragMoved);
         QVERIFY(!p.showOverlay);
         QVERIFY(!p.immediateFloatOnStart);
@@ -231,13 +231,13 @@ private Q_SLOTS:
         settings.m_monitorDisabled = true;
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
-        DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
-                                                            QStringLiteral("DP-1"), 1, QString());
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), 1, QString());
 
         // Context-disabled is checked before snapping_disabled — the reason
         // is stable at ContextDisabled even though either would produce
         // the same flag set.
-        QCOMPARE(p.bypassReason, DragBypassReason::ContextDisabled);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::ContextDisabled);
         QVERIFY(p.validationError().isEmpty());
     }
 
@@ -249,10 +249,10 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     void nullDeps_returnsCanonicalSnap()
     {
-        DragPolicy p = WindowDragAdaptor::computeDragPolicy(nullptr, nullptr, QStringLiteral("win-1"),
-                                                            QStringLiteral("DP-1"), 1, QString());
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(nullptr, nullptr, QStringLiteral("win-1"),
+                                                                              QStringLiteral("DP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, DragBypassReason::None);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::None);
         QVERIFY(p.streamDragMoved);
         QVERIFY(p.validationError().isEmpty());
     }
@@ -268,13 +268,13 @@ private Q_SLOTS:
         settings.m_snapEnabled = false;
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
-        DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"), QString(),
-                                                            1, QString());
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, engine.get(), QStringLiteral("win-1"), QString(), 1, QString());
 
         // Autotile check is skipped for empty screenId, so snapping_disabled wins.
-        QCOMPARE(p.bypassReason, DragBypassReason::SnappingDisabled);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::SnappingDisabled);
         // SnappingDisabled with empty screenId is explicitly tolerated by
-        // the validator (see DragPolicy::validationError).
+        // the validator (see PhosphorProtocol::DragPolicy::validationError).
         QVERIFY(p.validationError().isEmpty());
     }
 
@@ -294,10 +294,10 @@ private Q_SLOTS:
         settings.m_dragBehavior = AutotileDragBehavior::Reorder;
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
-        DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
-                                                            QStringLiteral("HP-1"), 1, QString());
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
         // Even though the engine would normally flip this on for tracked
         // windows, Reorder mode must leave it cleared.
         QVERIFY(!p.immediateFloatOnStart);
@@ -317,10 +317,10 @@ private Q_SLOTS:
         settings.m_dragBehavior = AutotileDragBehavior::Float;
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
-        DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
-                                                            QStringLiteral("HP-1"), 1, QString());
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
         // No windowOpened flowed through the engine so isWindowTracked
         // returns false — immediateFloatOnStart stays false either way.
         // The useful assertion here is that the reorder test above isn't
@@ -331,7 +331,7 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Structural equality contract. DragPolicy::operator== (defaulted) is
+    // Structural equality contract. PhosphorProtocol::DragPolicy::operator== (defaulted) is
     // the cross-VS flip trigger inside WindowDragAdaptor::updateDragCursor
     // — any field that differs between the in-force policy and a freshly
     // computed one must flip the comparator so dragPolicyChanged fires.
@@ -342,51 +342,51 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     void operatorEquals_flipsOnAnyFieldChange()
     {
-        DragPolicy base;
+        PhosphorProtocol::DragPolicy base;
         base.streamDragMoved = true;
         base.showOverlay = true;
         base.grabKeyboard = true;
         base.captureGeometry = true;
         base.immediateFloatOnStart = false;
         base.screenId = QStringLiteral("DP-1");
-        base.bypassReason = DragBypassReason::None;
+        base.bypassReason = PhosphorProtocol::DragBypassReason::None;
 
-        DragPolicy same = base;
+        PhosphorProtocol::DragPolicy same = base;
         QVERIFY(same == base);
 
         // Cross-screen transition within the same bypass category — the
         // exact case the old bypassReason-only comparator missed. With
         // full-struct ==, screenId diff trips the flip.
-        DragPolicy diffScreen = base;
+        PhosphorProtocol::DragPolicy diffScreen = base;
         diffScreen.screenId = QStringLiteral("DP-2");
         QVERIFY(!(diffScreen == base));
 
         // Bypass-reason change still flips (regression guard).
-        DragPolicy diffReason = base;
-        diffReason.bypassReason = DragBypassReason::AutotileScreen;
+        PhosphorProtocol::DragPolicy diffReason = base;
+        diffReason.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
         QVERIFY(!(diffReason == base));
 
         // Every routing flag participates — these cases exist so a future
         // refactor that replaces `= default` with a hand-written operator==
-        // can't silently drop a field. If you add a field to DragPolicy, add
+        // can't silently drop a field. If you add a field to PhosphorProtocol::DragPolicy, add
         // a case here too.
-        DragPolicy diffOverlay = base;
+        PhosphorProtocol::DragPolicy diffOverlay = base;
         diffOverlay.showOverlay = false;
         QVERIFY(!(diffOverlay == base));
 
-        DragPolicy diffStream = base;
+        PhosphorProtocol::DragPolicy diffStream = base;
         diffStream.streamDragMoved = false;
         QVERIFY(!(diffStream == base));
 
-        DragPolicy diffKeyboard = base;
+        PhosphorProtocol::DragPolicy diffKeyboard = base;
         diffKeyboard.grabKeyboard = false;
         QVERIFY(!(diffKeyboard == base));
 
-        DragPolicy diffCapture = base;
+        PhosphorProtocol::DragPolicy diffCapture = base;
         diffCapture.captureGeometry = false;
         QVERIFY(!(diffCapture == base));
 
-        DragPolicy diffImmediateFloat = base;
+        PhosphorProtocol::DragPolicy diffImmediateFloat = base;
         diffImmediateFloat.immediateFloatOnStart = true;
         QVERIFY(!(diffImmediateFloat == base));
     }

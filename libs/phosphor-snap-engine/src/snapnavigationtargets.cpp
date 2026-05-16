@@ -23,29 +23,32 @@ namespace {
 // Result builders
 // ═══════════════════════════════════════════════════════════════════════════
 
-MoveTargetResult moveResult(bool success, const QString& reason, const QString& zoneId, const QRect& geometry,
-                            const QString& sourceZoneId, const QString& screenId)
+PhosphorProtocol::MoveTargetResult moveResult(bool success, const QString& reason, const QString& zoneId,
+                                              const QRect& geometry, const QString& sourceZoneId,
+                                              const QString& screenId)
 {
     return {success,           reason,       zoneId,  geometry.x(), geometry.y(), geometry.width(),
             geometry.height(), sourceZoneId, screenId};
 }
 
-FocusTargetResult focusResult(bool success, const QString& reason, const QString& windowIdToActivate,
-                              const QString& sourceZoneId, const QString& targetZoneId, const QString& screenId)
+PhosphorProtocol::FocusTargetResult focusResult(bool success, const QString& reason, const QString& windowIdToActivate,
+                                                const QString& sourceZoneId, const QString& targetZoneId,
+                                                const QString& screenId)
 {
     return {success, reason, windowIdToActivate, sourceZoneId, targetZoneId, screenId};
 }
 
-CycleTargetResult cycleResult(bool success, const QString& reason, const QString& windowIdToActivate,
-                              const QString& zoneId, const QString& screenId)
+PhosphorProtocol::CycleTargetResult cycleResult(bool success, const QString& reason, const QString& windowIdToActivate,
+                                                const QString& zoneId, const QString& screenId)
 {
     return {success, reason, windowIdToActivate, zoneId, screenId};
 }
 
-SwapTargetResult swapResult(bool success, const QString& reason, const QString& windowId1, int x1, int y1, int w1,
-                            int h1, const QString& zoneId1, const QString& windowId2, int x2, int y2, int w2, int h2,
-                            const QString& zoneId2, const QString& screenId, const QString& sourceZoneId,
-                            const QString& targetZoneId)
+PhosphorProtocol::SwapTargetResult swapResult(bool success, const QString& reason, const QString& windowId1, int x1,
+                                              int y1, int w1, int h1, const QString& zoneId1, const QString& windowId2,
+                                              int x2, int y2, int w2, int h2, const QString& zoneId2,
+                                              const QString& screenId, const QString& sourceZoneId,
+                                              const QString& targetZoneId)
 {
     return {success, reason, windowId1, x1, y1,      w1,       h1,           zoneId1,     windowId2,
             x2,      y2,     w2,        h2, zoneId2, screenId, sourceZoneId, targetZoneId};
@@ -120,8 +123,9 @@ void SnapNavigationTargetResolver::setZoneAdjacencyResolver(IZoneAdjacencyResolv
 // Navigation Target Computation
 // ═══════════════════════════════════════════════════════════════════════════
 
-MoveTargetResult SnapNavigationTargetResolver::getMoveTargetForWindow(const QString& windowId, const QString& direction,
-                                                                      const QString& screenId)
+PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetForWindow(const QString& windowId,
+                                                                                        const QString& direction,
+                                                                                        const QString& screenId)
 {
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getMoveTargetForWindow - empty window ID";
@@ -193,9 +197,9 @@ MoveTargetResult SnapNavigationTargetResolver::getMoveTargetForWindow(const QStr
     return moveResult(true, QString(), targetZoneId, geo, currentZoneId, effectiveScreenId);
 }
 
-FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QString& windowId,
-                                                                        const QString& direction,
-                                                                        const QString& screenId)
+PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QString& windowId,
+                                                                                          const QString& direction,
+                                                                                          const QString& screenId)
 {
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getFocusTargetForWindow - empty window ID";
@@ -247,7 +251,8 @@ FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QS
     return focusResult(true, QString(), windowsInZone.first(), currentZoneId, targetZoneId, effectiveScreenId);
 }
 
-RestoreTargetResult SnapNavigationTargetResolver::getRestoreForWindow(const QString& windowId, const QString& screenId)
+PhosphorProtocol::RestoreTargetResult SnapNavigationTargetResolver::getRestoreForWindow(const QString& windowId,
+                                                                                        const QString& screenId)
 {
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getRestoreForWindow - empty window ID";
@@ -272,8 +277,8 @@ RestoreTargetResult SnapNavigationTargetResolver::getRestoreForWindow(const QStr
     return {success, success, x, y, w, h};
 }
 
-CycleTargetResult SnapNavigationTargetResolver::getCycleTargetForWindow(const QString& windowId, bool forward,
-                                                                        const QString& screenId)
+PhosphorProtocol::CycleTargetResult
+SnapNavigationTargetResolver::getCycleTargetForWindow(const QString& windowId, bool forward, const QString& screenId)
 {
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getCycleTargetForWindow - empty window ID";
@@ -316,8 +321,9 @@ CycleTargetResult SnapNavigationTargetResolver::getCycleTargetForWindow(const QS
     return cycleResult(true, QString(), targetWindowId, currentZoneId, screenId);
 }
 
-SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QString& windowId, const QString& direction,
-                                                                      const QString& screenId)
+PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QString& windowId,
+                                                                                        const QString& direction,
+                                                                                        const QString& screenId)
 {
     // On failure, windowId1 is returned empty so that a caller which forgets
     // to check `success` cannot accidentally act on the calling window.
@@ -388,7 +394,8 @@ SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QStr
                       targetZoneId);
 }
 
-MoveTargetResult SnapNavigationTargetResolver::getPushTargetForWindow(const QString& windowId, const QString& screenId)
+PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getPushTargetForWindow(const QString& windowId,
+                                                                                        const QString& screenId)
 {
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getPushTargetForWindow - empty window ID";
@@ -411,8 +418,9 @@ MoveTargetResult SnapNavigationTargetResolver::getPushTargetForWindow(const QStr
     return moveResult(true, QString(), emptyZoneId, geo, QString(), screenId);
 }
 
-MoveTargetResult SnapNavigationTargetResolver::getSnapToZoneByNumberTarget(const QString& windowId, int zoneNumber,
-                                                                           const QString& screenId)
+PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getSnapToZoneByNumberTarget(const QString& windowId,
+                                                                                             int zoneNumber,
+                                                                                             const QString& screenId)
 {
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getSnapToZoneByNumberTarget - empty window ID";

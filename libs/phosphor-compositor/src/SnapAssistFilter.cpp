@@ -10,10 +10,11 @@
 namespace PhosphorCompositor {
 namespace SnapAssistFilter {
 
-SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge, const QString& excludeWindowId,
-                                        const QString& screenId, const QSet<QString>& snappedWindowIds)
+PhosphorProtocol::SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge, const QString& excludeWindowId,
+                                                          const QString& screenId,
+                                                          const QSet<QString>& snappedWindowIds)
 {
-    SnapAssistCandidateList candidates;
+    PhosphorProtocol::SnapAssistCandidateList candidates;
     if (!bridge) {
         return candidates;
     }
@@ -80,7 +81,7 @@ SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge, const QString
             iconName = QStringLiteral("application-x-executable");
         }
 
-        SnapAssistCandidate c;
+        PhosphorProtocol::SnapAssistCandidate c;
         c.windowId = info.windowId;
         // compositorHandle left empty — compositor-specific code fills it (e.g. KWin's internalId)
         c.icon = iconName;

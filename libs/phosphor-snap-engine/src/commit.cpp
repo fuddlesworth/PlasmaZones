@@ -13,9 +13,6 @@ namespace PhosphorSnapEngine {
 
 using PhosphorEngine::SnapIntent;
 using PhosphorEngine::ZoneAssignmentEntry;
-using PhosphorProtocol::WindowGeometryEntry;
-using PhosphorProtocol::WindowGeometryList;
-using PhosphorProtocol::WindowStateEntry;
 
 void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                 SnapIntent intent)
@@ -57,9 +54,9 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
         << "commitSnap:" << windowId << "zones=" << zoneIds << "screen=" << screenId
         << "intent=" << (intent == SnapIntent::UserInitiated ? "user" : "auto");
 
-    Q_EMIT windowSnapStateChanged(
-        windowId,
-        WindowStateEntry{windowId, primaryZoneId, screenId, false, QStringLiteral("snapped"), zoneIds, false});
+    Q_EMIT windowSnapStateChanged(windowId,
+                                  PhosphorProtocol::WindowStateEntry{windowId, primaryZoneId, screenId, false,
+                                                                     QStringLiteral("snapped"), zoneIds, false});
 }
 
 void SnapEngine::commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId, SnapIntent intent)
@@ -99,15 +96,17 @@ void SnapEngine::uncommitSnap(const QString& windowId)
 
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "uncommitSnap:" << windowId << "from zone" << previousZoneId;
 
-    Q_EMIT windowSnapStateChanged(
-        windowId,
-        WindowStateEntry{windowId, QString(), QString(), false, QStringLiteral("unsnapped"), QStringList{}, false});
+    Q_EMIT windowSnapStateChanged(windowId,
+                                  PhosphorProtocol::WindowStateEntry{windowId, QString(), QString(), false,
+                                                                     QStringLiteral("unsnapped"), QStringList{},
+                                                                     false});
 }
 
-WindowGeometryList SnapEngine::applyBatchAssignments(const QVector<ZoneAssignmentEntry>& entries, SnapIntent intent,
-                                                     std::function<QString()> fallbackScreenResolver)
+PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVector<ZoneAssignmentEntry>& entries,
+                                                                       SnapIntent intent,
+                                                                       std::function<QString()> fallbackScreenResolver)
 {
-    WindowGeometryList geometries;
+    PhosphorProtocol::WindowGeometryList geometries;
     if (entries.isEmpty()) {
         return geometries;
     }
@@ -163,8 +162,8 @@ WindowGeometryList SnapEngine::applyBatchAssignments(const QVector<ZoneAssignmen
         // any other entry — but with empty screenId, since the window is being
         // returned to free-floating state and no tracked-screen seeding should
         // override the compositor's geometry-based resolution for it.
-        geometries.append(
-            WindowGeometryEntry::fromRect(entry.windowId, entry.targetGeometry, resolvedScreens.value(i)));
+        geometries.append(PhosphorProtocol::WindowGeometryEntry::fromRect(entry.windowId, entry.targetGeometry,
+                                                                          resolvedScreens.value(i)));
     }
     return geometries;
 }

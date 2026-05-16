@@ -100,7 +100,7 @@ QString WindowTrackingService::findEmptyZone(const QString& screenId) const
     return findEmptyZoneInLayout(layout, screenId, desktopFilter);
 }
 
-EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) const
+PhosphorProtocol::EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) const
 {
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
@@ -158,7 +158,7 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
     int defaultBw = m_geometryResolver ? m_geometryResolver->defaultBorderWidth() : 2;
     int defaultBr = m_geometryResolver ? m_geometryResolver->defaultBorderRadius() : 0;
 
-    EmptyZoneList result;
+    PhosphorProtocol::EmptyZoneList result;
     for (PhosphorZones::Zone* zone : layout->zones()) {
         if (occupied.contains(zone->id())) {
             continue;

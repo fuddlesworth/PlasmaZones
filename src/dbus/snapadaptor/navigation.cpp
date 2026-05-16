@@ -90,7 +90,7 @@ static bool processBatchEntries(WindowTrackingAdaptor* wta, PhosphorSnapEngine::
         return false;
     }
 
-    WindowGeometryList geometries =
+    PhosphorProtocol::WindowGeometryList geometries =
         engine->applyBatchAssignments(entries, SnapIntent::UserInitiated, [wta]() -> QString {
             const QString cursor = wta->lastCursorScreenName();
             return cursor.isEmpty() ? wta->lastActiveScreenName() : cursor;
@@ -162,7 +162,8 @@ void SnapAdaptor::resnapForVirtualScreenReconfigure(const QString& physicalScree
     processBatchEntries(m_adaptor, m_engine, entries, QStringLiteral("vs_reconfigure"));
 }
 
-SnapAllResultList SnapAdaptor::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId)
+PhosphorProtocol::SnapAllResultList SnapAdaptor::calculateSnapAllWindows(const QStringList& windowIds,
+                                                                         const QString& screenId)
 {
     qCDebug(lcDbusWindow) << "calculateSnapAllWindows: count=" << windowIds.size() << "screen=" << screenId;
     if (m_engine) {

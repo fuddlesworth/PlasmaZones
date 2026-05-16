@@ -210,7 +210,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
             snap->setAutotileEngine(autotile);
         }
 
-        // Snap-specific signal: carries WindowStateEntry which is snap-mode-only.
+        // Snap-specific signal: carries PhosphorProtocol::WindowStateEntry which is snap-mode-only.
         // Connected via qobject_cast since the member type is PlacementEngineBase.
         connect(snap, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this,
                 &WindowTrackingAdaptor::windowStateChanged);
@@ -413,8 +413,9 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
 
     // Emit unified state change for screen-change-triggered unsnap
     Q_EMIT windowStateChanged(windowId,
-                              WindowStateEntry{windowId, QString(), newScreenId, false,
-                                               QStringLiteral("screen_changed"), QStringList{}, false});
+                              PhosphorProtocol::WindowStateEntry{windowId, QString(), newScreenId, false,
+                                                                 QStringLiteral("screen_changed"), QStringList{},
+                                                                 false});
 }
 
 void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky)
@@ -683,7 +684,7 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     }
 }
 
-EmptyZoneList WindowTrackingAdaptor::getEmptyZones(const QString& screenId)
+PhosphorProtocol::EmptyZoneList WindowTrackingAdaptor::getEmptyZones(const QString& screenId)
 {
     return m_service->getEmptyZones(screenId);
 }
@@ -714,18 +715,19 @@ QString WindowTrackingAdaptor::findEmptyZone()
     return m_service->findEmptyZone(m_lastCursorScreenId);
 }
 
-ZoneGeometryRect WindowTrackingAdaptor::getZoneGeometry(const QString& zoneId)
+PhosphorProtocol::ZoneGeometryRect WindowTrackingAdaptor::getZoneGeometry(const QString& zoneId)
 {
     return getZoneGeometryForScreen(zoneId, QString());
 }
 
-ZoneGeometryRect WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenId)
+PhosphorProtocol::ZoneGeometryRect WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId,
+                                                                                   const QString& screenId)
 {
     QRect geo = zoneGeometryRect(zoneId, screenId);
     if (!geo.isValid()) {
-        return ZoneGeometryRect{};
+        return PhosphorProtocol::ZoneGeometryRect{};
     }
-    return ZoneGeometryRect::fromRect(geo);
+    return PhosphorProtocol::ZoneGeometryRect::fromRect(geo);
 }
 
 QRect WindowTrackingAdaptor::zoneGeometryRect(const QString& zoneId, const QString& screenId)
