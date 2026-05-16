@@ -4,7 +4,7 @@
 
 <img src="icons/hicolor/scalable/apps/plasmazones.svg" alt="PlasmaZones" width="96">
 
-**Window zone management for Wayland compositors**
+**Window zone management for KDE Plasma**
 
 Define zones on your screen. Drag windows into them. Done.
 
@@ -160,6 +160,6 @@ GPL-3.0-or-later
 
 Inspired by [FancyZones](https://learn.microsoft.com/en-us/windows/powertoys/fancyzones) from PowerToys.
 
-**Works on KDE Plasma, Hyprland, Sway, GNOME, and any Wayland compositor with layer-shell support.**
+**Built for KDE Plasma 6 on Wayland.**
 
 </div>
