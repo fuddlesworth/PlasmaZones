@@ -28,16 +28,14 @@ uniform mat4 modelViewProjectionMatrix;
 #endif
 
 void main() {
+    // texCoord pass-through — KWin and the daemon both deliver it
+    // Y=0-at-top. Mirrors `kKwinDefaultVertexSource` /
+    // `kDefaultVertexShaderSource` on the C++ side. Only gl_Position
+    // differs: KWin needs the MVP matrix, the daemon emits clip space.
+    vTexCoord = texCoord;
 #ifdef PLASMAZONES_KWIN
-    // Y-flip — kwin's FBO is Y-up but the daemon (and BMW math) uses
-    // Y-down. Mirrors `kKwinDefaultVertexSource` in
-    // kwin-effect/plasmazoneseffect.cpp.
-    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);
     gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);
 #else
-    // Daemon: Qt-RHI gives `position` in (-1..1) clip space and
-    // `texCoord` in [0, 1] over the FBO; pass both through.
-    vTexCoord = texCoord;
     gl_Position = vec4(position, 0.0, 1.0);
 #endif
 }

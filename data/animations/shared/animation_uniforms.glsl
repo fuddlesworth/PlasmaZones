@@ -26,19 +26,20 @@
 // The `#define PLASMAZONES_KWIN` switch describes the uniform-binding
 // ABI, not the runtime's feature set.
 //
-// Custom vertex stage on the kwin path: animation shaders are authored
-// against a Y=0-at-top texCoord convention. KWin's `OffscreenData::paint`
-// populates texCoord with Y-up FBO sampling coordinates instead, so
-// the kwin-effect's BUILT-IN default vertex stage applies a final
-// `vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y)` flip before
-// rasterisation. A pack that ships its own `vertexShader` via
-// metadata.json MUST replicate this flip — otherwise the fragment
-// stage's `vTexCoord` arrives upside-down and the entire shader
-// renders inverted on the compositor path. The daemon RHI path uses
-// Qt scene-graph coords (already Y=0-at-top) and needs no flip,
-// which is why this is a per-runtime concern. See
-// `kKwinDefaultVertexSource` in `kwin-effect/plasmazoneseffect.cpp`
-// for the canonical implementation to copy.
+// Custom vertex stage: animation shaders are authored against a
+// Y=0-at-top texCoord convention. BOTH runtimes deliver texCoord in
+// that orientation — the daemon's Qt-RHI quad and KWin's
+// `OffscreenData::paint` agree — so a vertex stage simply passes it
+// through: `vTexCoord = texCoord`, identical on both paths. (An
+// earlier revision applied a `1.0 - texCoord.y` flip on the kwin path
+// in the belief that KWin's FBO sampling was Y-up; it is not, and the
+// flip rendered every window animation upside-down.) The ONLY
+// per-runtime difference is `gl_Position`: the kwin path multiplies
+// `position` by `modelViewProjectionMatrix`, the daemon emits
+// clip-space directly. See `kKwinDefaultVertexSource` in
+// `kwin-effect/plasmazoneseffect/shader_transitions.cpp` and
+// `kDefaultVertexShaderSource` in
+// `libs/phosphor-rendering/src/shadereffect.cpp`.
 //
 // Layout-drift guard: the offsets in the UBO branch MUST stay aligned
 // with `PhosphorShaders::BaseUniforms`. The C++ side enforces that via

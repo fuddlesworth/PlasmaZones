@@ -539,38 +539,23 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     //     name-only and would mismatch our `texCoord` vs KWin's
     //     `texcoord`).
     //
-    // Authors that ship a per-shader vertex stage via metadata's
-    // `vertexShader` field still flow through the file-load path
-    // below. They opt out of this default and own the matrix /
-    // attribute contract themselves — INCLUDING the Y-flip described
-    // immediately below. A custom vertex stage that emits
-    // `vTexCoord = texCoord` (the obvious-looking pass-through) will
-    // render upside-down on the kwin path, because KWin's
-    // `OffscreenData::paint` populates texCoord with Y-up FBO sampling
-    // coordinates while animation shaders are authored against the
-    // daemon's Y=0-at-top convention. See the canonical GLSL header
-    // (`data/animations/shared/animation_uniforms.glsl`) for the full
-    // contract; the rule of thumb is "if you supply your own vertex
-    // shader for kwin, replicate the `1.0 - texCoord.y` flip".
-    // Y-flip the texCoord on the way out so animation shader math sees
-    // the same Y=0-at-top convention the daemon's Qt-RHI pipeline
-    // delivers. KWin's `OffscreenData::paint` populates the texCoord
-    // attribute with OpenGL FBO sampling coordinates (Y-up: Y=0 maps
-    // to the bottom row of the FBO; Y=1 to the top). Our animation
-    // shaders are authored against the daemon's Y=0-at-top convention
-    // (matrix's rain falls top-to-bottom via `fragCoord.y` math;
-    // dissolve's noise sweep, slidefade's leading edge, etc. all read
-    // vTexCoord.y as "0 at the top of the surface"). Without this
-    // flip the y-axis math runs upside-down on KWin and the rain
-    // appears to fall from the bottom up.
+    // texCoord is passed straight through, exactly as the daemon's
+    // `kDefaultVertexShaderSource` does. KWin's `OffscreenData::paint`
+    // populates the texCoord attribute in the same Y=0-at-top
+    // orientation the daemon's Qt-RHI quad delivers, so a flip here
+    // would render the whole window upside-down for every animation.
+    // (An earlier version applied `1.0 - texCoord.y` on the belief
+    // that KWin's FBO sampling was Y-up; it is not — the flip was the
+    // bug.) The only kwin-vs-daemon difference is `gl_Position`: KWin
+    // needs the modelViewProjectionMatrix to place the redirected
+    // quad, the daemon emits clip-space directly.
     //
-    // The flip ALSO corrects the texture sample: with KWin's Y-up
-    // FBO storage, the window's top row is stored at FBO-Y=1.
-    // Sampling `uTexture0(unflipped vTexCoord)` at vTexCoord.y=0
-    // would return the bottom of the FBO (= bottom of the window).
-    // After the flip, `texture(uTexture0, vTexCoord)` at vTexCoord.y=0
-    // samples FBO-Y=1, which is the top of the window — matching the
-    // daemon's behaviour.
+    // Authors that ship a per-shader vertex stage via metadata's
+    // `vertexShader` field own the matrix / attribute contract
+    // themselves: emit `vTexCoord = texCoord` (pass-through, same on
+    // both paths) and multiply `position` by modelViewProjectionMatrix
+    // on the kwin path. See the canonical GLSL header
+    // (`data/animations/shared/animation_uniforms.glsl`).
     static const QByteArray kKwinDefaultVertexSource = QByteArrayLiteral(
         "#version 450\n"
         "\n"
@@ -582,7 +567,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         "uniform mat4 modelViewProjectionMatrix;\n"
         "\n"
         "void main() {\n"
-        "    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);\n"
+        "    vTexCoord = texCoord;\n"
         "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
         "}\n");
 

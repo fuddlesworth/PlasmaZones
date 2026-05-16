@@ -35,9 +35,8 @@
 //    translation, `iResolution` matches the window frame (= the visible
 //    card on this path), and the FBO is the redirected window texture's
 //    full bounds. Adding `offsetPx` to position.x directly translates
-//    the rendered window across the screen — no remap needed. iTexCoord
-//    is also Y-flipped here (kwin's FBO is Y-up, daemon's Qt scene
-//    coords are Y-down).
+//    the rendered window across the screen — no remap needed. texCoord
+//    is passed through unchanged, same as the daemon path.
 
 #version 450
 
@@ -53,14 +52,10 @@ uniform mat4 modelViewProjectionMatrix;
 #endif
 
 void main() {
-    // texCoord — kwin's Y is up in the FBO, so flip; daemon's Qt scene
-    // coords already have Y down. Mirrors `kKwinDefaultVertexSource` /
+    // texCoord pass-through — KWin and the daemon both deliver it
+    // Y=0-at-top. Mirrors `kKwinDefaultVertexSource` /
     // `kDefaultVertexShaderSource` from the C++ side.
-#ifdef PLASMAZONES_KWIN
-    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);
-#else
     vTexCoord = texCoord;
-#endif
 
     // Horizontal translation amount, monotonically reducing 1 → 0 over
     // iTime. Clamp because bouncy curves overshoot iTime past 1 — we

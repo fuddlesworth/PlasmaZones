@@ -11,11 +11,11 @@
 // fly into the part of the surface that sits outside the original
 // anchor.
 //
-// Y-flip on the kwin path is mandatory — see
-// `data/animations/shared/animation_uniforms.glsl` for the full
-// contract. KWin's `OffscreenData::paint` populates `texCoord` with
-// Y-up FBO sampling coordinates; the canonical daemon Y=0-at-top
-// convention requires this flip. Matches morph/effect.vert.
+// texCoord is passed through unchanged on both paths — KWin's
+// `OffscreenData::paint` and the daemon's Qt-RHI quad deliver it in
+// the same Y=0-at-top orientation. Only `gl_Position` differs (KWin
+// needs the MVP matrix). See `animation_uniforms.glsl` for the
+// contract. Matches morph/effect.vert.
 
 #version 450
 
@@ -31,11 +31,10 @@ uniform mat4 modelViewProjectionMatrix;
 #endif
 
 void main() {
+    vTexCoord = texCoord;
 #ifdef PLASMAZONES_KWIN
-    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);
     gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);
 #else
-    vTexCoord = texCoord;
     gl_Position = vec4(position, 0.0, 1.0);
 #endif
 }
