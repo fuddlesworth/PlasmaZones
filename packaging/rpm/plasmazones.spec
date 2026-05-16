@@ -44,7 +44,6 @@ BuildRequires:  cmake(Qt6DBus)
 BuildRequires:  cmake(Qt6Gui)
 BuildRequires:  cmake(Qt6Qml)
 BuildRequires:  cmake(Qt6Quick)
-BuildRequires:  cmake(Qt6QuickPrivate)
 BuildRequires:  cmake(Qt6QuickControls2)
 BuildRequires:  cmake(Qt6Widgets)
 BuildRequires:  cmake(Qt6Concurrent)
@@ -53,6 +52,10 @@ BuildRequires:  cmake(Qt6ShaderToolsPrivate)
 BuildRequires:  qt6-svg-devel
 BuildRequires:  qt6-core-private-devel
 BuildRequires:  qt6-gui-private-devel
+# Qt6QuickPrivate (CMakeLists.txt:120). openSUSE ships the private Quick
+# CMake config in this explicit package; it does not auto-provide a
+# cmake(Qt6QuickPrivate) capability, unlike Qt6ShaderToolsPrivate.
+BuildRequires:  qt6-quick-private-devel
 BuildRequires:  vulkan-devel
 %else
 BuildRequires:  qt6-qtbase-devel >= 6.6.0
