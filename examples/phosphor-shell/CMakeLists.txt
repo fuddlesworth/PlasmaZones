@@ -38,21 +38,15 @@ qt_add_qml_module(phosphor_shell_example
         TopPanel.qml
         Taskbar.qml
         PanelPopupHost.qml
+        PanelPopup.qml
         SettingsWindow.qml
         CalendarContent.qml
         MenuContent.qml
         MprisContent.qml
+        MprisPlayerState.qml
         MprisWidget.qml
         TrayMenuPopup.qml
     RESOURCES
         shaders/frosted_glass.frag
         shaders/gradient.frag
-)
-
-# qmlsc emits warnings for any binding it can't compile (which is the
-# cue to add types). PRIVATE because the example module is consumed only
-# by the phosphor-shell binary — downstream lib consumers don't need to
-# inherit this.
-set_target_properties(phosphor_shell_example PROPERTIES
-    QT_QML_MODULE_NO_LINT OFF
 )

@@ -6,9 +6,10 @@
 #include <type_traits>
 
 #include <QDBusConnection>
-#include <QDBusInterface>
 #include <QDBusMessage>
-#include <QDBusReply>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcUPowerDevice, "phosphorservices.upower.device")
@@ -20,20 +21,6 @@ constexpr auto kPropsIface = "org.freedesktop.DBus.Properties";
 } // namespace
 
 namespace PhosphorServices {
-
-static QVariant deviceProp(QDBusConnection& bus, const QString& path, const char* prop)
-{
-    QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), path, QLatin1String(kPropsIface),
-                                                      QStringLiteral("Get"));
-    msg << QLatin1String(kDeviceIface) << QLatin1String(prop);
-    // 2 s timeout — see mprisplayer.cpp:dbusProperty for the rationale.
-    // UPower is usually fast (system bus, kernel-side state) but a slow
-    // initial response would silently leave the battery indicator empty.
-    QDBusMessage reply = bus.call(msg, QDBus::Block, 2000);
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().value<QDBusVariant>().variant();
-    return {};
-}
 
 class UPowerDevice::Private
 {
@@ -57,133 +44,126 @@ public:
     bool powerSupply = false;
     bool isPresent = false;
 
-    template <typename T, typename Signal>
-    static void setField(T& field, T val, Signal signal, UPowerDevice* o)
+    // Returns true when the value actually changed (and the NOTIFY was emitted).
+    template<typename T, typename Signal>
+    static bool setField(T& field, T val, Signal signal, UPowerDevice* o)
     {
         if constexpr (std::is_same_v<T, qreal>) {
             if (qFuzzyCompare(field + 1.0, val + 1.0))
-                return;
+                return false;
         } else {
             if (field == val)
-                return;
+                return false;
         }
         field = val;
         Q_EMIT(o->*signal)();
+        return true;
     }
 
-    void refreshAll()
+    // Async GetAll on the Properties interface — one round trip for the
+    // whole device, never blocking the calling thread. The watcher is
+    // parented to `owner` so an in-flight reply cancels cleanly if the
+    // device is removed.
+    void requestAll()
     {
-        setField(percentage, deviceProp(bus, path, "Percentage").toDouble(), &UPowerDevice::percentageChanged, owner);
-        setField(energy, deviceProp(bus, path, "Energy").toDouble(), &UPowerDevice::energyChanged, owner);
-        setField(energyFull, deviceProp(bus, path, "EnergyFull").toDouble(), &UPowerDevice::energyCapacityChanged,
-                owner);
-        setField(energyFullDesign, deviceProp(bus, path, "EnergyFullDesign").toDouble(),
-                &UPowerDevice::energyFullDesignChanged, owner);
-        setField(energyRate, deviceProp(bus, path, "EnergyRate").toDouble(), &UPowerDevice::energyRateChanged, owner);
-        setField(nativePath, deviceProp(bus, path, "NativePath").toString(), &UPowerDevice::nativePathChanged, owner);
-        setField(model, deviceProp(bus, path, "Model").toString(), &UPowerDevice::modelChanged, owner);
-        setField(iconName, deviceProp(bus, path, "IconName").toString(), &UPowerDevice::iconNameChanged, owner);
-        setField(powerSupply, deviceProp(bus, path, "PowerSupply").toBool(), &UPowerDevice::powerSupplyChanged, owner);
-        setField(isPresent, deviceProp(bus, path, "IsPresent").toBool(), &UPowerDevice::isPresentChanged, owner);
-
-        auto newState = static_cast<DeviceState>(deviceProp(bus, path, "State").toUInt());
-        if (state != newState) {
-            state = newState;
-            Q_EMIT owner->stateChanged();
-        }
-        auto newType = static_cast<DeviceType>(deviceProp(bus, path, "Type").toUInt());
-        bool oldIsLaptop = (type == Battery && powerSupply);
-        if (type != newType) {
-            type = newType;
-            Q_EMIT owner->typeChanged();
-        }
-        bool newIsLaptop = (type == Battery && powerSupply);
-        if (oldIsLaptop != newIsLaptop)
-            Q_EMIT owner->isLaptopBatteryChanged();
-
-        qint64 newTTE = deviceProp(bus, path, "TimeToEmpty").toLongLong();
-        if (timeToEmpty != newTTE) {
-            timeToEmpty = newTTE;
-            Q_EMIT owner->timeToEmptyChanged();
-        }
-        qint64 newTTF = deviceProp(bus, path, "TimeToFull").toLongLong();
-        if (timeToFull != newTTF) {
-            timeToFull = newTTF;
-            Q_EMIT owner->timeToFullChanged();
-        }
-
-        Q_EMIT owner->healthPercentageChanged();
-        Q_EMIT owner->propertiesRefreshed();
+        QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), path, QLatin1String(kPropsIface),
+                                                          QStringLiteral("GetAll"));
+        msg << QLatin1String(kDeviceIface);
+        auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), owner);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, owner, [this](QDBusPendingCallWatcher* call) {
+            call->deleteLater();
+            const QDBusPendingReply<QVariantMap> reply = *call;
+            if (reply.isError()) {
+                qCDebug(lcUPowerDevice) << "GetAll failed for" << path << ":" << reply.error().message();
+                return;
+            }
+            applyProps(reply.value());
+        });
     }
 
-    void refreshChanged(const QVariantMap& changed, const QStringList& invalidated)
+    // Applies a device-interface property map. Works for both a full
+    // GetAll reply and a partial PropertiesChanged `changed` map — every
+    // field is gated on isValid().
+    void applyProps(const QVariantMap& props)
     {
-        auto propVal = [this, &changed, &invalidated](const char* name) -> QVariant {
-            QString key = QLatin1String(name);
-            if (changed.contains(key))
-                return changed.value(key);
-            if (invalidated.contains(key))
-                return deviceProp(bus, path, name);
-            return {};
+        // Snapshot derived state up front so we can detect transitions
+        // caused by ANY of their inputs (isLaptopBattery depends on both
+        // `type` and `powerSupply`; healthPercentage on the energy pair).
+        const bool oldIsLaptop = (type == Battery && powerSupply);
+        const qreal oldHealth = owner->healthPercentage();
+        bool changed = false;
+
+        auto val = [&props](const char* name) -> QVariant {
+            return props.value(QLatin1String(name));
         };
-
         QVariant v;
-        if ((v = propVal("Percentage")).isValid())
-            setField(percentage, v.toDouble(), &UPowerDevice::percentageChanged, owner);
-        if ((v = propVal("Energy")).isValid())
-            setField(energy, v.toDouble(), &UPowerDevice::energyChanged, owner);
-        if ((v = propVal("EnergyFull")).isValid())
-            setField(energyFull, v.toDouble(), &UPowerDevice::energyCapacityChanged, owner);
-        if ((v = propVal("EnergyFullDesign")).isValid())
-            setField(energyFullDesign, v.toDouble(), &UPowerDevice::energyFullDesignChanged, owner);
-        if ((v = propVal("EnergyRate")).isValid())
-            setField(energyRate, v.toDouble(), &UPowerDevice::energyRateChanged, owner);
-        if ((v = propVal("NativePath")).isValid())
-            setField(nativePath, v.toString(), &UPowerDevice::nativePathChanged, owner);
-        if ((v = propVal("Model")).isValid())
-            setField(model, v.toString(), &UPowerDevice::modelChanged, owner);
-        if ((v = propVal("IconName")).isValid())
-            setField(iconName, v.toString(), &UPowerDevice::iconNameChanged, owner);
-        if ((v = propVal("PowerSupply")).isValid())
-            setField(powerSupply, v.toBool(), &UPowerDevice::powerSupplyChanged, owner);
-        if ((v = propVal("IsPresent")).isValid())
-            setField(isPresent, v.toBool(), &UPowerDevice::isPresentChanged, owner);
 
-        if ((v = propVal("State")).isValid()) {
+        if ((v = val("Percentage")).isValid())
+            changed |= setField(percentage, v.toDouble(), &UPowerDevice::percentageChanged, owner);
+        if ((v = val("Energy")).isValid())
+            changed |= setField(energy, v.toDouble(), &UPowerDevice::energyChanged, owner);
+        if ((v = val("EnergyFull")).isValid())
+            changed |= setField(energyFull, v.toDouble(), &UPowerDevice::energyCapacityChanged, owner);
+        if ((v = val("EnergyFullDesign")).isValid())
+            changed |= setField(energyFullDesign, v.toDouble(), &UPowerDevice::energyFullDesignChanged, owner);
+        if ((v = val("EnergyRate")).isValid())
+            changed |= setField(energyRate, v.toDouble(), &UPowerDevice::energyRateChanged, owner);
+        if ((v = val("NativePath")).isValid())
+            changed |= setField(nativePath, v.toString(), &UPowerDevice::nativePathChanged, owner);
+        if ((v = val("Model")).isValid())
+            changed |= setField(model, v.toString(), &UPowerDevice::modelChanged, owner);
+        if ((v = val("IconName")).isValid())
+            changed |= setField(iconName, v.toString(), &UPowerDevice::iconNameChanged, owner);
+        if ((v = val("PowerSupply")).isValid())
+            changed |= setField(powerSupply, v.toBool(), &UPowerDevice::powerSupplyChanged, owner);
+        if ((v = val("IsPresent")).isValid())
+            changed |= setField(isPresent, v.toBool(), &UPowerDevice::isPresentChanged, owner);
+
+        if ((v = val("State")).isValid()) {
             auto newState = static_cast<DeviceState>(v.toUInt());
             if (state != newState) {
                 state = newState;
+                changed = true;
                 Q_EMIT owner->stateChanged();
             }
         }
-        if ((v = propVal("Type")).isValid()) {
+        if ((v = val("Type")).isValid()) {
             auto newType = static_cast<DeviceType>(v.toUInt());
-            bool oldIsLaptop = (type == Battery && powerSupply);
             if (type != newType) {
                 type = newType;
+                changed = true;
                 Q_EMIT owner->typeChanged();
             }
-            bool newIsLaptop = (type == Battery && powerSupply);
-            if (oldIsLaptop != newIsLaptop)
-                Q_EMIT owner->isLaptopBatteryChanged();
         }
-        if ((v = propVal("TimeToEmpty")).isValid()) {
+        if ((v = val("TimeToEmpty")).isValid()) {
             qint64 newTTE = v.toLongLong();
             if (timeToEmpty != newTTE) {
                 timeToEmpty = newTTE;
+                changed = true;
                 Q_EMIT owner->timeToEmptyChanged();
             }
         }
-        if ((v = propVal("TimeToFull")).isValid()) {
+        if ((v = val("TimeToFull")).isValid()) {
             qint64 newTTF = v.toLongLong();
             if (timeToFull != newTTF) {
                 timeToFull = newTTF;
+                changed = true;
                 Q_EMIT owner->timeToFullChanged();
             }
         }
 
-        Q_EMIT owner->healthPercentageChanged();
-        Q_EMIT owner->propertiesRefreshed();
+        // Derived-state transitions — emitted only on an actual change,
+        // catching the case where only one input (e.g. powerSupply)
+        // moved without the other.
+        if (oldIsLaptop != (type == Battery && powerSupply))
+            Q_EMIT owner->isLaptopBatteryChanged();
+        if (!qFuzzyCompare(oldHealth + 1.0, owner->healthPercentage() + 1.0))
+            Q_EMIT owner->healthPercentageChanged();
+
+        // propertiesRefreshed is the model's data-changed hook — fire it
+        // only when something the model exposes could have moved.
+        if (changed)
+            Q_EMIT owner->propertiesRefreshed();
     }
 };
 
@@ -198,7 +178,7 @@ UPowerDevice::UPowerDevice(const QString& dbusPath, QObject* parent)
         QLatin1String(kService), dbusPath, QStringLiteral("org.freedesktop.DBus.Properties"),
         QStringLiteral("PropertiesChanged"), this, SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
 
-    d->refreshAll();
+    d->requestAll();
 }
 
 UPowerDevice::~UPowerDevice() = default;
@@ -280,7 +260,11 @@ void UPowerDevice::_q_onPropertiesChanged(const QString& iface, const QVariantMa
 {
     if (iface != QLatin1String(kDeviceIface))
         return;
-    d->refreshChanged(changed, invalidated);
+    d->applyProps(changed);
+    // Invalidated properties carry no value — re-fetch the whole
+    // interface asynchronously to pick them up.
+    if (!invalidated.isEmpty())
+        d->requestAll();
 }
 
 } // namespace PhosphorServices

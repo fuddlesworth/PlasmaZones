@@ -24,12 +24,13 @@ void MprisPlayerModel::setHost(MprisHost* host)
     if (m_host == host)
         return;
     beginResetModel();
-    if (m_host) {
+    if (m_host)
         disconnect(m_host, nullptr, this, nullptr);
-    }
     m_host = host;
+    m_rows.clear();
     if (m_host) {
-        for (auto* player : m_host->players())
+        m_rows = m_host->players();
+        for (auto* player : std::as_const(m_rows))
             connectPlayer(player);
         connect(m_host, &MprisHost::playerAdded, this, &MprisPlayerModel::onPlayerAdded);
         connect(m_host, &MprisHost::playerRemoved, this, &MprisPlayerModel::onPlayerRemoved);
@@ -43,14 +44,14 @@ int MprisPlayerModel::rowCount(const QModelIndex& parent) const
 {
     if (parent.isValid())
         return 0;
-    return m_host ? m_host->playerCount() : 0;
+    return m_rows.size();
 }
 
 QVariant MprisPlayerModel::data(const QModelIndex& index, int role) const
 {
-    if (!m_host || !index.isValid() || index.row() >= m_host->playerCount())
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size())
         return {};
-    auto* player = m_host->playerAt(index.row());
+    auto* player = m_rows.at(index.row());
     if (!player)
         return {};
     switch (role) {
@@ -81,10 +82,11 @@ QHash<int, QByteArray> MprisPlayerModel::roleNames() const
 
 void MprisPlayerModel::onPlayerAdded(MprisPlayer* player)
 {
-    if (!m_host)
+    if (!player || m_rows.contains(player))
         return;
-    const int row = m_host->playerCount() - 1;
+    const int row = m_rows.size();
     beginInsertRows({}, row, row);
+    m_rows.append(player);
     connectPlayer(player);
     endInsertRows();
     Q_EMIT countChanged();
@@ -92,37 +94,20 @@ void MprisPlayerModel::onPlayerAdded(MprisPlayer* player)
 
 void MprisPlayerModel::onPlayerRemoved(MprisPlayer* player)
 {
-    if (!m_host)
+    const int row = m_rows.indexOf(player);
+    if (row < 0)
         return;
-    const auto& players = m_host->players();
-    int row = -1;
-    for (int i = 0; i < players.size(); ++i) {
-        if (players.at(i) == player) {
-            row = i;
-            break;
-        }
-    }
-    if (row < 0) {
-        beginResetModel();
-        endResetModel();
-    } else {
-        beginRemoveRows({}, row, row);
-        endRemoveRows();
-    }
+    beginRemoveRows({}, row, row);
+    m_rows.removeAt(row);
+    endRemoveRows();
     Q_EMIT countChanged();
 }
 
 void MprisPlayerModel::onPlayerDataChanged(MprisPlayer* player)
 {
-    if (!m_host)
-        return;
-    const auto& players = m_host->players();
-    for (int i = 0; i < players.size(); ++i) {
-        if (players.at(i) == player) {
-            Q_EMIT dataChanged(index(i), index(i));
-            return;
-        }
-    }
+    const int row = m_rows.indexOf(player);
+    if (row >= 0)
+        Q_EMIT dataChanged(index(row), index(row));
 }
 
 void MprisPlayerModel::connectPlayer(MprisPlayer* player)

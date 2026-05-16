@@ -281,6 +281,45 @@ QRect PopupWindow::computeAnchorRect() const
     return QRect(scenePos.toPoint(), QSize(qCeil(m_anchor->width()), qCeil(m_anchor->height())));
 }
 
+QRect PopupWindow::resolvedAnchorRect() const
+{
+    if (!m_anchor || !m_anchor->window()) {
+        return {};
+    }
+    // Bake the gap into the anchor rect — Qt's xdg-shell client honours
+    // no offset property, so we extend the rect past the anchor item's
+    // edge by m_gap pixels in the direction the popup attaches to.
+    QRect anchorRect = computeAnchorRect();
+    switch (m_popupEdge) {
+    case Above:
+        anchorRect.adjust(0, -m_gap, 0, 0); // grow upward
+        break;
+    case Below:
+        anchorRect.adjust(0, 0, 0, m_gap); // grow downward
+        break;
+    case LeftOf:
+        anchorRect.adjust(-m_gap, 0, 0, 0); // grow leftward
+        break;
+    case RightOf:
+        anchorRect.adjust(0, 0, m_gap, 0); // grow rightward
+        break;
+    }
+
+    // xdg_positioner.set_anchor_rect requires the rect to lie within the
+    // parent surface's logical bounds AND be non-empty; an out-of-bounds
+    // or zero-area rect is a protocol error that drops the wl_display
+    // connection. Clamp the gap-extended rect to the parent surface; if
+    // that collapses to empty, fall back to the un-extended anchor rect
+    // (better to lose the gap than send an invalid positioner). An empty
+    // result here means the anchor is fully off-surface — callers abort.
+    const QRect surfaceBounds(0, 0, m_anchor->window()->width(), m_anchor->window()->height());
+    anchorRect = anchorRect.intersected(surfaceBounds);
+    if (anchorRect.isEmpty()) {
+        anchorRect = computeAnchorRect().intersected(surfaceBounds);
+    }
+    return anchorRect;
+}
+
 void PopupWindow::showPopup()
 {
     if (!m_anchor || !m_anchor->window()) {
@@ -325,57 +364,37 @@ void PopupWindow::showPopup()
     // offset property. We bake the gap into the anchor rect itself by
     // extending the rect past the anchor item's edge by m_gap pixels in
     // the direction we want the popup to attach to.
-    Qt::Edges anchorEdges;
-    Qt::Edges gravityEdges;
-    QRect anchorRect = computeAnchorRect();
-    switch (m_popupEdge) {
-    case Above:
-        anchorEdges = Qt::TopEdge;
-        gravityEdges = Qt::TopEdge;
-        anchorRect.adjust(0, -m_gap, 0, 0); // grow upward
-        break;
-    case Below:
-        anchorEdges = Qt::BottomEdge;
-        gravityEdges = Qt::BottomEdge;
-        anchorRect.adjust(0, 0, 0, m_gap); // grow downward
-        break;
-    case LeftOf:
-        anchorEdges = Qt::LeftEdge;
-        gravityEdges = Qt::LeftEdge;
-        anchorRect.adjust(-m_gap, 0, 0, 0); // grow leftward
-        break;
-    case RightOf:
-        anchorEdges = Qt::RightEdge;
-        gravityEdges = Qt::RightEdge;
-        anchorRect.adjust(0, 0, m_gap, 0); // grow rightward
-        break;
+    // Resolve the gap-extended, surface-clamped anchor rect. An empty
+    // result means the anchor is fully off-surface — abort rather than
+    // send an empty positioner, which would kill the wl_display connection.
+    const QRect anchorRect = resolvedAnchorRect();
+    if (anchorRect.isEmpty()) {
+        qCWarning(lcPopup) << "Cannot show popup: anchor item is off-surface (computed rect empty); "
+                              "skipping show to avoid xdg-positioner protocol error";
+        // Roll the visibility flag back so a subsequent
+        // setPopupVisible(true) re-attempts cleanly. We don't emit
+        // popupVisibleChanged again — caller already saw `true`.
+        m_popupVisible = false;
+        return;
     }
 
-    // xdg_positioner.set_anchor_rect requires the rect to lie within the
-    // parent surface's logical bounds AND be non-empty; an out-of-bounds
-    // or zero-area rect is a protocol error that drops the wl_display
-    // connection. Clamp our gap-extended rect to the parent QQuickWindow's
-    // content bounds (which equals the parent surface for layer-shell
-    // parents). If the anchor item is fully off-surface and BOTH the
-    // gap-extended and unextended rects collapse to empty, abort the
-    // show — sending an empty positioner would kill the connection.
-    if (auto* parentWindow = m_anchor->window()) {
-        const QRect surfaceBounds(0, 0, parentWindow->width(), parentWindow->height());
-        anchorRect = anchorRect.intersected(surfaceBounds);
-        if (anchorRect.isEmpty()) {
-            // Fall back to the un-extended anchor rect — better to lose
-            // the gap than to send an invalid positioner.
-            anchorRect = computeAnchorRect().intersected(surfaceBounds);
-        }
-        if (anchorRect.isEmpty()) {
-            qCWarning(lcPopup) << "Cannot show popup: anchor item is off-surface (computed rect empty); "
-                                  "skipping show to avoid xdg-positioner protocol error";
-            // Roll the visibility flag back so a subsequent
-            // setPopupVisible(true) re-attempts cleanly. We don't emit
-            // popupVisibleChanged again — caller already saw `true`.
-            m_popupVisible = false;
-            return;
-        }
+    // Map popupEdge → Qt::Edges anchor + gravity (Qt's xdg-shell client
+    // reads these from the _q_waylandPopup* properties set below).
+    Qt::Edges anchorEdges;
+    Qt::Edges gravityEdges;
+    switch (m_popupEdge) {
+    case Above:
+        anchorEdges = gravityEdges = Qt::TopEdge;
+        break;
+    case Below:
+        anchorEdges = gravityEdges = Qt::BottomEdge;
+        break;
+    case LeftOf:
+        anchorEdges = gravityEdges = Qt::LeftEdge;
+        break;
+    case RightOf:
+        anchorEdges = gravityEdges = Qt::RightEdge;
+        break;
     }
 
     m_popupWindow->setProperty("_q_waylandPopupAnchorRect", anchorRect);
@@ -432,43 +451,34 @@ bool PopupWindow::repositionInPlace()
         return false;
     }
 
-    // Compute the anchor rect + edge/gravity flags exactly as showPopup does.
-    QRect anchorRect = computeAnchorRect();
+    // Gap-extended, surface-clamped anchor rect — the same resolution
+    // path showPopup uses. Empty means the anchor is off-surface; abort.
+    const QRect anchorRect = resolvedAnchorRect();
+    if (anchorRect.isEmpty()) {
+        qCWarning(lcPopup) << "repositionInPlace: anchor rect empty after clamp — skipping";
+        return false;
+    }
+
+    // Map popupEdge → xdg_positioner anchor + gravity flags.
     QtWayland::xdg_positioner::anchor anchorFlag = QtWayland::xdg_positioner::anchor_none;
     QtWayland::xdg_positioner::gravity gravityFlag = QtWayland::xdg_positioner::gravity_none;
     switch (m_popupEdge) {
     case Above:
         anchorFlag = QtWayland::xdg_positioner::anchor_top;
         gravityFlag = QtWayland::xdg_positioner::gravity_top;
-        anchorRect.adjust(0, -m_gap, 0, 0);
         break;
     case Below:
         anchorFlag = QtWayland::xdg_positioner::anchor_bottom;
         gravityFlag = QtWayland::xdg_positioner::gravity_bottom;
-        anchorRect.adjust(0, 0, 0, m_gap);
         break;
     case LeftOf:
         anchorFlag = QtWayland::xdg_positioner::anchor_left;
         gravityFlag = QtWayland::xdg_positioner::gravity_left;
-        anchorRect.adjust(-m_gap, 0, 0, 0);
         break;
     case RightOf:
         anchorFlag = QtWayland::xdg_positioner::anchor_right;
         gravityFlag = QtWayland::xdg_positioner::gravity_right;
-        anchorRect.adjust(0, 0, m_gap, 0);
         break;
-    }
-    // Same surface-bounds clamp as showPopup — empty rect would crash
-    // the connection.
-    if (auto* parentWindow = m_anchor->window()) {
-        const QRect surfaceBounds(0, 0, parentWindow->width(), parentWindow->height());
-        anchorRect = anchorRect.intersected(surfaceBounds);
-        if (anchorRect.isEmpty())
-            anchorRect = computeAnchorRect().intersected(surfaceBounds);
-        if (anchorRect.isEmpty()) {
-            qCWarning(lcPopup) << "repositionInPlace: anchor rect empty after clamp — skipping";
-            return false;
-        }
     }
 
     // Build a fresh positioner. xdg_positioner is a one-shot resource:

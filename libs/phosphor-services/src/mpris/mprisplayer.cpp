@@ -5,13 +5,11 @@
 
 #include <QDBusArgument>
 #include <QDBusConnection>
-#include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDBusObjectPath>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDBusReply>
 #include <QLoggingCategory>
 #include <QTimer>
 #include <QVariantMap>
@@ -24,29 +22,38 @@ constexpr auto kPlayerIface = "org.mpris.MediaPlayer2.Player";
 constexpr auto kRootIface = "org.mpris.MediaPlayer2";
 constexpr auto kPropsIface = "org.freedesktop.DBus.Properties";
 constexpr int kPositionPollMs = 1000;
+// Resync the interpolated playback position against the player's real
+// Position property once every N ticks to correct accumulated drift.
+constexpr int kPositionResyncTicks = 30;
 } // namespace
 
 namespace PhosphorServices {
 
-static QVariant dbusProperty(QDBusConnection& bus, const QString& service, const char* iface, const char* prop)
+// ─── Change-guarded field setters ────────────────────────────────────────
+// Free helpers so applyRoot()/applyPlayer() stay flat. Each emits its
+// NOTIFY signal only when the value actually changes.
+static void setStrField(QString& field, const QString& value, void (MprisPlayer::*sig)(), MprisPlayer* o)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(service, QLatin1String(kMprisPath), QLatin1String(kPropsIface),
-                                                      QStringLiteral("Get"));
-    msg << QLatin1String(iface) << QLatin1String(prop);
-    // Timeout was 200 ms originally — too aggressive for slow players.
-    // Spotify on Linux is well known to take 500+ ms to respond to
-    // Properties.Get on startup (single-threaded UI work, lazy
-    // metadata generation). When Get(Metadata) times out at 200 ms,
-    // the call returns an error reply, dbusProperty returns QVariant(),
-    // and refreshMetadata's meta.contains() guards skip every field —
-    // leaving trackArtUrl empty and stuck that way until the user
-    // manually changes track (which triggers a fresh PropertiesChanged
-    // signal). 2 s is enough for any reasonable player while still
-    // bounding shell startup latency at ~2 s per stuck player.
-    QDBusMessage reply = bus.call(msg, QDBus::Block, 2000);
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().value<QDBusVariant>().variant();
-    return {};
+    if (field == value)
+        return;
+    field = value;
+    Q_EMIT(o->*sig)();
+}
+
+static void setRealField(qreal& field, qreal value, void (MprisPlayer::*sig)(), MprisPlayer* o)
+{
+    if (qFuzzyCompare(field + 1.0, value + 1.0))
+        return;
+    field = value;
+    Q_EMIT(o->*sig)();
+}
+
+static void setBoolField(bool& field, bool value, void (MprisPlayer::*sig)(), MprisPlayer* o)
+{
+    if (field == value)
+        return;
+    field = value;
+    Q_EMIT(o->*sig)();
 }
 
 static void dbusSetProperty(QDBusConnection& bus, const QString& service, const char* iface, const char* prop,
@@ -115,94 +122,129 @@ public:
     bool canGoPrevious = false;
     bool canControl = false;
 
-    void refreshRoot()
+    // ─── Async property fetch ─────────────────────────────────────────────
+    // GetAll on the Properties interface pulls every property of an
+    // interface in ONE round trip, and asyncCall keeps the GUI thread
+    // free while the (potentially slow — Spotify can take 500+ ms)
+    // reply is in flight. The watcher is parented to `owner`, so a
+    // player destroyed mid-flight cancels delivery cleanly.
+    void getAll(const char* iface, void (Private::*handler)(const QVariantMap&))
     {
-        auto setStr = [](QString& field, const QVariant& val, auto signal, auto* o) {
-            QString s = val.toString();
-            if (field == s)
-                return;
-            field = s;
-            Q_EMIT(o->*signal)();
-        };
-        setStr(identity, dbusProperty(bus, service, kRootIface, "Identity"), &MprisPlayer::identityChanged, owner);
-        setStr(desktopEntry, dbusProperty(bus, service, kRootIface, "DesktopEntry"), &MprisPlayer::desktopEntryChanged,
-               owner);
+        QDBusMessage msg = QDBusMessage::createMethodCall(service, QLatin1String(kMprisPath),
+                                                          QLatin1String(kPropsIface), QStringLiteral("GetAll"));
+        msg << QLatin1String(iface);
+        auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), owner);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, owner,
+                         [this, handler](QDBusPendingCallWatcher* call) {
+                             call->deleteLater();
+                             const QDBusPendingReply<QVariantMap> reply = *call;
+                             if (reply.isError()) {
+                                 qCDebug(lcMpris) << "GetAll failed for" << service << ":" << reply.error().message();
+                                 return;
+                             }
+                             (this->*handler)(reply.value());
+                         });
     }
 
-    void refreshPlayer()
+    // Lightweight async resync of just the Position property — used by
+    // the drift-correction tick. Position is excluded from
+    // PropertiesChanged by the MPRIS spec, so it must be polled.
+    void requestPosition()
     {
-        const QString statusStr = dbusProperty(bus, service, kPlayerIface, "PlaybackStatus").toString();
-        PlaybackState newState = Stopped;
-        if (statusStr == QLatin1String("Playing"))
-            newState = Playing;
-        else if (statusStr == QLatin1String("Paused"))
-            newState = Paused;
-        if (playbackState != newState) {
-            playbackState = newState;
-            Q_EMIT owner->playbackStateChanged();
-        }
-
-        {
-            QVariant metaVar = dbusProperty(bus, service, kPlayerIface, "Metadata");
-            QVariantMap meta = demarshallMetadata(metaVar);
-            qCDebug(lcMpris) << "Metadata for" << service << "type:" << metaVar.typeName() << "keys:" << meta.keys()
-                             << "artUrl:" << meta.value(QStringLiteral("mpris:artUrl"));
-            refreshMetadata(meta);
-        }
-
-        auto setReal = [](qreal& field, qreal val, auto signal, auto* o) {
-            if (qFuzzyCompare(field + 1.0, val + 1.0))
+        QDBusMessage msg = QDBusMessage::createMethodCall(service, QLatin1String(kMprisPath),
+                                                          QLatin1String(kPropsIface), QStringLiteral("Get"));
+        msg << QLatin1String(kPlayerIface) << QStringLiteral("Position");
+        auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), owner);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, owner, [this](QDBusPendingCallWatcher* call) {
+            call->deleteLater();
+            const QDBusPendingReply<QDBusVariant> reply = *call;
+            if (reply.isError())
                 return;
-            field = val;
-            Q_EMIT(o->*signal)();
-        };
-        setReal(volume, dbusProperty(bus, service, kPlayerIface, "Volume").toDouble(), &MprisPlayer::volumeChanged,
-                owner);
-        setReal(rate, dbusProperty(bus, service, kPlayerIface, "Rate").toDouble(), &MprisPlayer::rateChanged, owner);
-
-        const QString loopStr = dbusProperty(bus, service, kPlayerIface, "LoopStatus").toString();
-        LoopState newLoop = LoopNone;
-        if (loopStr == QLatin1String("Track"))
-            newLoop = LoopTrack;
-        else if (loopStr == QLatin1String("Playlist"))
-            newLoop = LoopPlaylist;
-        if (loopState != newLoop) {
-            loopState = newLoop;
-            Q_EMIT owner->loopStateChanged();
-        }
-
-        bool newShuffle = dbusProperty(bus, service, kPlayerIface, "Shuffle").toBool();
-        if (shuffle != newShuffle) {
-            shuffle = newShuffle;
-            Q_EMIT owner->shuffleChanged();
-        }
-
-        auto setBool = [](bool& field, bool val, auto signal, auto* o) {
-            if (field == val)
-                return;
-            field = val;
-            Q_EMIT(o->*signal)();
-        };
-        setBool(canPlay, dbusProperty(bus, service, kPlayerIface, "CanPlay").toBool(), &MprisPlayer::canPlayChanged,
-                owner);
-        setBool(canPause, dbusProperty(bus, service, kPlayerIface, "CanPause").toBool(), &MprisPlayer::canPauseChanged,
-                owner);
-        setBool(canSeek, dbusProperty(bus, service, kPlayerIface, "CanSeek").toBool(), &MprisPlayer::canSeekChanged,
-                owner);
-        setBool(canGoNext, dbusProperty(bus, service, kPlayerIface, "CanGoNext").toBool(),
-                &MprisPlayer::canGoNextChanged, owner);
-        setBool(canGoPrevious, dbusProperty(bus, service, kPlayerIface, "CanGoPrevious").toBool(),
-                &MprisPlayer::canGoPreviousChanged, owner);
-        setBool(canControl, dbusProperty(bus, service, kPlayerIface, "CanControl").toBool(),
-                &MprisPlayer::canControlChanged, owner);
-
-        positionUs = dbusProperty(bus, service, kPlayerIface, "Position").toLongLong();
-        Q_EMIT owner->positionChanged();
-
-        updatePositionTimer();
+            const qint64 newPos = reply.value().variant().toLongLong();
+            if (positionUs != newPos) {
+                positionUs = newPos;
+                Q_EMIT owner->positionChanged();
+            }
+        });
     }
 
-    void refreshMetadata(const QVariantMap& meta)
+    void applyRoot(const QVariantMap& props)
+    {
+        if (props.contains(QStringLiteral("Identity")))
+            setStrField(identity, props.value(QStringLiteral("Identity")).toString(), &MprisPlayer::identityChanged,
+                        owner);
+        if (props.contains(QStringLiteral("DesktopEntry")))
+            setStrField(desktopEntry, props.value(QStringLiteral("DesktopEntry")).toString(),
+                        &MprisPlayer::desktopEntryChanged, owner);
+    }
+
+    // Applies a player-interface property map. Works for both a full
+    // GetAll reply and a partial PropertiesChanged `changed` map — every
+    // field is gated on contains().
+    void applyPlayer(const QVariantMap& props)
+    {
+        if (props.contains(QStringLiteral("PlaybackStatus"))) {
+            const QString s = props.value(QStringLiteral("PlaybackStatus")).toString();
+            PlaybackState ns = Stopped;
+            if (s == QLatin1String("Playing"))
+                ns = Playing;
+            else if (s == QLatin1String("Paused"))
+                ns = Paused;
+            if (playbackState != ns) {
+                playbackState = ns;
+                Q_EMIT owner->playbackStateChanged();
+                updatePositionTimer();
+            }
+        }
+        if (props.contains(QStringLiteral("Metadata")))
+            applyMetadata(demarshallMetadata(props.value(QStringLiteral("Metadata"))));
+        if (props.contains(QStringLiteral("Volume")))
+            setRealField(volume, props.value(QStringLiteral("Volume")).toDouble(), &MprisPlayer::volumeChanged, owner);
+        if (props.contains(QStringLiteral("Rate")))
+            setRealField(rate, props.value(QStringLiteral("Rate")).toDouble(), &MprisPlayer::rateChanged, owner);
+        if (props.contains(QStringLiteral("Shuffle")))
+            setBoolField(shuffle, props.value(QStringLiteral("Shuffle")).toBool(), &MprisPlayer::shuffleChanged, owner);
+        if (props.contains(QStringLiteral("LoopStatus"))) {
+            const QString ls = props.value(QStringLiteral("LoopStatus")).toString();
+            LoopState nl = LoopNone;
+            if (ls == QLatin1String("Track"))
+                nl = LoopTrack;
+            else if (ls == QLatin1String("Playlist"))
+                nl = LoopPlaylist;
+            if (loopState != nl) {
+                loopState = nl;
+                Q_EMIT owner->loopStateChanged();
+            }
+        }
+        if (props.contains(QStringLiteral("CanPlay")))
+            setBoolField(canPlay, props.value(QStringLiteral("CanPlay")).toBool(), &MprisPlayer::canPlayChanged, owner);
+        if (props.contains(QStringLiteral("CanPause")))
+            setBoolField(canPause, props.value(QStringLiteral("CanPause")).toBool(), &MprisPlayer::canPauseChanged,
+                         owner);
+        if (props.contains(QStringLiteral("CanSeek")))
+            setBoolField(canSeek, props.value(QStringLiteral("CanSeek")).toBool(), &MprisPlayer::canSeekChanged, owner);
+        if (props.contains(QStringLiteral("CanGoNext")))
+            setBoolField(canGoNext, props.value(QStringLiteral("CanGoNext")).toBool(), &MprisPlayer::canGoNextChanged,
+                         owner);
+        if (props.contains(QStringLiteral("CanGoPrevious")))
+            setBoolField(canGoPrevious, props.value(QStringLiteral("CanGoPrevious")).toBool(),
+                         &MprisPlayer::canGoPreviousChanged, owner);
+        if (props.contains(QStringLiteral("CanControl")))
+            setBoolField(canControl, props.value(QStringLiteral("CanControl")).toBool(),
+                         &MprisPlayer::canControlChanged, owner);
+        // Position is only present in a GetAll reply (the MPRIS spec
+        // forbids it in PropertiesChanged); the contains() guard makes
+        // the partial-update case a no-op.
+        if (props.contains(QStringLiteral("Position"))) {
+            const qint64 newPos = props.value(QStringLiteral("Position")).toLongLong();
+            if (positionUs != newPos) {
+                positionUs = newPos;
+                Q_EMIT owner->positionChanged();
+            }
+        }
+    }
+
+    void applyMetadata(const QVariantMap& meta)
     {
         bool changed = false;
         auto metaString = [](const QVariant& val) -> QString {
@@ -239,15 +281,13 @@ public:
             QString id = metaString(meta.value(QStringLiteral("mpris:trackid")));
             if (trackId != id) {
                 trackId = id;
-                trackArtUrl.clear();  // new track — accept the next artUrl
+                trackArtUrl.clear(); // new track — accept the next artUrl
             }
         }
         if (meta.contains(QStringLiteral("mpris:artUrl"))) {
             QString s = metaString(meta.value(QStringLiteral("mpris:artUrl")));
-            // First non-empty URL wins for this trackid. Allow clearing
-            // (empty → empty is a no-op, empty → non-empty is the first
-            // assignment, non-empty → anything else is suppressed).
-            if (trackArtUrl.isEmpty() && trackArtUrl != s) {
+            // First non-empty URL wins for this trackid (see above).
+            if (trackArtUrl.isEmpty() && !s.isEmpty()) {
                 trackArtUrl = s;
                 changed = true;
             }
@@ -292,92 +332,18 @@ public:
             Q_EMIT owner->metadataChanged();
     }
 
-    void refetchProperties(const QStringList& invalidated)
-    {
-        for (const QString& prop : invalidated) {
-            if (prop == QLatin1String("PlaybackStatus") || prop == QLatin1String("Metadata")
-                || prop == QLatin1String("Position")) {
-                refreshPlayer();
-                return;
-            }
-        }
-        for (const QString& prop : invalidated) {
-            if (prop == QLatin1String("Identity") || prop == QLatin1String("DesktopEntry")) {
-                refreshRoot();
-                return;
-            }
-        }
-    }
-
     void onPropertiesChanged(const QString& iface, const QVariantMap& changed, const QStringList& invalidated)
     {
-        if (!invalidated.isEmpty())
-            refetchProperties(invalidated);
         if (iface == QLatin1String(kRootIface)) {
-            refreshRoot();
+            applyRoot(changed);
+            // Invalidated properties carry no value — re-fetch the whole
+            // interface asynchronously to pick them up.
+            if (!invalidated.isEmpty())
+                getAll(kRootIface, &Private::applyRoot);
         } else if (iface == QLatin1String(kPlayerIface)) {
-            if (changed.contains(QStringLiteral("PlaybackStatus"))) {
-                const QString s = changed.value(QStringLiteral("PlaybackStatus")).toString();
-                PlaybackState ns = Stopped;
-                if (s == QLatin1String("Playing"))
-                    ns = Playing;
-                else if (s == QLatin1String("Paused"))
-                    ns = Paused;
-                if (playbackState != ns) {
-                    playbackState = ns;
-                    Q_EMIT owner->playbackStateChanged();
-                    updatePositionTimer();
-                }
-            }
-            if (changed.contains(QStringLiteral("Metadata"))) {
-                refreshMetadata(demarshallMetadata(changed.value(QStringLiteral("Metadata"))));
-            }
-            if (changed.contains(QStringLiteral("Volume"))) {
-                qreal v = changed.value(QStringLiteral("Volume")).toDouble();
-                if (!qFuzzyCompare(volume + 1.0, v + 1.0)) {
-                    volume = v;
-                    Q_EMIT owner->volumeChanged();
-                }
-            }
-            if (changed.contains(QStringLiteral("Shuffle"))) {
-                bool v = changed.value(QStringLiteral("Shuffle")).toBool();
-                if (shuffle != v) {
-                    shuffle = v;
-                    Q_EMIT owner->shuffleChanged();
-                }
-            }
-            if (changed.contains(QStringLiteral("LoopStatus"))) {
-                const QString ls = changed.value(QStringLiteral("LoopStatus")).toString();
-                LoopState nl = LoopNone;
-                if (ls == QLatin1String("Track"))
-                    nl = LoopTrack;
-                else if (ls == QLatin1String("Playlist"))
-                    nl = LoopPlaylist;
-                if (loopState != nl) {
-                    loopState = nl;
-                    Q_EMIT owner->loopStateChanged();
-                }
-            }
-            if (changed.contains(QStringLiteral("CanPlay"))) {
-                canPlay = changed.value(QStringLiteral("CanPlay")).toBool();
-                Q_EMIT owner->canPlayChanged();
-            }
-            if (changed.contains(QStringLiteral("CanPause"))) {
-                canPause = changed.value(QStringLiteral("CanPause")).toBool();
-                Q_EMIT owner->canPauseChanged();
-            }
-            if (changed.contains(QStringLiteral("CanSeek"))) {
-                canSeek = changed.value(QStringLiteral("CanSeek")).toBool();
-                Q_EMIT owner->canSeekChanged();
-            }
-            if (changed.contains(QStringLiteral("CanGoNext"))) {
-                canGoNext = changed.value(QStringLiteral("CanGoNext")).toBool();
-                Q_EMIT owner->canGoNextChanged();
-            }
-            if (changed.contains(QStringLiteral("CanGoPrevious"))) {
-                canGoPrevious = changed.value(QStringLiteral("CanGoPrevious")).toBool();
-                Q_EMIT owner->canGoPreviousChanged();
-            }
+            applyPlayer(changed);
+            if (!invalidated.isEmpty())
+                getAll(kPlayerIface, &Private::applyPlayer);
         }
     }
 
@@ -392,13 +358,14 @@ public:
         if (playbackState != Playing)
             return;
         ++positionTickCount;
-        if (positionTickCount >= 30) {
+        if (positionTickCount >= kPositionResyncTicks) {
             positionTickCount = 0;
-            positionUs = dbusProperty(bus, service, kPlayerIface, "Position").toLongLong();
+            // Async resync — emits positionChanged itself if the value moved.
+            requestPosition();
         } else {
             positionUs += static_cast<qint64>(rate * kPositionPollMs * 1000);
+            Q_EMIT owner->positionChanged();
         }
-        Q_EMIT owner->positionChanged();
     }
 
     void updatePositionTimer()
@@ -429,10 +396,12 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
     QDBusConnection::sessionBus().connect(serviceName, QLatin1String(kMprisPath), QLatin1String(kPlayerIface),
                                           QStringLiteral("Seeked"), this, SLOT(_q_onSeeked(qlonglong)));
 
-    d->refreshRoot();
-    d->refreshPlayer();
+    // Async initial fetch — properties populate as the replies land; the
+    // GUI thread is never blocked waiting on a slow player.
+    d->getAll(kRootIface, &Private::applyRoot);
+    d->getAll(kPlayerIface, &Private::applyPlayer);
 
-    // Retry Get(Metadata) on a backoff schedule if the initial reply
+    // Retry GetAll(Player) on a backoff schedule if the initial reply
     // lacked mpris:artUrl. Different players publish the artUrl on
     // different timelines:
     //   - Spotify desktop: ~500 ms after track start (lazy URL gen).
@@ -445,16 +414,16 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
     //     where the user is mid-track in Firefox, the image may have
     //     been written long ago and Firefox won't re-emit
     //     PropertiesChanged until the page changes metadata — so we
-    //     have to poll Get instead of relying on the signal.
+    //     have to poll instead of relying on the signal.
     //   - Plain Spotify-Web-via-plasma-browser-integration: similar
     //     to Firefox, file:// URL written after a short delay.
     // Three retries cover the typical 0.5/1.5/3 s windows. Each is a
-    // cheap one-shot Get; the guard returns early once trackArtUrl
+    // cheap async GetAll; the guard returns early once trackArtUrl
     // is populated. Capped at 3 s after construction.
     for (int delayMs : {500, 1500, 3000}) {
         QTimer::singleShot(delayMs, this, [this]() {
             if (d->trackArtUrl.isEmpty() && d->playbackState != Stopped)
-                d->refreshPlayer();
+                d->getAll(kPlayerIface, &Private::applyPlayer);
         });
     }
 }

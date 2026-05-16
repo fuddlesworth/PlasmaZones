@@ -75,7 +75,7 @@ void SystemClock::update()
 {
     const QTime now = QTime::currentTime();
     const QDate today = QDate::currentDate();
-    bool timeChanged = false;
+    bool anyTimeChanged = false;
 
     const int h = now.hour();
     const int m = now.minute();
@@ -83,19 +83,19 @@ void SystemClock::update()
 
     if (m_hours != h) {
         m_hours = h;
-        timeChanged = true;
+        anyTimeChanged = true;
     }
     if (m_precision >= Minutes && m_minutes != m) {
         m_minutes = m;
-        timeChanged = true;
+        anyTimeChanged = true;
     }
     if (m_precision >= Seconds && m_seconds != s) {
         m_seconds = s;
-        timeChanged = true;
+        anyTimeChanged = true;
     }
 
-    if (timeChanged)
-        Q_EMIT this->timeChanged();
+    if (anyTimeChanged)
+        Q_EMIT timeChanged();
 
     if (m_date != today) {
         m_date = today;

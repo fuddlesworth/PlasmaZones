@@ -13,6 +13,8 @@ Item {
     // System data sources — owned at the top level so multiple
     // panels/windows can share a single Process / FileView each.
 
+    Component.onCompleted: shellState.togglePopup = panelPopupHost.toggle
+
     // Global UI state. Survives hot-reload via PersistentProperties.
     PersistentProperties {
         id: shellState
@@ -31,10 +33,10 @@ Item {
 
         reloadId: "main"
     }
-    Component.onCompleted: shellState.togglePopup = panelPopupHost.toggle
 
     SystemClock {
         id: clock
+
         precision: SystemClock.Minutes
     }
 
@@ -61,16 +63,16 @@ Item {
             // First line: "cpu  user nice system idle iowait irq softirq steal guest guest_nice"
             const line = content.split('\n')[0];
             if (!line.startsWith('cpu '))
-                return;
+                return ;
 
-            const fields = line.trim().split(/\s+/).slice(1).map(s => {
+            const fields = line.trim().split(/\s+/).slice(1).map((s) => {
                 return parseInt(s, 10);
             });
             // Defensive: a kernel that doesn't expose the expected layout
             // (exotic arch, namespaced /proc) leaves NaN in `fields[3]`,
             // which propagates and parks `prevTotal` at NaN forever.
             if (fields.length < 4 || !Number.isFinite(fields[3]))
-                return;
+                return ;
 
             // idle = idle + iowait (matches the original awk formula).
             const idle = fields[3] + (fields[4] || 0);
@@ -78,15 +80,17 @@ Item {
             for (const f of fields) {
                 if (Number.isFinite(f))
                     total += f;
+
             }
             if (!Number.isFinite(idle) || !Number.isFinite(total))
-                return;
+                return ;
 
             if (prevTotal > 0) {
                 const dTotal = total - prevTotal;
                 const dIdle = idle - prevIdle;
                 if (dTotal > 0)
                     percent = Math.round((1 - dIdle / dTotal) * 100).toString();
+
             }
             prevIdle = idle;
             prevTotal = total;
@@ -113,6 +117,7 @@ Item {
             }
             if (Number.isFinite(total) && Number.isFinite(available) && total > 0)
                 percent = Math.round((1 - available / total) * 100).toString();
+
         }
     }
 
@@ -136,11 +141,14 @@ Item {
         id: topPanel
 
         shellState: shellState
+        // Time as locale-neutral HH:mm; the date portion via Qt.formatDate
+        // so day/month names follow the user's locale (the hand-rolled
+        // English arrays this replaced were an i18n regression).
         clockText: {
-            const pad = n => n < 10 ? "0" + n : "" + n;
-            const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-            return pad(clock.hours) + ":" + pad(clock.minutes) + " · " + days[clock.date.getDay()] + " " + months[clock.date.getMonth()] + " " + pad(clock.date.getDate());
+            const pad = (n) => {
+                return n < 10 ? "0" + n : "" + n;
+            };
+            return pad(clock.hours) + ":" + pad(clock.minutes) + " · " + Qt.formatDate(clock.date, "ddd MMM dd");
         }
         cpuPercent: cpuStat.percent
         memPercent: memInfo.percent
@@ -148,13 +156,15 @@ Item {
         batteryVisible: battery.displayDevice !== null
     }
 
-    Taskbar {}
+    Taskbar {
+    }
 
     // ─── Popups ──────────────────────────────────────────────────────────
     // Single shared xdg_popup that hosts the calendar / media / menu
     // contents. See PanelPopupHost.qml.
     PanelPopupHost {
         id: panelPopupHost
+
         shellState: shellState
         topPanel: topPanel
     }
@@ -164,4 +174,5 @@ Item {
         shellState: shellState
         hostname: hostnameFile.content.trim()
     }
+
 }

@@ -50,7 +50,12 @@ private Q_SLOTS:
 
 private:
     void connectDevice(UPowerDevice* device);
+
     UPowerHost* m_host = nullptr;
+    // Row mirror owned by the model — see MprisPlayerModel for rationale:
+    // keeps the begin/end transaction boundaries correct independent of
+    // the host's list-mutation timing.
+    QList<UPowerDevice*> m_rows;
 };
 
 } // namespace PhosphorServices

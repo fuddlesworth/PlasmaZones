@@ -11,59 +11,19 @@ import QtQuick.Effects
 // the capsule to open the MprisPopup detail panel; click the art circle
 // to cycle players when multiple are running.
 Item {
+    // Middle-click = play/pause, scroll = volume.
+
     id: root
 
     property MprisPlayer currentPlayer: null
-    readonly property bool hasPlayer: currentPlayer !== null
-    readonly property bool isPlaying: hasPlayer && currentPlayer.isPlaying
-    readonly property real progress: {
-        if (!hasPlayer || currentPlayer.length <= 0)
-            return 0;
-        return Math.min(1.0, Math.max(0, currentPlayer.position / currentPlayer.length));
-    }
-
-    // Stable art URL — only updates when the actual URL string changes,
-    // preventing Image reload flicker on unrelated metadataChanged signals.
-    property string stableArtUrl: ""
-    function _updateArtUrl() {
-        // Gate on currentPlayer directly, not hasPlayer. hasPlayer is a
-        // bound property derived from currentPlayer; when this function
-        // is invoked from onCurrentPlayerChanged the assignment to
-        // currentPlayer has happened but hasPlayer's binding may not
-        // have re-evaluated yet (Qt evaluates property dependencies
-        // lazily, and the change handler runs before downstream
-        // re-evaluations are flushed). Result: hasPlayer reads `false`
-        // even though currentPlayer is non-null, the ternary falls to
-        // "" and stableArtUrl never gets the URL.
-        let url = (currentPlayer && currentPlayer.trackArtUrl) ? currentPlayer.trackArtUrl : "";
-        if (stableArtUrl !== url)
-            stableArtUrl = url;
-    }
-    onCurrentPlayerChanged: _updateArtUrl()
-    Connections {
-        target: root.currentPlayer
-        enabled: root.currentPlayer !== null
-        function onMetadataChanged() {
-            root._updateArtUrl();
-        }
-    }
-
-    signal popupRequested
-
+    readonly property bool hasPlayer: playerState.hasPlayer
+    readonly property bool isPlaying: playerState.isPlaying
+    readonly property real progress: playerState.progress
+    readonly property alias stableArtUrl: playerState.stableArtUrl
     // Exposed so shell.qml can anchor the popup to us.
     property alias popupAnchor: artContainer
 
-    visible: hasPlayer
-    implicitWidth: visible ? capsule.implicitWidth : 0
-    implicitHeight: parent ? parent.height : 30
-
-    MprisHost {
-        id: mprisHost
-    }
-    MprisPlayerModel {
-        id: playerModel
-        host: mprisHost
-    }
+    signal popupRequested()
 
     // ─── Player selection ────────────────────────────────────────────
     function selectPlayer() {
@@ -73,21 +33,25 @@ Item {
             let p = mprisHost.playerAt(i);
             if (!p)
                 continue;
+
             if (p.isPlaying) {
                 playing = p;
                 break;
             }
             if (p.playbackState === MprisPlayer.Paused && !paused)
                 paused = p;
+
         }
         let next = playing || paused || (mprisHost.playerCount > 0 ? mprisHost.playerAt(0) : null);
         if (root.currentPlayer !== next)
             root.currentPlayer = next;
+
     }
 
     function cyclePlayer() {
         if (mprisHost.playerCount <= 1)
-            return;
+            return ;
+
         let idx = 0;
         for (let i = 0; i < mprisHost.playerCount; i++) {
             if (mprisHost.playerAt(i) === currentPlayer) {
@@ -98,36 +62,66 @@ Item {
         root.currentPlayer = mprisHost.playerAt((idx + 1) % mprisHost.playerCount);
     }
 
+    visible: hasPlayer
+    implicitWidth: visible ? capsule.implicitWidth : 0
+    implicitHeight: parent ? parent.height : 30
+    Component.onCompleted: selectPlayer()
+
+    // Shared MPRIS derived-state + flicker-free art URL (see
+    // MprisPlayerState.qml). `sampling` is left at its default true —
+    // the progress ring's own Canvas culls repaints by visibility.
+    MprisPlayerState {
+        id: playerState
+
+        player: root.currentPlayer
+    }
+
+    MprisHost {
+        id: mprisHost
+    }
+
+    MprisPlayerModel {
+        id: playerModel
+
+        host: mprisHost
+    }
+
     Connections {
-        target: mprisHost
         function onPlayerAdded() {
             root.selectPlayer();
         }
+
         function onPlayerRemoved() {
             root.selectPlayer();
         }
+
         function onPlayerCountChanged() {
             root.selectPlayer();
         }
+
+        target: mprisHost
     }
+
     Connections {
-        target: root.currentPlayer
-        enabled: root.currentPlayer !== null
         function onPlaybackStateChanged() {
             root.selectPlayer();
         }
+
+        target: root.currentPlayer
+        enabled: root.currentPlayer !== null
     }
-    Component.onCompleted: selectPlayer()
 
     // ─── Capsule layout ──────────────────────────────────────────────
     Row {
         id: capsule
+
         anchors.verticalCenter: parent.verticalCenter
         spacing: 6
 
         // Album art with progress ring
         Item {
             id: artContainer
+
             width: 26
             height: 26
             anchors.verticalCenter: parent.verticalCenter
@@ -154,6 +148,7 @@ Item {
             // through to the visible scene.
             Item {
                 id: artMaskShape
+
                 width: artContainer.width
                 height: artContainer.height
                 visible: false
@@ -165,6 +160,7 @@ Item {
                     radius: width / 2
                     color: "white"
                 }
+
             }
 
             // Album art masked to the circle via MultiEffect.maskSource
@@ -173,6 +169,7 @@ Item {
             // bounding-box only. MultiEffect is the canonical mask path.
             Image {
                 id: artImage
+
                 anchors.fill: parent
                 source: root.stableArtUrl
                 fillMode: Image.PreserveAspectCrop
@@ -182,20 +179,21 @@ Item {
                 visible: status === Image.Ready || (source !== "" && status === Image.Loading)
                 layer.enabled: true
                 layer.smooth: true
+
                 layer.effect: MultiEffect {
                     maskEnabled: true
                     maskSource: artMaskShape
                     maskThresholdMin: 0.5
-                    maskSpreadAtMin: 1.0
+                    maskSpreadAtMin: 1
                 }
+
             }
 
             // Progress ring drawn ON TOP of the art so the outer ring
             // stroke overlays the artwork edge.
             Canvas {
                 id: progressRing
-                anchors.fill: parent
-                z: 1
+
                 // Only sample progress while the widget is visible and we
                 // have a player. When there's no player or the widget is
                 // hidden (occluded/no-player branch), keep `prog` at 0
@@ -203,9 +201,14 @@ Item {
                 // otherwise re-rasterize the ring once per MPRIS position
                 // tick regardless of visibility.
                 property real prog: (root.visible && root.hasPlayer) ? root.progress : 0
-                onProgChanged: if (root.visible)
-                    requestPaint()
 
+                anchors.fill: parent
+                z: 1
+                onProgChanged: {
+                    if (root.visible) {
+                        requestPaint();
+                    }
+                }
                 onPaint: {
                     let ctx = getContext("2d");
                     let cx = width / 2, cy = height / 2;
@@ -234,13 +237,14 @@ Item {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 Accessible.role: Accessible.Button
                 Accessible.name: "Media player controls"
-                onClicked: mouse => {
+                onClicked: (mouse) => {
                     if (mouse.button === Qt.RightButton)
                         root.cyclePlayer();
                     else
                         root.popupRequested();
                 }
             }
+
         }
 
         // Scrolling title — left-click opens popup
@@ -264,44 +268,56 @@ Item {
 
             Text {
                 id: titleText
+
+                property bool needsScroll: implicitWidth > 120
+
                 y: (parent.height - height) / 2
                 text: {
                     if (!root.hasPlayer)
                         return "";
+
                     let parts = [];
                     if (root.currentPlayer.trackArtist)
                         parts.push(root.currentPlayer.trackArtist);
+
                     if (root.currentPlayer.trackTitle)
                         parts.push(root.currentPlayer.trackTitle);
+
                     return parts.join(" · ") || root.currentPlayer.identity || "";
                 }
                 color: "#1e1e2e"
                 font.pixelSize: 11
-                property bool needsScroll: implicitWidth > 120
 
                 SequentialAnimation on x {
                     running: titleText.needsScroll && root.visible
                     loops: Animation.Infinite
+
                     PauseAnimation {
                         duration: 2000
                     }
+
                     NumberAnimation {
                         from: 0
                         to: -(titleText.implicitWidth - 110)
                         duration: titleText.implicitWidth * 25
                         easing.type: Easing.Linear
                     }
+
                     PauseAnimation {
                         duration: 1500
                     }
+
                     NumberAnimation {
                         from: -(titleText.implicitWidth - 110)
                         to: 0
                         duration: 400
                         easing.type: Easing.OutQuad
                     }
+
                 }
+
             }
+
         }
 
         // Controls
@@ -315,14 +331,17 @@ Item {
                 radius: 4
                 color: prevArea.containsMouse ? "#45475a" : "transparent"
                 visible: root.hasPlayer && root.currentPlayer.canGoPrevious
+
                 Text {
                     anchors.centerIn: parent
                     text: "⏮"
                     font.pixelSize: 9
                     color: "#1e1e2e"
                 }
+
                 MouseArea {
                     id: prevArea
+
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
@@ -330,6 +349,7 @@ Item {
                     Accessible.name: "Previous track"
                     onClicked: root.currentPlayer.previous()
                 }
+
             }
 
             Rectangle {
@@ -337,22 +357,29 @@ Item {
                 height: 22
                 radius: 11
                 color: playArea.containsMouse ? "#45475a" : "#313244"
+
                 Text {
                     anchors.centerIn: parent
                     text: root.isPlaying ? "⏸" : "▶"
                     font.pixelSize: 9
                     color: "#cdd6f4"
                 }
+
                 MouseArea {
                     id: playArea
+
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     Accessible.role: Accessible.Button
                     Accessible.name: root.isPlaying ? "Pause" : "Play"
-                    onClicked: if (root.hasPlayer)
-                        root.currentPlayer.togglePlaying()
+                    onClicked: {
+                        if (root.hasPlayer) {
+                            root.currentPlayer.togglePlaying();
+                        }
+                    }
                 }
+
             }
 
             Rectangle {
@@ -361,14 +388,17 @@ Item {
                 radius: 4
                 color: nextArea.containsMouse ? "#45475a" : "transparent"
                 visible: root.hasPlayer && root.currentPlayer.canGoNext
+
                 Text {
                     anchors.centerIn: parent
                     text: "⏭"
                     font.pixelSize: 9
                     color: "#1e1e2e"
                 }
+
                 MouseArea {
                     id: nextArea
+
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
@@ -376,12 +406,13 @@ Item {
                     Accessible.name: "Next track"
                     onClicked: root.currentPlayer.next()
                 }
+
             }
+
         }
+
     }
 
-    // Middle-click = play/pause, scroll = volume.
-    //
     // This MouseArea is anchors.fill: capsule and is declared AFTER
     // the per-element MouseAreas inside the Row, which puts it on top
     // of them in stacking order. Even though acceptedButtons filters
@@ -400,13 +431,18 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         propagateComposedEvents: true
-        onClicked: if (root.hasPlayer)
-            root.currentPlayer.togglePlaying()
-        onWheel: wheel => {
+        onClicked: {
+            if (root.hasPlayer) {
+                root.currentPlayer.togglePlaying();
+            }
+        }
+        onWheel: (wheel) => {
             if (!root.hasPlayer)
-                return;
+                return ;
+
             let delta = wheel.angleDelta.y > 0 ? 0.05 : -0.05;
             root.currentPlayer.volume = Math.max(0, Math.min(1, root.currentPlayer.volume + delta));
         }
     }
+
 }

@@ -5,7 +5,10 @@
 #include <PhosphorServices/MprisPlayer.h>
 
 #include <QDBusConnection>
-#include <QDBusConnectionInterface>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcMprisHost, "phosphorservices.mpris.host")
@@ -79,10 +82,26 @@ MprisHost::MprisHost(QObject* parent)
                 QStringLiteral("org.freedesktop.DBus"), QStringLiteral("NameOwnerChanged"), this,
                 SLOT(_q_nameOwnerChanged(QString, QString, QString)));
 
-    const QStringList services = bus.interface()->registeredServiceNames().value();
-    for (const QString& service : services) {
-        d->addService(service);
-    }
+    // Startup scan for already-running players via an async ListNames —
+    // a blocking call here would freeze the GUI thread on a slow session
+    // bus. The watcher is parented to `this` so it cancels cleanly if the
+    // host is destroyed before the reply lands.
+    QDBusMessage listMsg =
+        QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
+                                       QStringLiteral("org.freedesktop.DBus"), QStringLiteral("ListNames"));
+    auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(listMsg), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* call) {
+        call->deleteLater();
+        const QDBusPendingReply<QStringList> reply = *call;
+        if (reply.isError()) {
+            qCWarning(lcMprisHost) << "ListNames failed:" << reply.error().message();
+            return;
+        }
+        const QStringList services = reply.value();
+        for (const QString& service : services) {
+            d->addService(service);
+        }
+    });
 }
 
 MprisHost::~MprisHost() = default;

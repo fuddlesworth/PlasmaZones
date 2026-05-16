@@ -50,7 +50,13 @@ private Q_SLOTS:
 
 private:
     void connectPlayer(MprisPlayer* player);
+
     MprisHost* m_host = nullptr;
+    // Row mirror owned by the model. rowCount()/data() index into this
+    // list, never the host's, so the begin/end-insert/remove transaction
+    // boundaries always straddle the actual mutation regardless of when
+    // the host emits playerAdded/playerRemoved relative to its own list.
+    QList<MprisPlayer*> m_rows;
 };
 
 } // namespace PhosphorServices

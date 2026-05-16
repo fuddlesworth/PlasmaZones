@@ -5,12 +5,11 @@
 #include <PhosphorServices/UPowerDevice.h>
 
 #include <QDBusConnection>
-#include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDBusObjectPath>
+#include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDBusReply>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcUPowerHost, "phosphorservices.upower.host")
@@ -82,40 +81,64 @@ UPowerHost::UPowerHost(QObject* parent)
     bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kIface), QStringLiteral("DeviceRemoved"),
                 this, SLOT(_q_onDeviceRemoved(QDBusObjectPath)));
 
+    // All three startup queries run asynchronously — a blocking call
+    // here would freeze the GUI thread while UPower (and, through the
+    // per-device GetAll, every battery) responds. Watchers are parented
+    // to `this` so they cancel cleanly if the host is destroyed early.
+
     // Read OnBattery
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
                                                           QLatin1String(kPropsIface), QStringLiteral("Get"));
         msg << QLatin1String(kIface) << QStringLiteral("OnBattery");
-        QDBusMessage reply = bus.call(msg, QDBus::Block, 2000);
-        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-            d->onBattery = reply.arguments().first().value<QDBusVariant>().variant().toBool();
+        auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* call) {
+            call->deleteLater();
+            const QDBusPendingReply<QDBusVariant> reply = *call;
+            if (reply.isError())
+                return;
+            bool val = reply.value().variant().toBool();
+            if (d->onBattery != val) {
+                d->onBattery = val;
+                Q_EMIT onBatteryChanged();
+            }
+        });
     }
 
     // Get display device
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
                                                           QLatin1String(kIface), QStringLiteral("GetDisplayDevice"));
-        QDBusMessage reply = bus.call(msg, QDBus::Block, 2000);
-        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-            QString devPath = reply.arguments().first().value<QDBusObjectPath>().path();
-            if (!devPath.isEmpty()) {
+        auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* call) {
+            call->deleteLater();
+            const QDBusPendingReply<QDBusObjectPath> reply = *call;
+            if (reply.isError())
+                return;
+            const QString devPath = reply.value().path();
+            if (!devPath.isEmpty() && !d->displayDevice) {
                 d->displayDevice = new UPowerDevice(devPath, this);
                 Q_EMIT displayDeviceChanged();
             }
-        }
+        });
     }
 
     // Enumerate devices
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
                                                           QLatin1String(kIface), QStringLiteral("EnumerateDevices"));
-        QDBusMessage reply = bus.call(msg, QDBus::Block, 2000);
-        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-            const auto paths = qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().first());
+        auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* call) {
+            call->deleteLater();
+            const QDBusPendingReply<QList<QDBusObjectPath>> reply = *call;
+            if (reply.isError()) {
+                qCWarning(lcUPowerHost) << "EnumerateDevices failed:" << reply.error().message();
+                return;
+            }
+            const auto paths = reply.value();
             for (const QDBusObjectPath& p : paths)
                 d->addDevice(p.path());
-        }
+        });
     }
 }
 

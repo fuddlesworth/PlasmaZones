@@ -27,8 +27,10 @@ void UPowerDeviceModel::setHost(UPowerHost* host)
     if (m_host)
         disconnect(m_host, nullptr, this, nullptr);
     m_host = host;
+    m_rows.clear();
     if (m_host) {
-        for (auto* device : m_host->devices())
+        m_rows = m_host->devices();
+        for (auto* device : std::as_const(m_rows))
             connectDevice(device);
         connect(m_host, &UPowerHost::deviceAdded, this, &UPowerDeviceModel::onDeviceAdded);
         connect(m_host, &UPowerHost::deviceRemoved, this, &UPowerDeviceModel::onDeviceRemoved);
@@ -42,14 +44,14 @@ int UPowerDeviceModel::rowCount(const QModelIndex& parent) const
 {
     if (parent.isValid())
         return 0;
-    return m_host ? m_host->deviceCount() : 0;
+    return m_rows.size();
 }
 
 QVariant UPowerDeviceModel::data(const QModelIndex& index, int role) const
 {
-    if (!m_host || !index.isValid() || index.row() >= m_host->deviceCount())
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size())
         return {};
-    auto* device = m_host->deviceAt(index.row());
+    auto* device = m_rows.at(index.row());
     if (!device)
         return {};
     switch (role) {
@@ -80,10 +82,11 @@ QHash<int, QByteArray> UPowerDeviceModel::roleNames() const
 
 void UPowerDeviceModel::onDeviceAdded(UPowerDevice* device)
 {
-    if (!m_host)
+    if (!device || m_rows.contains(device))
         return;
-    const int row = m_host->deviceCount() - 1;
+    const int row = m_rows.size();
     beginInsertRows({}, row, row);
+    m_rows.append(device);
     connectDevice(device);
     endInsertRows();
     Q_EMIT countChanged();
@@ -91,37 +94,20 @@ void UPowerDeviceModel::onDeviceAdded(UPowerDevice* device)
 
 void UPowerDeviceModel::onDeviceRemoved(UPowerDevice* device)
 {
-    if (!m_host)
+    const int row = m_rows.indexOf(device);
+    if (row < 0)
         return;
-    const auto& devices = m_host->devices();
-    int row = -1;
-    for (int i = 0; i < devices.size(); ++i) {
-        if (devices.at(i) == device) {
-            row = i;
-            break;
-        }
-    }
-    if (row < 0) {
-        beginResetModel();
-        endResetModel();
-    } else {
-        beginRemoveRows({}, row, row);
-        endRemoveRows();
-    }
+    beginRemoveRows({}, row, row);
+    m_rows.removeAt(row);
+    endRemoveRows();
     Q_EMIT countChanged();
 }
 
 void UPowerDeviceModel::onDeviceDataChanged(UPowerDevice* device)
 {
-    if (!m_host)
-        return;
-    const auto& devices = m_host->devices();
-    for (int i = 0; i < devices.size(); ++i) {
-        if (devices.at(i) == device) {
-            Q_EMIT dataChanged(index(i), index(i));
-            return;
-        }
-    }
+    const int row = m_rows.indexOf(device);
+    if (row >= 0)
+        Q_EMIT dataChanged(index(row), index(row));
 }
 
 void UPowerDeviceModel::connectDevice(UPowerDevice* device)

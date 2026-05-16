@@ -93,6 +93,12 @@ private:
     void showPopup();
     void hidePopup();
     [[nodiscard]] QRect computeAnchorRect() const;
+    /// Anchor rect with the gap baked in (per popupEdge) and clamped to
+    /// the parent surface bounds, ready to hand to an xdg-positioner.
+    /// Returns an empty QRect when the anchor is off-surface — callers
+    /// must abort rather than send an empty/out-of-bounds positioner,
+    /// which is a protocol error that drops the wl_display connection.
+    [[nodiscard]] QRect resolvedAnchorRect() const;
     /// Re-apply the xdg-positioner / size when a live property change
     /// requires re-showing the popup. With xdg-shell ≥ v3 (KWin, Mutter,
     /// wlroots all support this) we issue xdg_popup.reposition on the
