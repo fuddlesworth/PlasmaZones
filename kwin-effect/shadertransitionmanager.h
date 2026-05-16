@@ -6,7 +6,6 @@
 #include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
-#include <PhosphorAnimation/ProfileTree.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
@@ -89,20 +88,6 @@ public:
     const PhosphorAnimationShaders::AnimationAppRuleList& appRules() const
     {
         return m_animationAppRules;
-    }
-
-    /// Per-event motion-profile tree mirrored from the daemon's
-    /// PhosphorProfileRegistry over D-Bus (`motionProfileTree`). Holds
-    /// the per-event base durations (window.open, window.close, …) that
-    /// `tryBeginShaderForEvent` resolves before applying the App Rule
-    /// timing cascade. Refreshed on every settingsChanged signal.
-    PhosphorAnimation::ProfileTree& motionProfileTree()
-    {
-        return m_motionProfileTree;
-    }
-    const PhosphorAnimation::ProfileTree& motionProfileTree() const
-    {
-        return m_motionProfileTree;
     }
 
     // NOTE: Shader transition methods (beginShaderTransition, endShaderTransition,
@@ -227,7 +212,6 @@ private:
     PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     PhosphorAnimationShaders::AnimationAppRuleList m_animationAppRules;
-    PhosphorAnimation::ProfileTree m_motionProfileTree;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Texture Cache

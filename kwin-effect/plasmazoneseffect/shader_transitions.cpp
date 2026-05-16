@@ -10,10 +10,6 @@
 #include <PhosphorAnimation/AnimationAppRuleResolver.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
-#include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/ProfileTree.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -1171,42 +1167,11 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     const auto& profileTree = m_shaderManager.profileTree();
     const auto profile =
         PhosphorAnimationShaders::resolveAnimationShaderProfile(appRules, profileTree, windowClass, profilePath);
-    // Per-event base duration. The daemon mirrors its motion
-    // PhosphorProfileRegistry into `motionProfileTree` over D-Bus —
-    // ProfileTree::resolve walks `window.open → window → global` and
-    // overlays each level, so a user-set `window.open` = 900 ms wins
-    // over the global default exactly as the daemon's SurfaceAnimator
-    // resolves per-event OSD/popup durations from the registry.
-    //
-    // Fall back to the caller-supplied global `animationDurationMs()`
-    // when NO node in the path's parent chain carries an override:
-    // an empty tree (D-Bus race / fresh user) must not silently
-    // collapse every event to the library default (150 ms). The
-    // resolved value is then handed to `resolveAnimationDuration` as
-    // its `defaultDurationMs`, so the per-window-class App Rule timing
-    // cascade still layers on top (rule wins → per-event base →
-    // global), matching the resolver's documented contract.
-    int baseDurationMs = durationMs;
-    {
-        const auto& motionTree = m_shaderManager.motionProfileTree();
-        bool hasChainOverride = false;
-        for (QString cursor = profilePath; !cursor.isEmpty();
-             cursor = PhosphorAnimation::ProfilePaths::parentPath(cursor)) {
-            if (motionTree.hasOverride(cursor)) {
-                hasChainOverride = true;
-                break;
-            }
-        }
-        if (hasChainOverride) {
-            baseDurationMs = qRound(motionTree.resolve(profilePath).effectiveDuration());
-        }
-    }
     // Resolve duration through the rule cascade too — a Timing rule for
-    // the same (class, event) bumps the per-event base. A rule with
-    // durationMs == 0 is the inherit sentinel and falls through to the
-    // per-event base resolved above.
+    // the same (class, event) bumps a per-event default. A rule with
+    // durationMs == 0 is the inherit sentinel and falls through.
     const int effectiveDurationMs =
-        PhosphorAnimationShaders::resolveAnimationDuration(appRules, windowClass, profilePath, baseDurationMs);
+        PhosphorAnimationShaders::resolveAnimationDuration(appRules, windowClass, profilePath, durationMs);
     if (profile.effectiveEffectId().isEmpty()) {
         // Default-state path: a fresh user with no shader overrides
         // anywhere in the tree resolves every event to empty effectId,
@@ -1283,40 +1248,6 @@ void PlasmaZonesEffect::loadAnimationAppRulesFromDbus()
                 qCWarning(lcEffect) << "Failed to parse animationAppRules from D-Bus — not a JSON array";
             }
         });
-}
-
-void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
-{
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(
-        this, QStringLiteral("motionProfileTree"), [this](const QVariant& v) {
-            const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
-            if (doc.isObject()) {
-                // ProfileTree::fromJson resolves the optional `curve`
-                // field through a CurveRegistry. The effect resolves
-                // ONLY per-event durations from this tree (it never
-                // animates with the motion curve — shader effects carry
-                // their own timing), so a throwaway empty registry is
-                // sufficient: an unresolved curve simply stays null,
-                // and effectiveDuration() reads `duration` directly.
-                PhosphorAnimation::CurveRegistry curves;
-                auto& tree = m_shaderManager.motionProfileTree();
-                tree = PhosphorAnimation::ProfileTree::fromJson(doc.object(), curves);
-                qCDebug(lcEffect) << "loadMotionProfileTreeFromDbus: tree loaded with" << tree.overriddenPaths().size()
-                                  << "per-event overrides — paths=" << tree.overriddenPaths();
-            } else {
-                qCWarning(lcEffect) << "Failed to parse motionProfileTree from D-Bus — not a JSON object";
-            }
-        });
-}
-
-void PlasmaZonesEffect::slotMotionProfileTreeChanged()
-{
-    // A per-event animation duration was edited (daemon rescanned a
-    // `profiles/*.json` override). Re-fetch so per-event durations apply
-    // live, without a logout/login. loadCachedSettings() also re-fetches
-    // it on settingsChanged; this dedicated path covers the profile-file
-    // edits that deliberately do NOT ride settingsChanged.
-    loadMotionProfileTreeFromDbus();
 }
 
 void PlasmaZonesEffect::loadShaderRegistryFromDbus()

@@ -482,20 +482,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         qCWarning(lcEffect) << "Failed to connect to daemon virtualScreensChanged D-Bus signal";
     }
 
-    // Connect to per-event motion-profile-tree changes. The daemon emits
-    // this (separate from settingsChanged) when a per-event animation
-    // duration is edited, so per-event durations apply live instead of
-    // only after a logout/login.
-    const bool motionTreeConnected = QDBusConnection::sessionBus().connect(
-        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-        PhosphorProtocol::Service::Interface::Settings, QStringLiteral("motionProfileTreeChanged"), this,
-        SLOT(slotMotionProfileTreeChanged()));
-    if (motionTreeConnected) {
-        qCInfo(lcEffect) << "Connected to daemon motionProfileTreeChanged D-Bus signal";
-    } else {
-        qCWarning(lcEffect) << "Failed to connect to daemon motionProfileTreeChanged D-Bus signal";
-    }
-
     // Connect to keyboard navigation D-Bus signals
     connectNavigationSignals();
 

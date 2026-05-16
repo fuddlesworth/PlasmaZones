@@ -851,7 +851,7 @@ bool Daemon::init()
     m_layoutAdaptor->setAutotileLayoutSource(m_autotileLayoutSource);
     // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
-    m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), m_shaderRegistry.get(), &m_profileRegistry, this);
+    m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), m_shaderRegistry.get(), this);
 
     // Shader adaptor - shader discovery, compilation lifecycle, file monitoring.
     // Held as a member so stop() can detach() it before the unique_ptr member
