@@ -126,6 +126,11 @@ jobs:
         run: bash packaging/generate-changelog.sh debian
 
       - name: Build Debian package
+        # Force bash: this step uses `set -o pipefail` and `compgen`, both
+        # bash builtins. The KDE Neon container's /bin/sh is dash, and
+        # GitHub's container default shell resolved to sh here, so the
+        # step aborted on 'Illegal option -o pipefail'.
+        shell: bash
         run: |
           set -euo pipefail
           # dpkg-buildpackage expects debian/ at project root. Remove any
