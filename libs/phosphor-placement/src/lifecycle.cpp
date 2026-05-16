@@ -454,6 +454,49 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     }
 }
 
+QSet<QString>
+WindowTrackingService::physicalScreensWithStaleVirtualAssignments(const QSet<QString>& subdividedPhysicalIds) const
+{
+    // Mirrors the state stores swept by migrateScreenAssignmentsFromVirtual —
+    // missing one here would leave a window stranded on a stale VS id even
+    // after migration runs. Co-locating the scan with the migrator keeps that
+    // pairing maintainable: any future store added to the migrator must also
+    // be added here, both edits land in the same file under the same review.
+    QSet<QString> result;
+    auto check = [&](const QString& screenId) {
+        if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+            return;
+        }
+        const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+        if (!subdividedPhysicalIds.contains(physId)) {
+            result.insert(physId);
+        }
+    };
+
+    if (m_snapState) {
+        const QHash<QString, QString>& assigns = m_snapState->screenAssignments();
+        for (auto it = assigns.constBegin(); it != assigns.constEnd(); ++it) {
+            check(it.value());
+        }
+        const QHash<QString, QString>& preFloat = m_snapState->preFloatScreenAssignments();
+        for (auto it = preFloat.constBegin(); it != preFloat.constEnd(); ++it) {
+            check(it.value());
+        }
+    }
+    for (auto qit = m_pendingRestoreQueues.constBegin(); qit != m_pendingRestoreQueues.constEnd(); ++qit) {
+        for (const auto& entry : qit.value()) {
+            check(entry.screenId);
+        }
+    }
+    if (m_snapEngine) {
+        const auto& geos = m_snapEngine->unmanagedGeometries();
+        for (auto it = geos.constBegin(); it != geos.constEnd(); ++it) {
+            check(it.value().screenId);
+        }
+    }
+    return result;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Window Lifecycle
 // ═══════════════════════════════════════════════════════════════════════════════

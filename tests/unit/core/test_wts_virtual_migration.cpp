@@ -392,6 +392,51 @@ private Q_SLOTS:
         QCOMPARE(m_service->screenAssignments().value(windowId), physId);
     }
 
+    // =====================================================================
+    // physicalScreensWithStaleVirtualAssignments — orphan-physId discovery
+    // =====================================================================
+
+    void testStaleScan_findsOrphanInActiveAssignments()
+    {
+        const QString physA = QStringLiteral("Dell:U2722D:115107");
+        const QString physB = QStringLiteral("LG:27GP850:ABC123");
+        const QString vsA0 = PhosphorIdentity::VirtualScreenId::make(physA, 0);
+        const QString vsB0 = PhosphorIdentity::VirtualScreenId::make(physB, 0);
+
+        m_service->assignWindowToZone(QStringLiteral("kate|a"), m_zoneIds[0], vsA0, 1);
+        m_service->assignWindowToZone(QStringLiteral("dolphin|b"), m_zoneIds[0], vsB0, 1);
+
+        // Caller declares physA still subdivided; physB is not.
+        const QSet<QString> stillSubdivided{physA};
+        const QSet<QString> orphans = m_service->physicalScreensWithStaleVirtualAssignments(stillSubdivided);
+
+        QCOMPARE(orphans.size(), 1);
+        QVERIFY(orphans.contains(physB));
+        QVERIFY(!orphans.contains(physA));
+    }
+
+    void testStaleScan_emptyWhenAllPolicyHonored()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+        m_service->assignWindowToZone(QStringLiteral("kate|a"), m_zoneIds[0], vs0, 1);
+
+        const QSet<QString> orphans = m_service->physicalScreensWithStaleVirtualAssignments({physId});
+
+        QVERIFY(orphans.isEmpty());
+    }
+
+    void testStaleScan_ignoresBarePhysicalIds()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        m_service->assignWindowToZone(QStringLiteral("kate|a"), m_zoneIds[0], physId, 1);
+
+        // Even with no subdivisions in the policy, a bare physId is not stale.
+        const QSet<QString> orphans = m_service->physicalScreensWithStaleVirtualAssignments({});
+
+        QVERIFY(orphans.isEmpty());
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;

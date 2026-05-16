@@ -39,6 +39,7 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <algorithm>
 
@@ -682,12 +683,35 @@ void Daemon::migrateStartupScreenAssignments()
         return;
     }
     const auto vsConfigs = m_settings->virtualScreenConfigs();
+
+    // "To virtual": for every physical screen Settings still subdivides, push
+    // any bare-physId or stale VS assignments onto the current VS id set.
+    QSet<QString> physWithSubdivisions;
     for (auto it = vsConfigs.constBegin(); it != vsConfigs.constEnd(); ++it) {
         if (it.value().hasSubdivisions()) {
+            physWithSubdivisions.insert(it.key());
             QStringList vsIds = m_screenManager->virtualScreenIdsFor(it.key());
             m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(it.key(), vsIds,
                                                                                   m_screenManager.get());
         }
+    }
+
+    // "From virtual": symmetric pass for the daemon-was-down case. If the user
+    // removed a screen's subdivisions while the daemon was offline, WTS state
+    // on disk still holds "physId/vs:N" for windows on that screen; the live-
+    // removal handler (onVirtualScreensReconfigured) never ran. Without this
+    // pass those windows would survive into a fresh session under orphan
+    // virtual ids and resnap/autotile/restore would mis-resolve them.
+    //
+    // The daemon supplies the policy (which physIds Settings still subdivides);
+    // WTS owns the state-shape question (which physIds carry stale VS ids
+    // anywhere in its bookkeeping). Coupling that to the daemon would force
+    // every future addition of a screen-id-bearing state store to mirror an
+    // orphan-scan update here — exactly the bug class this fix is closing.
+    const QSet<QString> orphanPhysIds =
+        m_windowTrackingAdaptor->service()->physicalScreensWithStaleVirtualAssignments(physWithSubdivisions);
+    for (const QString& physId : orphanPhysIds) {
+        m_windowTrackingAdaptor->service()->migrateScreenAssignmentsFromVirtual(physId);
     }
 }
 
@@ -769,13 +793,23 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
         m_windowTrackingAdaptor->service()->clearResnapBuffer();
     }
 
-    // Migrate window screen assignments to the new VS IDs (when subdivisions
-    // exist). Migration is a no-op for windows already on a valid VS ID in
-    // the new config — those keep their stored screen.
-    if (config.hasSubdivisions() && m_windowTrackingAdaptor) {
-        const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
-        m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(physicalScreenId, vsIds,
-                                                                              m_screenManager.get());
+    // Migrate window screen assignments symmetrically across the
+    // subdivision/no-subdivision boundary:
+    //   • subdivisions present → move physId (or stale VS ids from a prior
+    //     config) onto the new VS id set;
+    //   • subdivisions removed → collapse any lingering "physId/vs:N"
+    //     assignments back to the bare physId so resnap, autotile, and
+    //     pending-restore lookups don't dangle on orphan screen ids.
+    // Migration is a no-op for windows already on a valid screen id in the
+    // new config — those keep their stored screen.
+    if (m_windowTrackingAdaptor) {
+        if (config.hasSubdivisions()) {
+            const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
+            m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(physicalScreenId, vsIds,
+                                                                                  m_screenManager.get());
+        } else {
+            m_windowTrackingAdaptor->service()->migrateScreenAssignmentsFromVirtual(physicalScreenId);
+        }
     }
 
     // Prune stale autotile order entries for old virtual screen IDs.
