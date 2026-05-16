@@ -1353,34 +1353,38 @@ public:
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Virtual Screen Shortcuts
+    //
+    // VS-scope shortcuts escalate their window-scope counterpart with an
+    // extra Shift: swap-window (Meta+Ctrl+Alt+Arrow) → swap-VS adds Shift;
+    // rotate-window (Meta+Ctrl+]) → rotate-VS adds Shift+Alt. The Alt is
+    // mandatory: Meta+Ctrl+Shift+Arrow / Meta+Ctrl+Shift+[ ] are KWin's own
+    // built-in "Window One Desktop to the *" defaults, so dropping it lets
+    // KWin grab the chord and the VS action silently never fires.
     // ═══════════════════════════════════════════════════════════════════════════
 
     static QString swapVirtualScreenLeftShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Shift+Left");
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+Left");
     }
     static QString swapVirtualScreenRightShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Shift+Right");
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+Right");
     }
     static QString swapVirtualScreenUpShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Shift+Up");
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+Up");
     }
     static QString swapVirtualScreenDownShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Shift+Down");
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+Down");
     }
     static QString rotateVirtualScreensClockwiseShortcut()
     {
-        // +Shift over the window rotate (Meta+Ctrl+]) escalates from zone
-        // scope to VS scope, mirroring how swap-window → swap-VS adds one
-        // extra Shift modifier.
-        return QStringLiteral("Meta+Ctrl+Shift+]");
+        return QStringLiteral("Meta+Ctrl+Alt+]");
     }
     static QString rotateVirtualScreensCounterclockwiseShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Shift+[");
+        return QStringLiteral("Meta+Ctrl+Alt+[");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
