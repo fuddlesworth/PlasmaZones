@@ -702,18 +702,15 @@ void Daemon::migrateStartupScreenAssignments()
     // removal handler (onVirtualScreensReconfigured) never ran. Without this
     // pass those windows would survive into a fresh session under orphan
     // virtual ids and resnap/autotile/restore would mis-resolve them.
-    QSet<QString> orphanPhysIds;
-    const QHash<QString, QString>& assigns = m_windowTrackingAdaptor->service()->screenAssignments();
-    for (auto it = assigns.constBegin(); it != assigns.constEnd(); ++it) {
-        if (!PhosphorIdentity::VirtualScreenId::isVirtual(it.value())) {
-            continue;
-        }
-        const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.value());
-        if (!physWithSubdivisions.contains(physId)) {
-            orphanPhysIds.insert(physId);
-        }
-    }
-    for (const QString& physId : std::as_const(orphanPhysIds)) {
+    //
+    // The daemon supplies the policy (which physIds Settings still subdivides);
+    // WTS owns the state-shape question (which physIds carry stale VS ids
+    // anywhere in its bookkeeping). Coupling that to the daemon would force
+    // every future addition of a screen-id-bearing state store to mirror an
+    // orphan-scan update here — exactly the bug class this fix is closing.
+    const QSet<QString> orphanPhysIds =
+        m_windowTrackingAdaptor->service()->physicalScreensWithStaleVirtualAssignments(physWithSubdivisions);
+    for (const QString& physId : orphanPhysIds) {
         m_windowTrackingAdaptor->service()->migrateScreenAssignmentsFromVirtual(physId);
     }
 }
