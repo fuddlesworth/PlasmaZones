@@ -86,7 +86,7 @@ and the `HasDBusStreaming` `static_assert` guard.
 
 - `QtCore`, `QtDBus`
 - [`phosphor-dbus`](../phosphor-dbus/README.md) — generic D-Bus client and
-  the `HasDBusStreaming` concept.
+  the `HasDBusStreaming` trait.
 
 ## See also
 

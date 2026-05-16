@@ -12,14 +12,14 @@ using namespace PhosphorDBus;
 
 namespace {
 /// A plain struct with no QDBusArgument streaming operators — the negative
-/// case for the HasDBusStreaming concept.
+/// case for the HasDBusStreaming trait.
 struct NotStreamable
 {
     int value = 0;
 };
 } // namespace
 
-// HasDBusStreaming is a compile-time concept; exercise both polarities here.
+// HasDBusStreaming is a compile-time trait; exercise both polarities here.
 // `int` has built-in QDBusArgument operators; NotStreamable has none.
 static_assert(HasDBusStreaming<int>::value, "int is QDBusArgument-streamable");
 static_assert(!HasDBusStreaming<NotStreamable>::value, "NotStreamable has no QDBusArgument operators");

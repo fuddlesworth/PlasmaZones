@@ -46,7 +46,11 @@ void Client::fireAndForget(QObject* parent, const QString& interface, const QStr
 
 void Client::sendOneWay(const QString& interface, const QString& method, const QVariantList& args) const
 {
-    m_connection.send(createCall(interface, method, args));
+    // send() returns false when the message could not even be queued (e.g. a
+    // disconnected bus). There is no reply to surface the failure, so log it.
+    if (!m_connection.send(createCall(interface, method, args))) {
+        qCWarning(*m_log) << method << "D-Bus one-way send failed to dispatch";
+    }
 }
 
 QDBusPendingCall Client::asyncCall(const QString& interface, const QString& method, const QVariantList& args) const
