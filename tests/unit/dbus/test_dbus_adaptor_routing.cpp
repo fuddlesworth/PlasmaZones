@@ -5,22 +5,21 @@
  * @file test_dbus_adaptor_routing.cpp
  * @brief End-to-end D-Bus routing test for typed-struct slot dispatch.
  *
- * Regression guard for the 2026-04-10 resnap crash. Root cause: slots written
- * as `void slot(const PhosphorProtocol::WindowOpenedList&)` inside `namespace PlasmaZones` were
- * recorded by moc with the unqualified type name "PhosphorProtocol::WindowOpenedList", but the
- * metatype was registered via `Q_DECLARE_METATYPE(PhosphorProtocol::WindowOpenedList)`
- * under the qualified name "PhosphorProtocol::WindowOpenedList". QDBusAbstractAdaptor
- * dispatch couldn't resolve the type → "Could not find slot ..." at runtime →
- * kwin_wayland downstream crash with "demarshalling function for type 'QString'
- * failed".
+ * Regression guard for the 2026-04-10 resnap crash. Root cause: adaptor
+ * slots whose typed-struct parameter was spelled unqualified (or with a
+ * since-removed `PlasmaZones::` alias) were recorded by moc under a type
+ * name that did not match the metatype — which is registered, via
+ * `Q_DECLARE_METATYPE(PhosphorProtocol::WindowOpenedList)`, under the
+ * fully-qualified name. QDBusAbstractAdaptor dispatch could not resolve the
+ * type → "Could not find slot ..." at runtime → kwin_wayland downstream
+ * crash with "demarshalling function for type 'QString' failed".
  *
- * The structural fix is that every typed-struct slot parameter in the adaptor
- * headers is now fully-qualified (e.g. `const PhosphorProtocol::WindowOpenedList&`).
- * This test registers an adaptor on a private QDBusConnection and verifies
- * that a method call with a typed-struct payload is actually dispatched to
- * the slot. If a future adaptor regresses by using an unqualified slot
- * parameter, this test will fail (or the alias registration in
- * registerDBusTypes() will save it — both layers are exercised here).
+ * The fix is that every typed-struct slot parameter in the adaptor headers
+ * is fully qualified (e.g. `const PhosphorProtocol::WindowOpenedList&`), so
+ * moc records exactly the name `registerWireTypes()` registers. This test
+ * registers an adaptor on a private QDBusConnection and verifies that a
+ * method call with a typed-struct payload is dispatched to the slot, and
+ * that a typed-struct return value round-trips.
  */
 
 #include <QTest>
@@ -61,8 +60,9 @@ public:
     }
 
     // All slots use FULLY-QUALIFIED types exactly the way the real adaptors
-    // are expected to declare them. If someone later writes these without
-    // the `PlasmaZones::` prefix, the test will start failing.
+    // declare them, so moc records the same name `registerWireTypes()`
+    // registers. An unqualified parameter here would regress the dispatch
+    // the tests below exercise.
 public Q_SLOTS:
     void takeWindowOpenedList(const PhosphorProtocol::WindowOpenedList& entries)
     {
@@ -222,23 +222,15 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Sanity: metatype is registered under BOTH the qualified and
-    // unqualified names. The authoritative fix is to fully-qualify slot
-    // parameters, but `registerDBusTypes()` also registers an unqualified
-    // alias as belt-and-suspenders. This test asserts the alias exists so
-    // nobody accidentally removes it.
+    // Sanity: every wire type is registered with the Qt metatype system
+    // under its canonical fully-qualified name — the name moc records for
+    // the fully-qualified adaptor slot parameters, so D-Bus dispatch
+    // resolves the type. registerWireTypes() registers under this name only.
     // ─────────────────────────────────────────────────────────────────────
-    void metatypesAreRegisteredUnderBothNames()
+    void metatypesAreRegisteredUnderQualifiedName()
     {
         QVERIFY(QMetaType::fromName("PhosphorProtocol::WindowOpenedList").isValid());
-        QVERIFY(QMetaType::fromName("PhosphorProtocol::WindowOpenedList").isValid());
-        QCOMPARE(QMetaType::fromName("PhosphorProtocol::WindowOpenedList").id(),
-                 QMetaType::fromName("PhosphorProtocol::WindowOpenedList").id());
-
         QVERIFY(QMetaType::fromName("PhosphorProtocol::MoveTargetResult").isValid());
-        QVERIFY(QMetaType::fromName("PhosphorProtocol::MoveTargetResult").isValid());
-
-        QVERIFY(QMetaType::fromName("PhosphorProtocol::WindowStateEntry").isValid());
         QVERIFY(QMetaType::fromName("PhosphorProtocol::WindowStateEntry").isValid());
     }
 
