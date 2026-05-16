@@ -96,8 +96,18 @@ SharedBridge {
         appRulesRefreshed();
     }
 
-    function getRunningWindows() {
-        return settingsController.getRunningWindows();
+    // Async window picker: kick off a fetch; the reply arrives via the
+    // controller's runningWindowsAvailable signal — QML pickers connect
+    // directly to settingsController, not to this bridge, so a single
+    // in-flight request is delivered to every listening dialog.
+    function requestRunningWindows() {
+        settingsController.requestRunningWindows();
+    }
+
+    // Synchronous accessor for the last-received list (may be stale until
+    // the next runningWindowsAvailable signal fires). Never blocks.
+    function cachedRunningWindows() {
+        return settingsController.cachedRunningWindows();
     }
 
     assignmentViewMode: 0

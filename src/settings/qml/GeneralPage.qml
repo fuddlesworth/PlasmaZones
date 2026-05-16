@@ -7,7 +7,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-Flickable {
+SettingsFlickable {
     id: root
 
     // Layout constants (previously from monolith's QtObject)
@@ -20,66 +20,16 @@ Flickable {
     clip: true
 
     ColumnLayout {
+        // Animations editor moved to its own top-level sidebar entry
+        // (Settings → Animations → General). The General page used to
+        // host an inline Animations card; that's been removed in the
+        // animation-UI rework so there's a single place to edit motion
+        // settings rather than two paths editing the same backing fields.
+
         id: content
 
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
-
-        // =====================================================================
-        // ANIMATIONS CARD
-        // =====================================================================
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: animationsCard.implicitHeight
-
-            SettingsCard {
-                id: animationsCard
-
-                anchors.fill: parent
-                headerText: i18n("Animations")
-                showToggle: true
-                toggleChecked: appSettings.animationsEnabled
-                onToggleClicked: (checked) => {
-                    return appSettings.animationsEnabled = checked;
-                }
-                collapsible: true
-
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.largeSpacing
-
-                    // Easing curve editor with animated preview
-                    EasingPreview {
-                        id: easingPreview
-
-                        Layout.fillWidth: true
-                        Layout.maximumWidth: Kirigami.Units.gridUnit * 28
-                        Layout.alignment: Qt.AlignHCenter
-                        curve: appSettings.animationEasingCurve
-                        animationDuration: appSettings.animationDuration
-                        previewEnabled: animationsCard.toggleChecked
-                        opacity: animationsCard.toggleChecked ? 1 : 0.4
-                        onCurveEdited: function(newCurve) {
-                            appSettings.animationEasingCurve = newCurve;
-                        }
-                    }
-
-                    SettingsSeparator {
-                    }
-
-                    // Easing controls (extracted component)
-                    EasingSettings {
-                        Layout.fillWidth: true
-                        appSettings: root.settingsBridge
-                        constants: root
-                        animationsEnabled: animationsCard.toggleChecked
-                        easingPreview: easingPreview
-                    }
-
-                }
-
-            }
-
-        }
 
         // =====================================================================
         // ON-SCREEN DISPLAY CARD
@@ -107,16 +57,16 @@ Flickable {
                         id: renderingBackendCombo
 
                         function syncIndex() {
-                            currentIndex = Math.max(0, settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend));
+                            currentIndex = Math.max(0, settingsController.generalPage.renderingBackendOptions.indexOf(appSettings.renderingBackend));
                         }
 
                         enabled: !settingsController.daemonRunning
                         Accessible.name: i18n("Rendering backend")
-                        model: settingsController.renderingBackendDisplayNames
-                        currentIndex: Math.max(0, settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend))
+                        model: settingsController.generalPage.renderingBackendDisplayNames
+                        currentIndex: Math.max(0, settingsController.generalPage.renderingBackendOptions.indexOf(appSettings.renderingBackend))
                         onActivated: (index) => {
-                            if (index >= 0 && index < settingsController.renderingBackendOptions.length)
-                                appSettings.renderingBackend = settingsController.renderingBackendOptions[index];
+                            if (index >= 0 && index < settingsController.generalPage.renderingBackendOptions.length)
+                                appSettings.renderingBackend = settingsController.generalPage.renderingBackendOptions[index];
 
                         }
 
@@ -136,7 +86,7 @@ Flickable {
                     Layout.fillWidth: true
                     type: Kirigami.MessageType.Information
                     text: settingsController.daemonRunning ? i18n("Stop the daemon to change the rendering backend.") : i18n("Rendering backend changes take effect after restarting the daemon.")
-                    visible: settingsController.daemonRunning || appSettings.renderingBackend !== settingsController.startupRenderingBackend
+                    visible: settingsController.daemonRunning || appSettings.renderingBackend !== settingsController.generalPage.startupRenderingBackend
                 }
 
             }
@@ -180,6 +130,21 @@ Flickable {
 
                 }
 
+                SettingsSeparator {
+                }
+
+                SettingsRow {
+                    title: i18n("Reset")
+                    description: i18n("Restore every setting on every page to its default value")
+
+                    Button {
+                        text: i18n("Reset to Defaults")
+                        icon.name: "document-revert"
+                        onClicked: defaultsConfirmDialog.open()
+                    }
+
+                }
+
             }
 
         }
@@ -193,7 +158,7 @@ Flickable {
         nameFilters: [i18n("PlasmaZones Config (*.json)"), i18n("All files (*)")]
         defaultSuffix: "json"
         fileMode: FileDialog.SaveFile
-        onAccepted: settingsController.exportAllSettings(selectedFile.toString().replace(/^file:\/\/+/, "/"))
+        onAccepted: settingsController.exportAllSettings(decodeURIComponent(selectedFile.toString().replace(/^file:\/\/+/, "/")))
     }
 
     FileDialog {
@@ -202,7 +167,7 @@ Flickable {
         title: i18n("Import Settings")
         nameFilters: [i18n("PlasmaZones Config (*.json *.conf *.ini *.rc)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
-        onAccepted: settingsController.importAllSettings(selectedFile.toString().replace(/^file:\/\/+/, "/"))
+        onAccepted: settingsController.importAllSettings(decodeURIComponent(selectedFile.toString().replace(/^file:\/\/+/, "/")))
     }
 
 }

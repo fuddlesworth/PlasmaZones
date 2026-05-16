@@ -302,11 +302,11 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     float wobbleAmp = customParams[7].z >= 0.0 ? customParams[7].z : 0.12;
     uv.x = (uv.x - 0.5) * aspect + 0.5;
     if (totalCount <= 1) {
-        uv -= vec2(sin(time*0.11)*0.015+sin(time*0.27)*0.005, cos(time*0.14)*0.008+cos(time*0.09)*0.004);
-        float ra = sin(time * 0.08) * wobbleAmp;
+        uv -= vec2(timeSin(0.11)*0.015+timeSin(0.27)*0.005, timeCos(0.14)*0.008+timeCos(0.09)*0.004);
+        float ra = timeSin(0.08) * wobbleAmp;
         vec2 lp = uv - 0.5;
         uv = vec2(lp.x*cos(ra)-lp.y*sin(ra), lp.x*sin(ra)+lp.y*cos(ra)) + 0.5;
-        instScale = logoScale * (1.0 + sin(time * 0.5) * 0.01);
+        instScale = logoScale * (1.0 + timeSin(0.5) * 0.01);
         return (uv - 0.5) / instScale + LOGO_CENTER;
     }
     float h1=hash21(vec2(float(idx)*7.31,3.17)), h2=hash21(vec2(float(idx)*13.71,7.23));

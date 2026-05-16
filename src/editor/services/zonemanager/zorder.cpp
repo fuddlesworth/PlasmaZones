@@ -4,13 +4,14 @@
 #include "../ZoneManager.h"
 #include "../../../core/constants.h"
 #include "../../../core/logging.h"
+#include <PhosphorZones/Zone.h>
 
 #include <QtMath>
 
 using namespace PlasmaZones;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Zone structural operations
+// PhosphorZones::Zone structural operations
 // ═══════════════════════════════════════════════════════════════════════════
 
 QString ZoneManager::duplicateZone(const QString& zoneId)
@@ -22,7 +23,7 @@ QString ZoneManager::duplicateZone(const QString& zoneId)
     }
 
     const QVariantMap& srcZone = *zoneOpt;
-    QString originalName = srcZone[JsonKeys::Name].toString();
+    QString originalName = srcZone[::PhosphorZones::ZoneJsonKeys::Name].toString();
     int zoneNumber = m_zones.size() + 1;
     QString copyName = originalName + QStringLiteral(" (Copy)");
 
@@ -33,14 +34,15 @@ QString ZoneManager::duplicateZone(const QString& zoneId)
         qreal fy = qMax(0.0, fixedGeo.y() + EditorConstants::DuplicateOffsetPixels);
 
         QVariantMap duplicate = createZone(copyName, zoneNumber, 0, 0, 0.25, 0.25);
-        duplicate[JsonKeys::GeometryMode] = static_cast<int>(ZoneGeometryMode::Fixed);
-        duplicate[JsonKeys::FixedX] = fx;
-        duplicate[JsonKeys::FixedY] = fy;
-        duplicate[JsonKeys::FixedWidth] = fixedGeo.width();
-        duplicate[JsonKeys::FixedHeight] = fixedGeo.height();
+        duplicate[::PhosphorZones::ZoneJsonKeys::GeometryMode] =
+            static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed);
+        duplicate[::PhosphorZones::ZoneJsonKeys::FixedX] = fx;
+        duplicate[::PhosphorZones::ZoneJsonKeys::FixedY] = fy;
+        duplicate[::PhosphorZones::ZoneJsonKeys::FixedWidth] = fixedGeo.width();
+        duplicate[::PhosphorZones::ZoneJsonKeys::FixedHeight] = fixedGeo.height();
         syncRelativeFromFixed(duplicate);
 
-        QString newZoneId = duplicate[JsonKeys::Id].toString();
+        QString newZoneId = duplicate[::PhosphorZones::ZoneJsonKeys::Id].toString();
         m_zones.append(duplicate);
         emitZoneSignal(SignalType::ZoneAdded, newZoneId);
         return newZoneId;
@@ -52,7 +54,7 @@ QString ZoneManager::duplicateZone(const QString& zoneId)
     qreal newY = qMin(original.y() + EditorConstants::DuplicateOffset, 1.0 - original.height());
 
     QVariantMap duplicate = createZone(copyName, zoneNumber, newX, newY, original.width(), original.height());
-    QString newZoneId = duplicate[JsonKeys::Id].toString();
+    QString newZoneId = duplicate[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
     m_zones.append(duplicate);
     emitZoneSignal(SignalType::ZoneAdded, newZoneId);
@@ -88,9 +90,9 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
 
         // Shrink original
         if (horizontal) {
-            original[JsonKeys::FixedHeight] = splitDim;
+            original[::PhosphorZones::ZoneJsonKeys::FixedHeight] = splitDim;
         } else {
-            original[JsonKeys::FixedWidth] = splitDim;
+            original[::PhosphorZones::ZoneJsonKeys::FixedWidth] = splitDim;
         }
         syncRelativeFromFixed(original);
         m_zones[index] = original;
@@ -99,21 +101,21 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
         // Create new zone in pixel space
         int zoneNumber = m_zones.size() + 1;
         QVariantMap newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, 0, 0, 0.25, 0.25);
-        newZone[JsonKeys::GeometryMode] = static_cast<int>(ZoneGeometryMode::Fixed);
+        newZone[::PhosphorZones::ZoneJsonKeys::GeometryMode] = static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed);
         if (horizontal) {
-            newZone[JsonKeys::FixedX] = fixedGeo.x();
-            newZone[JsonKeys::FixedY] = fixedGeo.y() + splitDim;
-            newZone[JsonKeys::FixedWidth] = fixedGeo.width();
-            newZone[JsonKeys::FixedHeight] = remainDim;
+            newZone[::PhosphorZones::ZoneJsonKeys::FixedX] = fixedGeo.x();
+            newZone[::PhosphorZones::ZoneJsonKeys::FixedY] = fixedGeo.y() + splitDim;
+            newZone[::PhosphorZones::ZoneJsonKeys::FixedWidth] = fixedGeo.width();
+            newZone[::PhosphorZones::ZoneJsonKeys::FixedHeight] = remainDim;
         } else {
-            newZone[JsonKeys::FixedX] = fixedGeo.x() + splitDim;
-            newZone[JsonKeys::FixedY] = fixedGeo.y();
-            newZone[JsonKeys::FixedWidth] = remainDim;
-            newZone[JsonKeys::FixedHeight] = fixedGeo.height();
+            newZone[::PhosphorZones::ZoneJsonKeys::FixedX] = fixedGeo.x() + splitDim;
+            newZone[::PhosphorZones::ZoneJsonKeys::FixedY] = fixedGeo.y();
+            newZone[::PhosphorZones::ZoneJsonKeys::FixedWidth] = remainDim;
+            newZone[::PhosphorZones::ZoneJsonKeys::FixedHeight] = fixedGeo.height();
         }
         syncRelativeFromFixed(newZone);
 
-        QString newZoneId = newZone[JsonKeys::Id].toString();
+        QString newZoneId = newZone[::PhosphorZones::ZoneJsonKeys::Id].toString();
         m_zones.append(newZone);
         emitZoneSignal(SignalType::ZoneAdded, newZoneId);
         return newZoneId;
@@ -145,21 +147,21 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
 
     if (horizontal) {
         qreal newH = geom.height() / 2.0;
-        original[JsonKeys::Height] = newH;
+        original[::PhosphorZones::ZoneJsonKeys::Height] = newH;
         m_zones[index] = original;
         emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
         newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, geom.x(), geom.y() + newH,
                              geom.width(), newH);
     } else {
         qreal newW = geom.width() / 2.0;
-        original[JsonKeys::Width] = newW;
+        original[::PhosphorZones::ZoneJsonKeys::Width] = newW;
         m_zones[index] = original;
         emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
         newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, geom.x() + newW, geom.y(), newW,
                              geom.height());
     }
 
-    QString newZoneId = newZone[JsonKeys::Id].toString();
+    QString newZoneId = newZone[::PhosphorZones::ZoneJsonKeys::Id].toString();
     m_zones.append(newZone);
 
     emitZoneSignal(SignalType::ZoneAdded, newZoneId);
@@ -247,8 +249,8 @@ void ZoneManager::bringForward(const QString& zoneId)
     // Update zOrder values for swapped zones only (optimization over updateAllZOrderValues)
     QVariantMap zone1 = m_zones[index].toMap();
     QVariantMap zone2 = m_zones[index + 1].toMap();
-    zone1[JsonKeys::ZOrder] = index;
-    zone2[JsonKeys::ZOrder] = index + 1;
+    zone1[::PhosphorZones::ZoneJsonKeys::ZOrder] = index;
+    zone2[::PhosphorZones::ZoneJsonKeys::ZOrder] = index + 1;
     m_zones[index] = zone1;
     m_zones[index + 1] = zone2;
 
@@ -279,8 +281,8 @@ void ZoneManager::sendBackward(const QString& zoneId)
     // Update zOrder values for swapped zones only (optimization over updateAllZOrderValues)
     QVariantMap zone1 = m_zones[index - 1].toMap();
     QVariantMap zone2 = m_zones[index].toMap();
-    zone1[JsonKeys::ZOrder] = index - 1;
-    zone2[JsonKeys::ZOrder] = index;
+    zone1[::PhosphorZones::ZoneJsonKeys::ZOrder] = index - 1;
+    zone2[::PhosphorZones::ZoneJsonKeys::ZOrder] = index;
     m_zones[index - 1] = zone1;
     m_zones[index] = zone2;
 

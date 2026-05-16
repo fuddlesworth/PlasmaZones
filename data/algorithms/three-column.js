@@ -1,19 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Three Column
-// @builtinId three-column
-// @description Master window centered with columns on each side
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.5
-// @defaultMaxWindows 5
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @centerLayout true
-// @masterZoneIndex 0
-// @supportsMemory false
+var metadata = {
+    name: "Three Column",
+    id: "three-column",
+    description: "Master window centered with columns on each side",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.5,
+    defaultMaxWindows: 5,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    centerLayout: true,
+    masterZoneIndex: 0,
+    supportsMemory: false
+};
 
 /**
  * Three Column layout: center master with left/right side columns.

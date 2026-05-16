@@ -6,7 +6,6 @@
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",
-    "vertexShader": "zone.vert",
     "parameters": [
         {
             "id": "iconScale",
@@ -128,7 +127,14 @@
             "min": 1.0,
             "max": 4.0
         },
-        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 12, "default": true},
+        {
+            "id": "showLabels",
+            "name": "Show Labels",
+            "group": "Labels",
+            "type": "bool",
+            "slot": 12,
+            "default": true
+        },
         {
             "id": "backgroundIntensity",
             "name": "Background Intensity",

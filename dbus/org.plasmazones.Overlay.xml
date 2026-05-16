@@ -68,8 +68,8 @@
             <arg name="height" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Preview height in pixels."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen name (empty = screen containing x,y)."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID (empty = screen containing x,y)."/>
             </arg>
             <arg name="shaderId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Shader UUID."/>
@@ -109,14 +109,16 @@
         <!-- Snap Assist: show window picker to fill empty zones after snapping -->
         <method name="showSnapAssist">
             <annotation name="org.gtk.GDBus.DocString" value="Show Snap Assist overlay with candidate windows. Called by KWin effect after dragStopped when snapAssistRequested is true."/>
-            <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen where the snap occurred (e.g. DP-1)."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID where the snap occurred."/>
             </arg>
-            <arg name="emptyZonesJson" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {zoneId, x, y, width, height} for empty zones."/>
+            <arg name="emptyZones" type="a(siiiiiibsssdd)" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Array of EmptyZoneEntry structs: (zoneId, x, y, width, height, borderWidth, borderRadius, useCustomColors, highlightColor, inactiveColor, borderColor, activeOpacity, inactiveOpacity)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="PhosphorProtocol::EmptyZoneList"/>
             </arg>
-            <arg name="candidatesJson" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {windowId, kwinHandle, icon, caption} for candidate windows."/>
+            <arg name="candidates" type="a(ssss)" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Array of SnapAssistCandidate structs: (windowId, compositorHandle, icon, caption)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="PhosphorProtocol::SnapAssistCandidateList"/>
             </arg>
             <arg name="success" type="b" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="True if overlay was shown."/>
@@ -132,12 +134,21 @@
             </arg>
         </method>
         <method name="setSnapAssistThumbnail">
-            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail from KWin script (WindowThumbnail + grabToImage). Called by plasmazones-snapassist script."/>
-            <arg name="kwinHandle" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString())."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail to the daemon as raw ARGB32 pixels. Called by the kwin-effect; authenticated against /proc/&lt;pid&gt;/exe. Returns true iff the payload was accepted into the daemon's bounded LRU cache. See OverlayAdaptor::setSnapAssistThumbnail in src/dbus/overlayadaptor.cpp for the full validation and trust contract."/>
+            <arg name="compositorHandle" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString(), braced form)."/>
             </arg>
-            <arg name="dataUrl" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="data:image/png;base64,... thumbnail image."/>
+            <arg name="width" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Image width in pixels. Bounded; oversized values are rejected."/>
+            </arg>
+            <arg name="height" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Image height in pixels. Bounded; oversized values are rejected."/>
+            </arg>
+            <arg name="pixels" type="ay" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Tightly-packed ARGB32 (non-premultiplied) bytes, exactly width*height*4 long."/>
+            </arg>
+            <arg name="accepted" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True iff the daemon stored the thumbnail in its LRU cache. False on auth failure, oversize-payload rejection, dimension/byte-count mismatch, or post-shutdown engine teardown. Callers use this to decide whether to mark the handle as recently-posted; a false reply must NOT be treated as success."/>
             </arg>
         </method>
 
@@ -154,16 +165,21 @@
             </arg>
         </signal>
         <signal name="snapAssistShown">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when Snap Assist overlay is shown. KWin script subscribes to create thumbnails via WindowThumbnail and call setSnapAssistThumbnail."/>
-            <arg name="screenName" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen where snap occurred (e.g. DP-1)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Informational signal: emitted after the daemon has built the Snap Assist overlay. The kwin-effect drives thumbnail capture independently as part of the showSnapAssist call sequence (not in response to this signal); the signal is exposed for external observers (KCMs, debugging tools)."/>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID where snap occurred."/>
             </arg>
-            <arg name="emptyZonesJson" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of empty zones."/>
+            <arg name="emptyZones" type="a(siiiiiibsssdd)">
+                <annotation name="org.gtk.GDBus.DocString" value="Array of EmptyZoneEntry structs: (zoneId, x, y, width, height, borderWidth, borderRadius, useCustomColors, highlightColor, inactiveColor, borderColor, activeOpacity, inactiveOpacity)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="PhosphorProtocol::EmptyZoneList"/>
             </arg>
-            <arg name="candidatesJson" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of candidate windows with kwinHandle."/>
+            <arg name="candidates" type="a(ssss)">
+                <annotation name="org.gtk.GDBus.DocString" value="Array of SnapAssistCandidate structs: (windowId, compositorHandle, icon, caption)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="PhosphorProtocol::SnapAssistCandidateList"/>
             </arg>
+        </signal>
+        <signal name="snapAssistDismissed">
+            <annotation name="org.gtk.GDBus.DocString" value="Informational signal: emitted when the Snap Assist overlay closes — whether through a user pick, an Escape / backdrop dismiss, an external hideSnapAssist() D-Bus call, or a screen-change cancel. Pairs with snapAssistShown so external observers (KCMs, kwin-effect, debugging tools) can mirror the visible/hidden state without polling isSnapAssistVisible. Carries no payload; the dismiss reason is intentionally not surfaced because the daemon collapses every dismiss path through the same internal IOverlayService::snapAssistDismissed signal."/>
         </signal>
     </interface>
 </node>

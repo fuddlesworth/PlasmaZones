@@ -27,28 +27,31 @@ QString serializeZonesToClipboard(const QVariantList& zones)
 
         // Generate new UUID for paste (preserve original ID in metadata)
         zoneObj[QLatin1String("id")] = QUuid::createUuid().toString();
-        zoneObj[QLatin1String("name")] = zone[JsonKeys::Name].toString();
-        zoneObj[QLatin1String("zoneNumber")] = zone[JsonKeys::ZoneNumber].toInt();
-        zoneObj[QLatin1String("x")] = zone[JsonKeys::X].toDouble();
-        zoneObj[QLatin1String("y")] = zone[JsonKeys::Y].toDouble();
-        zoneObj[QLatin1String("width")] = zone[JsonKeys::Width].toDouble();
-        zoneObj[QLatin1String("height")] = zone[JsonKeys::Height].toDouble();
+        zoneObj[QLatin1String("name")] = zone[::PhosphorZones::ZoneJsonKeys::Name].toString();
+        zoneObj[QLatin1String("zoneNumber")] = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
+        zoneObj[::PhosphorZones::ZoneJsonKeys::X] = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+        zoneObj[::PhosphorZones::ZoneJsonKeys::Y] = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+        zoneObj[::PhosphorZones::ZoneJsonKeys::Width] = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+        zoneObj[::PhosphorZones::ZoneJsonKeys::Height] = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
         // Appearance properties
-        zoneObj[QLatin1String("highlightColor")] = zone[JsonKeys::HighlightColor].toString();
-        zoneObj[QLatin1String("inactiveColor")] = zone[JsonKeys::InactiveColor].toString();
-        zoneObj[QLatin1String("borderColor")] = zone[JsonKeys::BorderColor].toString();
-        zoneObj[QLatin1String("activeOpacity")] =
-            zone.contains(JsonKeys::ActiveOpacity) ? zone[JsonKeys::ActiveOpacity].toDouble() : Defaults::Opacity;
-        zoneObj[QLatin1String("inactiveOpacity")] = zone.contains(JsonKeys::InactiveOpacity)
-            ? zone[JsonKeys::InactiveOpacity].toDouble()
-            : Defaults::InactiveOpacity;
-        zoneObj[QLatin1String("borderWidth")] =
-            zone.contains(JsonKeys::BorderWidth) ? zone[JsonKeys::BorderWidth].toInt() : Defaults::BorderWidth;
-        zoneObj[QLatin1String("borderRadius")] =
-            zone.contains(JsonKeys::BorderRadius) ? zone[JsonKeys::BorderRadius].toInt() : Defaults::BorderRadius;
+        zoneObj[QLatin1String("highlightColor")] = zone[::PhosphorZones::ZoneJsonKeys::HighlightColor].toString();
+        zoneObj[QLatin1String("inactiveColor")] = zone[::PhosphorZones::ZoneJsonKeys::InactiveColor].toString();
+        zoneObj[QLatin1String("borderColor")] = zone[::PhosphorZones::ZoneJsonKeys::BorderColor].toString();
+        zoneObj[QLatin1String("activeOpacity")] = zone.contains(::PhosphorZones::ZoneJsonKeys::ActiveOpacity)
+            ? zone[::PhosphorZones::ZoneJsonKeys::ActiveOpacity].toDouble()
+            : ::PhosphorZones::ZoneDefaults::Opacity;
+        zoneObj[QLatin1String("inactiveOpacity")] = zone.contains(::PhosphorZones::ZoneJsonKeys::InactiveOpacity)
+            ? zone[::PhosphorZones::ZoneJsonKeys::InactiveOpacity].toDouble()
+            : ::PhosphorZones::ZoneDefaults::InactiveOpacity;
+        zoneObj[QLatin1String("borderWidth")] = zone.contains(::PhosphorZones::ZoneJsonKeys::BorderWidth)
+            ? zone[::PhosphorZones::ZoneJsonKeys::BorderWidth].toInt()
+            : ::PhosphorZones::ZoneDefaults::BorderWidth;
+        zoneObj[QLatin1String("borderRadius")] = zone.contains(::PhosphorZones::ZoneJsonKeys::BorderRadius)
+            ? zone[::PhosphorZones::ZoneJsonKeys::BorderRadius].toInt()
+            : ::PhosphorZones::ZoneDefaults::BorderRadius;
 
-        QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
+        QString useCustomColorsKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::UseCustomColors);
         zoneObj[QLatin1String("useCustomColors")] =
             zone.contains(useCustomColorsKey) ? zone[useCustomColorsKey].toBool() : false;
 
@@ -83,24 +86,28 @@ QVariantList deserializeZonesFromClipboard(const QString& clipboardText)
         QVariantMap zone;
 
         // Convert JSON to QVariantMap format used by ZoneManager
-        zone[JsonKeys::Id] = zoneObj[QLatin1String("id")].toString();
-        zone[JsonKeys::Name] = zoneObj[QLatin1String("name")].toString();
-        zone[JsonKeys::ZoneNumber] = zoneObj[QLatin1String("zoneNumber")].toInt();
-        zone[JsonKeys::X] = zoneObj[QLatin1String("x")].toDouble();
-        zone[JsonKeys::Y] = zoneObj[QLatin1String("y")].toDouble();
-        zone[JsonKeys::Width] = zoneObj[QLatin1String("width")].toDouble();
-        zone[JsonKeys::Height] = zoneObj[QLatin1String("height")].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::Id] = zoneObj[QLatin1String("id")].toString();
+        zone[::PhosphorZones::ZoneJsonKeys::Name] = zoneObj[QLatin1String("name")].toString();
+        zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = zoneObj[QLatin1String("zoneNumber")].toInt();
+        zone[::PhosphorZones::ZoneJsonKeys::X] = zoneObj[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::Y] = zoneObj[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::Width] = zoneObj[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::Height] = zoneObj[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
         // Appearance properties
-        zone[JsonKeys::HighlightColor] = zoneObj[QLatin1String("highlightColor")].toString();
-        zone[JsonKeys::InactiveColor] = zoneObj[QLatin1String("inactiveColor")].toString();
-        zone[JsonKeys::BorderColor] = zoneObj[QLatin1String("borderColor")].toString();
-        zone[JsonKeys::ActiveOpacity] = zoneObj[QLatin1String("activeOpacity")].toDouble(Defaults::Opacity);
-        zone[JsonKeys::InactiveOpacity] = zoneObj[QLatin1String("inactiveOpacity")].toDouble(Defaults::InactiveOpacity);
-        zone[JsonKeys::BorderWidth] = zoneObj[QLatin1String("borderWidth")].toInt(Defaults::BorderWidth);
-        zone[JsonKeys::BorderRadius] = zoneObj[QLatin1String("borderRadius")].toInt(Defaults::BorderRadius);
+        zone[::PhosphorZones::ZoneJsonKeys::HighlightColor] = zoneObj[QLatin1String("highlightColor")].toString();
+        zone[::PhosphorZones::ZoneJsonKeys::InactiveColor] = zoneObj[QLatin1String("inactiveColor")].toString();
+        zone[::PhosphorZones::ZoneJsonKeys::BorderColor] = zoneObj[QLatin1String("borderColor")].toString();
+        zone[::PhosphorZones::ZoneJsonKeys::ActiveOpacity] =
+            zoneObj[QLatin1String("activeOpacity")].toDouble(::PhosphorZones::ZoneDefaults::Opacity);
+        zone[::PhosphorZones::ZoneJsonKeys::InactiveOpacity] =
+            zoneObj[QLatin1String("inactiveOpacity")].toDouble(::PhosphorZones::ZoneDefaults::InactiveOpacity);
+        zone[::PhosphorZones::ZoneJsonKeys::BorderWidth] =
+            zoneObj[QLatin1String("borderWidth")].toInt(::PhosphorZones::ZoneDefaults::BorderWidth);
+        zone[::PhosphorZones::ZoneJsonKeys::BorderRadius] =
+            zoneObj[QLatin1String("borderRadius")].toInt(::PhosphorZones::ZoneDefaults::BorderRadius);
 
-        QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
+        QString useCustomColorsKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::UseCustomColors);
         zone[useCustomColorsKey] = zoneObj[QLatin1String("useCustomColors")].toBool(false);
 
         zones.append(zone);
@@ -135,21 +142,21 @@ QVariantList prepareZonesForPaste(const QVariantList& zones, qreal offsetX, qrea
         QVariantMap zone = zoneVar.toMap();
 
         // Generate new ID
-        zone[JsonKeys::Id] = QUuid::createUuid().toString();
+        zone[::PhosphorZones::ZoneJsonKeys::Id] = QUuid::createUuid().toString();
 
         // Adjust position with offset
-        qreal x = zone[JsonKeys::X].toDouble() + offsetX;
-        qreal y = zone[JsonKeys::Y].toDouble() + offsetY;
-        qreal width = zone[JsonKeys::Width].toDouble();
-        qreal height = zone[JsonKeys::Height].toDouble();
+        qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble() + offsetX;
+        qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble() + offsetY;
+        qreal width = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+        qreal height = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
         // Clamp to bounds
         x = qBound(0.0, x, 1.0 - width);
         y = qBound(0.0, y, 1.0 - height);
 
-        zone[JsonKeys::X] = x;
-        zone[JsonKeys::Y] = y;
-        zone[JsonKeys::ZoneNumber] = zoneNumber++;
+        zone[::PhosphorZones::ZoneJsonKeys::X] = x;
+        zone[::PhosphorZones::ZoneJsonKeys::Y] = y;
+        zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = zoneNumber++;
 
         preparedZones.append(zone);
     }

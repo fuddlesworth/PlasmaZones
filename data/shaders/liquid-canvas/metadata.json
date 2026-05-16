@@ -7,9 +7,12 @@
     "version": "1.0",
     "multipass": true,
     "wallpaper": true,
-    "bufferShaders": ["pass0.frag", "pass1.frag", "pass2.frag"],
+    "bufferShaders": [
+        "pass0.frag",
+        "pass1.frag",
+        "pass2.frag"
+    ],
     "fragmentShader": "effect.frag",
-    "vertexShader": "zone.vert",
     "parameters": [
         {
             "id": "flowSpeed",
@@ -207,6 +210,13 @@
             "slot": 2,
             "default": "#66ccbb"
         },
-        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 19, "default": true}
+        {
+            "id": "showLabels",
+            "name": "Show Labels",
+            "group": "Labels",
+            "type": "bool",
+            "slot": 19,
+            "default": true
+        }
     ]
 }

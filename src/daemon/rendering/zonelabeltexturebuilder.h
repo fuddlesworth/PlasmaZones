@@ -24,7 +24,7 @@ class PLASMAZONES_RENDERING_EXPORT ZoneLabelTextureBuilder
 public:
     /**
      * @brief Build a labels texture from zone data
-     * @param zones Zone data (QVariantList of maps with x, y, width, height, zoneNumber)
+     * @param zones PhosphorZones::Zone data (QVariantList of maps with x, y, width, height, zoneNumber)
      * @param size Overlay size in pixels (texture dimensions)
      * @param labelFontColor Text color for zone labels
      * @param showNumbers Whether to draw numbers (false returns null)

@@ -1,0 +1,53 @@
+{
+    "id": "matrix",
+    "name": "Matrix",
+    "description": "Falling-glyph rain transition that wipes the window through a Matrix-style cascade.",
+    "author": "PlasmaZones (ported from Burn-My-Windows by Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
+    "version": "1.0",
+    "category": "Glitch",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "letterSize",
+            "name": "Letter Size",
+            "type": "float",
+            "default": 16.0,
+            "min": 5.0,
+            "max": 50.0
+        },
+        {
+            "id": "randomness",
+            "name": "Randomness",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "overshoot",
+            "name": "Overshoot",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "trailColor",
+            "name": "Trail Color",
+            "type": "color",
+            "default": "#15FF00"
+        },
+        {
+            "id": "tipColor",
+            "name": "Tip Color",
+            "type": "color",
+            "default": "#FFFFFF"
+        }
+    ],
+    "textures": [
+        {
+            "path": "matrix-font.png",
+            "wrap": "clamp"
+        }
+    ]
+}

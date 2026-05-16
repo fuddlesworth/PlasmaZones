@@ -4,47 +4,39 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include <QObject>
-#include <QDBusAbstractAdaptor>
-#include <QRect>
-#include <QStringList>
+
+#include <PhosphorScreens/DBusScreenAdaptor.h>
+
+namespace Phosphor::Screens {
+class ScreenManager;
+class IConfigStore;
+}
 
 namespace PlasmaZones {
 
 /**
- * @brief D-Bus adaptor for screen management operations
+ * @brief PlasmaZones-specific D-Bus adaptor.
  *
- * Provides D-Bus interface: org.plasmazones.Screen
- *  Screen information and monitoring
+ * All the logic — screen queries, virtual-screen mutation, caches,
+ * signal plumbing — lives in @ref Phosphor::Screens::DBusScreenAdaptor.
+ * This subclass exists only to add
+ * `Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Screen")` so
+ * registrations go to the right interface name.
  *
- * NOTE: Interface name must match dbus/org.plasmazones.Screen.xml and
- * DBus::Interface::Screen constant for KCM signal connections to work.
+ * Wiring: both the ScreenManager and the IConfigStore are passed through
+ * the constructor — no setters, no service-locator intermediary. Interface
+ * name must match `dbus/org.plasmazones.Screen.xml` and
+ * `PhosphorProtocol::Service::Interface::Screen` for KCM signal connections.
  */
-class PLASMAZONES_EXPORT ScreenAdaptor : public QDBusAbstractAdaptor
+class PLASMAZONES_EXPORT ScreenAdaptor : public Phosphor::Screens::DBusScreenAdaptor
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Screen")
 
 public:
-    explicit ScreenAdaptor(QObject* parent = nullptr);
-    ~ScreenAdaptor() override = default;
-
-public Q_SLOTS:
-    // Screen queries
-    QStringList getScreens();
-    QString getScreenInfo(const QString& screenId);
-    QString getPrimaryScreen();
-    QString getScreenId(const QString& connectorName);
-    void setPrimaryScreenFromKWin(const QString& connectorName);
-    QRect getAvailableGeometry(const QString& screenId);
-
-Q_SIGNALS:
-    void screenAdded(const QString& screenId);
-    void screenRemoved(const QString& screenId);
-    void screenGeometryChanged(const QString& screenId);
-
-private:
-    QString m_primaryScreenOverride;
+    explicit ScreenAdaptor(Phosphor::Screens::ScreenManager* manager, Phosphor::Screens::IConfigStore* store,
+                           QObject* parent = nullptr);
+    ~ScreenAdaptor() override;
 };
 
 } // namespace PlasmaZones

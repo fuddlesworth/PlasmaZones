@@ -1,0 +1,44 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <!--
+        EditorApp single-instance D-Bus interface.
+
+        Hosted by plasmazones-editor at:
+            service: org.plasmazones.Editor.App
+            path:    /EditorApp
+
+        A second plasmazones-editor launcher forwards its CLI args here so the
+        existing editor can switch layout/screen/preview state instead of
+        spawning a parallel process. The running instance does NOT attempt to
+        raise its own window — programmatic focus-steal is unreliable on
+        Wayland and we gave up trying. See commit history of PR #314 for the
+        investigation.
+
+        Mirror interface: SettingsApp.
+    -->
+    <interface name="org.plasmazones.EditorController">
+        <annotation name="org.gtk.GDBus.DocString"
+                    value="Single-instance launch forwarding for plasmazones-editor."/>
+        <method name="handleLaunchRequest">
+            <annotation name="org.gtk.GDBus.DocString"
+                        value="Apply forwarded CLI args to the running editor (layout / screen / preview / create-new). Does not raise the window."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString"
+                            value="Effective screen ID to open on (virtual-screen aware). Empty = keep current."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString"
+                            value="Layout UUID or autotile: prefix to load. Empty = keep current."/>
+            </arg>
+            <arg name="createNew" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString"
+                            value="Create a new layout instead of loading one. Mutually exclusive with layoutId."/>
+            </arg>
+            <arg name="preview" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString"
+                            value="Open in read-only preview mode. Auto-enabled for autotile: layoutIds."/>
+            </arg>
+        </method>
+    </interface>
+</node>

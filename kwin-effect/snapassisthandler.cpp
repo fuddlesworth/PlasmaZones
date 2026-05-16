@@ -3,19 +3,30 @@
 
 #include "snapassisthandler.h"
 #include "plasmazoneseffect.h"
-#include "dbus_constants.h"
+#include "kwin_compositor_bridge.h"
+#include "snapassistthumbnailcapture.h"
+
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/ZoneMarshalling.h>
+#include <PhosphorCompositor/SnapAssistFilter.h>
 
 #include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
 
+#include <QDBusConnection>
+#include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QJsonDocument>
-#include <QJsonObject>
+#include <QUuid>
+#include <QVector>
 
 Q_LOGGING_CATEGORY(lcSnapAssist, "kwin.effect.plasmazones.snapassist", QtWarningMsg)
 
 namespace PlasmaZones {
+
+using namespace PhosphorCompositor;
 
 SnapAssistHandler::SnapAssistHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
@@ -37,15 +48,16 @@ void SnapAssistHandler::showContinuationIfNeeded(const QString& screenId)
         return;
     }
     qCInfo(lcSnapAssist) << "Snap assist continuation: querying empty zones for screen" << screenId;
-    QDBusPendingCall emptyCall = m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking,
-                                                           QStringLiteral("getEmptyZonesJson"), {screenId});
+    QDBusPendingCall emptyCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getEmptyZones"), {screenId});
     auto* watcher = new QDBusPendingCallWatcher(emptyCall, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, screenId](QDBusPendingCallWatcher* w) {
         w->deleteLater();
-        QDBusPendingReply<QString> reply = *w;
-        if (!reply.isValid() || reply.value().isEmpty() || reply.value() == QLatin1String("[]")) {
+        QDBusPendingReply<PhosphorProtocol::EmptyZoneList> reply = *w;
+        if (!reply.isValid() || reply.value().isEmpty()) {
             qCInfo(lcSnapAssist) << "Snap assist continuation: no empty zones"
-                                 << (reply.isValid() ? reply.value() : QStringLiteral("(invalid reply)"));
+                                 << (reply.isValid() ? QStringLiteral("(empty list)")
+                                                     : QStringLiteral("(invalid reply)"));
             return;
         }
         asyncShow(QString(), screenId, reply.value());
@@ -53,107 +65,106 @@ void SnapAssistHandler::showContinuationIfNeeded(const QString& screenId)
 }
 
 void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString& screenId,
-                                  const QString& emptyZonesJson)
+                                  const PhosphorProtocol::EmptyZoneList& emptyZones)
 {
     if (!m_effect->isDaemonReady("snap assist snapped windows")) {
         return;
     }
-    QDBusPendingCall snapCall =
-        m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
+    QDBusPendingCall snapCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
     auto* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
-    connect(
-        snapWatcher, &QDBusPendingCallWatcher::finished, this,
-        [this, excludeWindowId, screenId, emptyZonesJson](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            QDBusPendingReply<QStringList> reply = *w;
-            QSet<QString> snappedWindowIds;
-            if (reply.isValid()) {
-                for (const QString& id : reply.value()) {
-                    snappedWindowIds.insert(id);
+    connect(snapWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, excludeWindowId, screenId, emptyZones](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QStringList> reply = *w;
+                QSet<QString> snappedWindowIds;
+                if (reply.isValid()) {
+                    for (const QString& id : reply.value()) {
+                        snappedWindowIds.insert(id);
+                    }
                 }
-            }
-            QJsonArray candidates = buildCandidates(excludeWindowId, screenId, snappedWindowIds);
-            if (candidates.isEmpty()) {
-                qCInfo(lcSnapAssist) << "Snap assist skipped: no unsnapped candidate windows on" << screenId;
-                return;
-            }
-            if (!m_effect->isDaemonReady("snap assist show")) {
-                return;
-            }
-            m_effect->fireAndForgetDBusCall(
-                PlasmaZones::DBus::Interface::Overlay, QStringLiteral("showSnapAssist"),
-                {screenId, emptyZonesJson, QString::fromUtf8(QJsonDocument(candidates).toJson(QJsonDocument::Compact))},
-                QStringLiteral("showSnapAssist"));
-            qCInfo(lcSnapAssist) << "Snap Assist shown with" << candidates.size() << "candidates";
-        });
+                PhosphorProtocol::SnapAssistCandidateList candidates =
+                    buildCandidates(excludeWindowId, screenId, snappedWindowIds);
+                if (candidates.isEmpty()) {
+                    qCInfo(lcSnapAssist) << "Snap assist skipped: no unsnapped candidate windows on" << screenId;
+                    return;
+                }
+                if (!m_effect->isDaemonReady("snap assist show")) {
+                    return;
+                }
+
+                // Kick off in-process thumbnail captures alongside the
+                // showSnapAssist D-Bus call. The two are independent — the
+                // overlay opens on icons, and per-window setSnapAssistThumbnail
+                // calls land asynchronously as KWin's WindowThumbnail produces
+                // each frame. Either ordering is safe on the daemon side: a
+                // late thumbnail updates the live candidate list, an early one
+                // is held in the bounded LRU and applied when the overlay
+                // shows.
+                if (!m_capture) {
+                    m_capture = new SnapAssistThumbnailCapture(this);
+                }
+                QVector<SnapAssistThumbnailCapture::Candidate> captureList;
+                captureList.reserve(candidates.size());
+                for (const auto& c : candidates) {
+                    if (c.compositorHandle.isEmpty()) {
+                        continue;
+                    }
+                    const QUuid id(c.compositorHandle);
+                    if (id.isNull()) {
+                        continue;
+                    }
+                    captureList.append({id});
+                }
+                m_capture->captureCandidates(captureList);
+
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("showSnapAssist"),
+                    {screenId, QVariant::fromValue(emptyZones), QVariant::fromValue(candidates)},
+                    QStringLiteral("showSnapAssist"));
+                qCInfo(lcSnapAssist) << "Snap Assist shown with" << candidates.size() << "candidates";
+            });
 }
 
-QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString& screenId,
-                                              const QSet<QString>& snappedWindowIds) const
+void SnapAssistHandler::resetRecentlyPostedThumbnails()
 {
-    QJsonArray candidates;
-    const auto windows = KWin::effects->stackingOrder();
+    if (m_capture) {
+        m_capture->resetRecentlyPosted();
+    }
+}
 
-    for (KWin::EffectWindow* w : windows) {
-        if (!w || !m_effect->shouldHandleWindow(w) || w->isMinimized() || !w->isOnCurrentDesktop()
-            || !w->isOnCurrentActivity()) {
-            continue;
-        }
+PhosphorProtocol::SnapAssistCandidateList
+SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString& screenId,
+                                   const QSet<QString>& snappedWindowIds) const
+{
+    PhosphorProtocol::SnapAssistCandidateList candidates =
+        SnapAssistFilter::buildCandidates(m_effect->compositorBridge(), excludeWindowId, screenId, snappedWindowIds);
 
-        QString windowId = m_effect->getWindowId(w);
-        if (windowId == excludeWindowId) {
-            continue;
+    // KWin-specific: fill compositorHandle (internal UUID) for overlay window identification.
+    //
+    // Earlier revisions also dropped autotile-tracked candidates here via
+    // @c AutotileHandler::isTrackedWindow, but that flag tracks "we have notified
+    // autotile about this window at some point" — it is NOT a live "this window
+    // currently lives on an autotile screen" check. After a window moves from an
+    // autotile monitor to a manual-mode screen, the flag stays set until autotile's
+    // own bookkeeping catches up; using it here erased perfectly valid candidates
+    // (e.g. a window the user dragged off the autotile monitor onto vs:0) and
+    // stranded snap-assist with zero candidates on the manual screen.
+    //
+    // The screen-membership question is now answered authoritatively in
+    // SnapAssistFilter via @c VirtualScreenId::samePhysical(info.screenId, screenId):
+    // candidates are restricted to the target's physical monitor, and trigger
+    // sites gate on @c !isAutotileScreen(screenId), so by transitivity no
+    // surviving candidate is on an autotile monitor in normal flow.
+    //
+    // Sibling-VS inclusion (windows on the other VS of the same physical monitor
+    // still count as candidates) is also handled inside SnapAssistFilter, so it
+    // does NOT need to be re-applied here.
+    for (auto& c : candidates) {
+        auto* ew = KWinCompositorBridge::toEffectWindow(m_effect->compositorBridge()->findWindowById(c.windowId));
+        if (ew) {
+            c.compositorHandle = ew->internalId().toString();
         }
-        if (snappedWindowIds.contains(windowId)) {
-            continue;
-        }
-        QString appId = m_effect->appIdForInstance(windowId);
-        bool snappedByAppId = false;
-        for (const QString& snappedId : snappedWindowIds) {
-            if (m_effect->appIdForInstance(snappedId) == appId) {
-                snappedByAppId = true;
-                break;
-            }
-        }
-        if (snappedByAppId) {
-            int sameAppCount = 0;
-            for (KWin::EffectWindow* other : windows) {
-                if (other && m_effect->shouldHandleWindow(other)
-                    && m_effect->appIdForInstance(m_effect->getWindowId(other)) == appId) {
-                    ++sameAppCount;
-                }
-            }
-            if (sameAppCount <= 1) {
-                continue;
-            }
-        }
-
-        // Always use EDID-based screen ID for comparison
-        if (!screenId.isEmpty()) {
-            QString winScreen = m_effect->getWindowScreenId(w);
-            if (winScreen != screenId) {
-                continue;
-            }
-        }
-
-        QString windowClass = w->windowClass();
-        QString iconName = m_effect->deriveShortNameFromWindowClass(windowClass);
-        if (iconName.isEmpty()) {
-            iconName = QStringLiteral("application-x-executable");
-        }
-
-        QJsonObject obj;
-        obj[QLatin1String("windowId")] = windowId;
-        obj[QLatin1String("kwinHandle")] = w->internalId().toString();
-        obj[QLatin1String("icon")] = iconName;
-        obj[QLatin1String("caption")] = w->caption();
-
-        const QString dataUrl = PlasmaZonesEffect::iconToDataUrl(w->icon(), 64);
-        if (!dataUrl.isEmpty()) {
-            obj[QLatin1String("iconPng")] = dataUrl;
-        }
-
-        candidates.append(obj);
     }
     return candidates;
 }

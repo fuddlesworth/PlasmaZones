@@ -6,11 +6,12 @@
     "author": "PlasmaZones",
     "version": "1.0",
     "multipass": true,
-    "bufferShaders": ["pass0.frag"],
+    "bufferShaders": [
+        "pass0.frag"
+    ],
     "bufferFeedback": true,
     "bufferWrap": "clamp",
     "fragmentShader": "effect.frag",
-    "vertexShader": "zone.vert",
     "parameters": [
         {
             "id": "intensity",

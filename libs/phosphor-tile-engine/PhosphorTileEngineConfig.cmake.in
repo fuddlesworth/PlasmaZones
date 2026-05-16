@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Mirror the PUBLIC link set in CMakeLists.txt — only Core (no Gui in
+# this lib's public surface), PhosphorEngine, PhosphorTiles. The other
+# deps are PRIVATE and arrive transitively when needed.
+find_dependency(Qt6 6.6 COMPONENTS Core)
+find_dependency(PhosphorEngine)
+find_dependency(PhosphorTiles)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorTileEngineTargets.cmake")
+
+check_required_components(PhosphorTileEngine)

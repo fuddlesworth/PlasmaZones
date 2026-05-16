@@ -1,0 +1,25 @@
+{
+    "id": "energize-b",
+    "name": "Energize B",
+    "description": "Star Trek transporter beam-up: a horizontal shower wave passes through the window, leaving vertical beam-streaks and shimmering atoms in its wake",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Particle",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "beamColor",
+            "name": "Beam Color",
+            "type": "color",
+            "default": "#A0B4FF"
+        },
+        {
+            "id": "particleScale",
+            "name": "Particle Scale",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.2,
+            "max": 5.0
+        }
+    ]
+}

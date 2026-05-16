@@ -90,7 +90,7 @@ public:
             return;
         m_windowZoneAssignments.remove(windowId);
         m_preTileGeometries.remove(windowId);
-        QString stableId = PlasmaZones::Utils::extractAppId(windowId);
+        QString stableId = PhosphorIdentity::WindowId::extractAppId(windowId);
         m_floatingWindows.remove(stableId);
     }
 
@@ -120,7 +120,7 @@ public:
     {
         if (windowId.isEmpty())
             return;
-        QString stableId = PlasmaZones::Utils::extractAppId(windowId);
+        QString stableId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         if (floating) {
             if (!m_floatingWindows.contains(stableId)) {
@@ -136,7 +136,7 @@ public:
     {
         if (windowId.isEmpty())
             return false;
-        QString stableId = PlasmaZones::Utils::extractAppId(windowId);
+        QString stableId = PhosphorIdentity::WindowId::extractAppId(windowId);
         return m_floatingWindows.contains(stableId);
     }
 

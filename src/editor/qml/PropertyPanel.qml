@@ -9,6 +9,7 @@ import QtQuick.Templates as T
 import QtQuick.Window
 import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Properties panel component for zone editing
@@ -362,15 +363,15 @@ Rectangle {
                         border.width: zoneNameField.hasError ? 2 : 1
 
                         Behavior on border.color {
-                            ColorAnimation {
-                                duration: 100
+                            PhosphorMotionAnimation {
+                                profile: "widget.tint.fast"
                             }
 
                         }
 
                         Behavior on border.width {
-                            NumberAnimation {
-                                duration: 100
+                            PhosphorMotionAnimation {
+                                profile: "widget.tint.fast"
                             }
 
                         }
@@ -929,17 +930,23 @@ Rectangle {
     }
 
     Behavior on opacity {
-        NumberAnimation {
-            duration: Theme.animDuration
-            easing.type: Theme.animEasing
+        PhosphorMotionAnimation {
+            // Direction is taken from the same `visible` predicate that drives
+            // `opacity` above. Reading the animated `opacity` instead would
+            // re-evaluate during the Behavior and flip the leg mid-animation.
+            profile: visible ? "panel.fadeIn" : "panel.fadeOut"
+            durationOverride: Theme.animDuration
         }
 
     }
 
     Behavior on Layout.preferredWidth {
-        NumberAnimation {
-            duration: Theme.animDuration
-            easing.type: Theme.animEasing
+        PhosphorMotionAnimation {
+            // Direction is taken from `visible` (the same predicate driving
+            // `Layout.preferredWidth: visible ? 280 : 0`). slideIn when
+            // growing into view, slideOut when collapsing out.
+            profile: visible ? "panel.slideIn" : "panel.slideOut"
+            durationOverride: Theme.animDuration
         }
 
     }

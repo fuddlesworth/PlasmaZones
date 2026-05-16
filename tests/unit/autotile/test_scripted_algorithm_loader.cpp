@@ -9,10 +9,11 @@
 #include <QFile>
 #include <QSignalSpy>
 
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingAlgorithm.h"
-#include "autotile/algorithms/ScriptedAlgorithmLoader.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 
+#include "../helpers/AutotileTestHelpers.h"
 #include "../helpers/ScriptTestHelpers.h"
 #include "../helpers/XdgEnvGuard.h"
 
@@ -25,8 +26,7 @@ using namespace PlasmaZones::TestHelpers;
 static QString validScript(const QString& name)
 {
     return QStringLiteral(
-               "// @name %1\n"
-               "// @description Test algorithm\n"
+               "var metadata = { name: \"%1\", description: \"Test algorithm\" };\n"
                "function calculateZones(params) {\n"
                "    return [{ x: 0, y: 0, width: 100, height: 100 }];\n"
                "}\n")
@@ -43,7 +43,7 @@ private:
      */
     void cleanupScriptedAlgorithms(const QStringList& ids)
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
         for (const QString& id : ids) {
             if (registry->hasAlgorithm(id)) {
                 registry->unregisterAlgorithm(id);
@@ -71,7 +71,8 @@ private Q_SLOTS:
         cleanupScriptedAlgorithms({QStringLiteral("script:gamma"), QStringLiteral("script:valid-name"),
                                    QStringLiteral("script:shared"), QStringLiteral("script:ephemeral"),
                                    QStringLiteral("script:has space"), QStringLiteral("script:has.dot"),
-                                   QStringLiteral("script:special!char")});
+                                   QStringLiteral("script:special!char"), QStringLiteral("script:priority"),
+                                   QStringLiteral("script:user_only")});
     }
 
     // =========================================================================
@@ -92,13 +93,13 @@ private Q_SLOTS:
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
-        std::optional<ScriptedAlgorithmLoader> loader;
-        loader.emplace();
+        std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
 
-        QSignalSpy spy(&*loader, &ScriptedAlgorithmLoader::algorithmsChanged);
+        QSignalSpy spy(&*loader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged);
         loader->scanAndRegister();
 
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:gamma")));
         QCOMPARE(spy.count(), 1);
 
@@ -107,7 +108,7 @@ private Q_SLOTS:
         // below verifies isUserScript() with separate system/user directories.
 
         loader.reset();
-        loader.emplace();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
     }
 
     // =========================================================================
@@ -137,18 +138,18 @@ private Q_SLOTS:
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
-        std::optional<ScriptedAlgorithmLoader> loader;
-        loader.emplace();
+        std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
         loader->scanAndRegister();
 
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:valid-name")));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:has space")));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:has.dot")));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:special!char")));
 
         loader.reset();
-        loader.emplace();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
     }
 
     // =========================================================================
@@ -175,11 +176,11 @@ private Q_SLOTS:
         qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
         qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
 
-        std::optional<ScriptedAlgorithmLoader> loader;
-        loader.emplace();
+        std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
         loader->scanAndRegister();
 
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:shared")));
 
         // The user version should have overridden the system version
@@ -189,7 +190,7 @@ private Q_SLOTS:
         QVERIFY(algo->isUserScript()); // user version should be marked as user script
 
         loader.reset();
-        loader.emplace();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
     }
 
     // =========================================================================
@@ -212,11 +213,11 @@ private Q_SLOTS:
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
-        std::optional<ScriptedAlgorithmLoader> loader;
-        loader.emplace();
+        std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
         loader->scanAndRegister();
 
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:ephemeral")));
 
         // Delete the script file
@@ -227,7 +228,133 @@ private Q_SLOTS:
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:ephemeral")));
 
         loader.reset();
-        loader.emplace();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
+    }
+
+    /// Regression guard: passing `LiveReload::Off` disables the
+    /// background watcher and gives the caller a one-shot scan.
+    /// Verifies the new optional parameter on `scanAndRegister`
+    /// (a) compiles and (b) doesn't regress the basic scan path.
+    /// Tests that opt out of live-reload do so to avoid spurious
+    /// directoryChanged signals fighting with QSignalSpy timing.
+    void testScanAndRegister_liveReloadOff()
+    {
+        XdgEnvGuard envGuard;
+
+        QTemporaryDir xdgRoot;
+        QVERIFY(xdgRoot.isValid());
+        const QString algoDir = xdgRoot.path() + QStringLiteral("/plasmazones/algorithms");
+        QVERIFY(QDir().mkpath(algoDir));
+
+        writeScript(algoDir, QStringLiteral("ephemeral.js"), validScript(QStringLiteral("Ephemeral")));
+
+        qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
+        qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
+
+        PhosphorTiles::ScriptedAlgorithmLoader loader(QStringLiteral("plasmazones/algorithms"),
+                                                      PlasmaZones::TestHelpers::testRegistry());
+        loader.scanAndRegister(PhosphorFsLoader::LiveReload::Off);
+
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
+        QVERIFY(registry->hasAlgorithm(QStringLiteral("script:ephemeral")));
+    }
+
+    // =========================================================================
+    // System-vs-system priority — the highest-priority XDG_DATA_DIRS entry
+    // must win when two system dirs ship the same script id. Pre-fix, the
+    // reverse-iteration in performScan combined with skip-on-collision in
+    // loadFromDirectory made the LOWEST-priority system dir win — silently
+    // shipping a stale algorithm whenever a distro provided one and the
+    // local /usr/local/share/... package shipped a newer version.
+    // =========================================================================
+
+    void testSystemVsSystem_highestPriorityWins()
+    {
+        XdgEnvGuard envGuard;
+
+        QTemporaryDir xdgRoot;
+        QVERIFY(xdgRoot.isValid());
+
+        // Two system dirs — sysHigh is listed FIRST in XDG_DATA_DIRS
+        // so it should win for collisions.
+        const QString sysHighDir = xdgRoot.path() + QStringLiteral("/sys-high/plasmazones/algorithms");
+        const QString sysLowDir = xdgRoot.path() + QStringLiteral("/sys-low/plasmazones/algorithms");
+        QVERIFY(QDir().mkpath(sysHighDir));
+        QVERIFY(QDir().mkpath(sysLowDir));
+
+        // Same id, distinguishable name fields — the winner's name field
+        // tells us which dir's script registered.
+        writeScript(sysHighDir, QStringLiteral("priority.js"), validScript(QStringLiteral("HighPriority")));
+        writeScript(sysLowDir, QStringLiteral("priority.js"), validScript(QStringLiteral("LowPriority")));
+
+        // sys-high listed first => higher priority per XDG spec.
+        const QByteArray xdgDirs = (xdgRoot.path() + QStringLiteral("/sys-high")).toUtf8() + ":"
+            + (xdgRoot.path() + QStringLiteral("/sys-low")).toUtf8();
+        qputenv("XDG_DATA_DIRS", xdgDirs);
+        // Point user dir at a separate clean location so it doesn't interfere.
+        qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user-home")).toUtf8());
+
+        std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
+        loader->scanAndRegister();
+
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
+        QVERIFY(registry->hasAlgorithm(QStringLiteral("script:priority")));
+
+        auto* algo = registry->algorithm(QStringLiteral("script:priority"));
+        QVERIFY(algo != nullptr);
+        QCOMPARE(algo->name(), QStringLiteral("HighPriority"));
+        QVERIFY(!algo->isUserScript());
+
+        loader.reset();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
+    }
+
+    /// Three-tier check: user > sys-high > sys-low. Validates the
+    /// full XDG semantic in one shot.
+    void testThreeTierPriority_userBeatsSysHighBeatsSysLow()
+    {
+        XdgEnvGuard envGuard;
+
+        QTemporaryDir xdgRoot;
+        QVERIFY(xdgRoot.isValid());
+
+        const QString userHomeDir = xdgRoot.path() + QStringLiteral("/user-home/plasmazones/algorithms");
+        const QString sysHighDir = xdgRoot.path() + QStringLiteral("/sys-high/plasmazones/algorithms");
+        const QString sysLowDir = xdgRoot.path() + QStringLiteral("/sys-low/plasmazones/algorithms");
+        QVERIFY(QDir().mkpath(userHomeDir));
+        QVERIFY(QDir().mkpath(sysHighDir));
+        QVERIFY(QDir().mkpath(sysLowDir));
+
+        // Shared id `priority` exists in all three — user wins overall.
+        writeScript(userHomeDir, QStringLiteral("priority.js"), validScript(QStringLiteral("UserVersion")));
+        writeScript(sysHighDir, QStringLiteral("priority.js"), validScript(QStringLiteral("HighSystem")));
+        writeScript(sysLowDir, QStringLiteral("priority.js"), validScript(QStringLiteral("LowSystem")));
+
+        // `user_only` lives only in user dir; should be present.
+        writeScript(userHomeDir, QStringLiteral("user_only.js"), validScript(QStringLiteral("UserOnly")));
+
+        const QByteArray xdgDirs = (xdgRoot.path() + QStringLiteral("/sys-high")).toUtf8() + ":"
+            + (xdgRoot.path() + QStringLiteral("/sys-low")).toUtf8();
+        qputenv("XDG_DATA_DIRS", xdgDirs);
+        qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user-home")).toUtf8());
+
+        std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
+        loader->scanAndRegister();
+
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
+
+        QVERIFY(registry->hasAlgorithm(QStringLiteral("script:priority")));
+        auto* shared = registry->algorithm(QStringLiteral("script:priority"));
+        QVERIFY(shared != nullptr);
+        QCOMPARE(shared->name(), QStringLiteral("UserVersion"));
+        QVERIFY(shared->isUserScript());
+
+        QVERIFY(registry->hasAlgorithm(QStringLiteral("script:user_only")));
+
+        loader.reset();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
     }
 
     // =========================================================================
@@ -248,7 +375,8 @@ private Q_SLOTS:
 
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
-        ScriptedAlgorithmLoader loader;
+        PhosphorTiles::ScriptedAlgorithmLoader loader(QStringLiteral("plasmazones/algorithms"),
+                                                      PlasmaZones::TestHelpers::testRegistry());
         loader.ensureUserDirectoryExists();
 
         // The directory should now exist

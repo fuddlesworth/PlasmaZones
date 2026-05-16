@@ -245,8 +245,8 @@ LogoHit evalLogoInstance(vec2 logoUV, int idx, float time,
     for (int i = 0; i < 12; i++) {
         float phase = float(i) * 2.39996 + float(idx) * 1.618;
         vec2 wobble = vec2(
-            sin(time * 0.7 + phase) * noise2D(vec2(float(i) * 7.3 + float(idx) * 100.0, time * 0.3)),
-            cos(time * 0.9 + phase) * noise2D(vec2(time * 0.3, float(i) * 11.1 + float(idx) * 100.0))
+            timeSin(0.7, phase) * noise2D(vec2(float(i) * 7.3 + float(idx) * 100.0, time * 0.3)),
+            timeCos(0.9, phase) * noise2D(vec2(time * 0.3, float(i) * 11.1 + float(idx) * 100.0))
         ) * 0.004;
         vec2 vertPos = (i < 11) ? vec2[11](V0,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11)[i] : CIRC_POS_0;
         vec2 scatterDir = normalize(vertPos - LOGO_CENTER + 0.001);
@@ -268,15 +268,15 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     if (totalCount <= 1) {
         // Original single-logo behavior: gentle Lissajous near screen center
         vec2 drift = vec2(
-            sin(time * 0.17) * 0.012 + sin(time * 0.31) * 0.006,
-            cos(time * 0.23) * 0.010 + cos(time * 0.13) * 0.005
+            timeSin(0.17) * 0.012 + timeSin(0.31) * 0.006,
+            timeCos(0.23) * 0.010 + timeCos(0.13) * 0.005
         );
         uv -= drift;
-        float rotAng = sin(time * 0.15) * 0.05;
+        float rotAng = timeSin(0.15) * 0.05;
         vec2 lp = uv - vec2(0.5);
         uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
                    lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
-        float breathe = 1.0 + sin(time * 0.8) * 0.015;
+        float breathe = 1.0 + timeSin(0.8) * 0.015;
         float springT = fract(time * 1.5);
         float spring = 1.0 + bassEnv * 0.1 * exp(-springT * 6.0) * cos(springT * 20.0);
         instScale = logoScale * breathe * spring;
@@ -294,20 +294,20 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     float f1 = 0.07 + float(idx) * 0.023;
     float f2 = 0.05 + float(idx) * 0.019;
     vec2 drift = vec2(
-        sin(time * f1 + h1 * TAU) * roam + sin(time * f1 * 2.3 + h3 * TAU) * roam * 0.3,
-        cos(time * f2 + h2 * TAU) * roam * 0.9 + cos(time * f2 * 1.7 + h4 * TAU) * roam * 0.25
+        timeSin(f1, h1 * TAU) * roam + timeSin(f1 * 2.3, h3 * TAU) * roam * 0.3,
+        timeCos(f2, h2 * TAU) * roam * 0.9 + timeCos(f2 * 1.7, h4 * TAU) * roam * 0.25
     );
     uv -= drift;
 
     // Per-instance rotation oscillation
-    float rotAng = sin(time * (0.1 + float(idx) * 0.027) + h4 * TAU) * 0.06;
+    float rotAng = timeSin(0.1 + float(idx) * 0.027, h4 * TAU) * 0.06;
     vec2 lp = uv - vec2(0.5);
     uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
                lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
 
     // Per-instance scale from size range
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
-    float breathe = 1.0 + sin(time * (0.6 + float(idx) * 0.13) + h1 * TAU) * 0.015;
+    float breathe = 1.0 + timeSin(0.6 + float(idx) * 0.13, h1 * TAU) * 0.015;
     float springT = fract(time * 1.5 + h2);
     float spring = 1.0 + bassEnv * 0.1 * exp(-springT * 6.0) * cos(springT * 20.0);
     instScale *= breathe * spring;
@@ -388,7 +388,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     vec3 palGlow      = colorWithFallback(customColors[3].rgb, vec3(0.13, 1.0, 0.71));
 
     float vitality = isHighlighted ? 1.0 : 0.3;
-    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * 0.5;
+    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * 0.5;
 
     float flowAngle = flowDirection * TAU;
     vec2 flowDir = vec2(cos(flowAngle), sin(flowAngle));

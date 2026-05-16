@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Individual divider handle for zone resizing
@@ -135,15 +136,15 @@ Rectangle {
                 opacity: (dividerMouseArea.containsMouse || dividerHandle.isDragging) ? 0.9 : 0.5
 
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: 150
+                    PhosphorMotionAnimation {
+                        profile: "widget.hover"
                     }
 
                 }
 
                 Behavior on color {
-                    ColorAnimation {
-                        duration: 150
+                    PhosphorMotionAnimation {
+                        profile: "widget.hover"
                     }
 
                 }
@@ -164,8 +165,8 @@ Rectangle {
         opacity: (dividerMouseArea.containsMouse || dividerHandle.isDragging) ? 0.8 : 0.4
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 150
+            PhosphorMotionAnimation {
+                profile: "widget.hover"
             }
 
         }
@@ -330,17 +331,17 @@ Rectangle {
     }
 
     Behavior on color {
-        ColorAnimation {
-            duration: Theme.animDuration
-            easing.type: Theme.animEasing
+        PhosphorMotionAnimation {
+            profile: "widget.hover"
+            durationOverride: Theme.animDuration
         }
 
     }
 
     Behavior on border.color {
-        ColorAnimation {
-            duration: Theme.animDuration
-            easing.type: Theme.animEasing
+        PhosphorMotionAnimation {
+            profile: "widget.hover"
+            durationOverride: Theme.animDuration
         }
 
     }

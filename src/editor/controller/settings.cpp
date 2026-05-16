@@ -11,7 +11,7 @@
 #include "pz_i18n.h"
 #include "../../config/configdefaults.h"
 #include "../../config/configmigration.h"
-#include "../../config/iconfigbackend.h"
+#include "../../config/configbackends.h"
 #include <QRegularExpression>
 
 namespace PlasmaZones {
@@ -79,14 +79,14 @@ QString EditorController::validateZoneNumber(const QString& zoneId, int number)
     QVariantList zones = m_zoneManager->zones();
     for (const QVariant& zoneVar : zones) {
         QVariantMap zone = zoneVar.toMap();
-        QString otherZoneId = zone[JsonKeys::Id].toString();
+        QString otherZoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
         // Skip the zone being updated
         if (otherZoneId == zoneId) {
             continue;
         }
 
-        int otherNumber = zone[JsonKeys::ZoneNumber].toInt();
+        int otherNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
         if (otherNumber == number) {
             return PzI18n::tr("Zone number %1 is already in use").arg(number);
         }
@@ -119,9 +119,9 @@ void EditorController::loadEditorSettings()
 
     // Note: Per-layout zonePadding/outerGap overrides are loaded from the layout JSON
     // in loadLayout(). The global settings are cached here for performance (avoids D-Bus calls).
-    refreshGlobalZonePadding();
-    refreshGlobalOuterGap();
-    refreshGlobalOverlayDisplayMode();
+    // Single batched D-Bus round-trip for all 8 gap/overlay keys, not 8 sequential
+    // getSetting() calls — this is on the ctor hot path before the QML engine starts.
+    refreshGlobalGapOverlaySettings();
 
     // Load label font settings from global Snapping.Appearance.Labels config (read-only in editor)
     {

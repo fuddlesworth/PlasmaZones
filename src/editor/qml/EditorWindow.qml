@@ -7,6 +7,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /// Main editor window for zone layout editing
 Window {
@@ -22,7 +23,6 @@ Window {
 
     // Context properties (set in main.cpp)
     property var _editorController: editorController
-    property var _availableScreens: availableScreens
     // State properties
     property string selectedZoneId: editorWindow._editorController ? (editorWindow._editorController.selectedZoneId || "") : ""
     property var selectedZoneIds: editorWindow._editorController ? editorWindow._editorController.selectedZoneIds : []
@@ -162,7 +162,7 @@ Window {
     // Window flags - fullscreen editor window on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowFullScreenButtonHint
     // Transparent window clear color — the semi-transparent visual effect is
-    // provided by _windowBackground below. Using alpha on Window.color causes
+    // provided by windowBackground below. Using alpha on Window.color causes
     // Menu/Popup surfaces (xdg_popup) to inherit the window-level transparency
     // on Wayland, making all menus see-through. A child Rectangle achieves the
     // same visual without affecting popup surface compositing.
@@ -213,7 +213,7 @@ Window {
     // A child Rectangle lets the window surface be fully transparent while
     // popup menus (xdg_popup) get their own opaque surfaces from the style.
     Rectangle {
-        id: _windowBackground
+        id: windowBackground
 
         anchors.fill: parent
         z: -1
@@ -334,7 +334,7 @@ Window {
         visible: !editorWindow.fullscreenMode
         // Pass stored context properties to avoid scoping issues
         editorController: editorWindow._editorController
-        availableScreens: editorWindow._availableScreens
+        availableScreens: editorWindow._editorController ? editorWindow._editorController.screenModel : []
         confirmCloseDialog: confirmCloseDialog
         helpDialog: helpDialog
         shaderDialog: shaderDialog
@@ -348,9 +348,16 @@ Window {
         onFullscreenToggled: editorWindow.toggleFullscreenMode()
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+            PhosphorMotionAnimation {
+                // Pinned to widget.fadeIn for both directions. The top bar
+                // and the floating "Exit Fullscreen" pill below are
+                // reciprocal opacity bindings during a fullscreen toggle,
+                // so they must share one profile (200 ms, widget-out
+                // curve) for a clean handoff. Deliberately NOT using
+                // widget.fadeOut for the 1->0 direction: its 400 ms
+                // cubic-in seed is for graceful standalone exits, which
+                // would desync the paired surfaces.
+                profile: "widget.fadeIn"
             }
 
         }
@@ -393,6 +400,8 @@ Window {
                 property bool _insetsReady: false
 
                 objectName: "drawingArea" // Required for focus restoration from child components
+                // For virtual screens, the window itself is sized to the VS region,
+                // so the drawing area fills the entire window (no VS offset needed).
                 anchors.fill: parent
                 anchors.leftMargin: applyInsets && editorWindow._editorController ? editorWindow._editorController.insetLeft : 0
                 anchors.topMargin: applyInsets && editorWindow._editorController ? editorWindow._editorController.insetTop : 0
@@ -608,9 +617,10 @@ Window {
                 Behavior on anchors.leftMargin {
                     enabled: drawingArea._insetsReady
 
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        // Inset margin tween — not a fade, use the widget
+                        // family root for the generic 150 ms ease-out shape.
+                        profile: "widget"
                     }
 
                 }
@@ -618,9 +628,8 @@ Window {
                 Behavior on anchors.topMargin {
                     enabled: drawingArea._insetsReady
 
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget"
                     }
 
                 }
@@ -628,9 +637,8 @@ Window {
                 Behavior on anchors.rightMargin {
                     enabled: drawingArea._insetsReady
 
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget"
                     }
 
                 }
@@ -638,9 +646,8 @@ Window {
                 Behavior on anchors.bottomMargin {
                     enabled: drawingArea._insetsReady
 
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget"
                     }
 
                 }
@@ -734,8 +741,12 @@ Window {
         }
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 200
+            PhosphorMotionAnimation {
+                // Pinned to widget.fadeIn for both directions. Paired with
+                // the top bar fade above; same rationale (200 ms,
+                // widget-out curve, NOT widget.fadeOut's 400 ms tail) so
+                // the pill and the top bar exchange visibility cleanly.
+                profile: "widget.fadeIn"
             }
 
         }

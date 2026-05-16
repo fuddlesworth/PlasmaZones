@@ -4,15 +4,16 @@
 #include <QTest>
 #include <QSignalSpy>
 
-#include "autotile/AutotileEngine.h"
-#include "autotile/AutotileConfig.h"
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 
 #include "../helpers/AutotileTestHelpers.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Unit tests for NavigationController (via AutotileEngine forwarding)
@@ -42,7 +43,7 @@ private:
      * Delegates to TestHelpers::createEngineWithWindows which uses
      * engine->windowOpened() + processEvents() to register windows through
      * the proper lifecycle (populating m_windowToScreen), rather than adding
-     * directly to TilingState which leaves internal maps empty.
+     * directly to PhosphorTiles::TilingState which leaves internal maps empty.
      */
     AutotileEngine* createEngineWithWindows(const QString& screen, int windowCount,
                                             const QString& focusedWindow = QString())
@@ -54,7 +55,7 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        AlgorithmRegistry::instance();
+        PlasmaZones::TestHelpers::testRegistry();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -66,7 +67,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win3")));
 
-        QSignalSpy focusSpy(engine.data(), &AutotileEngine::focusWindowRequested);
+        QSignalSpy focusSpy(engine.data(), &AutotileEngine::activateWindowRequested);
 
         // Focused on win3 (last window), focusNext should wrap to win1
         engine->focusNext();
@@ -80,7 +81,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win1")));
 
-        QSignalSpy focusSpy(engine.data(), &AutotileEngine::focusWindowRequested);
+        QSignalSpy focusSpy(engine.data(), &AutotileEngine::activateWindowRequested);
 
         // Focused on win1 (first window), focusPrevious should wrap to win3
         engine->focusPrevious();
@@ -98,7 +99,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win1")));
 
-        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
 
         // win1 is already at position 0 (master). moveToTiledPosition returns true
         // for no-op moves (fromIndex == toIndex is treated as success in moveWindow),
@@ -128,7 +129,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win1")));
 
-        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
 
         engine->rotateWindowOrder(true);
 
@@ -145,7 +146,7 @@ private Q_SLOTS:
         QVERIFY(foundRotateFeedback);
 
         // Verify the window order actually rotated: [win1,win2,win3] -> [win3,win1,win2]
-        TilingState* state = engine->stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine->tilingStateForScreen(screen);
         QStringList expected = {QStringLiteral("win3"), QStringLiteral("win1"), QStringLiteral("win2")};
         QCOMPARE(state->windowOrder(), expected);
     }
@@ -159,12 +160,12 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win1")));
 
-        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
 
         // win1 is at index 0. Swapping "left" (backward) should wrap to win3.
         engine->swapFocusedInDirection(QStringLiteral("left"), QStringLiteral("move"));
 
-        TilingState* state = engine->stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine->tilingStateForScreen(screen);
         // After swap: win1 and win3 exchange positions
         // [win1, win2, win3] -> swap(0, 2) -> [win3, win2, win1]
         QCOMPARE(state->windowIndex(QStringLiteral("win1")), 2);
@@ -180,12 +181,12 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win3")));
 
-        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
 
         // Position 1 should map to index 0 (one-based to zero-based)
         engine->moveFocusedToPosition(1);
 
-        TilingState* state = engine->stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine->tilingStateForScreen(screen);
         // win3 was at index 2, should now be at tiled position 0
         QCOMPARE(state->tiledWindowIndex(QStringLiteral("win3")), 0);
 
@@ -207,7 +208,7 @@ private Q_SLOTS:
 
     void testNavigation_increaseMasterRatio_updatesFocusedScreenOnly()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen1 = QStringLiteral("eDP-1");
         const QString screen2 = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen1, screen2});
@@ -217,8 +218,8 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win2"), screen2, 0, 0);
         QCoreApplication::processEvents();
 
-        TilingState* state1 = engine.stateForScreen(screen1);
-        TilingState* state2 = engine.stateForScreen(screen2);
+        PhosphorTiles::TilingState* state1 = engine.tilingStateForScreen(screen1);
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(screen2);
 
         // Set a known initial ratio
         state1->setSplitRatio(0.5);
@@ -241,20 +242,20 @@ private Q_SLOTS:
     void testNavigation_tiledWindowsForFocusedScreen_fallbackToPrimary()
     {
         // When no window has focus, focusNext/focusPrevious should still work
-        // if there is a screen with tiled windows. Without a ScreenManager,
+        // if there is a screen with tiled windows. Without a Phosphor::Screens::ScreenManager,
         // the fallback returns empty — no crash expected.
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
         // No focused window set, no m_activeScreen set
 
-        QSignalSpy focusSpy(&engine, &AutotileEngine::focusWindowRequested);
+        QSignalSpy focusSpy(&engine, &AutotileEngine::activateWindowRequested);
 
-        // Without ScreenManager, the primary screen fallback in
+        // Without Phosphor::Screens::ScreenManager, the primary screen fallback in
         // tiledWindowsForFocusedScreen returns empty. No crash expected.
         engine.focusNext();
 
@@ -266,17 +267,17 @@ private Q_SLOTS:
     {
         // When m_activeScreen is empty, resolveActiveScreen falls back to
         // the first autotile screen. Verify by checking feedback screen name.
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen});
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
         state->setFocusedWindow(QStringLiteral("win1"));
         // m_activeScreen is NOT set (no windowFocused call)
 
-        QSignalSpy feedbackSpy(&engine, &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedbackSpy(&engine, &AutotileEngine::navigationFeedback);
 
         engine.increaseMasterRatio(0.05);
 

@@ -1,62 +1,197 @@
 # PlasmaZones CI Pipeline
-# Builds on Arch Linux and Nix to verify compilation
+# Builds on Arch + a stable distro across both USE_KDE_FRAMEWORKS modes,
+# with BUILD_TOOLS=ON to exercise the shader-render tool. Tests run under
+# QT_QPA_PLATFORM=offscreen so QML-touching tests don't need a display.
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, v3]
   pull_request:
-    branches: [main]
+    branches: [main, v3]
+
+# Default workflow token is read-only; jobs that need writes opt in.
+permissions:
+  contents: read
 
 jobs:
   build:
-    name: Build
+    name: Build (arch, KDE_FRAMEWORKS=${{ matrix.kde }})
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kde: [ON, OFF]
 
     steps:
-      - name: Setup pacman
+      - name: Setup (Arch)
         run: |
+          set -euo pipefail
+          # Full -Syu prevents partial-upgrade state that can break linked
+          # libs against stale base packages — Arch's standard guidance.
           pacman -Syu --noconfirm
-          pacman -S --noconfirm git base-devel
-
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Install build dependencies
-        run: |
           pacman -S --noconfirm --needed \
+            git base-devel ccache \
             cmake ninja extra-cmake-modules \
             qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
+            qt6-wayland wayland plasma-wayland-protocols wayland-protocols \
             kwin \
-            kconfig kconfigwidgets \
-            kcmutils kglobalaccel kirigami \
-            qt6-wayland wayland plasma-activities \
-            vulkan-headers vulkan-icd-loader
+            kconfig kconfigwidgets kcmutils kglobalaccel kirigami \
+            plasma-activities \
+            vulkan-headers vulkan-icd-loader glslang \
+            xorg-server-xvfb mesa cava ffmpeg
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ccache: BIG win on PR rebuilds with unity-build + LTO; without it
+      # every PR pays a 10-15 min cold compile.
+      - name: ccache
+        # hendrikmuhs/ccache-action v1.2.18 — SHA-pin third-party actions
+        # so a hijacked tag can't run arbitrary code in our build matrix.
+        uses: hendrikmuhs/ccache-action@a1209f81afb8c005c13b4296c32e363431bffea5
+        with:
+          key: ${{ matrix.distro }}-${{ matrix.kde }}
+          max-size: 500M
 
       - name: Configure
+        env:
+          CC: ccache gcc
+          CXX: ccache g++
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr \
-            -DBUILD_TESTING=ON
+            -DUSE_KDE_FRAMEWORKS=${{ matrix.kde }} \
+            -DBUILD_TESTING=ON \
+            -DBUILD_TOOLS=ON
 
       - name: Build
         run: cmake --build build --parallel $(nproc)
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        env:
+          # QML tests instantiate QQuickWindow; offscreen QPA keeps them
+          # headless without xvfb. Tests that need an RHI surface (e.g.
+          # shader-render tool tests) launch xvfb-run themselves.
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          # xvfb is available for tests that explicitly need a Wayland/X
+          # surface (offscreen QPA can't host RHI textures).
+          # Parallel ctest with $(nproc); xvfb-run wraps when available so
+          # surface-needing tests have a display.
+          if command -v xvfb-run >/dev/null 2>&1; then
+            xvfb-run -a ctest --test-dir build --output-on-failure -j "$(nproc)"
+          else
+            ctest --test-dir build --output-on-failure -j "$(nproc)"
+          fi
 
-      - name: Install (dry-run)
+      - name: Install (DESTDIR)
         run: DESTDIR="${PWD}/install" cmake --install build
 
       - name: Verify installed files
         run: |
           echo "=== Installed files ==="
-          find install -type f | head -50
+          find install -type f | sort
+
+  # ─── Lint: clang-format + qmlformat mirror the lefthook hooks so a
+  # contributor who skipped them can't merge unformatted code. Only
+  # lints files changed in the PR (or HEAD~1..HEAD for direct pushes)
+  # so the historical tree's pre-existing formatting drift doesn't
+  # block unrelated PRs.
+  #
+  # Runs in an Arch container so clang-format ships from the same
+  # `clang` package that contributors use locally (KDE/Plasma devs are
+  # overwhelmingly on Arch / rolling distros). clang-format's
+  # SpaceInEmptyBlock-style behaviour diverges between major versions
+  # (notably 18 vs 22 for empty lambda bodies and 22 vs 19/20 for
+  # initializer-list packing), so pinning CI to whatever Ubuntu ships
+  # would force every contributor to also keep an older clang-format
+  # on PATH for the pre-commit hook to agree with CI.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Setup (Arch)
+        run: |
+          set -euo pipefail
+          # Match the build job's full -Syu — partial-upgrade state
+          # can leave clang dynamically linked against stale base libs.
+          pacman -Syu --noconfirm
+          # `clang` package contains clang-format (no separate
+          # clang-format package on Arch). `qt6-declarative` provides
+          # qmlformat. `git` is needed for the diff range and isn't
+          # preinstalled in the base archlinux image.
+          pacman -S --noconfirm --needed clang qt6-declarative git
+          clang-format --version
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Need the base commit to diff against. Shallow clone doesn't
+          # have it; fetch the full history for the lint diff.
+          fetch-depth: 0
+
+      - name: Resolve changed files
+        id: changed
+        run: |
+          set -euo pipefail
+          # Container runs as root but the checkout files are owned by a
+          # different UID — git refuses operations on "dubiously owned"
+          # repos. Whitelist the workspace so the diff/fetch below run.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          # Pick the right diff range for the trigger.
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              BASE="origin/${{ github.base_ref }}"
+              git fetch origin "${{ github.base_ref }}" --depth=1 || true
+              RANGE="$BASE...HEAD"
+          else
+              # Direct push — diff against the previous commit on this ref.
+              RANGE="HEAD~1...HEAD"
+          fi
+          echo "Diff range: $RANGE"
+          # Filter to source files we actually format, exclude
+          # generator-output headers (they get regenerated, no point
+          # round-tripping clang-format against them).
+          git diff --name-only --diff-filter=ACMR "$RANGE" -- \
+              '*.cpp' '*.h' '*.qml' \
+            | grep -v '^libs/.*/include/.*_export\.h$' \
+            > changed.txt || true
+          echo "Changed files:"
+          cat changed.txt
+          # Emit the file list for the downstream steps.
+          echo "list=changed.txt" >> "$GITHUB_OUTPUT"
+
+      - name: clang-format
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(grep -E '\.(cpp|h)$' changed.txt || true)
+          if [ "${#files[@]}" -gt 0 ]; then
+            clang-format --dry-run -Werror "${files[@]}"
+          else
+            echo "No C++ files changed — skipping clang-format"
+          fi
+
+      - name: qmlformat
+        run: |
+          set -euo pipefail
+          # Arch's qt6-declarative installs qmlformat under
+          # /usr/lib/qt6/bin (not /usr/bin), so PATH doesn't pick it
+          # up by default. Prepend the qt6 bin dir for this step.
+          export PATH="/usr/lib/qt6/bin:$PATH"
+          mapfile -t files < <(grep -E '\.qml$' changed.txt || true)
+          if [ "${#files[@]}" -gt 0 ]; then
+            qmlformat -n "${files[@]}"
+          else
+            echo "No QML files changed — skipping qmlformat"
+          fi
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Nix Flake CI (x86_64 + aarch64)
@@ -75,10 +210,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@08dcb3a5e62fa31e2da3d490afc4176ef55ecd72  # v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 

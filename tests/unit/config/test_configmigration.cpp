@@ -11,8 +11,13 @@
 
 #include "../../../src/config/configmigration.h"
 #include "../../../src/config/configdefaults.h"
-#include "../../../src/config/configbackend_json.h"
+#include "../../../src/config/configbackends.h"
+#include "../../../src/config/settingsschema.h"
 #include "../helpers/IsolatedConfigGuard.h"
+
+#include <PhosphorConfig/Schema.h>
+
+#include <QSet>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -340,7 +345,7 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Round-trip with JsonConfigBackend
+    // Round-trip with PhosphorConfig::JsonBackend
     // =========================================================================
 
     // =========================================================================
@@ -371,7 +376,7 @@ private Q_SLOTS:
 
         // Write the v1 JSON to disk
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         // Run migration
         QVERIFY(ConfigMigration::ensureJsonConfig());
@@ -415,7 +420,7 @@ private Q_SLOTS:
         root[QStringLiteral("Activation")] = activation;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         // First migration
         QVERIFY(ConfigMigration::ensureJsonConfig());
@@ -444,7 +449,7 @@ private Q_SLOTS:
         root[QStringLiteral("AutotileShortcuts")] = autotileShortcuts;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -483,7 +488,7 @@ private Q_SLOTS:
         root[QStringLiteral("PerScreen")] = perScreen;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -502,7 +507,7 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Round-trip with JsonConfigBackend
+    // Round-trip with PhosphorConfig::JsonBackend
     // =========================================================================
 
     void testV1JsonMigration_unifiedSnapInterval()
@@ -519,7 +524,7 @@ private Q_SLOTS:
         root[QStringLiteral("Editor")] = editor;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -545,7 +550,7 @@ private Q_SLOTS:
         root[QStringLiteral("Editor")] = editor;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -568,7 +573,7 @@ private Q_SLOTS:
         root[QStringLiteral("Activation")] = activation;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -601,7 +606,7 @@ private Q_SLOTS:
         root[QStringLiteral("Activation")] = activation;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -631,11 +636,284 @@ private Q_SLOTS:
         root[QStringLiteral("Activation")] = activation;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QVERIFY(!QFile::exists(ConfigDefaults::sessionFilePath()));
+    }
+
+    void testINIColorHeuristic_preservesNonColorIntLists()
+    {
+        // iniMapToJson has a heuristic: 3 or 4 comma-separated ints in 0..255
+        // are treated as an r,g,b[,a] color and converted to hex. The
+        // docstring explicitly calls out this assumption; guard against a
+        // future setting whose wire format happens to fit the pattern but
+        // isn't a color. For now the only such shape in the config tree is
+        // trigger lists (which are JSON, not comma-separated), but this
+        // test locks the behavior so a regression surfaces loudly.
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Appearance]\n"
+                                    "HighlightColor=82,148,226,255\n"
+                                    "\n"
+                                    "[Ordering]\n"
+                                    // NOT a color: just a comma list of small
+                                    // ints (e.g. a layout order by index).
+                                    // Must round-trip as a string, not a hex.
+                                    "SnappingLayoutOrder=1,2,3\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject ordering = root.value(QStringLiteral("Ordering")).toObject();
+        const QJsonValue order = ordering.value(QStringLiteral("SnappingLayoutOrder"));
+        QVERIFY2(order.isString(),
+                 "Non-color int list must remain a string after migration — "
+                 "color heuristic over-fired on comma-separated small ints.");
+        QCOMPARE(order.toString(), QStringLiteral("1,2,3"));
+    }
+
+    void testSchemaCoversEveryMigrationDestinationKey()
+    {
+        // Cross-check: every leaf key that migrateV1ToV2 writes into the v2
+        // tree must be declared in the v2 settings schema. Catches silent
+        // drift between the migration's destination names and the live
+        // schema — e.g. if someone renames a key in ConfigDefaults and only
+        // updates one side, this test surfaces the mismatch at build time
+        // instead of at user-config-load time.
+        //
+        // The schema uses dot-path group names ("Snapping.Behavior.ZoneSpan")
+        // while migrateV1ToV2 produces nested JSON objects. Flatten both to
+        // a QSet<QString> of "Group.Path/Key" entries for comparison.
+        IsolatedConfigGuard guard;
+
+        // Use an INI covering every v1 group the migration handles. The
+        // exact values don't matter — we only care about which destination
+        // keys get produced.
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Activation]\n"
+                                    "SnappingEnabled=true\n"
+                                    "DragActivationTriggers=[{\"modifier\":2,\"mouseButton\":0}]\n"
+                                    "ToggleActivation=false\n"
+                                    "ZoneSpanEnabled=true\n"
+                                    "ZoneSpanModifier=4\n"
+                                    "ZoneSpanTriggers=[]\n"
+                                    "SnapAssistFeatureEnabled=true\n"
+                                    "SnapAssistEnabled=false\n"
+                                    "SnapAssistTriggers=[]\n"
+                                    "\n"
+                                    "[Display]\n"
+                                    "ShowOnAllMonitors=true\n"
+                                    "DisabledMonitors=a\n"
+                                    "DisabledDesktops=b\n"
+                                    "DisabledActivities=c\n"
+                                    "ShowNumbers=true\n"
+                                    "FlashOnSwitch=true\n"
+                                    "ShowOsdOnLayoutSwitch=true\n"
+                                    "ShowNavigationOsd=true\n"
+                                    "OsdStyle=0\n"
+                                    "OverlayDisplayMode=0\n"
+                                    "\n"
+                                    "[Behavior]\n"
+                                    "FilterLayoutsByAspectRatio=true\n"
+                                    "KeepOnResolutionChange=true\n"
+                                    "MoveNewToLastZone=true\n"
+                                    "RestoreSizeOnUnsnap=true\n"
+                                    "StickyWindowHandling=0\n"
+                                    "RestoreWindowsToZonesOnLogin=true\n"
+                                    "DefaultLayoutId=\n"
+                                    "\n"
+                                    "[Appearance]\n"
+                                    "UseSystemColors=true\n"
+                                    "HighlightColor=1,2,3,255\n"
+                                    "InactiveColor=4,5,6,255\n"
+                                    "BorderColor=7,8,9,255\n"
+                                    "ActiveOpacity=0.1\n"
+                                    "InactiveOpacity=0.2\n"
+                                    "BorderWidth=1\n"
+                                    "BorderRadius=2\n"
+                                    "LabelFontColor=0,0,0,255\n"
+                                    "LabelFontFamily=Sans\n"
+                                    "LabelFontSizeScale=1.0\n"
+                                    "LabelFontWeight=50\n"
+                                    "LabelFontItalic=false\n"
+                                    "LabelFontUnderline=false\n"
+                                    "LabelFontStrikeout=false\n"
+                                    "EnableBlur=false\n"
+                                    "\n"
+                                    "[Zones]\n"
+                                    "Padding=4\n"
+                                    "OuterGap=8\n"
+                                    "UsePerSideOuterGap=false\n"
+                                    "OuterGapTop=1\n"
+                                    "OuterGapBottom=2\n"
+                                    "OuterGapLeft=3\n"
+                                    "OuterGapRight=4\n"
+                                    "AdjacentThreshold=5\n"
+                                    "PollIntervalMs=100\n"
+                                    "MinimumZoneSizePx=50\n"
+                                    "MinimumZoneDisplaySizePx=60\n"
+                                    "\n"
+                                    "[Exclusions]\n"
+                                    "ExcludeTransientWindows=true\n"
+                                    "MinimumWindowWidth=100\n"
+                                    "MinimumWindowHeight=100\n"
+                                    "Applications=a\n"
+                                    "WindowClasses=b\n"
+                                    "\n"
+                                    "[ZoneSelector]\n"
+                                    "Enabled=true\n"
+                                    "TriggerDistance=20\n"
+                                    "Position=0\n"
+                                    "LayoutMode=0\n"
+                                    "PreviewWidth=100\n"
+                                    "PreviewHeight=100\n"
+                                    "PreviewLockAspect=true\n"
+                                    "GridColumns=2\n"
+                                    "SizeMode=0\n"
+                                    "MaxRows=5\n"
+                                    "\n"
+                                    "[Autotiling]\n"
+                                    "AutotileEnabled=true\n"
+                                    "DefaultAutotileAlgorithm=bsp\n"
+                                    "AutotileSplitRatio=0.5\n"
+                                    "AutotileSplitRatioStep=0.05\n"
+                                    "AutotileMasterCount=1\n"
+                                    "AutotileMaxWindows=8\n"
+                                    "AutotileInsertPosition=0\n"
+                                    "AutotileFocusNewWindows=true\n"
+                                    "AutotileFocusFollowsMouse=false\n"
+                                    "AutotileRespectMinimumSize=true\n"
+                                    "AutotileStickyWindowHandling=0\n"
+                                    "LockedScreens=\n"
+                                    "AutotileUseSystemBorderColors=false\n"
+                                    "AutotileBorderColor=1,2,3,255\n"
+                                    "AutotileInactiveBorderColor=4,5,6,255\n"
+                                    "AutotileHideTitleBars=false\n"
+                                    "AutotileShowBorder=true\n"
+                                    "AutotileBorderWidth=1\n"
+                                    "AutotileBorderRadius=1\n"
+                                    "AutotileInnerGap=4\n"
+                                    "AutotileOuterGap=4\n"
+                                    "AutotileUsePerSideOuterGap=false\n"
+                                    "AutotileOuterGapTop=1\n"
+                                    "AutotileOuterGapBottom=1\n"
+                                    "AutotileOuterGapLeft=1\n"
+                                    "AutotileOuterGapRight=1\n"
+                                    "AutotileSmartGaps=false\n"
+                                    "\n"
+                                    "[AutotileShortcuts]\n"
+                                    "ToggleShortcut=Meta+T\n"
+                                    "FocusMasterShortcut=Meta+M\n"
+                                    "SwapMasterShortcut=Meta+S\n"
+                                    "IncMasterRatioShortcut=Meta+L\n"
+                                    "DecMasterRatioShortcut=Meta+H\n"
+                                    "IncMasterCountShortcut=Meta+I\n"
+                                    "DecMasterCountShortcut=Meta+D\n"
+                                    "RetileShortcut=Meta+R\n"
+                                    "\n"
+                                    "[Animations]\n"
+                                    "AnimationsEnabled=true\n"
+                                    "AnimationDuration=200\n"
+                                    "AnimationEasingCurve=easeOutCubic\n"
+                                    "AnimationMinDistance=10\n"
+                                    "AnimationSequenceMode=0\n"
+                                    "AnimationStaggerInterval=0\n"
+                                    "\n"
+                                    "[GlobalShortcuts]\n"
+                                    "OpenEditorShortcut=Meta+E\n"
+                                    "\n"
+                                    "[Editor]\n"
+                                    "EditorDuplicateShortcut=Ctrl+D\n"
+                                    "EditorSplitHorizontalShortcut=Ctrl+H\n"
+                                    "EditorSplitVerticalShortcut=Ctrl+V\n"
+                                    "EditorFillShortcut=Ctrl+F\n"
+                                    "GridSnappingEnabled=true\n"
+                                    "EdgeSnappingEnabled=true\n"
+                                    "SnapIntervalX=0.05\n"
+                                    "SnapIntervalY=0.05\n"
+                                    "SnapOverrideModifier=67108864\n"
+                                    "FillOnDropEnabled=false\n"
+                                    "FillOnDropModifier=0\n"
+                                    "\n"
+                                    "[Ordering]\n"
+                                    "SnappingLayoutOrder=a,b\n"
+                                    "TilingAlgorithmOrder=a,b\n"
+                                    "\n"
+                                    "[Rendering]\n"
+                                    "RenderingBackend=vulkan\n"
+                                    "\n"
+                                    "[Shaders]\n"
+                                    "EnableShaderEffects=true\n"
+                                    "ShaderFrameRate=60\n"
+                                    "EnableAudioVisualizer=false\n"
+                                    "AudioSpectrumBarCount=32\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+
+        // Build the set of declared "Group.Path/Key" pairs from the schema.
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        QSet<QString> declared;
+        for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+            for (const PhosphorConfig::KeyDef& def : it.value()) {
+                declared.insert(it.key() + QLatin1Char('/') + def.key);
+            }
+        }
+
+        // Walk the migrated JSON tree, collecting every scalar leaf as
+        // "Group.Path/Key". Migration-only reserved keys (_version,
+        // PerScreen container — resolver-owned) are filtered out.
+        //
+        // Some root keys live outside the schema by design:
+        //   - TilingQuickLayoutSlots, Updates: managed outside Settings.
+        //   - Rendering.Backend: declared in the schema. Verify.
+        QSet<QString> produced;
+        QStringList stack; // path prefix as dot-path segments
+        std::function<void(const QJsonObject&)> collect = [&](const QJsonObject& obj) {
+            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                if (it.value().isObject()) {
+                    stack.append(it.key());
+                    collect(it.value().toObject());
+                    stack.removeLast();
+                } else {
+                    const QString groupPath = stack.join(QLatin1Char('.'));
+                    produced.insert(groupPath + QLatin1Char('/') + it.key());
+                }
+            }
+        };
+        // Skip reserved root keys and non-schema top-level groups.
+        const QSet<QString> skipRoots = {
+            QStringLiteral("_version"), QStringLiteral("PerScreen"),
+            QStringLiteral("General"),  QStringLiteral("TilingQuickLayoutSlots"),
+            QStringLiteral("Updates"),  QStringLiteral("WindowTracking"),
+        };
+        for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
+            if (skipRoots.contains(it.key())) {
+                continue;
+            }
+            if (it.value().isObject()) {
+                stack.append(it.key());
+                collect(it.value().toObject());
+                stack.removeLast();
+            }
+        }
+
+        // Every produced key must exist in the schema.
+        QStringList missing;
+        for (const QString& key : std::as_const(produced)) {
+            if (!declared.contains(key)) {
+                missing.append(key);
+            }
+        }
+        if (!missing.isEmpty()) {
+            missing.sort();
+            QFAIL(qPrintable(QStringLiteral("Migration produces keys that aren't declared in buildSettingsSchema() "
+                                            "— schema/migration drift:\n  ")
+                             + missing.join(QStringLiteral("\n  "))));
+        }
     }
 
     void testMigratedConfigReadableByBackend()
@@ -667,6 +945,534 @@ private Q_SLOTS:
             auto g = backend->group(QStringLiteral("Snapping.Appearance.Opacity"));
             QCOMPARE(g->readDouble(QStringLiteral("Active")), 0.3);
         }
+    }
+
+    /// v1→v2 animation migration: the five legacy per-field keys
+    /// (AnimationDuration, AnimationEasingCurve, AnimationMinDistance,
+    /// AnimationSequenceMode, AnimationStaggerInterval) must fold into
+    /// one v2 `Animations/Profile` JSON blob with the original values
+    /// preserved. The PR review found that the existing comprehensive
+    /// test exercised the migration path but never asserted the blob's
+    /// CONTENTS — the most load-bearing assertion was missing.
+    void testV1AnimationMigration_foldsIntoProfileBlob()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Animations]\n"
+                                    "AnimationsEnabled=true\n"
+                                    "AnimationDuration=200\n"
+                                    "AnimationEasingCurve=easeOutCubic\n"
+                                    "AnimationMinDistance=10\n"
+                                    "AnimationSequenceMode=0\n"
+                                    "AnimationStaggerInterval=25\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        const QJsonObject animations = root.value(QStringLiteral("Animations")).toObject();
+        QVERIFY(animations.contains(QStringLiteral("Enabled")));
+        QCOMPARE(animations.value(QStringLiteral("Enabled")).toBool(), true);
+
+        // Profile blob is stored as a STRING containing a compact JSON
+        // object — that's how settings.cpp reads/writes it via
+        // PhosphorConfig::Store::read<QString>.
+        const QString profileString = animations.value(QStringLiteral("Profile")).toString();
+        QVERIFY2(!profileString.isEmpty(), "Migration did not produce Animations/Profile blob from v1 per-field keys");
+        const QJsonDocument profileDoc = QJsonDocument::fromJson(profileString.toUtf8());
+        QVERIFY2(profileDoc.isObject(), "Animations/Profile must be a JSON object string");
+        const QJsonObject profile = profileDoc.object();
+
+        // Every v1 value MUST be preserved through to the v2 blob,
+        // EXCEPT for unresolved curve specs which are intentionally
+        // dropped (see the "curve" assertion below).
+        //
+        // Curves are stored in their WIRE FORMAT — the migration runs
+        // the v1 curve string through a stack-local CurveRegistry. If
+        // the registry resolves the input, `Curve::toString()` is
+        // stored (canonical form). If it does not resolve — as with
+        // the v1 friendly name "easeOutCubic", which the CurveRegistry
+        // has no factory for — the migration DROPS the field rather
+        // than writing it through verbatim. Persisting an unresolved
+        // spec would make `Profile::fromJson` emit the "curve spec …
+        // did not resolve" warning on every daemon start forever;
+        // dropping lets the library-default OutCubic apply silently
+        // and matches the "no backwards compat" spirit of decision S.
+        // The canonicalisation happy-path is exercised in
+        // `testV1AnimationMigration_canonicalisesKnownCurve` below.
+        QCOMPARE(profile.value(QStringLiteral("duration")).toDouble(-1.0), 200.0);
+        QVERIFY2(!profile.contains(QStringLiteral("curve")),
+                 "Unresolved v1 curve spec must be dropped, not written verbatim into the v2 blob");
+        QCOMPARE(profile.value(QStringLiteral("minDistance")).toInt(-1), 10);
+        QCOMPARE(profile.value(QStringLiteral("sequenceMode")).toInt(-1), 0);
+        QCOMPARE(profile.value(QStringLiteral("staggerInterval")).toInt(-1), 25);
+
+        // The v1 per-field keys must be gone from the v2 tree — we
+        // migrate into the blob, not alongside it (no write-once-
+        // test-forever shadow complexity).
+        QVERIFY(!animations.contains(QStringLiteral("AnimationDuration")));
+        QVERIFY(!animations.contains(QStringLiteral("AnimationEasingCurve")));
+        QVERIFY(!animations.contains(QStringLiteral("AnimationMinDistance")));
+        QVERIFY(!animations.contains(QStringLiteral("AnimationSequenceMode")));
+        QVERIFY(!animations.contains(QStringLiteral("AnimationStaggerInterval")));
+    }
+
+    /// v1→v2 animation migration MUST canonicalise the curve spec
+    /// through `CurveRegistry` when the input resolves to a known
+    /// factory. Without this, a settings-UI edit after migration would
+    /// re-serialise the curve via `Easing::toString()` (which always
+    /// emits canonical wire form) and produce a spurious config rewrite
+    /// on first interaction — even though the user made no change.
+    ///
+    /// Inputs exercised:
+    ///   - A cubic-bezier wire-form with non-canonical precision
+    ///     ("0.25,0.1,0.25,1.0") → canonicalises to "0.25,0.10,0.25,1.00"
+    ///     (two decimal places per `Easing::toString`).
+    ///   - A spring wire-form ("spring:14.0,0.6") → canonicalises to
+    ///     the same spec (spring wire form is already canonical) —
+    ///     proves spring inputs don't get corrupted by the registry
+    ///     round-trip either.
+    void testV1AnimationMigration_canonicalisesKnownCurve()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Animations]\n"
+                                    "AnimationDuration=200\n"
+                                    "AnimationEasingCurve=0.25,0.1,0.25,1.0\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        const QJsonObject animations = root.value(QStringLiteral("Animations")).toObject();
+        const QString profileString = animations.value(QStringLiteral("Profile")).toString();
+        QVERIFY(!profileString.isEmpty());
+
+        const QJsonObject profile = QJsonDocument::fromJson(profileString.toUtf8()).object();
+        const QString storedCurve = profile.value(QStringLiteral("curve")).toString();
+
+        // The stored curve MUST be the canonical wire form with two
+        // decimal places per component — not the original input string.
+        QCOMPARE(storedCurve, QStringLiteral("0.25,0.10,0.25,1.00"));
+    }
+
+    /// Companion to `_canonicalisesKnownCurve`: a spring spec round-trips
+    /// through CurveRegistry without corruption. Spring's canonical form
+    /// uses two-decimal precision on both omega and zeta.
+    void testV1AnimationMigration_canonicalisesSpringCurve()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Animations]\n"
+                                    "AnimationDuration=250\n"
+                                    "AnimationEasingCurve=spring:14.0,0.6\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        const QJsonObject animations = root.value(QStringLiteral("Animations")).toObject();
+        const QString profileString = animations.value(QStringLiteral("Profile")).toString();
+        QVERIFY(!profileString.isEmpty());
+
+        const QJsonObject profile = QJsonDocument::fromJson(profileString.toUtf8()).object();
+        const QString storedCurve = profile.value(QStringLiteral("curve")).toString();
+
+        // Spring::toString uses two-decimal precision.
+        QCOMPARE(storedCurve, QStringLiteral("spring:14.00,0.60"));
+    }
+
+    /// v1 config missing all the animation keys — v2 result should
+    /// contain NO Profile blob (or an empty one). No crash, no
+    /// fabricated defaults. The daemon's fan-out layer will then see
+    /// a default-constructed Profile at runtime and publish library
+    /// defaults for each well-known path.
+    void testV1AnimationMigration_missingKeysYieldNoProfileBlob()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Animations]\n"
+                                    "AnimationsEnabled=true\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        const QJsonObject animations = root.value(QStringLiteral("Animations")).toObject();
+        QCOMPARE(animations.value(QStringLiteral("Enabled")).toBool(), true);
+        // Blob is absent OR an empty object-string — either shape is
+        // acceptable as "no stored override"; both parse through
+        // Profile::fromJson to a default-constructed Profile.
+        const QString profileString = animations.value(QStringLiteral("Profile")).toString();
+        if (!profileString.isEmpty()) {
+            const QJsonDocument doc = QJsonDocument::fromJson(profileString.toUtf8());
+            QVERIFY(doc.isObject());
+            QVERIFY(doc.object().isEmpty());
+        }
+    }
+
+    // =========================================================================
+    // PR #344 senior review: partial customization + clamping + forward-compat
+    // =========================================================================
+
+    /// A v1 config with ONLY `AnimationDuration=200` (no curve, no
+    /// minDistance, etc.) migrates to a v2 Profile blob that contains
+    /// ONLY the duration field — the other fields are absent, so
+    /// `Profile::fromJson` leaves them unset and `effective*` substitutes
+    /// library defaults. The migration must NOT fabricate defaults for
+    /// unset v1 keys.
+    void testV1AnimationMigration_partialCustomization()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Animations]\n"
+                                    "AnimationDuration=200\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        const QJsonObject animations = root.value(QStringLiteral("Animations")).toObject();
+        const QString profileString = animations.value(QStringLiteral("Profile")).toString();
+        QVERIFY2(!profileString.isEmpty(),
+                 "Migration did not produce a Profile blob for a single-field v1 customisation");
+        const QJsonObject profile = QJsonDocument::fromJson(profileString.toUtf8()).object();
+
+        // The only set field is duration; every other Profile field must
+        // be absent from the blob.
+        QCOMPARE(profile.value(QStringLiteral("duration")).toInt(-1), 200);
+        QVERIFY(!profile.contains(QStringLiteral("curve")));
+        QVERIFY(!profile.contains(QStringLiteral("minDistance")));
+        QVERIFY(!profile.contains(QStringLiteral("sequenceMode")));
+        QVERIFY(!profile.contains(QStringLiteral("staggerInterval")));
+    }
+
+    /// v1 values outside the defined Min/Max range must be clamped to
+    /// the range during migration. A v1 config with, say, a negative
+    /// duration silently gets rejected by `Profile::fromJson` at load
+    /// time — producing a broken-looking UI (user's saved custom value
+    /// silently reverts to library default) plus a noisy warning on
+    /// every daemon start. Clamping at migration time keeps the user's
+    /// intent as close as the range allows and avoids the warnings.
+    ///
+    /// SequenceMode is a closed enum — out-of-range values snap to the
+    /// project default (ConfigDefaults::animationSequenceMode()) rather
+    /// than the nearest bound, to avoid silently aliasing e.g. 999 onto
+    /// a semantically-unrelated mode.
+    void testV1AnimationMigration_clampsOutOfRange()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Animations]\n"
+                                    "AnimationDuration=-50\n"
+                                    "AnimationMinDistance=-10\n"
+                                    "AnimationSequenceMode=999\n"
+                                    "AnimationStaggerInterval=600000\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        const QJsonObject animations = root.value(QStringLiteral("Animations")).toObject();
+        const QString profileString = animations.value(QStringLiteral("Profile")).toString();
+        QVERIFY(!profileString.isEmpty());
+        const QJsonObject profile = QJsonDocument::fromJson(profileString.toUtf8()).object();
+
+        // Duration: below-min → clamp to min.
+        const int durationStored = profile.value(QStringLiteral("duration")).toInt(-1);
+        QVERIFY2(durationStored >= ConfigDefaults::animationDurationMin(),
+                 qPrintable(QStringLiteral("Duration stored=%1 but Min=%2")
+                                .arg(durationStored)
+                                .arg(ConfigDefaults::animationDurationMin())));
+        QVERIFY(durationStored <= ConfigDefaults::animationDurationMax());
+        QCOMPARE(durationStored, ConfigDefaults::animationDurationMin());
+
+        // MinDistance: below-min → clamp to min (0 by project default).
+        const int minDistanceStored = profile.value(QStringLiteral("minDistance")).toInt(-1);
+        QCOMPARE(minDistanceStored, ConfigDefaults::animationMinDistanceMin());
+
+        // SequenceMode: 999 is outside the enum range → snap to default.
+        const int seqModeStored = profile.value(QStringLiteral("sequenceMode")).toInt(-1);
+        QCOMPARE(seqModeStored, ConfigDefaults::animationSequenceMode());
+
+        // StaggerInterval: above-max → clamp to max.
+        const int staggerStored = profile.value(QStringLiteral("staggerInterval")).toInt(-1);
+        QCOMPARE(staggerStored, ConfigDefaults::animationStaggerIntervalMax());
+    }
+
+    /// Regression guard for v2-already-stamped Animations idempotency.
+    /// A config already at the current schema version must not re-run
+    /// `migrateV1ToV2` — the per-field v1 keys are already gone and the
+    /// `Animations.Profile` blob is the canonical v2 shape. Re-running
+    /// the migration would either (a) stamp an empty Profile blob
+    /// (because no v1 keys are present) or (b) double-process the
+    /// existing blob (if a future bug routed it through the assembly
+    /// path). Either case corrupts the user's persisted profile.
+    ///
+    /// The contract under test: `ensureJsonConfig` on a v2-stamped
+    /// config containing a non-default `Animations.Profile` blob is a
+    /// pure no-op — the on-disk bytes are byte-identical before and
+    /// after.
+    void testV2AlreadyStamped_AnimationsBlobIdempotent()
+    {
+        IsolatedConfigGuard guard;
+
+        // Build a v2-stamped config with a non-default Animations.Profile
+        // blob. The blob shape mirrors what `ConfigDefaults::animationProfile`
+        // would produce — but with custom values so a re-processing path
+        // would silently overwrite them with defaults and fail the
+        // byte-identical comparison.
+        QJsonObject profileBlob;
+        profileBlob[QStringLiteral("duration")] = 275;
+        profileBlob[QStringLiteral("minDistance")] = 8;
+        profileBlob[QStringLiteral("sequenceMode")] = 1;
+        profileBlob[QStringLiteral("staggerInterval")] = 42;
+        profileBlob[QStringLiteral("curve")] = QStringLiteral("0.42,0.00,0.58,1.00");
+        const QString profileString = QString::fromUtf8(QJsonDocument(profileBlob).toJson(QJsonDocument::Compact));
+
+        QJsonObject animations;
+        animations[QStringLiteral("Enabled")] = true;
+        animations[QStringLiteral("Profile")] = profileString;
+
+        QJsonObject root;
+        root[QStringLiteral("_version")] = PlasmaZones::ConfigSchemaVersion;
+        root[QStringLiteral("Animations")] = animations;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        // Snapshot bytes BEFORE migration call.
+        QFile fileBefore(ConfigDefaults::configFilePath());
+        QVERIFY(fileBefore.open(QIODevice::ReadOnly));
+        const QByteArray beforeBytes = fileBefore.readAll();
+        fileBefore.close();
+        QVERIFY(!beforeBytes.isEmpty());
+
+        // Run ensureJsonConfig — already at current version, must be a
+        // pure no-op.
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // Snapshot bytes AFTER migration call. Must be byte-identical.
+        QFile fileAfter(ConfigDefaults::configFilePath());
+        QVERIFY(fileAfter.open(QIODevice::ReadOnly));
+        const QByteArray afterBytes = fileAfter.readAll();
+        fileAfter.close();
+
+        QCOMPARE(afterBytes, beforeBytes);
+
+        // Belt-and-suspenders: parse and verify the Profile blob is
+        // byte-equal to what we wrote (no key reorder, no whitespace
+        // shuffle, no value coercion). The byte comparison above
+        // already pins this; the structured check makes a regression
+        // diff readable.
+        const QJsonObject afterRoot = readJsonConfig(ConfigDefaults::configFilePath());
+        QCOMPARE(afterRoot.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
+        const QJsonObject afterAnimations = afterRoot.value(QStringLiteral("Animations")).toObject();
+        QCOMPARE(afterAnimations.value(QStringLiteral("Enabled")).toBool(), true);
+        QCOMPARE(afterAnimations.value(QStringLiteral("Profile")).toString(), profileString);
+    }
+
+    /// A config stamped with a version GREATER than the current
+    /// ConfigSchemaVersion must not trigger any downgrade logic — the
+    /// migration runner short-circuits and leaves the blob untouched.
+    /// Guards against a newer client writing the file and an older
+    /// client destroying or rewriting unknown-future-schema fields.
+    void testMigrationForwardCompat_versionGreaterThanTarget()
+    {
+        IsolatedConfigGuard guard;
+
+        // Build a config stamped with a version well above the current
+        // schema. Include a handful of arbitrary keys that aren't in
+        // any known schema — if the migration runner fires, it will
+        // leave fingerprints on the output by either reshuffling or
+        // dropping these keys.
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 999;
+        root[QStringLiteral("SomeFutureGroup")] = QJsonObject{
+            {QStringLiteral("FutureKey"), QStringLiteral("future-value")},
+        };
+        root[QStringLiteral("UnrelatedKey")] = 42;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject after = readJsonConfig(ConfigDefaults::configFilePath());
+        // No migration ran — every field (including the version stamp)
+        // is preserved byte-for-byte.
+        QCOMPARE(after, root);
+    }
+
+    // =========================================================================
+    // v2 → v3: per-mode disable list split
+    //
+    // v2 stored a single `Snapping.Behavior.Display.{DisabledMonitors,
+    // DisabledDesktops, DisabledActivities}` whose value silently gated both
+    // snap and autotile despite the snapping-prefixed group name. v3 splits
+    // each into per-mode lists under a mode-neutral `Display` group.
+    //
+    // The migration must duplicate every v2 entry into BOTH the snapping and
+    // autotile v3 lists — that's the only safe interpretation when the v2
+    // schema didn't distinguish modes (the user wanted PZ off there, period).
+    // =========================================================================
+
+    /// Each v2 disable list is copied verbatim into both v3 per-mode lists.
+    /// The v2 keys are removed from Snapping.Behavior.Display, but the
+    /// surrounding non-disable keys (ShowOnAllMonitors, FilterByAspectRatio)
+    /// stay put — the migration is targeted, not a wholesale group move.
+    void testMigrateV2ToV3_duplicatesDisableListsToBothModes()
+    {
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 2;
+
+        QJsonObject display;
+        display[QStringLiteral("ShowOnAllMonitors")] = true;
+        display[QStringLiteral("FilterByAspectRatio")] = false;
+        display[QStringLiteral("DisabledMonitors")] = QStringLiteral("DP-1,HDMI-A-1");
+        display[QStringLiteral("DisabledDesktops")] = QStringLiteral("DP-1/2,HDMI-A-1/3");
+        display[QStringLiteral("DisabledActivities")] = QStringLiteral("DP-1/uuid-foo");
+
+        QJsonObject behavior;
+        behavior[QStringLiteral("Display")] = display;
+        QJsonObject snapping;
+        snapping[QStringLiteral("Behavior")] = behavior;
+        root[QStringLiteral("Snapping")] = snapping;
+
+        ConfigMigration::migrateV2ToV3(root);
+
+        // Version stamped to 3.
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 3);
+
+        // Each disable list is copied to both per-mode v3 keys, identical bytes.
+        const QJsonObject v3Display = root.value(QStringLiteral("Display")).toObject();
+        QCOMPARE(v3Display.value(QStringLiteral("SnappingDisabledMonitors")).toString(),
+                 QStringLiteral("DP-1,HDMI-A-1"));
+        QCOMPARE(v3Display.value(QStringLiteral("AutotileDisabledMonitors")).toString(),
+                 QStringLiteral("DP-1,HDMI-A-1"));
+        QCOMPARE(v3Display.value(QStringLiteral("SnappingDisabledDesktops")).toString(),
+                 QStringLiteral("DP-1/2,HDMI-A-1/3"));
+        QCOMPARE(v3Display.value(QStringLiteral("AutotileDisabledDesktops")).toString(),
+                 QStringLiteral("DP-1/2,HDMI-A-1/3"));
+        QCOMPARE(v3Display.value(QStringLiteral("SnappingDisabledActivities")).toString(),
+                 QStringLiteral("DP-1/uuid-foo"));
+        QCOMPARE(v3Display.value(QStringLiteral("AutotileDisabledActivities")).toString(),
+                 QStringLiteral("DP-1/uuid-foo"));
+
+        // Disabled* keys are gone from v2's Snapping.Behavior.Display, but the
+        // sibling keys (ShowOnAllMonitors, FilterByAspectRatio) survive — the
+        // migration is targeted, not a group-wide move.
+        const QJsonObject postBehavior =
+            root.value(QStringLiteral("Snapping")).toObject().value(QStringLiteral("Behavior")).toObject();
+        const QJsonObject postDisplay = postBehavior.value(QStringLiteral("Display")).toObject();
+        QVERIFY(!postDisplay.contains(QStringLiteral("DisabledMonitors")));
+        QVERIFY(!postDisplay.contains(QStringLiteral("DisabledDesktops")));
+        QVERIFY(!postDisplay.contains(QStringLiteral("DisabledActivities")));
+        QCOMPARE(postDisplay.value(QStringLiteral("ShowOnAllMonitors")).toBool(), true);
+        QCOMPARE(postDisplay.value(QStringLiteral("FilterByAspectRatio")).toBool(), false);
+    }
+
+    /// A v2 config with empty disable lists must NOT pollute the v3 root with
+    /// empty keys — the migration only writes v3 entries when the v2 source
+    /// is non-empty. Avoids growing every existing user's config file with
+    /// noise on first launch after the upgrade.
+    void testMigrateV2ToV3_emptyListsProduceNoV3Keys()
+    {
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 2;
+        // No Snapping.Behavior.Display at all — clean install with no disabled state.
+        ConfigMigration::migrateV2ToV3(root);
+
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 3);
+        QVERIFY(!root.contains(QStringLiteral("Display")));
+    }
+
+    /// A v2 config whose Snapping.Behavior.Display held ONLY disable lists
+    /// (no ShowOnAllMonitors, no FilterByAspectRatio) must end up with
+    /// Snapping.Behavior.Display removed entirely — the migration trims any
+    /// container that becomes empty after the disable keys move out.
+    void testMigrateV2ToV3_collapsesEmptyContainers()
+    {
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 2;
+
+        QJsonObject display;
+        display[QStringLiteral("DisabledMonitors")] = QStringLiteral("DP-1");
+        QJsonObject behavior;
+        behavior[QStringLiteral("Display")] = display;
+        QJsonObject snapping;
+        snapping[QStringLiteral("Behavior")] = behavior;
+        root[QStringLiteral("Snapping")] = snapping;
+
+        ConfigMigration::migrateV2ToV3(root);
+
+        // Snapping.Behavior.Display had only the migrated keys, so the whole
+        // chain collapses up to root.
+        QVERIFY(!root.contains(QStringLiteral("Snapping")));
+        // The migrated value lives in v3.
+        QCOMPARE(root.value(QStringLiteral("Display"))
+                     .toObject()
+                     .value(QStringLiteral("SnappingDisabledMonitors"))
+                     .toString(),
+                 QStringLiteral("DP-1"));
+    }
+
+    /// A v2 config whose disable list has a non-string type (hand-edited
+    /// array, number, null) must be cleaned up during migration — the v2 key
+    /// is dropped unconditionally, no v3 entry is synthesized from the
+    /// malformed data, and nothing leaks past the v3 stamp as orphaned
+    /// "looks like v2" data.
+    void testMigrateV2ToV3_dropsNonStringDisableValues()
+    {
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 2;
+
+        QJsonObject display;
+        // Hand-edited array — not the v2 wire format (which is a comma-joined string).
+        QJsonArray badArray;
+        badArray.append(QStringLiteral("DP-1"));
+        badArray.append(QStringLiteral("HDMI-1"));
+        display[QStringLiteral("DisabledMonitors")] = badArray;
+        // null literal.
+        display[QStringLiteral("DisabledDesktops")] = QJsonValue::Null;
+        // Number.
+        display[QStringLiteral("DisabledActivities")] = 42;
+
+        QJsonObject behavior;
+        behavior[QStringLiteral("Display")] = display;
+        QJsonObject snapping;
+        snapping[QStringLiteral("Behavior")] = behavior;
+        root[QStringLiteral("Snapping")] = snapping;
+
+        ConfigMigration::migrateV2ToV3(root);
+
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 3);
+
+        // No v3 entries were synthesized — non-string values are dropped.
+        QVERIFY(!root.contains(QStringLiteral("Display")));
+
+        // The v2 keys are gone from Snapping.Behavior.Display so they don't
+        // linger as orphaned "looks like v2" data on a v3-stamped config.
+        // The whole chain collapses because the only keys in Display were
+        // the three malformed ones.
+        QVERIFY(!root.contains(QStringLiteral("Snapping")));
+    }
+
+    /// End-to-end check that ensureJsonConfig() chains v1→v2→v3 when given a
+    /// v1 file with disabled-monitor data — the data must end up in BOTH the
+    /// snap and autotile v3 lists, not just the snap one.
+    void testMigrateV1ToV3_chainPreservesDisableLists()
+    {
+        IsolatedConfigGuard guard;
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QFile f(ConfigDefaults::configFilePath());
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(
+            "{\"_version\":1,"
+            "\"Display\":{\"DisabledMonitors\":\"DP-1,HDMI-1\"}}");
+        f.close();
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
+        const QJsonObject v3Display = root.value(QStringLiteral("Display")).toObject();
+        QCOMPARE(v3Display.value(QStringLiteral("SnappingDisabledMonitors")).toString(), QStringLiteral("DP-1,HDMI-1"));
+        QCOMPARE(v3Display.value(QStringLiteral("AutotileDisabledMonitors")).toString(), QStringLiteral("DP-1,HDMI-1"));
     }
 };
 

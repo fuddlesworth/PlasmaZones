@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Zen
-// @builtinId zen
-// @description Centered column with margins — focused, distraction-free layout
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.6
-// @defaultMaxWindows 4
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @supportsMemory false
+var metadata = {
+    name: "Zen",
+    id: "zen",
+    description: "Centered column with margins — focused, distraction-free layout",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.6,
+    defaultMaxWindows: 4,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    supportsMemory: false
+};
 
 /**
  * Zen layout: all windows share the same width (splitRatio of screen) and

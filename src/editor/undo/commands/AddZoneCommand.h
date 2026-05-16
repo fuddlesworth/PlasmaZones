@@ -26,7 +26,7 @@ public:
     } // No merging
 
 private:
-    QString m_zoneId; // Zone ID (provided at construction)
+    QString m_zoneId; // PhosphorZones::Zone ID (provided at construction)
     QVariantMap m_zoneData; // Complete zone data for restoration
 };
 

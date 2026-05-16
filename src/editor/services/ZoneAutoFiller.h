@@ -63,7 +63,7 @@ public:
     /**
      * @brief Check if a rectangle is empty (no zones occupy it)
      * @param rect The rectangle to check (0-1 normalized)
-     * @param excludeZoneId Zone to exclude from check (optional)
+     * @param excludeZoneId PhosphorZones::Zone to exclude from check (optional)
      * @return true if the rectangle is empty
      */
     bool isRectangleEmpty(const QRectF& rect, const QString& excludeZoneId = QString()) const;
@@ -97,7 +97,7 @@ private:
      * @brief Find the largest empty rectangular region containing a target point
      * @param targetX Target X coordinate (0-1)
      * @param targetY Target Y coordinate (0-1)
-     * @param excludeZoneIndex Zone index to exclude from collision checks
+     * @param excludeZoneIndex PhosphorZones::Zone index to exclude from collision checks
      * @return Best region as QRectF, or invalid rect if none found
      *
      * Used by both smartFillZone and calculateFillRegion.

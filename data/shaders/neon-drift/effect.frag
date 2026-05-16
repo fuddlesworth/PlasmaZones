@@ -432,16 +432,16 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 
     if (totalCount <= 1) {
         vec2 drift = vec2(
-            sin(time * 0.13) * 0.015 + sin(time * 0.29) * 0.008,
-            cos(time * 0.19) * 0.012 + cos(time * 0.11) * 0.006
+            timeSin(0.13) * 0.015 + timeSin(0.29) * 0.008,
+            timeCos(0.19) * 0.012 + timeCos(0.11) * 0.006
         );
         uv -= drift;
         // Gentle rotation
-        float rotAng = sin(time * 0.12) * 0.04;
+        float rotAng = timeSin(0.12) * 0.04;
         vec2 lp = uv - vec2(0.5);
         uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
                    lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
-        float breathe = 1.0 + sin(time * 0.6) * 0.02;
+        float breathe = 1.0 + timeSin(0.6) * 0.02;
         float springT = fract(time * 1.2);
         float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
         instScale = logoScale * breathe * spring;
@@ -458,19 +458,19 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     float f1 = 0.06 + float(idx) * 0.021;
     float f2 = 0.04 + float(idx) * 0.017;
     vec2 drift = vec2(
-        sin(time * f1 + h1 * TAU) * roam + sin(time * f1 * 2.1 + h3 * TAU) * roam * 0.3,
-        cos(time * f2 + h2 * TAU) * roam * 0.9 + cos(time * f2 * 1.6 + h4 * TAU) * roam * 0.25
+        timeSin(f1, h1 * TAU) * roam + timeSin(f1 * 2.1, h3 * TAU) * roam * 0.3,
+        timeCos(f2, h2 * TAU) * roam * 0.9 + timeCos(f2 * 1.6, h4 * TAU) * roam * 0.25
     );
     uv -= drift;
 
     // Per-instance rotation oscillation
-    float rotAng = sin(time * (0.08 + float(idx) * 0.025) + h4 * TAU) * 0.05;
+    float rotAng = timeSin(0.08 + float(idx) * 0.025, h4 * TAU) * 0.05;
     vec2 lp = uv - vec2(0.5);
     uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
                lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
 
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
-    float breathe = 1.0 + sin(time * (0.5 + float(idx) * 0.11) + h1 * TAU) * 0.02;
+    float breathe = 1.0 + timeSin(0.5 + float(idx) * 0.11, h1 * TAU) * 0.02;
     float springT = fract(time * 1.2 + h2);
     float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
     instScale *= breathe * spring;
@@ -567,7 +567,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // ── Background: sunset sky gradient with FBM clouds ─────
         // Vertical gradient: warm orange/pink at bottom → teal/blue at top
         float skyT = globalUV.y;
-        vec3 skyBottom = mix(SUNSET_ORANGE, SUNSET_PINK, 0.5 + 0.5 * sin(time * 0.05));
+        vec3 skyBottom = mix(SUNSET_ORANGE, SUNSET_PINK, 0.5 + 0.5 * timeSin(0.05));
         vec3 skyTop = mix(palSecondary, SUNSET_PURPLE, 0.4);
         vec3 skyGrad = mix(skyBottom, skyTop, skyT);
 

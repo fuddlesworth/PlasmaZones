@@ -300,8 +300,8 @@ vec3 networkNodes(vec2 uv, float time, float bassEnv, float midsEnv, float trebl
 
             // Node position with omnidirectional drift
             vec2 nodeOff = hash22(nid * 1.3 + 7.0) * 0.6 + 0.2;
-            float driftX = sin(time * 0.3 + h * TAU) * 0.12;
-            float driftY = cos(time * 0.25 + h * 5.0) * 0.12;
+            float driftX = timeSin(0.3, h * TAU) * 0.12;
+            float driftY = timeCos(0.25, h * 5.0) * 0.12;
             vec2 nodePos = nid + nodeOff + vec2(driftX, driftY);
             vec2 diff = p - nodePos;
             float dist = length(diff);
@@ -334,8 +334,8 @@ vec3 networkNodes(vec2 uv, float time, float bassEnv, float midsEnv, float trebl
                     if (connPhase < 0.2) continue;
 
                     vec2 nodeOff2 = hash22(nid2 * 1.3 + 7.0) * 0.6 + 0.2;
-                    float driftX2 = sin(time * 0.3 + h2 * TAU) * 0.12;
-                    float driftY2 = cos(time * 0.25 + h2 * 5.0) * 0.12;
+                    float driftX2 = timeSin(0.3, h2 * TAU) * 0.12;
+                    float driftY2 = timeCos(0.25, h2 * 5.0) * 0.12;
                     vec2 nodePos2 = nid2 + nodeOff2 + vec2(driftX2, driftY2);
 
                     // Distance from point to line segment
@@ -437,16 +437,16 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 
     if (totalCount <= 1) {
         vec2 drift = vec2(
-            sin(time * 0.13) * 0.015 + sin(time * 0.29) * 0.008,
-            cos(time * 0.19) * 0.012 + cos(time * 0.11) * 0.006
+            timeSin(0.13) * 0.015 + timeSin(0.29) * 0.008,
+            timeCos(0.19) * 0.012 + timeCos(0.11) * 0.006
         );
         uv -= drift;
         // Gentle rotation
-        float rotAng = sin(time * 0.12) * 0.04;
+        float rotAng = timeSin(0.12) * 0.04;
         vec2 lp = uv - vec2(0.5);
         uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
                    lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
-        float breathe = 1.0 + sin(time * 0.6) * 0.02;
+        float breathe = 1.0 + timeSin(0.6) * 0.02;
         float springT = fract(time * 1.2);
         float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
         instScale = logoScale * breathe * spring;
@@ -463,19 +463,19 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     float f1 = 0.06 + float(idx) * 0.021;
     float f2 = 0.04 + float(idx) * 0.017;
     vec2 mdrift = vec2(
-        sin(time * f1 + h1 * TAU) * roam + sin(time * f1 * 2.1 + h3 * TAU) * roam * 0.3,
-        cos(time * f2 + h2 * TAU) * roam * 0.9 + cos(time * f2 * 1.6 + h4 * TAU) * roam * 0.25
+        timeSin(f1, h1 * TAU) * roam + timeSin(f1 * 2.1, h3 * TAU) * roam * 0.3,
+        timeCos(f2, h2 * TAU) * roam * 0.9 + timeCos(f2 * 1.6, h4 * TAU) * roam * 0.25
     );
     uv -= mdrift;
 
     // Minimal per-instance tilt (keep "f" essentially upright)
-    float rotAng = sin(time * (0.08 + float(idx) * 0.025) + h4 * TAU) * 0.01;
+    float rotAng = timeSin(0.08 + float(idx) * 0.025, h4 * TAU) * 0.01;
     vec2 lp = uv - vec2(0.5);
     uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
                lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
 
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
-    float breathe = 1.0 + sin(time * (0.5 + float(idx) * 0.11) + h1 * TAU) * 0.02;
+    float breathe = 1.0 + timeSin(0.5 + float(idx) * 0.11, h1 * TAU) * 0.02;
     float springT = fract(time * 1.2 + h2);
     float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
     instScale *= breathe * spring;

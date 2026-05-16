@@ -2,19 +2,27 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "daemon.h"
+
 #include "../config/configdefaults.h"
 #include "../config/configmigration.h"
+#include "../core/constants.h"
 #include "../core/logging.h"
-#include "../core/qpa/layershellpluginloader.h"
-#include "../core/layersurface.h"
 #include "../core/translationloader.h"
-#include "version.h"
+#include "pz_i18n.h"
 #include "rendering/zoneshaderitem.h"
+#include "version.h"
 #include "vulkan_support.h"
-#include <QGuiApplication>
+
+#include <PhosphorProtocol/Registration.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorWayland/LayerShellPluginLoader.h>
+#include <PhosphorWayland/LayerSurface.h>
+
 #include <QCommandLineParser>
 #include <QDBusConnection>
 #include <QDBusInterface>
+#include <QFile>
+#include <QGuiApplication>
 #include <QIcon>
 #include <QLibrary>
 #include <QMutex>
@@ -22,10 +30,11 @@
 #include <QQuickWindow>
 #include <QThread>
 #include <QTimer>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtQml/qqml.h>
-#include "pz_i18n.h"
+#include <QtQml/qqmlextensionplugin.h>
+
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
 #include <signal.h>
 
@@ -46,8 +55,63 @@ void signalHandler(int /*signal*/)
 
 int main(int argc, char* argv[])
 {
+    // Exit cleanly (code 0) if the Wayland socket is already gone — avoids
+    // a SIGABRT → Restart=on-failure loop. See queryPlasmaWorkspaceState()
+    // in daemon.cpp for the full phantom-session analysis.
+    {
+        const QByteArray waylandDisplay = qgetenv("WAYLAND_DISPLAY");
+        if (!waylandDisplay.isEmpty()) {
+            QByteArray socketPath;
+            if (waylandDisplay.startsWith('/')) {
+                socketPath = waylandDisplay;
+            } else {
+                const QByteArray runtimeDir = qgetenv("XDG_RUNTIME_DIR");
+                if (!runtimeDir.isEmpty()) {
+                    socketPath = runtimeDir + '/' + waylandDisplay;
+                }
+            }
+            if (!socketPath.isEmpty() && !QFile::exists(QString::fromLocal8Bit(socketPath))) {
+                std::fprintf(stderr,
+                             "plasmazones: WAYLAND_DISPLAY=%s but socket %s missing — "
+                             "wayland session not available, exiting cleanly to avoid restart loop\n",
+                             waylandDisplay.constData(), socketPath.constData());
+                return 0;
+            }
+        }
+    }
+
+    // Opt out of MangoHud's implicit Vulkan layer injection. MangoHud's
+    // implicit_layer manifest attaches whenever MANGOHUD=1 is in the
+    // environment (e.g. set globally for games), and its NVIDIA stat-polling
+    // thread costs ~30% CPU continuously inside this daemon — we are a
+    // background service, not a game client. Both env vars are cleared:
+    // MANGOHUD=0 alone is not enough on all manifest versions; the explicit
+    // DISABLE_MANGOHUD opt-out is honored regardless of MANGOHUD's value.
+    // Must run before QVulkanInstance::create() in vulkan_support.cpp.
+    qunsetenv("MANGOHUD");
+    qputenv("DISABLE_MANGOHUD", "1");
+
+    // Use the simple animation driver (Qt 6.5+). With the threaded scene-
+    // graph render loop and TWO OR MORE QQuickWindows, Qt 6's default
+    // animation driver explicitly "falls back to the system timer based
+    // approach" — and crucially, every render-thread sync phase blocks the
+    // GUI thread for the duration of that window's polishAndSync. Animation
+    // ticks driven by GUI-thread QTimers (which is how SurfaceAnimator's
+    // m_driverTimer works) miss frames whenever the GUI thread is parked
+    // in a sibling window's sync — the visible symptom is one popup's
+    // shader fly-in pausing partway through while another popup mounts and
+    // animates, then jumping forward when the GUI thread resumes.
+    //
+    // QSG_USE_SIMPLE_ANIMATION_DRIVER=1 swaps the multi-window-fallback
+    // timer driver for QElapsedTimer-based timing, decoupling the
+    // animation tick cadence from the per-window vsync / sync handshake.
+    // Documented in the Qt Quick Scene Graph manual page as the supported
+    // way to address exactly this multi-window stutter pattern. Must be
+    // set before QGuiApplication is constructed.
+    qputenv("QSG_USE_SIMPLE_ANIMATION_DRIVER", "1");
+
     // Register our layer-shell QPA plugin before QGuiApplication
-    PlasmaZones::registerLayerShellPlugin();
+    PhosphorWayland::registerLayerShellPlugin();
 
     // Read rendering backend preference and probe Vulkan BEFORE QGuiApplication —
     // QQuickWindow::setGraphicsApi() must be called before the app object exists.
@@ -91,19 +155,22 @@ int main(int argc, char* argv[])
 #endif
     PlasmaZones::loadTranslations(&app);
 
+    // Register D-Bus struct types for typed signal/method exchange
+    PhosphorProtocol::registerWireTypes();
+
     // Register metatype for QVariant storage (LayerSurface stores itself
     // as a QWindow dynamic property via QVariant::fromValue).
-    qRegisterMetaType<PlasmaZones::LayerSurface*>();
+    qRegisterMetaType<PhosphorWayland::LayerSurface*>();
 
     // Verify the layer-shell QPA plugin loaded successfully. If not, overlays will
     // be created as xdg_toplevel (wrong stacking/anchoring) — warn loudly.
-    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PlasmaZones::LayerSurface::isSupported()) {
+    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PhosphorWayland::LayerSurface::isSupported()) {
         qCCritical(lcDaemon) << "Layer-shell QPA plugin did not initialize —"
                              << "overlays will use xdg_toplevel (wrong stacking/anchoring)."
                              << "Zone overlays will appear as regular windows (visible in taskbar,"
                              << "wrong z-order, no keyboard grab). This compositor may not support"
                              << "zwlr_layer_shell_v1 (e.g. GNOME/Mutter)."
-                             << "Check that pz-layer-shell.so is installed to Qt's"
+                             << "Check that phosphorwayland-qpa.so is installed to Qt's"
                              << "wayland-shell-integration plugin directory.";
     }
 
@@ -175,7 +242,7 @@ int main(int argc, char* argv[])
     }
 
     // Ensure single instance via D-Bus service name registration
-    const QString serviceName = QStringLiteral("org.plasmazones.daemon");
+    const QString serviceName = QString(PhosphorProtocol::Service::Name);
     QDBusConnection bus = QDBusConnection::sessionBus();
 
     if (!bus.registerService(serviceName)) {

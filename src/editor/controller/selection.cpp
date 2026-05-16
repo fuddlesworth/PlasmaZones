@@ -24,7 +24,7 @@ void EditorController::syncSelectionSignals()
 
 /**
  * @brief Selects the next zone in the zone list
- * @return Zone ID of the newly selected zone, or empty string if no zones
+ * @return PhosphorZones::Zone ID of the newly selected zone, or empty string if no zones
  */
 QString EditorController::selectNextZone()
 {
@@ -46,7 +46,7 @@ QString EditorController::selectNextZone()
     // Select next zone (wrap around to first if at end)
     int nextIndex = (currentIndex + 1) % zones.length();
     QVariantMap nextZone = zones[nextIndex].toMap();
-    QString nextZoneId = nextZone[JsonKeys::Id].toString();
+    QString nextZoneId = nextZone[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
     setSelectedZoneId(nextZoneId);
     return nextZoneId;
@@ -54,7 +54,7 @@ QString EditorController::selectNextZone()
 
 /**
  * @brief Selects the previous zone in the zone list
- * @return Zone ID of the newly selected zone, or empty string if no zones
+ * @return PhosphorZones::Zone ID of the newly selected zone, or empty string if no zones
  */
 QString EditorController::selectPreviousZone()
 {
@@ -76,7 +76,7 @@ QString EditorController::selectPreviousZone()
     // Select previous zone (wrap around to last if at beginning)
     int prevIndex = currentIndex <= 0 ? zones.length() - 1 : currentIndex - 1;
     QVariantMap prevZone = zones[prevIndex].toMap();
-    QString prevZoneId = prevZone[JsonKeys::Id].toString();
+    QString prevZoneId = prevZone[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
     setSelectedZoneId(prevZoneId);
     return prevZoneId;
@@ -127,10 +127,10 @@ bool EditorController::moveSelectedZone(int direction, qreal step)
     }
 
     // Relative mode: original behavior
-    qreal x = selectedZone[JsonKeys::X].toDouble();
-    qreal y = selectedZone[JsonKeys::Y].toDouble();
-    qreal width = selectedZone[JsonKeys::Width].toDouble();
-    qreal height = selectedZone[JsonKeys::Height].toDouble();
+    qreal x = selectedZone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+    qreal y = selectedZone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+    qreal width = selectedZone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+    qreal height = selectedZone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
     switch (direction) {
     case 0:
@@ -204,10 +204,10 @@ bool EditorController::resizeSelectedZone(int direction, qreal step)
     }
 
     // Relative mode: original behavior
-    qreal x = selectedZone[JsonKeys::X].toDouble();
-    qreal y = selectedZone[JsonKeys::Y].toDouble();
-    qreal width = selectedZone[JsonKeys::Width].toDouble();
-    qreal height = selectedZone[JsonKeys::Height].toDouble();
+    qreal x = selectedZone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+    qreal y = selectedZone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+    qreal width = selectedZone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+    qreal height = selectedZone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
     const qreal minSize = 0.05;
 
@@ -310,7 +310,7 @@ void EditorController::selectRange(const QString& fromId, const QString& toId)
     // Find indices of both zones
     for (int i = 0; i < allZones.count(); ++i) {
         QVariantMap zone = allZones[i].toMap();
-        QString id = zone[JsonKeys::Id].toString();
+        QString id = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
         if (id == fromId)
             fromIndex = i;
         if (id == toId)
@@ -329,7 +329,7 @@ void EditorController::selectRange(const QString& fromId, const QString& toId)
     // Select all zones in range (adds to existing selection)
     for (int i = fromIndex; i <= toIndex; ++i) {
         QVariantMap zone = allZones[i].toMap();
-        QString zoneId = zone[JsonKeys::Id].toString();
+        QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
         if (!m_selectedZoneIds.contains(zoneId)) {
             m_selectedZoneIds.append(zoneId);
         }
@@ -355,7 +355,7 @@ void EditorController::selectAll()
 
     for (const QVariant& zoneVar : allZones) {
         QVariantMap zone = zoneVar.toMap();
-        newSelection.append(zone[JsonKeys::Id].toString());
+        newSelection.append(zone[::PhosphorZones::ZoneJsonKeys::Id].toString());
     }
 
     setSelectedZoneIds(newSelection);
@@ -391,8 +391,8 @@ bool EditorController::allSelectedUseCustomColors() const
         if (zone.isEmpty()) {
             return false;
         }
-        // Check useCustomColors property (JsonKeys::UseCustomColors is already QLatin1String)
-        if (!zone.value(QString(JsonKeys::UseCustomColors), false).toBool()) {
+        // Check useCustomColors property (::PhosphorZones::ZoneJsonKeys::UseCustomColors is already QLatin1String)
+        if (!zone.value(QString(::PhosphorZones::ZoneJsonKeys::UseCustomColors), false).toBool()) {
             return false;
         }
     }
@@ -415,16 +415,16 @@ QStringList EditorController::selectZonesInRect(qreal x, qreal y, qreal width, q
     const QVariantList& zonesList = m_zoneManager->zones();
     for (const QVariant& zoneVar : zonesList) {
         const QVariantMap zone = zoneVar.toMap();
-        const QString zoneId = zone.value(QString(JsonKeys::Id)).toString();
+        const QString zoneId = zone.value(QString(::PhosphorZones::ZoneJsonKeys::Id)).toString();
         if (zoneId.isEmpty()) {
             continue;
         }
 
-        // Zone bounds
-        const qreal zoneX = zone.value(QString(JsonKeys::X)).toDouble();
-        const qreal zoneY = zone.value(QString(JsonKeys::Y)).toDouble();
-        const qreal zoneRight = zoneX + zone.value(QString(JsonKeys::Width)).toDouble();
-        const qreal zoneBottom = zoneY + zone.value(QString(JsonKeys::Height)).toDouble();
+        // PhosphorZones::Zone bounds
+        const qreal zoneX = zone.value(QString(::PhosphorZones::ZoneJsonKeys::X)).toDouble();
+        const qreal zoneY = zone.value(QString(::PhosphorZones::ZoneJsonKeys::Y)).toDouble();
+        const qreal zoneRight = zoneX + zone.value(QString(::PhosphorZones::ZoneJsonKeys::Width)).toDouble();
+        const qreal zoneBottom = zoneY + zone.value(QString(::PhosphorZones::ZoneJsonKeys::Height)).toDouble();
 
         // Check AABB intersection
         const bool intersects = !(zoneRight < x || zoneX > rectRight || zoneBottom < y || zoneY > rectBottom);

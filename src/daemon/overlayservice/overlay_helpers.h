@@ -22,9 +22,15 @@
 #include <QJsonParseError>
 #include <atomic>
 
-#include "../../core/layersurface.h"
+#include <PhosphorWayland/LayerSurface.h>
+#include "qml_property_names.h"
 #include "../../core/logging.h"
 #include "../../core/enums.h"
+
+namespace PlasmaZones {
+using PhosphorWayland::LayerSurface;
+namespace LayerSurfaceProps = PhosphorWayland::LayerSurfaceProps;
+} // namespace PlasmaZones
 
 namespace PlasmaZones {
 
@@ -45,13 +51,13 @@ inline void writeQmlProperty(QObject* object, const QString& name, const QVarian
 // Patch zone data with current highlight state from QML window properties.
 // The zone model doesn't know about overlay highlights (keyboard/hover),
 // so we patch isHighlighted here before passing to shaders.
-inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QQuickWindow* window)
+inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QObject* propertyHost)
 {
-    if (!window) {
+    if (!propertyHost) {
         return zones;
     }
-    const QString hid = window->property("highlightedZoneId").toString();
-    const QVariantList hids = window->property("highlightedZoneIds").toList();
+    const QString hid = propertyHost->property(OverlayQmlPropertyNames::HighlightedZoneId.data()).toString();
+    const QVariantList hids = propertyHost->property(OverlayQmlPropertyNames::HighlightedZoneIds.data()).toList();
 
     QVariantList out;
     for (const QVariant& z : zones) {

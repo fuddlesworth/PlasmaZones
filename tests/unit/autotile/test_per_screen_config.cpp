@@ -4,16 +4,18 @@
 #include <QTest>
 #include <QSignalSpy>
 
-#include "autotile/AutotileEngine.h"
-#include "autotile/AutotileConfig.h"
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingAlgorithm.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include "../helpers/AutotileTestHelpers.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 
 #include "../helpers/ScriptedAlgoTestSetup.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Unit tests for PerScreenConfigResolver
@@ -47,7 +49,7 @@ private Q_SLOTS:
 
     void testPerScreen_effectiveMaxWindows_perScreenAlgoDiffersFromGlobal()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen});
 
@@ -61,8 +63,8 @@ private Q_SLOTS:
 
         // When the per-screen algo differs and global maxWindows is at the global
         // algo's default, effectiveMaxWindows should return the per-screen algo's default
-        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
-        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
+        auto* bspAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("bsp"));
+        auto* msAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("master-stack"));
         QVERIFY(bspAlgo);
         QVERIFY(msAlgo);
 
@@ -79,7 +81,7 @@ private Q_SLOTS:
 
     void testPerScreen_effectiveMaxWindows_userCustomizedGlobalHonored()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen});
 
@@ -91,7 +93,7 @@ private Q_SLOTS:
         engine.applyPerScreenConfig(screen, overrides);
 
         // User has explicitly customized global maxWindows away from algo default
-        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
+        auto* msAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("master-stack"));
         QVERIFY(msAlgo);
         engine.config()->maxWindows = msAlgo->defaultMaxWindows() + 2;
 
@@ -100,13 +102,82 @@ private Q_SLOTS:
         QCOMPARE(effective, engine.config()->maxWindows);
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Unlimited overflow mode returns the named sentinel so std::min clamps
+    // become idempotent and onWindowAdded's gate is wide open. The constant
+    // lives in PhosphorTiles::AutotileDefaults so any caller (resolver, tests, future
+    // headroom math) shares one definition.
+    // ─────────────────────────────────────────────────────────────────────
+    void testPerScreen_effectiveMaxWindows_unlimitedReturnsSentinel()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+
+        engine.config()->overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Unlimited;
+
+        const int effective = engine.effectiveMaxWindows(screen);
+        QCOMPARE(effective, PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // A per-screen MaxWindows override wins even when global overflow is
+    // Unlimited — users must be able to clamp individual screens while
+    // running unlimited elsewhere. The override path is checked BEFORE the
+    // Unlimited short-circuit in PerScreenConfigResolver::effectiveMaxWindows.
+    // ─────────────────────────────────────────────────────────────────────
+    void testPerScreen_effectiveMaxWindows_unlimitedRespectsPerScreenOverride()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenA = QStringLiteral("eDP-1");
+        const QString screenB = QStringLiteral("HDMI-1");
+        engine.setAutotileScreens({screenA, screenB});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+
+        engine.config()->overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Unlimited;
+
+        // Screen A clamps to 3 via per-screen override; screen B inherits Unlimited.
+        QVariantMap overrides;
+        overrides[QStringLiteral("MaxWindows")] = 3;
+        engine.applyPerScreenConfig(screenA, overrides);
+
+        QCOMPARE(engine.effectiveMaxWindows(screenA), 3);
+        QCOMPARE(engine.effectiveMaxWindows(screenB), PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Symmetric coverage: Float (default) global with a per-screen override
+    // — the per-screen override path runs ahead of the Unlimited short
+    // circuit, so this exercises the same priority ordering from the
+    // opposite branch and pins it against future refactors that might move
+    // the override below either short circuit.
+    // ─────────────────────────────────────────────────────────────────────
+    void testPerScreen_effectiveMaxWindows_floatRespectsPerScreenOverride()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenA = QStringLiteral("eDP-1");
+        const QString screenB = QStringLiteral("HDMI-1");
+        engine.setAutotileScreens({screenA, screenB});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+
+        // Float global, screen A clamps to 2, screen B falls through to global default.
+        engine.config()->overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Float;
+        QVariantMap overrides;
+        overrides[QStringLiteral("MaxWindows")] = 2;
+        engine.applyPerScreenConfig(screenA, overrides);
+
+        QCOMPARE(engine.effectiveMaxWindows(screenA), 2);
+        QCOMPARE(engine.effectiveMaxWindows(screenB), engine.config()->maxWindows);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // applyOverrides
     // ═══════════════════════════════════════════════════════════════════════════
 
     void testPerScreen_applyOverrides_splitRatioSet()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -114,7 +185,7 @@ private Q_SLOTS:
         overrides[QStringLiteral("SplitRatio")] = 0.75;
         engine.applyPerScreenConfig(screen, overrides);
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
         QVERIFY(qFuzzyCompare(state->splitRatio(), 0.75));
 
@@ -124,12 +195,12 @@ private Q_SLOTS:
 
     void testPerScreen_applyOverrides_masterCountSet()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
         // Add windows so master count can be verified
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
         state->addWindow(QStringLiteral("win3"));
@@ -144,11 +215,11 @@ private Q_SLOTS:
 
     void testPerScreen_applyOverrides_algorithmResetsSplitRatio()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->setSplitRatio(0.75);
 
         // Override with a new algorithm but NO explicit SplitRatio override.
@@ -157,7 +228,7 @@ private Q_SLOTS:
         overrides[QStringLiteral("Algorithm")] = QLatin1String("bsp");
         engine.applyPerScreenConfig(screen, overrides);
 
-        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
+        auto* bspAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("bsp"));
         QVERIFY(bspAlgo);
         QVERIFY(qFuzzyCompare(state->splitRatio(), bspAlgo->defaultSplitRatio()));
     }
@@ -168,7 +239,7 @@ private Q_SLOTS:
 
     void testPerScreen_clearOverrides_restoresGlobalDefaults()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -176,7 +247,7 @@ private Q_SLOTS:
         engine.config()->splitRatio = 0.6;
         engine.config()->masterCount = 1;
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
 
@@ -203,7 +274,7 @@ private Q_SLOTS:
 
     void testPerScreen_effectiveOuterGaps_perSideOverrides()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen});
 
@@ -217,7 +288,7 @@ private Q_SLOTS:
         overrides[QStringLiteral("OuterGapBottom")] = 5;
         engine.applyPerScreenConfig(screen, overrides);
 
-        EdgeGaps gaps = engine.effectiveOuterGaps(screen);
+        ::PhosphorLayout::EdgeGaps gaps = engine.effectiveOuterGaps(screen);
         QCOMPARE(gaps.top, 20);
         QCOMPARE(gaps.bottom, 5);
         // Left and right fall back to the global uniform outer gap (10),
@@ -234,7 +305,7 @@ private Q_SLOTS:
 
     void testPerScreen_emptyOverridesCallsClear()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -259,7 +330,7 @@ private Q_SLOTS:
 
     void testPerScreen_emptyScreenNameIgnored()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         // Should not crash or create state for empty screen name
         QVariantMap overrides;
@@ -272,7 +343,7 @@ private Q_SLOTS:
 
     void testPerScreen_removeOverridesForScreen()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("DP-1");
         engine.setAutotileScreens({screen});
 

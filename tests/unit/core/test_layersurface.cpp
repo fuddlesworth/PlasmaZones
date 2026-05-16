@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "core/layersurface.h"
-#include "core/qpa/layershellintegration.h"
+#include <PhosphorWayland/LayerSurface.h>
+
+// Full definition needed for tests that directly construct LayerShellIntegration.
+#include "../../../libs/phosphor-wayland/src/qpa/layershellintegration.h"
 
 #include <QTest>
 #include <QSignalSpy>
@@ -10,7 +12,7 @@
 #include <QPointer>
 #include <QWindow>
 
-using namespace PlasmaZones;
+using namespace PhosphorWayland;
 
 class TestLayerSurface : public QObject
 {
@@ -108,9 +110,10 @@ private Q_SLOTS:
         QCOMPARE(surface->anchors(), LayerSurface::Anchors());
         QCOMPARE(surface->exclusiveZone(), int32_t(-1));
         QCOMPARE(surface->keyboardInteractivity(), LayerSurface::KeyboardInteractivityNone);
-        QCOMPARE(surface->scope(), QStringLiteral("plasmazones"));
+        QCOMPARE(surface->scope(), QStringLiteral("phosphorwayland"));
         QCOMPARE(surface->screen(), nullptr);
         QCOMPARE(surface->margins(), QMargins());
+        QCOMPARE(surface->exclusiveEdge(), LayerSurface::Anchors());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -192,6 +195,35 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
     }
 
+    void testSetExclusiveEdge_emitsOnChange()
+    {
+        QWindow window;
+        SurfaceGuard guard(window);
+        auto* surface = LayerSurface::get(&window);
+        QSignalSpy spy(surface, &LayerSurface::exclusiveEdgeChanged);
+
+        surface->setExclusiveEdge(LayerSurface::AnchorTop);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(surface->exclusiveEdge(), LayerSurface::Anchors(LayerSurface::AnchorTop));
+
+        surface->setExclusiveEdge(LayerSurface::AnchorTop);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void testSetExclusiveEdge_invalidValue_ignored()
+    {
+        QWindow window;
+        SurfaceGuard guard(window);
+        auto* surface = LayerSurface::get(&window);
+        QSignalSpy spy(surface, &LayerSurface::exclusiveEdgeChanged);
+
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("setExclusiveEdge\\(\\) called with invalid value")));
+        surface->setExclusiveEdge(LayerSurface::AnchorTop | LayerSurface::AnchorLeft);
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(surface->exclusiveEdge(), LayerSurface::Anchors());
+    }
+
     void testSetMargins_emitsOnChange()
     {
         QWindow window;
@@ -233,7 +265,7 @@ private Q_SLOTS:
         surface->setScope(QStringLiteral("new-scope"));
         // setScope after show returns early without emitting (scope is immutable)
         QCOMPARE(spy.count(), 0);
-        QCOMPARE(surface->scope(), QStringLiteral("plasmazones")); // original default unchanged
+        QCOMPARE(surface->scope(), QStringLiteral("phosphorwayland")); // original default unchanged
         window.close();
     }
 
@@ -389,11 +421,12 @@ private Q_SLOTS:
         QCOMPARE(window.property(LayerSurfaceProps::Anchors).toInt(), 0); // AnchorNone
         QCOMPARE(window.property(LayerSurfaceProps::ExclusiveZone).toInt(), -1);
         QCOMPARE(window.property(LayerSurfaceProps::Keyboard).toInt(), 0); // None
-        QCOMPARE(window.property(LayerSurfaceProps::Scope).toString(), QStringLiteral("plasmazones"));
+        QCOMPARE(window.property(LayerSurfaceProps::Scope).toString(), QStringLiteral("phosphorwayland"));
         QCOMPARE(window.property(LayerSurfaceProps::MarginsLeft).toInt(), 0);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsTop).toInt(), 0);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsRight).toInt(), 0);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsBottom).toInt(), 0);
+        QCOMPARE(window.property(LayerSurfaceProps::ExclusiveEdge).toInt(), 0);
     }
 
     void testPropertiesPropagateToWindow()
@@ -422,6 +455,9 @@ private Q_SLOTS:
         QCOMPARE(window.property(LayerSurfaceProps::MarginsTop).toInt(), 2);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsRight).toInt(), 3);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsBottom).toInt(), 4);
+
+        surface->setExclusiveEdge(LayerSurface::AnchorBottom);
+        QCOMPARE(window.property(LayerSurfaceProps::ExclusiveEdge).toInt(), 2); // AnchorBottom
     }
 
     void testIsLayerShellProperty()
@@ -566,8 +602,10 @@ private Q_SLOTS:
     void testGlobalRemovedCallback_firesAndIsCleared()
     {
         // Test the callback registration/deregistration/fire lifecycle
-        // without needing a real Wayland compositor. We test the
-        // LayerShellIntegration's callback bookkeeping directly.
+        // without needing a real Wayland compositor. We drive dispatch
+        // via the public `fireGlobalRemovedCallbacks` entry point so
+        // the test isn't sensitive to which manager id-field happens to
+        // alias with a sentinel value inside `registryRemoveHandler`.
         LayerShellIntegration integration;
 
         bool called1 = false;
@@ -582,10 +620,10 @@ private Q_SLOTS:
         // Remove one callback before firing
         integration.removeGlobalRemovedCallback(id1);
 
-        // Simulate global removal by calling the static handler with a fake
-        // registry id=0 — since m_layerShellId is 0 (never bound), this triggers
-        // the removal path.
-        LayerShellIntegration::registryRemoveHandler(&integration, nullptr, 0);
+        // Simulate the layer-shell global being removed — fires every
+        // currently-registered callback exactly once and clears the
+        // list (std::exchange).
+        integration.fireGlobalRemovedCallbacks();
 
         QVERIFY(!called1); // Was removed before firing
         QVERIFY(called2); // Was still registered
@@ -615,7 +653,7 @@ private Q_SLOTS:
         integration.removeGlobalRemovedCallback(id);
 
         // Trigger removal — callback must NOT fire
-        LayerShellIntegration::registryRemoveHandler(&integration, nullptr, 0);
+        integration.fireGlobalRemovedCallbacks();
         QVERIFY(!called);
     }
 

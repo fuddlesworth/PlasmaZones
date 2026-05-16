@@ -21,9 +21,11 @@ Item {
 
     signal shaderError(string log)
 
-    // Force re-read of shader source from disk (hot-reload)
-    function loadShader() {
-        zoneShaderItem.loadShader();
+    // Force re-read of shader source from disk (hot-reload). Delegates to the
+    // underlying ZoneShaderItem, which inherits reloadShader() as a Q_INVOKABLE
+    // from PhosphorRendering::ShaderEffect.
+    function reloadShader() {
+        zoneShaderItem.reloadShader();
     }
 
     ZoneShaderItem {

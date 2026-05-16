@@ -40,7 +40,7 @@ private Q_SLOTS:
         m_settings = new StubSettings(nullptr);
         // SettingsAdaptor is a QDBusAbstractAdaptor and needs a parent
         m_parent = new QObject(nullptr);
-        m_adaptor = new SettingsAdaptor(m_settings, m_parent);
+        m_adaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, m_parent);
     }
 
     void cleanup()

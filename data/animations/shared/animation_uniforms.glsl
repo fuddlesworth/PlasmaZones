@@ -1,0 +1,244 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// Canonical uniform contract for animation/transition shaders. Both
+// PlasmaZones runtimes that load animation shaders honor this header:
+//
+//   • Daemon overlay-surface execution (PhosphorRendering::ShaderEffect →
+//     ShaderNodeRhi → BaseUniforms UBO at binding=0). Qt-RHI's SPIR-V
+//     pipeline mandates UBO-bound uniforms; default-block uniforms aren't
+//     supported. The UBO branch below is std140-aligned with
+//     `PhosphorShaders::BaseUniforms` and covers its full 672-byte
+//     footprint.
+//
+//   • Compositor window-content execution (kwin-effect → KWin::GLShader,
+//     classic OpenGL). KWin's `GLShader::setUniform(loc, val)` API
+//     addresses default-block uniforms only and never binds UBOs. The
+//     kwin-effect prepends `#define PLASMAZONES_KWIN` after the
+//     `#version` line of every animation shader before compile, which
+//     selects the default-block branch below.
+//
+// Author guidance: include this file from each animation shader's
+// effect.frag with `#include <animation_uniforms.glsl>` and use the
+// declared names directly (`iTime`, `iResolution`, `customParams[N]`,
+// `uTexture0`, etc.) — both branches expose the same identifiers, so
+// shader code does not need its own `#ifdef PLASMAZONES_KWIN` blocks.
+// The `#define PLASMAZONES_KWIN` switch describes the uniform-binding
+// ABI, not the runtime's feature set.
+//
+// Custom vertex stage on the kwin path: animation shaders are authored
+// against a Y=0-at-top texCoord convention. KWin's `OffscreenData::paint`
+// populates texCoord with Y-up FBO sampling coordinates instead, so
+// the kwin-effect's BUILT-IN default vertex stage applies a final
+// `vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y)` flip before
+// rasterisation. A pack that ships its own `vertexShader` via
+// metadata.json MUST replicate this flip — otherwise the fragment
+// stage's `vTexCoord` arrives upside-down and the entire shader
+// renders inverted on the compositor path. The daemon RHI path uses
+// Qt scene-graph coords (already Y=0-at-top) and needs no flip,
+// which is why this is a per-runtime concern. See
+// `kKwinDefaultVertexSource` in `kwin-effect/plasmazoneseffect.cpp`
+// for the canonical implementation to copy.
+//
+// Layout-drift guard: the offsets in the UBO branch MUST stay aligned
+// with `PhosphorShaders::BaseUniforms`. The C++ side enforces that via
+// `static_assert(offsetof(...))` in `<PhosphorShaders/BaseUniforms.h>`
+// for every field declared below — if any assert fails after a
+// `BaseUniforms` change, this header has to move in lockstep. The bake
+// test in `tests/unit/ui/test_animation_shader_bake.cpp` surfaces
+// GLSL-side drift by running `qsb` over every built-in shader.
+
+#ifndef PLASMAZONES_ANIMATION_UNIFORMS_GLSL
+#define PLASMAZONES_ANIMATION_UNIFORMS_GLSL
+
+#ifdef PLASMAZONES_KWIN
+
+// ─── KWin classic-GL default-block branch ──────────────────────────────
+// `qt_Matrix` / `qt_Opacity` / `_appField0` / `_appField1` /
+// `iFlipBufferY` are daemon-only (Qt scene-graph transform/opacity,
+// consumer escape-hatch ints, daemon Y-flip signal); they are absent
+// here. `iTimeHi` is documented dead and never read by animation
+// shaders, but it stays in the contract for parity with the daemon
+// side — declared as a default-block uniform so source written against
+// the canonical header still compiles. Reads zero on this path.
+//
+// Sampler binding decorations are intentionally absent: KWin's
+// `OffscreenData::paint` binds the redirected window texture to the
+// default active unit (TEXTURE0) with no `glActiveTexture` call. With
+// `#version 450`, an explicit `layout(binding = N)` would pin the
+// sampler to unit N at link time and KWin's bind to unit 0 would be
+// invisible — texture sample returns transparent, transition is a
+// see-through no-op. Default-bound samplers fall back to GL's default
+// (unit 0), which matches KWin's bind.
+uniform float iTime;
+uniform float iTimeDelta;
+uniform int iFrame;
+uniform vec2 iResolution;
+uniform vec4 iMouse;
+uniform vec4 iDate;
+uniform vec4 customParams[8];
+uniform vec4 customColors[16];
+// `iChannelResolution[4]` and `iAudioSpectrumSize` from the UBO branch
+// are intentionally absent here: kwin-effect/plasmazoneseffect.cpp
+// never calls `setUniform` for either, and no animation shader in
+// `data/animations/` references them. Adding default-block declarations
+// would compile but read garbage at runtime — better to surface the
+// gap as a compile error if a future shader reaches for them on the
+// kwin path. (The UBO branch keeps both fields for std140 layout
+// parity with `PhosphorShaders::BaseUniforms`; see static_asserts in
+// `<PhosphorShaders/BaseUniforms.h>`.)
+uniform vec4 iTextureResolution[4];
+uniform float iTimeHi;
+// 1 when the runtime is driving this leg in the "reverse" direction
+// (window.close / going-to-minimized / unmaximize on the kwin path,
+// hide leg on the daemon path); 0 for the forward direction. Symmetric
+// shaders ignore this — the runtime ALSO flips iTime so they auto-mirror.
+// Asymmetric shaders (matrix's directional rain + open-vs-close window
+// reveal) branch on it. See UBO branch below for the full contract.
+uniform int iIsReversed;
+// .xy = surface origin in logical-screen pixels; .zw = (screenW, screenH).
+// Vertex / fragment shaders that need to know where the surface sits on
+// its host screen (fly-in from closest edge, screen-relative noise) read
+// this. Both runtimes populate it once per leg attach + on every anchor
+// or window geometry signal.
+uniform vec4 iSurfaceScreenPos;
+// Anchor (card) pixel size in logical pixels. Decoupled from iResolution
+// because Qt auto-resets iResolution to the QQuickItem's bounds on any
+// geometry event: a `fboExtent: "surface"` shader item is surface-sized
+// and that auto-reset would clobber any anchor-size override. Vertex
+// shaders mapping a captured small texture into a surface-sized FBO
+// read this for the card's pixel dimensions; iResolution still carries
+// the FBO size as usual.
+uniform vec2 iAnchorSize;
+// Anchor's top-left position inside the shader item's FBO, in logical
+// pixels. Combined with `iAnchorSize` and `iResolution`, shaders compute
+// the anchor's UV region inside the FBO:
+//   vec2 anchorTopLeftUv = iAnchorPosInFbo / iResolution;
+//   vec2 anchorSizeUv    = iAnchorSize    / iResolution;
+//   vec2 anchorUv        = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;
+// This generalises the previous `customParams[7].x` ring-padding remap
+// (morph, broken-glass) and the surface-extent vertex remap (fly-in)
+// onto one contract that works for any FBO size the runtime allocates.
+// On the kwin-effect path the value is (0, 0); the quad-side texCoord
+// remap done by `PlasmaZonesEffect::apply()` already delivers
+// `vTexCoord` in anchor-space coordinates, so the math collapses to
+// identity on that runtime.
+uniform vec2 iAnchorPosInFbo;
+
+// uTexture0 — redirected window content (the surface the shader is
+// transitioning). Auto-bound by the runtime: KWin's OffscreenEffect
+// binds the redirected window texture to TEXTURE0 before drawWindow,
+// and the daemon's SurfaceAnimator wires the shaderAnchor's live
+// texture provider to slot 0 of the underlying user-texture array.
+// Animation shaders treat this as their input image; overlay shaders
+// (see data/shaders/) use the same uTexture0 name for their first
+// user-declared texture, so author shader source compiles unchanged
+// across categories — semantics differ only at the runtime binding
+// layer.
+uniform sampler2D uTexture0;
+// User-declared textures — see AnimationShaderEffect::TextureSlot in
+// metadata.json or the runtime `uTexture<N>` parameter override. The
+// kwin-effect binds these to TEXTURE1..3 before drawWindow; the
+// daemon binds them to SRB bindings 8..10 via
+// ShaderNodeRhi::setUserTexture. Default `vec4(0)` (transparent black)
+// when neither declaration nor override resolves to a loadable file.
+uniform sampler2D uTexture1;
+uniform sampler2D uTexture2;
+uniform sampler2D uTexture3;
+
+#else
+
+// ─── Daemon Qt-RHI / SPIR-V UBO branch (default) ───────────────────────
+// Std140 array stride note: `int[N]` and `float[N]` arrays have a per-
+// element stride of 16 bytes in std140 (rule 4: rounded up to vec4
+// alignment). That makes `int _pad0[2]` 32 bytes — NOT 8 — which would
+// shove the next field 24 bytes past where the C `BaseUniforms` upload
+// places it. Sibling daemon `data/shaders/common.glsl` solves this by
+// declaring no explicit padding and relying on std140's natural
+// vec4-alignment of the next array to bridge the gap. Match that
+// pattern here: after `int iFlipBufferY` (4 bytes at offset 580,
+// occupying [580, 584)), the next `vec4 iTextureResolution[4]` is
+// auto-aligned to offset 592 by std140 (rule 4 → 16-byte boundary),
+// implicitly filling the same 8 bytes the C struct's
+// `_pad_after_audioSpectrum[2]` covers. Likewise the struct itself is
+// auto-aligned to a 16-byte multiple at the end, picking up the
+// trailing 12 bytes that C's `_pad_after_iTimeHi[3]` owns and landing
+// total size at 672 bytes — matching `BaseUniforms`.
+layout(std140, binding = 0) uniform AnimationUniforms {
+    mat4 qt_Matrix;              // offset 0   (64 bytes) — Qt scene-graph transform; daemon-only
+    float qt_Opacity;            // offset 64  (4 bytes)  — Qt scene-graph opacity; daemon-only
+    float iTime;                 // offset 68  — animation progress in [0, 1]
+    float iTimeDelta;            // offset 72  — real-time seconds between SurfaceAnimator
+                                 //              ticks (daemon path)
+    int iFrame;                  // offset 76  — per-leg frame counter starting at 0
+    vec2 iResolution;            // offset 80  — surface size in logical pixels
+    int _appField0;              // offset 88  — consumer escape-hatch int (daemon-only)
+    int _appField1;              // offset 92  — consumer escape-hatch int (daemon-only)
+    vec4 iMouse;                 // offset 96  — cursor position in shader-local pixels
+                                 //              (.xy = position, (-1,-1) when off-region)
+    vec4 iDate;                  // offset 112 — year, month, day, seconds-since-midnight
+    vec4 customParams[8];        // offset 128 (128 bytes) — per-effect float/int/bool parameter slots
+    vec4 customColors[16];       // offset 256 (256 bytes) — per-effect color parameter slots
+    vec4 iChannelResolution[4];  // offset 512 (64 bytes)  — buffer texture sizes (multipass)
+    int iAudioSpectrumSize;      // offset 576 — audio spectrum bin count
+    int iFlipBufferY;            // offset 580 — always 1 (Y-flip); daemon-only
+    // implicit 8-byte std140 padding here — see layout note above.
+    vec4 iTextureResolution[4];  // offset 592 (64 bytes)  — user texture sizes (bindings 7-10)
+    float iTimeHi;               // offset 656 — wrap-offset counterpart of iTime;
+                                 //              always 0 on the animation path. Do NOT
+                                 //              read in animation shaders — exists only
+                                 //              to keep std140 layout aligned with the
+                                 //              overlay UBO so a single effect.frag
+                                 //              source compiles for either runtime.
+    int iIsReversed;             // offset 660 — 1 on reverse legs (close / hide /
+                                 //              unmaximize), 0 on forward legs.
+                                 //              Symmetric shaders ignore this; the
+                                 //              runtime ALSO flips iTime for reverse
+                                 //              legs so they auto-mirror. Asymmetric
+                                 //              shaders branch on this when the iTime
+                                 //              flip alone can't express the open-vs-
+                                 //              close difference (e.g. matrix's rain
+                                 //              direction + windowAlpha reveal).
+    // implicit 8-byte std140 pad here — `vec4 iSurfaceScreenPos` below
+    // has 16-byte alignment, so std140 forces the next field to offset
+    // 672. The C struct mirrors this with `_pad_before_iSurfaceScreenPos[2]`.
+    vec4 iSurfaceScreenPos;      // offset 672 (16 bytes) — .xy = surface origin
+                                 //              in logical-screen pixels;
+                                 //              .zw = (screenWidth, screenHeight).
+                                 //              Populated by SurfaceAnimator (daemon)
+                                 //              and paint_pipeline (kwin-effect) once
+                                 //              per leg attach + on every anchor /
+                                 //              window geometry change.
+    vec2 iAnchorSize;            // offset 688 (8 bytes) — anchor (card) pixel size
+                                 //              in logical pixels. Decoupled from
+                                 //              iResolution because Qt's QQuickItem
+                                 //              geometryChange auto-resets iResolution
+                                 //              to the item's bounds on any geometry
+                                 //              event, which clobbers an anchor-size
+                                 //              override under fboExtent=surface.
+                                 //              Vertex shaders that need the captured
+                                 //              card's pixel dimensions read this.
+    vec2 iAnchorPosInFbo;        // offset 696 (8 bytes). Anchor's top-left position
+                                 //              inside the shader item's FBO, in
+                                 //              logical pixels. Lets shaders compute
+                                 //              the anchor's UV region for vTexCoord
+                                 //              -> anchor-space remap (replaces the
+                                 //              old customParams[7].x ring-padding
+                                 //              fraction). Total struct size 704 bytes;
+                                 //              std140 trailing pad is now zero bytes
+                                 //              because the field fills it exactly.
+};
+
+layout(binding = 7) uniform sampler2D uTexture0;
+// User-declared textures — see AnimationShaderEffect::TextureSlot or
+// the runtime `uTexture<N>` parameter override. Bindings 8..10 match
+// the overlay shader convention (data/shaders/shared/textures.glsl)
+// so animation and overlay shaders speak the same sampler-name and
+// binding-point dialect.
+layout(binding = 8) uniform sampler2D uTexture1;
+layout(binding = 9) uniform sampler2D uTexture2;
+layout(binding = 10) uniform sampler2D uTexture3;
+
+#endif // PLASMAZONES_KWIN
+
+#endif // PLASMAZONES_ANIMATION_UNIFORMS_GLSL

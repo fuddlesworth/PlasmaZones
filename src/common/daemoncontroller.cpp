@@ -8,6 +8,7 @@
 #include <QTimer>
 #include "../../src/core/constants.h"
 #include "../../src/core/logging.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 
 namespace PlasmaZones {
 
@@ -22,7 +23,7 @@ DaemonController::DaemonController(QObject* parent)
 
     // Set up D-Bus service watcher for immediate daemon start/stop notification
     m_watcher = new QDBusServiceWatcher(
-        QString(DBus::ServiceName), QDBusConnection::sessionBus(),
+        QString(PhosphorProtocol::Service::Name), QDBusConnection::sessionBus(),
         QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration, this);
 
     connect(m_watcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
@@ -69,7 +70,7 @@ bool DaemonController::isRunning() const
     if (!iface) {
         return false;
     }
-    return iface->isServiceRegistered(QString(DBus::ServiceName));
+    return iface->isServiceRegistered(QString(PhosphorProtocol::Service::Name));
 }
 
 bool DaemonController::isEnabled() const

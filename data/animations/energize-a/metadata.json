@@ -1,0 +1,25 @@
+{
+    "id": "energize-a",
+    "name": "Energize A",
+    "description": "Star Trek transporter dematerialisation: window dissolves through a shimmering atom shower with a central heart-glow",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Particle",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "particleColor",
+            "name": "Particle Color",
+            "type": "color",
+            "default": "#FFC832"
+        },
+        {
+            "id": "particleScale",
+            "name": "Particle Scale",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.2,
+            "max": 5.0
+        }
+    ]
+}

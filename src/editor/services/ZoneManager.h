@@ -35,7 +35,7 @@ public:
     explicit ZoneManager(QObject* parent = nullptr);
     ~ZoneManager() override = default;
 
-    // Zone CRUD operations
+    // PhosphorZones::Zone CRUD operations
     QString addZone(qreal x, qreal y, qreal width, qreal height);
     void updateZoneGeometry(const QString& zoneId, qreal x, qreal y, qreal width, qreal height);
     /**
@@ -120,7 +120,7 @@ public:
 
     /**
      * @brief Get validated zone by ID with logging on failure
-     * @param zoneId Zone ID to look up
+     * @param zoneId PhosphorZones::Zone ID to look up
      * @return Optional containing zone data, or empty on failure (logs warning)
      */
     std::optional<QVariantMap> getValidatedZone(const QString& zoneId) const;
@@ -161,13 +161,13 @@ public:
 
     /**
      * @brief Sync fixed pixel geometry from relative coords using m_referenceScreenSize
-     * @param zone Zone QVariantMap to update (modified in place)
+     * @param zone PhosphorZones::Zone QVariantMap to update (modified in place)
      */
     void syncFixedFromRelative(QVariantMap& zone) const;
 
     /**
      * @brief Sync relative fallback from fixed pixel coords using m_referenceScreenSize
-     * @param zone Zone QVariantMap to update (modified in place)
+     * @param zone PhosphorZones::Zone QVariantMap to update (modified in place)
      */
     void syncRelativeFromFixed(QVariantMap& zone) const;
 
@@ -182,7 +182,7 @@ public:
      * @brief Adds a zone from complete QVariantMap (for paste operations)
      * @param zoneData Complete zone data including all properties (colors, appearance, etc.)
      * @param allowIdReuse If true, allows reusing existing zone IDs (for undo/redo operations)
-     * @return Zone ID of the created zone, or empty string on failure
+     * @return PhosphorZones::Zone ID of the created zone, or empty string on failure
      *
      * Allows pasting zones with all their properties intact. Validates
      * zone data and creates new zone with specified properties.
@@ -192,7 +192,7 @@ public:
 
     /**
      * @brief Get complete zone data by ID (for undo state and QML lookup)
-     * @param zoneId Zone ID to retrieve
+     * @param zoneId PhosphorZones::Zone ID to retrieve
      * @return Complete zone data as QVariantMap, or empty map if not found
      *
      * This method is Q_INVOKABLE for efficient O(1) lookup from QML,
@@ -202,7 +202,7 @@ public:
 
     /**
      * @brief Set complete zone data (for undo restoration)
-     * @param zoneId Zone ID to update
+     * @param zoneId PhosphorZones::Zone ID to update
      * @param zoneData Complete zone data including all properties
      * @note MUST emit zonesChanged() on success — callers (e.g. applyZoneGeometryMode)
      *       rely on this instead of emitting separately.

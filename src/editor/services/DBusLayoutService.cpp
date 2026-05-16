@@ -2,56 +2,35 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "DBusLayoutService.h"
-#include "../../core/constants.h"
-
-#include <QDBusConnection>
-#include <QDBusInterface>
-#include <QDBusReply>
-#include <QCoreApplication>
 #include "../../core/logging.h"
 
-using namespace PlasmaZones;
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+
+#include <QCoreApplication>
+#include <QDBusError>
+#include <QDBusMessage>
+
+namespace PlasmaZones {
+
+namespace {
+
+QDBusMessage callLayoutRegistry(const QString& method, const QVariantList& args = {})
+{
+    return PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::LayoutRegistry, method,
+                                                     args);
+}
+
+QString errorMessage(const QDBusMessage& reply)
+{
+    return reply.type() == QDBusMessage::ErrorMessage ? QDBusError(reply).message() : QString();
+}
+
+} // namespace
 
 DBusLayoutService::DBusLayoutService(QObject* parent)
     : ILayoutService(parent)
-    , m_serviceName(QString::fromLatin1(DBus::ServiceName))
-    , m_objectPath(QString::fromLatin1(DBus::ObjectPath))
-    , m_interfaceName(QString::fromLatin1(DBus::Interface::LayoutManager))
-    , m_interface(nullptr)
 {
-}
-
-DBusLayoutService::~DBusLayoutService()
-{
-    // m_interface has `this` as parent, so Qt handles deletion automatically
-    // Just null the pointer to prevent any accidental access
-    m_interface = nullptr;
-}
-
-QDBusInterface* DBusLayoutService::getInterface()
-{
-    // Reuse cached interface if valid (performance optimization)
-    if (m_interface && m_interface->isValid()) {
-        return m_interface;
-    }
-
-    // Clean up invalid interface
-    if (m_interface) {
-        m_interface->deleteLater();
-        m_interface = nullptr;
-    }
-
-    // Create new interface
-    m_interface = new QDBusInterface(m_serviceName, m_objectPath, m_interfaceName, QDBusConnection::sessionBus(), this);
-
-    if (!m_interface->isValid()) {
-        qCWarning(lcDbus) << "D-Bus connection: failed, service:" << m_serviceName << "path:" << m_objectPath;
-        m_interface->deleteLater();
-        m_interface = nullptr;
-        return nullptr;
-    }
-
-    return m_interface;
 }
 
 QString DBusLayoutService::loadLayout(const QString& layoutId)
@@ -61,23 +40,14 @@ QString DBusLayoutService::loadLayout(const QString& layoutId)
         return QString();
     }
 
-    QDBusInterface* layoutManager = getInterface();
-    if (!layoutManager) {
-        QString error = QCoreApplication::translate("DBusLayoutService", "Cannot connect to PlasmaZones daemon");
-        Q_EMIT errorOccurred(error);
+    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("getLayout"), {layoutId});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        const QString err = errorMessage(reply);
+        qCWarning(lcDbus) << "loadLayout: failed for" << layoutId << err;
+        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Failed to load layout: %1").arg(err));
         return QString();
     }
-
-    QDBusReply<QString> reply = layoutManager->call(QStringLiteral("getLayout"), layoutId);
-    if (!reply.isValid()) {
-        QString error =
-            QCoreApplication::translate("DBusLayoutService", "Failed to load layout: %1").arg(reply.error().message());
-        qCWarning(lcDbus) << "loadLayout: failed for" << layoutId << reply.error().message();
-        Q_EMIT errorOccurred(error);
-        return QString();
-    }
-
-    return reply.value();
+    return reply.arguments().constFirst().toString();
 }
 
 QString DBusLayoutService::createLayout(const QString& jsonLayout)
@@ -87,30 +57,20 @@ QString DBusLayoutService::createLayout(const QString& jsonLayout)
         return QString();
     }
 
-    QDBusInterface* layoutManager = getInterface();
-    if (!layoutManager) {
-        QString error = QCoreApplication::translate("DBusLayoutService", "Cannot connect to PlasmaZones daemon");
-        Q_EMIT errorOccurred(error);
+    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("createLayoutFromJson"), {jsonLayout});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        const QString err = errorMessage(reply);
+        qCWarning(lcDbus) << "createLayout: failed:" << err;
+        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Failed to create layout: %1").arg(err));
         return QString();
     }
-
-    QDBusReply<QString> reply = layoutManager->call(QStringLiteral("createLayoutFromJson"), jsonLayout);
-    if (!reply.isValid()) {
-        QString error = QCoreApplication::translate("DBusLayoutService", "Failed to create layout: %1")
-                            .arg(reply.error().message());
-        qCWarning(lcDbus) << error;
-        Q_EMIT errorOccurred(error);
-        return QString();
-    }
-
-    QString layoutId = reply.value();
+    const QString layoutId = reply.arguments().constFirst().toString();
     if (layoutId.isEmpty()) {
         QString error = QCoreApplication::translate("DBusLayoutService", "Created layout but received empty ID");
         qCWarning(lcDbus) << error;
         Q_EMIT errorOccurred(error);
         return QString();
     }
-
     return layoutId;
 }
 
@@ -121,22 +81,13 @@ bool DBusLayoutService::updateLayout(const QString& jsonLayout)
         return false;
     }
 
-    QDBusInterface* layoutManager = getInterface();
-    if (!layoutManager) {
-        QString error = QCoreApplication::translate("DBusLayoutService", "Cannot connect to PlasmaZones daemon");
-        Q_EMIT errorOccurred(error);
+    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("updateLayout"), {jsonLayout});
+    if (reply.type() != QDBusMessage::ReplyMessage) {
+        const QString err = errorMessage(reply);
+        qCWarning(lcDbus) << "updateLayout: failed:" << err;
+        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Failed to update layout: %1").arg(err));
         return false;
     }
-
-    QDBusReply<void> reply = layoutManager->call(QStringLiteral("updateLayout"), jsonLayout);
-    if (!reply.isValid()) {
-        QString error = QCoreApplication::translate("DBusLayoutService", "Failed to update layout: %1")
-                            .arg(reply.error().message());
-        qCWarning(lcDbus) << error;
-        Q_EMIT errorOccurred(error);
-        return false;
-    }
-
     return true;
 }
 
@@ -147,19 +98,12 @@ QString DBusLayoutService::getLayoutIdForScreen(const QString& screenName)
         return QString();
     }
 
-    QDBusInterface* layoutManager = getInterface();
-    if (!layoutManager) {
-        qCWarning(lcDbus) << "getLayoutIdForScreen: D-Bus connection failed, screen=" << screenName;
+    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("getLayoutForScreen"), {screenName});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        qCWarning(lcDbus) << "getLayoutForScreen: failed, screen=" << screenName << errorMessage(reply);
         return QString();
     }
-
-    QDBusReply<QString> reply = layoutManager->call(QStringLiteral("getLayoutForScreen"), screenName);
-    if (!reply.isValid()) {
-        qCWarning(lcDbus) << "getLayoutForScreen: failed, screen=" << screenName << reply.error().message();
-        return QString();
-    }
-
-    return reply.value();
+    return reply.arguments().constFirst().toString();
 }
 
 void DBusLayoutService::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
@@ -169,19 +113,13 @@ void DBusLayoutService::assignLayoutToScreen(const QString& screenName, const QS
         return;
     }
 
-    QDBusInterface* layoutManager = getInterface();
-    if (!layoutManager) {
-        QString error = QCoreApplication::translate("DBusLayoutService", "Cannot connect to PlasmaZones daemon");
-        Q_EMIT errorOccurred(error);
-        return;
-    }
-
-    QDBusReply<void> reply = layoutManager->call(QStringLiteral("assignLayoutToScreen"), screenName, layoutId);
-    if (!reply.isValid()) {
-        QString error = QCoreApplication::translate("DBusLayoutService", "Failed to assign layout to screen: %1")
-                            .arg(reply.error().message());
-        qCWarning(lcDbus) << "assignLayoutToScreen: failed for layout" << layoutId << "to screen" << screenName
-                          << reply.error().message();
-        Q_EMIT errorOccurred(error);
+    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("assignLayoutToScreen"), {screenName, layoutId});
+    if (reply.type() != QDBusMessage::ReplyMessage) {
+        const QString err = errorMessage(reply);
+        qCWarning(lcDbus) << "assignLayoutToScreen: failed for layout" << layoutId << "to screen" << screenName << err;
+        Q_EMIT errorOccurred(
+            QCoreApplication::translate("DBusLayoutService", "Failed to assign layout to screen: %1").arg(err));
     }
 }
+
+} // namespace PlasmaZones

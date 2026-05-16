@@ -1,0 +1,129 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// Shared noise primitives for animation shaders.
+//
+// Hosted here so the per-shader copies (previously duplicated verbatim
+// across apparition, aura-glow, doom, energize-a, energize-b, hexagon,
+// matrix, pixel-wipe) collapse to one definition. Including this from a
+// shader brings hash22 + simplex2D + simplex2DFractal + surfaceSeed
+// into scope.
+//
+// `simplex2D` is the standard 2D simplex-noise variant used across the
+// suite. It returns a value in roughly [0, 1] (the 0.5 + 0.5 * ... shift
+// at the end normalises the [-1, 1] simplex output). `simplex2DFractal`
+// is a 4-octave fBm wrapper using the canonical rotation matrix
+// mat2(1.6, 1.2, -1.2, 1.6) per octave.
+//
+// `hash22` is a 2-component hash using the Inigo Quilez "fract(sin(...))"
+// pattern; deterministic per input vec2, output in [0, 1).
+//
+// `surfaceSeed()` returns a pseudo-random scalar in [0, 1) derived from
+// `iSurfaceScreenPos.xy`. It substitutes for niri's `niri_random_seed`
+// uniform in ported transitions, with one important behavioural
+// difference: niri's seed is fresh per animation leg (each open or
+// close gets a new random), while ours is keyed only on the surface's
+// screen origin. So a window animated repeatedly at the same screen
+// position will replay the SAME seed every leg — repeated open/close
+// at one location is visually deterministic. Different surfaces (or
+// the same surface moved to a new position) get different seeds. This
+// trade-off keeps the function pure-uniform (no leg-attach plumbing
+// needed) at the cost of cross-leg variability; ports that need true
+// per-leg randomness should mix in a leg-unique input themselves.
+//
+// Requires `iSurfaceScreenPos` to be in scope, which means the caller
+// must include `<animation_uniforms.glsl>` BEFORE `<noise.glsl>`.
+// Both runtimes (daemon RHI and kwin-effect via KWin::GLShader) compile
+// shader sources at `#version 450 core`, where all floats are 32-bit
+// IEEE-754 by default — no precision-coupling concerns to track.
+
+#ifndef PHOSPHOR_NOISE_GLSL
+#define PHOSPHOR_NOISE_GLSL
+
+vec2 hash22(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+float simplex2D(vec2 p) {
+    const float K1 = 0.366025404;
+    const float K2 = 0.211324865;
+    vec2 i  = floor(p + (p.x + p.y) * K1);
+    vec2 a  = p - i + (i.x + i.y) * K2;
+    float m = step(a.y, a.x);
+    vec2 o  = vec2(m, 1.0 - m);
+    vec2 b  = a - o + K2;
+    vec2 c  = a - 1.0 + 2.0 * K2;
+    vec3 h  = max(0.5 - vec3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
+    vec3 n  = h * h * h * h *
+            vec3(dot(a, -1.0 + 2.0 * hash22(i + 0.0)),
+                 dot(b, -1.0 + 2.0 * hash22(i + o)),
+                 dot(c, -1.0 + 2.0 * hash22(i + 1.0)));
+    return 0.5 + 0.5 * dot(n, vec3(70.0));
+}
+
+float simplex2DFractal(vec2 p) {
+    mat2 m  = mat2(1.6, 1.2, -1.2, 1.6);
+    float f = 0.5000 * simplex2D(p);  p = m * p;
+    f      += 0.2500 * simplex2D(p);  p = m * p;
+    f      += 0.1250 * simplex2D(p);  p = m * p;
+    f      += 0.0625 * simplex2D(p);
+    return f;
+}
+
+float surfaceSeed() {
+    return fract(sin(dot(iSurfaceScreenPos.xy, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+// niri-style 1D hash from vec2: the classic `fract(sin(dot(p,
+// (127.1, 311.7))) * 43758.5453)` pattern. Used by the niri-derived
+// ports for per-cell / per-instance pseudo-random in [0, 1). Lifted
+// from the file-scope copies that previously lived in dissolve,
+// glitch, ink-splash, plasma-flow, smoke, snap, and soft-warp-fade
+// — all bit-equivalent except for sub-ULP variance in the
+// constant's last decimals (43758.5453 vs 43758.5453123, identical
+// in float32). Other niri ports keep their own hashes when the
+// constants are deliberately different (crosshatch, randomsquares
+// use (12.9898, 78.233); static-fade uses unique magic constants;
+// perlin pre-mods the dot product). Voronoi-shatter's vs_hash2
+// returns vec2 and stays local.
+float niriHash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+// niri-style bilinear value noise on niriHash (smooth-step interp
+// at integer lattice corners). Used by the 4 niri ports that need
+// procedural noise — plasma-flow, soft-warp-fade, ink-splash,
+// smoke. Identical body across all four; lifting deduplicates ~10
+// lines per shader. Perlin's perlin_noise stays local because it
+// uses an alternative bilinear formulation tied to perlin_random's
+// non-shareable hash.
+float niriNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(niriHash(i),                    niriHash(i + vec2(1.0, 0.0)), f.x),
+               mix(niriHash(i + vec2(0.0, 1.0)),   niriHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+// Boundary mask for shaders that displace sample UVs. Returns 1.0
+// when uv is fully within [0, 1] and fades to 0 over a 0.005-wide
+// band placed JUST OUTSIDE the [0, 1] boundary. uTexture0's
+// clamp-to-edge sampler would otherwise smear transparent
+// window-edge pixels (alpha = 0 from rounded corners / drop
+// shadows) into the rendered output, producing a grey-transparent
+// border around the warped silhouette.
+//
+// Bands sit OUTSIDE [0, 1] so identity sampling (sample_uv ∈
+// [0, 1]) gets mask = 1 everywhere — no inner-edge alpha clipping.
+// Used by morph, popin, fade, inkwell-drop, plasma-flow, ripple,
+// smoke, snap, soft-warp-fade, and glide. See PR #425 for the
+// inside-vs-outside-band fix history.
+float boundaryMask(vec2 uv) {
+    vec2 lo = smoothstep(vec2(-0.005), vec2(0.0),   uv);
+    vec2 hi = vec2(1.0) - smoothstep(vec2(1.0),     vec2(1.005), uv);
+    return lo.x * lo.y * hi.x * hi.y;
+}
+
+#endif

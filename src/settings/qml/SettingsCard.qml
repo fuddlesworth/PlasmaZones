@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Styled settings card with hover effects and optional collapse.
@@ -175,9 +176,9 @@ Item {
                         opacity: 0.5
 
                         Behavior on rotation {
-                            NumberAnimation {
-                                duration: 200
-                                easing.type: Easing.OutCubic
+                            PhosphorMotionAnimation {
+                                profile: "widget.hover"
+                                durationOverride: 200
                             }
 
                         }
@@ -221,20 +222,20 @@ Item {
             SequentialAnimation {
                 id: collapseAnim
 
-                NumberAnimation {
+                PhosphorMotionAnimation {
                     target: contentClip
-                    property: "opacity"
+                    properties: "opacity"
                     to: 0
-                    duration: 150
-                    easing.type: Easing.InCubic
+                    profile: "widget.fadeOut"
+                    durationOverride: 150
                 }
 
-                NumberAnimation {
+                PhosphorMotionAnimation {
                     target: contentClip
-                    property: "height"
+                    properties: "height"
                     to: 0
-                    duration: 200
-                    easing.type: Easing.OutCubic
+                    profile: "widget.accordionCollapse"
+                    durationOverride: 200
                 }
 
             }
@@ -242,20 +243,19 @@ Item {
             SequentialAnimation {
                 id: expandAnim
 
-                NumberAnimation {
+                PhosphorMotionAnimation {
                     target: contentClip
-                    property: "height"
+                    properties: "height"
                     to: contentColumn.implicitHeight
-                    duration: 200
-                    easing.type: Easing.OutCubic
+                    profile: "widget.accordionExpand"
+                    durationOverride: 200
                 }
 
-                NumberAnimation {
+                PhosphorMotionAnimation {
                     target: contentClip
-                    property: "opacity"
+                    properties: "opacity"
                     to: root.showToggle && !root.toggleChecked ? 0.5 : 1
-                    duration: 150
-                    easing.type: Easing.OutCubic
+                    profile: "widget.fadeIn"
                 }
 
                 ScriptAction {
@@ -272,9 +272,9 @@ Item {
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "widget.hover"
+                    durationOverride: 200
                 }
 
             }
@@ -282,9 +282,9 @@ Item {
         }
 
         Behavior on border.color {
-            ColorAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+            PhosphorMotionAnimation {
+                profile: "widget.hover"
+                durationOverride: 200
             }
 
         }
@@ -296,9 +296,9 @@ Item {
         y: hoverHandler.hovered && root.enabled ? -1 : 0
 
         Behavior on y {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+            PhosphorMotionAnimation {
+                profile: "widget.hover"
+                durationOverride: 200
             }
 
         }

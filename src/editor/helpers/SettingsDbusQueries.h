@@ -4,7 +4,9 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 #include <QVariant>
+#include <QVariantMap>
 
 namespace PlasmaZones {
 
@@ -15,6 +17,24 @@ namespace PlasmaZones {
  * Avoids duplicating the query pattern across EditorController methods.
  */
 namespace SettingsDbusQueries {
+
+/**
+ * @brief Batch-fetch multiple settings from the daemon in one D-Bus call.
+ * @param keys List of setting keys to fetch
+ * @return Map of key → value for keys the daemon recognized; unknown keys
+ *         are omitted and callers must fall back to their own defaults.
+ *
+ * Collapses N individual getSetting() round-trips into one — the primary
+ * reason this helper exists. Used on the editor startup hot path by
+ * refreshGlobalGapOverlaySettings() in gaps.cpp.
+ *
+ * If the daemon is a stale build without getSettings() the helper
+ * transparently falls back to per-key getSetting() calls so the editor
+ * still sees the user's real configured values. Returns an empty map if
+ * the daemon is unreachable or the call times out (500 ms cap); callers
+ * should treat missing keys and empty maps the same way (use defaults).
+ */
+QVariantMap querySettingsBatch(const QStringList& keys);
 
 /**
  * @brief Query an integer setting from the daemon via D-Bus
@@ -31,45 +51,12 @@ namespace SettingsDbusQueries {
 int queryIntSetting(const QString& settingKey, int defaultValue);
 
 /**
- * @brief Query the global zone padding setting
- * @return Zone padding in pixels, or default if unavailable
- */
-int queryGlobalZonePadding();
-
-/**
- * @brief Query the global outer gap setting
- * @return Outer gap in pixels, or default if unavailable
- */
-int queryGlobalOuterGap();
-
-/**
  * @brief Query a boolean setting from the daemon via D-Bus
  * @param settingKey The setting key to query
  * @param defaultValue Value to return if query fails
  * @return The setting value, or defaultValue if unavailable
  */
 bool queryBoolSetting(const QString& settingKey, bool defaultValue);
-
-/**
- * @brief Query the global per-side outer gap toggle
- * @return Whether per-side outer gaps are enabled globally
- */
-bool queryGlobalUsePerSideOuterGap();
-
-/**
- * @brief Query the global outer gap for a specific edge
- * @return Gap in pixels, or default if unavailable
- */
-int queryGlobalOuterGapTop();
-int queryGlobalOuterGapBottom();
-int queryGlobalOuterGapLeft();
-int queryGlobalOuterGapRight();
-
-/**
- * @brief Query the global overlay display mode
- * @return Overlay display mode (0=ZoneRectangles, 1=LayoutPreview), or 0 if unavailable
- */
-int queryGlobalOverlayDisplayMode();
 
 } // namespace SettingsDbusQueries
 

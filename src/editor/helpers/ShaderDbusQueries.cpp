@@ -2,53 +2,48 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "ShaderDbusQueries.h"
-#include "../../core/constants.h"
 #include "../../core/dbusvariantutils.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
 
-#include <QDBusConnection>
-#include <QDBusInterface>
-#include <QDBusReply>
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+
+#include <QDBusError>
+#include <QDBusMessage>
 
 namespace PlasmaZones {
 namespace ShaderDbusQueries {
 
 namespace {
 
-QDBusInterface createSettingsInterface()
+QDBusMessage callSettings(const QString& method, const QVariantList& args = {})
 {
-    return QDBusInterface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                          QString::fromLatin1(DBus::Interface::Settings), QDBusConnection::sessionBus());
+    return PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::Settings, method, args);
 }
 
-} // anonymous namespace
+QString errorMessage(const QDBusMessage& reply)
+{
+    return reply.type() == QDBusMessage::ErrorMessage ? QDBusError(reply).message() : QString();
+}
+
+} // namespace
 
 bool queryShadersEnabled()
 {
-    QDBusInterface settingsIface = createSettingsInterface();
-
-    if (!settingsIface.isValid()) {
-        qCWarning(lcDbus) << "Shader query: daemon D-Bus interface unavailable";
+    const QDBusMessage reply = callSettings(QStringLiteral("shadersEnabled"));
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        qCWarning(lcDbus) << "Shader query: shadersEnabled D-Bus call failed:" << errorMessage(reply);
         return false;
     }
-
-    QDBusReply<bool> reply = settingsIface.call(QStringLiteral("shadersEnabled"));
-    return reply.isValid() && reply.value();
+    return reply.arguments().constFirst().toBool();
 }
 
 QVariantList queryAvailableShaders()
 {
-    QDBusInterface settingsIface = createSettingsInterface();
-
-    if (!settingsIface.isValid()) {
-        qCWarning(lcDbus) << "Shader query: daemon D-Bus interface unavailable";
-        return QVariantList();
-    }
-
-    QDBusReply<QVariantList> reply = settingsIface.call(QStringLiteral("availableShaders"));
-    if (!reply.isValid()) {
-        qCWarning(lcDbus) << "D-Bus availableShaders call failed:" << reply.error().message();
+    const QDBusMessage reply = callSettings(QStringLiteral("availableShaders"));
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        qCWarning(lcDbus) << "D-Bus availableShaders call failed:" << errorMessage(reply);
         return QVariantList();
     }
 
@@ -56,7 +51,8 @@ QVariantList queryAvailableShaders()
 
     // D-Bus returns nested structures (QVariantMap, QVariantList) as QDBusArgument
     // Use DBusVariantUtils::convertDbusArgument to recursively convert them to proper Qt types
-    for (const QVariant& item : reply.value()) {
+    const QVariantList payload = reply.arguments().constFirst().toList();
+    for (const QVariant& item : payload) {
         QVariant converted = DBusVariantUtils::convertDbusArgument(item);
         if (converted.typeId() == QMetaType::QVariantMap) {
             QVariantMap map = converted.toMap();
@@ -81,32 +77,19 @@ QVariantMap queryShaderInfo(const QString& shaderId)
         return QVariantMap();
     }
 
-    QDBusInterface settingsIface = createSettingsInterface();
-
-    if (!settingsIface.isValid()) {
+    const QDBusMessage reply = callSettings(QStringLiteral("shaderInfo"), {shaderId});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        qCWarning(lcDbus) << "D-Bus shaderInfo call failed:" << errorMessage(reply);
         return QVariantMap();
     }
-
-    QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("shaderInfo"), shaderId);
-    if (reply.isValid()) {
-        // D-Bus may return nested structures as QDBusArgument - convert recursively
-        QVariant converted = DBusVariantUtils::convertDbusArgument(QVariant::fromValue(reply.value()));
-        return converted.toMap();
-    }
-
-    qCWarning(lcDbus) << "D-Bus shaderInfo call failed:" << reply.error().message();
-    return QVariantMap();
+    // D-Bus may return nested structures as QDBusArgument - convert recursively
+    QVariant converted = DBusVariantUtils::convertDbusArgument(reply.arguments().constFirst());
+    return converted.toMap();
 }
 
 QVariantMap queryTranslateShaderParams(const QString& shaderId, const QVariantMap& params)
 {
     if (ShaderRegistry::isNoneShader(shaderId)) {
-        return QVariantMap();
-    }
-
-    QDBusInterface settingsIface = createSettingsInterface();
-
-    if (!settingsIface.isValid()) {
         return QVariantMap();
     }
 
@@ -120,14 +103,13 @@ QVariantMap queryTranslateShaderParams(const QString& shaderId, const QVariantMa
         }
     }
 
-    QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("translateShaderParams"), shaderId, safeParams);
-    if (reply.isValid()) {
-        QVariant converted = DBusVariantUtils::convertDbusArgument(QVariant::fromValue(reply.value()));
-        return converted.toMap();
+    const QDBusMessage reply = callSettings(QStringLiteral("translateShaderParams"), {shaderId, safeParams});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        qCWarning(lcDbus) << "D-Bus translateShaderParams call failed:" << errorMessage(reply);
+        return QVariantMap();
     }
-
-    qCWarning(lcDbus) << "D-Bus translateShaderParams call failed:" << reply.error().message();
-    return QVariantMap();
+    QVariant converted = DBusVariantUtils::convertDbusArgument(reply.arguments().constFirst());
+    return converted.toMap();
 }
 
 } // namespace ShaderDbusQueries

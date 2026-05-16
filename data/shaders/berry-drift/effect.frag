@@ -84,8 +84,8 @@ vec2 blobCenter(int idx, float time, float drift) {
     float ry = 0.06 + hash11(seed + 25.0) * 0.12;
 
     return vec2(
-        homeX + rx * sin(time * freqX * drift + phaseX),
-        homeY + ry * cos(time * freqY * drift + phaseY)
+        homeX + rx * timeSin(freqX * drift, phaseX),
+        homeY + ry * timeCos(freqY * drift, phaseY)
     );
 }
 

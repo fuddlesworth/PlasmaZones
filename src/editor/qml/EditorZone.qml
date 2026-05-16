@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Window
 import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Editable zone component with drag and resize handles
@@ -493,8 +494,17 @@ Item {
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: 100
+                PhosphorMotionAnimation {
+                    // Direction is taken from the badge's visibility condition
+                    // so the leg is decided synchronously when the multi-
+                    // selection state flips, not from the animated `opacity`
+                    // (which interpolates during the Behavior).
+
+                    // The override shortcuts widget.fadeOut's seeded 400 ms
+                    // tail: a small confirmation badge needs snappy state
+                    // feedback in both directions, not a graceful exit.
+                    profile: root.isPartOfMultiSelection ? "widget.fadeIn" : "widget.fadeOut"
+                    durationOverride: Kirigami.Units.shortDuration
                 }
 
             }
@@ -504,9 +514,9 @@ Item {
         Behavior on color {
             enabled: root._animationsReady
 
-            ColorAnimation {
-                duration: Theme.animDuration
-                easing.type: Theme.animEasing
+            PhosphorMotionAnimation {
+                profile: "widget.dim"
+                durationOverride: Theme.animDuration
             }
 
         }
@@ -514,9 +524,9 @@ Item {
         Behavior on border.color {
             enabled: root._animationsReady
 
-            ColorAnimation {
-                duration: Theme.animDuration
-                easing.type: Theme.animEasing
+            PhosphorMotionAnimation {
+                profile: "widget.dim"
+                durationOverride: Theme.animDuration
             }
 
         }
@@ -638,9 +648,8 @@ Item {
     Behavior on visualX {
         enabled: root.animateFillPreview
 
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        PhosphorMotionAnimation {
+            profile: "editor.snapResize"
         }
 
     }
@@ -648,9 +657,8 @@ Item {
     Behavior on visualY {
         enabled: root.animateFillPreview
 
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        PhosphorMotionAnimation {
+            profile: "editor.snapResize"
         }
 
     }
@@ -658,9 +666,8 @@ Item {
     Behavior on visualWidth {
         enabled: root.animateFillPreview
 
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        PhosphorMotionAnimation {
+            profile: "editor.snapResize"
         }
 
     }
@@ -668,9 +675,8 @@ Item {
     Behavior on visualHeight {
         enabled: root.animateFillPreview
 
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        PhosphorMotionAnimation {
+            profile: "editor.snapResize"
         }
 
     }

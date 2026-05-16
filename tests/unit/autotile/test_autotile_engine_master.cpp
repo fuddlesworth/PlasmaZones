@@ -5,10 +5,11 @@
 #include <QCoreApplication>
 #include <QSignalSpy>
 
-#include "autotile/AutotileEngine.h"
-#include "autotile/AutotileConfig.h"
-#include "autotile/TilingState.h"
-#include "autotile/AlgorithmRegistry.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include "../helpers/AutotileTestHelpers.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "core/constants.h"
 
 #include "../helpers/ScriptedAlgoTestSetup.h"
@@ -18,6 +19,7 @@
 #include <QJsonObject>
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief AutotileEngine tests for master ratio/count adjustments,
@@ -44,7 +46,7 @@ private Q_SLOTS:
 
     void testIncreaseMasterRatio_updatesFocusedScreenOnly()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         const QString screen2 = QStringLiteral("Screen2");
@@ -55,8 +57,8 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win2"), screen2, 0, 0);
         QCoreApplication::processEvents(); // flush deferred retile
 
-        TilingState* state1 = engine.stateForScreen(screen1);
-        TilingState* state2 = engine.stateForScreen(screen2);
+        PhosphorTiles::TilingState* state1 = engine.tilingStateForScreen(screen1);
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(screen2);
 
         const qreal initial1 = state1->splitRatio();
         const qreal initial2 = state2->splitRatio();
@@ -73,7 +75,7 @@ private Q_SLOTS:
 
     void testDecreaseMasterRatio_updatesFocusedScreenOnly()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         const QString screen2 = QStringLiteral("Screen2");
@@ -84,8 +86,8 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win2"), screen2, 0, 0);
         QCoreApplication::processEvents(); // flush deferred retile
 
-        TilingState* state1 = engine.stateForScreen(screen1);
-        TilingState* state2 = engine.stateForScreen(screen2);
+        PhosphorTiles::TilingState* state1 = engine.tilingStateForScreen(screen1);
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(screen2);
 
         const qreal initial1 = state1->splitRatio();
         const qreal initial2 = state2->splitRatio();
@@ -106,7 +108,7 @@ private Q_SLOTS:
 
     void testIncreaseMasterCount_updatesFocusedScreenOnly()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         const QString screen2 = QStringLiteral("Screen2");
@@ -119,8 +121,8 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win5"), screen2, 0, 0);
         QCoreApplication::processEvents();
 
-        TilingState* state1 = engine.stateForScreen(screen1);
-        TilingState* state2 = engine.stateForScreen(screen2);
+        PhosphorTiles::TilingState* state1 = engine.tilingStateForScreen(screen1);
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(screen2);
         const int initial1 = state1->masterCount();
         const int initial2 = state2->masterCount();
 
@@ -133,7 +135,7 @@ private Q_SLOTS:
 
     void testDecreaseMasterCount_updatesFocusedScreenOnly()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         const QString screen2 = QStringLiteral("Screen2");
@@ -145,8 +147,8 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win4"), screen2, 0, 0);
         QCoreApplication::processEvents();
 
-        TilingState* state1 = engine.stateForScreen(screen1);
-        TilingState* state2 = engine.stateForScreen(screen2);
+        PhosphorTiles::TilingState* state1 = engine.tilingStateForScreen(screen1);
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(screen2);
         state1->setMasterCount(2);
         state2->setMasterCount(2);
 
@@ -159,7 +161,7 @@ private Q_SLOTS:
 
     void testDecreaseMasterCount_doesNotGoBelowOne()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         engine.setAutotileScreens({screen1});
@@ -167,7 +169,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen1);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen1);
         QCOMPARE(state->masterCount(), 1);
 
         engine.windowFocused(QStringLiteral("win1"), screen1);
@@ -182,7 +184,7 @@ private Q_SLOTS:
 
     void testIncreaseMasterRatio_withPerScreenOverride_updatesOverrideNotGlobal()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         engine.setAutotileScreens({screen1});
@@ -195,7 +197,7 @@ private Q_SLOTS:
         overrides[QStringLiteral("SplitRatio")] = 0.5;
         engine.applyPerScreenConfig(screen1, overrides);
 
-        TilingState* state = engine.stateForScreen(screen1);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen1);
         state->setSplitRatio(0.5);
         const qreal globalBefore = engine.config()->splitRatio;
 
@@ -213,7 +215,7 @@ private Q_SLOTS:
 
     void testDecreaseMasterRatio_withPerScreenOverride_updatesOverrideNotGlobal()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         engine.setAutotileScreens({screen1});
@@ -226,7 +228,7 @@ private Q_SLOTS:
         overrides[QStringLiteral("SplitRatio")] = 0.5;
         engine.applyPerScreenConfig(screen1, overrides);
 
-        TilingState* state = engine.stateForScreen(screen1);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen1);
         state->setSplitRatio(0.5);
         const qreal globalBefore = engine.config()->splitRatio;
 
@@ -244,7 +246,7 @@ private Q_SLOTS:
 
     void testIncreaseMasterCount_withPerScreenOverride_updatesOverrideNotGlobal()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         engine.setAutotileScreens({screen1});
@@ -263,7 +265,7 @@ private Q_SLOTS:
         engine.windowFocused(QStringLiteral("win1"), screen1);
         engine.increaseMasterCount();
 
-        TilingState* state = engine.stateForScreen(screen1);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen1);
         QCOMPARE(state->masterCount(), 2);
         // Global config unchanged
         QCOMPARE(engine.config()->masterCount, globalBefore);
@@ -278,7 +280,7 @@ private Q_SLOTS:
 
     void testMonocle_tileRequestIncludesMonocleFlag()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
 
         QSet<QString> screens{screenName};
@@ -292,7 +294,7 @@ private Q_SLOTS:
 
         QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
         const QRect fullArea(10, 42, 1900, 1038);
         state->setCalculatedZones({fullArea, fullArea});
         engine.retile(screenName);
@@ -310,7 +312,7 @@ private Q_SLOTS:
 
     void testMonocle_nonMonocleTileRequestOmitsFlag()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
 
         QSet<QString> screens{screenName};
@@ -323,7 +325,7 @@ private Q_SLOTS:
 
         QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
         state->setCalculatedZones({QRect(10, 10, 950, 1060), QRect(960, 10, 950, 1060)});
         engine.retile(screenName);
 
@@ -338,13 +340,13 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Zone-ordered window transition tests
+    // PhosphorZones::Zone-ordered window transition tests
     // =========================================================================
 
     void testSetInitialWindowOrder_preSeededInsertion()
     {
         const QString screenName = QStringLiteral("DP-1");
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
 
@@ -356,7 +358,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-B"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
         QVERIFY(state);
         QStringList tiledWindows = state->tiledWindows();
         QCOMPARE(tiledWindows.size(), 3);
@@ -368,7 +370,7 @@ private Q_SLOTS:
     void testSetInitialWindowOrder_ignoresWhenStateHasWindows()
     {
         const QString screenName = QStringLiteral("DP-1");
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
 
@@ -381,7 +383,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-A"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
         QVERIFY(state);
         QStringList tiledWindows = state->tiledWindows();
         QCOMPARE(tiledWindows.at(0), QStringLiteral("win-existing"));
@@ -390,7 +392,7 @@ private Q_SLOTS:
     void testSetInitialWindowOrder_unknownWindowsFallThrough()
     {
         const QString screenName = QStringLiteral("DP-1");
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
 
@@ -402,7 +404,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-B"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
         QVERIFY(state);
         QStringList tiledWindows = state->tiledWindows();
         QCOMPARE(tiledWindows.size(), 3);
@@ -414,7 +416,7 @@ private Q_SLOTS:
     void testTiledWindowOrder_returnsOrderedList()
     {
         const QString screenName = QStringLiteral("DP-1");
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
 
@@ -432,7 +434,7 @@ private Q_SLOTS:
 
     void testTiledWindowOrder_emptyForUnknownScreen()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QStringList order = engine.tiledWindowOrder(QStringLiteral("nonexistent"));
         QVERIFY(order.isEmpty());
     }
@@ -440,7 +442,7 @@ private Q_SLOTS:
     void testRemoveWindow_cleansPendingInitialOrders()
     {
         const QString screenName = QStringLiteral("DP-1");
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
 
@@ -454,7 +456,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-C"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
         QVERIFY(state);
         QStringList tiledWindows = state->tiledWindows();
         QCOMPARE(tiledWindows.size(), 2);
@@ -465,14 +467,14 @@ private Q_SLOTS:
     void testSetInitialWindowOrder_guardChecksAllWindows()
     {
         const QString screenName = QStringLiteral("DP-1");
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
 
         engine.windowOpened(QStringLiteral("win-floating"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
         QVERIFY(state);
         state->setFloating(QStringLiteral("win-floating"), true);
         QVERIFY(state->tiledWindows().isEmpty());

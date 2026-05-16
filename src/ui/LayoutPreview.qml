@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 /**
@@ -20,6 +21,9 @@ Rectangle {
     property var zones: [] // Array of zone objects with relativeGeometry
     property int category: 0 // 0=Manual (matches LayoutCategory in C++)
     property bool autoAssign: false
+    // Global "Auto-assign for all layouts" master toggle (#370) — passed by the
+    // parent so the badge shows effective rather than per-layout state.
+    property bool globalAutoAssign: false
     // Autotile algorithm metadata
     property bool showMasterDot: false
     property bool producesOverlappingZones: false
@@ -80,7 +84,7 @@ Rectangle {
 
         readonly property int standardBorderWidth: Kirigami.Units.smallSpacing / 2 // 2px
         readonly property int thinBorderWidth: 1
-        readonly property int animationDuration: 150 // ms
+        readonly property int animationDuration: Kirigami.Units.shortDuration
     }
 
     // Use shared ZonePreview component for consistent zone rendering
@@ -143,6 +147,7 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 category: root.category
                 autoAssign: root.autoAssign === true
+                globalAutoAssign: root.globalAutoAssign
             }
 
             Label {
@@ -184,8 +189,9 @@ Rectangle {
         }
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: constants.animationDuration
+            PhosphorMotionAnimation {
+                profile: "widget.zoneHighlight"
+                durationOverride: constants.animationDuration
             }
 
         }
@@ -250,24 +256,28 @@ Rectangle {
 
     // Color animation
     Behavior on color {
-        ColorAnimation {
-            duration: constants.animationDuration
+        PhosphorMotionAnimation {
+            profile: "widget.zoneHighlight"
+            durationOverride: constants.animationDuration
         }
 
     }
 
-    // Border animation
+    // Border animation — half-duration profile for snappier border feedback
+    // (matches the original `duration: animationDuration / 2` pattern).
     Behavior on border.width {
-        NumberAnimation {
-            duration: constants.animationDuration / 2
+        PhosphorMotionAnimation {
+            profile: "widget.zoneHighlight.border"
+            durationOverride: Math.round(constants.animationDuration / 2)
         }
 
     }
 
+    // Scale uses widget.zoneHighlight.pop for the OutBack overshoot=1.20 feel.
     Behavior on scale {
-        NumberAnimation {
-            duration: constants.animationDuration
-            easing.type: Easing.OutBack
+        PhosphorMotionAnimation {
+            profile: "widget.zoneHighlight.pop"
+            durationOverride: constants.animationDuration
         }
 
     }

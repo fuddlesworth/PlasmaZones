@@ -5,8 +5,18 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 ApplicationWindow {
+    // Cached breadcrumb segment list for the current navigation
+    // state. Rendered as `[top-parent] › [intermediate] › … ›
+    // [current page]` with every non-leaf segment navigable; current-
+    // mode segment is not clickable since it's where the user already
+    // is. For 2-level navigation the chain has two entries (parent +
+    // page); for the 3-level Animations layout it has three (top-parent
+    // + intermediate-parent + page). In main mode the chain collapses
+    // to just the current page name.
+
     id: window
 
     // Expose the layout context menu so Loader-loaded pages can connect to its signals
@@ -19,7 +29,12 @@ ApplicationWindow {
     // Close-without-save guard
     property bool _closeConfirmed: false
     // ── Drill-down sidebar state ─────────────────────────────────────
-    // "main" = top-level list; otherwise the parent name (e.g. "snapping")
+    // "main" = top-level list; any other value names the currently-
+    // displayed parent. Top-level parents (e.g. "snapping", "tiling",
+    // "animations") and mid-level virtual parents registered in
+    // `_parentMode` (e.g. "animations-surfaces", "animations-library")
+    // are both valid values; `_drillOut` walks the lineage one level
+    // at a time using `_parentMode`.
     property string _sidebarMode: "main"
     // Main sidebar items
     readonly property var _mainItems: [{
@@ -29,11 +44,17 @@ ApplicationWindow {
         "hasChildren": false,
         "hasDividerAfter": true
     }, {
+        "name": "virtualscreens",
+        "label": i18n("Virtual Screens"),
+        "iconName": "virtual-desktops",
+        "hasChildren": false,
+        "hasDividerAfter": false
+    }, {
         "name": "layouts",
         "label": i18n("Layouts"),
         "iconName": "view-grid",
         "hasChildren": false,
-        "hasDividerAfter": false
+        "hasDividerAfter": true
     }, {
         "name": "snapping",
         "label": i18n("Snapping"),
@@ -47,11 +68,17 @@ ApplicationWindow {
         "hasChildren": true,
         "hasDividerAfter": true
     }, {
+        "name": "animations",
+        "label": i18n("Animations"),
+        "iconName": "media-playback-start",
+        "hasChildren": true,
+        "hasDividerAfter": true
+    }, {
         "name": "exclusions",
         "label": i18n("Exclusions"),
         "iconName": "dialog-cancel",
         "hasChildren": false,
-        "hasDividerAfter": false
+        "hasDividerAfter": true
     }, {
         "name": "editor",
         "label": i18n("Editor"),
@@ -80,7 +107,11 @@ ApplicationWindow {
         }, {
             "name": "snapping-effects",
             "label": i18n("Effects"),
-            "iconName": "preferences-desktop-effects",
+            "iconName": "preferences-desktop-effects"
+        }, {
+            "name": "snapping-shaders",
+            "label": i18n("Shaders"),
+            "iconName": "preferences-desktop-display",
             "hasDividerAfter": true
         }, {
             "name": "snapping-behavior",
@@ -134,16 +165,84 @@ ApplicationWindow {
             "name": "tiling-shortcuts",
             "label": i18n("Quick Shortcuts"),
             "iconName": "bookmark"
+        }],
+        "animations": [{
+            "name": "animations-general",
+            "label": i18n("General"),
+            "iconName": "configure"
+        }, {
+            "name": "animations-app-rules",
+            "label": i18n("App Rules"),
+            "iconName": "application-x-executable",
+            "hasDividerAfter": true
+        }, {
+            "name": "animations-surfaces",
+            "label": i18n("Surfaces"),
+            "iconName": "preferences-desktop-multimedia",
+            "hasChildren": true
+        }, {
+            "name": "animations-library",
+            "label": i18n("Library"),
+            "iconName": "folder-open",
+            "hasChildren": true
+        }],
+        "animations-surfaces": [{
+            "name": "animations-windows",
+            "label": i18n("Windows"),
+            "iconName": "window-new"
+        }, {
+            "name": "animations-osds",
+            "label": i18n("OSDs"),
+            "iconName": "dialog-information"
+        }, {
+            "name": "animations-overlays",
+            "label": i18n("Overlays"),
+            "iconName": "view-presentation"
+        }, {
+            "name": "animations-side-panels",
+            "label": i18n("Side Panels"),
+            "iconName": "sidebar-collapse-symbolic"
+        }, {
+            "name": "animations-widgets",
+            "label": i18n("Widgets"),
+            "iconName": "preferences-desktop-theme"
+        }, {
+            "name": "animations-editor",
+            "label": i18n("Layout Editor"),
+            "iconName": "document-edit"
+        }],
+        "animations-library": [{
+            "name": "animations-presets",
+            "label": i18n("Presets"),
+            "iconName": "bookmarks"
+        }, {
+            "name": "animations-motionsets",
+            "label": i18n("Motion Sets"),
+            "iconName": "color-palette"
+        }, {
+            "name": "animations-shaders",
+            "label": i18n("Shaders"),
+            "iconName": "preferences-desktop-display"
         }]
+    })
+    // Map from sub-mode → its parent mode. Modes not listed here drill
+    // back to "main". Lets `_drillOut` pop one level instead of always
+    // returning to the top, so `animations-surfaces` → `animations` →
+    // `main` works as three discrete steps.
+    readonly property var _parentMode: ({
+        "animations-surfaces": "animations",
+        "animations-library": "animations"
     })
     // Page component map -- loaded on demand by Loader
     readonly property var _pageComponents: ({
         "overview": "MonitorStatePage.qml",
+        "virtualscreens": "VirtualScreensPage.qml",
         "layouts": "LayoutsPage.qml",
         "snapping-appearance": "SnappingAppearancePage.qml",
         "snapping-behavior": "SnappingBehaviorPage.qml",
         "snapping-zoneselector": "SnappingZoneSelectorPage.qml",
         "snapping-effects": "SnappingEffectsPage.qml",
+        "snapping-shaders": "SnappingShadersPage.qml",
         "tiling-appearance": "TilingAppearancePage.qml",
         "tiling-behavior": "TilingBehaviorPage.qml",
         "tiling-algorithm": "TilingAlgorithmPage.qml",
@@ -157,7 +256,18 @@ ApplicationWindow {
         "exclusions": "ExclusionsPage.qml",
         "editor": "EditorPage.qml",
         "general": "GeneralPage.qml",
-        "about": "AboutPage.qml"
+        "about": "AboutPage.qml",
+        "animations-general": "AnimationsGeneralPage.qml",
+        "animations-windows": "AnimationsWindowsPage.qml",
+        "animations-app-rules": "AnimationsAppRulesPage.qml",
+        "animations-editor": "AnimationsEditorPage.qml",
+        "animations-osds": "AnimationsOsdsPage.qml",
+        "animations-overlays": "AnimationsOverlaysPage.qml",
+        "animations-side-panels": "AnimationsSidePanelsPage.qml",
+        "animations-widgets": "AnimationsWidgetsPage.qml",
+        "animations-presets": "AnimationsPresetsPage.qml",
+        "animations-motionsets": "AnimationsMotionSetsPage.qml",
+        "animations-shaders": "AnimationsShadersPage.qml"
     })
     // Shared aspect ratio labels (used in context menu + LayoutsPage section headers)
     readonly property var aspectRatioLabels: ({
@@ -167,6 +277,104 @@ ApplicationWindow {
         "super-ultrawide": i18n("Super-Ultrawide (32:9)"),
         "portrait": i18n("Portrait (9:16)")
     })
+    // Flat name → label map computed once from `_mainItems` and
+    // every `_childItems` bucket. Drives `_modeLabel` and the
+    // breadcrumb so resolving a label is a single hash lookup
+    // instead of nested-loop scans on every binding re-evaluation.
+    // Property is `readonly` so QML caches the value at startup;
+    // both source maps are also `readonly`, so the index never goes
+    // stale.
+    readonly property var _labelByName: {
+        let out = ({
+        });
+        for (let i = 0; i < _mainItems.length; i++) {
+            out[_mainItems[i].name] = _mainItems[i].label;
+        }
+        const buckets = Object.keys(_childItems);
+        for (let b = 0; b < buckets.length; b++) {
+            const entries = _childItems[buckets[b]];
+            for (let e = 0; e < entries.length; e++) {
+                out[entries[e].name] = entries[e].label;
+            }
+        }
+        return out;
+    }
+    // Hard depth ceiling for any walk through `_parentMode` /
+    // `_childItems` — guards against a malformed map (cyclic lineage,
+    // self-referencing parent) producing an infinite loop. Today's
+    // tree never exceeds 2 hops; 16 is an order of magnitude headroom
+    // for any plausible future structure.
+    readonly property int _maxNavDepth: 16
+    // Cached as a `readonly property var` so the Repeater's `model`
+    // and per-delegate separator-visibility binding share a single
+    // computation. Reading `_sidebarMode` and `activePage` inside
+    // the IIFE registers the binding's reactivity dependencies.
+    readonly property var _breadcrumbModel: {
+        if (_sidebarMode === "main") {
+            const activeName = settingsController.activePage;
+            return [{
+                "name": activeName,
+                "label": _modeLabel(activeName),
+                "clickable": false
+            }];
+        }
+        // Walk the parent chain top-down with an explicit depth
+        // bound; `_parentMode[mode]` returning undefined terminates
+        // the walk normally, the bound is belt-and-braces against a
+        // future cyclic map.
+        let chain = [];
+        let mode = _sidebarMode;
+        for (let depth = 0; depth < _maxNavDepth && mode !== undefined; depth++) {
+            chain.unshift(mode);
+            mode = _parentMode[mode];
+        }
+        let segments = [];
+        for (let i = 0; i < chain.length; i++) {
+            segments.push({
+                "name": chain[i],
+                "label": _modeLabel(chain[i]),
+                "clickable": chain[i] !== _sidebarMode
+            });
+        }
+        segments.push({
+            "name": settingsController.activePage,
+            "label": _subPageLabel(settingsController.activePage),
+            "clickable": false
+        });
+        return segments;
+    }
+
+    // Walk @p parentName's descendants and return every leaf whose label
+    // matches @p searchText. Nested labels are prefixed with their
+    // immediate parent ("Surfaces / Windows") so a search hit is
+    // unambiguous when multiple intermediate categories live under the
+    // same grandparent. When an intermediate parent's OWN label matches
+    // the query (e.g. searching "surfaces"), every leaf under it is
+    // included unfiltered — otherwise typing a category name would yield
+    // empty results because the parent itself is a virtual non-leaf.
+    function _collectMatchingDescendants(parentName, searchText) {
+        let out = [];
+        let children = _childItems[parentName] || [];
+        for (let j = 0; j < children.length; j++) {
+            let child = children[j];
+            if (child.hasChildren) {
+                let intermediateMatches = child.label.toLowerCase().indexOf(searchText) >= 0;
+                let nestedQuery = intermediateMatches ? "" : searchText;
+                let nested = _collectMatchingDescendants(child.name, nestedQuery);
+                for (let k = 0; k < nested.length; k++) {
+                    out.push({
+                        "name": nested[k].name,
+                        "label": child.label + " / " + nested[k].label,
+                        "iconName": nested[k].iconName,
+                        "hasDividerAfter": false
+                    });
+                }
+            } else if (searchText === "" || child.label.toLowerCase().indexOf(searchText) >= 0) {
+                out.push(child);
+            }
+        }
+        return out;
+    }
 
     function _rebuildSidebar() {
         sidebarModel.clear();
@@ -175,17 +383,12 @@ ApplicationWindow {
             for (let i = 0; i < _mainItems.length; i++) {
                 let item = _mainItems[i];
                 if (searchText) {
-                    // Search both item label and children labels
+                    // Search the item label and walk every descendant
+                    // (children + grand-children) so a Surfaces leaf
+                    // like "Windows" still surfaces under the
+                    // top-level Animations entry.
                     let itemMatches = item.label.toLowerCase().indexOf(searchText) >= 0;
-                    let matchingChildren = [];
-                    if (item.hasChildren) {
-                        let children = _childItems[item.name] || [];
-                        for (let j = 0; j < children.length; j++) {
-                            if (children[j].label.toLowerCase().indexOf(searchText) >= 0)
-                                matchingChildren.push(children[j]);
-
-                        }
-                    }
+                    let matchingChildren = item.hasChildren ? _collectMatchingDescendants(item.name, searchText) : [];
                     if (!itemMatches && matchingChildren.length === 0)
                         continue;
 
@@ -204,12 +407,13 @@ ApplicationWindow {
                         let childDivider = matchingChildren[j].hasDividerAfter || false;
                         sidebarModel.append({
                             "name": matchingChildren[j].name,
-                            "label": "  " + matchingChildren[j].label,
+                            "label": matchingChildren[j].label,
                             "iconName": matchingChildren[j].iconName,
                             "hasChildren": false,
                             "isBackButton": false,
                             "hasDividerAfter": false,
-                            "isDivider": false
+                            "isDivider": false,
+                            "isSearchChild": true
                         });
                         if (childDivider)
                             sidebarModel.append({
@@ -247,14 +451,16 @@ ApplicationWindow {
 
             }
         } else {
-            // Find parent label
-            let parentLabel = _sidebarMode;
-            for (let i = 0; i < _mainItems.length; i++) {
-                if (_mainItems[i].name === _sidebarMode) {
-                    parentLabel = _mainItems[i].label;
-                    break;
-                }
-            }
+            // Back-row label is the CURRENT mode's display label
+            // (so a sub-sidebar "Surfaces" reads "← Surfaces"). The
+            // mode may live in `_mainItems` (top-level parents like
+            // "animations") or inside another `_childItems` entry
+            // (intermediate parents like "animations-surfaces").
+            // Search-mode entries that have nested matches inlined
+            // below have their drill-in disabled at append time so
+            // the user clicks the leaves directly, mirroring the
+            // main-mode search pattern.
+            let parentLabel = _modeLabel(_sidebarMode);
             // Back button row (always visible)
             sidebarModel.append({
                 "name": "__back__",
@@ -268,15 +474,49 @@ ApplicationWindow {
             // Child items
             let children = _childItems[_sidebarMode] || [];
             for (let i = 0; i < children.length; i++) {
-                if (searchText && children[i].label.toLowerCase().indexOf(searchText) < 0)
-                    continue;
+                let child = children[i];
+                let childDivider = child.hasDividerAfter || false;
+                if (searchText) {
+                    // Search inside a sub-sidebar matches the entry's
+                    // own label OR (when it's an intermediate parent)
+                    // any grand-child label. Without the recursion,
+                    // searching "windows" from inside the Animations
+                    // sub-sidebar would silently miss it because
+                    // Windows lives one level deeper under Surfaces —
+                    // a regression compared with the prior flat layout.
+                    let ownMatch = child.label.toLowerCase().indexOf(searchText) >= 0;
+                    let nestedMatches = child.hasChildren ? _collectMatchingDescendants(child.name, searchText) : [];
+                    if (!ownMatch && nestedMatches.length === 0)
+                        continue;
 
-                let childDivider = children[i].hasDividerAfter || false;
+                    sidebarModel.append({
+                        "name": child.name,
+                        "label": child.label,
+                        "iconName": child.iconName,
+                        "hasChildren": nestedMatches.length === 0 && (child.hasChildren || false),
+                        "isBackButton": false,
+                        "hasDividerAfter": false,
+                        "isDivider": false
+                    });
+                    for (let j = 0; j < nestedMatches.length; j++) {
+                        sidebarModel.append({
+                            "name": nestedMatches[j].name,
+                            "label": nestedMatches[j].label,
+                            "iconName": nestedMatches[j].iconName,
+                            "hasChildren": false,
+                            "isBackButton": false,
+                            "hasDividerAfter": false,
+                            "isDivider": false,
+                            "isSearchChild": true
+                        });
+                    }
+                    continue;
+                }
                 sidebarModel.append({
-                    "name": children[i].name,
-                    "label": children[i].label,
-                    "iconName": children[i].iconName,
-                    "hasChildren": false,
+                    "name": child.name,
+                    "label": child.label,
+                    "iconName": child.iconName,
+                    "hasChildren": child.hasChildren || false,
                     "isBackButton": false,
                     "hasDividerAfter": false,
                     "isDivider": false
@@ -296,46 +536,80 @@ ApplicationWindow {
         }
     }
 
-    // Helper: find the parent label for the current sidebar mode
-    function _parentLabel() {
-        for (let i = 0; i < _mainItems.length; i++) {
-            if (_mainItems[i].name === _sidebarMode)
-                return _mainItems[i].label;
-
-        }
-        return _sidebarMode;
+    // Returns the display label for any node by name. Falls back to
+    // the raw name so a missing entry shows up visibly in the UI
+    // rather than silently collapsing to an empty string.
+    function _modeLabel(name) {
+        const label = _labelByName[name];
+        return label !== undefined ? label : name;
     }
 
-    // Helper: find a subpage label by name
+    // Navigate to the breadcrumb segment named @p name. Top-level
+    // modes pop to main with that parent name as `activePage` (so the
+    // sidebar highlights it); sub-modes pop directly into that
+    // intermediate sub-sidebar. Both go through the same fade
+    // transition as a back-button click for visual continuity.
+    function _navigateToBreadcrumbSegment(name) {
+        for (let i = 0; i < _mainItems.length; i++) {
+            if (_mainItems[i].name === name) {
+                sidebarTransition.pendingMode = "main";
+                sidebarTransition.pendingPage = name;
+                sidebarTransition.restart();
+                return ;
+            }
+        }
+        sidebarTransition.pendingMode = name;
+        sidebarTransition.pendingPage = "";
+        sidebarTransition.restart();
+    }
+
+    // Helper: find a subpage label by name. Searches the current
+    // mode's child list first (fast path) then falls back to the
+    // whole tree so a stale `activePage` from a different mode still
+    // resolves to a readable label in the breadcrumb.
     function _subPageLabel(pageName) {
         let children = _childItems[_sidebarMode];
-        if (!children)
-            return pageName;
+        if (children) {
+            for (let i = 0; i < children.length; i++) {
+                if (children[i].name === pageName)
+                    return children[i].label;
 
+            }
+        }
+        return _modeLabel(pageName);
+    }
+
+    // Drill into a parent category and select the first reachable
+    // leaf (recursing through intermediate categories so e.g.
+    // drilling into "animations" lands on "General", and a future
+    // bucket whose immediate children are ALL `hasChildren` still
+    // resolves a real leaf instead of showing the LayoutsPage
+    // fallback). The optional @p depth parameter is incremented on
+    // each recursive call and short-circuits at `_maxNavDepth` to
+    // guard against a cyclic `_childItems` map producing a stack
+    // overflow.
+    function _firstLeafOf(parentName, depth) {
+        const next = depth === undefined ? 0 : depth;
+        if (next >= _maxNavDepth)
+            return "";
+
+        let children = _childItems[parentName] || [];
         for (let i = 0; i < children.length; i++) {
-            if (children[i].name === pageName)
-                return children[i].label;
+            if (!children[i].hasChildren)
+                return children[i].name;
+
+            const nested = _firstLeafOf(children[i].name, next + 1);
+            if (nested.length > 0)
+                return nested;
 
         }
-        return pageName;
+        return "";
     }
 
-    // Helper: find a main-item label by name
-    function _mainItemLabel(pageName) {
-        for (let i = 0; i < _mainItems.length; i++) {
-            if (_mainItems[i].name === pageName)
-                return _mainItems[i].label;
-
-        }
-        return pageName;
-    }
-
-    // Drill into a parent category and select the first child
     function _drillIn(parentName) {
-        let children = _childItems[parentName];
-        let firstChild = (children && children.length > 0) ? children[0].name : "";
+        const firstLeaf = _firstLeafOf(parentName);
         sidebarTransition.pendingMode = parentName;
-        sidebarTransition.pendingPage = firstChild;
+        sidebarTransition.pendingPage = firstLeaf;
         sidebarTransition.restart();
     }
 
@@ -353,10 +627,21 @@ ApplicationWindow {
         layoutContextMenu.showForLayout(layout);
     }
 
-    // Return to the main sidebar list, selecting the parent category
+    // Pop one level. Sub-modes registered in `_parentMode` (e.g.
+    // `animations-surfaces` → `animations`) drill back to the
+    // intermediate parent; everything else returns to "main" with the
+    // current parent highlighted as `activePage`. When popping back
+    // into an intermediate (still-virtual) parent, `activePage` is
+    // left untouched (empty pendingPage) so the leaf the user came
+    // from stays visible until they pick another — re-anchoring on
+    // the virtual category they just stepped out of would be less
+    // useful context.
     function _drillOut() {
-        sidebarTransition.pendingMode = "main";
-        sidebarTransition.pendingPage = _sidebarMode !== "main" ? _sidebarMode : "overview";
+        const target = _parentMode[_sidebarMode] || "main";
+        const popToMain = target === "main";
+        const pendingPage = popToMain ? (_sidebarMode !== "main" ? _sidebarMode : "overview") : "";
+        sidebarTransition.pendingMode = target;
+        sidebarTransition.pendingPage = pendingPage;
         sidebarTransition.restart();
     }
 
@@ -384,19 +669,33 @@ ApplicationWindow {
         }
         // Build initial sidebar
         _rebuildSidebar();
-        // If the active page is a child of a category, drill in
+        // If the active page is a child of a category, drill in. Skip
+        // intermediate (`hasChildren: true`) entries so a stale
+        // `activePage = "animations-surfaces"` doesn't masquerade as a
+        // valid restored leaf — the virtual parent name only ever
+        // means "show this sub-sidebar", and there's no QML component
+        // for it in `_pageComponents`. The drill-in transition picks a
+        // real leaf for the user when one of those names round-trips
+        // through stored state.
         let page = settingsController.activePage;
         let parents = Object.keys(_childItems);
         for (let p = 0; p < parents.length; p++) {
             let children = _childItems[parents[p]];
             for (let c = 0; c < children.length; c++) {
-                if (children[c].name === page) {
+                if (children[c].name === page && !children[c].hasChildren) {
                     _sidebarMode = parents[p];
                     _rebuildSidebar();
                     return ;
                 }
             }
         }
+        // Stale activePage is a virtual parent (e.g. saved as
+        // "animations-surfaces") — treat it as a drill-in request so
+        // the user lands on a real leaf instead of seeing the silent
+        // LayoutsPage fallback.
+        if (_childItems[page])
+            _drillIn(page);
+
     }
 
     // Auto-drill-out if feature disabled while viewing its subpages
@@ -428,12 +727,11 @@ ApplicationWindow {
         property string pendingMode: ""
         property string pendingPage: ""
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: sidebar
-            property: "opacity"
+            properties: "opacity"
             to: 0
-            duration: 80
-            easing.type: Easing.InQuad
+            profile: "panel.fadeOut"
         }
 
         ScriptAction {
@@ -446,12 +744,11 @@ ApplicationWindow {
             }
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: sidebar
-            property: "opacity"
+            properties: "opacity"
             to: 1
-            duration: 120
-            easing.type: Easing.OutQuad
+            profile: "panel.fadeIn"
         }
 
     }
@@ -531,6 +828,7 @@ ApplicationWindow {
 
                     Layout.fillWidth: true
                     Layout.margins: Kirigami.Units.smallSpacing
+                    Accessible.name: i18n("Search settings pages")
                     placeholderText: i18n("Search...")
                     visible: !window.sidebarCompact
                     leftPadding: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
@@ -576,6 +874,13 @@ ApplicationWindow {
                         required property bool isBackButton
                         required property bool hasDividerAfter
                         required property bool isDivider
+                        // Inline search-result rows under their parent
+                        // carry an `isSearchChild` role; rows without
+                        // it (most of the model) get `false` here via
+                        // the truthy coercion. Reading through `model.`
+                        // rather than as a required property avoids
+                        // forcing every append site to set the role.
+                        readonly property bool isSearchChild: model.isSearchChild === true
                         readonly property bool isActive: {
                             if (isBackButton)
                                 return false;
@@ -606,8 +911,14 @@ ApplicationWindow {
                                 window._drillIn(name);
                                 return ;
                             }
-                            // If selecting an inline search result child, clear search and drill into parent
-                            if (sidebarSearch.text.length > 0 && _sidebarMode === "main") {
+                            // If selecting an inline search result, clear
+                            // the search, drill into the leaf's actual
+                            // parent (could be a different sub-sidebar
+                            // bucket), and activate the leaf. The lookup
+                            // walks every `_childItems` bucket so it
+                            // handles top-level search hits AND nested
+                            // matches inlined inside a sub-sidebar.
+                            if (sidebarSearch.text.length > 0) {
                                 let parents = Object.keys(_childItems);
                                 for (let p = 0; p < parents.length; p++) {
                                     let children = _childItems[parents[p]];
@@ -624,8 +935,27 @@ ApplicationWindow {
                             }
                             settingsController.activePage = name;
                         }
-                        leftPadding: window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing
+                        leftPadding: {
+                            const base = window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing;
+                            // Inline search-result rows nest under
+                            // their parent — bump leftPadding by an
+                            // iconSize-equivalent so the indent reads
+                            // as hierarchy. Theme-aware via
+                            // `Kirigami.Units` and RTL-correct because
+                            // `leftPadding` flips with layoutDirection.
+                            return base + (navDelegate.isSearchChild ? Kirigami.Units.iconSizes.small : 0);
+                        }
                         rightPadding: window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing
+                        // Strip the "Surfaces / Windows" prefix from
+                        // the Accessible.name so screen readers
+                        // announce the leaf cleanly without the
+                        // visual-hierarchy decoration. The full
+                        // composed label still drives the visible
+                        // Label and ToolTip below.
+                        Accessible.name: {
+                            const slashIdx = navDelegate.label.lastIndexOf(" / ");
+                            return slashIdx >= 0 ? navDelegate.label.substring(slashIdx + 3) : navDelegate.label;
+                        }
                         ToolTip.visible: window.sidebarCompact && navDelegate.hovered
                         ToolTip.text: label
                         ToolTip.delay: 300
@@ -676,8 +1006,8 @@ ApplicationWindow {
                             }
 
                             Behavior on color {
-                                ColorAnimation {
-                                    duration: 120
+                                PhosphorMotionAnimation {
+                                    profile: "widget.tint.fast"
                                 }
 
                             }
@@ -704,8 +1034,9 @@ ApplicationWindow {
                                 }
 
                                 Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 120
+                                    PhosphorMotionAnimation {
+                                        profile: "widget.hover"
+                                        durationOverride: 120
                                     }
 
                                 }
@@ -736,68 +1067,82 @@ ApplicationWindow {
                                 visible: !window.sidebarCompact
 
                                 Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 120
+                                    PhosphorMotionAnimation {
+                                        profile: "widget.hover"
+                                        durationOverride: 120
                                     }
 
                                 }
 
                             }
 
-                            // Unsaved changes badge
+                            // Unsaved changes badge — per-page tracking.
+                            // Reference dirtyPages once so QML tracks it as a
+                            // binding dependency, then delegate the actual
+                            // lookup (including parent-category traversal) to
+                            // the controller's isPageDirty().
                             Rectangle {
+                                id: dirtyBadge
+
                                 width: Kirigami.Units.smallSpacing * 1.5
                                 height: Kirigami.Units.smallSpacing * 1.5
                                 radius: width / 2
                                 color: Kirigami.Theme.neutralTextColor
-                                visible: navDelegate.isActive && settingsController.needsSave && !navDelegate.isDivider && !navDelegate.isBackButton
+                                visible: {
+                                    if (navDelegate.isDivider || navDelegate.isBackButton)
+                                        return false;
+
+                                    settingsController.dirtyPages; // binding dependency
+                                    return settingsController.isPageDirty(navDelegate.name);
+                                }
                                 Layout.alignment: Qt.AlignVCenter
 
                                 SequentialAnimation {
                                     id: dirtyBadgePulse
 
-                                    property Item target: parent
-
                                     loops: Animation.Infinite
-                                    running: navDelegate.isActive && settingsController.needsSave
+                                    running: dirtyBadge.visible
                                     onRunningChanged: {
                                         if (!running)
-                                            target.opacity = 1;
+                                            dirtyBadge.opacity = 1;
 
                                     }
 
-                                    NumberAnimation {
-                                        target: dirtyBadgePulse.target
-                                        property: "opacity"
+                                    PhosphorMotionAnimation {
+                                        target: dirtyBadge
+                                        properties: "opacity"
                                         from: 1
                                         to: 0.4
-                                        duration: 1000
-                                        easing.type: Easing.InOutSine
+                                        profile: "widget.pulse"
                                     }
 
-                                    NumberAnimation {
-                                        target: dirtyBadgePulse.target
-                                        property: "opacity"
+                                    PhosphorMotionAnimation {
+                                        target: dirtyBadge
+                                        properties: "opacity"
                                         from: 0.4
                                         to: 1
-                                        duration: 1000
-                                        easing.type: Easing.InOutSine
+                                        profile: "widget.pulse"
                                     }
 
                                 }
 
                             }
 
-                            // Enable/disable toggle for snapping and tiling
+                            // Enable/disable toggle for snapping and tiling.
+                            // Wraps the assignment in begin/endExternalEdit so
+                            // the dirty marker lands on snapping/tiling rather
+                            // than whatever page the user is currently viewing.
                             SettingsSwitch {
                                 visible: (navDelegate.name === "snapping" || navDelegate.name === "tiling") && !window.sidebarCompact
                                 checked: navDelegate.name === "snapping" ? appSettings.snappingEnabled : appSettings.autotileEnabled
                                 accessibleName: navDelegate.label
                                 onToggled: function(newValue) {
+                                    settingsController.beginExternalEdit(navDelegate.name);
                                     if (navDelegate.name === "snapping")
                                         appSettings.snappingEnabled = newValue;
                                     else
                                         appSettings.autotileEnabled = newValue;
+                                    settingsController.endExternalEdit();
                                 }
                             }
 
@@ -857,22 +1202,20 @@ ApplicationWindow {
 
                                 }
 
-                                NumberAnimation {
+                                PhosphorMotionAnimation {
                                     target: daemonDot
-                                    property: "opacity"
+                                    properties: "opacity"
                                     from: 1
                                     to: 0.4
-                                    duration: 1500
-                                    easing.type: Easing.InOutSine
+                                    profile: "widget.pulse.slow"
                                 }
 
-                                NumberAnimation {
+                                PhosphorMotionAnimation {
                                     target: daemonDot
-                                    property: "opacity"
+                                    properties: "opacity"
                                     from: 0.4
                                     to: 1
-                                    duration: 1500
-                                    easing.type: Easing.InOutSine
+                                    profile: "widget.pulse.slow"
                                 }
 
                             }
@@ -916,17 +1259,23 @@ ApplicationWindow {
             }
 
             Behavior on Layout.preferredWidth {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.InOutQuad
+                PhosphorMotionAnimation {
+                    // Direction is taken from the same `sidebarCompact` flag
+                    // that drives `Layout.preferredWidth` above, so the leg
+                    // is decided synchronously when the nav rail is toggled.
+                    // Reading `Layout.preferredWidth` directly would re-
+                    // evaluate during the Behavior and converge to the wrong
+                    // leg as the value approaches its target.
+                    profile: !window.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
                 }
 
             }
 
             Behavior on Layout.minimumWidth {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.InOutQuad
+                PhosphorMotionAnimation {
+                    // Same `sidebarCompact` driver as above — the rail's
+                    // minimumWidth tracks preferredWidth in lockstep.
+                    profile: !window.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
                 }
 
             }
@@ -951,6 +1300,12 @@ ApplicationWindow {
         // CONTENT AREA
         // =================================================================
         ColumnLayout {
+            // Aspect ratio submenu — present unless the right-clicked
+            // layout is autotile (showForLayout reconciles its insertion
+            // state in lockstep with the layout kind). Rows are driven
+            // by an Instantiator over `_aspectRatioOptions` so each
+            // ItemDelegate's lifecycle is Qt-managed.
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
@@ -970,40 +1325,49 @@ ApplicationWindow {
                     Row {
                         spacing: Kirigami.Units.smallSpacing
 
-                        // Parent name (clickable when drilled in)
-                        Label {
-                            visible: window._sidebarMode !== "main"
-                            text: window._parentLabel()
-                            opacity: parentMouse.containsMouse ? 0.8 : 0.5
-                            font.underline: parentMouse.containsMouse
+                        // Render every lineage segment + a separator
+                        // between them. The `_breadcrumbModel` cached
+                        // property holds the precomputed segment list
+                        // and re-evaluates only when its inputs
+                        // (`_sidebarMode`, `activePage`) change — far
+                        // cheaper than calling `_breadcrumbSegments()`
+                        // once per delegate per binding fire.
+                        Repeater {
+                            model: window._breadcrumbModel
 
-                            MouseArea {
-                                id: parentMouse
+                            delegate: Row {
+                                required property int index
+                                required property var modelData
 
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: window._drillOut()
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Label {
+                                    text: modelData.label
+                                    opacity: modelData.clickable && segmentMouse.containsMouse ? 0.8 : 0.5
+                                    font.underline: modelData.clickable && segmentMouse.containsMouse
+                                    Accessible.name: modelData.label
+                                    Accessible.role: modelData.clickable ? Accessible.Link : Accessible.StaticText
+
+                                    MouseArea {
+                                        id: segmentMouse
+
+                                        anchors.fill: parent
+                                        hoverEnabled: modelData.clickable
+                                        enabled: modelData.clickable
+                                        cursorShape: modelData.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                        onClicked: window._navigateToBreadcrumbSegment(modelData.name)
+                                    }
+
+                                }
+
+                                Label {
+                                    visible: index < window._breadcrumbModel.length - 1
+                                    text: "\u203A"
+                                    opacity: 0.5
+                                }
+
                             }
 
-                        }
-
-                        // Separator
-                        Label {
-                            visible: window._sidebarMode !== "main"
-                            text: "\u203A"
-                            opacity: 0.5
-                        }
-
-                        // Current page name
-                        Label {
-                            text: {
-                                if (window._sidebarMode !== "main")
-                                    return window._subPageLabel(settingsController.activePage);
-
-                                return window._mainItemLabel(settingsController.activePage);
-                            }
-                            opacity: 0.5
                         }
 
                     }
@@ -1060,6 +1424,7 @@ ApplicationWindow {
                         flat: true
                         icon.name: "internet-web-browser"
                         visible: settingsController.updateChecker.releaseUrl.length > 0
+                        Accessible.name: i18n("View release notes")
                         onClicked: Qt.openUrlExternally(settingsController.updateChecker.releaseUrl)
                     }
 
@@ -1067,6 +1432,7 @@ ApplicationWindow {
                         icon.name: "dialog-close"
                         display: ToolButton.IconOnly
                         onClicked: settingsController.dismissUpdate()
+                        Accessible.name: i18n("Dismiss update notification")
                         ToolTip.text: i18n("Dismiss")
                         ToolTip.visible: hovered
                     }
@@ -1112,6 +1478,7 @@ ApplicationWindow {
                         text: i18n("What's New")
                         flat: true
                         icon.name: "go-next"
+                        Accessible.name: i18n("View what's new")
                         onClicked: whatsNewDialog.open()
                     }
 
@@ -1119,6 +1486,7 @@ ApplicationWindow {
                         icon.name: "dialog-close"
                         display: ToolButton.IconOnly
                         onClicked: settingsController.markWhatsNewSeen()
+                        Accessible.name: i18n("Dismiss")
                         ToolTip.text: i18n("Dismiss")
                         ToolTip.visible: hovered
                     }
@@ -1159,15 +1527,15 @@ ApplicationWindow {
                         fadeIn.restart();
                     }
 
-                    NumberAnimation {
+                    PhosphorMotionAnimation {
                         id: fadeIn
 
                         target: pageLoader.item
-                        property: "opacity"
+                        properties: "opacity"
                         from: 0
                         to: 1
-                        duration: 180
-                        easing.type: Easing.OutCubic
+                        profile: "widget.fadeIn"
+                        durationOverride: 180
                     }
 
                 }
@@ -1204,15 +1572,15 @@ ApplicationWindow {
                         font.weight: Font.Medium
                     }
 
-                    NumberAnimation {
+                    PhosphorMotionAnimation {
                         id: toastShow
 
                         target: toast
-                        property: "opacity"
+                        properties: "opacity"
                         from: 0
                         to: 1
-                        duration: 200
-                        easing.type: Easing.OutCubic
+                        profile: "popup"
+                        durationOverride: 200
                     }
 
                     SequentialAnimation {
@@ -1222,13 +1590,12 @@ ApplicationWindow {
                             duration: 2000
                         }
 
-                        NumberAnimation {
+                        PhosphorMotionAnimation {
                             target: toast
-                            property: "opacity"
+                            properties: "opacity"
                             from: 1
                             to: 0
-                            duration: 400
-                            easing.type: Easing.InCubic
+                            profile: "widget.fadeOut"
                         }
 
                     }
@@ -1243,12 +1610,34 @@ ApplicationWindow {
 
                 property var layout: null
                 property int viewMode: 0
-                property var _screenItems: []
-                property bool _aspectRatioMenuInserted: false
+                /// Tracks the kind (`"snap"` / `"autotile"` / `"none"`) the
+                /// aspect-ratio submenu was last reconciled to. showForLayout
+                /// only mutates the menu when the current layout's kind
+                /// differs from this state — `removeMenu` `deleteLater`s
+                /// Qt 6's auto-generated MenuItem placeholder, and the
+                /// inline submenu's reparenting back to its declared parent
+                /// is unreliable enough that doing the dance on every show
+                /// can lose the QML object after many cycles.
+                property string _aspectRatioMenuKind: "none"
                 readonly property bool isAutotile: layout && layout.isAutotile === true
                 readonly property string layoutId: layout ? (layout.id || "") : ""
-                // Aspect ratio options: [key, label, settingsIndex]
+                /// Aspect ratio options: `[key, label, settingsIndex]`. Drives
+                /// the `Instantiator` inside `aspectRatioSubMenu` so each row's
+                /// ItemDelegate is created with a stable Qt-managed lifecycle.
+                /// Imperative `Component.createObject(menu, ...)` parented to
+                /// a popup that isn't yet in the graphics scene emits the
+                /// `Created graphical object was not placed in the graphics
+                /// scene` warning and the unplaced object can leak into Qt's
+                /// menu state.
                 readonly property var _aspectRatioOptions: [["any", window.aspectRatioLabels["any"], 0], ["standard", window.aspectRatioLabels["standard"], 1], ["ultrawide", window.aspectRatioLabels["ultrawide"], 2], ["super-ultrawide", window.aspectRatioLabels["super-ultrawide"], 3], ["portrait", window.aspectRatioLabels["portrait"], 4]]
+                /// Driver for the dynamic "Edit on <screen>" Instantiator
+                /// below. Empty array hides every dynamic row; switching to
+                /// the `screens` list grows them. Single-screen setups never
+                /// populate the model so the submenu collapses cleanly.
+                readonly property var _screenItemsModel: {
+                    var screens = settingsController.screens || [];
+                    return screens.length > 1 ? screens : [];
+                }
 
                 // Signals for dialogs that live in LayoutsPage
                 signal deleteRequested(var layout)
@@ -1257,56 +1646,35 @@ ApplicationWindow {
                 function showForLayout(layout) {
                     layoutContextMenu.layout = layout;
                     layoutContextMenu.viewMode = (layout && layout.isAutotile === true) ? 1 : 0;
-                    // Add/remove aspect ratio submenu (Qt6 ignores visible on inline Menu submenus,
-                    // so we imperatively insert/remove it like screen items)
-                    if (_aspectRatioMenuInserted) {
-                        layoutContextMenu.removeMenu(aspectRatioSubMenu);
-                        _aspectRatioMenuInserted = false;
-                    }
-                    if (!layoutContextMenu.isAutotile) {
-                        aspectRatioSubMenu.updateChecks();
-                        // Insert after the aspectRatioMarker separator
-                        let markerIdx = -1;
-                        for (let k = 0; k < layoutContextMenu.count; k++) {
-                            if (layoutContextMenu.itemAt(k) === aspectRatioMarker) {
-                                markerIdx = k;
-                                break;
+                    var wantKind = layoutContextMenu.isAutotile ? "autotile" : "snap";
+                    // Only reconcile the submenu when the layout kind flips.
+                    // Reconciling on every show churns Qt 6's MenuItem
+                    // placeholder; after enough churn the inline submenu's
+                    // reparenting back to its declared parent fails and
+                    // the QML object is lost.
+                    if (wantKind !== layoutContextMenu._aspectRatioMenuKind) {
+                        if (wantKind === "snap") {
+                            // Insert after the aspectRatioMarker separator so
+                            // the submenu lands in its declared visual slot
+                            // even though it's added imperatively. itemAt
+                            // walks the menu's children, which the inline
+                            // separator joined at parse time.
+                            var markerIdx = -1;
+                            for (var k = 0; k < layoutContextMenu.count; k++) {
+                                if (layoutContextMenu.itemAt(k) === aspectRatioMarker) {
+                                    markerIdx = k;
+                                    break;
+                                }
                             }
+                            if (markerIdx >= 0)
+                                layoutContextMenu.insertMenu(markerIdx + 1, aspectRatioSubMenu);
+                            else
+                                layoutContextMenu.addMenu(aspectRatioSubMenu);
+                        } else {
+                            layoutContextMenu.removeMenu(aspectRatioSubMenu);
                         }
-                        if (markerIdx >= 0)
-                            layoutContextMenu.insertMenu(markerIdx + 1, aspectRatioSubMenu);
-                        else
-                            layoutContextMenu.addMenu(aspectRatioSubMenu);
-                        _aspectRatioMenuInserted = true;
+                        layoutContextMenu._aspectRatioMenuKind = wantKind;
                     }
-                    // Rebuild dynamic "Edit on <screen>" items
-                    for (let j = 0; j < _screenItems.length; j++) {
-                        layoutContextMenu.removeItem(_screenItems[j]);
-                        _screenItems[j].destroy();
-                    }
-                    _screenItems = [];
-                    let screens = settingsController.screens || [];
-                    if (screens.length > 1) {
-                        for (let i = 0; i < screens.length; i++) {
-                            let s = screens[i];
-                            let parts = [s.manufacturer || "", s.model || ""].filter((p) => {
-                                return p !== "";
-                            });
-                            let label = parts.length > 0 ? parts.join(" ") : (s.name || "");
-                            if (s.resolution)
-                                label += " (" + s.resolution + ")";
-
-                            let item = screenMenuItemComponent.createObject(layoutContextMenu, {
-                                "text": i18n("Edit on %1", label),
-                                "icon.name": s.isPrimary ? "starred-symbolic" : "monitor"
-                            });
-                            item._screenName = s.name;
-                            // Insert after the Edit item (index 1+)
-                            layoutContextMenu.insertItem(1 + i, item);
-                            _screenItems.push(item);
-                        }
-                    }
-                    screenSeparator.visible = _screenItems.length > 0;
                     layoutContextMenu.popup();
                 }
 
@@ -1317,11 +1685,59 @@ ApplicationWindow {
                     onTriggered: settingsController.editLayout(layoutContextMenu.layoutId)
                 }
 
-                // -- Dynamic "Edit on <screen>" items inserted here by showForLayout --
+                // Dynamic "Edit on <screen>" items. Instantiator gives Qt
+                // ownership of each row's lifecycle — rows are placed when
+                // the model grows and torn down synchronously when it
+                // shrinks, with no out-of-scene `createObject` parents and
+                // no deferred `destroy()` racing the next popup. The
+                // delegate is `ItemDelegate` rather than `MenuItem` to
+                // bypass Qt 6's onItemTriggered → dismiss() cascade through
+                // `finalizeExitTransition`; the click handler hides the
+                // menu explicitly via `Qt.callLater` after the click body
+                // finishes.
+                Instantiator {
+                    id: screenItemInstantiator
+
+                    model: layoutContextMenu._screenItemsModel
+                    onObjectAdded: function(index, object) {
+                        // The Edit MenuItem occupies index 0; dynamic rows
+                        // sit immediately after, ahead of screenSeparator
+                        // and the rest of the static menu.
+                        layoutContextMenu.insertItem(1 + index, object);
+                    }
+                    onObjectRemoved: function(index, object) {
+                        layoutContextMenu.removeItem(object);
+                    }
+
+                    delegate: ItemDelegate {
+                        required property var modelData
+                        readonly property string _screenName: (modelData && modelData.name) ? modelData.name : ""
+
+                        text: i18n("Edit on %1", (modelData && modelData.displayLabel) || (modelData && modelData.name) || "")
+                        icon.name: (modelData && modelData.isPrimary) ? "starred-symbolic" : "monitor"
+                        Accessible.name: text
+                        onClicked: {
+                            var screenName = _screenName;
+                            var layoutId = layoutContextMenu.layoutId;
+                            Qt.callLater(function() {
+                                layoutContextMenu.visible = false;
+                                if (screenName.length > 0)
+                                    settingsController.editLayoutOnScreen(layoutId, screenName);
+
+                            });
+                        }
+                    }
+
+                }
+
+                // Tracks the dynamic-row model directly so the separator
+                // hides when no extra screens exist — including live
+                // changes to `settingsController.screens` while the menu
+                // is open.
                 MenuSeparator {
                     id: screenSeparator
 
-                    visible: false
+                    visible: layoutContextMenu._screenItemsModel.length > 0
                 }
 
                 // -- Open in Editor (external text editor) --
@@ -1368,10 +1784,18 @@ ApplicationWindow {
                 }
 
                 MenuItem {
-                    text: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign")
-                    icon.name: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? "window-duplicate" : "window-new"
+                    readonly property bool perLayoutAuto: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true
+                    readonly property bool globalAuto: appSettings.autoAssignAllLayouts === true
+
+                    // When the global "Auto-assign for all layouts" toggle is on (#370),
+                    // every layout effectively auto-assigns regardless of its per-layout flag,
+                    // so the per-layout toggle is preserved but disabled here. The label
+                    // points the user at the global setting that's overriding it.
+                    text: globalAuto ? i18n("Auto-assign forced on (global setting)") : (perLayoutAuto ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign"))
+                    icon.name: (perLayoutAuto || globalAuto) ? "window-duplicate" : "window-new"
                     visible: !layoutContextMenu.isAutotile
-                    onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true))
+                    enabled: !globalAuto
+                    onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !perLayoutAuto)
                 }
 
                 // -- Aspect Ratio insertion point (submenu managed imperatively in showForLayout) --
@@ -1446,81 +1870,57 @@ ApplicationWindow {
 
             }
 
-            // Component for dynamic "Edit on <screen>" menu items
-            Component {
-                id: screenMenuItemComponent
-
-                MenuItem {
-                    property string _screenName: ""
-
-                    onTriggered: settingsController.editLayoutOnScreen(layoutContextMenu.layoutId, _screenName)
-                }
-
-            }
-
-            // Component for aspect ratio submenu items (ItemDelegate, not MenuItem —
-            // avoids Qt6 finalizeExitTransition crash; same pattern as editor shader menu)
-            Component {
-                id: aspectRatioItemComponent
-
-                ItemDelegate {
-                    property string _arKey: ""
-                    property int _arIndex: 0
-                    property bool isSelected: false
-
-                    icon.name: isSelected ? "checkmark" : ""
-                    Accessible.name: text
-                    onClicked: {
-                        let layoutId = layoutContextMenu.layoutId;
-                        let idx = _arIndex;
-                        Qt.callLater(function() {
-                            aspectRatioSubMenu.visible = false;
-                            layoutContextMenu.visible = false;
-                            settingsController.setLayoutAspectRatio(layoutId, idx);
-                        });
-                    }
-                }
-
-            }
-
-            // Aspect ratio submenu (managed imperatively by showForLayout —
-            // Qt6 ignores visible on inline Menu submenus, so we add/remove it)
+            // Empty `enter` / `exit` Transitions are the
+            // `finalizeExitTransition` hardening pattern (mirrors the
+            // editor's metadata-preset menu): synchronous close avoids
+            // the QQmlData::destroyed race Qt 6's animated Menu teardown
+            // can otherwise hit.
             Menu {
                 id: aspectRatioSubMenu
 
-                property var _items: []
-                property bool _built: false
-
-                function buildOnce() {
-                    if (_built)
-                        return ;
-
-                    _built = true;
-                    var options = layoutContextMenu._aspectRatioOptions;
-                    for (var i = 0; i < options.length; i++) {
-                        var item = aspectRatioItemComponent.createObject(aspectRatioSubMenu, {
-                            "text": options[i][1],
-                            "_arKey": options[i][0],
-                            "_arIndex": options[i][2]
-                        });
-                        aspectRatioSubMenu.addItem(item);
-                        _items.push(item);
-                    }
-                }
-
-                function updateChecks() {
-                    buildOnce();
-                    var currentClass = (layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass) || "any";
-                    for (var i = 0; i < _items.length; i++) {
-                        if (_items[i])
-                            _items[i].isSelected = (_items[i]._arKey === currentClass);
-
-                    }
-                }
-
                 title: i18n("Aspect Ratio")
                 icon.name: "view-fullscreen"
-                onAboutToShow: updateChecks()
+
+                Instantiator {
+                    id: aspectRatioItemInstantiator
+
+                    model: layoutContextMenu._aspectRatioOptions
+                    onObjectAdded: function(index, object) {
+                        aspectRatioSubMenu.insertItem(index, object);
+                    }
+                    onObjectRemoved: function(index, object) {
+                        aspectRatioSubMenu.removeItem(object);
+                    }
+
+                    delegate: ItemDelegate {
+                        required property var modelData
+                        readonly property string _arKey: (modelData && modelData[0]) ? modelData[0] : ""
+                        readonly property int _arIndex: (modelData && modelData[2] !== undefined) ? modelData[2] : 0
+                        // Bound off the layout's aspect-ratio class so the
+                        // check mark tracks the current selection without
+                        // any imperative refresh hook on the submenu —
+                        // such a hook is what fails when the submenu's
+                        // QML object goes null during teardown.
+                        readonly property bool isSelected: {
+                            var current = (layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass) || "any";
+                            return _arKey === current;
+                        }
+
+                        text: (modelData && modelData[1]) ? modelData[1] : ""
+                        icon.name: isSelected ? "checkmark" : ""
+                        Accessible.name: text
+                        onClicked: {
+                            var layoutId = layoutContextMenu.layoutId;
+                            var idx = _arIndex;
+                            Qt.callLater(function() {
+                                aspectRatioSubMenu.visible = false;
+                                layoutContextMenu.visible = false;
+                                settingsController.setLayoutAspectRatio(layoutId, idx);
+                            });
+                        }
+                    }
+
+                }
 
                 enter: Transition {
                 }
@@ -1537,8 +1937,8 @@ ApplicationWindow {
                 color: settingsController.needsSave ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
 
                 Behavior on color {
-                    ColorAnimation {
-                        duration: 300
+                    PhosphorMotionAnimation {
+                        profile: "widget.tint"
                     }
 
                 }
@@ -1594,16 +1994,10 @@ ApplicationWindow {
                         }
 
                         Button {
-                            text: i18n("Defaults")
-                            icon.name: "document-revert"
-                            flat: true
-                            onClicked: defaultsConfirmDialog.open()
-                        }
-
-                        Button {
                             text: i18n("Discard")
                             icon.name: "edit-undo"
                             flat: true
+                            Accessible.name: i18n("Discard changes")
                             onClicked: resetConfirmDialog.open()
                         }
 
@@ -1611,6 +2005,7 @@ ApplicationWindow {
                             text: i18n("Save")
                             icon.name: "document-save"
                             highlighted: true
+                            Accessible.name: i18n("Save settings")
                             onClicked: {
                                 settingsController.save();
                                 toast.show(i18n("Settings saved"));
@@ -1622,9 +2017,14 @@ ApplicationWindow {
                 }
 
                 Behavior on implicitHeight {
-                    NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        // Direction is taken from `needsSave` (the same flag
+                        // that drives `implicitHeight` for this bar) so the
+                        // leg is decided when needsSave flips. Reading the
+                        // animated `implicitHeight` would re-evaluate during
+                        // the Behavior and converge to the wrong leg as the
+                        // value approaches its target.
+                        profile: settingsController.needsSave ? "widget.accordionExpand" : "widget.accordionCollapse"
                     }
 
                 }
@@ -1723,7 +2123,7 @@ ApplicationWindow {
         id: shortcutOverlay
 
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.6)
+        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.6)
         visible: opacity > 0
         opacity: window._showShortcuts ? 1 : 0
         z: 200
@@ -1828,8 +2228,12 @@ ApplicationWindow {
         }
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 200
+            PhosphorMotionAnimation {
+                // Direction is taken from `_showShortcuts` (the same flag
+                // driving `opacity` above) so the leg is decided when the
+                // overlay is toggled.
+                profile: window._showShortcuts ? "widget.fadeIn" : "widget.fadeOut"
+                durationOverride: 200
             }
 
         }

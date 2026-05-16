@@ -3,7 +3,7 @@
 
 /**
  * @file test_geometry_utils_overlaps.cpp
- * @brief Unit tests for GeometryUtils::removeZoneOverlaps and gap preservation
+ * @brief Unit tests for GeometryUtils::removeRectOverlaps and gap preservation
  */
 
 #include <QTest>
@@ -23,7 +23,7 @@ class TestGeometryUtilsOverlaps : public QObject
 private Q_SLOTS:
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // removeZoneOverlaps tests
+    // removeRectOverlaps tests
     // ═══════════════════════════════════════════════════════════════════════════
 
     void test_noOverlap_noChange()
@@ -34,7 +34,7 @@ private Q_SLOTS:
         };
         const QVector<QRect> original = zones;
 
-        GeometryUtils::removeZoneOverlaps(zones);
+        GeometryUtils::removeRectOverlaps(zones);
 
         for (int i = 0; i < zones.size(); ++i) {
             QCOMPARE(zones[i], original[i]);
@@ -48,10 +48,10 @@ private Q_SLOTS:
             QRect(400, 0, 500, 900),
         };
 
-        GeometryUtils::removeZoneOverlaps(zones);
+        GeometryUtils::removeRectOverlaps(zones);
 
         QVERIFY2(!zones[0].intersects(zones[1]),
-                 qPrintable(QStringLiteral("Zones still overlap after removeZoneOverlaps: "
+                 qPrintable(QStringLiteral("Zones still overlap after removeRectOverlaps: "
                                            "A(%1,%2,%3,%4) B(%5,%6,%7,%8)")
                                 .arg(zones[0].x())
                                 .arg(zones[0].y())
@@ -73,10 +73,10 @@ private Q_SLOTS:
             QRect(0, 500, 900, 600),
         };
 
-        GeometryUtils::removeZoneOverlaps(zones);
+        GeometryUtils::removeRectOverlaps(zones);
 
         QVERIFY2(!zones[0].intersects(zones[1]),
-                 qPrintable(QStringLiteral("Zones still overlap vertically after removeZoneOverlaps: "
+                 qPrintable(QStringLiteral("Zones still overlap vertically after removeRectOverlaps: "
                                            "A(%1,%2,%3,%4) B(%5,%6,%7,%8)")
                                 .arg(zones[0].x())
                                 .arg(zones[0].y())
@@ -96,7 +96,7 @@ private Q_SLOTS:
         QVector<QRect> zones = {QRect(0, 0, 900, 900)};
         const QVector<QRect> original = zones;
 
-        GeometryUtils::removeZoneOverlaps(zones);
+        GeometryUtils::removeRectOverlaps(zones);
 
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], original[0]);
@@ -106,7 +106,7 @@ private Q_SLOTS:
     {
         QVector<QRect> zones;
 
-        GeometryUtils::removeZoneOverlaps(zones);
+        GeometryUtils::removeRectOverlaps(zones);
 
         QVERIFY(zones.isEmpty());
     }
@@ -122,7 +122,7 @@ private Q_SLOTS:
             QRect(400, 0, 500, 900),
         };
 
-        GeometryUtils::removeZoneOverlaps(zones, {}, /*innerGap=*/8);
+        GeometryUtils::removeRectOverlaps(zones, {}, /*innerGap=*/8);
 
         QVERIFY2(
             !zones[0].intersects(zones[1]),
@@ -143,7 +143,7 @@ private Q_SLOTS:
         };
         QVector<QSize> minSizes = {QSize(700, 1), QSize(), QSize(), QSize()};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, /*gapThreshold=*/5);
+        GeometryUtils::enforceMinSizes(zones, minSizes, /*gapThreshold=*/5);
 
         QVERIFY2(!zones[0].intersects(zones[3]),
                  qPrintable(QStringLiteral("Zone A overlaps D: A=(%1,%2,%3,%4) D=(%5,%6,%7,%8)")
@@ -165,7 +165,7 @@ private Q_SLOTS:
         };
         QVector<QSize> minSizes = {QSize(400, 1), QSize()};
 
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, /*gapThreshold=*/10, /*innerGap=*/8);
+        GeometryUtils::enforceMinSizes(zones, minSizes, /*gapThreshold=*/10, /*innerGap=*/8);
 
         QVERIFY2(zones[0].width() >= 400,
                  qPrintable(QStringLiteral("Zone[0] width=%1, expected >= 400").arg(zones[0].width())));

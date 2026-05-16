@@ -10,6 +10,7 @@
 
 #include <QGuiApplication>
 #include <QScreen>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -115,7 +116,8 @@ void EditorController::toggleScreenAllowed(const QString& screenName)
 QString EditorController::screenDisplayName(const QString& screenIdOrName) const
 {
     for (QScreen* screen : QGuiApplication::screens()) {
-        if (Utils::screenIdentifier(screen) == screenIdOrName || screen->name() == screenIdOrName) {
+        if (Phosphor::Screens::ScreenIdentity::identifierFor(screen) == screenIdOrName
+            || screen->name() == screenIdOrName) {
             QString connectorName = screen->name();
             QString mfr = screen->manufacturer();
             QString mdl = screen->model();

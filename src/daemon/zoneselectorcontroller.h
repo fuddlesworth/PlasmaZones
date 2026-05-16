@@ -4,8 +4,21 @@
 #pragma once
 
 #include "../core/interfaces.h"
-#include "../core/layoutmanager.h"
-#include "../core/layout.h"
+#include <PhosphorZones/LayoutRegistry.h>
+
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
+namespace PhosphorLayout {
+class ILayoutSource;
+}
+
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
+}
+
+#include <PhosphorZones/Layout.h>
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -19,7 +32,7 @@
 namespace PlasmaZones {
 
 /**
- * @brief Controller for the Zone Selector UI component
+ * @brief Controller for the PhosphorZones::Zone Selector UI component
  *
  * Manages the zone selector that slides in from the top of the screen
  * when the user drags a window near the top edge. Similar to KZones
@@ -45,7 +58,7 @@ class PLASMAZONES_EXPORT ZoneSelectorController : public QObject
     Q_PROPERTY(qreal cursorProximity READ cursorProximity NOTIFY cursorProximityChanged)
     Q_PROPERTY(QPointF cursorPosition READ cursorPosition NOTIFY cursorPositionChanged)
 
-    // Layout data
+    // PhosphorZones::Layout data
     Q_PROPERTY(QVariantList layouts READ layouts NOTIFY layoutsChanged)
     Q_PROPERTY(QString activeLayoutId READ activeLayoutId WRITE setActiveLayoutId NOTIFY activeLayoutIdChanged)
     Q_PROPERTY(QString hoveredLayoutId READ hoveredLayoutId WRITE setHoveredLayoutId NOTIFY hoveredLayoutIdChanged)
@@ -68,7 +81,7 @@ public:
     };
     Q_ENUM(State)
 
-    explicit ZoneSelectorController(QObject* parent = nullptr);
+    explicit ZoneSelectorController(Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~ZoneSelectorController() override;
 
     // State management
@@ -93,7 +106,7 @@ public:
         return m_cursorPosition;
     }
 
-    // Layout data
+    // PhosphorZones::Layout data
     QVariantList layouts() const;
     QString activeLayoutId() const
     {
@@ -130,12 +143,34 @@ public:
     }
     void setSelectorGeometry(const QRectF& geometry);
 
-    // Layout management (concrete type for signal connections)
-    void setLayoutManager(LayoutManager* layoutManager);
+    // PhosphorZones::Layout management (concrete type for signal connections)
+    void setLayoutManager(PhosphorZones::LayoutRegistry* layoutManager);
     void setSettings(ISettings* settings);
+
+    /// Inject the daemon-owned tile-algorithm registry — required for
+    /// autotile layout entries to appear in @ref layoutPreviews.
+    void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
+
+    /// Inject the daemon's bundle-owned autotile layout source. Optional —
+    /// when set, layout enumeration reuses its preview cache across calls
+    /// instead of constructing a transient source per call.
+    ///
+    /// @note Expected to be called at most once after construction. The
+    /// controller does not subscribe to the source's own signals — match
+    /// the "set-once" discipline used by every other
+    /// setAutotileLayoutSource call site.
+    void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
 
     // Screen management
     void setScreen(QScreen* screen);
+    void setScreenId(const QString& screenId)
+    {
+        m_screenId = screenId;
+    }
+    QString screenId() const
+    {
+        return m_screenId;
+    }
     QScreen* screen() const
     {
         return m_screen;
@@ -155,7 +190,7 @@ public:
         return m_currentActivity;
     }
 
-    // Layout type filter (set by Daemon based on tiling mode + feature gate)
+    // PhosphorZones::Layout type filter (set by Daemon based on tiling mode + feature gate)
     void setLayoutFilter(bool includeManual, bool includeAutotile);
 
     // Drag state management
@@ -176,7 +211,7 @@ public:
     Q_INVOKABLE void expand();
     Q_INVOKABLE void toggle();
 
-    // Layout selection
+    // PhosphorZones::Layout selection
     Q_INVOKABLE void selectLayout(const QString& layoutId);
     Q_INVOKABLE void hoverLayout(const QString& layoutId);
 
@@ -204,7 +239,7 @@ Q_SIGNALS:
     void edgeTriggerZoneChanged(int zone);
     void selectorGeometryChanged(const QRectF& geometry);
 
-    // Layout selection signal (for external handlers)
+    // PhosphorZones::Layout selection signal (for external handlers)
     void layoutSelected(const QString& layoutId);
     void layoutHovered(const QString& layoutId);
 
@@ -225,6 +260,7 @@ private:
 
     // Cursor tracking
     QPointF m_cursorPosition;
+    bool m_hasCursorPosition = false; // True after first updateCursorPosition() call
     qreal m_cursorProximity = 1.0; // 0.0 = at edge, 1.0 = far away
 
     // Configuration (in pixels)
@@ -235,14 +271,18 @@ private:
     // Selector geometry (global coordinates, set from QML)
     QRectF m_selectorGeometry;
 
-    // Layout data
+    // PhosphorZones::Layout data
     QString m_activeLayoutId;
     QString m_hoveredLayoutId;
 
     // References (concrete type for signal connections)
-    QPointer<LayoutManager> m_layoutManager;
+    QPointer<PhosphorZones::LayoutRegistry> m_layoutManager;
     QPointer<ISettings> m_settings;
+    PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives controller
+    PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives controller (optional)
+    QPointer<Phosphor::Screens::ScreenManager> m_screenManager;
     QPointer<QScreen> m_screen;
+    QString m_screenId; // Virtual-aware screen ID (set explicitly or derived from m_screen)
     QPointer<QQuickItem> m_qmlItem;
     int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
     QString m_currentActivity; // Current KDE activity (empty = all activities)

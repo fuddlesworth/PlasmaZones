@@ -4,6 +4,8 @@
 #pragma once
 
 #include <QColor>
+#include <QHash>
+#include <QRectF>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -14,6 +16,15 @@
 #include "../core/enums.h"
 #include "configkeys.h"
 #include "plasmazones_export.h"
+// PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
+// the user-facing default accessors.
+#include <PhosphorTiles/AutotileConstants.h>
+// Animation duration / stagger UI bounds — generic policy, not autotile-specific.
+#include <PhosphorAnimation/AnimationLimits.h>
+
+namespace PhosphorAnimation {
+class CurveRegistry;
+}
 
 namespace PlasmaZones {
 
@@ -34,13 +45,31 @@ public:
     // Activation Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Single source of truth for the per-action trigger cap. Consumed by
+    // Settings::MaxTriggersPerAction (public API), the canonicalTriggerList
+    // validator in settingsschema.cpp (schema-side cap), and any caller that
+    // needs the limit. Keeping the constant here — reachable from both
+    // settings.h and settingsschema.cpp without either depending on the
+    // other — avoids the drift that motivated the original static_assert.
+    static constexpr int maxTriggersPerAction()
+    {
+        return 4;
+    }
+
+    // Build a single-entry trigger list with the given modifier and mouse
+    // button. Shared by the default accessors below so the canonical
+    // {modifier, mouseButton} shape lives in one place.
+    static QVariantList makeSingleTriggerList(int modifier, int mouseButton = 0)
+    {
+        QVariantMap trigger;
+        trigger[ConfigKeys::triggerModifierField()] = modifier;
+        trigger[ConfigKeys::triggerMouseButtonField()] = mouseButton;
+        return {trigger};
+    }
+
     static QVariantList dragActivationTriggers()
     {
-        // Default: single trigger with Alt modifier, no mouse button
-        QVariantMap trigger;
-        trigger[ConfigKeys::triggerModifierField()] = static_cast<int>(DragModifier::Alt);
-        trigger[ConfigKeys::triggerMouseButtonField()] = 0;
-        return {trigger};
+        return makeSingleTriggerList(static_cast<int>(DragModifier::Alt));
     }
     static bool toggleActivation()
     {
@@ -60,10 +89,17 @@ public:
     }
     static QVariantList zoneSpanTriggers()
     {
-        QVariantMap trigger;
-        trigger[ConfigKeys::triggerModifierField()] = zoneSpanModifier();
-        trigger[ConfigKeys::triggerMouseButtonField()] = 0;
-        return {trigger};
+        return makeSingleTriggerList(zoneSpanModifier());
+    }
+    static QVariantList autotileDragInsertTriggers()
+    {
+        // Held while dragging a window to dynamically insert it into the
+        // autotile stack at the cursor position.
+        return makeSingleTriggerList(static_cast<int>(DragModifier::Alt));
+    }
+    static bool autotileDragInsertToggle()
+    {
+        return false;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -74,14 +110,6 @@ public:
     {
         return false;
     }
-    static QStringList disabledDesktops()
-    {
-        return {};
-    }
-    static QStringList disabledActivities()
-    {
-        return {};
-    }
     static bool showNumbers()
     {
         return true;
@@ -91,6 +119,10 @@ public:
         return true;
     }
     static bool showOsdOnLayoutSwitch()
+    {
+        return true;
+    }
+    static bool showOsdOnDesktopSwitch()
     {
         return true;
     }
@@ -133,23 +165,23 @@ public:
     }
     static QColor highlightColor()
     {
-        return Defaults::HighlightColor;
+        return ::PhosphorZones::ZoneDefaults::HighlightColor;
     }
     static QColor inactiveColor()
     {
-        return Defaults::InactiveColor;
+        return ::PhosphorZones::ZoneDefaults::InactiveColor;
     }
     static QColor borderColor()
     {
-        return Defaults::BorderColor;
+        return ::PhosphorZones::ZoneDefaults::BorderColor;
     }
     static QColor labelFontColor()
     {
-        return Defaults::LabelFontColor;
+        return ::PhosphorZones::ZoneDefaults::LabelFontColor;
     }
     static double activeOpacity()
     {
-        return Defaults::Opacity;
+        return ::PhosphorZones::ZoneDefaults::Opacity;
     }
     static constexpr qreal activeOpacityMin()
     {
@@ -161,7 +193,7 @@ public:
     }
     static double inactiveOpacity()
     {
-        return Defaults::InactiveOpacity;
+        return ::PhosphorZones::ZoneDefaults::InactiveOpacity;
     }
     static constexpr qreal inactiveOpacityMin()
     {
@@ -173,7 +205,7 @@ public:
     }
     static int borderWidth()
     {
-        return Defaults::BorderWidth;
+        return ::PhosphorZones::ZoneDefaults::BorderWidth;
     }
     static constexpr int borderWidthMin()
     {
@@ -185,7 +217,7 @@ public:
     }
     static int borderRadius()
     {
-        return Defaults::BorderRadius;
+        return ::PhosphorZones::ZoneDefaults::BorderRadius;
     }
     static constexpr int borderRadiusMin()
     {
@@ -241,7 +273,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Zone Settings
+    // PhosphorZones::Zone Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
     static int zonePadding()
@@ -322,7 +354,7 @@ public:
     }
     static int adjacentThreshold()
     {
-        return Defaults::AdjacentThreshold;
+        return ::PhosphorZones::ZoneDefaults::AdjacentThreshold;
     }
     static constexpr int adjacentThresholdMin()
     {
@@ -398,6 +430,10 @@ public:
     {
         return true;
     }
+    static bool autoAssignAllLayouts()
+    {
+        return false;
+    }
     static bool filterLayoutsByAspectRatio()
     {
         return true;
@@ -413,10 +449,7 @@ public:
     static QVariantList snapAssistTriggers()
     {
         // Default: Middle mouse
-        QVariantMap trigger;
-        trigger[ConfigKeys::triggerModifierField()] = static_cast<int>(DragModifier::Disabled);
-        trigger[ConfigKeys::triggerMouseButtonField()] = static_cast<int>(Qt::MiddleButton);
-        return {trigger};
+        return makeSingleTriggerList(static_cast<int>(DragModifier::Disabled), static_cast<int>(Qt::MiddleButton));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -453,7 +486,50 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Zone Selector Settings
+    // Animation Window Filtering Settings
+    //
+    // Mirrors the snapping/tiling Exclusion settings but lives in its own
+    // `Animations.WindowFiltering` group so a user can disable animations
+    // for an app while still snapping it (or vice versa). The defaults
+    // are deliberately permissive — every window animates unless the
+    // user opts in to a filter — because animations don't have the
+    // user-data-loss risk that drives the conservative snapping defaults.
+    // App rules with a matching classPattern override the filter at the
+    // resolver layer, so a class-targeted rule can re-enable animations
+    // for an otherwise-excluded app.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool animationExcludeTransientWindows()
+    {
+        return false;
+    }
+    static int animationMinimumWindowWidth()
+    {
+        return 0;
+    }
+    static constexpr int animationMinimumWindowWidthMin()
+    {
+        return 0;
+    }
+    static constexpr int animationMinimumWindowWidthMax()
+    {
+        return 2000;
+    }
+    static int animationMinimumWindowHeight()
+    {
+        return 0;
+    }
+    static constexpr int animationMinimumWindowHeightMin()
+    {
+        return 0;
+    }
+    static constexpr int animationMinimumWindowHeightMax()
+    {
+        return 2000;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PhosphorZones::Zone Selector Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
     static bool zoneSelectorEnabled()
@@ -553,7 +629,7 @@ public:
 
     // Returns the absolute path to assignments.json (layout assignments and
     // quick layout shortcuts).  Separate from config.json so that Settings
-    // and LayoutManager have independent ownership of their files.
+    // and PhosphorZones::LayoutRegistry have independent ownership of their files.
     PLASMAZONES_EXPORT static QString assignmentsFilePath();
 
     // Returns the absolute path to the legacy plasmazonesrc file (INI format).
@@ -683,15 +759,15 @@ public:
     }
     static constexpr qreal autotileSplitRatio()
     {
-        return 0.5;
+        return PhosphorTiles::AutotileDefaults::DefaultSplitRatio;
     }
     static constexpr qreal autotileSplitRatioMin()
     {
-        return AutotileDefaults::MinSplitRatio;
+        return PhosphorTiles::AutotileDefaults::MinSplitRatio;
     }
     static constexpr qreal autotileSplitRatioMax()
     {
-        return AutotileDefaults::MaxSplitRatio;
+        return PhosphorTiles::AutotileDefaults::MaxSplitRatio;
     }
     static constexpr qreal autotileSplitRatioStep()
     {
@@ -707,15 +783,15 @@ public:
     }
     static constexpr int autotileMasterCount()
     {
-        return 1;
+        return PhosphorTiles::AutotileDefaults::DefaultMasterCount;
     }
     static constexpr int autotileMasterCountMin()
     {
-        return AutotileDefaults::MinMasterCount;
+        return PhosphorTiles::AutotileDefaults::MinMasterCount;
     }
     static constexpr int autotileMasterCountMax()
     {
-        return AutotileDefaults::MaxMasterCount;
+        return PhosphorTiles::AutotileDefaults::MaxMasterCount;
     }
     static constexpr int autotileInnerGap()
     {
@@ -723,11 +799,11 @@ public:
     }
     static constexpr int autotileInnerGapMin()
     {
-        return AutotileDefaults::MinGap;
+        return PhosphorTiles::AutotileDefaults::MinGap;
     }
     static constexpr int autotileInnerGapMax()
     {
-        return AutotileDefaults::MaxGap;
+        return PhosphorTiles::AutotileDefaults::MaxGap;
     }
     static constexpr int autotileOuterGap()
     {
@@ -735,11 +811,11 @@ public:
     }
     static constexpr int autotileOuterGapMin()
     {
-        return AutotileDefaults::MinGap;
+        return PhosphorTiles::AutotileDefaults::MinGap;
     }
     static constexpr int autotileOuterGapMax()
     {
-        return AutotileDefaults::MaxGap;
+        return PhosphorTiles::AutotileDefaults::MaxGap;
     }
     static bool autotileUsePerSideOuterGap()
     {
@@ -751,11 +827,11 @@ public:
     }
     static constexpr int autotileOuterGapTopMin()
     {
-        return AutotileDefaults::MinGap;
+        return PhosphorTiles::AutotileDefaults::MinGap;
     }
     static constexpr int autotileOuterGapTopMax()
     {
-        return AutotileDefaults::MaxGap;
+        return PhosphorTiles::AutotileDefaults::MaxGap;
     }
     static int autotileOuterGapBottom()
     {
@@ -763,11 +839,11 @@ public:
     }
     static constexpr int autotileOuterGapBottomMin()
     {
-        return AutotileDefaults::MinGap;
+        return PhosphorTiles::AutotileDefaults::MinGap;
     }
     static constexpr int autotileOuterGapBottomMax()
     {
-        return AutotileDefaults::MaxGap;
+        return PhosphorTiles::AutotileDefaults::MaxGap;
     }
     static int autotileOuterGapLeft()
     {
@@ -775,11 +851,11 @@ public:
     }
     static constexpr int autotileOuterGapLeftMin()
     {
-        return AutotileDefaults::MinGap;
+        return PhosphorTiles::AutotileDefaults::MinGap;
     }
     static constexpr int autotileOuterGapLeftMax()
     {
-        return AutotileDefaults::MaxGap;
+        return PhosphorTiles::AutotileDefaults::MaxGap;
     }
     static int autotileOuterGapRight()
     {
@@ -787,11 +863,11 @@ public:
     }
     static constexpr int autotileOuterGapRightMin()
     {
-        return AutotileDefaults::MinGap;
+        return PhosphorTiles::AutotileDefaults::MinGap;
     }
     static constexpr int autotileOuterGapRightMax()
     {
-        return AutotileDefaults::MaxGap;
+        return PhosphorTiles::AutotileDefaults::MaxGap;
     }
     static constexpr bool autotileFocusNewWindows()
     {
@@ -807,23 +883,23 @@ public:
     }
     static constexpr int autotileInsertPositionMin()
     {
-        return AutotileDefaults::MinInsertPosition;
+        return PhosphorTiles::AutotileDefaults::MinInsertPosition;
     }
     static constexpr int autotileInsertPositionMax()
     {
-        return AutotileDefaults::MaxInsertPosition;
+        return PhosphorTiles::AutotileDefaults::MaxInsertPosition;
     }
     static constexpr int autotileMaxWindows()
     {
-        return 5;
+        return PhosphorTiles::AutotileDefaults::DefaultMaxWindows;
     }
     static constexpr int autotileMaxWindowsMin()
     {
-        return AutotileDefaults::MinMaxWindows;
+        return PhosphorTiles::AutotileDefaults::MinMaxWindows;
     }
     static constexpr int autotileMaxWindowsMax()
     {
-        return AutotileDefaults::MaxMaxWindows;
+        return PhosphorTiles::AutotileDefaults::MaxMaxWindows;
     }
     static bool animationsEnabled()
     {
@@ -831,17 +907,17 @@ public:
     }
     static constexpr int animationDuration()
     {
-        return 300;
+        return 320;
     }
     static constexpr int animationDurationMin()
     {
-        return AutotileDefaults::MinAnimationDuration;
+        return PhosphorAnimation::Limits::MinAnimationDurationMs;
     }
     static constexpr int animationDurationMax()
     {
-        return AutotileDefaults::MaxAnimationDuration;
+        return PhosphorAnimation::Limits::MaxAnimationDurationMs;
     }
-    static int animationSequenceMode()
+    static constexpr int animationSequenceMode()
     {
         return 1;
     }
@@ -853,21 +929,21 @@ public:
     {
         return 1;
     }
-    static int animationStaggerInterval()
+    static constexpr int animationStaggerInterval()
     {
-        return 50;
+        return 40;
     }
     static constexpr int animationStaggerIntervalMin()
     {
-        return AutotileDefaults::MinAnimationStaggerIntervalMs;
+        return PhosphorAnimation::Limits::MinAnimationStaggerIntervalMs;
     }
     static constexpr int animationStaggerIntervalMax()
     {
-        return AutotileDefaults::MaxAnimationStaggerIntervalMs;
+        return PhosphorAnimation::Limits::MaxAnimationStaggerIntervalMs;
     }
     static QString animationEasingCurve()
     {
-        return QStringLiteral("0.33,1.00,0.68,1.00");
+        return QStringLiteral("0.22,0.61,0.36,1.00");
     }
     static int animationMinDistance()
     {
@@ -881,6 +957,29 @@ public:
     {
         return 200;
     }
+    /// Default Profile blob — animation settings live as a single
+    /// nested-JSON entry under `animationsGroup/animationProfileKey`.
+    /// Persisted as a `QVariantMap` so the on-disk JSON file shows the
+    /// nested object structure directly (no escaped string-in-string).
+    /// Assembled from the per-field defaults above so the library-default
+    /// feel matches `Profile::toJson` shape.
+    static QVariantMap animationProfile(const PhosphorAnimation::CurveRegistry& registry);
+
+    static QVariantMap shaderProfileTree()
+    {
+        return {};
+    }
+
+    /// Animation App Rules default — empty array. Persisted as a JSON
+    /// array (top-level QVariantList) so the schema entry can route
+    /// through the same `QVariantList`-typed read/write path the
+    /// existing settings backends already implement for ordered
+    /// arrays. fromJson tolerates an empty list as the no-rules case.
+    static QVariantList animationAppRules()
+    {
+        return {};
+    }
+
     static bool autotileFocusFollowsMouse()
     {
         return false;
@@ -899,7 +998,7 @@ public:
     }
     static int autotileBorderWidth()
     {
-        return Defaults::BorderWidth;
+        return ::PhosphorZones::ZoneDefaults::BorderWidth;
     }
     static constexpr int autotileBorderWidthMin()
     {
@@ -923,11 +1022,11 @@ public:
     }
     static QColor autotileBorderColor()
     {
-        return Defaults::HighlightColor;
+        return ::PhosphorZones::ZoneDefaults::HighlightColor;
     }
     static QColor autotileInactiveBorderColor()
     {
-        return Defaults::InactiveColor;
+        return ::PhosphorZones::ZoneDefaults::InactiveColor;
     }
     static bool autotileUseSystemBorderColors()
     {
@@ -937,9 +1036,43 @@ public:
     {
         return 0;
     }
+    static int autotileDragBehavior()
+    {
+        return 0; // AutotileDragBehavior::Float — native drag-to-float
+    }
+    static int autotileOverflowBehavior()
+    {
+        return 0; // AutotileOverflowBehavior::Float — cap-enforcing (current)
+    }
     static QStringList lockedScreens()
     {
         return {};
+    }
+
+    // ── Virtual Screen Limits ──────────────────────────────────────────
+    static constexpr int maxVirtualScreensPerPhysical()
+    {
+        return 10;
+    }
+    static constexpr int minVirtualScreensPerPhysical()
+    {
+        return 2;
+    }
+
+    // ── Virtual Screen Defaults ───────────────────────────────────────
+    static QString defaultVirtualScreenName(int index)
+    {
+        return QStringLiteral("Screen %1").arg(index + 1);
+    }
+    static QRectF defaultVirtualScreenRegion()
+    {
+        return QRectF(0.0, 0.0, 1.0, 1.0);
+    }
+
+    /// Tolerance for validating that virtual screen regions cover the full physical screen.
+    static constexpr qreal areaCoverageTolerance()
+    {
+        return 0.05;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -986,6 +1119,25 @@ public:
     static double editorSnapInterval()
     {
         return 0.1;
+    }
+    /// Per-axis defaults — currently share the same value as editorSnapInterval
+    /// but split so future aspect-aware defaults don't require auditing every
+    /// call site. Use these from resetDefaults / first-run paths.
+    static double editorSnapIntervalX()
+    {
+        return editorSnapInterval();
+    }
+    static double editorSnapIntervalY()
+    {
+        return editorSnapInterval();
+    }
+    static double editorSnapIntervalMin()
+    {
+        return 0.01;
+    }
+    static double editorSnapIntervalMax()
+    {
+        return 1.0;
     }
     static int editorSnapOverrideModifier()
     {
@@ -1200,6 +1352,42 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Virtual Screen Shortcuts
+    //
+    // VS-scope shortcuts escalate their window-scope counterpart with an
+    // extra Shift: swap-window (Meta+Ctrl+Alt+Arrow) → swap-VS adds Shift;
+    // rotate-window (Meta+Ctrl+]) → rotate-VS adds Shift+Alt. The Alt is
+    // mandatory: Meta+Ctrl+Shift+Arrow / Meta+Ctrl+Shift+[ ] are KWin's own
+    // built-in "Window One Desktop to the *" defaults, so dropping it lets
+    // KWin grab the chord and the VS action silently never fires.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString swapVirtualScreenLeftShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+Left");
+    }
+    static QString swapVirtualScreenRightShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+Right");
+    }
+    static QString swapVirtualScreenUpShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+Up");
+    }
+    static QString swapVirtualScreenDownShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+Down");
+    }
+    static QString rotateVirtualScreensClockwiseShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Alt+]");
+    }
+    static QString rotateVirtualScreensCounterclockwiseShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Alt+[");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Shortcuts
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1236,9 +1424,55 @@ public:
         return QStringLiteral("Meta+Ctrl+R");
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // XDG Data Sub-directories
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // Sub-paths under `QStandardPaths::GenericDataLocation` (typically
+    // `~/.local/share`) for assets the settings app and daemon write at
+    // runtime. Centralised here so a directory rename is a one-line edit.
+
+    static QString userProfilesSubdir()
+    {
+        return QStringLiteral("/plasmazones/profiles");
+    }
+    static QString userAnimationsSubdir()
+    {
+        return QStringLiteral("/plasmazones/animations");
+    }
+    static QString userMotionSetsSubdir()
+    {
+        return QStringLiteral("/plasmazones/motionsets");
+    }
+    /// Snapping overlay shader packs (the `data/shaders/` family — wallpaper
+    /// drift, neon-city, cosmic-flow, etc.). Mirrors the
+    /// `userAnimationsSubdir()` convention so settings + daemon code share
+    /// one source of truth for the on-disk location.
+    static QString userOverlayShadersSubdir()
+    {
+        return QStringLiteral("/plasmazones/shaders");
+    }
+
 private:
     // Non-instantiable
     ConfigDefaults() = delete;
 };
+
+// Compile-time bound checks for retuned animation defaults so a future
+// bump can never silently exceed the declared slider range. Mirrors the
+// pattern in AnimationLimits.h where library defaults assert against
+// their own min/max. Mirrored at runtime by QVERIFY in
+// tests/unit/config/test_configdefaults.cpp; the compile-time form
+// catches a bad default during build, the runtime form survives header
+// changes that drop constexpr from any accessor.
+static_assert(ConfigDefaults::animationDuration() >= ConfigDefaults::animationDurationMin()
+                  && ConfigDefaults::animationDuration() <= ConfigDefaults::animationDurationMax(),
+              "ConfigDefaults::animationDuration() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin()
+                  && ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax(),
+              "ConfigDefaults::animationStaggerInterval() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::animationSequenceMode() >= ConfigDefaults::animationSequenceModeMin()
+                  && ConfigDefaults::animationSequenceMode() <= ConfigDefaults::animationSequenceModeMax(),
+              "ConfigDefaults::animationSequenceMode() outside declared [min, max] range");
 
 } // namespace PlasmaZones

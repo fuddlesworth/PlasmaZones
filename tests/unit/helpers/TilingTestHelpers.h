@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "autotile/TilingAlgorithm.h"
+#include <PhosphorTiles/TilingAlgorithm.h>
 
 #include <QRect>
 #include <QVector>
@@ -11,12 +11,13 @@
 namespace PlasmaZones::TestHelpers {
 
 /**
- * @brief Construct TilingParams with named fields (avoids -Wmissing-field-initializers).
+ * @brief Construct PhosphorTiles::TilingParams with named fields (avoids -Wmissing-field-initializers).
  */
-inline TilingParams makeParams(int count, const QRect& screen, const TilingState* state, int gap = 0,
-                               EdgeGaps outerGaps = {}, QVector<QSize> minSizes = {})
+inline PhosphorTiles::TilingParams makeParams(int count, const QRect& screen, const PhosphorTiles::TilingState* state,
+                                              int gap = 0, ::PhosphorLayout::EdgeGaps outerGaps = {},
+                                              QVector<QSize> minSizes = {})
 {
-    TilingParams p;
+    PhosphorTiles::TilingParams p;
     p.windowCount = count;
     p.screenGeometry = screen;
     p.state = state;

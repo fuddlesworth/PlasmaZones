@@ -7,33 +7,32 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as PZCommon
 
 /**
  * @brief Shader settings dialog
  *
  * Provides a consistent UX for configuring shader effects on zone overlays.
  * Side-by-side layout: settings on the left, live preview on the right.
- * Supports both grouped parameters (with accordion sections) and flat parameters.
+ *
+ * The picker, parameter rows, accordion sections and lock/randomize
+ * toolbar live in `org.plasmazones.common` (PZCommon.ShaderPickerButton /
+ * ShaderParameterEditor) so the animation-settings page can reuse them.
+ * This dialog owns the editor-specific bits: the live preview pane, the
+ * shader-preset load/save flow, color/image platform dialogs, and the
+ * pending-state buffering until "Apply" is clicked.
  */
 Kirigami.Dialog {
-    // Category names come from shader metadata.json — no translation needed.
-    // Menu items are kept alive (build-once pattern) so the category
-    // menu is reusable across open/close cycles without duplication.
-    // Cleanup happens in Component.onDestruction below.
+    // No explicit `Qt.callLater(updateLocalShaderPreview)` —
+    // `initializePendingState` mutates `pendingShaderId` /
+    // `pendingParams`, which fire the existing change handlers and
+    // restart `debouncePreviewUpdate`. The 150ms debounce gives the
+    // preview pane time to receive its layout geometry before the
+    // shader pipeline tries to read width/height.
 
     id: root
 
     required property var editorController
-    // ═══════════════════════════════════════════════════════════════════════
-    // CONSTANTS
-    // ═══════════════════════════════════════════════════════════════════════
-    readonly property int colorButtonSize: Kirigami.Units.gridUnit * 3
-    // Theme colors cached at dialog level for use in dynamically loaded Components
-    // Use disabledTextColor with reduced opacity as separator color
-    readonly property color themeSeparatorColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-    readonly property color themeBackgroundColor: Kirigami.Theme.backgroundColor
-    readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 4
-    readonly property int colorLabelWidth: Kirigami.Units.gridUnit * 7
     // ═══════════════════════════════════════════════════════════════════════
     // PENDING STATE (buffered until Apply is clicked)
     // ═══════════════════════════════════════════════════════════════════════
@@ -42,8 +41,6 @@ Kirigami.Dialog {
     property var lockedParams: ({
     })
     property string pendingShaderId: ""
-    // Accordion state - only one group expanded at a time (-1 = all collapsed)
-    property int expandedGroupIndex: 0
     // Prevent preview updates after dialog closed (avoids race with debounce timer)
     property bool previewAllowed: true
     // Preset load/save error message (shown inline when non-empty)
@@ -69,100 +66,10 @@ Kirigami.Dialog {
         return null;
     }
     readonly property var shaderParams: currentShaderInfo ? (currentShaderInfo.parameters || []) : []
-    // Shaders sorted by name for the dropdown (avoids arbitrary QHash order)
-    readonly property var sortedShaders: {
-        var shaders = editorController ? editorController.availableShaders : [];
-        if (!shaders || shaders.length === 0)
-            return [];
-
-        var arr = [];
-        for (var i = 0; i < shaders.length; i++) {
-            if (shaders[i])
-                arr.push(shaders[i]);
-
-        }
-        arr.sort(function(a, b) {
-            var na = (a && a.name !== undefined) ? String(a.name) : "";
-            var nb = (b && b.name !== undefined) ? String(b.name) : "";
-            return na.localeCompare(nb);
-        });
-        return arr;
-    }
-    // Shaders grouped by category for the cascading menu.
-    // Supports "/" path separators for nested submenus (e.g. "Audio/Reactive").
-    // Returns: [{ name, shaders (direct), subcategories: [{ name, shaders }] }]
-    readonly property var shaderCategoryTree: {
-        var shaders = root.sortedShaders;
-        var tree = {
-        }; // { topName: { direct: [], subcats: { subName: [] } } }
-        var uncategorized = [];
-        for (var i = 0; i < shaders.length; i++) {
-            var s = shaders[i];
-            var cat = (s.category || "").trim();
-            if (cat === "") {
-                uncategorized.push(s);
-                continue;
-            }
-            var slashIdx = cat.indexOf("/");
-            var top = slashIdx >= 0 ? cat.substring(0, slashIdx).trim() : cat;
-            var sub = slashIdx >= 0 ? cat.substring(slashIdx + 1).trim() : "";
-            if (top === "") {
-                uncategorized.push(s);
-                continue;
-            }
-            if (!tree[top])
-                tree[top] = {
-                "direct": [],
-                "subcats": {
-                }
-            };
-
-            if (sub === "") {
-                tree[top].direct.push(s);
-            } else {
-                if (!tree[top].subcats[sub])
-                    tree[top].subcats[sub] = [];
-
-                tree[top].subcats[sub].push(s);
-            }
-        }
-        // Convert to sorted array
-        var keys = Object.keys(tree);
-        keys.sort(function(a, b) {
-            return a.localeCompare(b);
-        });
-        var categories = [];
-        for (var k = 0; k < keys.length; k++) {
-            var node = tree[keys[k]];
-            var subKeys = Object.keys(node.subcats);
-            subKeys.sort(function(a, b) {
-                return a.localeCompare(b);
-            });
-            var subcategories = [];
-            for (var si = 0; si < subKeys.length; si++) subcategories.push({
-                "name": subKeys[si],
-                "shaders": node.subcats[subKeys[si]]
-            })
-            categories.push({
-                "name": keys[k],
-                "shaders": node.direct,
-                "subcategories": subcategories
-            });
-        }
-        return {
-            "categories": categories,
-            "uncategorized": uncategorized
-        };
-    }
-    readonly property var shaderCategories: shaderCategoryTree.categories || []
-    readonly property var uncategorizedShaders: shaderCategoryTree.uncategorized || []
-    // Computed property: parameters grouped by their "group" field
-    readonly property var parameterGroups: buildParameterGroups(shaderParams)
     // Pause/resume local preview animation when app loses/gains focus
     readonly property bool appActive: Qt.application.state === Qt.ApplicationActive
     // Local shader preview — static config rebuilt on shader/params/zones change
     property var previewShaderConfig: null
-    // {bufferShaderPaths, bufferFeedback, bufferScale, bufferWrap, useWallpaper, zones, shaderParams} (shaderSource set imperatively)
     // Cached shader metadata (static per shader — avoid D-Bus call on every param change)
     property var cachedShaderInfoForPreview: null
     property string cachedShaderInfoId: ""
@@ -171,14 +78,6 @@ Kirigami.Dialog {
     property real previewLastTime: 0
     property real previewTimeDelta: 0.016
     property int previewFrame: 0
-    readonly property bool hasAnyLocked: {
-        for (var key in lockedParams) {
-            if (lockedParams[key] === true)
-                return true;
-
-        }
-        return false;
-    }
 
     function hideShaderPreview() {
         previewAnimationTimer.stop();
@@ -194,7 +93,6 @@ Kirigami.Dialog {
         Qt.callLater(root.updateLocalShaderPreview);
     }
 
-    // Build local preview config from shader info + translated params + zones
     function updateLocalShaderPreview() {
         if (!previewAllowed) {
             root.hideShaderPreview();
@@ -212,7 +110,6 @@ Kirigami.Dialog {
         var zones = editorController.zonesForShaderPreview(w, h);
         var params = editorController.translateShaderParams(root.pendingShaderId, root.pendingParams || {
         });
-        // Cache shader metadata per shader ID (avoids D-Bus call on every param change)
         if (root.cachedShaderInfoId !== root.pendingShaderId) {
             root.cachedShaderInfoForPreview = editorController.getShaderInfo(root.pendingShaderId);
             root.cachedShaderInfoId = root.pendingShaderId;
@@ -222,15 +119,11 @@ Kirigami.Dialog {
             root.hideShaderPreview();
             return ;
         }
-        // Build labels texture (zone numbers) for the preview
         var labelsImg = editorController.buildLabelsTexture(zones, w, h);
-        // Load wallpaper texture if shader uses it
         var useWallpaper = info.wallpaper || false;
         var wallpaperImg = useWallpaper ? editorController.loadWallpaperTexture() : null;
         var bsPaths = info.bufferShaderPaths || [];
         var shaderUrl = info.shaderUrl || "";
-        // Include shaderUrl in the config so the Loader's sourceComponent
-        // bindings and onLoaded can apply it after all other props settle.
         previewShaderConfig = {
             "shaderUrl": shaderUrl,
             "bufferShaderPaths": (bsPaths.length > 0) ? Array.from(bsPaths) : (info.bufferShaderPath ? [info.bufferShaderPath] : []),
@@ -253,7 +146,6 @@ Kirigami.Dialog {
             previewTimeDelta = 0.016;
             previewFrame = 0;
             previewAnimationTimer.start();
-            // Start CAVA audio capture once when preview first activates
             if (editorController)
                 editorController.startAudioCapture();
 
@@ -267,22 +159,20 @@ Kirigami.Dialog {
         if (!editorController)
             return ;
 
+        // Set `pendingShaderId` first — that fires `onPendingShaderIdChanged`
+        // which calls `initializePendingParamsForShader()` and overwrites
+        // `pendingParams` with schema defaults. We then assign
+        // `pendingParams` from the LIVE controller params, which is the
+        // last-write-wins result and what the user expects on open.
         pendingShaderId = editorController.currentShaderId || "";
-        var current = editorController.currentShaderParams || {
-        };
-        var copy = {
-        };
-        for (var key in current) {
-            copy[key] = current[key];
-        }
-        pendingParams = copy;
+        pendingParams = Object.assign({
+        }, editorController.currentShaderParams || {
+        });
         lockedParams = {
         };
     }
 
     function initializePendingParamsForShader() {
-        // Get params directly by ID to avoid stale computed property values
-        // When onPendingShaderIdChanged fires, currentShaderInfo may not have updated yet
         var params = getShaderParamsById(pendingShaderId);
         if (!params || params.length === 0) {
             pendingParams = {
@@ -292,7 +182,6 @@ Kirigami.Dialog {
         pendingParams = extractDefaults(params);
     }
 
-    // Helper to get shader parameters directly by ID, avoiding computed property timing issues
     function getShaderParamsById(shaderId) {
         if (!editorController || !shaderId)
             return [];
@@ -310,48 +199,19 @@ Kirigami.Dialog {
     }
 
     function setPendingParam(paramId, value) {
-        var copy = {
-        };
-        for (var key in pendingParams) {
-            copy[key] = pendingParams[key];
-        }
-        copy[paramId] = value;
-        pendingParams = copy;
-    }
-
-    function parameterValue(paramId, fallback) {
-        if (pendingParams && pendingParams[paramId] !== undefined)
-            return pendingParams[paramId];
-
-        return fallback;
-    }
-
-    function isParamLocked(paramId) {
-        return lockedParams && lockedParams[paramId] === true;
+        var next = Object.assign({
+        }, pendingParams || {
+        });
+        next[paramId] = value;
+        pendingParams = next;
     }
 
     function setParamLocked(paramId, locked) {
-        var copy = {
-        };
-        for (var key in lockedParams) copy[key] = lockedParams[key]
-        if (locked)
-            copy[paramId] = true;
-        else
-            delete copy[paramId];
-        lockedParams = copy;
+        lockedParams = paramEditor.lockedAfterToggle(paramId, locked);
     }
 
     function toggleAllLocks(locked) {
-        var copy = {
-        };
-        if (locked && shaderParams) {
-            for (var i = 0; i < shaderParams.length; i++) {
-                if (shaderParams[i] && shaderParams[i].id !== undefined)
-                    copy[shaderParams[i].id] = true;
-
-            }
-        }
-        lockedParams = copy;
+        lockedParams = paramEditor.lockedAfterAllToggle(locked);
     }
 
     function applyChanges() {
@@ -359,10 +219,14 @@ Kirigami.Dialog {
             return ;
 
         if (pendingShaderId !== editorController.currentShaderId) {
-            // Shader switched: atomic undo of ID + params (single Ctrl+Z)
-            editorController.switchShader(pendingShaderId, pendingParams);
+            // Shader switched: atomic undo of ID + params (single Ctrl+Z).
+            // Switching INTO the None shader strips the param map — the
+            // None shader has no schema, so carrying the previous shader's
+            // params would persist a stale map the daemon couldn't validate.
+            var nextParams = (pendingShaderId === noneShaderId) ? ({
+            }) : pendingParams;
+            editorController.switchShader(pendingShaderId, nextParams);
         } else {
-            // Same shader: apply individual param changes (supports undo merge for slider drags)
             var currentParams = editorController.currentShaderParams || {
             };
             for (var paramId in pendingParams) {
@@ -384,61 +248,9 @@ Kirigami.Dialog {
         if (!editorController || shaderParams.length === 0)
             return ;
 
-        var randomized = {
-        };
-        for (var i = 0; i < shaderParams.length; i++) {
-            var param = shaderParams[i];
-            if (!param || param.id === undefined)
-                continue;
-
-            // Skip locked parameters — preserve their current value
-            if (isParamLocked(param.id)) {
-                randomized[param.id] = parameterValue(param.id, param.default);
-                continue;
-            }
-            var value;
-            switch (param.type) {
-            case "float":
-                var minF = param.min !== undefined ? param.min : 0;
-                var maxF = param.max !== undefined ? param.max : 1;
-                value = minF + Math.random() * (maxF - minF);
-                // Round to step if defined
-                if (param.step !== undefined && param.step > 0)
-                    value = Math.round(value / param.step) * param.step;
-
-                break;
-            case "int":
-                var minI = param.min !== undefined ? param.min : 0;
-                var maxI = param.max !== undefined ? param.max : 100;
-                value = Math.floor(minI + Math.random() * (maxI - minI + 1));
-                break;
-            case "bool":
-                value = Math.random() < 0.5;
-                break;
-            case "color":
-                // Generate random RGB color
-                var r = Math.floor(Math.random() * 256);
-                var g = Math.floor(Math.random() * 256);
-                var b = Math.floor(Math.random() * 256);
-                value = "#" + r.toString(16).padStart(2, "0") + g.toString(16).padStart(2, "0") + b.toString(16).padStart(2, "0");
-                break;
-            case "image":
-                // Preserve current image path (don't randomize file paths)
-                value = root.parameterValue(param.id, param.default);
-                break;
-            default:
-                // Unknown type - use default if available
-                value = param.default;
-                break;
-            }
-            if (value !== undefined)
-                randomized[param.id] = value;
-
-        }
-        pendingParams = randomized;
+        pendingParams = paramEditor.computeRandomized();
     }
 
-    // Extract default values from parameter definitions
     function extractDefaults(params) {
         var defaults = {
         };
@@ -454,7 +266,6 @@ Kirigami.Dialog {
         return defaults;
     }
 
-    // Helper for ParameterDelegate to open color dialog
     function openColorDialog(paramId, paramName, currentColor) {
         shaderColorDialog.selectedColor = currentColor;
         shaderColorDialog.paramId = paramId;
@@ -462,10 +273,9 @@ Kirigami.Dialog {
         shaderColorDialog.open();
     }
 
-    // Helper for ParameterDelegate to open image file dialog
-    // Owned by the dialog root (not the delegate) to avoid use-after-free
-    // when the Repeater destroys delegates while the native FileDialog wrapper
-    // is still alive — the platform dialog destructor races with QQmlData cleanup.
+    // Owned by the dialog root (not the delegate row) so the platform
+    // FileDialog wrapper outlives any row that gets destroyed by a
+    // Repeater model change while it's still open.
     function openImageDialog(paramId) {
         shaderImageDialog.paramId = paramId;
         root.hideShaderPreview();
@@ -473,11 +283,23 @@ Kirigami.Dialog {
     }
 
     function firstEffectId() {
-        // Use sortedShaders (alphabetical by name) so the pick is deterministic
-        var shaders = root.sortedShaders;
+        if (!editorController)
+            return noneShaderId;
+
+        var shaders = editorController.availableShaders;
+        // Sort alphabetically so the pick is deterministic across registry orderings.
+        var arr = [];
         for (var i = 0; i < shaders.length; i++) {
-            if (shaders[i] && shaders[i].id && shaders[i].id !== noneShaderId)
-                return shaders[i].id;
+            if (shaders[i])
+                arr.push(shaders[i]);
+
+        }
+        arr.sort(function(a, b) {
+            return String(a.name || "").localeCompare(String(b.name || ""));
+        });
+        for (var j = 0; j < arr.length; j++) {
+            if (arr[j].id && arr[j].id !== noneShaderId)
+                return arr[j].id;
 
         }
         return noneShaderId;
@@ -487,7 +309,10 @@ Kirigami.Dialog {
         if (!url)
             return "";
 
-        return url.toString().replace(/^file:\/\/+/, "/");
+        // `decodeURIComponent` is required for paths containing spaces or
+        // any other %-encoded character — `selectedFile` from FileDialog
+        // returns e.g. `file:///home/u/My%20Documents/preset.json`.
+        return decodeURIComponent(url.toString().replace(/^file:\/\/+/, "/"));
     }
 
     function preparePresetDialog(dialog) {
@@ -497,46 +322,6 @@ Kirigami.Dialog {
                 dialog.currentFolder = Qt.resolvedUrl("file://" + dir);
 
         }
-    }
-
-    function buildParameterGroups(params) {
-        if (!params || params.length === 0)
-            return [];
-
-        var hasGroups = false;
-        for (var i = 0; i < params.length; i++) {
-            if (params[i] && params[i].group) {
-                hasGroups = true;
-                break;
-            }
-        }
-        if (!hasGroups)
-            return [];
-
-        var groupMap = {
-        };
-        var groupOrder = [];
-        for (var j = 0; j < params.length; j++) {
-            var param = params[j];
-            if (!param)
-                continue;
-
-            var groupName = param.group || i18nc("@title:group", "General");
-            if (!groupMap[groupName]) {
-                groupMap[groupName] = [];
-                groupOrder.push(groupName);
-            }
-            groupMap[groupName].push(param);
-        }
-        var result = [];
-        for (var k = 0; k < groupOrder.length; k++) {
-            var name = groupOrder[k];
-            result.push({
-                "name": name,
-                "params": groupMap[name]
-            });
-        }
-        return result;
     }
 
     title: i18nc("@title:window", "Shader Settings")
@@ -550,8 +335,6 @@ Kirigami.Dialog {
         previewAllowed = true;
         presetErrorMessage = "";
         initializePendingState();
-        expandedGroupIndex = 0;
-        Qt.callLater(root.updateLocalShaderPreview);
     }
     onAppActiveChanged: {
         if (!root.visible || !root.hasShaderEffect)
@@ -561,7 +344,6 @@ Kirigami.Dialog {
             if (root.previewShaderConfig) {
                 root.previewLastTime = Date.now() / 1000;
                 previewAnimationTimer.start();
-                // Re-check CAVA on focus — user may have toggled it in KCM
                 if (editorController)
                     editorController.startAudioCapture();
 
@@ -576,23 +358,6 @@ Kirigami.Dialog {
         root.hideShaderPreview();
         cachedShaderInfoForPreview = null;
         cachedShaderInfoId = "";
-    }
-    Component.onDestruction: {
-        // Destroy dynamic menu items before the QML engine tears down.
-        // Without this, Qt's child destruction cascade hits QQmlData::destroyed
-        // on items whose context data is already partially freed.
-        for (var i = 0; i < shaderCategoryMenu._allItems.length; i++) {
-            if (shaderCategoryMenu._allItems[i])
-                shaderCategoryMenu._allItems[i].destroy();
-
-        }
-        shaderCategoryMenu._allItems = [];
-        for (var j = 0; j < shaderCategoryMenu._allSubMenus.length; j++) {
-            if (shaderCategoryMenu._allSubMenus[j])
-                shaderCategoryMenu._allSubMenus[j].destroy();
-
-        }
-        shaderCategoryMenu._allSubMenus = [];
     }
     onPendingShaderIdChanged: {
         if (visible)
@@ -626,7 +391,6 @@ Kirigami.Dialog {
         onTriggered: root.updateLocalShaderPreview()
     }
 
-    // Local animation timer for shader preview (replaces daemon-side 60fps timer)
     Timer {
         id: previewAnimationTimer
 
@@ -650,18 +414,16 @@ Kirigami.Dialog {
         Layout.fillWidth: true
         Layout.fillHeight: root.hasShaderEffect
 
-        // ═══════════════════════════════════════════════════════════════════
-        // LEFT: Settings panel - original layout/width (28gu), unchanged
-        // ═══════════════════════════════════════════════════════════════════
+        // ═══════════════════════════════════════════════════════════════
+        // LEFT: Settings panel
+        // ═══════════════════════════════════════════════════════════════
         ColumnLayout {
             Layout.fillHeight: root.hasShaderEffect
             Layout.preferredWidth: Kirigami.Units.gridUnit * 28
             Layout.minimumWidth: Kirigami.Units.gridUnit * 28
             spacing: Kirigami.Units.largeSpacing
 
-            // ═══════════════════════════════════════════════════════════════
-            // EFFECT SELECTION SECTION
-            // ═══════════════════════════════════════════════════════════════
+            // ── Effect selection (enable + picker) ─────────────────────
             Kirigami.FormLayout {
                 Layout.fillWidth: true
 
@@ -682,216 +444,34 @@ Kirigami.Dialog {
                     }
                 }
 
-                Button {
-                    id: shaderMenuButton
-
-                    readonly property string displayText: {
-                        var info = root.currentShaderInfo;
-                        return info ? info.name : i18nc("@action:button", "Select shader...");
-                    }
-
+                PZCommon.ShaderPickerButton {
                     Kirigami.FormData.label: i18nc("@label", "Shader:")
                     enabled: root.hasShaderEffect
                     Layout.fillWidth: true
-                    onClicked: shaderCategoryMenu.showMenu()
-                    Accessible.name: displayText
-                    ToolTip.text: i18nc("@info:tooltip", "Choose a shader effect from categorized list")
-                    ToolTip.visible: hovered && !shaderCategoryMenu.visible
-                    ToolTip.delay: Kirigami.Units.toolTipDelay
-
-                    // Use ItemDelegate (not MenuItem) to avoid Qt 6 use-after-free in
-                    // QQuickPopupPrivate::finalizeExitTransition. Qt's QQuickMenu connects
-                    // internally to QQuickMenuItem::triggered → dismiss() cascade. ItemDelegate
-                    // is not a MenuItem, so Qt's onItemTriggered never fires and the dismiss
-                    // cascade never starts. Manual createObject + explicit destroy (same
-                    // pattern as Main.qml's dynamic screen items) keeps lifecycle under control.
-                    Component {
-                        id: shaderMenuItemComponent
-
-                        ItemDelegate {
-                            property string shaderId
-                            property bool isSelected: false
-
-                            icon.name: isSelected ? "checkmark" : ""
-                            onClicked: shaderCategoryMenu.selectShader(shaderId)
-                        }
-
+                    shaders: editorController ? editorController.availableShaders : []
+                    currentShaderId: root.pendingShaderId
+                    noneShaderId: root.noneShaderId
+                    placeholderText: i18nc("@action:button", "Select shader…")
+                    onShaderSelected: function(id) {
+                        // Hide preview before the switch so RHI resources
+                        // are released cleanly before the new shader spins
+                        // up. NVIDIA EGL 595.x corrupts the heap on
+                        // in-place pipeline swaps. Reassigning
+                        // `pendingShaderId` then fires `onPendingShaderIdChanged`
+                        // which restarts the debounce timer; the timer
+                        // re-runs `updateLocalShaderPreview()` once the
+                        // ID has settled — no explicit restore needed
+                        // here (a manual `restoreShaderPreview()` would
+                        // double-fire the rebuild).
+                        root.hideShaderPreview();
+                        root.pendingShaderId = id;
                     }
-
-                    Component {
-                        id: subMenuComponent
-
-                        Menu {
-                            // Force opaque background via palette (not background:
-                            // property — that crashes in finalizeExitTransition).
-                            palette.window: root.themeBackgroundColor
-
-                            // Empty transitions prevent the default animated exit
-                            // transition from deferring finalizeExitTransition to
-                            // an animation tick. With ItemDelegate (not MenuItem)
-                            // and build-once (no destroy), items are stable when
-                            // finalizeExitTransition runs synchronously.
-                            enter: Transition {
-                            }
-
-                            exit: Transition {
-                            }
-
-                        }
-
-                    }
-
-                    Menu {
-                        id: shaderCategoryMenu
-
-                        // All shader ItemDelegates (flat list for checkmark updates)
-                        property var _allItems: []
-                        // All submenus (for force-hiding to bypass transitions)
-                        property var _allSubMenus: []
-                        property bool _built: false
-
-                        function selectShader(id) {
-                            // Defer everything to the next event loop tick.
-                            // The ItemDelegate's onClicked fires from handleRelease —
-                            // setting visible=false mid-event-delivery triggers
-                            // finalizeExitTransition while the event pipeline is active.
-                            Qt.callLater(function() {
-                                for (var i = 0; i < _allSubMenus.length; i++) {
-                                    if (_allSubMenus[i])
-                                        _allSubMenus[i].visible = false;
-
-                                }
-                                shaderCategoryMenu.visible = false;
-                                root.hideShaderPreview();
-                                root.pendingShaderId = id;
-                                root.restoreShaderPreview();
-                            });
-                        }
-
-                        // Update checkmarks on existing items — no destroy/create
-                        function updateChecks() {
-                            for (var i = 0; i < _allItems.length; i++) {
-                                var it = _allItems[i];
-                                if (it)
-                                    it.isSelected = (it.shaderId === root.pendingShaderId);
-
-                            }
-                        }
-
-                        // Build menu once, reuse on subsequent opens
-                        function showMenu() {
-                            if (!_built) {
-                                _built = true;
-                                var categories = root.shaderCategories;
-                                for (var c = 0; c < categories.length; c++) {
-                                    var cat = categories[c];
-                                    var subMenu = subMenuComponent.createObject(shaderCategoryMenu, {
-                                        "title": cat.name
-                                    });
-                                    _allSubMenus.push(subMenu);
-                                    var shaders = cat.shaders || [];
-                                    for (var s = 0; s < shaders.length; s++) {
-                                        var item = shaderMenuItemComponent.createObject(subMenu, {
-                                            "text": shaders[s].name,
-                                            "shaderId": shaders[s].id
-                                        });
-                                        subMenu.addItem(item);
-                                        _allItems.push(item);
-                                    }
-                                    var subcats = cat.subcategories || [];
-                                    for (var sc = 0; sc < subcats.length; sc++) {
-                                        var subSubMenu = subMenuComponent.createObject(subMenu, {
-                                            "title": subcats[sc].name
-                                        });
-                                        _allSubMenus.push(subSubMenu);
-                                        var subShaders = subcats[sc].shaders || [];
-                                        for (var ss = 0; ss < subShaders.length; ss++) {
-                                            var subItem = shaderMenuItemComponent.createObject(subSubMenu, {
-                                                "text": subShaders[ss].name,
-                                                "shaderId": subShaders[ss].id
-                                            });
-                                            subSubMenu.addItem(subItem);
-                                            _allItems.push(subItem);
-                                        }
-                                        subMenu.addMenu(subSubMenu);
-                                    }
-                                    shaderCategoryMenu.addMenu(subMenu);
-                                }
-                                var uncategorized = root.uncategorizedShaders;
-                                if (uncategorized.length > 0 && categories.length > 0)
-                                    shaderCategoryMenu.addItem(menuSeparatorComponent.createObject(shaderCategoryMenu));
-
-                                for (var u = 0; u < uncategorized.length; u++) {
-                                    var uncatItem = shaderMenuItemComponent.createObject(shaderCategoryMenu, {
-                                        "text": uncategorized[u].name,
-                                        "shaderId": uncategorized[u].id
-                                    });
-                                    shaderCategoryMenu.addItem(uncatItem);
-                                    _allItems.push(uncatItem);
-                                }
-                            }
-                            updateChecks();
-                            shaderCategoryMenu.popup(shaderMenuButton, 0, shaderMenuButton.height);
-                        }
-
-                        // Force opaque background via palette (not background:
-                        // property — that crashes in finalizeExitTransition).
-                        palette.window: root.themeBackgroundColor
-                        onAboutToShow: previewAnimationTimer.stop()
-                        onAboutToHide: {
-                            if (root.previewShaderConfig)
-                                previewAnimationTimer.start();
-
-                        }
-
-                        enter: Transition {
-                        }
-
-                        exit: Transition {
-                        }
-
-                    }
-
-                    Component {
-                        id: menuSeparatorComponent
-
-                        MenuSeparator {
-                        }
-
-                    }
-
-                    contentItem: RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: shaderMenuButton.displayText
-                            elide: Text.ElideRight
-                            color: shaderMenuButton.enabled ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
-                        }
-
-                        Kirigami.Icon {
-                            source: "arrow-down"
-                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                            Layout.alignment: Qt.AlignVCenter
-                        }
-
-                    }
-
                 }
 
             }
 
-            // ═══════════════════════════════════════════════════════════════════
-            // SHADER DESCRIPTION AREA (OUTSIDE FormLayout)
-            // FormLayout has special internal handling that conflicts with
-            // fixed-height containers. Moving this to the parent ColumnLayout
-            // gives reliable sizing behavior.
-            // ═══════════════════════════════════════════════════════════════════
+            // ── Shader description / metadata ─────────────────────────
             ColumnLayout {
-                id: descriptionArea
-
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0 // Don't expand parent based on content
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 4
@@ -901,11 +481,7 @@ Kirigami.Dialog {
                 visible: root.hasShaderEffect
                 spacing: Kirigami.Units.smallSpacing
 
-                // Description text - takes remaining vertical space
-                // Layout.preferredWidth: 0 prevents implicitWidth from expanding layout
                 Label {
-                    id: descriptionLabel
-
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.preferredWidth: 0
@@ -925,10 +501,7 @@ Kirigami.Dialog {
                     verticalAlignment: Text.AlignTop
                 }
 
-                // Author/version metadata - natural height at bottom
                 Label {
-                    id: metadataLabel
-
                     Layout.fillWidth: true
                     Layout.preferredWidth: 0
                     text: {
@@ -956,169 +529,127 @@ Kirigami.Dialog {
 
             }
 
-            // ═══════════════════════════════════════════════════════════════════
-            // PARAMETERS SECTION
-            // ═══════════════════════════════════════════════════════════════════
             Kirigami.Separator {
                 Layout.fillWidth: true
                 visible: root.hasShaderEffect && root.shaderParams.length > 0
             }
 
-            RowLayout {
+            // ── Parameters editor (toolbar + flat/grouped rows) ───────
+            PZCommon.ShaderParameterEditor {
+                id: paramEditor
+
                 Layout.fillWidth: true
-                visible: root.hasShaderEffect && root.shaderParams.length > 0
-                spacing: Kirigami.Units.smallSpacing
-
-                Label {
-                    Layout.fillWidth: true
-                    text: i18nc("@title:group", "Parameters")
-                    font.weight: Font.DemiBold
+                visible: root.hasShaderEffect
+                parameters: root.shaderParams
+                currentValues: root.pendingParams
+                lockedParams: root.lockedParams
+                enableLocking: true
+                enableRandomize: true
+                enableGroups: true
+                enableImage: true
+                onValueChanged: function(id, value) {
+                    root.setPendingParam(id, value);
+                }
+                onLockToggled: function(id, locked) {
+                    root.setParamLocked(id, locked);
+                }
+                onLockAllRequested: function(lock) {
+                    root.toggleAllLocks(lock);
+                }
+                onRandomizeRequested: root.randomizeParameters()
+                onRequestColorPicker: function(id, name, current) {
+                    root.openColorDialog(id, name, current);
+                }
+                onRequestImagePicker: function(id) {
+                    root.openImageDialog(id);
                 }
 
-                ToolButton {
-                    icon.name: root.hasAnyLocked ? "object-unlocked" : "object-locked"
-                    display: ToolButton.IconOnly
-                    ToolTip.text: root.hasAnyLocked ? i18nc("@info:tooltip", "Unlock all parameters") : i18nc("@info:tooltip", "Lock all parameters")
-                    Accessible.name: root.hasAnyLocked ? i18nc("@action:button", "Unlock All") : i18nc("@action:button", "Lock All")
-                    Accessible.description: ToolTip.text
-                    onClicked: root.toggleAllLocks(!root.hasAnyLocked)
-                }
+                // Editor-specific extras: metadata-driven preset menu.
+                toolbarTrailing: Component {
+                    ToolButton {
+                        id: metadataPresetButton
 
-                ToolButton {
-                    icon.name: "roll"
-                    display: ToolButton.IconOnly
-                    ToolTip.text: root.hasAnyLocked ? i18nc("@info:tooltip", "Randomize unlocked parameters") : i18nc("@info:tooltip", "Randomize all parameters")
-                    Accessible.name: i18nc("@action:button", "Random")
-                    Accessible.description: ToolTip.text
-                    onClicked: root.randomizeParameters()
-                }
+                        icon.name: "bookmarks"
+                        display: ToolButton.IconOnly
+                        visible: {
+                            var info = root.currentShaderInfo;
+                            return info && info.presets && info.presets.length > 0;
+                        }
+                        ToolTip.text: i18nc("@info:tooltip", "Apply a built-in preset")
+                        Accessible.name: i18nc("@action:button", "Presets")
+                        Accessible.description: ToolTip.text
+                        onClicked: metadataPresetMenu.open()
 
-                // Metadata presets menu (from shader's metadata.json)
-                ToolButton {
-                    id: metadataPresetButton
+                        Menu {
+                            id: metadataPresetMenu
 
-                    icon.name: "bookmarks"
-                    display: ToolButton.IconOnly
-                    visible: {
-                        var info = root.currentShaderInfo;
-                        return info && info.presets && info.presets.length > 0;
-                    }
-                    ToolTip.text: i18nc("@info:tooltip", "Apply a built-in preset")
-                    Accessible.name: i18nc("@action:button", "Presets")
-                    Accessible.description: ToolTip.text
-                    onClicked: metadataPresetMenu.open()
+                            // Same Qt 6 menu-lifecycle hardening as
+                            // ShaderPickerButton: opaque palette + empty
+                            // transitions keep finalizeExitTransition
+                            // synchronous and avoid the QQmlData::destroyed
+                            // race that fires when MenuItem-based exit
+                            // animations run while the parent dialog is
+                            // tearing down.
+                            palette.window: Kirigami.Theme.backgroundColor
+                            y: metadataPresetButton.height
 
-                    Menu {
-                        id: metadataPresetMenu
-
-                        y: metadataPresetButton.height
-
-                        Instantiator {
-                            model: {
-                                var info = root.currentShaderInfo;
-                                return (info && info.presets) ? info.presets : [];
-                            }
-                            onObjectAdded: function(index, object) {
-                                metadataPresetMenu.insertItem(index, object);
-                            }
-                            onObjectRemoved: function(index, object) {
-                                metadataPresetMenu.removeItem(object);
-                            }
-
-                            delegate: MenuItem {
-                                text: modelData.name
-                                Accessible.name: modelData.name
-                                onTriggered: {
-                                    if (!editorController)
-                                        return ;
-
-                                    var presetParams = editorController.presetParams(root.pendingShaderId, modelData.name);
-                                    if (presetParams && Object.keys(presetParams).length > 0) {
-                                        root.pendingParams = presetParams;
-                                        root.updatePreview();
-                                    }
+                            Instantiator {
+                                model: {
+                                    var info = root.currentShaderInfo;
+                                    return (info && info.presets) ? info.presets : [];
                                 }
-                            }
-
-                        }
-
-                    }
-
-                }
-
-            }
-
-            // Message when shader has no parameters
-            Label {
-                Layout.fillWidth: true
-                visible: root.hasShaderEffect && root.shaderParams.length === 0
-                text: i18nc("@info", "This effect has no configurable parameters.")
-                wrapMode: Text.WordWrap
-                opacity: 0.7
-            }
-
-            // ═══════════════════════════════════════════════════════════════════
-            // GROUPED PARAMETERS - Accordion sections when groups defined
-            // ═══════════════════════════════════════════════════════════════════
-            ColumnLayout {
-                Layout.fillWidth: true
-                visible: root.hasShaderEffect && root.parameterGroups.length > 0
-                spacing: Kirigami.Units.smallSpacing
-
-                Repeater {
-                    id: groupRepeater
-
-                    model: root.parameterGroups
-
-                    delegate: ShaderParameterSection {
-                        id: paramSection
-
-                        required property var modelData
-                        required property int index
-
-                        Layout.fillWidth: true
-                        title: modelData.name
-                        groupParams: modelData.params
-                        dialogRoot: root
-                        expanded: root.expandedGroupIndex === index
-                        onToggled: {
-                            root.expandedGroupIndex = expanded ? -1 : index;
-                        }
-
-                        contentComponent: Component {
-                            ColumnLayout {
-                                Kirigami.Theme.inherit: true
-                                spacing: Kirigami.Units.smallSpacing
-
-                                Repeater {
-                                    model: paramSection.groupParams
-
-                                    delegate: RowLayout {
-                                        required property var modelData
-                                        required property int index
-
-                                        Layout.fillWidth: true
-                                        spacing: Kirigami.Units.largeSpacing
-
-                                        Label {
-                                            Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-                                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                                            text: modelData ? (modelData.name || modelData.id || "") : ""
-                                            horizontalAlignment: Text.AlignRight
-                                            elide: Text.ElideRight
-                                        }
-
-                                        ParameterDelegate {
-                                            Layout.fillWidth: true
-                                            Kirigami.Theme.inherit: true
-                                            dialogRoot: root
-                                            paramData: modelData
-                                        }
-
-                                    }
-
+                                onObjectAdded: function(index, object) {
+                                    metadataPresetMenu.insertItem(index, object);
+                                }
+                                onObjectRemoved: function(index, object) {
+                                    metadataPresetMenu.removeItem(object);
                                 }
 
+                                // ItemDelegate (not MenuItem) so Qt's
+                                // onItemTriggered → dismiss() cascade
+                                // never starts; the menu hides via the
+                                // explicit Qt.callLater below, after the
+                                // click handler has returned.
+                                delegate: ItemDelegate {
+                                    required property var modelData
+
+                                    text: modelData.name
+                                    Accessible.name: modelData.name
+                                    onClicked: {
+                                        // Snapshot BOTH the preset name and the
+                                        // shader id at click time. Without the id
+                                        // snapshot, a registry refresh between
+                                        // click and the deferred apply (e.g.
+                                        // `availableShaders` reload) could shift
+                                        // `root.pendingShaderId` out from under
+                                        // us, applying the preset to the wrong
+                                        // shader.
+                                        var presetName = modelData.name;
+                                        var shaderIdAtClick = root.pendingShaderId;
+                                        Qt.callLater(function() {
+                                            metadataPresetMenu.visible = false;
+                                            if (!editorController)
+                                                return ;
+
+                                            // Bail if the shader changed between click
+                                            // and apply — better a no-op than a wrong-shader apply.
+                                            if (root.pendingShaderId !== shaderIdAtClick)
+                                                return ;
+
+                                            var preset = editorController.presetParams(shaderIdAtClick, presetName);
+                                            if (preset && Object.keys(preset).length > 0)
+                                                root.pendingParams = preset;
+
+                                        });
+                                    }
+                                }
+
+                            }
+
+                            enter: Transition {
+                            }
+
+                            exit: Transition {
                             }
 
                         }
@@ -1129,50 +660,7 @@ Kirigami.Dialog {
 
             }
 
-            // ═══════════════════════════════════════════════════════════════════
-            // FLAT PARAMETERS - When no groups are defined
-            // Uses ColumnLayout instead of FormLayout to avoid attached property
-            // issues during Repeater model changes (FormLayout caches FormData refs)
-            // ═══════════════════════════════════════════════════════════════════
-            ColumnLayout {
-                Layout.fillWidth: true
-                visible: root.hasShaderEffect && root.parameterGroups.length === 0 && root.shaderParams.length > 0
-                spacing: Kirigami.Units.smallSpacing
-
-                Repeater {
-                    model: root.parameterGroups.length === 0 ? root.shaderParams : []
-
-                    delegate: RowLayout {
-                        required property var modelData
-                        required property int index
-
-                        Layout.fillWidth: true
-                        spacing: Kirigami.Units.largeSpacing
-
-                        Label {
-                            Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                            text: modelData ? (modelData.name || modelData.id || "") : ""
-                            horizontalAlignment: Text.AlignRight
-                            elide: Text.ElideRight
-                        }
-
-                        ParameterDelegate {
-                            Layout.fillWidth: true
-                            Kirigami.Theme.inherit: true
-                            dialogRoot: root
-                            paramData: modelData
-                        }
-
-                    }
-
-                }
-
-            }
-
-            // ═══════════════════════════════════════════════════════════════════
-            // DISABLED STATE MESSAGE
-            // ═══════════════════════════════════════════════════════════════════
+            // ── Disabled state message ────────────────────────────────
             Label {
                 Layout.fillWidth: true
                 visible: !root.hasShaderEffect
@@ -1188,9 +676,7 @@ Kirigami.Dialog {
                 Layout.minimumHeight: root.hasShaderEffect ? Kirigami.Units.gridUnit * 2 : Kirigami.Units.smallSpacing
             }
 
-            // ═══════════════════════════════════════════════════════════════════
-            // PRESET ERROR MESSAGE (inline when load/save fails)
-            // ═══════════════════════════════════════════════════════════════════
+            // ── Preset error inline ───────────────────────────────────
             Kirigami.InlineMessage {
                 Layout.fillWidth: true
                 visible: root.presetErrorMessage !== ""
@@ -1205,9 +691,7 @@ Kirigami.Dialog {
                 ]
             }
 
-            // ═══════════════════════════════════════════════════════════════════
-            // FOOTER BUTTONS - Right-aligned at bottom of panel
-            // ═══════════════════════════════════════════════════════════════════
+            // ── Footer (Load/Save preset, Defaults, Apply) ────────────
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
@@ -1261,9 +745,9 @@ Kirigami.Dialog {
 
         }
 
-        // ═══════════════════════════════════════════════════════════════════
+        // ═══════════════════════════════════════════════════════════════
         // RIGHT: Live shader preview (hidden when effect disabled - no space)
-        // ═══════════════════════════════════════════════════════════════════
+        // ═══════════════════════════════════════════════════════════════
         Item {
             id: previewContainer
 
@@ -1285,7 +769,6 @@ Kirigami.Dialog {
 
                 readonly property var cfg: root.previewShaderConfig || ({
                 })
-                // Mouse tracking for zone hover highlight in preview
                 property point previewMouse: Qt.point(-1, -1)
                 readonly property int previewHoveredZone: {
                     var mouse = previewBackground.previewMouse;
@@ -1341,15 +824,9 @@ Kirigami.Dialog {
                     visible: item === null || item.status !== ZoneShaderItem.Error
 
                     sourceComponent: ZoneShaderItem {
-                        // Render to a private layer FBO so multipass shaders' beginPass(rt)
-                        // clears only this layer — not the entire editor window surface.
                         layer.enabled: shaderSource.toString() !== ""
-                        // Our render node already outputs correct top-down orientation;
-                        // disable default MirrorVertically to prevent double-flip.
                         layer.textureMirroring: ShaderEffectSource.NoMirroring
-                        // shaderSource bound from config — applied reactively
                         shaderSource: previewBackground.cfg.shaderUrl || ""
-                        // All auxiliary props
                         bufferShaderPaths: previewBackground.cfg.bufferShaderPaths || []
                         bufferFeedback: previewBackground.cfg.bufferFeedback || false
                         bufferScale: previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1
@@ -1362,7 +839,6 @@ Kirigami.Dialog {
                         shaderParams: previewBackground.cfg.shaderParams || ({
                         })
                         useWallpaper: previewBackground.cfg.useWallpaper || false
-                        // Timing bound directly to root properties for per-frame updates
                         iTime: root.previewITime
                         iTimeDelta: root.previewTimeDelta
                         iFrame: root.previewFrame
@@ -1374,10 +850,6 @@ Kirigami.Dialog {
 
                 }
 
-                // Reactive QImage bindings — Binding elements update labelsTexture
-                // and wallpaperTexture whenever the config changes, not just on
-                // initial Loader creation. The `when` guard prevents assigning
-                // undefined/null to the C++ setter (which expects a valid QImage).
                 Binding {
                     target: shaderPreviewLoader.item
                     property: "labelsTexture"
@@ -1392,7 +864,6 @@ Kirigami.Dialog {
                     when: shaderPreviewLoader.item !== null && previewBackground.cfg.wallpaperTexture !== undefined && previewBackground.cfg.wallpaperTexture !== null
                 }
 
-                // Shader error box — mirrors RenderNodeOverlay.qml error display
                 Rectangle {
                     visible: shaderPreviewLoader.item !== null && shaderPreviewLoader.item.status === ZoneShaderItem.Error
                     anchors.centerIn: parent
@@ -1417,7 +888,6 @@ Kirigami.Dialog {
 
                 }
 
-                // Fallback message when no shader is rendering
                 Label {
                     anchors.centerIn: parent
                     visible: root.previewShaderConfig === null && root.hasShaderEffect
@@ -1449,7 +919,7 @@ Kirigami.Dialog {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // SHARED IMAGE FILE DIALOG (owned by dialog root, not by delegate)
+    // SHARED IMAGE FILE DIALOG (owned by dialog root, not by delegate row)
     // ═══════════════════════════════════════════════════════════════════════
     FileDialog {
         id: shaderImageDialog
@@ -1460,10 +930,9 @@ Kirigami.Dialog {
         nameFilters: [i18nc("@item:inlistbox", "Image files (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)"), i18nc("@item:inlistbox", "All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            if (paramId) {
-                var path = decodeURIComponent(selectedFile.toString().replace(/^file:\/\/+/, "/"));
-                root.setPendingParam(paramId, path);
-            }
+            if (paramId)
+                root.setPendingParam(paramId, filePathFromUrl(selectedFile));
+
             root.restoreShaderPreview();
         }
         onRejected: {

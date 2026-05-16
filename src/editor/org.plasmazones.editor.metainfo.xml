@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-FileCopyrightText: 2026 fuddlesworth
+  SPDX-License-Identifier: CC0-1.0
+-->
+<component type="desktop-application">
+  <id>org.plasmazones.editor</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>PlasmaZones Layout Editor</name>
+  <summary>Create and edit window zone layouts</summary>
+
+  <description>
+    <p>
+      The PlasmaZones Layout Editor is the visual companion to the
+      PlasmaZones window-tiling system for KDE Plasma. Use it to author
+      named zone layouts, drag zone boundaries on a live canvas, assign
+      shaders, configure per-zone appearance, and pick the layout that
+      should activate on each monitor.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Drag-to-resize zones with snap-to-grid and zone-mirror tools</li>
+      <li>Fixed-geometry and relative-geometry zones for resolution-independent layouts</li>
+      <li>Per-zone shader effects with live previews</li>
+      <li>Per-monitor and per-activity layout assignments</li>
+      <li>Import / export layout JSON for sharing</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">org.plasmazones.editor.desktop</launchable>
+
+  <categories>
+    <category>Settings</category>
+    <category>Utility</category>
+  </categories>
+
+  <keywords>
+    <keyword>window</keyword>
+    <keyword>tiling</keyword>
+    <keyword>zones</keyword>
+    <keyword>layout</keyword>
+    <keyword>snap</keyword>
+  </keywords>
+
+  <url type="homepage">https://github.com/fuddlesworth/PlasmaZones</url>
+  <url type="bugtracker">https://github.com/fuddlesworth/PlasmaZones/issues</url>
+  <url type="vcs-browser">https://github.com/fuddlesworth/PlasmaZones</url>
+
+  <developer id="io.github.fuddlesworth">
+    <name>fuddlesworth</name>
+  </developer>
+
+  <content_rating type="oars-1.1" />
+
+  <provides>
+    <binary>plasmazones-editor</binary>
+  </provides>
+</component>

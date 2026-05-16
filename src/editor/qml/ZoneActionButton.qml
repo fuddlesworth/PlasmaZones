@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Reusable action button for zone operations
@@ -59,25 +60,25 @@ AbstractButton {
         }
 
         Behavior on border.width {
-            NumberAnimation {
-                duration: Theme.animDuration
-                easing.type: Theme.animEasing
+            PhosphorMotionAnimation {
+                profile: "widget.press"
+                durationOverride: Theme.animDuration
             }
 
         }
 
         Behavior on color {
-            ColorAnimation {
-                duration: Theme.animDuration
-                easing.type: Theme.animEasing
+            PhosphorMotionAnimation {
+                profile: "widget.press"
+                durationOverride: Theme.animDuration
             }
 
         }
 
         Behavior on border.color {
-            ColorAnimation {
-                duration: Theme.animDuration
-                easing.type: Theme.animEasing
+            PhosphorMotionAnimation {
+                profile: "widget.press"
+                durationOverride: Theme.animDuration
             }
 
         }

@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../settings.h"
-#include "../iconfigbackend.h"
+#include "../configbackends.h"
 #include "../configdefaults.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -71,21 +72,36 @@ void applyPerScreenOverrides(ZoneSelectorConfig& config, const QVariantMap& over
     }
 }
 
-constexpr const char* kPerScreenKeys[] = {
-    ZoneSelectorConfigKey::Position,          ZoneSelectorConfigKey::LayoutMode,
-    ZoneSelectorConfigKey::SizeMode,          ZoneSelectorConfigKey::MaxRows,
-    ZoneSelectorConfigKey::PreviewWidth,      ZoneSelectorConfigKey::PreviewHeight,
-    ZoneSelectorConfigKey::PreviewLockAspect, ZoneSelectorConfigKey::GridColumns,
-    ZoneSelectorConfigKey::TriggerDistance,
+const QLatin1String kPerScreenKeys[] = {
+    QLatin1String(ZoneSelectorConfigKey::Position),          QLatin1String(ZoneSelectorConfigKey::LayoutMode),
+    QLatin1String(ZoneSelectorConfigKey::SizeMode),          QLatin1String(ZoneSelectorConfigKey::MaxRows),
+    QLatin1String(ZoneSelectorConfigKey::PreviewWidth),      QLatin1String(ZoneSelectorConfigKey::PreviewHeight),
+    QLatin1String(ZoneSelectorConfigKey::PreviewLockAspect), QLatin1String(ZoneSelectorConfigKey::GridColumns),
+    QLatin1String(ZoneSelectorConfigKey::TriggerDistance),
 };
 
-constexpr const char* kPerScreenAutotileKeys[] = {
-    "AutotileAlgorithm",          "AutotileSplitRatio",    "AutotileSplitRatioStep",     "AutotileMasterCount",
-    "AutotileInnerGap",           "AutotileOuterGap",      "AutotileUsePerSideOuterGap", "AutotileOuterGapTop",
-    "AutotileOuterGapBottom",     "AutotileOuterGapLeft",  "AutotileOuterGapRight",      "AutotileFocusNewWindows",
-    "AutotileSmartGaps",          "AutotileMaxWindows",    "AutotileInsertPosition",     "AutotileFocusFollowsMouse",
-    "AutotileRespectMinimumSize", "AutotileHideTitleBars", "AnimationsEnabled",          "AnimationDuration",
-    "AnimationEasingCurve",
+const QLatin1String kPerScreenAutotileKeys[] = {
+    QLatin1String(PerScreenAutotileKey::Algorithm),
+    QLatin1String(PerScreenAutotileKey::SplitRatio),
+    QLatin1String(PerScreenAutotileKey::SplitRatioStep),
+    QLatin1String(PerScreenAutotileKey::MasterCount),
+    QLatin1String(PerScreenAutotileKey::InnerGap),
+    QLatin1String(PerScreenAutotileKey::OuterGap),
+    QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap),
+    QLatin1String(PerScreenAutotileKey::OuterGapTop),
+    QLatin1String(PerScreenAutotileKey::OuterGapBottom),
+    QLatin1String(PerScreenAutotileKey::OuterGapLeft),
+    QLatin1String(PerScreenAutotileKey::OuterGapRight),
+    QLatin1String(PerScreenAutotileKey::FocusNewWindows),
+    QLatin1String(PerScreenAutotileKey::SmartGaps),
+    QLatin1String(PerScreenAutotileKey::MaxWindows),
+    QLatin1String(PerScreenAutotileKey::InsertPosition),
+    QLatin1String(PerScreenAutotileKey::FocusFollowsMouse),
+    QLatin1String(PerScreenAutotileKey::RespectMinimumSize),
+    QLatin1String(PerScreenAutotileKey::HideTitleBars),
+    QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
+    QLatin1String(PerScreenAutotileKey::AnimationDuration),
+    QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
 };
 
 QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& value)
@@ -106,90 +122,125 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k == PerScreenKeys::MasterCount)
         return QVariant(
             qBound(ConfigDefaults::autotileMasterCountMin(), value.toInt(), ConfigDefaults::autotileMasterCountMax()));
-    if (k == QLatin1String("InnerGap"))
+    if (k == PerScreenKeys::InnerGap)
         return QVariant(
             qBound(ConfigDefaults::autotileInnerGapMin(), value.toInt(), ConfigDefaults::autotileInnerGapMax()));
-    if (k == QLatin1String("OuterGap") || k.startsWith(QLatin1String("OuterGap")))
+    // Per-side gaps each have their own min/max — match exactly, not by prefix.
+    // A single startsWith("OuterGap") would apply the uniform-gap bounds to
+    // Top/Bottom/Left/Right, which silently clamps to the wrong range whenever
+    // those bounds diverge from the uniform ones.
+    if (k == QLatin1String("OuterGap"))
         return QVariant(
             qBound(ConfigDefaults::autotileOuterGapMin(), value.toInt(), ConfigDefaults::autotileOuterGapMax()));
+    if (k == QLatin1String("OuterGapTop"))
+        return QVariant(
+            qBound(ConfigDefaults::autotileOuterGapTopMin(), value.toInt(), ConfigDefaults::autotileOuterGapTopMax()));
+    if (k == QLatin1String("OuterGapBottom"))
+        return QVariant(qBound(ConfigDefaults::autotileOuterGapBottomMin(), value.toInt(),
+                               ConfigDefaults::autotileOuterGapBottomMax()));
+    if (k == QLatin1String("OuterGapLeft"))
+        return QVariant(qBound(ConfigDefaults::autotileOuterGapLeftMin(), value.toInt(),
+                               ConfigDefaults::autotileOuterGapLeftMax()));
+    if (k == QLatin1String("OuterGapRight"))
+        return QVariant(qBound(ConfigDefaults::autotileOuterGapRightMin(), value.toInt(),
+                               ConfigDefaults::autotileOuterGapRightMax()));
     if (k == PerScreenKeys::MaxWindows)
         return QVariant(
             qBound(ConfigDefaults::autotileMaxWindowsMin(), value.toInt(), ConfigDefaults::autotileMaxWindowsMax()));
-    if (k == QLatin1String("InsertPosition"))
+    if (k == PerScreenKeys::InsertPosition)
         return QVariant(qBound(ConfigDefaults::autotileInsertPositionMin(), value.toInt(),
                                ConfigDefaults::autotileInsertPositionMax()));
-    if (k == PerScreenKeys::Algorithm || key == QLatin1String("AnimationEasingCurve"))
+    if (k == PerScreenKeys::Algorithm || k == PerScreenKeys::AnimationEasingCurve)
         return value;
-    if (k == QLatin1String("UsePerSideOuterGap") || k == QLatin1String("FocusNewWindows")
-        || k == QLatin1String("SmartGaps") || k == QLatin1String("FocusFollowsMouse")
-        || k == QLatin1String("RespectMinimumSize") || k == QLatin1String("HideTitleBars")
-        || key == QLatin1String("AnimationsEnabled"))
+    if (k == PerScreenKeys::UsePerSideOuterGap || k == PerScreenKeys::FocusNewWindows || k == PerScreenKeys::SmartGaps
+        || k == PerScreenKeys::FocusFollowsMouse || k == PerScreenKeys::RespectMinimumSize
+        || k == PerScreenKeys::HideTitleBars || k == PerScreenKeys::AnimationsEnabled)
         return QVariant(value.toBool());
-    if (key == QLatin1String("AnimationDuration"))
+    if (k == PerScreenKeys::AnimationDuration)
         return QVariant(
             qBound(ConfigDefaults::animationDurationMin(), value.toInt(), ConfigDefaults::animationDurationMax()));
     return QVariant();
 }
 
-QVariant readPerScreenAutotileEntry(IConfigGroup& group, const QString& key)
+QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
-    if (key == QLatin1String("AutotileSplitRatio"))
+    if (key == QLatin1String(PerScreenAutotileKey::SplitRatio))
         return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatio()));
-    if (key == QLatin1String("AutotileAlgorithm") || key == QLatin1String("AnimationEasingCurve"))
+    if (key == QLatin1String(PerScreenAutotileKey::SplitRatioStep))
+        return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatioStep()));
+    if (key == QLatin1String(PerScreenAutotileKey::Algorithm)
+        || key == QLatin1String(PerScreenAutotileKey::AnimationEasingCurve))
         return QVariant(group.readString(key));
-    if (key == QLatin1String("AutotileUsePerSideOuterGap") || key == QLatin1String("AutotileFocusNewWindows")
-        || key == QLatin1String("AutotileSmartGaps") || key == QLatin1String("AutotileFocusFollowsMouse")
-        || key == QLatin1String("AutotileRespectMinimumSize") || key == QLatin1String("AutotileHideTitleBars")
-        || key == QLatin1String("AnimationsEnabled"))
-        return QVariant(group.readBool(key, false));
+    if (key == QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileUsePerSideOuterGap()));
+    if (key == QLatin1String(PerScreenAutotileKey::FocusNewWindows))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileFocusNewWindows()));
+    if (key == QLatin1String(PerScreenAutotileKey::SmartGaps))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileSmartGaps()));
+    if (key == QLatin1String(PerScreenAutotileKey::FocusFollowsMouse))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileFocusFollowsMouse()));
+    if (key == QLatin1String(PerScreenAutotileKey::RespectMinimumSize))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileRespectMinimumSize()));
+    if (key == QLatin1String(PerScreenAutotileKey::HideTitleBars))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileHideTitleBars()));
+    if (key == QLatin1String(PerScreenAutotileKey::AnimationsEnabled))
+        return QVariant(group.readBool(key, ConfigDefaults::animationsEnabled()));
     return QVariant(group.readInt(key, 0));
 }
 
-constexpr const char* kPerScreenSnappingKeys[] = {
-    "SnapAssistEnabled",    "ZoneSelectorEnabled",      "ZoneSelectorTriggerDistance",
-    "ZoneSelectorPosition", "ZoneSelectorLayoutMode",   "ZoneSelectorSizeMode",
-    "ZoneSelectorMaxRows",  "ZoneSelectorPreviewWidth", "ZoneSelectorPreviewHeight",
+const QLatin1String kPerScreenSnappingKeys[] = {
+    PerScreenSnappingKey::SnapAssistEnabled,           PerScreenSnappingKey::ZoneSelectorEnabled,
+    PerScreenSnappingKey::ZoneSelectorTriggerDistance, PerScreenSnappingKey::ZoneSelectorPosition,
+    PerScreenSnappingKey::ZoneSelectorLayoutMode,      PerScreenSnappingKey::ZoneSelectorSizeMode,
+    PerScreenSnappingKey::ZoneSelectorMaxRows,         PerScreenSnappingKey::ZoneSelectorPreviewWidth,
+    PerScreenSnappingKey::ZoneSelectorPreviewHeight,
 };
 
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
 {
-    if (key == QLatin1String("SnapAssistEnabled") || key == QLatin1String("ZoneSelectorEnabled"))
+    namespace K = PerScreenSnappingKey;
+    if (key == K::SnapAssistEnabled || key == K::ZoneSelectorEnabled)
         return QVariant(value.toBool());
-    if (key == QLatin1String("ZoneSelectorTriggerDistance"))
-        return QVariant(qBound(10, value.toInt(), 200));
-    if (key == QLatin1String("ZoneSelectorPosition")) {
+    if (key == K::ZoneSelectorTriggerDistance)
+        return QVariant(
+            qBound(ConfigDefaults::triggerDistanceMin(), value.toInt(), ConfigDefaults::triggerDistanceMax()));
+    if (key == K::ZoneSelectorPosition) {
         int v = value.toInt();
         return (v >= 0 && v <= 8) ? QVariant(v) : QVariant();
     }
-    if (key == QLatin1String("ZoneSelectorLayoutMode"))
+    if (key == K::ZoneSelectorLayoutMode)
         return QVariant(qBound(0, value.toInt(), static_cast<int>(ZoneSelectorLayoutMode::Vertical)));
-    if (key == QLatin1String("ZoneSelectorSizeMode"))
+    if (key == K::ZoneSelectorSizeMode)
         return QVariant(qBound(0, value.toInt(), static_cast<int>(ZoneSelectorSizeMode::Manual)));
-    if (key == QLatin1String("ZoneSelectorMaxRows"))
-        return QVariant(qBound(1, value.toInt(), 10));
-    if (key == QLatin1String("ZoneSelectorPreviewWidth"))
-        return QVariant(qBound(80, value.toInt(), 400));
-    if (key == QLatin1String("ZoneSelectorPreviewHeight"))
-        return QVariant(qBound(60, value.toInt(), 300));
+    if (key == K::ZoneSelectorMaxRows)
+        return QVariant(qBound(ConfigDefaults::maxRowsMin(), value.toInt(), ConfigDefaults::maxRowsMax()));
+    if (key == K::ZoneSelectorPreviewWidth)
+        return QVariant(qBound(ConfigDefaults::previewWidthMin(), value.toInt(), ConfigDefaults::previewWidthMax()));
+    if (key == K::ZoneSelectorPreviewHeight)
+        return QVariant(qBound(ConfigDefaults::previewHeightMin(), value.toInt(), ConfigDefaults::previewHeightMax()));
     return QVariant();
 }
 
-QVariant readPerScreenSnappingEntry(IConfigGroup& group, const QString& key)
+QVariant readPerScreenSnappingEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
-    if (key == QLatin1String("SnapAssistEnabled") || key == QLatin1String("ZoneSelectorEnabled"))
-        return QVariant(group.readBool(key, false));
+    namespace K = PerScreenSnappingKey;
+    if (key == K::SnapAssistEnabled)
+        return QVariant(group.readBool(key, ConfigDefaults::snapAssistEnabled()));
+    if (key == K::ZoneSelectorEnabled)
+        return QVariant(group.readBool(key, ConfigDefaults::zoneSelectorEnabled()));
     return QVariant(group.readInt(key, 0));
 }
 
-QVariant readPerScreenZoneSelectorEntry(IConfigGroup& group, const QString& key)
+QVariant readPerScreenZoneSelectorEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
     namespace K = ZoneSelectorConfigKey;
     if (key == QLatin1String(K::PreviewLockAspect))
-        return QVariant(group.readBool(key, true));
+        return QVariant(group.readBool(key, ConfigDefaults::previewLockAspect()));
     return QVariant(group.readInt(key, 0));
 }
 
-void savePerScreenOverrides(IConfigBackend* backend, const QString& prefix, const QHash<QString, QVariantMap>& source)
+void savePerScreenOverrides(PhosphorConfig::IBackend* backend, const QString& prefix,
+                            const QHash<QString, QVariantMap>& source)
 {
     const QStringList groups = backend->groupList();
     for (const QString& groupName : groups) {
@@ -227,8 +278,8 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
 {
     QHash<QString, QVariantMap> migrated;
     for (auto it = settings.begin(); it != settings.end();) {
-        if (Utils::isConnectorName(it.key())) {
-            QString resolved = Utils::screenIdForName(it.key());
+        if (Phosphor::Screens::ScreenIdentity::isConnectorName(it.key())) {
+            QString resolved = Phosphor::Screens::ScreenIdentity::idForName(it.key());
             if (resolved != it.key()) {
                 if (migrated.contains(resolved)) {
                     qCWarning(lcConfig) << "EDID collision during migration:" << it.key()
@@ -246,11 +297,11 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
     }
 }
 
-using PerScreenReadFn = QVariant (*)(IConfigGroup&, const QString&);
+using PerScreenReadFn = QVariant (*)(PhosphorConfig::IGroup&, const QString&);
 using PerScreenValidateFn = QVariant (*)(const QString&, const QVariant&);
 
-void loadPerScreenGroup(IConfigBackend* backend, const QStringList& allGroups, const QString& prefix,
-                        const char* const* keys, size_t keyCount, PerScreenReadFn readEntry,
+void loadPerScreenGroup(PhosphorConfig::IBackend* backend, const QStringList& allGroups, const QString& prefix,
+                        const QLatin1String* keys, size_t keyCount, PerScreenReadFn readEntry,
                         PerScreenValidateFn validate, QHash<QString, QVariantMap>& dest)
 {
     dest.clear();
@@ -264,8 +315,7 @@ void loadPerScreenGroup(IConfigBackend* backend, const QStringList& allGroups, c
         auto screenGroup = backend->group(groupName);
         QVariantMap overrides;
         for (size_t i = 0; i < keyCount; ++i) {
-            const char* key = keys[i];
-            QString keyStr = QString::fromLatin1(key);
+            const QString keyStr(keys[i]);
             if (screenGroup->hasKey(keyStr)) {
                 QVariant raw = readEntry(*screenGroup, keyStr);
                 QVariant validated = validate(keyStr, raw);
@@ -309,18 +359,19 @@ static void normalizeAutotileKeys(QHash<QString, QVariantMap>& settings)
     }
 }
 
-void Settings::loadPerScreenOverrides(IConfigBackend* backend)
+void Settings::loadPerScreenOverrides(PhosphorConfig::IBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
-    loadPerScreenGroup(backend, allGroups, QStringLiteral("ZoneSelector:"), kPerScreenKeys, std::size(kPerScreenKeys),
-                       readPerScreenZoneSelectorEntry, validatePerScreenValue, m_perScreenZoneSelectorSettings);
-    loadPerScreenGroup(backend, allGroups, QStringLiteral("AutotileScreen:"), kPerScreenAutotileKeys,
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::zoneSelectorGroupPrefix(), kPerScreenKeys,
+                       std::size(kPerScreenKeys), readPerScreenZoneSelectorEntry, validatePerScreenValue,
+                       m_perScreenZoneSelectorSettings);
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::autotileScreenGroupPrefix(), kPerScreenAutotileKeys,
                        std::size(kPerScreenAutotileKeys), readPerScreenAutotileEntry, validatePerScreenAutotileValue,
                        m_perScreenAutotileSettings);
     // Normalize autotile keys from disk format ("AutotileAlgorithm") to short format
     // ("Algorithm") that QML uses for lookup via PerScreenOverrideHelper.settingValue().
     normalizeAutotileKeys(m_perScreenAutotileSettings);
-    loadPerScreenGroup(backend, allGroups, QStringLiteral("SnappingScreen:"), kPerScreenSnappingKeys,
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::snappingScreenGroupPrefix(), kPerScreenSnappingKeys,
                        std::size(kPerScreenSnappingKeys), readPerScreenSnappingEntry, validatePerScreenSnappingValue,
                        m_perScreenSnappingSettings);
 }
@@ -335,9 +386,9 @@ static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVari
 {
     // Short keys that should NOT get the "Autotile" prefix
     static const QStringList animationKeys = {
-        QStringLiteral("AnimationsEnabled"),
-        QStringLiteral("AnimationDuration"),
-        QStringLiteral("AnimationEasingCurve"),
+        QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
+        QLatin1String(PerScreenAutotileKey::AnimationDuration),
+        QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
     };
 
     QHash<QString, QVariantMap> expanded;
@@ -356,12 +407,13 @@ static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVari
     return expanded;
 }
 
-void Settings::saveAllPerScreenOverrides(IConfigBackend* backend)
+void Settings::saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend)
 {
-    savePerScreenOverrides(backend, QStringLiteral("ZoneSelector:"), m_perScreenZoneSelectorSettings);
+    savePerScreenOverrides(backend, ConfigDefaults::zoneSelectorGroupPrefix(), m_perScreenZoneSelectorSettings);
     // Expand short keys back to disk format before saving
-    savePerScreenOverrides(backend, QStringLiteral("AutotileScreen:"), expandAutotileKeys(m_perScreenAutotileSettings));
-    savePerScreenOverrides(backend, QStringLiteral("SnappingScreen:"), m_perScreenSnappingSettings);
+    savePerScreenOverrides(backend, ConfigDefaults::autotileScreenGroupPrefix(),
+                           expandAutotileKeys(m_perScreenAutotileSettings));
+    savePerScreenOverrides(backend, ConfigDefaults::snappingScreenGroupPrefix(), m_perScreenSnappingSettings);
 }
 
 template<typename T>
@@ -372,15 +424,15 @@ static typename QHash<QString, T>::const_iterator findPerScreenEntry(const QHash
     if (it != hash.constEnd()) {
         return it;
     }
-    if (Utils::isConnectorName(screenIdOrName)) {
-        QString resolved = Utils::screenIdForName(screenIdOrName);
+    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
+        QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
         if (resolved != screenIdOrName) {
             it = hash.constFind(resolved);
             if (it != hash.constEnd())
                 return it;
         }
     }
-    QString connector = Utils::screenNameForId(screenIdOrName);
+    QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenIdOrName);
     if (!connector.isEmpty() && connector != screenIdOrName) {
         it = hash.constFind(connector);
         if (it != hash.constEnd())
@@ -395,30 +447,30 @@ static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenI
     if (hash.remove(screenIdOrName)) {
         return true;
     }
-    if (Utils::isConnectorName(screenIdOrName)) {
-        QString resolved = Utils::screenIdForName(screenIdOrName);
+    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
+        QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
         if (resolved != screenIdOrName && hash.remove(resolved))
             return true;
     }
-    QString connector = Utils::screenNameForId(screenIdOrName);
+    QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenIdOrName);
     if (!connector.isEmpty() && connector != screenIdOrName && hash.remove(connector))
         return true;
     return false;
 }
 
-// ── Per-Screen Zone Selector Config ──────────────────────────────────────────
+// ── Per-Screen PhosphorZones::Zone Selector Config ──────────────────────────────────────────
 
 ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdOrName) const
 {
-    ZoneSelectorConfig config = {static_cast<int>(m_zoneSelectorPosition),
-                                 static_cast<int>(m_zoneSelectorLayoutMode),
-                                 static_cast<int>(m_zoneSelectorSizeMode),
-                                 m_zoneSelectorMaxRows,
-                                 m_zoneSelectorPreviewWidth,
-                                 m_zoneSelectorPreviewHeight,
-                                 m_zoneSelectorPreviewLockAspect,
-                                 m_zoneSelectorGridColumns,
-                                 m_zoneSelectorTriggerDistance};
+    ZoneSelectorConfig config = {static_cast<int>(zoneSelectorPosition()),
+                                 static_cast<int>(zoneSelectorLayoutMode()),
+                                 static_cast<int>(zoneSelectorSizeMode()),
+                                 zoneSelectorMaxRows(),
+                                 zoneSelectorPreviewWidth(),
+                                 zoneSelectorPreviewHeight(),
+                                 zoneSelectorPreviewLockAspect(),
+                                 zoneSelectorGridColumns(),
+                                 zoneSelectorTriggerDistance()};
 
     auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName);
     if (it == m_perScreenZoneSelectorSettings.constEnd()) {
@@ -448,8 +500,9 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, co
     }
 
     // Resolve to EDID-based screen ID so the key matches daemon lookups
-    const QString resolved =
-        Utils::isConnectorName(screenIdOrName) ? Utils::screenIdForName(screenIdOrName) : screenIdOrName;
+    const QString resolved = Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)
+        ? Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName)
+        : screenIdOrName;
     QVariantMap& screenSettings = m_perScreenZoneSelectorSettings[resolved];
     if (screenSettings.value(key) == validated) {
         return;
@@ -504,8 +557,9 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
     const QString normalizedKey = key.startsWith(QLatin1String("Autotile")) ? key.mid(8) : key;
 
     // Resolve to EDID-based screen ID so the key matches daemon lookups
-    const QString resolved =
-        Utils::isConnectorName(screenIdOrName) ? Utils::screenIdForName(screenIdOrName) : screenIdOrName;
+    const QString resolved = Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)
+        ? Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName)
+        : screenIdOrName;
     QVariantMap& screenSettings = m_perScreenAutotileSettings[resolved];
     if (screenSettings.value(normalizedKey) == validated) {
         return;
@@ -549,8 +603,9 @@ void Settings::setPerScreenSnappingSetting(const QString& screenIdOrName, const 
     }
 
     // Resolve to EDID-based screen ID so the key matches daemon lookups
-    const QString resolved =
-        Utils::isConnectorName(screenIdOrName) ? Utils::screenIdForName(screenIdOrName) : screenIdOrName;
+    const QString resolved = Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)
+        ? Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName)
+        : screenIdOrName;
     QVariantMap& screenSettings = m_perScreenSnappingSettings[resolved];
     if (screenSettings.value(key) == validated) {
         return;

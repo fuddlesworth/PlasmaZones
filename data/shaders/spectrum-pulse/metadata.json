@@ -2,31 +2,200 @@
     "id": "spectrum-pulse",
     "name": "Spectrum Pulse",
     "category": "Audio Visualizer",
-    "description": "Reactive neon energy — bass expands the glow, energy pulses race around borders, spectrum paints a flowing aurora, treble fires off sparks. Enable CAVA audio visualization in settings.",
+    "description": "Reactive neon energy \u2014 bass expands the glow, energy pulses race around borders, spectrum paints a flowing aurora, treble fires off sparks. Enable CAVA audio visualization in settings.",
     "author": "PlasmaZones",
     "version": "2.1",
     "fragmentShader": "effect.frag",
-    "vertexShader": "zone.vert",
     "parameters": [
-        {"id": "glowIntensity", "name": "Glow Intensity", "group": "Appearance", "type": "float", "slot": 0, "default": 2.5, "min": 1, "max": 5},
-        {"id": "reactivity", "name": "Audio Reactivity", "group": "Audio", "type": "float", "slot": 1, "default": 1.5, "min": 0.5, "max": 3},
-        {"id": "waveHeight", "name": "Spectrum Aurora Height", "group": "Audio", "type": "float", "slot": 2, "default": 0.15, "min": 0.05, "max": 0.4},
-        {"id": "bassExpand", "name": "Bass Glow Expansion", "group": "Audio", "type": "float", "slot": 3, "default": 1.5, "min": 0, "max": 3},
-        {"id": "flowSpeed", "name": "Energy Flow Speed", "group": "Animation", "type": "float", "slot": 4, "default": 2.0, "min": 0.5, "max": 4},
-        {"id": "plasmaDetail", "name": "Plasma Turbulence", "group": "Animation", "type": "float", "slot": 5, "default": 0.8, "min": 0, "max": 2},
-        {"id": "colorMix", "name": "Audio Color Shift", "group": "Audio", "type": "float", "slot": 6, "default": 0.5, "min": 0, "max": 1},
-        {"id": "idleAnimation", "name": "Idle Animation", "group": "Animation", "type": "float", "slot": 7, "default": 1.0, "min": 0, "max": 2},
-        {"id": "veinIntensity", "name": "Energy Vein Intensity", "group": "Effects", "type": "float", "slot": 8, "default": 0.5, "min": 0.0, "max": 1.0},
-        {"id": "gridOpacity", "name": "Grid Opacity", "group": "Effects", "type": "float", "slot": 10, "default": 0.15, "min": 0.0, "max": 0.5},
-        {"id": "fillOpacity", "name": "Fill Opacity", "group": "Appearance", "type": "float", "slot": 11, "default": 0.85, "min": 0.4, "max": 1.0},
-        {"id": "neonSpread", "name": "Neon Glow Spread", "group": "Labels", "type": "float", "slot": 12, "default": 1.5, "min": 1.0, "max": 5.0},
-        {"id": "neonIntensity", "name": "Neon Core Intensity", "group": "Labels", "type": "float", "slot": 13, "default": 2.0, "min": 1.0, "max": 4.0},
-        {"id": "electricReact", "name": "Electric Reactivity", "group": "Labels", "type": "float", "slot": 14, "default": 1.0, "min": 0.0, "max": 2.0},
-        {"id": "gridResolution", "name": "Grid Resolution", "group": "Effects", "type": "int", "slot": 15, "default": 20, "min": 8, "max": 40},
-        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 16, "default": true},
-        {"id": "primaryColor", "name": "Primary Neon", "group": "Colors", "type": "color", "slot": 0, "default": "#00ffff"},
-        {"id": "accentColor", "name": "Accent Glow", "group": "Colors", "type": "color", "slot": 1, "default": "#ff00ff"},
-        {"id": "bassColor", "name": "Bass Color", "group": "Colors", "type": "color", "slot": 2, "default": "#ff6600"},
-        {"id": "sparkColor", "name": "Spark Color", "group": "Colors", "type": "color", "slot": 3, "default": "#ffffff"}
+        {
+            "id": "glowIntensity",
+            "name": "Glow Intensity",
+            "group": "Appearance",
+            "type": "float",
+            "slot": 0,
+            "default": 2.5,
+            "min": 1,
+            "max": 5
+        },
+        {
+            "id": "reactivity",
+            "name": "Audio Reactivity",
+            "group": "Audio",
+            "type": "float",
+            "slot": 1,
+            "default": 1.5,
+            "min": 0.5,
+            "max": 3
+        },
+        {
+            "id": "waveHeight",
+            "name": "Spectrum Aurora Height",
+            "group": "Audio",
+            "type": "float",
+            "slot": 2,
+            "default": 0.15,
+            "min": 0.05,
+            "max": 0.4
+        },
+        {
+            "id": "bassExpand",
+            "name": "Bass Glow Expansion",
+            "group": "Audio",
+            "type": "float",
+            "slot": 3,
+            "default": 1.5,
+            "min": 0,
+            "max": 3
+        },
+        {
+            "id": "flowSpeed",
+            "name": "Energy Flow Speed",
+            "group": "Animation",
+            "type": "float",
+            "slot": 4,
+            "default": 2.0,
+            "min": 0.5,
+            "max": 4
+        },
+        {
+            "id": "plasmaDetail",
+            "name": "Plasma Turbulence",
+            "group": "Animation",
+            "type": "float",
+            "slot": 5,
+            "default": 0.8,
+            "min": 0,
+            "max": 2
+        },
+        {
+            "id": "colorMix",
+            "name": "Audio Color Shift",
+            "group": "Audio",
+            "type": "float",
+            "slot": 6,
+            "default": 0.5,
+            "min": 0,
+            "max": 1
+        },
+        {
+            "id": "idleAnimation",
+            "name": "Idle Animation",
+            "group": "Animation",
+            "type": "float",
+            "slot": 7,
+            "default": 1.0,
+            "min": 0,
+            "max": 2
+        },
+        {
+            "id": "veinIntensity",
+            "name": "Energy Vein Intensity",
+            "group": "Effects",
+            "type": "float",
+            "slot": 8,
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "gridOpacity",
+            "name": "Grid Opacity",
+            "group": "Effects",
+            "type": "float",
+            "slot": 10,
+            "default": 0.15,
+            "min": 0.0,
+            "max": 0.5
+        },
+        {
+            "id": "fillOpacity",
+            "name": "Fill Opacity",
+            "group": "Appearance",
+            "type": "float",
+            "slot": 11,
+            "default": 0.85,
+            "min": 0.4,
+            "max": 1.0
+        },
+        {
+            "id": "neonSpread",
+            "name": "Neon Glow Spread",
+            "group": "Labels",
+            "type": "float",
+            "slot": 12,
+            "default": 1.5,
+            "min": 1.0,
+            "max": 5.0
+        },
+        {
+            "id": "neonIntensity",
+            "name": "Neon Core Intensity",
+            "group": "Labels",
+            "type": "float",
+            "slot": 13,
+            "default": 2.0,
+            "min": 1.0,
+            "max": 4.0
+        },
+        {
+            "id": "electricReact",
+            "name": "Electric Reactivity",
+            "group": "Labels",
+            "type": "float",
+            "slot": 14,
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "gridResolution",
+            "name": "Grid Resolution",
+            "group": "Effects",
+            "type": "int",
+            "slot": 15,
+            "default": 20,
+            "min": 8,
+            "max": 40
+        },
+        {
+            "id": "showLabels",
+            "name": "Show Labels",
+            "group": "Labels",
+            "type": "bool",
+            "slot": 16,
+            "default": true
+        },
+        {
+            "id": "primaryColor",
+            "name": "Primary Neon",
+            "group": "Colors",
+            "type": "color",
+            "slot": 0,
+            "default": "#00ffff"
+        },
+        {
+            "id": "accentColor",
+            "name": "Accent Glow",
+            "group": "Colors",
+            "type": "color",
+            "slot": 1,
+            "default": "#ff00ff"
+        },
+        {
+            "id": "bassColor",
+            "name": "Bass Color",
+            "group": "Colors",
+            "type": "color",
+            "slot": 2,
+            "default": "#ff6600"
+        },
+        {
+            "id": "sparkColor",
+            "name": "Spark Color",
+            "group": "Colors",
+            "type": "color",
+            "slot": 3,
+            "default": "#ffffff"
+        }
     ]
 }

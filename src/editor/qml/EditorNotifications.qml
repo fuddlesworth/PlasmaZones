@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Notification system for the layout editor
@@ -61,11 +62,13 @@ Item {
         }
         width: Math.min(Kirigami.Units.gridUnit * 50, notifications.windowWidth * 0.8)
 
-        // Smooth transition when success banner fades and error slides up
+        // Position transition when success banner fades and error slides up.
+        // Banners are editor-shell surfaces (osd.show is for the in-shell OSD);
+        // a y-slide isn't really a fade, so route through the widget family
+        // root for the generic ease-out shape.
         Behavior on y {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+            PhosphorMotionAnimation {
+                profile: "widget"
             }
 
         }

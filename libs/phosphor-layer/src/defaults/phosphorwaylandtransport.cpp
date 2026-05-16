@@ -1,0 +1,275 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorLayer/defaults/PhosphorWaylandTransport.h>
+
+#include "../internal.h"
+
+#include <PhosphorWayland/CompositorLost.h>
+#include <PhosphorWayland/LayerSurface.h>
+
+#include <QQuickWindow>
+
+#include <atomic>
+
+namespace PhosphorLayer {
+
+namespace {
+
+// Convert between PhosphorLayer's enums and PhosphorWayland's. Both mirror
+// the zwlr_layer_shell_v1 protocol values, so these are compile-time casts;
+// keeping them in functions makes the intent explicit and gives us a place
+// to hang static_assert guards if the mappings ever diverge.
+
+// Backstop against either side renumbering the shared wlr-layer-shell enum.
+// Both enums mirror the zwlr_layer_shell_v1 protocol values (0-based layer
+// sequence, Wayland keyboard-interactivity values); if the mapping ever
+// diverges these asserts break the build instead of silently translating
+// wrong values at runtime.
+static_assert(static_cast<int>(Layer::Background) == PhosphorWayland::LayerSurface::LayerBackground);
+static_assert(static_cast<int>(Layer::Bottom) == PhosphorWayland::LayerSurface::LayerBottom);
+static_assert(static_cast<int>(Layer::Top) == PhosphorWayland::LayerSurface::LayerTop);
+static_assert(static_cast<int>(Layer::Overlay) == PhosphorWayland::LayerSurface::LayerOverlay);
+static_assert(static_cast<int>(KeyboardInteractivity::None)
+              == PhosphorWayland::LayerSurface::KeyboardInteractivityNone);
+static_assert(static_cast<int>(KeyboardInteractivity::Exclusive)
+              == PhosphorWayland::LayerSurface::KeyboardInteractivityExclusive);
+static_assert(static_cast<int>(KeyboardInteractivity::OnDemand)
+              == PhosphorWayland::LayerSurface::KeyboardInteractivityOnDemand);
+
+constexpr PhosphorWayland::LayerSurface::Layer toShellLayer(Layer l)
+{
+    return static_cast<PhosphorWayland::LayerSurface::Layer>(static_cast<int>(l));
+}
+constexpr PhosphorWayland::LayerSurface::KeyboardInteractivity toShellKbd(KeyboardInteractivity k)
+{
+    return static_cast<PhosphorWayland::LayerSurface::KeyboardInteractivity>(static_cast<int>(k));
+}
+PhosphorWayland::LayerSurface::Anchors toShellAnchors(Anchors a)
+{
+    PhosphorWayland::LayerSurface::Anchors out;
+    if (a.testFlag(Anchor::Top)) {
+        out |= PhosphorWayland::LayerSurface::AnchorTop;
+    }
+    if (a.testFlag(Anchor::Bottom)) {
+        out |= PhosphorWayland::LayerSurface::AnchorBottom;
+    }
+    if (a.testFlag(Anchor::Left)) {
+        out |= PhosphorWayland::LayerSurface::AnchorLeft;
+    }
+    if (a.testFlag(Anchor::Right)) {
+        out |= PhosphorWayland::LayerSurface::AnchorRight;
+    }
+    return out;
+}
+
+} // namespace
+
+// ── Handle ─────────────────────────────────────────────────────────────
+
+class PhosphorWaylandTransportHandle : public ITransportHandle
+{
+public:
+    PhosphorWaylandTransportHandle(QQuickWindow* win, PhosphorWayland::LayerSurface* surface)
+        : m_window(win)
+        , m_surface(surface)
+    {
+    }
+    ~PhosphorWaylandTransportHandle() override
+    {
+        // PhosphorWayland::LayerSurface is parented to the QWindow it was
+        // created on; Qt will clean it up when the window dies. Don't
+        // delete it manually here or we race against Qt's destruction.
+        // Clear the QPointers defensively so any stray setter call during
+        // unwind hits a null check instead of a dangling pointer if a
+        // future PhosphorWayland refactor breaks the parenting invariant.
+        m_surface.clear();
+        m_window.clear();
+    }
+
+    QQuickWindow* window() const override
+    {
+        return m_window;
+    }
+
+    bool isConfigured() const override
+    {
+        // PhosphorWayland doesn't expose an explicit "configured" flag. We
+        // use window-exposure as a proxy for "compositor has sent at least
+        // one configure event", then latch — once configured, always
+        // configured across hide()/show() cycles. Without the latch, a
+        // consumer that gates setAnchors() on isConfigured() would get a
+        // false negative after the first hide and incorrectly think the
+        // layer_surface was never ack'd.
+        //
+        // m_everConfigured is std::atomic<bool> because callbacks
+        // documented in ILayerShellTransport.h can fire off the GUI
+        // thread; a plain bool with cross-thread reads is a data race.
+        if (!m_window) {
+            return false;
+        }
+        if (m_window->isVisible()) {
+            m_everConfigured.store(true, std::memory_order_release);
+        }
+        return m_everConfigured.load(std::memory_order_acquire);
+    }
+
+    QSize configuredSize() const override
+    {
+        // ILayerShellTransport contract: return zero before
+        // isConfigured() flips true. Returning m_window->size() pre-
+        // configure leaks the warmup geometry (whatever Qt picked at
+        // QWindow creation) as if it were the compositor's reply,
+        // which lets consumer layout code commit to a phantom size
+        // that the real configure then overrides.
+        if (!m_window || !m_everConfigured.load(std::memory_order_acquire)) {
+            return {};
+        }
+        return m_window->size();
+    }
+
+    void setMargins(QMargins m) override
+    {
+        if (m_surface) {
+            m_surface->setMargins(m);
+        }
+    }
+    void setLayer(Layer l) override
+    {
+        if (m_surface) {
+            m_surface->setLayer(toShellLayer(l));
+        }
+    }
+    void setExclusiveZone(int z) override
+    {
+        if (m_surface) {
+            m_surface->setExclusiveZone(z);
+        }
+    }
+    void setKeyboardInteractivity(KeyboardInteractivity k) override
+    {
+        if (m_surface) {
+            m_surface->setKeyboardInteractivity(toShellKbd(k));
+        }
+    }
+    void setAnchors(Anchors a) override
+    {
+        if (m_surface) {
+            m_surface->setAnchors(toShellAnchors(a));
+        }
+    }
+    void setDesiredSize(QSize size) override
+    {
+        if (m_surface) {
+            m_surface->setDesiredSize(size);
+        }
+    }
+
+private:
+    QPointer<QQuickWindow> m_window;
+    QPointer<PhosphorWayland::LayerSurface> m_surface;
+    mutable std::atomic<bool> m_everConfigured{
+        false}; ///< Latched true on first isVisible(); atomic for cross-thread reads.
+};
+
+// ── Transport ──────────────────────────────────────────────────────────
+
+class PhosphorWaylandTransport::Impl
+{
+public:
+    CompositorLostBroadcaster m_broadcaster;
+    QMetaObject::Connection m_aboutToQuitConnection;
+    PhosphorWayland::CompositorLostCookie m_globalRemovedCookie = 0;
+};
+
+PhosphorWaylandTransport::PhosphorWaylandTransport()
+    : m_impl(std::make_unique<Impl>())
+{
+    // Two upstream signals collapse into the single compositor-lost edge
+    // exposed by this transport:
+    //
+    //   1. PhosphorWayland::addCompositorLostCallback — fires when the QPA
+    //      plugin observes wl_registry::global_remove for zwlr_layer_shell_v1
+    //      mid-session (compositor crash / restart). Detected before Qt
+    //      starts tearing down.
+    //   2. QGuiApplication::aboutToQuit — fires on clean exit, after the
+    //      QPA plugin's destructor has run, so every active layer surface
+    //      is effectively lost regardless of whether the compositor sent a
+    //      removal first.
+    //
+    // The internal broadcaster is idempotent (`fire()` is a one-shot), so
+    // whichever signal arrives first wins and the second is a no-op.
+    m_impl->m_aboutToQuitConnection = m_impl->m_broadcaster.hookAboutToQuit();
+    m_impl->m_globalRemovedCookie = PhosphorWayland::addCompositorLostCallback([this] {
+        m_impl->m_broadcaster.fire();
+    });
+}
+
+PhosphorWaylandTransport::~PhosphorWaylandTransport()
+{
+    PhosphorWayland::removeCompositorLostCallback(m_impl->m_globalRemovedCookie);
+    QObject::disconnect(m_impl->m_aboutToQuitConnection);
+}
+
+bool PhosphorWaylandTransport::isSupported() const
+{
+    return PhosphorWayland::LayerSurface::isSupported();
+}
+
+std::unique_ptr<ITransportHandle> PhosphorWaylandTransport::attach(QQuickWindow* win, const TransportAttachArgs& args)
+{
+    if (!win) {
+        qCWarning(lcPhosphorLayer) << "PhosphorWaylandTransport::attach: window is nullptr";
+        return nullptr;
+    }
+    if (!isSupported()) {
+        qCWarning(lcPhosphorLayer) << "PhosphorWaylandTransport::attach: compositor lacks wlr-layer-shell";
+        return nullptr;
+    }
+    // Pre-show-immutable properties (scope, layer, anchors, kbd interactivity)
+    // can only be set before the wl_surface commits as a layer_surface. If
+    // the consumer already show()'d, PhosphorWayland::LayerSurface::get logs
+    // a qCCritical but returns a surface whose setters silently no-op —
+    // that yields a handle that reports "configured" but never honoured
+    // its initial config. Refuse loudly so the caller fixes their ordering.
+    if (win->isVisible()) {
+        qCWarning(lcPhosphorLayer)
+            << "PhosphorWaylandTransport::attach: window is already visible — attach must run before show()"
+            << "(pre-show-immutable properties would be silently discarded)";
+        return nullptr;
+    }
+    auto* surface = PhosphorWayland::LayerSurface::get(win);
+    if (!surface) {
+        qCWarning(lcPhosphorLayer) << "PhosphorWaylandTransport::attach: LayerSurface::get returned nullptr";
+        return nullptr;
+    }
+
+    // Pre-show-immutable properties MUST be set before the caller calls
+    // window->show(). We batch so PhosphorWayland fires one propertiesChanged
+    // signal at the end rather than six.
+    PhosphorWayland::LayerSurface::BatchGuard batch(surface);
+    surface->setScope(args.scope);
+    if (args.screen) {
+        surface->setScreen(args.screen);
+    }
+    surface->setLayer(toShellLayer(args.layer));
+    surface->setAnchors(toShellAnchors(args.anchors));
+    surface->setKeyboardInteractivity(toShellKbd(args.keyboard));
+    surface->setExclusiveZone(args.exclusiveZone);
+    surface->setMargins(args.margins);
+
+    return std::make_unique<PhosphorWaylandTransportHandle>(win, surface);
+}
+
+PhosphorWaylandTransport::CompositorLostCookie
+PhosphorWaylandTransport::addCompositorLostCallback(CompositorLostCallback cb)
+{
+    return m_impl->m_broadcaster.addCallback(std::move(cb));
+}
+
+void PhosphorWaylandTransport::removeCompositorLostCallback(CompositorLostCookie cookie)
+{
+    m_impl->m_broadcaster.removeCallback(cookie);
+}
+
+} // namespace PhosphorLayer

@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "configdefaults.h"
+
+#include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Profile.h>
+
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
@@ -71,6 +75,20 @@ QString ConfigDefaults::readRenderingBackendFromDisk()
     }
 
     return renderingBackend();
+}
+
+QVariantMap ConfigDefaults::animationProfile(const PhosphorAnimation::CurveRegistry& registry)
+{
+    // Curve is resolved through the CurveRegistry so the wire format
+    // ("0.33,1.00,0.68,1.00") maps to the same shared_ptr<const Curve>
+    // the runtime uses.
+    PhosphorAnimation::Profile p;
+    p.curve = registry.create(animationEasingCurve());
+    p.duration = static_cast<qreal>(animationDuration());
+    p.minDistance = animationMinDistance();
+    p.sequenceMode = static_cast<PhosphorAnimation::SequenceMode>(animationSequenceMode());
+    p.staggerInterval = animationStaggerInterval();
+    return p.toJson().toVariantMap();
 }
 
 } // namespace PlasmaZones

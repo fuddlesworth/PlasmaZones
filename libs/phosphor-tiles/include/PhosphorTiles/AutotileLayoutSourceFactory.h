@@ -1,0 +1,66 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <phosphortiles_export.h>
+
+#include <PhosphorLayoutApi/ILayoutSourceFactory.h>
+
+#include <QLatin1String>
+
+#include <QString>
+
+namespace PhosphorTiles {
+
+class ITileAlgorithmRegistry;
+
+/// Stable source-name string for the autotile layout source. Exposed
+/// publicly so callers that need to look up the bundle's autotile
+/// source via @c LayoutSourceBundle::source(...) (e.g. the daemon's
+/// fast-path cache pointer in @c daemon.cpp) reference one definition
+/// instead of repeating the literal at every call site. The factory's
+/// @c name() returns the same value.
+PHOSPHORTILES_EXPORT QLatin1String autotileLayoutSourceName();
+
+/// Anchor symbol that forces the translation unit owning the static
+/// @c LayoutSourceProviderRegistrar for this provider to be linked in.
+///
+/// Under @c SHARED builds (today's default) every TU of the loaded
+/// library has its static initialisers run, so this anchor is a no-op.
+/// The function exists so that @c STATIC builds + linker GC
+/// (@c --gc-sections, @c --as-needed) can't drop
+/// @c autotilelayoutsourcefactory.cpp silently — at which point the
+/// static registrar never runs and the bundle ships without the
+/// autotile provider. Composition-root glue
+/// (@c buildStandardLayoutSourceBundle) calls this once during bundle
+/// wiring. The body is an empty no-op; only the symbol reference
+/// matters. See the @c @@todo(plugin-compositor) note in
+/// @c PhosphorLayoutApi/LayoutSourceProviderRegistry.h.
+PHOSPHORTILES_EXPORT void ensureAutotileLayoutSourceProviderLinked();
+
+/// Factory for @c AutotileLayoutSource.
+///
+/// Composition roots register an instance with their
+/// @c PhosphorLayout::LayoutSourceBundle to surface autotile-algorithm
+/// previews. Symmetric with @c PhosphorZones::ZonesLayoutSourceFactory
+/// — both follow the per-library factory pattern that the bundle drives
+/// from one @c addFactory() line per provider.
+class PHOSPHORTILES_EXPORT AutotileLayoutSourceFactory : public PhosphorLayout::ILayoutSourceFactory
+{
+public:
+    /// @p registry is the tile-algorithm registry the produced source
+    /// borrows. Caller owns @p registry and must keep it alive for the
+    /// produced source's lifetime — typically the bundle's lifetime,
+    /// which is owned by the same composition root.
+    explicit AutotileLayoutSourceFactory(ITileAlgorithmRegistry* registry);
+    ~AutotileLayoutSourceFactory() override;
+
+    QString name() const override;
+    std::unique_ptr<PhosphorLayout::ILayoutSource> create() override;
+
+private:
+    ITileAlgorithmRegistry* m_registry;
+};
+
+} // namespace PhosphorTiles

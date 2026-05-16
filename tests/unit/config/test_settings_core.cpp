@@ -11,11 +11,22 @@
  * 3. Signal emission on load and setters (P1)
  * 4. LabelFontWeight default (regression guard)
  * 5. Legacy activation migration
+ *
+ * Companion test files (split for the <800-line guideline):
+ *   - test_settings_animation_profile.cpp — Profile JSON-blob storage,
+ *     per-field signals, aggregate-setter merge semantics
+ *   - test_settings_shader_tree.cpp       — ShaderProfileTree persistence,
+ *     prune-on-write/read, autoAssignAllLayouts master toggle
  */
 
 #include <QTest>
 #include <QSignalSpy>
-#include "config/configbackend_json.h"
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/ShaderProfile.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
+#include "config/configbackends.h"
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
@@ -194,9 +205,18 @@ private Q_SLOTS:
         }
 
         {
+            // Phase 4 sub-commit 6: animation settings persist as a
+            // single Profile JSON blob under `Animations/Profile`
+            // (decision S). The per-field setters compose into that
+            // blob — verify the on-disk shape carries both values.
             auto animations = backend->group(ConfigDefaults::animationsGroup());
-            QCOMPARE(animations->readInt(ConfigDefaults::durationKey(), 0), 300);
-            QCOMPARE(animations->readInt(ConfigDefaults::sequenceModeKey(), -1), 0);
+            const QString profileJson = animations->readString(ConfigDefaults::animationProfileKey(), QString());
+            QVERIFY2(!profileJson.isEmpty(), "Animations/Profile blob missing from persisted config");
+            const QJsonDocument doc = QJsonDocument::fromJson(profileJson.toUtf8());
+            QVERIFY(doc.isObject());
+            const QJsonObject obj = doc.object();
+            QCOMPARE(obj.value(QLatin1String("duration")).toInt(), 300);
+            QCOMPARE(obj.value(QLatin1String("sequenceMode")).toInt(), 0);
         }
     }
 
@@ -261,6 +281,55 @@ private Q_SLOTS:
 
         QCOMPARE(specificSpy.count(), 0);
         QCOMPARE(generalSpy.count(), 0);
+    }
+
+    /**
+     * REGRESSION GUARD (PR #331 review).
+     *
+     * load() must emit per-property NOTIFY signals when the on-disk value
+     * differs from the in-memory value at the time of the call. This is
+     * the discard-changes UX flow: the user mutates a setting, the in-memory
+     * Store now disagrees with disk, then calls load() to revert. QML
+     * bindings rely on the specific NOTIFY signal — settingsChanged() alone
+     * is not enough.
+     *
+     * The bug being guarded: pre-fix, load() reparseConfiguration()'d BEFORE
+     * snapshotting properties. Store-backed getters read on demand from the
+     * just-reloaded backend, so snapshot==reloaded value, the comparison
+     * loop never detected a difference, and no NOTIFY signal fired —
+     * leaving the QML binding stuck on the user's pre-discard value.
+     *
+     * Fix: snapshot must be taken BEFORE reparseConfiguration() so the
+     * pre-discard in-memory value is captured.
+     */
+    void testLoad_emitsSpecificNotifyOnDiscardChanges()
+    {
+        IsolatedConfigGuard guard;
+
+        // Seed disk with a known value via save().
+        {
+            Settings settings;
+            settings.setBorderWidth(3);
+            settings.save();
+        }
+
+        // Open Settings — getter now reads 3 from the freshly loaded backend.
+        Settings settings;
+        QCOMPARE(settings.borderWidth(), 3);
+
+        // Mutate in-memory only — disk still says 3.
+        settings.setBorderWidth(7);
+        QCOMPARE(settings.borderWidth(), 7);
+
+        // The discard-changes flow: load() reverts in-memory state to
+        // disk and must emit borderWidthChanged() so QML rebinds.
+        QSignalSpy specificSpy(&settings, &Settings::borderWidthChanged);
+        QVERIFY(specificSpy.isValid());
+
+        settings.load();
+
+        QCOMPARE(settings.borderWidth(), 3);
+        QCOMPARE(specificSpy.count(), 1);
     }
 
     /**

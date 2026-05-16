@@ -1,15 +1,18 @@
 # Maintainer: fuddlesworth <fuddlesworth at users dot noreply dot github dot com>
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, KWin 6.6).
 
 pkgname=plasmazones
+# pkgver/pkgrel are placeholders; CI rewrites them against the release tag
+# before publishing. See packaging/arch/update-aur.sh.
 pkgver=0.0.0
 pkgrel=1
 pkgdesc='Window tiling and autotiling for KDE Plasma'
 arch=('x86_64')
 url='https://github.com/fuddlesworth/PlasmaZones'
-license=('GPL-3.0-or-later')
+license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
 
 # Exact KWin upstream pin. The kwin-effect plugin's IID embeds KWin's exact
 # upstream version string; KWin refuses to load effects whose IID doesn't
@@ -46,7 +49,10 @@ optdepends=(
 )
 conflicts=('plasmazones-bin' 'plasmazones-git')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('9661908abffb05fa01ebc8a870202b477f390dae20c80bc91e0a968aa2616b97')
+# 'SKIP' so local `makepkg -p PKGBUILD` doesn't fail integrity-check
+# on the placeholder pkgver. release.yml templates a real sha256 when
+# publishing to AUR (see the awk rewrite in the publish-aur job).
+sha256sums=('SKIP')
 install=plasmazones.install
 
 build() {
@@ -67,4 +73,21 @@ package() {
         "$pkgdir/usr/share/libalpm/hooks/plasmazones-kbuildsycoca.hook"
     install -Dm755 "PlasmaZones-$pkgver/packaging/arch/plasmazones-refresh-sycoca" \
         "$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
+
+    # License files — GPL-3.0-or-later (main) + LGPL-2.1-or-later
+    # (the eight Phosphor* libraries enumerated below). The `license=()`
+    # array above declares both; both files must be shipped under
+    # /usr/share/licenses.
+    install -Dm644 "PlasmaZones-$pkgver/LICENSE" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 "PlasmaZones-$pkgver/COPYING.LESSER" \
+        "$pkgdir/usr/share/licenses/$pkgname/COPYING.LESSER"
+
+    # Package ships 20 Phosphor shared libraries plus their CMake config and
+    # headers: Animation, Audio, Config, EngineApi, FsLoader, Geometry,
+    # Identity, Layer, LayoutApi, Protocol, Rendering, Screens, Shaders,
+    # Shortcuts, SnapEngine, Surfaces, TileEngine, Tiles, Wayland, Zones.
+    # No separate -devel package is produced; these are installed by
+    # `cmake --install` above into /usr/lib and /usr/include and bundled
+    # with the main package.
 }

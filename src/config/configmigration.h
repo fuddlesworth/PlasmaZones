@@ -16,6 +16,15 @@
 
 namespace PlasmaZones {
 
+/// Current config schema version. Written by JsonBackend::sync() (fresh
+/// installs, via the version stamp wired up in configbackends.cpp),
+/// migrateIniToJson() (INI upgrades), and migrateV1ToV2() (schema upgrades).
+/// v1: flat groups (Activation, Display, Appearance, etc.)
+/// v2: nested dot-path groups (Snapping.Behavior.ZoneSpan, Tiling.Gaps, etc.)
+/// v3: per-mode disable lists — Snapping.Behavior.Display.{Disabled*} relocates
+///     to Display.{Snapping,Autotile}Disabled{Monitors,Desktops,Activities}.
+inline constexpr int ConfigSchemaVersion = 3;
+
 /// A single schema migration step: transforms root JSON in-place from
 /// fromVersion to fromVersion+1, then stamps the new _version.
 struct MigrationStep
@@ -35,7 +44,30 @@ public:
     /// - All migrations succeeded
     ///
     /// Returns false if any migration failed (old file preserved, error logged).
+    ///
+    /// Internally short-circuits after the first successful call in a given
+    /// process, so repeated invocations on the editor startup hot path don't
+    /// re-read and re-parse the config file. Tests that swap the backing
+    /// config file underneath the process must call
+    /// resetMigrationGuardForTesting() between cases — see that method's
+    /// docs for the rationale.
+    ///
+    /// Trusts PlasmaZones' single-writer-per-session model: once the guard
+    /// latches, a later out-of-process rewrite of config.json (e.g. a user
+    /// editing the file by hand, or a second daemon downgrading the schema
+    /// mid-session) will NOT be re-detected by this function. Readers still
+    /// re-open the file fresh on every load(), so config values themselves
+    /// remain live — only the schema-version check is skipped. If you
+    /// introduce a workflow that involves external rewrites during a
+    /// session, drop the guard first via resetMigrationGuardForTesting().
     static bool ensureJsonConfig();
+
+    /// Reset the process-level "already migrated" flag set by
+    /// ensureJsonConfig(). Exists so test harnesses can reuse a single
+    /// process to exercise multiple migration scenarios against different
+    /// isolated config directories — in production code the guard is
+    /// strictly one-way and this should never be called.
+    static void resetMigrationGuardForTesting();
 
     /// Convert an INI config file to JSON format. Produces v1 JSON.
     /// Used by ensureJsonConfig() for one-time INI migration,
@@ -56,14 +88,25 @@ public:
     // Schema migration functions (one per version bump).
     // Public so the MigrationStep function pointers can reference them.
     static void migrateV1ToV2(QJsonObject& root);
-    // static void migrateV2ToV3(QJsonObject& root);  // future
+    static void migrateV2ToV3(QJsonObject& root);
 
 private:
     ConfigMigration() = default;
 
+    /// Actual implementation of ensureJsonConfig() — runs the file
+    /// check / INI→JSON / version-upgrade logic unconditionally. The
+    /// public ensureJsonConfig() wraps this in the process-level
+    /// short-circuit guard so repeat calls on the startup hot path are
+    /// free.
+    static bool ensureJsonConfigImpl();
+
     // INI→JSON helpers
     static QJsonObject iniMapToJson(const QMap<QString, QVariant>& flatMap);
-    static QJsonValue convertValue(const QVariant& value);
+    /// Convert an INI value to its JSON form. @p keyName is the leaf key
+    /// (without group prefix); it's used to decide whether a comma-separated
+    /// int list should be read as an r,g,b[,a] color — the content heuristic
+    /// alone can't tell a color from e.g. a comma-separated layout order.
+    static QJsonValue convertValue(const QString& keyName, const QVariant& value);
 };
 
 } // namespace PlasmaZones

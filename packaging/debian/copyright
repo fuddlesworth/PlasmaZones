@@ -1,15 +1,31 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: PlasmaZones
-Upstream-Contact: fuddlesworth
+Upstream-Contact: fuddlesworth <fuddlesworth@users.noreply.github.com>
 Source: https://github.com/fuddlesworth/PlasmaZones
 
 Files: *
-Copyright: 2024-2026 fuddlesworth
+Copyright: 2024-2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
+# All phosphor-* extracted libraries ship as LGPL so third-party
+# plugins / shells can link them without inheriting GPL — see CLAUDE.md
+# for the per-tree license rules.
+Files: libs/phosphor-*/*
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: LGPL-2.1-or-later
+
 Files: debian/*
-Copyright: 2026 fuddlesworth
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
+
+License: LGPL-2.1-or-later
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as published
+ by the Free Software Foundation; either version 2.1 of the License, or
+ (at your option) any later version.
+ .
+ On Debian systems, the full text of the GNU Lesser General Public License
+ version 2.1 can be found in the file '/usr/share/common-licenses/LGPL-2.1'.
 
 License: GPL-3.0-or-later
  This program is free software: you can redistribute it and/or modify

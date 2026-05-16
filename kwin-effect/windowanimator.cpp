@@ -3,311 +3,268 @@
 
 #include "windowanimator.h"
 
+#include <PhosphorAnimation/Curve.h>
+
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
+
 #include <QLoggingCategory>
-#include <QStringList>
-#include <QLineF>
+
+#include <utility>
 
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Easing curve helpers — Elastic and Bounce formulas
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// Configuration
+// ═══════════════════════════════════════════════════════════════════════
 
-qreal EasingCurve::evaluateElasticOut(qreal t, qreal amp, qreal per)
+void WindowAnimator::setOutputClockResolver(OutputClockResolver resolver)
 {
-    if (t <= 0.0)
-        return 0.0;
-    if (t >= 1.0)
-        return 1.0;
-    const qreal a = qMax(1.0, amp);
-    const qreal s = per / (2.0 * M_PI) * qAsin(1.0 / a);
-    return a * qPow(2.0, -10.0 * t) * qSin((t - s) * 2.0 * M_PI / per) + 1.0;
+    m_outputClockResolver = std::move(resolver);
 }
 
-qreal EasingCurve::evaluateBounceOut(qreal t, qreal amp, int n)
+void WindowAnimator::setOnAnimationCompleteCallback(AnimationCompleteCallback callback)
 {
-    if (t <= 0.0)
-        return 0.0;
-    if (t >= 1.0)
-        return 1.0;
-
-    // Generalized bounce with n bounce arcs after the initial rise.
-    // Uses restitution coefficient r = 0.5 (each bounce reaches r² = 25% of
-    // previous height, and takes r = 50% of the previous duration).
-    //
-    // Structure: one half-parabola (approach: 0→1) followed by n full parabolic
-    // arcs of decreasing height. Amplitude scales the bounce dip depths.
-    constexpr qreal r = 0.5;
-    n = qBound(1, n, 8);
-
-    // Compute base arc duration d so all arcs fit in [0, 1]:
-    // total = d + d + d*r + d*r² + ... + d*r^(n-1) = d * (1 + (1-r^n)/(1-r))
-    qreal S = (1.0 - qPow(r, n)) / (1.0 - r);
-    const qreal d = 1.0 / (1.0 + S);
-
-    // First half-arc: parabolic rise from 0 to 1
-    if (t < d) {
-        const qreal u = t / d;
-        return u * u;
-    }
-
-    // Subsequent full arcs: each is a symmetric parabola peaking at y=1,
-    // dipping to a floor that depends on the arc index.
-    qreal tAccum = d;
-    for (int k = 0; k < n; ++k) {
-        const qreal dk = d * qPow(r, k);
-        if (t < tAccum + dk || k == n - 1) {
-            const qreal u = (t - tAccum) / dk; // 0..1 within this arc
-            const qreal height = qPow(r, 2 * (k + 1)); // standard dip depth
-            // Parabola: 1.0 at u=0 and u=1, dips to (1 - height*amp) at u=0.5
-            const qreal dip = 1.0 - 4.0 * (u - 0.5) * (u - 0.5); // 0 at edges, 1 at center
-            return 1.0 - height * amp * dip;
-        }
-        tAccum += dk;
-    }
-    return 1.0;
+    m_onAnimationCompleteCallback = std::move(callback);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Easing curve parsing, serialization, evaluation
-// ═══════════════════════════════════════════════════════════════════════════════
-
-EasingCurve EasingCurve::fromString(const QString& str)
+void WindowAnimator::setClock(PhosphorAnimation::IMotionClock* clock)
 {
-    EasingCurve curve;
-    if (str.isEmpty())
-        return curve;
+    m_clock = clock;
+}
 
-    // Detect named curve: contains any letter other than scientific notation 'e'/'E'.
-    // Without this guard, bezier strings like "1e-1,0.5,0.8,1.0" would be
-    // misrouted to named-curve parsing and silently fall back to default.
-    bool hasLetter = false;
-    for (const QChar& ch : str) {
-        if (ch.isLetter() && ch != QLatin1Char('e') && ch != QLatin1Char('E')) {
-            hasLetter = true;
-            break;
-        }
+PhosphorAnimation::IMotionClock* WindowAnimator::clock() const
+{
+    return m_clock;
+}
+
+void WindowAnimator::setEnabled(bool enabled)
+{
+    m_enabled = enabled;
+}
+
+bool WindowAnimator::isEnabled() const
+{
+    return m_enabled;
+}
+
+void WindowAnimator::setProfile(const PhosphorAnimation::Profile& profile)
+{
+    m_profile = profile;
+    clampProfile(m_profile);
+}
+
+const PhosphorAnimation::Profile& WindowAnimator::profile() const
+{
+    return m_profile;
+}
+
+void WindowAnimator::setCurve(std::shared_ptr<const PhosphorAnimation::Curve> curve)
+{
+    m_profile.curve = std::move(curve);
+}
+
+std::shared_ptr<const PhosphorAnimation::Curve> WindowAnimator::curve() const
+{
+    return m_profile.curve;
+}
+
+void WindowAnimator::setDuration(qreal ms)
+{
+    m_profile.duration = ms;
+    clampProfile(m_profile);
+}
+
+qreal WindowAnimator::duration() const
+{
+    return m_profile.effectiveDuration();
+}
+
+void WindowAnimator::setMinDistance(int pixels)
+{
+    m_profile.minDistance = pixels;
+    clampProfile(m_profile);
+}
+
+int WindowAnimator::minDistance() const
+{
+    return m_profile.effectiveMinDistance();
+}
+
+void WindowAnimator::setRetargetPolicy(PhosphorAnimation::RetargetPolicy policy)
+{
+    m_retargetPolicy = policy;
+}
+
+PhosphorAnimation::RetargetPolicy WindowAnimator::retargetPolicy() const
+{
+    return m_retargetPolicy;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Lifecycle
+// ═══════════════════════════════════════════════════════════════════════
+
+bool WindowAnimator::hasActiveAnimations() const
+{
+    return !m_animations.empty();
+}
+
+bool WindowAnimator::hasAnimation(KWin::EffectWindow* handle) const
+{
+    return m_animations.contains(handle);
+}
+
+bool WindowAnimator::startAnimation(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame,
+                                    const PhosphorAnimation::Profile* profileOverride)
+{
+    const auto r = startAnimationWithResult(handle, oldFrame, newFrame, profileOverride);
+    return r == PhosphorAnimation::StartResult::Accepted || r == PhosphorAnimation::StartResult::AcceptedThenRemoved;
+}
+
+PhosphorAnimation::StartResult
+WindowAnimator::startAnimationWithResult(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame,
+                                         const PhosphorAnimation::Profile* profileOverride)
+{
+    using PhosphorAnimation::StartResult;
+
+    if (!m_enabled) {
+        return StartResult::Disabled;
+    }
+    if (!isHandleValid(handle)) {
+        return StartResult::HandleInvalid;
     }
 
-    if (hasLetter) {
-        // Parse "name" or "name:p1,p2"
-        const int colonIdx = str.indexOf(QLatin1Char(':'));
-        const QString name = (colonIdx >= 0) ? str.left(colonIdx).trimmed() : str.trimmed();
-        const QString params = (colonIdx >= 0) ? str.mid(colonIdx + 1).trimmed() : QString();
-
-        // Map name to type
-        if (name == QLatin1String("elastic-in")) {
-            curve.type = Type::ElasticIn;
-        } else if (name == QLatin1String("elastic-out")) {
-            curve.type = Type::ElasticOut;
-        } else if (name == QLatin1String("elastic-in-out")) {
-            curve.type = Type::ElasticInOut;
-        } else if (name == QLatin1String("bounce-in")) {
-            curve.type = Type::BounceIn;
-        } else if (name == QLatin1String("bounce-out")) {
-            curve.type = Type::BounceOut;
-        } else if (name == QLatin1String("bounce-in-out")) {
-            curve.type = Type::BounceInOut;
-        } else {
-            qCDebug(lcEffect) << "animationEasingCurve: unknown named curve" << name << "- using default";
-            return curve;
-        }
-
-        // Parse optional parameters
-        if (!params.isEmpty()) {
-            const QStringList parts = params.split(QLatin1Char(','));
-            // First param is always amplitude (elastic and bounce)
-            if (parts.size() >= 1) {
-                bool ok;
-                qreal a = parts[0].trimmed().toDouble(&ok);
-                if (ok)
-                    curve.amplitude = qBound(0.5, a, 3.0);
-            }
-            // Second param: period (elastic) or bounce count (bounce)
-            if (parts.size() >= 2) {
-                if (curve.type == Type::ElasticIn || curve.type == Type::ElasticOut
-                    || curve.type == Type::ElasticInOut) {
-                    bool ok;
-                    qreal p = parts[1].trimmed().toDouble(&ok);
-                    if (ok)
-                        curve.period = qBound(0.1, p, 1.0);
-                } else if (curve.type == Type::BounceIn || curve.type == Type::BounceOut
-                           || curve.type == Type::BounceInOut) {
-                    bool ok;
-                    int b = parts[1].trimmed().toInt(&ok);
-                    if (ok)
-                        curve.bounces = qBound(1, b, 8);
-                }
-            }
-        }
-        return curve;
+    PhosphorAnimation::IMotionClock* clk = clockForHandle(handle);
+    if (!clk) {
+        return StartResult::NoClock;
     }
 
-    // Bezier: "x1,y1,x2,y2"
-    const QStringList parts = str.split(QLatin1Char(','));
-    if (parts.size() == 4) {
-        bool ok1, ok2, ok3, ok4;
-        qreal x1 = parts[0].trimmed().toDouble(&ok1);
-        qreal y1 = parts[1].trimmed().toDouble(&ok2);
-        qreal x2 = parts[2].trimmed().toDouble(&ok3);
-        qreal y2 = parts[3].trimmed().toDouble(&ok4);
-        if (ok1 && ok2 && ok3 && ok4) {
-            curve.x1 = qBound(0.0, x1, 1.0);
-            curve.y1 = qBound(-1.0, y1, 2.0);
-            curve.x2 = qBound(0.0, x2, 1.0);
-            curve.y2 = qBound(-1.0, y2, 2.0);
-        } else {
-            qCDebug(lcEffect) << "animationEasingCurve: invalid numeric values in" << str << "- using default";
-        }
+    PhosphorAnimation::SnapPolicy::SnapParams params;
+    // Per-call profile override — used by the AnimationAppRule cascade to
+    // apply a curve / duration override for one animation without mutating
+    // m_profile. The override is already curve-resolved through CurveRegistry
+    // by the caller and clamped here through the same path as m_profile.
+    if (profileOverride) {
+        params.profile = *profileOverride;
+        clampProfile(params.profile);
     } else {
-        qCDebug(lcEffect) << "animationEasingCurve: invalid format (expected x1,y1,x2,y2):" << str << "- using default";
+        params.profile = m_profile;
     }
-    return curve;
-}
-
-QString EasingCurve::toString() const
-{
-    switch (type) {
-    case Type::CubicBezier:
-        return QStringLiteral("%1,%2,%3,%4")
-            .arg(x1, 0, 'f', 2)
-            .arg(y1, 0, 'f', 2)
-            .arg(x2, 0, 'f', 2)
-            .arg(y2, 0, 'f', 2);
-    case Type::ElasticIn:
-        return QStringLiteral("elastic-in:%1,%2").arg(amplitude, 0, 'f', 2).arg(period, 0, 'f', 2);
-    case Type::ElasticOut:
-        return QStringLiteral("elastic-out:%1,%2").arg(amplitude, 0, 'f', 2).arg(period, 0, 'f', 2);
-    case Type::ElasticInOut:
-        return QStringLiteral("elastic-in-out:%1,%2").arg(amplitude, 0, 'f', 2).arg(period, 0, 'f', 2);
-    case Type::BounceIn:
-        return QStringLiteral("bounce-in:%1,%2").arg(amplitude, 0, 'f', 2).arg(bounces);
-    case Type::BounceOut:
-        return QStringLiteral("bounce-out:%1,%2").arg(amplitude, 0, 'f', 2).arg(bounces);
-    case Type::BounceInOut:
-        return QStringLiteral("bounce-in-out:%1,%2").arg(amplitude, 0, 'f', 2).arg(bounces);
+    params.retargetPolicy = m_retargetPolicy;
+    const auto spec = PhosphorAnimation::SnapPolicy::createSnapSpec(oldFrame, newFrame, params, clk);
+    if (!spec) {
+        return StartResult::PolicyRejected;
     }
-    Q_UNREACHABLE_RETURN(QStringLiteral("0.33,1.00,0.68,1.00"));
-}
 
-qreal EasingCurve::evaluate(qreal x) const
-{
-    if (x <= 0.0)
-        return 0.0;
-    if (x >= 1.0)
-        return 1.0;
-
-    switch (type) {
-    case Type::ElasticOut:
-        return evaluateElasticOut(x, amplitude, period);
-    case Type::ElasticIn:
-        return 1.0 - evaluateElasticOut(1.0 - x, amplitude, period);
-    case Type::ElasticInOut: {
-        if (x < 0.5) {
-            return (1.0 - evaluateElasticOut(1.0 - 2.0 * x, amplitude, period)) * 0.5;
+    PhosphorAnimation::AnimatedValue<QRectF> anim;
+    if (!anim.start(oldFrame, newFrame, *spec)) {
+        if (auto existing = m_animations.find(handle); existing != m_animations.end()) {
+            PhosphorAnimation::AnimatedValue<QRectF> displaced = std::move(existing->second);
+            m_animations.erase(existing);
+            onAnimationReplaced(handle, displaced);
         }
-        return evaluateElasticOut(2.0 * x - 1.0, amplitude, period) * 0.5 + 0.5;
+        return StartResult::NoMotion;
     }
-    case Type::BounceOut:
-        return evaluateBounceOut(x, amplitude, bounces);
-    case Type::BounceIn:
-        return 1.0 - evaluateBounceOut(1.0 - x, amplitude, bounces);
-    case Type::BounceInOut: {
-        if (x < 0.5) {
-            return (1.0 - evaluateBounceOut(1.0 - 2.0 * x, amplitude, bounces)) * 0.5;
+
+    // Displace + notify via move-assignment to preserve object identity
+    // (re-entrancy safety — see original AnimationController commentary).
+    if (auto existing = m_animations.find(handle); existing != m_animations.end()) {
+        PhosphorAnimation::AnimatedValue<QRectF> displaced = std::move(existing->second);
+        existing->second = std::move(anim);
+        onAnimationReplaced(handle, displaced);
+        // Re-lookup: hook may have mutated the map.
+        auto placed = m_animations.find(handle);
+        if (placed != m_animations.end()) {
+            onAnimationStarted(handle, placed->second);
+            return StartResult::Accepted;
         }
-        return evaluateBounceOut(2.0 * x - 1.0, amplitude, bounces) * 0.5 + 0.5;
-    }
-    case Type::CubicBezier:
-        break;
+        return StartResult::AcceptedThenRemoved;
     }
 
-    // Newton's method to solve Bx(t) = x for parameter t
-    // Bx(t) = 3(1-t)^2*t*x1 + 3(1-t)*t^2*x2 + t^3
-    qreal t = x; // initial guess
-    for (int i = 0; i < 8; ++i) {
-        const qreal t2 = t * t;
-        const qreal t3 = t2 * t;
-        const qreal mt = 1.0 - t;
-        const qreal mt2 = mt * mt;
-
-        // Bx(t) - x
-        const qreal bx = 3.0 * mt2 * t * x1 + 3.0 * mt * t2 * x2 + t3 - x;
-        // Bx'(t)
-        const qreal dbx = 3.0 * mt2 * x1 + 6.0 * mt * t * (x2 - x1) + 3.0 * t2 * (1.0 - x2);
-
-        if (qAbs(dbx) < 1e-12)
-            break;
-        t -= bx / dbx;
-        t = qBound(0.0, t, 1.0);
-    }
-
-    // Evaluate By(t) with the solved parameter
-    const qreal mt = 1.0 - t;
-    return 3.0 * mt * mt * t * y1 + 3.0 * mt * t * t * y2 + t * t * t;
+    auto [it, inserted] = m_animations.emplace(handle, std::move(anim));
+    onAnimationStarted(handle, it->second);
+    return StartResult::Accepted;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// WindowAnimator
-// ═══════════════════════════════════════════════════════════════════════════════
-
-WindowAnimator::WindowAnimator(QObject* parent)
-    : QObject(parent)
+bool WindowAnimator::retarget(KWin::EffectWindow* handle, const QRectF& newFrame,
+                              PhosphorAnimation::RetargetPolicy policy)
 {
+    return retargetWithResult(handle, newFrame, policy) == PhosphorAnimation::RetargetResult::Accepted;
 }
 
-bool WindowAnimator::hasAnimation(KWin::EffectWindow* window) const
+bool WindowAnimator::retarget(KWin::EffectWindow* handle, const QRectF& newFrame)
 {
-    return m_animations.contains(window);
+    return retargetWithResult(handle, newFrame) == PhosphorAnimation::RetargetResult::Accepted;
 }
 
-bool WindowAnimator::startAnimation(KWin::EffectWindow* window, const QPointF& oldPosition, const QSizeF& oldSize,
-                                    const QRect& targetGeometry)
+PhosphorAnimation::RetargetResult WindowAnimator::retargetWithResult(KWin::EffectWindow* handle, const QRectF& newFrame,
+                                                                     PhosphorAnimation::RetargetPolicy policy)
 {
-    if (!window || !m_enabled) {
-        return false;
+    using PhosphorAnimation::RetargetResult;
+
+    if (!m_enabled) {
+        return RetargetResult::Disabled;
+    }
+    if (!isHandleValid(handle)) {
+        return RetargetResult::HandleInvalid;
+    }
+    auto it = m_animations.find(handle);
+    if (it == m_animations.end()) {
+        return RetargetResult::UnknownHandle;
     }
 
-    // Skip degenerate targets
-    if (targetGeometry.width() <= 0 || targetGeometry.height() <= 0) {
-        return false;
+    // Snapshot displaced bounds before retarget overwrites state.
+    const QMarginsF preservedPadding = expandedPadding(handle, it->second);
+    const QRectF preservedBounds = it->second.bounds().marginsAdded(preservedPadding);
+    const bool accepted = it->second.retarget(newFrame, policy);
+    if (accepted) {
+        onAnimationRetargeted(handle, it->second);
+        return RetargetResult::Accepted;
     }
 
-    // Skip if position change is below the minimum distance threshold
-    // and size isn't changing either
-    const QPointF newPos = targetGeometry.topLeft();
-    const qreal dist = QLineF(oldPosition, newPos).length();
-    const bool sizeChanging =
-        qAbs(oldSize.width() - targetGeometry.width()) > 1.0 || qAbs(oldSize.height() - targetGeometry.height()) > 1.0;
-    if (dist < qMax(1.0, qreal(m_minDistance)) && !sizeChanging) {
-        return false;
+    // Degenerate retarget — reap immediately.
+    if (it->second.isComplete()) {
+        const QMarginsF padding = expandedPadding(handle, it->second);
+        const QRectF postBounds = it->second.bounds().marginsAdded(padding);
+        const QRectF bounds = preservedBounds.isValid() ? preservedBounds.united(postBounds) : postBounds;
+        PhosphorAnimation::AnimatedValue<QRectF> finished = std::move(it->second);
+        m_animations.erase(it);
+        onAnimationComplete(handle, finished);
+        if (bounds.isValid()) {
+            onRepaintNeeded(handle, bounds);
+        }
+        return RetargetResult::DegenerateReap;
     }
 
-    WindowAnimation anim;
-    anim.startPosition = oldPosition;
-    anim.startSize = oldSize;
-    anim.targetGeometry = targetGeometry;
-    anim.duration = m_duration;
-    anim.easing = m_easing;
-    // startTime is -1 (pending); latched to presentTime on first advanceAnimations()
-    m_animations[window] = anim;
-
-    window->addRepaintFull();
-
-    qCDebug(lcEffect) << "Started animation from" << oldPosition << oldSize << "to" << newPos << targetGeometry.size()
-                      << "distance:" << dist << "scale:" << sizeChanging << "duration:" << m_duration
-                      << "easing:" << m_easing.toString();
-    return true;
+    Q_ASSERT_X(false, "WindowAnimator::retargetWithResult",
+               "AnimatedValue rejected retarget without marking complete — spec was never installed");
+    return RetargetResult::InternalError;
 }
 
-void WindowAnimator::removeAnimation(KWin::EffectWindow* window)
+PhosphorAnimation::RetargetResult WindowAnimator::retargetWithResult(KWin::EffectWindow* handle, const QRectF& newFrame)
 {
-    m_animations.remove(window);
+    using PhosphorAnimation::RetargetResult;
+
+    if (!m_enabled) {
+        return RetargetResult::Disabled;
+    }
+    if (!isHandleValid(handle)) {
+        return RetargetResult::HandleInvalid;
+    }
+    auto it = m_animations.find(handle);
+    if (it == m_animations.end()) {
+        return RetargetResult::UnknownHandle;
+    }
+    return retargetWithResult(handle, newFrame, it->second.spec().retargetPolicy);
+}
+
+void WindowAnimator::removeAnimation(KWin::EffectWindow* handle)
+{
+    m_animations.erase(handle);
 }
 
 void WindowAnimator::clear()
@@ -315,161 +272,288 @@ void WindowAnimator::clear()
     m_animations.clear();
 }
 
-bool WindowAnimator::isAnimatingToTarget(KWin::EffectWindow* window, const QRect& targetGeometry) const
+int WindowAnimator::reapAnimationsForClock(const PhosphorAnimation::IMotionClock* clock)
 {
-    auto it = m_animations.constFind(window);
-    if (it == m_animations.constEnd()) {
+    if (!clock) {
+        return 0;
+    }
+    QVarLengthArray<KWin::EffectWindow*, kMaxInlineHandlesPerTick> handles;
+    for (const auto& [handle, anim] : m_animations) {
+        if (anim.spec().clock == clock) {
+            handles.append(handle);
+        }
+    }
+    int reaped = 0;
+    for (KWin::EffectWindow* handle : handles) {
+        auto it = m_animations.find(handle);
+        if (it == m_animations.end()) {
+            continue;
+        }
+        if (it->second.spec().clock != clock) {
+            continue;
+        }
+        const QMarginsF padding = expandedPadding(handle, it->second);
+        const QRectF bounds = it->second.bounds().marginsAdded(padding);
+        PhosphorAnimation::AnimatedValue<QRectF> reapedAnim = std::move(it->second);
+        m_animations.erase(it);
+        onAnimationReaped(handle, reapedAnim);
+        if (bounds.isValid()) {
+            onRepaintNeeded(handle, bounds);
+        }
+        ++reaped;
+    }
+    return reaped;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// State queries
+// ═══════════════════════════════════════════════════════════════════════
+
+bool WindowAnimator::isAnimatingToTarget(KWin::EffectWindow* handle, const QRectF& target) const
+{
+    auto it = m_animations.find(handle);
+    if (it == m_animations.end()) {
         return false;
     }
-    return it->targetGeometry == targetGeometry;
+    const QRectF to = it->second.to();
+    return qAbs(to.x() - target.x()) < PhosphorAnimation::kRectSizeEpsilonPx
+        && qAbs(to.y() - target.y()) < PhosphorAnimation::kRectSizeEpsilonPx
+        && qAbs(to.width() - target.width()) < PhosphorAnimation::kRectSizeEpsilonPx
+        && qAbs(to.height() - target.height()) < PhosphorAnimation::kRectSizeEpsilonPx;
 }
 
-QPointF WindowAnimator::currentVisualPosition(KWin::EffectWindow* window) const
+QRectF WindowAnimator::currentValue(KWin::EffectWindow* handle, const QRectF& fallback) const
 {
-    auto it = m_animations.constFind(window);
-    if (it == m_animations.constEnd()) {
-        return window ? window->frameGeometry().topLeft() : QPointF();
+    auto it = m_animations.find(handle);
+    if (it == m_animations.end()) {
+        return fallback;
     }
-    return it->currentVisualPosition();
+    return it->second.value();
 }
 
-QSizeF WindowAnimator::currentVisualSize(KWin::EffectWindow* window) const
+const PhosphorAnimation::AnimatedValue<QRectF>* WindowAnimator::animationFor(KWin::EffectWindow* handle) const
 {
-    auto it = m_animations.constFind(window);
-    if (it == m_animations.constEnd()) {
-        return window ? window->frameGeometry().size() : QSizeF();
+    auto it = m_animations.find(handle);
+    return (it == m_animations.end()) ? nullptr : &it->second;
+}
+
+QRectF WindowAnimator::animationBounds(KWin::EffectWindow* handle) const
+{
+    auto it = m_animations.find(handle);
+    if (it == m_animations.end()) {
+        return QRectF();
     }
-    return it->currentVisualSize();
+    const QMarginsF padding = expandedPadding(handle, it->second);
+    return it->second.bounds().marginsAdded(padding);
 }
 
-void WindowAnimator::advanceAnimations(std::chrono::milliseconds presentTime)
+// ═══════════════════════════════════════════════════════════════════════
+// Per-frame
+// ═══════════════════════════════════════════════════════════════════════
+
+void WindowAnimator::advanceAnimations()
 {
-    // Iterate over a snapshot of keys — signal handlers triggered by repaint
-    // could indirectly modify m_animations.
-    const auto windows = m_animations.keys();
-    for (KWin::EffectWindow* window : windows) {
-        auto it = m_animations.find(window);
+    QVarLengthArray<KWin::EffectWindow*, kMaxInlineHandlesPerTick> handles;
+    handles.reserve(m_animations.size());
+    for (const auto& [handle, _] : m_animations) {
+        handles.append(handle);
+    }
+
+    for (KWin::EffectWindow* handle : handles) {
+        auto it = m_animations.find(handle);
+        if (it == m_animations.end()) {
+            continue;
+        }
+        if (!isHandleValid(handle)) {
+            PhosphorAnimation::AnimatedValue<QRectF> abandoned = std::move(it->second);
+            m_animations.erase(it);
+            onAnimationAbandoned(handle, abandoned);
+            continue;
+        }
+
+        // Per-tick clock re-resolution for output migration.
+        if (PhosphorAnimation::IMotionClock* resolved = clockForHandle(handle)) {
+            PhosphorAnimation::IMotionClock* current = it->second.spec().clock;
+            if (resolved != current && PhosphorAnimation::IMotionClock::epochCompatible(current, resolved)) {
+                it->second.rebindClock(resolved);
+            }
+        }
+
+        it->second.advance();
+
+        // Re-lookup: advance() fires callbacks that may re-enter and rehash.
+        it = m_animations.find(handle);
         if (it == m_animations.end()) {
             continue;
         }
 
-        if (window->isDeleted()) {
+        if (it->second.isComplete()) {
+            const QMarginsF padding = expandedPadding(handle, it->second);
+            const QRectF bounds = it->second.bounds().marginsAdded(padding);
+            PhosphorAnimation::AnimatedValue<QRectF> finished = std::move(it->second);
             m_animations.erase(it);
-            continue;
-        }
-
-        // Update cached progress from presentTime (latches startTime on first call)
-        it->updateProgress(presentTime);
-
-        if (it->isComplete(presentTime)) {
-            // Animation done — window is already at its final position
-            // (moveResize was called before the animation started).
-            const QRectF bounds = animationBounds(window);
-            m_animations.erase(it);
-            window->addRepaintFull();
+            onAnimationComplete(handle, finished);
             if (bounds.isValid()) {
-                KWin::effects->addRepaint(bounds.toAlignedRect());
+                onRepaintNeeded(handle, bounds);
             }
-            qCDebug(lcEffect) << "Window snap animation complete";
         }
     }
 }
 
 void WindowAnimator::scheduleRepaints() const
 {
-    for (auto it = m_animations.constBegin(); it != m_animations.constEnd(); ++it) {
-        const QRectF bounds = animationBounds(it.key());
+    for (const auto& [handle, anim] : m_animations) {
+        const QMarginsF padding = expandedPadding(handle, anim);
+        const QRectF bounds = anim.bounds().marginsAdded(padding);
         if (bounds.isValid()) {
-            KWin::effects->addRepaint(bounds.toAlignedRect());
+            onRepaintNeeded(handle, bounds);
         }
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// KWin-specific: applyTransform
+// ═══════════════════════════════════════════════════════════════════════
+
 void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const
 {
-    auto it = m_animations.constFind(window);
-    if (it == m_animations.constEnd() || !it->isValid()) {
+    if (!window || window->isDeleted()) {
         return;
     }
 
-    // Translate: compute the desired visual position and offset from
-    // the actual frameGeometry. moveResize() was called once to set the
-    // final geometry, so frameGeometry should be at the target. The
-    // offset shrinks to zero as the animation completes.
-    const QPointF desiredPos = it->currentVisualPosition();
+    const PhosphorAnimation::AnimatedValue<QRectF>* anim = animationFor(window);
+    if (!anim || !anim->isAnimating()) {
+        return;
+    }
+
+    const QRectF current = anim->value();
+
+    // Translate: desired visual top-left offset from the actual frameGeometry.
+    const QPointF desiredPos = current.topLeft();
     const QPointF actualPos = window->frameGeometry().topLeft();
     data += (desiredPos - actualPos);
 
     // Scale: smoothly morph from old size to target size.
-    // visual_size = frameGeometry.size * scale = desiredSize.
-    // Scale converges to 1.0 at t=1, so the final state uses the
-    // natural buffer with no transform applied.
-    if (it->hasScaleChange()) {
-        const QSizeF desiredSize = it->currentVisualSize();
+    if (anim->hasSizeChange()) {
+        const QSizeF desiredSize = current.size();
         const QSizeF actualSize = window->frameGeometry().size();
-        constexpr qreal MinDim = 1.0;
-        const qreal sx = qBound(0.1, desiredSize.width() / qMax(actualSize.width(), MinDim), 10.0);
-        const qreal sy = qBound(0.1, desiredSize.height() / qMax(actualSize.height(), MinDim), 10.0);
+        constexpr qreal kMinActualDim = 1.0;
+        constexpr qreal kMinScaleFactor = 0.01;
+        constexpr qreal kMaxScaleFactor = 100.0;
+        const qreal sx =
+            qBound(kMinScaleFactor, desiredSize.width() / qMax(actualSize.width(), kMinActualDim), kMaxScaleFactor);
+        const qreal sy =
+            qBound(kMinScaleFactor, desiredSize.height() / qMax(actualSize.height(), kMinActualDim), kMaxScaleFactor);
         data.setXScale(data.xScale() * sx);
         data.setYScale(data.yScale() * sy);
     }
 }
 
-QRectF WindowAnimator::animationBounds(KWin::EffectWindow* window) const
+// ═══════════════════════════════════════════════════════════════════════
+// Hook implementations (formerly virtual overrides)
+// ═══════════════════════════════════════════════════════════════════════
+
+void WindowAnimator::onAnimationStarted(KWin::EffectWindow* window,
+                                        const PhosphorAnimation::AnimatedValue<QRectF>& anim)
 {
-    auto it = m_animations.constFind(window);
-    if (it == m_animations.constEnd()) {
-        return QRectF();
+    if (window) {
+        window->addRepaintFull();
     }
+    qCDebug(lcEffect) << "Started animation from" << anim.from() << "to" << anim.to()
+                      << "duration:" << anim.spec().profile.effectiveDuration();
+}
 
-    // The window's expanded geometry (includes shadow/decoration padding).
-    // Guard: once a window enters the "deleted" state, its Item tree may be
-    // torn down and expandedGeometry() would dereference a null Item pointer.
-    QRectF expanded = (window && !window->isDeleted()) ? window->expandedGeometry() : QRectF(it->targetGeometry);
+void WindowAnimator::onAnimationComplete(KWin::EffectWindow* window,
+                                         const PhosphorAnimation::AnimatedValue<QRectF>& anim)
+{
+    qCDebug(lcEffect) << "Window snap animation complete:" << static_cast<const void*>(window)
+                      << "target:" << anim.to();
+    if (m_onAnimationCompleteCallback) {
+        m_onAnimationCompleteCallback(window);
+    }
+}
 
-    // Shadow/decoration padding (constant)
-    const QRectF frameGeo(it->targetGeometry);
-    const qreal padLeft = expanded.x() - frameGeo.x();
-    const qreal padTop = expanded.y() - frameGeo.y();
-    const qreal padRight = expanded.right() - frameGeo.right();
-    const qreal padBottom = expanded.bottom() - frameGeo.bottom();
-
-    // Footprint at animation start (t=0)
-    QRectF atStart(it->startPosition.x() + padLeft, it->startPosition.y() + padTop,
-                   it->startSize.width() - padLeft + padRight, it->startSize.height() - padTop + padBottom);
-
-    QRectF bounds = expanded.united(atStart);
-
-    // For overshooting easing curves, sample to find extremes.
-    const bool isBounce =
-        (it->easing.type == EasingCurve::Type::BounceIn || it->easing.type == EasingCurve::Type::BounceOut
-         || it->easing.type == EasingCurve::Type::BounceInOut);
-    const bool needsSampling =
-        (it->easing.type == EasingCurve::Type::ElasticIn || it->easing.type == EasingCurve::Type::ElasticOut
-         || it->easing.type == EasingCurve::Type::ElasticInOut)
-        || (isBounce && it->easing.amplitude > 1.0)
-        || (it->easing.type == EasingCurve::Type::CubicBezier
-            && (it->easing.y1 < 0.0 || it->easing.y1 > 1.0 || it->easing.y2 < 0.0 || it->easing.y2 > 1.0));
-
-    if (needsSampling) {
-        const qreal dx = it->startPosition.x() - it->targetGeometry.x();
-        const qreal dy = it->startPosition.y() - it->targetGeometry.y();
-        const qreal dw = it->startSize.width() - it->targetGeometry.width();
-        const qreal dh = it->startSize.height() - it->targetGeometry.height();
-
-        constexpr int nSamples = 50;
-        for (int i = 1; i < nSamples; ++i) {
-            qreal p = it->easing.evaluate(qreal(i) / nSamples);
-            const qreal inv = 1.0 - p;
-            QRectF sampledRect(it->targetGeometry.x() + dx * inv + padLeft, it->targetGeometry.y() + dy * inv + padTop,
-                               it->targetGeometry.width() + dw * inv - padLeft + padRight,
-                               it->targetGeometry.height() + dh * inv - padTop + padBottom);
-            bounds = bounds.united(sampledRect);
+void WindowAnimator::onAnimationReplaced(KWin::EffectWindow* window,
+                                         const PhosphorAnimation::AnimatedValue<QRectF>& displaced)
+{
+    if (window && !window->isDeleted()) {
+        const QRectF bounds = displaced.value();
+        if (bounds.isValid()) {
+            KWin::effects->addRepaint(bounds.toAlignedRect());
         }
     }
+    qCDebug(lcEffect) << "Window snap animation replaced:" << static_cast<const void*>(window)
+                      << "displaced-from:" << displaced.from() << "displaced-to:" << displaced.to();
+}
 
-    bounds.adjust(-2.0, -2.0, 2.0, 2.0);
-    return bounds;
+void WindowAnimator::onAnimationRetargeted(KWin::EffectWindow* window,
+                                           const PhosphorAnimation::AnimatedValue<QRectF>& anim)
+{
+    qCDebug(lcEffect) << "Window snap animation retargeted:" << static_cast<const void*>(window)
+                      << "new-from:" << anim.from() << "new-to:" << anim.to();
+}
+
+void WindowAnimator::onAnimationReaped(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim)
+{
+    qCDebug(lcEffect) << "Window snap animation reaped (output teardown):" << static_cast<const void*>(window)
+                      << "target:" << anim.to();
+}
+
+void WindowAnimator::onAnimationAbandoned(KWin::EffectWindow* window,
+                                          const PhosphorAnimation::AnimatedValue<QRectF>& anim)
+{
+    qCDebug(lcEffect) << "Window snap animation abandoned (handle invalidated):" << static_cast<const void*>(window)
+                      << "target:" << anim.to();
+}
+
+void WindowAnimator::onRepaintNeeded(KWin::EffectWindow*, const QRectF& bounds) const
+{
+    if (bounds.isValid()) {
+        KWin::effects->addRepaint(bounds.toAlignedRect());
+    }
+}
+
+bool WindowAnimator::isHandleValid(KWin::EffectWindow* window) const
+{
+    return window && !window->isDeleted();
+}
+
+QMarginsF WindowAnimator::expandedPadding(KWin::EffectWindow* window,
+                                          const PhosphorAnimation::AnimatedValue<QRectF>& anim) const
+{
+    const QRectF expanded = (window && !window->isDeleted()) ? QRectF(window->expandedGeometry()) : anim.to();
+
+    const QRectF frameGeo = anim.to();
+    return QMarginsF(qMax(0.0, frameGeo.x() - expanded.x()), qMax(0.0, frameGeo.y() - expanded.y()),
+                     qMax(0.0, expanded.right() - frameGeo.right()), qMax(0.0, expanded.bottom() - frameGeo.bottom()));
+}
+
+PhosphorAnimation::IMotionClock* WindowAnimator::clockForHandle(KWin::EffectWindow* window) const
+{
+    if (m_outputClockResolver && window && !window->isDeleted()) {
+        if (auto* clk = m_outputClockResolver(window->screen())) {
+            return clk;
+        }
+    }
+    return m_clock;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════════════════
+
+void WindowAnimator::clampProfile(PhosphorAnimation::Profile& profile)
+{
+    if (profile.duration) {
+        if (!std::isfinite(*profile.duration)) {
+            profile.duration.reset();
+        } else {
+            profile.duration = qBound(qreal(0.0), *profile.duration, kMaxDurationMs);
+        }
+    }
+    if (profile.minDistance) {
+        profile.minDistance = qBound(0, *profile.minDistance, kMaxMinDistancePx);
+    }
 }
 
 } // namespace PlasmaZones

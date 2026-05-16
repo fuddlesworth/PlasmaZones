@@ -148,10 +148,12 @@ bool EditorController::moveSelectedZones(int direction, qreal step)
                 default:
                     continue;
                 }
-                qreal x = qBound(0.0, zone[JsonKeys::X].toDouble() + dx, 1.0 - zone[JsonKeys::Width].toDouble());
-                qreal y = qBound(0.0, zone[JsonKeys::Y].toDouble() + dy, 1.0 - zone[JsonKeys::Height].toDouble());
-                updateZoneGeometry(zoneId, x, y, zone[JsonKeys::Width].toDouble(), zone[JsonKeys::Height].toDouble(),
-                                   true);
+                qreal x = qBound(0.0, zone[::PhosphorZones::ZoneJsonKeys::X].toDouble() + dx,
+                                 1.0 - zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble());
+                qreal y = qBound(0.0, zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble() + dy,
+                                 1.0 - zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble());
+                updateZoneGeometry(zoneId, x, y, zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble(),
+                                   zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble(), true);
             }
         }
     }
@@ -216,10 +218,10 @@ bool EditorController::resizeSelectedZones(int direction, qreal step)
             } else {
                 // Relative mode
                 const qreal minSize = 0.05;
-                qreal x = zone[JsonKeys::X].toDouble();
-                qreal y = zone[JsonKeys::Y].toDouble();
-                qreal width = zone[JsonKeys::Width].toDouble();
-                qreal height = zone[JsonKeys::Height].toDouble();
+                qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+                qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+                qreal width = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+                qreal height = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
                 switch (direction) {
                 case 0:
@@ -289,8 +291,8 @@ void EditorController::startMultiZoneDrag(const QString& primaryZoneId, qreal st
     for (const QString& zoneId : m_selectedZoneIds) {
         QVariantMap zone = m_zoneManager->getZoneById(zoneId);
         if (!zone.isEmpty()) {
-            qreal x = zone[JsonKeys::X].toDouble();
-            qreal y = zone[JsonKeys::Y].toDouble();
+            qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+            qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
             m_dragInitialPositions[zoneId] = QPointF(x, y);
         }
     }
@@ -322,8 +324,8 @@ void EditorController::updateMultiZoneDrag(const QString& primaryZoneId, qreal n
             continue;
         }
 
-        qreal width = zone[JsonKeys::Width].toDouble();
-        qreal height = zone[JsonKeys::Height].toDouble();
+        qreal width = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+        qreal height = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
         // Calculate new position with bounds checking
         qreal newZoneX = qBound(0.0, it.value().x() + dx, 1.0 - width);
@@ -348,8 +350,8 @@ void EditorController::endMultiZoneDrag(bool commit)
         // Calculate final delta from primary zone
         QVariantMap primaryZone = m_zoneManager->getZoneById(m_dragPrimaryZoneId);
         if (!primaryZone.isEmpty() && m_dragInitialPositions.contains(m_dragPrimaryZoneId)) {
-            qreal finalX = primaryZone[JsonKeys::X].toDouble();
-            qreal finalY = primaryZone[JsonKeys::Y].toDouble();
+            qreal finalX = primaryZone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+            qreal finalY = primaryZone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
             qreal dx = finalX - m_dragInitialPositions[m_dragPrimaryZoneId].x();
             qreal dy = finalY - m_dragInitialPositions[m_dragPrimaryZoneId].y();
 
@@ -368,8 +370,8 @@ void EditorController::endMultiZoneDrag(bool commit)
                         continue;
                     }
 
-                    qreal width = zone[JsonKeys::Width].toDouble();
-                    qreal height = zone[JsonKeys::Height].toDouble();
+                    qreal width = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+                    qreal height = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
                     qreal newX = qBound(0.0, it.value().x() + dx, 1.0 - width);
                     qreal newY = qBound(0.0, it.value().y() + dy, 1.0 - height);
 
@@ -390,8 +392,8 @@ void EditorController::endMultiZoneDrag(bool commit)
 
             QVariantMap zone = m_zoneManager->getZoneById(it.key());
             if (!zone.isEmpty()) {
-                qreal width = zone[JsonKeys::Width].toDouble();
-                qreal height = zone[JsonKeys::Height].toDouble();
+                qreal width = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+                qreal height = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
                 m_zoneManager->updateZoneGeometryDirect(it.key(), it.value().x(), it.value().y(), width, height);
             }
         }

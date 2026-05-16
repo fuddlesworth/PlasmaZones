@@ -32,14 +32,14 @@ void UpdateFixedGeometryCommand::applyGeometry(const QRectF& fixed, const QRectF
         return;
     }
 
-    zone[JsonKeys::FixedX] = fixed.x();
-    zone[JsonKeys::FixedY] = fixed.y();
-    zone[JsonKeys::FixedWidth] = fixed.width();
-    zone[JsonKeys::FixedHeight] = fixed.height();
-    zone[JsonKeys::X] = relative.x();
-    zone[JsonKeys::Y] = relative.y();
-    zone[JsonKeys::Width] = relative.width();
-    zone[JsonKeys::Height] = relative.height();
+    zone[::PhosphorZones::ZoneJsonKeys::FixedX] = fixed.x();
+    zone[::PhosphorZones::ZoneJsonKeys::FixedY] = fixed.y();
+    zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] = fixed.width();
+    zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] = fixed.height();
+    zone[::PhosphorZones::ZoneJsonKeys::X] = relative.x();
+    zone[::PhosphorZones::ZoneJsonKeys::Y] = relative.y();
+    zone[::PhosphorZones::ZoneJsonKeys::Width] = relative.width();
+    zone[::PhosphorZones::ZoneJsonKeys::Height] = relative.height();
 
     m_zoneManager->setZoneData(m_zoneId, zone);
 }

@@ -4,14 +4,17 @@
 #pragma once
 
 #include "../core/constants.h"
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include <QObject>
 #include <QString>
+
+namespace Phosphor::Screens {
+class ScreenManager;
+}
 
 namespace PlasmaZones {
 
 class Settings;
-class LayoutManager;
 
 /**
  * @brief Tiling mode: manual zone layouts or automatic tiling algorithms
@@ -24,8 +27,8 @@ enum class TilingMode {
 /**
  * @brief Thin convenience wrapper over LayoutManager's per-context AssignmentEntry.
  *
- * All state queries delegate to LayoutManager::assignmentEntryForScreen().
- * Mutation methods write to AssignmentEntry directly. No global [ModeTracking]
+ * All state queries delegate to PhosphorZones::LayoutRegistry::assignmentEntryForScreen().
+ * Mutation methods write to PhosphorZones::AssignmentEntry directly. No global [ModeTracking]
  * KConfig group is used — per-context state lives in [Assignment:*] groups.
  *
  * Callers must set the current context (screen, desktop, activity) before
@@ -37,7 +40,8 @@ class ModeTracker : public QObject
     Q_PROPERTY(TilingMode currentMode READ currentMode NOTIFY currentModeChanged)
 
 public:
-    explicit ModeTracker(Settings* settings, LayoutManager* layoutManager, QObject* parent = nullptr);
+    explicit ModeTracker(Settings* settings, PhosphorZones::LayoutRegistry* layoutManager,
+                         Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~ModeTracker() override;
 
     /**
@@ -46,7 +50,7 @@ public:
     void setContext(const QString& screenId, int desktop, const QString& activity);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Current mode (reads from AssignmentEntry for current context)
+    // Current mode (reads from PhosphorZones::AssignmentEntry for current context)
     // ═══════════════════════════════════════════════════════════════════════════
 
     TilingMode currentMode() const;
@@ -60,12 +64,19 @@ public:
     }
 
     /**
-     * @brief Check if any screen on the current desktop is in autotile mode
+     * @brief Check if any screen on the given desktop/activity is in autotile mode.
+     *
+     * @param desktop  Virtual desktop number (1-based). Pass -1 to use the stored m_desktop.
+     * @param activity Activity ID. Pass an empty string to use the stored m_activity.
+     *
+     * Callers that have a fresh desktop/activity should pass them explicitly. Callers that
+     * rely on the stored context should ensure setContext() was called recently with current
+     * values to avoid stale results.
      */
-    bool isAnyScreenAutotile() const;
+    bool isAnyScreenAutotile(int desktop = -1, const QString& activity = QString()) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layout tracking (reads from AssignmentEntry for current context)
+    // PhosphorZones::Layout tracking (reads from PhosphorZones::AssignmentEntry for current context)
     // ═══════════════════════════════════════════════════════════════════════════
 
     QString lastManualLayoutId() const;
@@ -87,7 +98,8 @@ Q_SIGNALS:
 
 private:
     Settings* m_settings = nullptr;
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
+    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     QString m_screenId;
     int m_desktop = 0;
     QString m_activity;

@@ -6,10 +6,10 @@
 #include <QRect>
 #include <QVector>
 
-#include "autotile/SplitTree.h"
-#include "autotile/TilingAlgorithm.h"
-#include "autotile/TilingState.h"
-#include "autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/SplitTree.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "core/constants.h"
 
 #include "../helpers/TilingTestHelpers.h"
@@ -28,9 +28,9 @@ private:
     QRect m_screenGeometry{0, 0, ScreenWidth, ScreenHeight};
     ScriptedAlgoTestSetup m_scriptSetup;
 
-    TilingAlgorithm* dwindleMemory()
+    PhosphorTiles::TilingAlgorithm* dwindleMemory()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle-memory"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("dwindle-memory"));
     }
 
 private Q_SLOTS:
@@ -42,12 +42,12 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // SplitTree core tests
+    // PhosphorTiles::SplitTree core tests
     // =========================================================================
 
     void testEmpty()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         QVERIFY(tree.isEmpty());
         QCOMPARE(tree.leafCount(), 0);
         QVERIFY(tree.root() == nullptr);
@@ -59,7 +59,7 @@ private Q_SLOTS:
 
     void testInsertFirst()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
 
         QVERIFY(!tree.isEmpty());
@@ -74,7 +74,7 @@ private Q_SLOTS:
 
     void testInsertTwo()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
 
@@ -88,7 +88,7 @@ private Q_SLOTS:
 
     void testInsertThree()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
         tree.insertAtEnd(QStringLiteral("win3"));
@@ -100,7 +100,7 @@ private Q_SLOTS:
 
     void testInsertAtFocused()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
         tree.insertAtFocused(QStringLiteral("win3"), QStringLiteral("win1"));
@@ -119,7 +119,7 @@ private Q_SLOTS:
 
     void testInsertAtPosition()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
         tree.insertAtEnd(QStringLiteral("win3"));
@@ -140,7 +140,7 @@ private Q_SLOTS:
 
     void testRemoveLeafFromTwo()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
         tree.remove(QStringLiteral("win1"));
@@ -156,7 +156,7 @@ private Q_SLOTS:
 
     void testRemoveMiddlePreservesRatios()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
         tree.insertAtEnd(QStringLiteral("win3"));
@@ -178,7 +178,7 @@ private Q_SLOTS:
 
     void testRemoveLastWindow()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.remove(QStringLiteral("win1"));
 
@@ -189,7 +189,7 @@ private Q_SLOTS:
 
     void testSwap()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
         tree.insertAtEnd(QStringLiteral("win3"));
@@ -211,7 +211,7 @@ private Q_SLOTS:
 
     void testResizeSplit()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
 
@@ -223,13 +223,95 @@ private Q_SLOTS:
         QCOMPARE(root->splitRatio, 0.3);
     }
 
+    void testSwapLeaves_bothPresent()
+    {
+        PhosphorTiles::SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("win1"));
+        tree.insertAtEnd(QStringLiteral("win2"));
+        tree.insertAtEnd(QStringLiteral("win3"));
+
+        const bool ok = tree.swapLeaves(QStringLiteral("win1"), QStringLiteral("win3"));
+        QVERIFY(ok);
+
+        auto order = tree.leafOrder();
+        QCOMPARE(order.size(), 3);
+        QCOMPARE(order[0], QStringLiteral("win3"));
+        QCOMPARE(order[1], QStringLiteral("win2"));
+        QCOMPARE(order[2], QStringLiteral("win1"));
+
+        // Structure unchanged — tree still has 3 leaves and a non-leaf root.
+        QCOMPARE(tree.leafCount(), 3);
+        QVERIFY(!tree.root()->isLeaf());
+    }
+
+    void testSwapLeaves_eitherMissing()
+    {
+        PhosphorTiles::SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("win1"));
+        tree.insertAtEnd(QStringLiteral("win2"));
+        tree.insertAtEnd(QStringLiteral("win3"));
+
+        const auto orderBefore = tree.leafOrder();
+
+        // First id missing
+        QVERIFY(!tree.swapLeaves(QStringLiteral("nope"), QStringLiteral("win2")));
+        QCOMPARE(tree.leafOrder(), orderBefore);
+
+        // Second id missing
+        QVERIFY(!tree.swapLeaves(QStringLiteral("win1"), QStringLiteral("nope")));
+        QCOMPARE(tree.leafOrder(), orderBefore);
+
+        // Both missing
+        QVERIFY(!tree.swapLeaves(QStringLiteral("nope1"), QStringLiteral("nope2")));
+        QCOMPARE(tree.leafOrder(), orderBefore);
+    }
+
+    void testSwapLeaves_preservesGeometry()
+    {
+        PhosphorTiles::SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("win1"));
+        tree.insertAtEnd(QStringLiteral("win2"));
+        tree.insertAtEnd(QStringLiteral("win3"));
+
+        // Customise some ratios so we can verify they survive the swap.
+        tree.resizeSplit(QStringLiteral("win2"), 0.7);
+        const qreal rootRatioBefore = tree.root()->splitRatio;
+        const bool rootHorizontalBefore = tree.root()->splitHorizontal;
+        const auto zonesBefore = tree.applyGeometry(m_screenGeometry, 0);
+
+        QVERIFY(tree.swapLeaves(QStringLiteral("win1"), QStringLiteral("win3")));
+
+        // Split ratios / directions are untouched by the id-only swap.
+        QVERIFY(qFuzzyCompare(tree.root()->splitRatio, rootRatioBefore));
+        QCOMPARE(tree.root()->splitHorizontal, rootHorizontalBefore);
+
+        // Because swapLeaves only exchanges ids on existing leaves, the per-slot
+        // geometry the tree produces must be byte-identical to before.
+        const auto zonesAfter = tree.applyGeometry(m_screenGeometry, 0);
+        QCOMPARE(zonesAfter, zonesBefore);
+    }
+
+    void testSwapLeaves_selfSwap()
+    {
+        PhosphorTiles::SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("win1"));
+        tree.insertAtEnd(QStringLiteral("win2"));
+
+        // Self-swap on an existing id is a successful no-op.
+        QVERIFY(tree.swapLeaves(QStringLiteral("win1"), QStringLiteral("win1")));
+        QCOMPARE(tree.leafOrder(), (QStringList{QStringLiteral("win1"), QStringLiteral("win2")}));
+
+        // Self-swap on a missing id still reports failure.
+        QVERIFY(!tree.swapLeaves(QStringLiteral("nope"), QStringLiteral("nope")));
+    }
+
     // =========================================================================
     // Geometry tests
     // =========================================================================
 
     void testApplyGeometry_twoWindows()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
 
@@ -249,7 +331,7 @@ private Q_SLOTS:
 
     void testApplyGeometry_threeWindows()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
         tree.insertAtEnd(QStringLiteral("win3"));
@@ -268,7 +350,7 @@ private Q_SLOTS:
 
     void testApplyGeometry_withGaps()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
 
@@ -294,14 +376,14 @@ private Q_SLOTS:
 
     void testSerializationRoundTrip()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
         tree.insertAtEnd(QStringLiteral("win3"));
         tree.resizeSplit(QStringLiteral("win2"), 0.7);
 
         QJsonObject json = tree.toJson();
-        auto restored = SplitTree::fromJson(json);
+        auto restored = PhosphorTiles::SplitTree::fromJson(json);
         QVERIFY(restored != nullptr);
 
         QCOMPARE(restored->leafCount(), tree.leafCount());
@@ -319,7 +401,7 @@ private Q_SLOTS:
 
     void testSerializationRoundTripDeep()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         // Build an 8-window tree
         for (int i = 1; i <= 8; i++) {
             tree.insertAtEnd(QStringLiteral("win%1").arg(i));
@@ -334,7 +416,7 @@ private Q_SLOTS:
         QJsonObject json = tree.toJson();
 
         // Deserialize
-        auto restored = SplitTree::fromJson(json);
+        auto restored = PhosphorTiles::SplitTree::fromJson(json);
         QVERIFY(restored);
 
         // Verify leaf count
@@ -361,9 +443,9 @@ private Q_SLOTS:
 
     void testSerializationEmpty()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         QJsonObject json = tree.toJson();
-        auto restored = SplitTree::fromJson(json);
+        auto restored = PhosphorTiles::SplitTree::fromJson(json);
 
         // Restoring an empty tree should either return nullptr or an empty tree
         if (restored) {
@@ -378,7 +460,7 @@ private Q_SLOTS:
 
     void testLeafForWindow()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
         tree.insertAtEnd(QStringLiteral("win3"));
@@ -399,18 +481,19 @@ private Q_SLOTS:
     void testAlgo_withTree()
     {
         auto* algo = dwindleMemory();
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
         state.addWindow(QStringLiteral("win3"));
 
-        auto tree = std::make_unique<SplitTree>();
+        auto tree = std::make_unique<PhosphorTiles::SplitTree>();
         tree->insertAtEnd(QStringLiteral("win1"));
         tree->insertAtEnd(QStringLiteral("win2"));
         tree->insertAtEnd(QStringLiteral("win3"));
         state.setSplitTree(std::move(tree));
 
-        auto zones = algo->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            algo->calculateZones(makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
 
         for (const QRect& zone : zones) {
@@ -423,13 +506,14 @@ private Q_SLOTS:
     void testAlgo_withoutTree()
     {
         auto* algo = dwindleMemory();
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
         state.addWindow(QStringLiteral("win3"));
 
         // No split tree set — should fall back to stateless dwindle
-        auto zones = algo->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            algo->calculateZones(makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
 
         for (const QRect& zone : zones) {
@@ -441,18 +525,19 @@ private Q_SLOTS:
     void testAlgo_treeCountMismatch()
     {
         auto* algo = dwindleMemory();
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
         state.addWindow(QStringLiteral("win3"));
 
         // Tree has only 2 leaves but state has 3 windows — should fall back
-        auto tree = std::make_unique<SplitTree>();
+        auto tree = std::make_unique<PhosphorTiles::SplitTree>();
         tree->insertAtEnd(QStringLiteral("win1"));
         tree->insertAtEnd(QStringLiteral("win2"));
         state.setSplitTree(std::move(tree));
 
-        auto zones = algo->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            algo->calculateZones(makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
     }
 
@@ -468,12 +553,12 @@ private Q_SLOTS:
     void testAlgo_prepareTilingState_createsTree()
     {
         auto* algo = dwindleMemory();
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
         state.addWindow(QStringLiteral("win3"));
 
-        // TilingState::addWindow triggers syncTreeLazyCreate, so tree exists
+        // PhosphorTiles::TilingState::addWindow triggers syncTreeLazyCreate, so tree exists
         // after the 2nd window. Clear it to test prepareTilingState from scratch.
         state.clearSplitTree();
         QVERIFY(state.splitTree() == nullptr);
@@ -487,12 +572,12 @@ private Q_SLOTS:
     void testAlgo_prepareTilingState_skipsIfTreeExists()
     {
         auto* algo = dwindleMemory();
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
 
         // Manually set a tree with custom ratio
-        auto tree = std::make_unique<SplitTree>();
+        auto tree = std::make_unique<PhosphorTiles::SplitTree>();
         tree->insertAtEnd(QStringLiteral("win1"), 0.7);
         tree->insertAtEnd(QStringLiteral("win2"), 0.7);
         state.setSplitTree(std::move(tree));
@@ -507,7 +592,7 @@ private Q_SLOTS:
     void testAlgo_prepareTilingState_skipsSingleWindow()
     {
         auto* algo = dwindleMemory();
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
 
         algo->prepareTilingState(&state);
@@ -522,7 +607,7 @@ private Q_SLOTS:
     {
         QJsonObject json;
         // Empty object — no "type", no children
-        auto tree = SplitTree::fromJson(json);
+        auto tree = PhosphorTiles::SplitTree::fromJson(json);
         // Should not crash; returns nullptr or an empty tree
         if (tree) {
             QCOMPARE(tree->leafCount(), 0);
@@ -538,7 +623,7 @@ private Q_SLOTS:
         QJsonObject wrapper;
         wrapper[QStringLiteral("root")] = leaf;
 
-        auto tree = SplitTree::fromJson(wrapper);
+        auto tree = PhosphorTiles::SplitTree::fromJson(wrapper);
         // QJsonValue::toString() on int returns empty string (not "42"),
         // so the leaf is rejected due to empty windowId — tree has no leaves.
         // The tree may be null or empty depending on implementation.
@@ -560,7 +645,7 @@ private Q_SLOTS:
         QJsonObject wrapper2;
         wrapper2[QStringLiteral("root")] = internal;
 
-        auto tree2 = SplitTree::fromJson(wrapper2);
+        auto tree2 = PhosphorTiles::SplitTree::fromJson(wrapper2);
         // toDouble() on a string returns 0.0, which gets clamped to MinSplitRatio.
         // The tree should still parse successfully with 2 leaves.
         QVERIFY(tree2 != nullptr);
@@ -585,7 +670,7 @@ private Q_SLOTS:
         QJsonObject wrapper;
         wrapper[QStringLiteral("root")] = node;
 
-        auto tree = SplitTree::fromJson(wrapper);
+        auto tree = PhosphorTiles::SplitTree::fromJson(wrapper);
         // Ratio should be clamped to MinSplitRatio; tree must be usable
         QVERIFY(tree);
         QCOMPARE(tree->leafCount(), 2);
@@ -600,7 +685,7 @@ private Q_SLOTS:
 
     void testFromJson_deeplyNested()
     {
-        // Build a tree deeper than MaxDeserializationDepth (AutotileDefaults::MaxRuntimeTreeDepth = 50)
+        // Build a tree deeper than MaxDeserializationDepth (PhosphorTiles::AutotileDefaults::MaxRuntimeTreeDepth = 50)
         QJsonObject leaf;
         leaf[QStringLiteral("windowId")] = QStringLiteral("win1");
 
@@ -620,7 +705,7 @@ private Q_SLOTS:
         QJsonObject wrapper;
         wrapper[QStringLiteral("root")] = current;
 
-        auto tree = SplitTree::fromJson(wrapper);
+        auto tree = PhosphorTiles::SplitTree::fromJson(wrapper);
         // nodeFromJson returns nullptr for children beyond the max depth,
         // which causes parent internal nodes to also return nullptr.
         // The tree should be rejected (nullptr) — must not stack overflow.
@@ -633,7 +718,7 @@ private Q_SLOTS:
 
     void testRemove_nonexistent()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
         tree.insertAtEnd(QStringLiteral("win3"));
@@ -647,7 +732,7 @@ private Q_SLOTS:
 
     void testRebuildFromOrderPreservesRatios()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"), 0.5);
         tree.insertAtEnd(QStringLiteral("win2"), 0.5);
         tree.insertAtEnd(QStringLiteral("win3"), 0.5);
@@ -664,7 +749,7 @@ private Q_SLOTS:
 
     void testSwap_withNonexistentWindow()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
         tree.insertAtEnd(QStringLiteral("win3"));
@@ -680,7 +765,7 @@ private Q_SLOTS:
 
     void testInsertAtPosition_outOfRange()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
 
@@ -703,7 +788,7 @@ private Q_SLOTS:
 
     void testResizeSplit_boundaryValues()
     {
-        SplitTree tree;
+        PhosphorTiles::SplitTree tree;
         tree.insertAtEnd(QStringLiteral("win1"));
         tree.insertAtEnd(QStringLiteral("win2"));
 

@@ -1,0 +1,161 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorZones/LayoutComputeService.h>
+#include <PhosphorZones/LayoutWorker.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Zone.h>
+#include "zoneslogging.h"
+
+#include <QThread>
+
+namespace PhosphorZones {
+
+LayoutComputeService::LayoutComputeService(QObject* parent)
+    : QObject(parent)
+{
+    qRegisterMetaType<LayoutSnapshot>("PhosphorZones::LayoutSnapshot");
+    qRegisterMetaType<LayoutComputeResult>("PhosphorZones::LayoutComputeResult");
+
+    m_thread = new QThread(this);
+    m_thread->setObjectName(QStringLiteral("LayoutWorker"));
+    m_worker = new LayoutWorker();
+    m_worker->moveToThread(m_thread);
+
+    connect(this, &LayoutComputeService::requestCompute, m_worker, &LayoutWorker::computeGeometries);
+    connect(m_worker, &LayoutWorker::geometriesReady, this, &LayoutComputeService::applyResult);
+    connect(m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
+
+    m_thread->start();
+    qCDebug(lcLayoutLib) << "LayoutComputeService: worker thread started";
+}
+
+LayoutComputeService::~LayoutComputeService()
+{
+    m_thread->quit();
+    m_thread->wait(5000);
+}
+
+void LayoutComputeService::setLayoutManager(LayoutRegistry* manager)
+{
+    m_layoutManager = manager;
+    if (!manager) {
+        return;
+    }
+    connect(manager, &LayoutRegistry::layoutRemoved, this, [this](Layout* layout) {
+        if (layout) {
+            onLayoutRemoved(layout->id());
+        }
+    });
+}
+
+bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry)
+{
+    if (!layout || !screenGeometry.isValid()) {
+        return false;
+    }
+
+    if (screenGeometry == layout->lastRecalcGeometry()) {
+        const QString sid = screenId;
+        const QUuid lid = layout->id();
+        QPointer<Layout> lp(layout);
+        QMetaObject::invokeMethod(
+            this,
+            [this, sid, lid, lp]() {
+                Q_EMIT geometriesComputed(sid, lid, lp.data());
+            },
+            Qt::QueuedConnection);
+        return true;
+    }
+
+    m_trackedLayouts[layout->id()] = layout;
+
+    uint64_t gen = ++m_screenGeneration[screenId];
+
+    LayoutSnapshot snapshot = buildSnapshot(layout, screenId, screenGeometry);
+    Q_EMIT requestCompute(snapshot, gen);
+    return true;
+}
+
+void LayoutComputeService::recalculateSync(Layout* layout, const QRectF& screenGeometry)
+{
+    if (!layout) {
+        return;
+    }
+    layout->recalculateZoneGeometries(screenGeometry);
+}
+
+LayoutSnapshot LayoutComputeService::buildSnapshot(Layout* layout, const QString& screenId,
+                                                   const QRectF& screenGeometry)
+{
+    LayoutSnapshot snapshot;
+    snapshot.layoutId = layout->id();
+    snapshot.screenId = screenId;
+    snapshot.screenGeometry = screenGeometry;
+    snapshot.zones.reserve(layout->zoneCount());
+
+    for (const auto* zone : layout->zones()) {
+        ZoneSnapshot zs;
+        zs.id = zone->id();
+        zs.geometryMode = zone->geometryMode();
+        zs.relativeGeometry = zone->relativeGeometry();
+        zs.fixedGeometry = zone->fixedGeometry();
+        snapshot.zones.append(zs);
+    }
+
+    return snapshot;
+}
+
+void LayoutComputeService::applyResult(const LayoutComputeResult& result)
+{
+    auto genIt = m_screenGeneration.constFind(result.screenId);
+    if (genIt != m_screenGeneration.constEnd() && result.generation < *genIt) {
+        qCDebug(lcLayoutLib) << "LayoutComputeService: discarding stale result for" << result.screenId
+                             << "gen=" << result.generation << "current=" << *genIt;
+        // Emit so async barriers (e.g. Daemon::processPendingGeometryUpdates) still
+        // drain for this (screenId, layoutId) pair. Without this, a burst of
+        // panel/screen events that bumps the generation faster than worker results
+        // arrive leaves every superseded barrier waiting forever, and the
+        // reapply-geometries timer that follows the barrier never starts. Pass
+        // nullptr because the layout's zone geometries do NOT reflect this
+        // generation — consumers that need fresh state will see the next
+        // non-stale emit for the same (screenId, layoutId) pair.
+        Q_EMIT geometriesComputed(result.screenId, result.layoutId, nullptr);
+        return;
+    }
+
+    auto layoutIt = m_trackedLayouts.constFind(result.layoutId);
+    if (layoutIt == m_trackedLayouts.constEnd() || layoutIt->isNull()) {
+        qCDebug(lcLayoutLib) << "LayoutComputeService: dropping result for destroyed layout"
+                             << result.layoutId.toString();
+        Q_EMIT geometriesComputed(result.screenId, result.layoutId, nullptr);
+        return;
+    }
+    Layout* layout = layoutIt->data();
+
+    if (layout->lastRecalcGeometry() == result.screenGeometry) {
+        qCDebug(lcLayoutLib) << "LayoutComputeService: sync path already applied for" << result.screenId;
+        Q_EMIT geometriesComputed(result.screenId, result.layoutId, layout);
+        return;
+    }
+
+    layout->beginBatchModify();
+    for (const auto& computed : result.zones) {
+        Zone* zone = layout->zoneById(computed.zoneId);
+        if (zone) {
+            zone->setGeometry(computed.absoluteGeometry);
+        }
+    }
+    layout->setLastRecalcGeometry(result.screenGeometry);
+    layout->endBatchModify();
+
+    Q_EMIT geometriesComputed(result.screenId, result.layoutId, layout);
+}
+
+void LayoutComputeService::onLayoutRemoved(const QUuid& layoutId)
+{
+    m_trackedLayouts.remove(layoutId);
+}
+
+} // namespace PhosphorZones

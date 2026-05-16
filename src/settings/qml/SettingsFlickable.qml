@@ -1,0 +1,101 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import QtQuick
+import org.kde.kirigami as Kirigami
+
+/**
+ * @brief Settings-page root Flickable with Plasma-aware wheel scroll.
+ *
+ * Default Qt 6 Flickable wheel handling translates one wheel notch
+ * (`event.angleDelta.y == 120`, the libinput-driven default on
+ * Wayland) into a flick velocity that decelerates over only ~15 px
+ * under Plasma's "1 line per click" wheel-line setting. The user
+ * reported this as "scrolling in settings is very slow" — every
+ * notch barely moves the page while native KDE apps move ~80–120 px
+ * per notch (discussion #405).
+ *
+ * Kirigami already ships the canonical fix: `Kirigami.WheelHandler`.
+ * Installed on a Flickable, it
+ *
+ *   - reads `verticalStepSize` as `20 * Qt.styleHints.wheelScrollLines`
+ *     by default — so Plasma's "Mouse" KCM's "lines per click" knob
+ *     end-to-end controls the page step (KdePlatformTheme reads the
+ *     `kdeglobals[KDE].WheelScrollLines` config; Qt's `QStyleHints`
+ *     surfaces it; Kirigami's WheelHandler multiplies it through);
+ *   - smooth-animates the scroll via `QPropertyAnimation` + `OutCubic`
+ *     instead of jumping contentY — cosmetic but matches every other
+ *     KDE app's feel;
+ *   - distinguishes high-res `pixelDelta` events (Logitech MX-class
+ *     hi-res wheels, trackpads) from notched `angleDelta` events,
+ *     applying the system multiplier only to notches;
+ *   - handles Shift = horizontal, Ctrl = page-jump modifiers natively.
+ *
+ * Drop-in replacement for `Flickable` in settings pages — same
+ * properties, same `contentItem` semantics. Kirigami's WheelHandler
+ * is the upstream answer to KDE bug 385836 ("Kirigami scrollviews
+ * ignore Mouse wheel scroll speed") and the implementation that
+ * Kirigami's own ScrollView used to embed before `Kirigami.Scrollable-
+ * Page` migrated to `QQC2.ScrollView` (which silently dropped the
+ * handler).
+ *
+ * ## Consumer responsibilities
+ *
+ * `SettingsFlickable` defaults `flickableDirection` to vertical-only
+ * and pins `boundsBehavior` to `StopAtBounds` so wheel events arriving
+ * mid-decay don't fight the WheelHandler animation. Otherwise it
+ * inherits Flickable's whole property surface unchanged. Each
+ * consumer is responsible for:
+ *
+ *   - Binding `contentHeight` (and `contentWidth` if scrolling
+ *     horizontally — not the typical settings-page case). Without it
+ *     `WheelHandler` sees a zero scrollable range and silently
+ *     refuses to move.
+ *   - Avoiding nested Flickable / ListView / TextArea scroll surfaces
+ *     unless they are intentionally height-clamped to their content
+ *     (the `LayoutsPage.qml` pattern). Nested independent scrollers
+ *     compete with this handler for wheel events and wheel-over-the-
+ *     inner produces double-scroll.
+ *
+ * Drag-to-flick (touch drag, middle-button drag) keeps Flickable's
+ * native momentum + decay path because `filterMouseEvents` defaults
+ * to `false` — only wheel events route through the handler.
+ */
+Flickable {
+    id: settingsFlickable
+
+    /// Vertical-only by default — matches every consumer in the
+    /// settings tree. Pages that need horizontal scrolling can set
+    /// `flickableDirection: Flickable.AutoFlickDirection` explicitly.
+    flickableDirection: Flickable.VerticalFlick
+    /// `StopAtBounds` instead of the default `DragAndOvershootBounds`
+    /// so wheel events arriving while a previous wheel scroll is
+    /// still animating don't compound with overshoot bounce, which
+    /// fights the WheelHandler's `QPropertyAnimation` decay and
+    /// produces visibly jittery wheel-during-decay frames.
+    boundsBehavior: Flickable.StopAtBounds
+
+    Kirigami.WheelHandler {
+        // Leave `filterMouseEvents` at its default of `false` — that
+        // flag is for nested-Flickable scenarios where you want the
+        // inner Flickable to NOT respond to mouse press/release.
+        // Setting it true here would kill Flickable's native
+        // drag-to-flick path (touch drag, middle-button drag, etc.)
+        // because the handler would swallow the press / release
+        // events. The wheel path runs through this handler regardless
+        // of the flag's value; only the press/release path is gated.
+        // `keyNavigationEnabled` is intentionally left at its default
+        // (`false`). Settings pages focus form controls (sliders,
+        // combos), not the Flickable itself, so Page-Up / Page-Down
+        // on the handler would only fire when nothing inside the page
+        // had focus — confusing in practice. Pages that genuinely
+        // want keyboard scroll should set their own `Keys` handlers
+        // on the Flickable with explicit focus management.
+
+        // `target: settingsFlickable` is robust to reparenting; using
+        // `parent` would be too if the handler stays a direct child,
+        // but is fragile under any future Loader / Component wrapping.
+        target: settingsFlickable
+    }
+
+}

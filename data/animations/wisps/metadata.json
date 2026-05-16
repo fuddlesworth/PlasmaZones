@@ -1,0 +1,53 @@
+{
+    "id": "wisps",
+    "name": "Wisps",
+    "description": "Smoke wisps — sparse animated noise trails dissipate the surface.",
+    "author": "PlasmaZones (ported from Burn-My-Windows by Simon Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
+    "version": "1.0",
+    "category": "Particle",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "uScale",
+            "name": "Scale",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.1,
+            "max": 3.0
+        },
+        {
+            "id": "uSeedX",
+            "name": "Seed X",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "uSeedY",
+            "name": "Seed Y",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "uColor1",
+            "name": "Wisp Color 1",
+            "type": "color",
+            "default": "#1A0033FF"
+        },
+        {
+            "id": "uColor2",
+            "name": "Wisp Color 2",
+            "type": "color",
+            "default": "#7733CCFF"
+        },
+        {
+            "id": "uColor3",
+            "name": "Wisp Color 3",
+            "type": "color",
+            "default": "#E6CCFFFF"
+        }
+    ]
+}

@@ -17,12 +17,12 @@
  *  - clear emits windowDisappeared for every tracked id
  */
 
-#include "../../../src/core/windowregistry.h"
+#include <PhosphorEngine/WindowRegistry.h>
 #include <QSignalSpy>
 #include <QTest>
 
-using PlasmaZones::WindowMetadata;
-using PlasmaZones::WindowRegistry;
+using PhosphorEngine::WindowMetadata;
+using PhosphorEngine::WindowRegistry;
 
 namespace {
 WindowMetadata make(const QString& appId, const QString& desktopFile = {}, const QString& title = {})
@@ -217,11 +217,11 @@ private Q_SLOTS:
 
 // metadataChanged carries WindowMetadata by value in its signal payload;
 // QSignalSpy stores QVariants so the type must be registered to round-trip.
-Q_DECLARE_METATYPE(PlasmaZones::WindowMetadata)
+Q_DECLARE_METATYPE(PhosphorEngine::WindowMetadata)
 
 int main(int argc, char** argv)
 {
-    qRegisterMetaType<PlasmaZones::WindowMetadata>("PlasmaZones::WindowMetadata");
+    qRegisterMetaType<PhosphorEngine::WindowMetadata>("PhosphorEngine::WindowMetadata");
     QCoreApplication app(argc, argv);
     TestWindowRegistry tc;
     return QTest::qExec(&tc, argc, argv);

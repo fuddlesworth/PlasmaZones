@@ -13,32 +13,8 @@ qt_policy(SET QTP0004 NEW)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_subdirectory(shared)
 
-# Generate wlr-layer-shell Wayland protocol client code
-set(_pz_proto_dir ${CMAKE_CURRENT_SOURCE_DIR}/core/protocols)
-set(_pz_gen_dir ${CMAKE_CURRENT_BINARY_DIR}/generated-protocols)
-file(MAKE_DIRECTORY ${_pz_gen_dir})
-
-add_custom_command(
-    OUTPUT ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-client-protocol.h
-           ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
-    COMMAND ${WAYLAND_SCANNER} client-header
-            ${_pz_proto_dir}/wlr-layer-shell-unstable-v1.xml
-            ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-client-protocol.h
-    COMMAND ${WAYLAND_SCANNER} private-code
-            ${_pz_proto_dir}/wlr-layer-shell-unstable-v1.xml
-            ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
-    DEPENDS ${_pz_proto_dir}/wlr-layer-shell-unstable-v1.xml
-    COMMENT "Generating wlr-layer-shell Wayland protocol code"
-)
-
-# Generated protocol C code: skip PCH and unity build since it's plain C
-set_source_files_properties(
-    ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/core/qpa/xdg_popup_stub.c
-    PROPERTIES
-        SKIP_PRECOMPILE_HEADERS ON
-        SKIP_UNITY_BUILD_INCLUSION ON
-)
+# Wayland layer-shell protocol code generation moved to PhosphorWayland library.
+# PlasmaZones uses PhosphorWayland::LayerSurface via compatibility wrappers in core/.
 
 # Core library sources
 set(plasmazones_core_SRCS
@@ -48,66 +24,57 @@ set(plasmazones_core_SRCS
     core/logging.cpp
     core/translationloader.h
     core/translationloader.cpp
-    core/wallpaperprovider.h
-    core/wallpaperprovider.cpp
+    core/animationbootstrap.h
+    core/animationbootstrap.cpp
+    # wallpaperprovider moved to PhosphorShaders
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
-    core/iwindowengine.h
+    # ilayoutmanager / izonedetector shims removed - consumers include
+    # <PhosphorZones/ILayoutManager.h> / <PhosphorZones/IZoneDetector.h>
+    # directly.
+    core/ioverlayservice.h
+    core/isettings.h
     core/settings_interfaces.h
     core/types.h
     core/utils.h
     core/utils.cpp
-    core/layoutfactory.h
-    core/layoutfactory.cpp
-    core/windowtrackingservice.h
-    core/windowtrackingservice.cpp
-    core/windowtrackingservice/snap.cpp
-    core/windowtrackingservice/navigation.cpp
-    core/windowtrackingservice/resnap.cpp
-    core/windowtrackingservice/lifecycle.cpp
-    core/windowregistry.h
-    core/windowregistry.cpp
+    core/daemongeometryresolver.h
+    core/daemongeometryresolver.cpp
     core/platform.cpp
     core/platform.h
     core/geometryutils.cpp
-    core/geometryutils/constraints.cpp
-    core/geometryutils/overlaps.cpp
     core/geometryutils.h
+    core/spatialadjacency.h
+    # virtualscreenswapper.{h,cpp} lifted to libs/phosphor-screens/Swapper.h -
+    # callers include <PhosphorScreens/Swapper.h> directly.
+    core/screenmoderouter.cpp
+    core/screenmoderouter.h
     core/dbusvariantutils.cpp
     core/dbusvariantutils.h
-    core/zone.cpp
-    core/zone.h
-    core/layout.cpp
-    core/layout/serialization.cpp
-    core/layout/factories.cpp
-    core/layout.h
-    core/layoutmanager.cpp
-    core/layoutmanager/persistence.cpp
-    core/layoutmanager/assignments.cpp
-    core/layoutmanager.h
-    core/layoututils.cpp
-    core/layoututils.h
+    # zone, layout, layoututils, zonedetector, zonehighlighter, LayoutRegistry,
+    # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ -
+    # consumers include <PhosphorZones/...> directly and construct the registry
+    # with createAssignmentsBackend() + the "plasmazones/layouts" subdir inline.
+    core/unifiedlayoutlist.cpp
+    core/unifiedlayoutlist.h
+    common/layoutpreviewserialize.cpp
+    common/layoutpreviewserialize.h
+    common/screenidresolver.cpp
+    common/screenidresolver.h
+    common/layoutbundlebuilder.cpp
+    common/layoutbundlebuilder.h
     core/supportreport.cpp
     core/supportreport.h
-    core/shaderregistry/params.cpp
-    core/layersurface.cpp
-    core/layersurface.h
-    core/screenmanager.cpp
-    core/screenmanager/panels.cpp
-    core/screenmanager.h
-    core/virtualdesktopmanager.cpp
-    core/virtualdesktopmanager.h
-    core/activitymanager.cpp
-    core/activitymanager.h
-    core/zonedetector.cpp
-    core/zonedetector.h
-    core/zonehighlighter.cpp
-    core/zonehighlighter.h
-    core/shaderregistry.cpp
-    core/shaderregistry.h
-    core/shaderincluderesolver.cpp
-    core/shaderincluderesolver.h
+    # layersurface moved to PhosphorWayland; shaderregistry/params moved to PhosphorShaders
+    core/single_instance_service.cpp
+    core/single_instance_service.h
+    # screen_resolver.{h,cpp} and screenmanager.{h,cpp} + screenmanager/
+    # lifted to libs/phosphor-screens. Daemon consumers take
+    # Phosphor::Screens::ScreenManager* via constructor injection -
+    # no service-locator intermediary.
+    core/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
+    # shaderregistry.cpp + shaderincluderesolver moved to PhosphorShaders
     core/modifierutils.cpp
     core/modifierutils.h
     config/settings.cpp
@@ -116,17 +83,21 @@ set(plasmazones_core_SRCS
     config/settings/perscreen.cpp
     config/settings.h
     config/configdefaults.cpp
-    config/iconfigbackend.h
-    config/configbackend_qsettings.h
-    config/configbackend_qsettings.cpp
-    config/configbackend_json.h
-    config/configbackend_json.cpp
+    config/configbackends.h
+    config/configbackends.cpp
+    config/settingsconfigstore.cpp
+    config/settingsconfigstore.h
+    config/perscreenresolver.h
+    config/perscreenresolver.cpp
+    config/settingsschema.h
+    config/settingsschema.cpp
     config/configmigration.h
     config/configmigration.cpp
     config/colorimporter.cpp
     config/colorimporter.h
     config/updatechecker.cpp
     config/updatechecker.h
+    dbus/dbushelpers.cpp
     dbus/layoutadaptor.cpp
     dbus/layoutadaptor/assignment.cpp
     dbus/layoutadaptor/editor.cpp
@@ -143,12 +114,14 @@ set(plasmazones_core_SRCS
     dbus/overlayadaptor.h
     dbus/zonedetectionadaptor.cpp
     dbus/zonedetectionadaptor.h
+    # snapnavigationtargets moved to libs/phosphor-snap-engine/
     dbus/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor/navigation.cpp
-    dbus/windowtrackingadaptor/targets.cpp
     dbus/windowtrackingadaptor/float.cpp
     dbus/windowtrackingadaptor/persistence.cpp
     dbus/windowtrackingadaptor/saveload.cpp
+    dbus/windowtrackingadaptor/persistenceworker.cpp
+    dbus/windowtrackingadaptor/persistenceworker.h
     dbus/windowtrackingadaptor/snaprestore.cpp
     dbus/windowtrackingadaptor/convenience.cpp
     dbus/windowtrackingadaptor.h
@@ -157,55 +130,24 @@ set(plasmazones_core_SRCS
     dbus/screenadaptor.h
     dbus/windowdragadaptor.cpp
     dbus/windowdragadaptor/drag.cpp
+    dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
+    dbus/windowdragadaptor/dragactivation.cpp
+    dbus/windowdragadaptor/dragactivation.h
     dbus/windowdragadaptor.h
-    daemon/shortcutbackend.h
-    daemon/shortcutbackend.cpp
     dbus/autotileadaptor.cpp
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor.h
     dbus/snapadaptor.cpp
+    dbus/snapadaptor/commit.cpp
+    dbus/snapadaptor/snaprestore.cpp
+    dbus/snapadaptor/navigation.cpp
     dbus/snapadaptor.h
-    autotile/TilingAlgorithm.cpp
-    autotile/TilingAlgorithm.h
-    autotile/TilingState.cpp
-    autotile/TilingStateSerialization.cpp
-    autotile/TilingState.h
-    autotile/SplitTree.cpp
-    autotile/SplitTreeRebuild.cpp
-    autotile/SplitTreeSerializer.cpp
-    autotile/SplitTree.h
-    autotile/AlgorithmRegistry.cpp
-    autotile/AlgorithmRegistry.h
-    autotile/AutotileConfig.cpp
-    autotile/AutotileConfig.h
-    autotile/AutotileEngine.cpp
-    autotile/AutotileEngine.h
-    autotile/PerScreenConfigResolver.cpp
-    autotile/PerScreenConfigResolver.h
-    autotile/NavigationController.cpp
-    autotile/NavigationController.h
-    autotile/SettingsBridge.cpp
-    autotile/SettingsBridge.h
-    autotile/OverflowManager.cpp
-    autotile/OverflowManager.h
-    autotile/algorithms/ScriptedAlgorithm.cpp
-    autotile/algorithms/ScriptedAlgorithm.h
-    autotile/algorithms/ScriptedAlgorithmHelpers.cpp
-    autotile/algorithms/ScriptedAlgorithmHelpers.h
-    autotile/algorithms/ScriptedAlgorithmJsBuiltins.cpp
-    autotile/algorithms/ScriptedAlgorithmJsBuiltins.h
-    autotile/algorithms/ScriptedAlgorithmLoader.cpp
-    # Builtin JS helpers compiled into the binary as Qt resources
-    autotile/algorithms/builtins.qrc
-    autotile/algorithms/ScriptedAlgorithmLoader.h
-    autotile/algorithms/ScriptedAlgorithmSandbox.cpp
-    autotile/algorithms/ScriptedAlgorithmSandbox.h
-    snap/SnapEngine.cpp
-    snap/SnapEngine.h
-    snap/snapengine/float.cpp
-    snap/snapengine/lifecycle.cpp
-    snap/snapengine/navigation.cpp
+    # TilingAlgorithm, TilingState, SplitTree, AlgorithmRegistry, scripted-algo
+    # machinery live in libs/phosphor-tiles/. Consumers include canonical
+    # <PhosphorTiles/...> headers directly; no forwarding shims remain.
+    # AutotileEngine + supporting files moved to libs/phosphor-tile-engine/.
+    # SnapEngine + SnapState + supporting files moved to libs/phosphor-snap-engine/.
 )
 
 # Create core library
@@ -219,24 +161,18 @@ generate_export_header(plasmazones_core
     EXPORT_MACRO_NAME PLASMAZONES_EXPORT
 )
 
-# Layer-shell: our QPA plugin (no LayerShellQt)
-# QPA files are excluded from unity build to avoid include conflicts
-# with Qt Wayland private headers and the wayland-scanner-generated protocol header.
-target_sources(plasmazones_core PRIVATE
-    core/qpa/layershellintegration.cpp
-    core/qpa/layershellintegration.h
-    core/qpa/layershellwindow.cpp
-    core/qpa/layershellwindow.h
-    core/qpa/xdg_popup_stub.c
-    ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
-)
+# Layer-shell: implementation moved to PhosphorWayland library.
+# The compatibility wrappers (core/qpa/*.h) are header-only - no sources to compile.
+# PhosphorWayland provides the QPA plugin, protocol code, and LayerSurface implementation.
 set_source_files_properties(
-    core/qpa/layershellintegration.cpp
-    core/qpa/layershellwindow.cpp
     config/configdefaults.cpp
+    # Exclude from unity build to avoid forward-declaration conflicts
+    dbus/windowdragadaptor/drag.cpp
+    dbus/windowdragadaptor/drag_protocol.cpp
+    dbus/windowdragadaptor/drop.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
-target_include_directories(plasmazones_core PRIVATE ${_pz_gen_dir})
+# PhosphorShaders + PhosphorWayland headers are available via PUBLIC link dependencies
 
 target_link_libraries(plasmazones_core
     PUBLIC
@@ -246,16 +182,40 @@ target_link_libraries(plasmazones_core
         Qt6::Quick
         Qt6::Gui
         Qt6::DBus
+        # PhosphorAnimation PUBLIC because Settings::animationProfile()
+        # exposes PhosphorAnimation::Profile in the header - consumers
+        # that #include <settings.h> need the core library for the
+        # return type (Phase 4 sub-commit 6).
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorConfig::PhosphorConfig
+        PhosphorEngine::PhosphorEngine
+        PhosphorWorkspaces::PhosphorWorkspaces
+        PhosphorPlacement::PhosphorPlacement
+        PhosphorTileEngine::PhosphorTileEngine
+        PhosphorSnapEngine::PhosphorSnapEngine
+        PhosphorIdentity::PhosphorIdentity
+        PhosphorLayoutApi::PhosphorLayoutApi
+        PhosphorProtocol::PhosphorProtocol
+        PhosphorScreens::PhosphorScreens
+        PhosphorShaders::PhosphorShaders
+        PhosphorWayland::PhosphorWayland
+        PhosphorTiles::PhosphorTiles
+        PhosphorZones::PhosphorZones
     PRIVATE
         Wayland::Client
         Qt6::Concurrent
         Qt6::WaylandClientPrivate
 )
 
-# KDE-specific link dependencies (only when building with KDE Frameworks)
-if(USE_KDE_FRAMEWORKS)
-    target_link_libraries(plasmazones_core PUBLIC KF6::GlobalAccel)
-endif()
+# PhosphorShortcuts: plasmazones_core uses ONLY the Integration::IAdhocRegistrar header
+# (consumed by WindowDragAdaptor); the daemon links the shared library
+# binary (see target_link_libraries(plasmazonesd ...) below). Wire the
+# headers via INTERFACE-only include - pulls no .so dependency into
+# editor / settings builds that link plasmazones_core but never touch
+# shortcuts.
+target_include_directories(plasmazones_core SYSTEM PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/libs/phosphor-shortcuts/include>
+)
 
 # Conditionally link PlasmaActivities/KActivities if available
 if(PlasmaActivities_FOUND)
@@ -294,6 +254,7 @@ target_include_directories(plasmazones_core
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>  # For shared/ headers (virtualscreenid.h)
         $<INSTALL_INTERFACE:include/plasmazones>
 )
 
@@ -330,47 +291,18 @@ install(TARGETS plasmazones_core
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Layer Shell Qt Plugin (installed to Qt's wayland-shell-integration plugin dir)
+# Layer Shell Qt Plugin - now provided by PhosphorWayland library
 # ═══════════════════════════════════════════════════════════════════════════════
-add_library(pz-layer-shell MODULE core/qpa/pzlayershellplugin.cpp)
-target_link_libraries(pz-layer-shell PRIVATE
-    plasmazones_core
-    Qt6::WaylandClientPrivate
-    Wayland::Client
-)
-target_include_directories(pz-layer-shell PRIVATE ${_pz_gen_dir})
-set_target_properties(pz-layer-shell PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins/wayland-shell-integration
-    INSTALL_RPATH "$ORIGIN/../../${CMAKE_INSTALL_LIBDIR}"
-)
-# Install to Qt's plugin dir (query via QT6_INSTALL_PLUGINS or fallback)
-if(NOT DEFINED QT6_INSTALL_PLUGINS)
-    get_target_property(QT6_INSTALL_PLUGINS Qt6::Core QT_INSTALL_PLUGINS)
-    if(NOT QT6_INSTALL_PLUGINS)
-        set(QT6_INSTALL_PLUGINS "${KDE_INSTALL_QTPLUGINDIR}")
-    endif()
-    if(NOT QT6_INSTALL_PLUGINS)
-        message(FATAL_ERROR "Cannot determine Qt plugin install directory. "
-            "Set QT6_INSTALL_PLUGINS or ensure ECM/KDE_INSTALL_QTPLUGINDIR is available.")
-    endif()
-endif()
-install(TARGETS pz-layer-shell
-    DESTINATION ${QT6_INSTALL_PLUGINS}/wayland-shell-integration
-)
+# The QPA plugin (phosphorwayland-qpa) is built and installed by libs/phosphor-wayland/CMakeLists.txt.
+# PlasmaZones::registerLayerShellPlugin() forwards to PhosphorWayland::registerLayerShellPlugin()
+# which sets QT_WAYLAND_SHELL_INTEGRATION=phosphorwayland.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Rendering Library (ZoneShaderItem, shared between daemon and editor)
 # ═══════════════════════════════════════════════════════════════════════════════
 set(plasmazones_rendering_SRCS
-    daemon/rendering/zoneshadercommon.h
-    daemon/rendering/rendering_macros.h
-    daemon/rendering/zoneshadernodebase.h
-    daemon/rendering/zoneshadernoderhi/internal.h
     daemon/rendering/zoneshadernoderhi.h
     daemon/rendering/zoneshadernoderhi.cpp
-    daemon/rendering/zoneshadernoderhi/setters.cpp
-    daemon/rendering/zoneshadernoderhi/pipeline.cpp
-    daemon/rendering/zoneshadernoderhi/uniforms.cpp
     daemon/rendering/zoneshaderitem.h
     daemon/rendering/zoneshaderitem.cpp
     daemon/rendering/zoneshaderitem/setters.cpp
@@ -389,6 +321,7 @@ target_link_libraries(plasmazones_rendering
     PUBLIC
         plasmazones_core
         Qt6::Quick
+        PhosphorRendering::PhosphorRendering
     PRIVATE
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
@@ -413,6 +346,7 @@ set(plasmazones_daemon_SRCS
     daemon/main.cpp
     daemon/vulkan_support.cpp
     daemon/daemon.cpp
+    daemon/enginefactory.cpp
     daemon/daemon/start.cpp
     daemon/daemon/signals.cpp
     daemon/daemon/navigation.cpp
@@ -421,23 +355,26 @@ set(plasmazones_daemon_SRCS
     daemon/daemon.h
     daemon/daemon/helpers.h
     daemon/daemon/macros.h
-    daemon/cavaservice.cpp
-    daemon/cavaservice.h
     daemon/overlayservice.cpp
+    daemon/overlayservice/animation_config.cpp
+    daemon/overlayservice/lifecycle.cpp
     daemon/overlayservice/settings.cpp
     daemon/overlayservice/overlay.cpp
     daemon/overlayservice/overlay_data.cpp
     daemon/overlayservice/osd.cpp
+    daemon/overlayservice/priming.cpp
+    daemon/overlayservice/rekey.cpp
+    daemon/overlayservice/screens.cpp
     daemon/overlayservice/selector.cpp
+    daemon/overlayservice/shellhost_bridge.cpp
     daemon/overlayservice/selector_update.cpp
     daemon/overlayservice/shader.cpp
     daemon/overlayservice/snapassist.cpp
     daemon/overlayservice.h
     daemon/overlayservice/internal.h
-    daemon/windowthumbnailservice.cpp
-    daemon/windowthumbnailservice.h
+    daemon/snapassistthumbnailprovider.cpp
+    daemon/snapassistthumbnailprovider.h
     daemon/shortcutmanager.cpp
-    daemon/shortcutmanager/handlers.cpp
     daemon/shortcutmanager.h
     daemon/zoneselectorcontroller.cpp
     daemon/zoneselectorcontroller.h
@@ -460,7 +397,17 @@ target_link_libraries(plasmazonesd
         plasmazones_rendering
         plasmazones_shared_qml
         plasmazones_shared_qmlplugin  # Generated by qt_add_qml_module
-        Qt6::Widgets
+        PhosphorAnimation::PhosphorAnimation  # motion runtime + QML module + shaders + layer
+        PhosphorAnimationQmlplugin  # Generated by qt_add_qml_module (STATIC)
+        PhosphorLayer::PhosphorLayer  # wlr-layer-shell surface lifecycle
+        PhosphorShellPatterns::PhosphorShellPatterns  # axis-2 UI-pattern recipes
+        PhosphorShortcuts::PhosphorShortcuts  # ShortcutManager / Registry / backends
+        PhosphorAudio::PhosphorAudio  # audio spectrum provider (CAVA)
+        PhosphorSurfaces::PhosphorSurfaces  # managed surface lifecycle (engine, keep-alive)
+        PhosphorOverlay::PhosphorOverlay  # per-screen shell-host + slot mechanism (Phase 2 onward)
+        # Daemon is headless — runs under QGuiApplication. No Qt6::Widgets
+        # link: it was unused and pulled QtWidgets + xcb deps into a binary
+        # that never instantiates a QWidget.
         Qt6::Quick
         Qt6::QuickControls2
         Qt6::Concurrent  # Pre-load shader bake cache on registry refresh
@@ -507,6 +454,51 @@ configure_file(
     @ONLY
 )
 
+# D-Bus service activation: lets a client method-call wake the daemon on
+# first contact without requiring the systemd user unit to be already
+# running. Installed to ${KDE_INSTALL_DBUSSERVICEDIR}; install() rule is
+# in the install block lower in this file.
+configure_file(
+    daemon/org.plasmazones.service.in
+    ${CMAKE_CURRENT_BINARY_DIR}/org.plasmazones.service
+    @ONLY
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phosphor Shell (opt-in via -DBUILD_PHOSPHOR_SHELL=ON at the top level)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Gated alongside libs/phosphor-shell and libs/phosphor-services in the
+# root CMakeLists.txt — without the flag those library targets don't
+# exist, so the binary wouldn't link anyway. Wrapping the whole block
+# also keeps `install(TARGETS phosphor-shell …)` from running when the
+# target is absent.
+
+if(BUILD_PHOSPHOR_SHELL)
+    add_executable(phosphor-shell shell/main.cpp)
+
+    target_link_libraries(phosphor-shell
+        PRIVATE
+            PhosphorShell::PhosphorShell
+            PhosphorServices::PhosphorServices
+            PhosphorLayer::PhosphorLayer
+            PhosphorWayland::PhosphorWayland
+            PhosphorRendering::PhosphorRendering
+            # Linked from examples/phosphor-shell — bakes the default shell.qml
+            # tree into the binary as a qt-qml-module resource. Two effects:
+            # (1) qmlcachegen / qmlsc run at build time (faster cold start,
+            # typed bindings compile to C++); (2) when no user config exists
+            # under XDG paths, ShellLoader falls back to qrc:/qt/qml/...
+            # so the binary works without the optional DATADIR install.
+            phosphor_shell_exampleplugin
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Quick
+            Qt6::Qml
+    )
+
+    install(TARGETS phosphor-shell DESTINATION ${KDE_INSTALL_BINDIR})
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Layout Editor
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -515,10 +507,12 @@ set(plasmazones_editor_SRCS
     editor/main.cpp
     daemon/vulkan_support.cpp
     editor/EditorController.cpp
+    editor/EditorLaunchController.cpp
+    editor/EditorLaunchController.h
+    editor/EditorAppAdaptor.cpp
+    editor/EditorAppAdaptor.h
     editor/controller/gaps.cpp
     editor/controller/shader.cpp
-    daemon/cavaservice.cpp
-    daemon/cavaservice.h
     editor/controller/layout.cpp
     editor/controller/selection.cpp
     editor/controller/multiselect.cpp
@@ -649,12 +643,10 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/ZoneOperations.qml
         editor/qml/HelpDialogContent.qml
         editor/qml/TemplatePreview.qml
-        editor/qml/ShaderParameterSection.qml
         editor/qml/ShaderSettingsDialog.qml
         editor/qml/VisibilitySettingsDialog.qml
         editor/qml/LayoutSettingsDialog.qml
         editor/qml/SectionHeader.qml
-        editor/qml/ParameterDelegate.qml
         # SRP-extracted components from PropertyPanel
         editor/qml/ColorUtils.js
         editor/qml/ColorPickerRow.qml
@@ -669,9 +661,14 @@ target_link_libraries(plasmazones-editor
         plasmazones_rendering
         plasmazones_shared_qml
         plasmazones_shared_qmlplugin  # Generated by qt_add_qml_module
+        PhosphorAnimation::PhosphorAnimation  # motion runtime + QML module
+        PhosphorAnimationQmlplugin  # Generated by qt_add_qml_module (STATIC)
+        PhosphorAudio::PhosphorAudio  # audio spectrum provider (CAVA)
+        # Editor runs under QGuiApplication — no QWidget usage anywhere in
+        # src/editor, so the Widgets link was dead (pulled QtWidgets + xcb
+        # for nothing). Same cleanup applied to the daemon above.
         Qt6::Quick
         Qt6::QuickControls2
-        Qt6::Widgets
         Qt6::DBus
 )
 
@@ -710,21 +707,30 @@ install(FILES
     DESTINATION ${KDE_INSTALL_APPDIR}
 )
 
-# KGlobalAccel component desktop file — provides display name + icon in
+# D-Bus session activation file. Wakes the daemon on first bus call.
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/org.plasmazones.service
+    DESTINATION ${KDE_INSTALL_DBUSSERVICEDIR}
+)
+
+# AppStream metainfo — so Discover / GNOME Software / KDE store list the
+# editor + settings apps with summary, screenshots, and content rating.
+# Validated by `appstreamcli validate <file>` if `appstream` is installed.
+install(FILES
+    editor/org.plasmazones.editor.metainfo.xml
+    settings/org.plasmazones.settings.metainfo.xml
+    DESTINATION ${KDE_INSTALL_METAINFODIR}
+)
+
+# KGlobalAccel component desktop file - provides display name + icon in
 # System Settings > Shortcuts.  Filename must match applicationName ("plasmazonesd").
 install(FILES
     daemon/plasmazonesd.desktop
     DESTINATION ${KDE_INSTALL_DATADIR}/kglobalaccel
 )
 
-# Snap Assist thumbnails: daemon captures via KWin ScreenShot2. When desktop matching fails
-# (e.g. local install), set KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 in environment.
-configure_file(
-    daemon/99-plasmazones-screenshot.conf.in
-    ${CMAKE_CURRENT_BINARY_DIR}/99-plasmazones-screenshot.conf
-    @ONLY
-)
-install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/99-plasmazones-screenshot.conf
-    DESTINATION ${KDE_INSTALL_LIBDIR}/environment.d
-)
+# Snap Assist thumbnails are now produced inside the kwin-effect via
+# OffscreenQuickScene + org.kde.kwin's WindowThumbnail, so the daemon no
+# longer needs ScreenShot2 access. The X-KDE-DBUS-Restricted-Interfaces
+# entry and the environment.d/99-plasmazones-screenshot.conf override
+# that gated that path are gone with the C++ removal.

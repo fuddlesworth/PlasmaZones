@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Step indicator for multi-step wizard dialogs.
@@ -55,9 +56,8 @@ RowLayout {
                 }
 
                 Behavior on color {
-                    ColorAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.progress"
                     }
 
                 }
@@ -70,8 +70,8 @@ RowLayout {
                 opacity: stepIndicator.index <= root.currentStep ? 1 : 0.4
 
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: 200
+                    PhosphorMotionAnimation {
+                        profile: "widget.progress"
                     }
 
                 }
@@ -88,9 +88,8 @@ RowLayout {
                 color: completed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
 
                 Behavior on color {
-                    ColorAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.progress"
                     }
 
                 }

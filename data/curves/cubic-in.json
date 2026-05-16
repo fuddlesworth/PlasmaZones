@@ -1,0 +1,11 @@
+{
+  "name": "cubic-in",
+  "displayName": "Qt InCubic (faithful)",
+  "typeId": "cubic-bezier",
+  "parameters": {
+    "x1": 0.55,
+    "y1": 0.055,
+    "x2": 0.675,
+    "y2": 0.19
+  }
+}

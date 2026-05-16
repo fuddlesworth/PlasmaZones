@@ -1,0 +1,174 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <PhosphorLayoutApi/AlgorithmMetadata.h>
+#include <PhosphorLayoutApi/AspectRatioClass.h>
+
+#include <QRectF>
+#include <QString>
+#include <QVector>
+
+#include <optional>
+
+namespace PhosphorLayout {
+
+/// Reference window count used by `ILayoutSource::previewAt` when the caller
+/// doesn't specify one. Picked so most picker thumbnails render a visually
+/// representative layout without visiting the algorithm's empty state.
+inline constexpr int DefaultPreviewWindowCount = 4;
+
+/// Renderer-ready snapshot of one layout entry (manual zone layout OR autotile
+/// algorithm result). Plain data — no Qt object lifecycle, no signals.
+///
+/// Both phosphor-zones (manual `Layout` -> preview) and the future
+/// phosphor-tile-algo (autotile algorithm @ N windows -> preview) produce
+/// values of this type. Editor / settings / overlay code consumes
+/// LayoutPreview uniformly without branching on the underlying source —
+/// the only renderer-relevant difference between manual and autotile is
+/// whether @c isAutotile is set (used for badge / icon styling).
+///
+/// Coordinate system: every QRectF in @c zones is in 0.0–1.0 relative
+/// space, ready to be scaled into any pixel rectangle. For autotile entries
+/// the "preview" geometry is computed for some specific window count (see
+/// @c ILayoutSource::previewAt) — different counts yield different
+/// previews from the same algorithm.
+///
+/// @c zoneCount carries a logical "this layout supports N windows" value
+/// that's distinct from @c zones.size(). The sentinel @c UnlimitedZoneCount
+/// (== 0) means "no hard limit" and is used by unlimited autotile
+/// algorithms whose rendered preview still contains a fixed example
+/// geometry. Consumers validate the shape via @c isValid().
+struct LayoutPreview
+{
+    /// Sentinel for @c zoneCount meaning "no hard limit on window count"
+    /// (typical for unlimited autotile algorithms). Distinct from a
+    /// partially-populated preview — @c isValid checks the relationship
+    /// between @c zoneCount and @c zones.size() rather than the sentinel
+    /// itself.
+    static constexpr int UnlimitedZoneCount = 0;
+
+    /// Stable identifier for this layout entry. For manual layouts this is
+    /// the layout's UUID string (with braces); for autotile entries it's
+    /// the prefixed form `"autotile:<algorithmId>"` so manual + autotile
+    /// IDs share a single namespace at the consumer level.
+    QString id;
+
+    /// Human-readable name for the picker UI (i18n'd by the source).
+    QString displayName;
+
+    /// Optional longer description shown in tooltips / detail views.
+    QString description;
+
+    /// Zone rectangles in 0.0–1.0 relative coordinates. Renderer scales
+    /// these into the preview canvas. Order matches @c zoneNumbers.
+    QVector<QRectF> zones;
+
+    /// Per-zone display label. Same length as @c zones (or empty when the
+    /// source doesn't number its zones — autotile algorithms often emit
+    /// just the count). Numbering is 1-based; consumer renders the literal
+    /// integer.
+    QVector<int> zoneNumbers;
+
+    /// Number of zones in the preview. Identical to @c zones.size() for
+    /// finished previews — kept as an explicit field because some autotile
+    /// algorithms expose a logical "this layout supports N windows" value
+    /// distinct from the number of preview rectangles (e.g. unlimited
+    /// algorithms use a sentinel here while @c zones renders a fixed
+    /// example geometry).
+    int zoneCount = 0;
+
+    /// True when the layout matches the rendering canvas's aspect ratio
+    /// well enough to be a "recommended" pick. False entries can still
+    /// render (they just appear in a collapsed "Other" section in the
+    /// picker). Sources fill this when called with an aspect-ratio hint;
+    /// otherwise leave the default (true) so unranked previews show
+    /// normally.
+    bool recommended = true;
+
+    /// For fixed-geometry manual layouts: the reference aspect ratio the
+    /// zones were authored for. Renderer uses this so the preview tile
+    /// shows the layout in its native aspect rather than stretched. Zero
+    /// when the layout has no fixed-geometry zones (relative layouts
+    /// adapt to any aspect).
+    qreal referenceAspectRatio = 0.0;
+
+    /// Aspect-ratio class hint propagated up from the layout source. Picker
+    /// uses this for section grouping; renderer ignores. Manual layouts
+    /// source this from `Layout::aspectRatioClass`; autotile entries leave
+    /// it at the default (`AspectRatioClass::Any`).
+    AspectRatioClass aspectRatioClass = AspectRatioClass::Any;
+
+    /// Section-grouping metadata for the picker UI. Sources fill these
+    /// to drive grouped headers ("Built-in", "Custom", "Standard 16:9",
+    /// etc.). All optional; empty values mean "no section header".
+    QString sectionKey;
+    QString sectionLabel;
+    int sectionOrder = 0;
+
+    /// True when new windows should auto-fill the first empty zone (manual
+    /// layouts only — the autotile equivalent is implicit). Drives
+    /// auto-snap behaviour at the daemon side; renderer ignores.
+    bool autoAssign = false;
+
+    /// True when the layout is "system-owned" and should render with a
+    /// lock badge in the picker. For manual layouts this reflects whether
+    /// the layout file came from the system install (vs. a user-created
+    /// copy). For autotile layouts the source computes this from
+    /// `!algorithm->isScripted || !algorithm->isUserScript` — i.e.
+    /// built-in C++ algorithms and system-installed scripts are system
+    /// entries; user scripts are not.
+    ///
+    /// Sources (ZonesLayoutSource, AutotileLayoutSource) are the sole
+    /// populators. Consumers treat this as authoritative — do not
+    /// recompute from algorithm flags; that's the source's job.
+    bool isSystem = false;
+
+    /// Optional autotile algorithm metadata. Presence is the sole signal
+    /// that this preview backs an autotile algorithm rather than a static
+    /// manual layout — @c isAutotile() reads the optional's has_value().
+    /// Picker reads the metadata for capability flags (supports master
+    /// count / split ratio editors, lock badge, etc.).
+    std::optional<AlgorithmMetadata> algorithm;
+
+    /// True when this preview backs an autotile algorithm (equivalent to
+    /// `algorithm.has_value()`). Consumers branch on this to toggle UI
+    /// affordances like the system-vs-user badge and algorithm-specific
+    /// parameter editors. The invariant `isAutotile() == algorithm.has_value()`
+    /// holds by construction — the flag is computed, not stored.
+    bool isAutotile() const noexcept
+    {
+        return algorithm.has_value();
+    }
+
+    /// Structural consistency check.  Returns true when:
+    ///   - @c zoneCount is @c UnlimitedZoneCount, or matches @c zones.size()
+    ///     (a bounded-count preview renders exactly as many rects as it
+    ///     claims to support);
+    ///   - @c zoneNumbers is either empty (unnumbered — typical for
+    ///     autotile algorithms that only emit a count) or exactly matches
+    ///     @c zones.size() (1:1 parallel arrays).
+    ///
+    /// Empty previews (default-constructed, used by ILayoutSource to signal
+    /// "id not mine") are valid — @c zones is empty, @c zoneCount is 0, and
+    /// @c zoneNumbers is empty.
+    bool isValid() const noexcept
+    {
+        // Negative zoneCount has no meaning in either bounded or unlimited
+        // semantics — reject it explicitly so a stray negative doesn't
+        // sneak past the > 0 bounded check below.
+        if (zoneCount < UnlimitedZoneCount) {
+            return false;
+        }
+        if (zoneCount > UnlimitedZoneCount && zones.size() != zoneCount) {
+            return false;
+        }
+        if (!zoneNumbers.isEmpty() && zoneNumbers.size() != zones.size()) {
+            return false;
+        }
+        return true;
+    }
+};
+
+} // namespace PhosphorLayout

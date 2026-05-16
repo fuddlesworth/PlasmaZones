@@ -114,7 +114,7 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::minimumWindowHeight() >= ConfigDefaults::minimumWindowHeightMin());
         QVERIFY(ConfigDefaults::minimumWindowHeight() <= ConfigDefaults::minimumWindowHeightMax());
 
-        // Zone Selector
+        // PhosphorZones::Zone Selector
         QVERIFY(ConfigDefaults::triggerDistance() >= ConfigDefaults::triggerDistanceMin());
         QVERIFY(ConfigDefaults::triggerDistance() <= ConfigDefaults::triggerDistanceMax());
         QVERIFY(ConfigDefaults::position() >= 0);

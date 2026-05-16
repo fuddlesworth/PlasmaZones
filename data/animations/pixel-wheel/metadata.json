@@ -1,0 +1,27 @@
+{
+    "id": "pixel-wheel",
+    "name": "Pixel Wheel",
+    "description": "Pixelated clockwise spoke dissolve — pixels fade away in spinning wedge sectors around the window centre",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Pixelation",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "maxPixelSize",
+            "name": "Max Pixel Size",
+            "type": "float",
+            "default": 10.0,
+            "min": 1.0,
+            "max": 50.0
+        },
+        {
+            "id": "spokeCount",
+            "name": "Spoke Count",
+            "type": "float",
+            "default": 12.0,
+            "min": 1.0,
+            "max": 64.0
+        }
+    ]
+}

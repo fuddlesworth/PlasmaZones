@@ -50,6 +50,23 @@ Item {
             }
 
             SettingsRow {
+                title: i18n("Desktop switch OSD")
+                description: i18n("Show notification on virtual desktop change, activity change, and daemon startup")
+
+                SettingsSwitch {
+                    checked: osdRoot.appSettings.showOsdOnDesktopSwitch
+                    accessibleName: i18n("Show OSD on desktop switch")
+                    onToggled: function(newValue) {
+                        osdRoot.appSettings.showOsdOnDesktopSwitch = newValue;
+                    }
+                }
+
+            }
+
+            SettingsSeparator {
+            }
+
+            SettingsRow {
                 title: i18n("Keyboard navigation OSD")
                 description: i18n("Show notification when moving windows with keyboard shortcuts")
 
@@ -76,9 +93,10 @@ Item {
                     readonly property int osdStyleNone: 0
                     readonly property int osdStyleText: 1
                     readonly property int osdStylePreview: 2
+                    readonly property bool anyOsdEnabled: osdRoot.appSettings.showOsdOnLayoutSwitch || osdRoot.appSettings.showOsdOnDesktopSwitch || osdRoot.appSettings.showNavigationOsd
 
                     Accessible.name: i18n("OSD style")
-                    enabled: osdRoot.appSettings.showOsdOnLayoutSwitch || osdRoot.appSettings.showNavigationOsd
+                    enabled: osdStyleCombo.anyOsdEnabled
                     currentIndex: Math.max(0, Math.min(osdRoot.appSettings.osdStyle, 2))
                     model: [i18n("None"), i18n("Text only"), i18n("Visual preview")]
                     onActivated: (index) => {

@@ -1,0 +1,27 @@
+{
+    "id": "dissolve",
+    "name": "Dissolve",
+    "description": "Noise-based dissolve transition with configurable grain",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Fade",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "grain",
+            "name": "Grain Size",
+            "type": "float",
+            "default": 0.05,
+            "min": 0.01,
+            "max": 0.3
+        },
+        {
+            "id": "softness",
+            "name": "Edge Softness",
+            "type": "float",
+            "default": 0.1,
+            "min": 0.0,
+            "max": 0.5
+        }
+    ]
+}

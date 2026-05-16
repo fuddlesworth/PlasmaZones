@@ -1,0 +1,43 @@
+{
+    "id": "glide",
+    "name": "Glide",
+    "description": "Smooth slide-and-fade glide entrance/exit.",
+    "author": "PlasmaZones (ported from Burn-My-Windows by Simon Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
+    "version": "1.0",
+    "category": "Slide",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "uScale",
+            "name": "Scale",
+            "type": "float",
+            "default": 0.95,
+            "min": 0.1,
+            "max": 1.0
+        },
+        {
+            "id": "uSquish",
+            "name": "Squish",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "uTilt",
+            "name": "Tilt",
+            "type": "float",
+            "default": -0.3,
+            "min": -1.0,
+            "max": 1.0
+        },
+        {
+            "id": "uShift",
+            "name": "Shift",
+            "type": "float",
+            "default": -0.05,
+            "min": -1.0,
+            "max": 1.0
+        }
+    ]
+}

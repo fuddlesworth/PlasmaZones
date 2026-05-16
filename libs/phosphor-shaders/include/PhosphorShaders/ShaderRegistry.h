@@ -1,0 +1,235 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <PhosphorShaders/phosphorshaders_export.h>
+
+#include <PhosphorFsLoader/MetadataPackRegistryBase.h>
+#include <PhosphorFsLoader/MetadataPackScanStrategy.h>
+
+#include <QHash>
+#include <QImage>
+#include <QList>
+#include <QMap>
+#include <QMutex>
+#include <QRect>
+#include <QSize>
+#include <QString>
+#include <QUrl>
+#include <QVariant>
+#include <array>
+#include <memory>
+
+namespace PhosphorShaders {
+
+class IWallpaperProvider;
+
+/// Registry of available shader effects.
+///
+/// Discovers shaders from configured search paths, validates metadata,
+/// manages parameter presets, and watches for file changes.
+///
+/// Composition roots own a per-process instance and register search
+/// paths explicitly — there is no library-level singleton. Tests
+/// construct a per-fixture registry; downstream consumers (PlasmaZones
+/// shell, future plugin compositors) instantiate their own.
+///
+/// Search-path management (`addSearchPath`, `addSearchPaths`,
+/// `searchPaths`, `setUserPath`, `refresh`) is inherited from
+/// `PhosphorFsLoader::MetadataPackRegistryBase`.
+///
+/// ## Thread safety
+///
+/// GUI-thread only for both reads and mutations. The shader map lives
+/// inside the strategy and is rebuilt on the GUI thread inside the
+/// rescan; the public lookup methods (`availableShaders`, `shader`,
+/// `shaderInfo`, `shaderUrl`) read it without synchronisation.
+///
+/// `searchPaths()` is the one exception: it returns a by-value snapshot
+/// of an implicitly-shared QStringList, so a GUI-thread caller can
+/// snapshot it and propagate the result to worker threads (this is the
+/// shader-warming path's contract). Calling `searchPaths()` *from* a
+/// worker thread concurrently with a GUI-thread mutation is a data race;
+/// snapshot on the GUI thread first.
+class PHOSPHORSHADERS_EXPORT ShaderRegistry : public PhosphorFsLoader::MetadataPackRegistryBase
+{
+    Q_OBJECT
+
+public:
+    struct ParameterInfo
+    {
+        QString id;
+        QString name;
+        QString group;
+        QString type; ///< "float", "color", "int", "bool", "image"
+        int slot = -1;
+        QVariant defaultValue;
+        QVariant minValue;
+        QVariant maxValue;
+        bool useZoneColor = false; ///< Hint: consumer may bind to app-specific color
+        QString wrap;
+
+        /// Convert slot to uniform name (e.g., slot 0 → "customParams1_x")
+        QString uniformName() const;
+    };
+
+    struct ShaderInfo
+    {
+        QString id;
+        QString name;
+        QString description;
+        QString author;
+        QString version;
+        QUrl shaderUrl;
+        QString sourcePath;
+        QString vertexShaderPath;
+        QStringList bufferShaderPaths;
+        QString previewPath;
+        QString category;
+        QList<ParameterInfo> parameters;
+        QMap<QString, QVariantMap> presets;
+        bool isUserShader = false;
+        bool isMultipass = false;
+        bool useWallpaper = false;
+        bool bufferFeedback = false;
+        qreal bufferScale = 1.0;
+        QString bufferWrap = QStringLiteral("clamp");
+        QStringList bufferWraps;
+        QString bufferFilter = QStringLiteral("linear");
+        QStringList bufferFilters;
+        bool useDepthBuffer = false;
+
+        bool isValid() const
+        {
+            return !id.isEmpty() && (isNoneShader(id) || shaderUrl.isValid());
+        }
+    };
+
+    explicit ShaderRegistry(QObject* parent = nullptr);
+    ~ShaderRegistry() override;
+
+    // ── Shader discovery ──────────────────────────────────────────────
+
+    static QString noneShaderUuid();
+    static bool isNoneShader(const QString& id);
+
+    QList<ShaderInfo> availableShaders() const;
+    Q_INVOKABLE QVariantList availableShadersVariant() const;
+
+    ShaderInfo shader(const QString& id) const;
+    Q_INVOKABLE QVariantMap shaderInfo(const QString& id) const;
+    Q_INVOKABLE QUrl shaderUrl(const QString& id) const;
+
+    // ── Parameters & presets ──────────────────────────────────────────
+
+    Q_INVOKABLE QVariantMap defaultParams(const QString& id) const;
+    bool validateParams(const QString& id, const QVariantMap& params) const;
+    QVariantMap validateAndCoerceParams(const QString& id, const QVariantMap& params) const;
+    Q_INVOKABLE QVariantMap translateParamsToUniforms(const QString& shaderId, const QVariantMap& storedParams) const;
+    Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;
+    Q_INVOKABLE QStringList shaderPresetNames(const QString& shaderId) const;
+    Q_INVOKABLE QVariantList shaderPresetsVariant(const QString& shaderId) const;
+
+    /// Always true — once a `ShaderRegistry` is constructed, shader
+    /// discovery and metadata are functional (the registry is purely a
+    /// metadata-pack walker; actual shader compilation lives in the
+    /// `phosphor-rendering` library which carries the `Qt6::ShaderTools`
+    /// dependency). Kept as `Q_INVOKABLE` because QML callers
+    /// historically used it as a feature gate from the era when the
+    /// build had an opt-out for shader support; new code can omit the
+    /// check.
+    Q_INVOKABLE bool shadersEnabled() const
+    {
+        return true;
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────
+
+    void reportShaderBakeStarted(const QString& shaderId);
+    void reportShaderBakeFinished(const QString& shaderId, bool success, const QString& error);
+
+    // ── Wallpaper ─────────────────────────────────────────────────────
+
+    static QString wallpaperPath();
+    static QImage loadWallpaperImage();
+
+    /// Return the wallpaper image cropped to the portion that a sub-region
+    /// (@p subGeom) occupies on a physical screen (@p physGeom), assuming
+    /// "cover" scaling (aspect-correct fill, centered, overflow cropped) —
+    /// the same placement model the `wallpaperUv` GLSL helper uses.
+    ///
+    /// Returns the full (uncropped) wallpaper when either rect is invalid
+    /// or when @p subGeom covers all of @p physGeom.
+    ///
+    /// Virtual screens that share a physical monitor need this so each VS
+    /// samples the wallpaper portion it occupies on the monitor, instead of
+    /// each getting the center-cropped wallpaper as if it were a full screen.
+    ///
+    /// The result is memoized keyed on (@p subGeom, @p physGeom, wallpaper
+    /// mtime), so repeated calls for the same VS return the same QImage
+    /// (stable cacheKey()) and avoid re-uploading to the GPU each frame.
+    static QImage loadWallpaperImage(const QRect& subGeom, const QRect& physGeom);
+
+    /// Pure geometry helper: compute the pixel rect inside a wallpaper of
+    /// size @p wpSize that corresponds to @p subGeom when the wallpaper
+    /// covers @p physGeom under the same "cover" placement used by
+    /// `wallpaperUv`. Returns an invalid rect if inputs are degenerate or
+    /// if @p subGeom fully covers @p physGeom (caller should use the full
+    /// image in that case). Exposed for unit testing.
+    static QRect computeWallpaperCropRect(QSize wpSize, const QRect& physGeom, const QRect& subGeom);
+
+    static void invalidateWallpaperCache();
+
+Q_SIGNALS:
+    void shadersChanged();
+    void shaderCompilationStarted(const QString& shaderId);
+    void shaderCompilationFinished(const QString& shaderId, bool success, const QString& error);
+
+protected:
+    void onUserPathChanged(const QString& path) override;
+
+private:
+    bool validateParameterValue(const ParameterInfo& param, const QVariant& value) const;
+    QVariantMap shaderInfoToVariantMap(const ShaderInfo& info) const;
+    QVariantMap parameterInfoToVariantMap(const ParameterInfo& param) const;
+
+    using ScanStrategy = PhosphorFsLoader::MetadataPackScanStrategy<ShaderInfo>;
+
+    /// Build + configure the scan strategy. Returns the base type so
+    /// the helper can be invoked from the ctor's member-init list while
+    /// staying agnostic of the subclass-private `ScanStrategy` typedef.
+    /// Defined in the .cpp to keep schema-specific parser / signature
+    /// hookups out of the public header.
+    static std::unique_ptr<PhosphorFsLoader::IScanStrategy> buildScanStrategy(ShaderRegistry* self);
+
+    // Non-owning typed alias for the strategy the base owns. Populated
+    // in the ctor's member-init list via `static_cast<ScanStrategy*>(strategy())`
+    // — the cast is safe because we passed in the same instance. Named
+    // distinctly from the base's private `m_strategy` so a future reader
+    // can't accidentally read this as the same field.
+    ScanStrategy* m_typedStrategy;
+
+    static std::unique_ptr<IWallpaperProvider> s_wallpaperProvider;
+    static QString s_cachedWallpaperPath;
+    static QImage s_cachedWallpaperImage;
+    static qint64 s_cachedWallpaperMtime;
+    static QMutex s_wallpaperCacheMutex;
+
+    // Per-VS crop cache: keeps the same QImage (and cacheKey) for repeated
+    // loadWallpaperImage(sub, phys) calls so downstream cacheKey()-based
+    // short-circuits in ShaderEffect/ShaderNodeRhi keep working and the GPU
+    // doesn't re-upload the wallpaper on every overlay update.
+    struct WallpaperCropEntry
+    {
+        QRect sub;
+        QRect phys;
+        qint64 mtime = 0;
+        QImage img;
+    };
+    static constexpr int CropCacheCapacity = 8;
+    static std::array<WallpaperCropEntry, CropCacheCapacity> s_cachedWallpaperCrops;
+    static int s_cachedWallpaperCropNextSlot;
+};
+
+} // namespace PhosphorShaders
