@@ -51,7 +51,7 @@ endif()
 if(NOT TARGET PhosphorAnimation::PhosphorAnimation)
     find_package(PhosphorAnimation CONFIG REQUIRED)
 endif()
-if(NOT TARGET PhosphorScreens::PhosphorScreens)
+if(NOT TARGET PhosphorScreens::Core)
     find_package(PhosphorScreens CONFIG REQUIRED)
 endif()
 
@@ -106,7 +106,7 @@ target_link_libraries(PhosphorOverlay
         PhosphorShellPatterns::PhosphorShellPatterns
         PhosphorSurfaces::PhosphorSurfaces
         PhosphorAnimation::PhosphorAnimation
-        PhosphorScreens::PhosphorScreens
+        PhosphorScreens::Core
 )
 
 set_target_properties(PhosphorOverlay PROPERTIES

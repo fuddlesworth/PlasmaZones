@@ -60,7 +60,7 @@ target_link_libraries(PhosphorPlacement
         PhosphorZones::PhosphorZones
         PhosphorProtocol::Types
     PRIVATE
-        PhosphorScreens::PhosphorScreens
+        PhosphorScreens::Core
         PhosphorIdentity::PhosphorIdentity
         PhosphorWorkspaces::PhosphorWorkspaces
         PhosphorLayoutApi::PhosphorLayoutApi

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "phosphorscreens_export.h"
+#include "phosphorscreenscore_export.h"
 
 // EDID parsing primitives + the wire-format helpers (`buildBaseId`,
 // `buildScreenBaseId`, `normalizeHexSerial`, `readEdidHeaderSerial`,
@@ -68,7 +68,7 @@ namespace ScreenIdentity {
  * keyed entries before the next run populates them with addresses that
  * happen to match a freed QScreen from a previous iteration.
  */
-PHOSPHORSCREENS_EXPORT void reset();
+PHOSPHORSCREENSCORE_EXPORT void reset();
 
 /**
  * @brief Drop the QScreen-keyed identifier caches AND the underlying
@@ -78,7 +78,7 @@ PHOSPHORSCREENS_EXPORT void reset();
  * is on this connector and every cached identifier referencing it must
  * be rebuilt. Pass an empty string to drop everything.
  */
-PHOSPHORSCREENS_EXPORT void invalidateEdidCache(const QString& connectorName = QString());
+PHOSPHORSCREENSCORE_EXPORT void invalidateEdidCache(const QString& connectorName = QString());
 
 /**
  * @brief Drop the computed-identifier and reverse-lookup caches without
@@ -98,7 +98,7 @@ PHOSPHORSCREENS_EXPORT void invalidateEdidCache(const QString& connectorName = Q
  * monitor swap), while disambiguation is a function of the screen set
  * (changes on every add/remove regardless of hardware reuse).
  */
-PHOSPHORSCREENS_EXPORT void invalidateComputedIdentifiers();
+PHOSPHORSCREENSCORE_EXPORT void invalidateComputedIdentifiers();
 
 /**
  * @brief Compute the EDID-based base ID for a `QScreen*`.
@@ -111,7 +111,7 @@ PHOSPHORSCREENS_EXPORT void invalidateComputedIdentifiers();
  * already-fetched QScreen fields is cheap enough that a second cache
  * layer would trade memory for negligible speedup.
  */
-PHOSPHORSCREENS_EXPORT QString baseIdentifierFor(const QScreen* screen);
+PHOSPHORSCREENSCORE_EXPORT QString baseIdentifierFor(const QScreen* screen);
 
 /**
  * @brief Compute the canonical identifier for a `QScreen*`.
@@ -121,7 +121,7 @@ PHOSPHORSCREENS_EXPORT QString baseIdentifierFor(const QScreen* screen);
  * to disambiguate. Mirrors KWin's OutputConfigurationStore strategy:
  * EDID primary, connector fallback.
  */
-PHOSPHORSCREENS_EXPORT QString identifierFor(const QScreen* screen);
+PHOSPHORSCREENSCORE_EXPORT QString identifierFor(const QScreen* screen);
 
 /**
  * @brief Resolve an identifier (connector name OR EDID-style ID, with
@@ -141,7 +141,7 @@ PHOSPHORSCREENS_EXPORT QString identifierFor(const QScreen* screen);
  * Returns nullptr when no match is found (note: empty input still
  * returns the primary screen).
  */
-PHOSPHORSCREENS_EXPORT QScreen* findByIdOrName(const QString& identifier);
+PHOSPHORSCREENSCORE_EXPORT QScreen* findByIdOrName(const QString& identifier);
 
 /// True if the identifier looks like a connector name (no ':').
 inline bool isConnectorName(const QString& identifier)
@@ -150,10 +150,10 @@ inline bool isConnectorName(const QString& identifier)
 }
 
 /// Convert a connector name to its current screen identifier.
-PHOSPHORSCREENS_EXPORT QString idForName(const QString& connectorName);
+PHOSPHORSCREENSCORE_EXPORT QString idForName(const QString& connectorName);
 
 /// Convert a screen identifier back to its current connector name.
-PHOSPHORSCREENS_EXPORT QString nameForId(const QString& screenId);
+PHOSPHORSCREENSCORE_EXPORT QString nameForId(const QString& screenId);
 
 /**
  * @brief Tolerance-aware equality between two screen identifiers.
@@ -163,14 +163,14 @@ PHOSPHORSCREENS_EXPORT QString nameForId(const QString& screenId);
  * IDs are compared exactly; mixed virtual/physical inputs always
  * compare false.
  */
-PHOSPHORSCREENS_EXPORT bool screensMatch(const QString& a, const QString& b);
+PHOSPHORSCREENSCORE_EXPORT bool screensMatch(const QString& a, const QString& b);
 
 /// Whether @p storedScreenId belongs to the physical screen @p physicalScreenId.
 /// Handles virtual screen IDs: if stored is virtual, extracts its physical parent
 /// and compares via screensMatch() so connector-name / EDID-ID equivalence is
 /// honored (e.g. "DP-2" vs "Dell:U2722D:115107"). If physicalScreenId is itself
 /// virtual, returns false (misuse — the function is "stored belongs to PHYSICAL X").
-PHOSPHORSCREENS_EXPORT bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physicalScreenId);
+PHOSPHORSCREENSCORE_EXPORT bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physicalScreenId);
 
 } // namespace ScreenIdentity
 
