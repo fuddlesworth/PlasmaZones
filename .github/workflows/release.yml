@@ -450,12 +450,15 @@ jobs:
           pkgdesc="Window tiling and autotiling for KDE Plasma"
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
-          license=('GPL-3.0-or-later')
+          license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
+          # Exact KWin upstream pin — mirrors packaging/arch/PKGBUILD. kwin is
+          # installed in the CI build env, so this resolves at parse time.
+          _kwin_ver=$(pacman -Q kwin 2>/dev/null | awk '{print $2}' | cut -d- -f1)
           depends=(
-              'qt6-base' 'qt6-declarative'
-              'kconfig' 'kconfigwidgets'
-              'kcmutils' 'kglobalaccel'
-              'kirigami'
+              'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
+              'kconfig' 'kconfigwidgets' 'kirigami'
+              'kcmutils' 'kglobalaccel' 'qt6-wayland'
+              "kwin${_kwin_ver:+=}${_kwin_ver}"
           )
           makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')
           optdepends=('plasma-activities: activity-based layouts')
@@ -558,13 +561,9 @@ jobs:
     name: Create GitHub Release
     needs: [version, build-deb, build-rpm, build-rpm-opensuse, build-arch, build-generic, build-nix]
     runs-on: ubuntu-latest
-    # Create the release even if some package builds failed — a release
-    # with most packages beats no release at all. always() is required so
-    # a failed job in needs doesn't skip this; the version guard still
-    # blocks publishing on an unparsed/invalid tag. The asset step globs
-    # whatever artifacts exist, so a missing distro just means one fewer
-    # asset. Re-running the tag re-cuts cleanly (delete-and-recreate).
-    if: ${{ always() && needs.version.result == 'success' }}
+    # No `if:` — the implicit success() gate is intentional. If any
+    # package build fails, the release is NOT cut: we don't ship a
+    # partial release. Fix the failing distro and re-run the tag.
     # Only this job writes release assets back to the repo.
     permissions:
       contents: write
