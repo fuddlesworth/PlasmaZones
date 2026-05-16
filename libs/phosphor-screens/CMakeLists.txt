@@ -3,15 +3,18 @@
 #
 # PhosphorScreens — domain-free screen-topology library for Qt6 Wayland.
 #
-# Owns physical screen monitoring, virtual-screen subdivision, and
-# effective-screen resolution. Pluggable backends for panel-offset
-# detection (KDE Plasma D-Bus, no-op) and VS-config persistence
-# (Settings, in-memory). See README.md for the public-API overview.
+# Two targets, layered so the screen-topology core does not drag QtDBus
+# into pure-compute consumers:
 #
-# Surface: VirtualScreen.h POD types, ScreenResolver, ScreenManager,
-# IPanelSource (+ PlasmaPanelSource, NoOpPanelSource), IConfigStore
-# (+ InMemoryConfigStore), VirtualScreenSwapper, DBusScreenAdaptor,
-# ScreenIdentity helpers.
+#   PhosphorScreens::Core  — physical-screen monitoring, virtual-screen
+#                            subdivision, identity helpers, pluggable
+#                            config/panel backends. Qt6::Core/Gui only.
+#                            Domain libraries (zones, snap/tile engines,
+#                            placement) link this.
+#   PhosphorScreens::PhosphorScreens
+#                          — adds the D-Bus surface: DBusScreenAdaptor,
+#                            the Plasma panel source, and the resolver.
+#                            Depends on ::Core + Qt6::DBus.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -36,10 +39,7 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui DBus)
 
 # PhosphorIdentity ships VirtualScreenId — the cross-process ID format
 # helpers that VirtualScreen.h consumes. INTERFACE-only dependency, so
-# zero runtime cost and no .so to chase. Found via add_subdirectory in
-# PZ in-tree builds; falls back to find_package when this library is
-# consumed standalone. CONFIG + REQUIRED matches the pattern sibling
-# phosphor-* libs use (phosphor-zones, phosphor-tiles).
+# zero runtime cost and no .so to chase.
 if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
     find_package(PhosphorIdentity CONFIG REQUIRED)
 endif()
@@ -50,65 +50,112 @@ if(NOT TARGET PhosphorWayland::PhosphorWayland)
     find_package(PhosphorWayland CONFIG REQUIRED)
 endif()
 
-# PhosphorProtocol ships the canonical org.plasmazones.* service / object /
-# interface constants and shared timeouts. Resolver.h pulls them in for the
-# default endpoint, so PUBLIC link.
-if(NOT TARGET PhosphorProtocol::PhosphorProtocol)
+# PhosphorProtocol::Types ships the QtCore-only org.plasmazones.* service /
+# object / interface constants. Resolver.h pulls them in for the default
+# endpoint — constants only, no QtDBus from this dependency.
+if(NOT TARGET PhosphorProtocol::Types)
     find_package(PhosphorProtocol CONFIG REQUIRED)
 endif()
 
+if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
+endif()
+
+# Properties shared by both library targets.
+function(_phosphorscreens_target_defaults _target)
+    set_target_properties(${_target} PROPERTIES
+        VERSION ${PHOSPHORSCREENS_VERSION}
+        SOVERSION 0
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
+        UNITY_BUILD OFF
+        AUTOMOC ON
+        POSITION_INDEPENDENT_CODE ON
+    )
+    target_compile_features(${_target} PUBLIC cxx_std_20)
+endfunction()
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# Library
+# PhosphorScreens::Core — QtDBus-free screen-topology core
 # ═══════════════════════════════════════════════════════════════════════════════
 
-set(phosphorscreens_public_HDRS
-    include/PhosphorScreens/DBusScreenAdaptor.h
+set(phosphorscreenscore_public_HDRS
     include/PhosphorScreens/IConfigStore.h
     include/PhosphorScreens/InMemoryConfigStore.h
     include/PhosphorScreens/IPanelSource.h
     include/PhosphorScreens/Manager.h
     include/PhosphorScreens/NoOpPanelSource.h
-    include/PhosphorScreens/PhosphorScreens.h
-    include/PhosphorScreens/PlasmaPanelSource.h
-    include/PhosphorScreens/Resolver.h
     include/PhosphorScreens/ScreenIdentity.h
     include/PhosphorScreens/Swapper.h
     include/PhosphorScreens/VirtualScreen.h
 )
 
-set(phosphorscreens_private_HDRS
+add_library(PhosphorScreensCore SHARED
+    ${phosphorscreenscore_public_HDRS}
     src/screenslogging.h
-)
-
-set(phosphorscreens_SRCS
-    src/dbusscreenadaptor.cpp
     src/manager.cpp
     src/manager_virtualscreens.cpp
-    src/plasmapanelsource.cpp
-    src/resolver.cpp
     src/screenidentity.cpp
     src/screenslogging.cpp
     src/swapper.cpp
 )
 
+add_library(PhosphorScreens::Core ALIAS PhosphorScreensCore)
+
+generate_export_header(PhosphorScreensCore
+    BASE_NAME PhosphorScreensCore
+    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/phosphorscreenscore_export.h
+    EXPORT_MACRO_NAME PHOSPHORSCREENSCORE_EXPORT
+)
+
+target_include_directories(PhosphorScreensCore
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(PhosphorScreensCore
+    PUBLIC
+        Qt6::Core
+        Qt6::Gui   # QRect / QRectF / QScreen in public headers
+        PhosphorIdentity::PhosphorIdentity
+    PRIVATE
+        PhosphorWayland::PhosphorWayland  # LayerSurface for geometry sensors
+)
+
+_phosphorscreens_target_defaults(PhosphorScreensCore)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PhosphorScreens — D-Bus adaptor + Plasma panel source + resolver
+# ═══════════════════════════════════════════════════════════════════════════════
+
+set(phosphorscreens_public_HDRS
+    include/PhosphorScreens/DBusScreenAdaptor.h
+    include/PhosphorScreens/PhosphorScreens.h
+    include/PhosphorScreens/PlasmaPanelSource.h
+    include/PhosphorScreens/Resolver.h
+)
+
 add_library(PhosphorScreens SHARED
     ${phosphorscreens_public_HDRS}
-    ${phosphorscreens_private_HDRS}
-    ${phosphorscreens_SRCS}
+    src/dbusscreenadaptor.cpp
+    src/plasmapanelsource.cpp
+    src/resolver.cpp
 )
 
 add_library(PhosphorScreens::PhosphorScreens ALIAS PhosphorScreens)
 
 generate_export_header(PhosphorScreens
+    BASE_NAME PhosphorScreens
     EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/phosphorscreens_export.h
     EXPORT_MACRO_NAME PHOSPHORSCREENS_EXPORT
 )
-
-# Resolve KDE_INSTALL_INCLUDEDIR here so INSTALL_INTERFACE can reference it.
-if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
-endif()
 
 target_include_directories(PhosphorScreens
     PUBLIC
@@ -119,48 +166,20 @@ target_include_directories(PhosphorScreens
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_compile_features(PhosphorScreens PUBLIC cxx_std_20)
-
 target_link_libraries(PhosphorScreens
     PUBLIC
-        Qt6::Core
-        Qt6::Gui   # QRect / QRectF / QScreen in public headers
+        PhosphorScreens::Core
         Qt6::DBus  # QDBusAbstractAdaptor in DBusScreenAdaptor.h public surface
-        PhosphorIdentity::PhosphorIdentity
-        PhosphorProtocol::PhosphorProtocol  # Service::* constants in Resolver.h
-    PRIVATE
-        PhosphorWayland::PhosphorWayland  # LayerSurface for geometry sensors
+        PhosphorProtocol::Types  # Service::* constants in Resolver.h
 )
 
-set_target_properties(PhosphorScreens PROPERTIES
-    VERSION ${PHOSPHORSCREENS_VERSION}
-    SOVERSION 0
-    CXX_VISIBILITY_PRESET hidden
-    VISIBILITY_INLINES_HIDDEN ON
-    UNITY_BUILD OFF
-    AUTOMOC ON
-    # Explicit PIC — SHARED targets on most platforms get this inferred,
-    # but ARM64 and cross-compile toolchains occasionally don't. Matches
-    # the policy in the sibling phosphor-* libraries so downstream
-    # packagers see consistent relocation behaviour.
-    POSITION_INDEPENDENT_CODE ON
-)
+_phosphorscreens_target_defaults(PhosphorScreens)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════
 
-if(NOT DEFINED KDE_INSTALL_LIBDIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
-    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
-endif()
-
-if(NOT DEFINED KDE_INSTALL_BINDIR)
-    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
-endif()
-
-install(TARGETS PhosphorScreens
+install(TARGETS PhosphorScreensCore PhosphorScreens
     EXPORT PhosphorScreensTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
@@ -182,11 +201,6 @@ configure_package_config_file(
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorScreensConfigVersion.cmake"
     VERSION ${PHOSPHORSCREENS_VERSION}
-    # SameMajorVersion matches every other phosphor-* library in this
-    # tree (phosphor-identity, phosphor-layer, phosphor-animation,
-    # phosphor-tiles, phosphor-zones, phosphor-wayland). Keep the policy
-    # uniform across the family so consumers see one compatibility rule
-    # rather than per-library divergence.
     COMPATIBILITY SameMajorVersion
 )
 install(FILES
@@ -200,7 +214,9 @@ install(DIRECTORY include/PhosphorScreens/
     FILES_MATCHING PATTERN "*.h"
 )
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/phosphorscreens_export.h
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/phosphorscreenscore_export.h
+    ${CMAKE_CURRENT_BINARY_DIR}/phosphorscreens_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorScreens
 )
 
@@ -208,9 +224,6 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/phosphorscreens_export.h
 # Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Enable unit tests when building as part of the parent project or when the
-# user explicitly toggles BUILD_TESTING. Mirrors phosphor-animation's policy so
-# ctest picks them up automatically on a normal `cmake --build` cycle.
 if(CMAKE_PROJECT_NAME STREQUAL "PhosphorScreens" OR BUILD_TESTING)
     enable_testing()
     add_subdirectory(tests)

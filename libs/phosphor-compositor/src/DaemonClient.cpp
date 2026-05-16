@@ -4,6 +4,8 @@
 #include <PhosphorCompositor/DaemonClient.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
+#include <PhosphorProtocol/ZoneMarshalling.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>

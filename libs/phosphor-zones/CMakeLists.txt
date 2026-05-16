@@ -54,7 +54,7 @@ endif()
 # PhosphorScreens supplies ScreenIdentity (canonical id ↔ connector name)
 # and VirtualScreen helpers used by LayoutRegistry's assignment cascade.
 # PRIVATE because no public header leaks the type.
-if(NOT TARGET PhosphorScreens::PhosphorScreens)
+if(NOT TARGET PhosphorScreens::Core)
     find_package(PhosphorScreens CONFIG REQUIRED)
 endif()
 
@@ -172,7 +172,7 @@ target_link_libraries(PhosphorZones
         # LayoutRegistry impl uses ScreenIdentity / VirtualScreen for
         # the assignment-cascade screen-id normalisation. PRIVATE — no
         # public header surfaces these types.
-        PhosphorScreens::PhosphorScreens
+        PhosphorScreens::Core
 )
 
 set_target_properties(PhosphorZones PROPERTIES

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>

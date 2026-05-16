@@ -5,7 +5,8 @@
 
 #include "plasmazones_export.h"
 
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/AutotileMarshalling.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
 #include <QDBusAbstractAdaptor>
 #include <QObject>
 #include <QRect>

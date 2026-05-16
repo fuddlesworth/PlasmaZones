@@ -4,7 +4,7 @@
 #pragma once
 
 #include "VirtualScreen.h"
-#include "phosphorscreens_export.h"
+#include "phosphorscreenscore_export.h"
 
 #include <QHash>
 #include <QMap>
@@ -62,7 +62,7 @@ struct ScreenManagerConfig
  * that need a process-wide ScreenManager (the PlasmaZones daemon does)
  * provide their own thin service-locator outside this class.
  */
-class PHOSPHORSCREENS_EXPORT ScreenManager : public QObject
+class PHOSPHORSCREENSCORE_EXPORT ScreenManager : public QObject
 {
     Q_OBJECT
 public:

@@ -6,7 +6,7 @@
 #include "../core/logging.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/BridgeMarshalling.h>
 #include <QUuid>
 
 namespace PlasmaZones {

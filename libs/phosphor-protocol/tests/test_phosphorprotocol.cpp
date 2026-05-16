@@ -1,8 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/AutotileMarshalling.h>
+#include <PhosphorProtocol/BridgeMarshalling.h>
+#include <PhosphorProtocol/DragMarshalling.h>
+#include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
+#include <PhosphorProtocol/ZoneMarshalling.h>
 
 #include <QTest>
 

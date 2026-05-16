@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "phosphorscreens_export.h"
+#include "phosphorscreenscore_export.h"
 
 #include <QString>
 
@@ -42,7 +42,7 @@ inline constexpr QLatin1StringView Down{"down"};
  * Lifetime: the swapper does not own the store. Caller must keep both
  * alive for the duration of any swap/rotate call.
  */
-class PHOSPHORSCREENS_EXPORT VirtualScreenSwapper
+class PHOSPHORSCREENSCORE_EXPORT VirtualScreenSwapper
 {
 public:
     /// Structured outcome for swap/rotate operations. Lets callers

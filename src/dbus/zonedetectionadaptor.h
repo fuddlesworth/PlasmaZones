@@ -5,7 +5,7 @@
 
 #include "plasmazones_export.h"
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
-#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorProtocol/ZoneMarshalling.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>

@@ -71,7 +71,7 @@ target_link_libraries(PhosphorTileEngine
         PhosphorEngine::PhosphorEngine
         PhosphorTiles::PhosphorTiles
     PRIVATE
-        PhosphorScreens::PhosphorScreens
+        PhosphorScreens::Core
         PhosphorIdentity::PhosphorIdentity
         PhosphorZones::PhosphorZones
 )
