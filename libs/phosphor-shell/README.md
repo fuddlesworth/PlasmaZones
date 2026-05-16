@@ -19,6 +19,10 @@ and the engine instantiates the user's QML which declares `PanelWindow`,
 layer-shell surface through `phosphor-layer` underneath, so the QML
 author writes panels without touching wlr-protocol primitives.
 
+`ShellEngine` also drives hot reload: it watches the config tree and the
+screen topology, rebuilds the QML engine on change, and saves/restores
+`PersistentProperties` state across the reload.
+
 The API mirrors Quickshell where it matters (`PanelWindow`, `Variants`,
 `LazyLoader`, `PersistentProperties`, `Process`, `FileView`) so existing
 configs port with minimal rework.
@@ -27,20 +31,34 @@ configs port with minimal rework.
 
 | Type | Purpose |
 |------|---------|
-| `ShellEngine`            | Top-level lifecycle: QML engine, config discovery, reload. |
+| `ShellEngine`            | Top-level lifecycle: QML engine, config discovery, hot reload. |
 | `ShellLoader`            | Discovers and loads the user's QML config from XDG paths. |
 | `PanelWindow`            | Layer-shell-backed panel window with edge anchoring and exclusive zone. |
-| `PopupWindow`            | Top-layer popup with optional keyboard grab and parent anchoring. |
+| `PopupWindow`            | xdg-popup positioned against an anchor item, with in-place reposition. |
 | `FloatingWindow`         | XDG-toplevel window for non-shell auxiliary UI. |
 | `Variants`               | Lazy per-screen instantiation of declarative content. |
 | `LazyLoader`             | Defer-instantiation helper for expensive QML trees. |
-| `PersistentProperties`   | QML-friendly persistence of property values across launches. |
+| `PersistentProperties`   | QML-friendly persistence of property values across launches and hot reloads. |
 | `Process`                | Sandboxed subprocess runner exposed to QML. |
-| `FileView`               | Watched-file reader for QML config-driven panels. |
+| `FileView`               | Watched-file reader for QML config-driven panels (`/proc`, `/sys`, config files). |
+| `SystemClock`            | Timer-driven clock — hours/minutes/seconds/date — with configurable tick precision. |
+| `WallpaperService`       | Decodes the desktop wallpaper off the GUI thread; reached from QML via `ShellGlobal.wallpaper`. |
 | `Environment`            | Cross-platform env-var, locale, and runtime-dir helpers. |
-| `ShellGlobal`            | QML singleton with shell-wide config and runtime state. |
+| `ShellGlobal`            | QML context object (`PhosphorShell`) with shell-wide config and runtime state. |
 | `ScreenModel`            | Reactive list of physical screens for per-screen `Variants`. |
 | `Toplevels`              | `ext-foreign-toplevel-list-v1` consumer (window list for taskbars). |
+
+## QML module
+
+`ShellEngine` registers the `Phosphor.Shell` import. Alongside the types
+above it re-exports a few from sibling libraries, so shell QML needs a
+single import:
+
+- `ShaderBackground` — animated shader surface (from `phosphor-rendering`).
+- `IdleInhibitor`, `IdleNotifier` — idle inhibition and idle detection
+  (from `phosphor-wayland`).
+- `ForeignToplevel` — one entry of the `Toplevels` window list
+  (uncreatable; vended by `Toplevels`).
 
 ## Dependencies
 
@@ -53,6 +71,6 @@ working reference for consumers.
 
 ## See also
 
-- [`phosphor-services`](../phosphor-services/README.md) — system tray and dbusmenu.
+- [`phosphor-services`](../phosphor-services/README.md) — system tray, MPRIS media, and UPower power services.
 - [`phosphor-layer`](../phosphor-layer/README.md) — Role vocabulary the window types compose from.
 - [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md) — named Role recipes the panels use.

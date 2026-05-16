@@ -14,6 +14,7 @@
 #include "wlr_layer_shell_protocol.h"
 #include "single_pixel_buffer_protocol.h"
 #include "idle_notify_protocol.h"
+#include "idle_inhibit_protocol.h"
 #include "xdg_toplevel_drag_protocol.h"
 #include "foreign_toplevel_protocol.h"
 
@@ -97,6 +98,11 @@ public:
         return m_idleNotifierAvailable ? m_idleNotifier : nullptr;
     }
 
+    struct zwp_idle_inhibit_manager_v1* idleInhibitManager() const
+    {
+        return m_idleInhibitManagerAvailable ? m_idleInhibitManager : nullptr;
+    }
+
     struct xdg_toplevel_drag_manager_v1* toplevelDragManager() const
     {
         return m_toplevelDragManagerAvailable ? m_toplevelDragManager : nullptr;
@@ -159,6 +165,10 @@ private:
     struct ext_idle_notifier_v1* m_idleNotifier = nullptr;
     uint32_t m_idleNotifierId = 0;
     bool m_idleNotifierAvailable = false;
+
+    struct zwp_idle_inhibit_manager_v1* m_idleInhibitManager = nullptr;
+    uint32_t m_idleInhibitManagerId = 0;
+    bool m_idleInhibitManagerAvailable = false;
 
     struct xdg_toplevel_drag_manager_v1* m_toplevelDragManager = nullptr;
     uint32_t m_toplevelDragManagerId = 0;

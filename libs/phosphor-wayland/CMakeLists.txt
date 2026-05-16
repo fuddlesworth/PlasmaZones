@@ -118,6 +118,19 @@ add_custom_command(
     COMMENT "PhosphorWayland: generating wlr-foreign-toplevel-management protocol code"
 )
 
+add_custom_command(
+    OUTPUT ${_ps_gen_dir}/zwp-idle-inhibit-v1-client-protocol.h
+           ${_ps_gen_dir}/zwp-idle-inhibit-v1-protocol.c
+    COMMAND ${WAYLAND_SCANNER} client-header
+            ${_ps_proto_dir}/zwp-idle-inhibit-v1.xml
+            ${_ps_gen_dir}/zwp-idle-inhibit-v1-client-protocol.h
+    COMMAND ${WAYLAND_SCANNER} private-code
+            ${_ps_proto_dir}/zwp-idle-inhibit-v1.xml
+            ${_ps_gen_dir}/zwp-idle-inhibit-v1-protocol.c
+    DEPENDS ${_ps_proto_dir}/zwp-idle-inhibit-v1.xml
+    COMMENT "PhosphorWayland: generating zwp-idle-inhibit protocol code"
+)
+
 # Generated C code: skip PCH and unity build
 set_source_files_properties(
     ${_ps_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
@@ -125,6 +138,7 @@ set_source_files_properties(
     ${_ps_gen_dir}/ext-idle-notify-v1-protocol.c
     ${_ps_gen_dir}/xdg-toplevel-drag-v1-protocol.c
     ${_ps_gen_dir}/wlr-foreign-toplevel-management-unstable-v1-protocol.c
+    ${_ps_gen_dir}/zwp-idle-inhibit-v1-protocol.c
     src/qpa/xdg_popup_stub.c
     src/qpa/xdg_toplevel_stub.c
     PROPERTIES
@@ -143,6 +157,7 @@ set(phosphorwayland_public_HDRS
     include/PhosphorWayland/IdleNotifier.h
     include/PhosphorWayland/ToplevelDrag.h
     include/PhosphorWayland/ForeignToplevel.h
+    include/PhosphorWayland/IdleInhibitor.h
     include/PhosphorWayland/CompositorLost.h
 )
 
@@ -153,6 +168,7 @@ set(phosphorwayland_layershell_SRCS
     src/idlenotifier.cpp
     src/topleveldrag.cpp
     src/foreigntoplevel.cpp
+    src/idleinhibitor.cpp
     src/compositorlost.cpp
     src/compositorlost_internal.h
     src/qpa/layershellintegration.cpp
@@ -166,6 +182,7 @@ set(phosphorwayland_layershell_SRCS
     ${_ps_gen_dir}/ext-idle-notify-v1-protocol.c
     ${_ps_gen_dir}/xdg-toplevel-drag-v1-protocol.c
     ${_ps_gen_dir}/wlr-foreign-toplevel-management-unstable-v1-protocol.c
+    ${_ps_gen_dir}/zwp-idle-inhibit-v1-protocol.c
 )
 
 add_library(PhosphorWayland SHARED

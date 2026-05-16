@@ -4,6 +4,7 @@
 #include <PhosphorShell/ShellLoader.h>
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QLatin1String>
 #include <QLoggingCategory>
@@ -23,11 +24,23 @@ bool isValidShellName(const QString& name)
     if (name.isEmpty()) {
         return false;
     }
+    // A whitespace-only name is non-empty but resolves to a nonsense
+    // directory ("<config>/   /shell.qml") — reject it.
+    if (name.trimmed().isEmpty()) {
+        return false;
+    }
     if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))) {
         return false;
     }
     if (name == QLatin1String(".") || name == QLatin1String("..")) {
         return false;
+    }
+    // Control characters (NUL, newline, etc.) never belong in a
+    // directory name — they corrupt log output and path comparisons.
+    for (const QChar ch : name) {
+        if (ch.category() == QChar::Other_Control) {
+            return false;
+        }
     }
     return true;
 }
@@ -66,6 +79,20 @@ QUrl ShellLoader::resolve() const
         if (QFileInfo::exists(candidate)) {
             return QUrl::fromLocalFile(candidate);
         }
+    }
+
+    // Final fallback: a qrc-baked example shell linked into the binary at
+    // build time (see examples/phosphor-shell/CMakeLists.txt — registers
+    // a qt-qml-module under URI `Phosphor.Shell.Example`). Qt's
+    // qt_add_qml_module places module files at
+    // `:/qt/qml/<URI-with-slashes>/shell.qml`; QFile resolves the `:/`
+    // scheme via the static resource registry that the static plugin's
+    // initializer populates at link time. Lets the executable run on a
+    // fresh system that has no user config and skipped the optional
+    // DATADIR install.
+    const QString qrcPath = QStringLiteral(":/qt/qml/Phosphor/Shell/Example/shell.qml");
+    if (QFile::exists(qrcPath)) {
+        return QUrl(QStringLiteral("qrc") + qrcPath);
     }
 
     return {};

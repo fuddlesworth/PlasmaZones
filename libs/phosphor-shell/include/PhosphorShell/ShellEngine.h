@@ -71,6 +71,11 @@ private Q_SLOTS:
     void onScreensChanged();
 
 private:
+    /// Build a fresh QQmlEngine, instantiate the shell QML, and
+    /// materialize its panels. Shared by the initial load() and the
+    /// hot-reload onFileChanged() path. Emits failed() and returns false
+    /// if the QML fails to load or instantiate.
+    [[nodiscard]] bool buildAndMaterialize();
     void materializePanels();
     void installDynamicAutoFit(PanelWindow* panel, PhosphorLayer::Surface* surface, QSize screenSize);
     void teardown();

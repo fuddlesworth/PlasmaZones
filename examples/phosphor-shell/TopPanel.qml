@@ -6,7 +6,6 @@
 import Phosphor.Services 1.0
 import Phosphor.Shell 1.0
 import QtQuick
-import QtQuick.Window
 
 // Trade-off vs the three-panel layout: one exclusive zone, one shader,
 // one wl_surface — cheaper for the compositor. Anchors don't reserve
@@ -21,18 +20,14 @@ PanelWindow {
     // Anchors exposed for popup positioning.
     property alias menuAnchor: menuButton
     property alias calendarAnchor: clockLabel
+    property alias mediaAnchor: mprisWidget.popupAnchor
+    property alias mediaPlayer: mprisWidget.currentPlayer
     required property var shellState
     required property string clockText
     required property string cpuPercent
     required property string memPercent
     required property string batteryPercent
     required property bool batteryVisible
-    // Surface-to-screen height RATIO (DPR-independent). The shader
-    // multiplies the panel's surface UV by this to get the wallpaper-
-    // texture UV for the strip of wallpaper the panel sits on top of.
-    // A ratio sidesteps having to reconcile `Screen.devicePixelRatio`
-    // with the panel's actual rendering DPR — they cancel out here.
-    readonly property real panelToScreenH: (root.thickness + root.shadowSize) / Math.max(Screen.height, 1)
     // Shadow strip as fraction of total surface height (also DPR-
     // independent). The shader uses 1 - shadowFraction as the
     // panel/shadow split position in surface-local UV.
@@ -57,69 +52,24 @@ PanelWindow {
     alignment: PanelWindow.Fill
     exclusiveZoneEnabled: true
 
+    // Translucent animated gradient — no wallpaper sampling; the
+    // compositor blends it over whatever sits behind the panel surface.
     ShaderBackground {
-        // Canonical slot-keyed names — `setShaderParams` only honours
-        // `customParams<N>_<x|y|z|w>` and `customColor<N>` keys.
-        // Friendly names like "speed" would be silently dropped.
-        // 0.55 leaves enough wallpaper visible to read the
-        // mauve→sky gradient as a tint rather than an opaque wash.
-        // Subtle crystalline grain. Higher reads as static noise;
-        // lower and the panel looks plastic against the wallpaper.
-        // No corner radius for a continuous screen-spanning panel.
-        // Voronoi cells per panel width.
-        // Blur radius in wallpaper pixels — 8 gives a soft but
-        // recognisable backdrop on a 1080p+ wallpaper.
-        // Bind the desktop wallpaper as a sampler at SRB slot 11 so the
-        // shader can read it via `uniform sampler2D uWallpaper`. The
-        // service decodes the image off the GUI thread; while the load
-        // is in flight, `image` is null and the shader's textureSize-
-        // based check falls back to the gradient-only path.
-        // shadowSize must match the physical-pixel height of the
-        // extra surface strip below the visible panel (set via
-        // PanelWindow.shadowSize above). A mismatch would draw the
-        // shadow band into the panel zone or leave the strip
-        // un-drawn (transparent).
-        // 0.45 looks like a real drop-shadow against the
-        // Catppuccin wallpaper palette without obscuring the
-        // window content underneath.
-        // Ratio form is DPR-independent — see the property comment
-        // above. Passing physical-pixel screenHeight + shadowSize
-        // separately would risk a 2× mismatch if Screen.dpr ever
-        // disagreed with the panel's actual rendering DPR (which
-        // produced the "shadow strip is half the panel" symptom
-        // observed in the earlier rev).
-        // 0.5 gives a clearly readable drop shadow without
-        // obscuring window content immediately below the panel.
-
         anchors.fill: parent
         playing: root.visible
         shaderSource: Qt.resolvedUrl("shaders/gradient.frag")
-        // useWallpaper MUST stay true regardless of whether a real
-        // wallpaper is loaded yet: gradient.frag declares binding 11
-        // unconditionally, and toggling useWallpaper drops that slot
-        // from the SRB. A pipeline whose shader uses a binding the SRB
-        // doesn't bind silently fails to draw — which is what makes
-        // the whole panel invisible during the cold-start window
-        // before the async wallpaper load completes. Keeping it true
-        // means the renderer's 1×1 transparent fallback fills the
-        // slot, and the shader's `textureSize > 1` check selects the
-        // correct visual path data-driven from the texture size.
-        useWallpaper: true
-        wallpaperTexture: PhosphorShell.wallpaper.image
+        useWallpaper: false
         //   customParams1: speed / baseAngle / tintOpacity / frostAmount
         //   customParams2: cornerRadius / frostScale
-        //   customParams3: panelToScreenH / blurRadius
         //   customParams4: shadowFraction / shadowOpacity
         //   customParams5: cornerCarveFraction
         shaderParams: {
             "customParams1_x": 1.2,
             "customParams1_y": 0,
-            "customParams1_z": 0.55,
+            "customParams1_z": 0.9,
             "customParams1_w": 0.08,
             "customParams2_x": 0,
             "customParams2_y": 24,
-            "customParams3_x": root.panelToScreenH,
-            "customParams3_y": 8,
             "customParams4_x": root.shadowFraction,
             "customParams4_y": 0.5,
             "customParams5_x": root.cornerCarveFraction
@@ -176,7 +126,7 @@ PanelWindow {
                     cursorShape: Qt.PointingHandCursor
                     Accessible.role: Accessible.Button
                     Accessible.name: root.shellState.menuOpen ? "Close menu" : "Open menu"
-                    onClicked: root.shellState.menuOpen = !root.shellState.menuOpen
+                    onClicked: root.shellState.togglePopup("menu")
                 }
 
             }
@@ -248,7 +198,7 @@ PanelWindow {
                 cursorShape: Qt.PointingHandCursor
                 Accessible.role: Accessible.Button
                 Accessible.name: root.shellState.calendarOpen ? "Close calendar" : "Open calendar"
-                onClicked: root.shellState.calendarOpen = !root.shellState.calendarOpen
+                onClicked: root.shellState.togglePopup("calendar")
             }
 
         }
@@ -431,6 +381,13 @@ PanelWindow {
 
                 }
 
+            }
+
+            MprisWidget {
+                id: mprisWidget
+
+                anchors.verticalCenter: parent.verticalCenter
+                onPopupRequested: root.shellState.togglePopup("media")
             }
 
             Row {

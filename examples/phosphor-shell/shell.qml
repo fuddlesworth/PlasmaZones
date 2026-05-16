@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import Phosphor.Services 1.0
 import Phosphor.Shell 1.0
 import QtQuick
 
@@ -12,6 +13,8 @@ Item {
     // System data sources — owned at the top level so multiple
     // panels/windows can share a single Process / FileView each.
 
+    Component.onCompleted: shellState.togglePopup = panelPopupHost.toggle
+
     // Global UI state. Survives hot-reload via PersistentProperties.
     PersistentProperties {
         id: shellState
@@ -19,36 +22,22 @@ Item {
         property bool menuOpen: false
         property bool settingsOpen: false
         property bool calendarOpen: false
+        property bool mediaOpen: false
         property int activeWorkspace: 0
+        // Function reference assigned in Component.onCompleted.
+        // TopPanel and widget MouseAreas call this to toggle panel
+        // popups; the host swaps the active popup in-place inside a
+        // single shared xdg_popup so popup-to-popup transitions
+        // can't race the Wayland grab handoff.
+        property var togglePopup
 
         reloadId: "main"
     }
 
-    // Clock formatting via Qt's built-in `Qt.formatDateTime` driven by
-    // a 1 s Timer instead of a 1 Hz `date` subprocess. Earlier rev
-    // fork/exec'd `date` every second (~86 400 forks/day) for a value
-    // QML can compute natively. Sync to the wall-clock minute boundary
-    // by leaving the interval at 1 s — the worst-case visual lag from
-    // minute roll-over is one second, same as the prior subprocess.
-    Item {
-        id: clockProc
+    SystemClock {
+        id: clock
 
-        property string stdoutText: ""
-
-        function update() {
-            stdoutText = Qt.formatDateTime(new Date(), "HH:mm · ddd MMM dd");
-        }
-
-        Component.onCompleted: update()
-
-        Timer {
-            interval: 1000
-            running: true
-            repeat: true
-            triggeredOnStart: true
-            onTriggered: clockProc.update()
-        }
-
+        precision: SystemClock.Minutes
     }
 
     // CPU + memory readouts via /proc — avoids a `sh -c` subprocess
@@ -132,11 +121,11 @@ Item {
         }
     }
 
-    FileView {
-        id: batteryFile
-
-        path: "/sys/class/power_supply/BAT0/capacity"
-        interval: 30000
+    // Battery via UPower D-Bus — replaces the raw sysfs FileView.
+    // UPowerHost connects to org.freedesktop.UPower on the system bus;
+    // displayDevice is the aggregate battery (percentage, state, icon).
+    UPowerHost {
+        id: battery
     }
 
     FileView {
@@ -152,25 +141,32 @@ Item {
         id: topPanel
 
         shellState: shellState
-        clockText: clockProc.stdoutText.trim()
+        // Time as locale-neutral HH:mm; the date portion via Qt.formatDate
+        // so day/month names follow the user's locale (the hand-rolled
+        // English arrays this replaced were an i18n regression).
+        clockText: {
+            const pad = (n) => {
+                return n < 10 ? "0" + n : "" + n;
+            };
+            return pad(clock.hours) + ":" + pad(clock.minutes) + " · " + Qt.formatDate(clock.date, "ddd MMM dd");
+        }
         cpuPercent: cpuStat.percent
         memPercent: memInfo.percent
-        batteryPercent: batteryFile.content.trim()
-        batteryVisible: batteryFile.exists
+        batteryPercent: battery.displayDevice ? Math.round(battery.displayDevice.percentage).toString() : ""
+        batteryVisible: battery.displayDevice !== null
     }
 
     Taskbar {
     }
 
     // ─── Popups ──────────────────────────────────────────────────────────
-    MenuPopup {
-        shellState: shellState
-        anchorItem: topPanel.menuAnchor
-    }
+    // Single shared xdg_popup that hosts the calendar / media / menu
+    // contents. See PanelPopupHost.qml.
+    PanelPopupHost {
+        id: panelPopupHost
 
-    CalendarPopup {
         shellState: shellState
-        anchorItem: topPanel.calendarAnchor
+        topPanel: topPanel
     }
 
     // ─── Floating windows ────────────────────────────────────────────────
