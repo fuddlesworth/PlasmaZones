@@ -22,17 +22,19 @@ class IConfigStore;
 class ScreenManager;
 
 /**
- * @brief Reusable D-Bus adaptor for the screen-topology surface.
+ * @brief D-Bus adaptor for the `org.plasmazones.Screen` screen-topology
+ *        surface: screen queries, virtual-screen mutation, the JSON
+ *        round-trip for `setVirtualScreenConfig`, caches, and signals.
  *
- * Abstract over the D-Bus interface NAME (subclasses set `Q_CLASSINFO`);
- * everything else — the Q_SLOTS that read/mutate screen topology, the
- * signal surface, the JSON round-trip for `setVirtualScreenConfig`, the
- * caches that keep `getScreenInfo` / effective-ID broadcasts cheap — is
- * host-agnostic.
- *
- * Hosts use this by declaring a thin subclass carrying just the
- * `Q_CLASSINFO("D-Bus Interface", "...")` they want to expose, and
- * injecting `ScreenManager*` + `IConfigStore*` via the setters.
+ * The D-Bus interface name is declared HERE via `Q_CLASSINFO`, on the
+ * class that declares the signals — not on a host subclass. Qt derives a
+ * signal's D-Bus interface from the metaobject that *declares* the signal:
+ * a subclass-only `Q_CLASSINFO` fixes incoming method dispatch (that walks
+ * the whole adaptor hierarchy) but leaves every signal in this class
+ * emitting on an auto-generated junk interface name, which no consumer's
+ * match rule ever sees. The bus service name and object path — the parts
+ * that genuinely vary per host — are still chosen by the host at
+ * `registerObject` time.
  *
  * Lifetimes: pointers are non-owning. `ScreenManager` and `IConfigStore`
  * must outlive this adaptor.
@@ -40,8 +42,7 @@ class ScreenManager;
 class PHOSPHORSCREENS_EXPORT DBusScreenAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    // No Q_CLASSINFO("D-Bus Interface", ...) — subclass sets the interface
-    // name so different hosts can register against their own services.
+    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Screen")
 
 public:
     /// Primary constructor: wires the screen-topology service and the VS

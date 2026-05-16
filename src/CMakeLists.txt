@@ -126,8 +126,6 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/convenience.cpp
     dbus/windowtrackingadaptor.h
     dbus/windowtrackingadaptor/internal.h
-    dbus/screenadaptor.cpp
-    dbus/screenadaptor.h
     dbus/windowdragadaptor.cpp
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drag_protocol.cpp

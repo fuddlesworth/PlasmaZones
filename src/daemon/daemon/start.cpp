@@ -23,7 +23,6 @@
 #include "../../dbus/zonedetectionadaptor.h"
 #include "../../dbus/snapadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
-#include "../../dbus/screenadaptor.h"
 #include "../../dbus/windowdragadaptor.h"
 #include "../../dbus/autotileadaptor.h"
 #include "../../dbus/snapadaptor.h"

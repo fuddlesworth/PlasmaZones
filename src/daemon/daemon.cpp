@@ -60,6 +60,7 @@
 #include "../core/utils.h"
 #include "../config/configdefaults.h"
 #include "../config/settingsconfigstore.h"
+#include <PhosphorScreens/DBusScreenAdaptor.h>
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorScreens/PlasmaPanelSource.h>
 #include "../core/shaderregistry.h"
@@ -76,7 +77,6 @@
 #include "../dbus/snapadaptor.h"
 #include "../dbus/shaderadaptor.h"
 #include "../dbus/compositorbridgeadaptor.h"
-#include "../dbus/screenadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -894,12 +894,12 @@ bool Daemon::init()
     connect(&m_reapplyGeometriesTimer, &QTimer::timeout, m_windowTrackingAdaptor,
             &WindowTrackingAdaptor::requestReapplyWindowGeometries);
 
-    // ScreenAdaptor::setVirtualScreenConfig writes to Settings (the source of
-    // truth) via the IConfigStore — the daemon's single SettingsConfigStore
+    // DBusScreenAdaptor::setVirtualScreenConfig writes to Settings (the source
+    // of truth) via the IConfigStore — the daemon's single SettingsConfigStore
     // instance, shared with m_screenManager (as its Config::configStore) and
     // m_virtualScreenSwapper. One store per process, one change-signal
     // channel, no parallel Settings observer.
-    m_screenAdaptor = new ScreenAdaptor(m_screenManager.get(), m_virtualScreenStore.get(), this);
+    m_screenAdaptor = new Phosphor::Screens::DBusScreenAdaptor(m_screenManager.get(), m_virtualScreenStore.get(), this);
 
     // Window drag adaptor - handles drag events from KWin script
     // All drag logic (modifiers, zones, snapping) handled here
@@ -1466,7 +1466,7 @@ void Daemon::stop()
     //
     // The other eight raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
-    // ScreenAdaptor, WindowDragAdaptor, SnapAdaptor, AutotileAdaptor) all
+    // DBusScreenAdaptor, WindowDragAdaptor, SnapAdaptor, AutotileAdaptor) all
     // ship `= default` destructors (verified — see their class headers),
     // so they have no dtor body to UAF. QDBusConnection::unregisterObject
     // (invoked above) blocks new method dispatch to them before we begin

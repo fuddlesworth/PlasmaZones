@@ -23,6 +23,7 @@
 
 namespace Phosphor::Screens {
 class PlasmaPanelSource;
+class DBusScreenAdaptor;
 }
 
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -69,7 +70,6 @@ class ControlAdaptor;
 class OverlayAdaptor;
 class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
-class ScreenAdaptor;
 class WindowDragAdaptor;
 class ModeTracker;
 class ZoneSelectorController;
@@ -544,7 +544,7 @@ private:
     OverlayAdaptor* m_overlayAdaptor = nullptr; // Overlay visibility only
     ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr; // PhosphorZones::Zone detection queries
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr; // Window-zone tracking
-    ScreenAdaptor* m_screenAdaptor = nullptr;
+    Phosphor::Screens::DBusScreenAdaptor* m_screenAdaptor = nullptr;
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling
     // Held so stop() can invoke detach() before the unique_ptr members
     // those adaptors borrow from are destroyed. ~QObject runs AFTER all
