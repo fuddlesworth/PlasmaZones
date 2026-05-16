@@ -162,7 +162,7 @@ Window {
     // Window flags - fullscreen editor window on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowFullScreenButtonHint
     // Transparent window clear color — the semi-transparent visual effect is
-    // provided by _windowBackground below. Using alpha on Window.color causes
+    // provided by windowBackground below. Using alpha on Window.color causes
     // Menu/Popup surfaces (xdg_popup) to inherit the window-level transparency
     // on Wayland, making all menus see-through. A child Rectangle achieves the
     // same visual without affecting popup surface compositing.
@@ -213,7 +213,7 @@ Window {
     // A child Rectangle lets the window surface be fully transparent while
     // popup menus (xdg_popup) get their own opaque surfaces from the style.
     Rectangle {
-        id: _windowBackground
+        id: windowBackground
 
         anchors.fill: parent
         z: -1
