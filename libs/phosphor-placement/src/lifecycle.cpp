@@ -320,6 +320,49 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
     }
 
+    // Validate each migrated window's zone assignment against its new
+    // virtual-screen layout. Migration above moved the window's *screen*
+    // onto a VS id, but its *zone* ids still reference the pre-subdivision
+    // physical-screen layout — and the VS has its own layout with different
+    // zone ids. Without this prune, resnapForVirtualScreenReconfigure resnaps
+    // the window to the physical layout's zone geometry (full-monitor width)
+    // instead of the VS layout, so windows resize to the wrong target.
+    // Symmetric with the physical-layout validation in
+    // migrateScreenAssignmentsFromVirtual. Floating windows are skipped —
+    // their float state must survive a VS reconfigure.
+    if (m_layoutManager) {
+        QStringList windowsToRemove;
+        const QHash<QString, QStringList>& zoneAssignsV = m_snapState->zoneAssignments();
+        const QHash<QString, QString>& screenAssignsV = m_snapState->screenAssignments();
+        for (auto it = zoneAssignsV.constBegin(); it != zoneAssignsV.constEnd(); ++it) {
+            const QString& winScreen = screenAssignsV.value(it.key());
+            if (!virtualScreenIds.contains(winScreen)) {
+                continue;
+            }
+            if (isWindowFloating(it.key())) {
+                continue;
+            }
+            PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(winScreen);
+            if (vsLayout && !allZonesExistInLayout(it.value(), vsLayout)) {
+                windowsToRemove.append(it.key());
+            }
+        }
+        bool lastUsedCleared = false;
+        for (const QString& wId : windowsToRemove) {
+            auto unResult = m_snapState->unassignWindow(wId);
+            lastUsedCleared |= unResult.lastUsedZoneCleared;
+            if (m_snapEngine) {
+                m_snapEngine->forgetWindow(wId);
+            }
+            m_snapState->clearPreFloatZone(wId);
+            m_windowStickyStates.remove(wId);
+            anyStateMigrated = true;
+        }
+        if (lastUsedCleared) {
+            markDirty(DirtyLastUsedZone);
+        }
+    }
+
     if (migrated > 0 || anyStateMigrated) {
         qCInfo(lcPlacement) << "Migrated" << migrated << "window screen assignments"
                             << "(plus auxiliary state)" << "from" << physicalScreenId << "to virtual screens";
