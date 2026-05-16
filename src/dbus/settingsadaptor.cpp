@@ -35,6 +35,7 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegi
     , m_shaderRegistry(shaderRegistry)
     , m_profileRegistry(profileRegistry)
     , m_saveTimer(new QTimer(this))
+    , m_motionTreeNotifyTimer(new QTimer(this))
 {
     Q_ASSERT(settings);
     initializeRegistry();
@@ -47,6 +48,11 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegi
         qCInfo(lcDbusSettings) << "Settings save completed";
     });
 
+    // Configure the debounced motion-profile-tree notifier (see member doc).
+    m_motionTreeNotifyTimer->setSingleShot(true);
+    m_motionTreeNotifyTimer->setInterval(MotionTreeNotifyDebounceMs);
+    connect(m_motionTreeNotifyTimer, &QTimer::timeout, this, &SettingsAdaptor::motionProfileTreeChanged);
+
     // Connect to interface signals (DIP)
     connect(m_settings, &ISettings::settingsChanged, this, &SettingsAdaptor::settingsChanged);
 
@@ -54,22 +60,29 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegi
     // settings-shaped state: editing a `window.open` duration rewrites
     // a `profiles/*.json` file, the daemon's ProfileLoader file-watch
     // rescans it into the registry, and the registry fires
-    // profileChanged / profilesReloaded. The kwin-effect (a separate
-    // process) must re-fetch `motionProfileTree` when that happens, so
-    // bridge the registry mutations to a DEDICATED `motionProfileTreeChanged`
-    // D-Bus signal — NOT the generic `settingsChanged`. The Settings app
-    // listens only to `settingsChanged`; routing registry mutations
-    // there made the daemon echo the app's own immediate profile-file
-    // writes back through onExternalSettingsChanged(), which reset its
-    // value-change / save-discard detection. The effect subscribes to
+    // profileChanged / profilesReloaded / ownerReloaded. The kwin-effect
+    // (a separate process) must re-fetch `motionProfileTree` when that
+    // happens, so bridge the registry mutations to a DEDICATED
+    // `motionProfileTreeChanged` D-Bus signal — NOT the generic
+    // `settingsChanged`. The Settings app listens only to
+    // `settingsChanged`; routing registry mutations there made the
+    // daemon echo the app's own immediate profile-file writes back
+    // through onExternalSettingsChanged(), which reset its value-change
+    // / save-discard detection. The effect subscribes to
     // `motionProfileTreeChanged` specifically; the app never sees it.
+    //
+    // The three registry signals feed the debounce timer rather than
+    // motionProfileTreeChanged directly: a reloadFromOwner() batch emits
+    // one profileChanged per path plus a closing ownerReloaded, so a
+    // direct bridge would fan one logical change out into N+1 D-Bus
+    // emissions. start() on a single-shot timer collapses the burst.
     if (m_profileRegistry) {
-        connect(m_profileRegistry, &PhosphorAnimation::PhosphorProfileRegistry::profileChanged, this,
-                &SettingsAdaptor::motionProfileTreeChanged);
-        connect(m_profileRegistry, &PhosphorAnimation::PhosphorProfileRegistry::profilesReloaded, this,
-                &SettingsAdaptor::motionProfileTreeChanged);
-        connect(m_profileRegistry, &PhosphorAnimation::PhosphorProfileRegistry::ownerReloaded, this,
-                &SettingsAdaptor::motionProfileTreeChanged);
+        connect(m_profileRegistry, &PhosphorAnimation::PhosphorProfileRegistry::profileChanged, m_motionTreeNotifyTimer,
+                qOverload<>(&QTimer::start));
+        connect(m_profileRegistry, &PhosphorAnimation::PhosphorProfileRegistry::profilesReloaded,
+                m_motionTreeNotifyTimer, qOverload<>(&QTimer::start));
+        connect(m_profileRegistry, &PhosphorAnimation::PhosphorProfileRegistry::ownerReloaded, m_motionTreeNotifyTimer,
+                qOverload<>(&QTimer::start));
     }
 
     // Drop shader caches whenever the registry reloads from disk. The
@@ -118,6 +131,11 @@ void SettingsAdaptor::detach()
     if (m_profileRegistry) {
         disconnect(m_profileRegistry, nullptr, this, nullptr);
     }
+    // Cancel any pending coalesced motion-tree notification — its inputs
+    // are severed above and the daemon is tearing down. Constructed in
+    // the initializer list and never nulled, so no null-check (same as
+    // m_saveTimer).
+    m_motionTreeNotifyTimer->stop();
     // Clear the registries before nulling m_settings so a queued D-Bus
     // call that slipped past unregisterObject() lands on an empty-getter
     // hash (returning an empty QVariant) instead of the registered

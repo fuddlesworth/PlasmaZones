@@ -235,7 +235,8 @@ Q_SIGNALS:
      * @brief Daemon → KWin effect: the per-event motion-profile tree changed.
      *
      * Emitted when the motion-profile registry mutates (a per-event
-     * `profiles/*.json` override was edited and the daemon rescanned it).
+     * `profiles/<path>.json` override was edited and the daemon
+     * rescanned it).
      * Deliberately separate from @ref settingsChanged: the Settings app
      * listens only to settingsChanged, so routing registry mutations
      * here keeps the app's value-change / save-discard detection from
@@ -299,6 +300,16 @@ private:
     // Debounced save timer (performance optimization)
     QTimer* m_saveTimer = nullptr;
     static constexpr int SaveDebounceMs = 500; // 500ms debounce
+
+    // Debounced motion-profile-tree change notifier. A single
+    // ProfileLoader rescan calls reloadFromOwner(), which emits one
+    // profileChanged per touched path plus a closing ownerReloaded —
+    // N+1 registry signals for one logical change. Without coalescing,
+    // each would emit motionProfileTreeChanged() and the kwin-effect
+    // would re-fetch + re-parse the whole tree N+1 times. This timer
+    // collapses the burst into a single emission.
+    QTimer* m_motionTreeNotifyTimer = nullptr;
+    static constexpr int MotionTreeNotifyDebounceMs = 50;
 
     // ═══════════════════════════════════════════════════════════════════════
     // ShaderRegistry caches

@@ -95,7 +95,9 @@ public:
     /// PhosphorProfileRegistry over D-Bus (`motionProfileTree`). Holds
     /// the per-event base durations (window.open, window.close, …) that
     /// `tryBeginShaderForEvent` resolves before applying the App Rule
-    /// timing cascade. Refreshed on every settingsChanged signal.
+    /// timing cascade. Refreshed on the dedicated `motionProfileTreeChanged`
+    /// D-Bus signal (live per-event edits) and on `settingsChanged` via
+    /// `loadCachedSettings()`.
     PhosphorAnimation::ProfileTree& motionProfileTree()
     {
         return m_motionProfileTree;
