@@ -3,16 +3,16 @@
 
 #include "autotileadaptor.h"
 
-#include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include <PhosphorTileEngine/AutotileEngine.h>
-#include <PhosphorTiles/TilingAlgorithm.h>
-
 #include "core/logging.h"
-#include <PhosphorScreens/Manager.h>
 
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>

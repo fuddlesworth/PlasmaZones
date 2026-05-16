@@ -30,7 +30,7 @@ function(ps_add_test _name)
     add_test(NAME ${_name} COMMAND ${_name})
     # Offscreen QPA so QTimer-based tests work without a display server.
     set_tests_properties(${_name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphorscreens.debug=false"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphor.screens.debug=false"
         LABELS "phosphorscreens"
     )
 endfunction()

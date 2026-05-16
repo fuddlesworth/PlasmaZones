@@ -2,23 +2,27 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "daemon.h"
+
 #include "../config/configdefaults.h"
-#include "../core/constants.h"
 #include "../config/configmigration.h"
+#include "../core/constants.h"
 #include "../core/logging.h"
-#include <PhosphorWayland/LayerShellPluginLoader.h>
-#include <PhosphorWayland/LayerSurface.h>
 #include "../core/translationloader.h"
-#include "version.h"
+#include "pz_i18n.h"
 #include "rendering/zoneshaderitem.h"
+#include "version.h"
 #include "vulkan_support.h"
+
 #include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <QGuiApplication>
+#include <PhosphorWayland/LayerShellPluginLoader.h>
+#include <PhosphorWayland/LayerSurface.h>
+
 #include <QCommandLineParser>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QFile>
+#include <QGuiApplication>
 #include <QIcon>
 #include <QLibrary>
 #include <QMutex>
@@ -26,9 +30,9 @@
 #include <QQuickWindow>
 #include <QThread>
 #include <QTimer>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtQml/qqml.h>
-#include "pz_i18n.h"
+#include <QtQml/qqmlextensionplugin.h>
+
 #include <cerrno>
 #include <cstdio>
 #include <cstring>

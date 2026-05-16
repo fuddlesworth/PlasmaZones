@@ -4,25 +4,28 @@
 #pragma once
 
 #include <phosphorplacement_export.h>
-#include <PhosphorPlacement/IGeometryResolver.h>
-#include <PhosphorPlacement/PlacementConfig.h>
+
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorPlacement/IGeometryResolver.h>
+#include <PhosphorPlacement/PlacementConfig.h>
 #include <PhosphorProtocol/WindowTypes.h>
 #include <PhosphorProtocol/ZoneTypes.h>
+#include <PhosphorScreens/ScreenIdentity.h>
+
+#include <QHash>
 #include <QObject>
+#include <QPointer>
+#include <QRect>
+#include <QSet>
 #include <QString>
 #include <QStringList>
-#include <QHash>
-#include <QSet>
-#include <QRect>
+
 #include <functional>
 #include <optional>
 #include <utility>
-#include <QPointer>
-#include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorEngine/PlacementEngineBase.h>
 
 namespace PhosphorZones {
 class IZoneDetector;

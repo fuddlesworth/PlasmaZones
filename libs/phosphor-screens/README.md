@@ -30,7 +30,7 @@ pure-compute consumers:
 
 | Type | Purpose |
 |------|---------|
-| `Phosphor::Screens::Manager`            | Physical + virtual topology state with change signals as screens come and go. |
+| `Phosphor::Screens::ScreenManager`      | Physical + virtual topology state with change signals as screens come and go. |
 | `Phosphor::Screens::Resolver`           | Point-to-screen lookup; accepts an optional D-Bus endpoint override. |
 | `Phosphor::Screens::IPanelSource`       | Pluggable panel-reservation source per desktop (Plasma, GNOME, wlr). |
 | `Phosphor::Screens::PlasmaPanelSource`  | Bundled `IPanelSource` for `org.kde.plasmashell` reservations. |
