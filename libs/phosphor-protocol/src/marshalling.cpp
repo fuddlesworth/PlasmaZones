@@ -366,21 +366,17 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, DragOutcome& o)
 
 void registerWireTypes()
 {
-    // IMPORTANT: register each type under BOTH its qualified and unqualified
-    // names. Q_DECLARE_METATYPE must be at global scope, so it registers under
-    // the fully-qualified name "PhosphorProtocol::Foo". The authoritative fix is
-    // to fully-qualify the type in every adaptor slot parameter declaration (see
-    // e.g. autotileadaptor.h) so moc records "PhosphorProtocol::Foo" and matches
-    // the qualified registration. This unqualified-alias registration is a
-    // defensive belt-and-suspenders so that a future adaptor written with
-    // unqualified slot parameters still works rather than crashing D-Bus
-    // dispatch at runtime (see dbus_adaptor_routing integration test for the
-    // failure mode — "Could not find slot ..." / "demarshalling function for
-    // type 'QString' failed" observed in production on 2026-04-10).
+    // Each type is registered under its fully-qualified name
+    // "PhosphorProtocol::Foo" — the name Q_DECLARE_METATYPE records at global
+    // scope, and the name moc records for every adaptor slot/signal parameter
+    // (all such declarations are fully qualified). The two agree, so D-Bus
+    // dispatch resolves the slot and its demarshaller without an unqualified
+    // alias. Keep adaptor type spellings fully qualified — an unqualified slot
+    // parameter would make moc record "Foo", which is not registered, and
+    // crash dispatch at runtime (see the dbus_adaptor_routing integration
+    // test for that failure mode).
 
-#define PZ_REGISTER_DBUS_TYPE(Type)                                                                                    \
-    qRegisterMetaType<Type>(#Type);                                                                                    \
-    qDBusRegisterMetaType<Type>()
+#define PZ_REGISTER_DBUS_TYPE(Type) qDBusRegisterMetaType<Type>()
 
     PZ_REGISTER_DBUS_TYPE(WindowGeometryEntry);
     PZ_REGISTER_DBUS_TYPE(WindowGeometryList);
