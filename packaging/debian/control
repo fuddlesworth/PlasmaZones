@@ -41,7 +41,7 @@ Architecture: any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
- kwin-common (>= 4:6.6.0),
+ kwin-common (= ${kwin:Version}),
  qt6-wayland (>= 6.6.0),
  libqt6shadertools6 (>= 6.6.0) | qt6-shadertools,
  libkf6kirigami-bin (>= 6.6.0) | kf6-kirigami | qml6-module-org-kde-kirigami,

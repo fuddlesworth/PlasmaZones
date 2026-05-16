@@ -74,8 +74,12 @@ BuildRequires:  kf6-kirigami-devel >= 6.6.0
 %endif
 
 # Plasma 6.6 / KWin 6.6 (effect API)
-# The KWin effect plugin links against libkwin; RPM auto-generates soname deps
-# for ABI safety. Patch releases (6.6.x) maintain ABI and IID compatibility.
+# The KWin effect plugin's IID embeds KWin's exact upstream version
+# (KWIN_PLUGIN_VERSION_STRING in /usr/include/kwin/config-kwin.h). KWin refuses
+# to load any effect whose IID doesn't match its own version string — even
+# across patch releases (e.g. 6.6.4 → 6.6.5). We capture the build-time KWin
+# version below and emit an exact Requires so this package fails to install on
+# systems with a mismatched KWin instead of installing silently broken.
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
 BuildRequires:  cmake(Qt6WaylandClient)
@@ -101,6 +105,12 @@ BuildRequires:  systemd-rpm-macros
 %endif
 %{?systemd_requires}
 
+# Build-time KWin upstream version (Fedora). kwin-devel is BuildRequired above,
+# so it is installed when this spec is parsed by rpmbuild. The query falls back
+# to a permissive minimum if kwin-devel is somehow absent, which only affects
+# local rebuilds — CI always has kwin-devel.
+%global kwin_version %(rpm -q --qf '%%{VERSION}' kwin-devel 2>/dev/null || echo 6.6.0)
+
 # Runtime dependencies — RPM auto-generates most from sonames;
 # explicit Requires ensure minimum versions on Fedora.
 %if !0%{?suse_version}
@@ -110,7 +120,8 @@ Requires:       qt6-qtshadertools
 Requires:       kf6-kirigami >= 6.6.0
 Requires:       kf6-kcmutils >= 6.6.0
 Requires:       qt6-qtwayland >= 6.6.0
-Requires:       kwin >= 6.6.0
+# Exact KWin patch pin — see note above the BuildRequires block.
+Requires:       kwin = %{kwin_version}
 %endif
 Requires:       hicolor-icon-theme
 
