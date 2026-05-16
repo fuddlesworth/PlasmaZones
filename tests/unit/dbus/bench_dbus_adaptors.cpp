@@ -58,7 +58,8 @@ private Q_SLOTS:
         // teardown. See test_settings_adaptor_batch.cpp for the same pattern.
         m_settings = new StubSettings(nullptr);
         m_parent = new QObject(nullptr);
-        m_settingsAdaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, m_parent);
+        m_settingsAdaptor =
+            new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, /*profileRegistry=*/nullptr, m_parent);
 
         m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
                                                             QStringLiteral("plasmazones/layouts"), m_parent);
