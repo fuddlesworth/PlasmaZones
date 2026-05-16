@@ -276,7 +276,7 @@ private Q_SLOTS:
 
         m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
 
-        WindowStateEntry state = m_wta->getWindowState(windowId);
+        PhosphorProtocol::WindowStateEntry state = m_wta->getWindowState(windowId);
         QCOMPARE(state.windowId, windowId);
         QCOMPARE(state.zoneId, m_zoneIds[0]);
         QCOMPARE(state.screenId, m_screenId);
@@ -291,7 +291,7 @@ private Q_SLOTS:
         m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
         m_wta->setWindowFloating(windowId, true);
 
-        WindowStateEntry state = m_wta->getWindowState(windowId);
+        PhosphorProtocol::WindowStateEntry state = m_wta->getWindowState(windowId);
         QCOMPARE(state.isFloating, true);
     }
 
@@ -299,7 +299,7 @@ private Q_SLOTS:
     {
         QString windowId = QStringLiteral("unknown|99999");
 
-        WindowStateEntry state = m_wta->getWindowState(windowId);
+        PhosphorProtocol::WindowStateEntry state = m_wta->getWindowState(windowId);
         QVERIFY(state.zoneId.isEmpty());
     }
 
@@ -315,7 +315,7 @@ private Q_SLOTS:
         m_snapEngine->commitSnap(window1, m_zoneIds[0], m_screenId);
         m_snapEngine->commitSnap(window2, m_zoneIds[1], m_screenId);
 
-        WindowStateList allStates = m_wta->getAllWindowStates();
+        PhosphorProtocol::WindowStateList allStates = m_wta->getAllWindowStates();
         QCOMPARE(allStates.size(), 2);
 
         // Collect all window IDs from the list
@@ -344,7 +344,7 @@ private Q_SLOTS:
         // Find the "snapped" emission
         bool foundSnapped = false;
         for (int i = 0; i < spy.count(); ++i) {
-            auto state = spy.at(i).at(1).value<WindowStateEntry>();
+            auto state = spy.at(i).at(1).value<PhosphorProtocol::WindowStateEntry>();
             if (state.changeType == QLatin1String("snapped")) {
                 QCOMPARE(spy.at(i).at(0).toString(), windowId);
                 foundSnapped = true;
@@ -368,7 +368,7 @@ private Q_SLOTS:
 
         bool foundUnsnapped = false;
         for (int i = 0; i < spy.count(); ++i) {
-            auto state = spy.at(i).at(1).value<WindowStateEntry>();
+            auto state = spy.at(i).at(1).value<PhosphorProtocol::WindowStateEntry>();
             if (state.changeType == QLatin1String("unsnapped")) {
                 QCOMPARE(spy.at(i).at(0).toString(), windowId);
                 foundUnsnapped = true;
@@ -392,7 +392,7 @@ private Q_SLOTS:
 
         bool foundFloated = false;
         for (int i = 0; i < spy.count(); ++i) {
-            auto state = spy.at(i).at(1).value<WindowStateEntry>();
+            auto state = spy.at(i).at(1).value<PhosphorProtocol::WindowStateEntry>();
             if (state.changeType == QLatin1String("floated")) {
                 QCOMPARE(spy.at(i).at(0).toString(), windowId);
                 foundFloated = true;

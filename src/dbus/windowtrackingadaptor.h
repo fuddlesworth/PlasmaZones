@@ -48,15 +48,6 @@ class VirtualDesktopManager;
 
 namespace PlasmaZones {
 
-using PhosphorProtocol::EmptyZoneList;
-using PhosphorProtocol::PreTileGeometryEntry;
-using PhosphorProtocol::PreTileGeometryList;
-using PhosphorProtocol::WindowGeometryEntry;
-using PhosphorProtocol::WindowGeometryList;
-using PhosphorProtocol::WindowStateEntry;
-using PhosphorProtocol::WindowStateList;
-using PhosphorProtocol::ZoneGeometryRect;
-
 class ScreenModeRouter;
 
 class PersistenceWorker;
@@ -303,7 +294,7 @@ public Q_SLOTS:
      * Get all pre-tile geometries as a typed list (for effect pre-population on restart).
      * Each entry carries appId, geometry rect, and the screen it was on.
      */
-    PlasmaZones::PreTileGeometryList getPreTileGeometries();
+    PhosphorProtocol::PreTileGeometryList getPreTileGeometries();
 
     /**
      * Clean up all tracking data for a closed window
@@ -398,9 +389,9 @@ public Q_SLOTS:
     /**
      * Get typed list of empty zones for Snap Assist continuation
      * @param screenId Screen ID (e.g. DP-1)
-     * @return EmptyZoneList of empty zone entries with overlay-local geometry
+     * @return PhosphorProtocol::EmptyZoneList of empty zone entries with overlay-local geometry
      */
-    PlasmaZones::EmptyZoneList getEmptyZones(const QString& screenId);
+    PhosphorProtocol::EmptyZoneList getEmptyZones(const QString& screenId);
 
     /**
      * Get the last zone a window was snapped to
@@ -417,7 +408,7 @@ public Q_SLOTS:
      * @return JSON array of objects: [{windowId, x, y, width, height}, ...]
      * @note Returns empty if keepWindowsInZonesOnResolutionChange is disabled
      */
-    PlasmaZones::WindowGeometryList getUpdatedWindowGeometries();
+    PhosphorProtocol::WindowGeometryList getUpdatedWindowGeometries();
 
     /**
      * @brief Pre-computed zone geometries for pending restore entries.
@@ -436,15 +427,15 @@ public Q_SLOTS:
     /**
      * @brief Get comprehensive state for a single window
      * @param windowId Window to query
-     * @return WindowStateEntry with windowId, zoneId, screenId, isFloating, changeType
+     * @return PhosphorProtocol::WindowStateEntry with windowId, zoneId, screenId, isFloating, changeType
      */
-    PlasmaZones::WindowStateEntry getWindowState(const QString& windowId);
+    PhosphorProtocol::WindowStateEntry getWindowState(const QString& windowId);
 
     /**
      * @brief Get state for all tracked windows (TUI dashboard)
-     * @return List of WindowStateEntry structs
+     * @return List of PhosphorProtocol::WindowStateEntry structs
      */
-    PlasmaZones::WindowStateList getAllWindowStates();
+    PhosphorProtocol::WindowStateList getAllWindowStates();
 
     /**
      * @brief Check if a window is temporarily floating (excluded from snapping)
@@ -482,17 +473,17 @@ public Q_SLOTS:
     /**
      * @brief Get geometry for a specific zone ID (uses primary screen)
      * @param zoneId PhosphorZones::Zone UUID string
-     * @return ZoneGeometryRect with x, y, width, height (all zero if not found)
+     * @return PhosphorProtocol::ZoneGeometryRect with x, y, width, height (all zero if not found)
      */
-    PlasmaZones::ZoneGeometryRect getZoneGeometry(const QString& zoneId);
+    PhosphorProtocol::ZoneGeometryRect getZoneGeometry(const QString& zoneId);
 
     /**
      * @brief Get geometry for a specific zone ID on a specific screen
      * @param zoneId PhosphorZones::Zone UUID string
      * @param screenId Screen ID (empty = primary screen)
-     * @return ZoneGeometryRect with x, y, width, height (all zero if not found)
+     * @return PhosphorProtocol::ZoneGeometryRect with x, y, width, height (all zero if not found)
      */
-    PlasmaZones::ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
+    PhosphorProtocol::ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
 
     /// Internal: returns QRect directly (avoids JSON round-trip for daemon-internal callers)
     QRect zoneGeometryRect(const QString& zoneId, const QString& screenId);
@@ -595,10 +586,10 @@ Q_SIGNALS:
     /**
      * @brief Unified window state change stream
      * @param windowId Window whose state changed
-     * @param state WindowStateEntry with windowId, zoneId, screenId, isFloating, changeType
+     * @param state PhosphorProtocol::WindowStateEntry with windowId, zoneId, screenId, isFloating, changeType
      *        changeType: "snapped", "unsnapped", "floated", "unfloated", "screen_changed"
      */
-    void windowStateChanged(const QString& windowId, const PlasmaZones::WindowStateEntry& state);
+    void windowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state);
 
     /**
      * @brief Emitted when pending window restores become available
@@ -682,7 +673,7 @@ Q_SIGNALS:
      * @note Daemon handles windowSnapped bookkeeping internally before emitting.
      *       Effect just applies geometry with stagger — no windowsSnappedBatch callback.
      */
-    void applyGeometriesBatch(const PlasmaZones::WindowGeometryList& geometries, const QString& action);
+    void applyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
 
     /**
      * @brief Daemon requests KWin to raise windows in order (z-order restoration)

@@ -17,12 +17,6 @@ class LayoutRegistry;
 
 namespace PhosphorSnapEngine {
 
-using PhosphorProtocol::CycleTargetResult;
-using PhosphorProtocol::FocusTargetResult;
-using PhosphorProtocol::MoveTargetResult;
-using PhosphorProtocol::RestoreTargetResult;
-using PhosphorProtocol::SwapTargetResult;
-
 class ISettings;
 class IZoneAdjacencyResolver;
 
@@ -50,7 +44,7 @@ class IZoneAdjacencyResolver;
  * This class is deliberately not a QObject — it needs no signals of
  * its own, and the absence of QObject machinery makes it trivially
  * constructable for unit tests. The single dependency on Qt is the
- * shared result-struct types (MoveTargetResult etc. from PhosphorProtocol/NavigationTypes.h).
+ * shared result-struct types (PhosphorProtocol::MoveTargetResult etc. from PhosphorProtocol/NavigationTypes.h).
  *
  * All methods are intended to be called only for screens that the
  * router (ScreenModeRouter) has confirmed are in Snapping mode. The
@@ -84,20 +78,24 @@ public:
     /// it becomes available.
     void setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver);
 
-    MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction, const QString& screenId);
+    PhosphorProtocol::MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction,
+                                                              const QString& screenId);
 
-    FocusTargetResult getFocusTargetForWindow(const QString& windowId, const QString& direction,
-                                              const QString& screenId);
+    PhosphorProtocol::FocusTargetResult getFocusTargetForWindow(const QString& windowId, const QString& direction,
+                                                                const QString& screenId);
 
-    RestoreTargetResult getRestoreForWindow(const QString& windowId, const QString& screenId);
+    PhosphorProtocol::RestoreTargetResult getRestoreForWindow(const QString& windowId, const QString& screenId);
 
-    CycleTargetResult getCycleTargetForWindow(const QString& windowId, bool forward, const QString& screenId);
+    PhosphorProtocol::CycleTargetResult getCycleTargetForWindow(const QString& windowId, bool forward,
+                                                                const QString& screenId);
 
-    SwapTargetResult getSwapTargetForWindow(const QString& windowId, const QString& direction, const QString& screenId);
+    PhosphorProtocol::SwapTargetResult getSwapTargetForWindow(const QString& windowId, const QString& direction,
+                                                              const QString& screenId);
 
-    MoveTargetResult getPushTargetForWindow(const QString& windowId, const QString& screenId);
+    PhosphorProtocol::MoveTargetResult getPushTargetForWindow(const QString& windowId, const QString& screenId);
 
-    MoveTargetResult getSnapToZoneByNumberTarget(const QString& windowId, int zoneNumber, const QString& screenId);
+    PhosphorProtocol::MoveTargetResult getSnapToZoneByNumberTarget(const QString& windowId, int zoneNumber,
+                                                                   const QString& screenId);
 
 private:
     /// Single emission point so call sites don't have to null-check the

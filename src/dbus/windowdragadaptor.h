@@ -38,11 +38,6 @@ class IPlacementEngine;
 
 namespace PlasmaZones {
 
-using PhosphorProtocol::DragBypassReason;
-using PhosphorProtocol::DragOutcome;
-using PhosphorProtocol::DragPolicy;
-using PhosphorProtocol::EmptyZoneList;
-
 class IOverlayService;
 
 class ISettings;
@@ -156,7 +151,7 @@ public Q_SLOTS:
      *
      * Replaces dragStarted as the canonical drag-begin entry point. Compositor
      * plugin calls this synchronously at drag start and uses the returned
-     * DragPolicy to decide whether to stream cursor updates, grab keyboard,
+     * PhosphorProtocol::DragPolicy to decide whether to stream cursor updates, grab keyboard,
      * apply an immediate float transition (autotile), etc. Single source of
      * truth replaces the effect-side m_dragBypassedForAutotile cache that
      * went stale after every settings reload.
@@ -168,14 +163,14 @@ public Q_SLOTS:
      * updateDragCursor / endDrag calls match.
      *
      */
-    PlasmaZones::DragPolicy beginDrag(const QString& windowId, int frameX, int frameY, int frameWidth, int frameHeight,
-                                      const QString& startScreenId, int mouseButtons);
+    PhosphorProtocol::DragPolicy beginDrag(const QString& windowId, int frameX, int frameY, int frameWidth,
+                                           int frameHeight, const QString& startScreenId, int mouseButtons);
 
     /**
      * End a drag session — daemon-authoritative action.
      *
      * Replaces dragStopped as the canonical drag-end entry point. Returns a
-     * DragOutcome that the compositor plugin applies verbatim — no further
+     * PhosphorProtocol::DragOutcome that the compositor plugin applies verbatim — no further
      * decisions on the plugin side. Covers the full dispatch matrix:
      *
      *   - autotile_screen bypass → ApplyFloat at the release cursor
@@ -187,8 +182,8 @@ public Q_SLOTS:
      * Must be called after beginDrag for the same windowId. If beginDrag
      * was never called (or the ids mismatch), returns NoOp.
      */
-    PlasmaZones::DragOutcome endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons,
-                                     bool cancelled);
+    PhosphorProtocol::DragOutcome endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers,
+                                          int mouseButtons, bool cancelled);
 
     /**
      * Update drag cursor position — fire-and-forget counterpart to
@@ -255,7 +250,7 @@ Q_SIGNALS:
      * Replaces the effect-side cross-VS flip logic that used a local cache
      * and could go stale after settings reloads.
      */
-    void dragPolicyChanged(const QString& windowId, const PlasmaZones::DragPolicy& newPolicy);
+    void dragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy);
 
     /**
      * Emitted asynchronously after endDrag returns, when the drop requested
@@ -264,7 +259,7 @@ Q_SIGNALS:
      * reply path. The effect discards this if a new drag has already started.
      */
     void snapAssistReady(const QString& windowId, const QString& releaseScreenId,
-                         const PlasmaZones::EmptyZoneList& emptyZones);
+                         const PhosphorProtocol::EmptyZoneList& emptyZones);
 
 private:
     // Tolerance constants for geometry matching (fallback detection)
@@ -308,7 +303,7 @@ private:
     void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
                      int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
                      QString& releaseScreenIdOut, bool& restoreSizeOnly, bool& snapAssistRequested,
-                     PlasmaZones::EmptyZoneList& emptyZonesOut, QString& resolvedZoneIdOut);
+                     PhosphorProtocol::EmptyZoneList& emptyZonesOut, QString& resolvedZoneIdOut);
 
     // Promote the pending snap-path drag (stashed by beginDrag) to an
     // active drag by running the legacy dragStarted setup. Called from
@@ -344,10 +339,10 @@ public:
      * @param curDesktop Current virtual desktop (for context-disabled check)
      * @param curActivity Current activity (for context-disabled check)
      */
-    static PlasmaZones::DragPolicy computeDragPolicy(const ISettings* settings,
-                                                     const PhosphorEngine::IPlacementEngine* autotileEngine,
-                                                     const QString& windowId, const QString& screenId, int curDesktop,
-                                                     const QString& curActivity);
+    static PhosphorProtocol::DragPolicy computeDragPolicy(const ISettings* settings,
+                                                          const PhosphorEngine::IPlacementEngine* autotileEngine,
+                                                          const QString& windowId, const QString& screenId,
+                                                          int curDesktop, const QString& curActivity);
 
 private:
     // Helper: Find screen containing a point (returns primary screen if not found)
@@ -413,9 +408,9 @@ private:
     // comparator in updateDragCursor re-emit dragPolicyChanged on any
     // policy-relevant field change, including same-bypass-reason
     // variations like autotile→autotile cross-VS or (future) per-screen
-    // snap-behavior differences. operator== on DragPolicy is a defaulted
+    // snap-behavior differences. operator== on PhosphorProtocol::DragPolicy is a defaulted
     // structural compare, so new fields are picked up automatically.
-    DragPolicy m_currentDragPolicy;
+    PhosphorProtocol::DragPolicy m_currentDragPolicy;
     QRect m_originalGeometry;
 
     // Pending snap-path drag awaiting first activation. Populated by

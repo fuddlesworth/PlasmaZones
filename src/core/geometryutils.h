@@ -29,9 +29,6 @@ class ScreenManager;
 
 namespace PlasmaZones {
 
-using PhosphorProtocol::EmptyZoneEntry;
-using PhosphorProtocol::EmptyZoneList;
-
 class ISettings;
 
 /**
@@ -123,14 +120,14 @@ using ::PhosphorZones::GeometryUtils::setZoneGeometry;
  * @param screen Screen to calculate geometry for
  * @param settings Settings for zone padding/outer gap
  * @param isZoneEmpty Predicate: returns true if zone has no windows
- * @return EmptyZoneList of empty zone entries with overlay-local geometry
+ * @return PhosphorProtocol::EmptyZoneList of empty zone entries with overlay-local geometry
  *
  * Used by PhosphorPlacement::WindowTrackingService::getEmptyZones and WindowDragAdaptor::dragStopped
  * to avoid duplicating the empty-zones building logic.
  */
-PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr,
-                                                    PhosphorZones::Layout* layout, QScreen* screen, ISettings* settings,
-                                                    const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
+PLASMAZONES_EXPORT PhosphorProtocol::EmptyZoneList
+buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout, QScreen* screen,
+                   ISettings* settings, const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
 
 /**
  * @brief Build typed list of empty zones using explicit screen ID (virtual-screen-aware)
@@ -138,10 +135,10 @@ PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenMan
  * Uses Phosphor::Screens::ScreenManager to resolve virtual screen geometry when available, falling back
  * to the physical QScreen* geometry.
  */
-PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr,
-                                                    PhosphorZones::Layout* layout, const QString& screenId,
-                                                    QScreen* physScreen, ISettings* settings,
-                                                    const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
+PLASMAZONES_EXPORT PhosphorProtocol::EmptyZoneList
+buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout, const QString& screenId,
+                   QScreen* physScreen, ISettings* settings,
+                   const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
 
 using ::PhosphorGeometry::enforceMinSizes;
 using ::PhosphorGeometry::removeRectOverlaps;

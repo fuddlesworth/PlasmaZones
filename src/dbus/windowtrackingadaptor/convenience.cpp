@@ -13,14 +13,14 @@
 
 namespace PlasmaZones {
 
-WindowStateEntry WindowTrackingAdaptor::getWindowState(const QString& windowId)
+PhosphorProtocol::WindowStateEntry WindowTrackingAdaptor::getWindowState(const QString& windowId)
 {
     if (windowId.isEmpty()) {
         qCWarning(lcDbusWindow) << "getWindowState: empty window ID";
-        return WindowStateEntry{};
+        return PhosphorProtocol::WindowStateEntry{};
     }
 
-    return WindowStateEntry{
+    return PhosphorProtocol::WindowStateEntry{
         windowId,
         m_service->zoneForWindow(windowId),
         m_service->screenAssignments().value(windowId),
@@ -31,9 +31,9 @@ WindowStateEntry WindowTrackingAdaptor::getWindowState(const QString& windowId)
     };
 }
 
-WindowStateList WindowTrackingAdaptor::getAllWindowStates()
+PhosphorProtocol::WindowStateList WindowTrackingAdaptor::getAllWindowStates()
 {
-    WindowStateList result;
+    PhosphorProtocol::WindowStateList result;
 
     // Collect all tracked windows: snapped + floating
     QSet<QString> allWindowIds;
@@ -52,7 +52,7 @@ WindowStateList WindowTrackingAdaptor::getAllWindowStates()
 
     // Build state for each window
     for (const QString& windowId : std::as_const(allWindowIds)) {
-        result.append(WindowStateEntry{
+        result.append(PhosphorProtocol::WindowStateEntry{
             windowId,
             m_service->zoneForWindow(windowId),
             m_service->screenAssignments().value(windowId),

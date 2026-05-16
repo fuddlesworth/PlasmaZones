@@ -24,10 +24,6 @@ class IZoneDetector;
 
 namespace PlasmaZones {
 
-using PhosphorProtocol::EmptyZoneEntry;
-using PhosphorProtocol::EmptyZoneList;
-using PhosphorProtocol::SnapAssistCandidateList;
-
 class IOverlayService;
 class ISettings;
 
@@ -86,8 +82,8 @@ public Q_SLOTS:
     void hideShaderPreview();
 
     // Snap Assist overlay (window picker after snapping)
-    bool showSnapAssist(const QString& screenId, const PlasmaZones::EmptyZoneList& emptyZones,
-                        const PlasmaZones::SnapAssistCandidateList& candidates);
+    bool showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
+                        const PhosphorProtocol::SnapAssistCandidateList& candidates);
     void hideSnapAssist();
     bool isSnapAssistVisible();
     bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height, const QByteArray& pixels);
@@ -95,8 +91,8 @@ public Q_SLOTS:
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);
     void zoneHighlightChanged(const QString& zoneId);
-    void snapAssistShown(const QString& screenId, const PlasmaZones::EmptyZoneList& emptyZones,
-                         const PlasmaZones::SnapAssistCandidateList& candidates);
+    void snapAssistShown(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
+                         const PhosphorProtocol::SnapAssistCandidateList& candidates);
     /**
      * @brief Emitted when the Snap Assist overlay closes.
      *

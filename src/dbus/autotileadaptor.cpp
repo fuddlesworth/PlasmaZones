@@ -203,7 +203,7 @@ int AutotileAdaptor::pendingWindowOpensCount() const
     return m_pendingOpens.size();
 }
 
-void AutotileAdaptor::dispatchWindowOpened(const WindowOpenedEntry& entry)
+void AutotileAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEntry& entry)
 {
     if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
         return;
@@ -245,7 +245,7 @@ void AutotileAdaptor::flushPendingWindowOpens()
     // Move-then-clear so any re-entrant dispatchWindowOpened → slot callback → new
     // deferral (unlikely post-ready, but defensive) queues into a fresh list rather
     // than mutating the one we're iterating.
-    const WindowOpenedList toFlush = std::move(m_pendingOpens);
+    const PhosphorProtocol::WindowOpenedList toFlush = std::move(m_pendingOpens);
     m_pendingOpens.clear();
     qCInfo(lcDbusAutotile) << "flushPendingWindowOpens: processing" << toFlush.size()
                            << "deferred windows after panel geometry became ready";
@@ -273,7 +273,7 @@ void AutotileAdaptor::windowOpened(const QString& windowId, const QString& scree
     // is empty until the sensor windows and Plasma D-Bus panel query finish), and
     // the daemon would emit a visible correction a frame later. Flushing happens in
     // flushPendingWindowOpens() when panelGeometryReady fires.
-    WindowOpenedEntry entry{windowId, screenId, minWidth, minHeight};
+    PhosphorProtocol::WindowOpenedEntry entry{windowId, screenId, minWidth, minHeight};
     if (deferUntilPanelReady()) {
         qCInfo(lcDbusAutotile) << "windowOpened: deferring" << windowId
                                << "until panel geometry ready (queue size=" << (m_pendingOpens.size() + 1) << ")";
@@ -285,7 +285,7 @@ void AutotileAdaptor::windowOpened(const QString& windowId, const QString& scree
     dispatchWindowOpened(entry);
 }
 
-void AutotileAdaptor::windowsOpenedBatch(const WindowOpenedList& entries)
+void AutotileAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList& entries)
 {
     if (!ensureEngine("windowsOpenedBatch")) {
         return;
@@ -368,7 +368,7 @@ QStringList AutotileAdaptor::availableAlgorithms()
     return m_algorithmRegistry->availableAlgorithms();
 }
 
-AlgorithmInfoEntry AutotileAdaptor::algorithmInfo(const QString& algorithmId)
+PhosphorProtocol::AlgorithmInfoEntry AutotileAdaptor::algorithmInfo(const QString& algorithmId)
 {
     PhosphorTiles::TilingAlgorithm* algo = m_algorithmRegistry->algorithm(algorithmId);
     if (!algo) {
@@ -376,7 +376,7 @@ AlgorithmInfoEntry AutotileAdaptor::algorithmInfo(const QString& algorithmId)
         return {};
     }
 
-    AlgorithmInfoEntry entry;
+    PhosphorProtocol::AlgorithmInfoEntry entry;
     entry.id = algorithmId; // Validated by successful lookup above
     entry.name = algo->name();
     entry.description = algo->description();
@@ -411,10 +411,10 @@ void AutotileAdaptor::onWindowsTiled(const QString& tileRequestsJson)
         return;
     }
 
-    TileRequestList requests;
+    PhosphorProtocol::TileRequestList requests;
     for (const QJsonValue& val : doc.array()) {
         QJsonObject obj = val.toObject();
-        TileRequestEntry entry;
+        PhosphorProtocol::TileRequestEntry entry;
         entry.windowId = obj.value(QLatin1String("windowId")).toString();
         entry.floating = obj.value(QLatin1String("floating")).toBool(false);
         if (!entry.floating) {

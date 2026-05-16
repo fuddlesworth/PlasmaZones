@@ -16,19 +16,18 @@
 
 namespace PhosphorCompositor {
 
-using namespace PhosphorProtocol;
-
 DaemonClient::DaemonClient(QObject* parent)
     : QObject(parent)
 {
     m_serviceWatcher = new QDBusServiceWatcher(
-        Service::Name, QDBusConnection::sessionBus(),
+        PhosphorProtocol::Service::Name, QDBusConnection::sessionBus(),
         QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration, this);
 
     connect(m_serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, &DaemonClient::onServiceRegistered);
     connect(m_serviceWatcher, &QDBusServiceWatcher::serviceUnregistered, this, &DaemonClient::onServiceUnregistered);
 
-    QDBusConnection::sessionBus().connect(Service::Name, Service::ObjectPath, Service::Interface::LayoutRegistry,
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::LayoutRegistry,
                                           QStringLiteral("daemonReady"), this, SLOT(onDaemonReadySignal()));
 }
 
@@ -49,7 +48,8 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
     m_registrationInFlight = true;
 
     QDBusMessage msg = QDBusMessage::createMethodCall(
-        Service::Name, Service::ObjectPath, Service::Interface::CompositorBridge, QStringLiteral("registerBridge"));
+        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+        PhosphorProtocol::Service::Interface::CompositorBridge, QStringLiteral("registerBridge"));
     msg << compositorId << apiVersion << capabilities;
 
     auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
@@ -88,25 +88,27 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
 
 void DaemonClient::notifyWindowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
-    ClientHelpers::sendOneWay(Service::Interface::Autotile, QStringLiteral("windowOpened"),
-                              {windowId, screenId, minWidth, minHeight});
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Autotile,
+                                                QStringLiteral("windowOpened"),
+                                                {windowId, screenId, minWidth, minHeight});
 }
 
 void DaemonClient::notifyWindowOpenedBatch(const PhosphorProtocol::WindowOpenedList& windows)
 {
-    ClientHelpers::sendOneWay(Service::Interface::Autotile, QStringLiteral("windowsOpenedBatch"),
-                              {QVariant::fromValue(windows)});
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Autotile,
+                                                QStringLiteral("windowsOpenedBatch"), {QVariant::fromValue(windows)});
 }
 
 void DaemonClient::notifyWindowClosed(const QString& windowId)
 {
-    ClientHelpers::sendOneWay(Service::Interface::Autotile, QStringLiteral("windowClosed"), {windowId});
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Autotile,
+                                                QStringLiteral("windowClosed"), {windowId});
 }
 
 void DaemonClient::notifyWindowActivated(const QString& windowId, const QString& screenId)
 {
-    ClientHelpers::sendOneWay(Service::Interface::WindowTracking, QStringLiteral("windowActivated"),
-                              {windowId, screenId});
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                QStringLiteral("windowActivated"), {windowId, screenId});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -115,20 +117,21 @@ void DaemonClient::notifyWindowActivated(const QString& windowId, const QString&
 
 void DaemonClient::dragStarted(const QString& windowId, const QString& screenId, const QRect& geometry)
 {
-    ClientHelpers::sendOneWay(Service::Interface::WindowDrag, QStringLiteral("dragStarted"),
-                              {windowId, screenId, geometry.x(), geometry.y(), geometry.width(), geometry.height()});
+    PhosphorProtocol::ClientHelpers::sendOneWay(
+        PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("dragStarted"),
+        {windowId, screenId, geometry.x(), geometry.y(), geometry.width(), geometry.height()});
 }
 
 void DaemonClient::dragMoved(const QString& windowId, int cursorX, int cursorY)
 {
-    ClientHelpers::sendOneWay(Service::Interface::WindowDrag, QStringLiteral("dragMoved"),
-                              {windowId, cursorX, cursorY});
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
+                                                QStringLiteral("dragMoved"), {windowId, cursorX, cursorY});
 }
 
 void DaemonClient::dragStopped(const QString& windowId, const QString& screenId, const QString& zoneId)
 {
-    ClientHelpers::sendOneWay(Service::Interface::WindowDrag, QStringLiteral("dragStopped"),
-                              {windowId, screenId, zoneId});
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
+                                                QStringLiteral("dragStopped"), {windowId, screenId, zoneId});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -137,12 +140,14 @@ void DaemonClient::dragStopped(const QString& windowId, const QString& screenId,
 
 void DaemonClient::notifyCursorScreenChanged(const QString& screenId)
 {
-    ClientHelpers::sendOneWay(Service::Interface::WindowTracking, QStringLiteral("cursorScreenChanged"), {screenId});
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                QStringLiteral("cursorScreenChanged"), {screenId});
 }
 
 void DaemonClient::notifyPrimaryScreen(const QString& screenName)
 {
-    ClientHelpers::sendOneWay(Service::Interface::Screen, QStringLiteral("setPrimaryScreenFromKWin"), {screenName});
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Screen,
+                                                QStringLiteral("setPrimaryScreenFromKWin"), {screenName});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -152,7 +157,9 @@ void DaemonClient::notifyPrimaryScreen(const QString& screenName)
 void DaemonClient::queryFloatingWindows()
 {
     auto* watcher = new QDBusPendingCallWatcher(
-        ClientHelpers::asyncCall(Service::Interface::WindowTracking, QStringLiteral("getFloatingWindows")), this);
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("getFloatingWindows")),
+        this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         if (w->isError())
@@ -167,7 +174,9 @@ void DaemonClient::queryFloatingWindows()
 void DaemonClient::querySnappedWindows()
 {
     auto* watcher = new QDBusPendingCallWatcher(
-        ClientHelpers::asyncCall(Service::Interface::WindowTracking, QStringLiteral("getSnappedWindows")), this);
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("getSnappedWindows")),
+        this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         if (w->isError())
@@ -182,7 +191,8 @@ void DaemonClient::querySnappedWindows()
 void DaemonClient::queryPendingRestoreGeometries()
 {
     auto* watcher = new QDBusPendingCallWatcher(
-        ClientHelpers::asyncCall(Service::Interface::WindowTracking, QStringLiteral("getPendingRestoreGeometries")),
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("getPendingRestoreGeometries")),
         this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
@@ -198,7 +208,9 @@ void DaemonClient::queryPendingRestoreGeometries()
 void DaemonClient::queryVirtualScreens(const QString& screenId)
 {
     auto* watcher = new QDBusPendingCallWatcher(
-        ClientHelpers::asyncCall(Service::Interface::Screen, QStringLiteral("getVirtualScreens"), {screenId}), this);
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Screen,
+                                                   QStringLiteral("getVirtualScreens"), {screenId}),
+        this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, screenId](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         if (w->isError())
@@ -212,7 +224,8 @@ void DaemonClient::queryVirtualScreens(const QString& screenId)
 
 void DaemonClient::pruneStaleWindows(const QStringList& liveWindowIds)
 {
-    ClientHelpers::sendOneWay(Service::Interface::WindowTracking, QStringLiteral("pruneStaleWindows"), {liveWindowIds});
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                QStringLiteral("pruneStaleWindows"), {liveWindowIds});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -227,9 +240,11 @@ void DaemonClient::onDaemonReadySignal()
 void DaemonClient::onServiceRegistered()
 {
     // Daemon process appeared — wait for daemonReady signal before registering
-    QDBusConnection::sessionBus().disconnect(Service::Name, Service::ObjectPath, Service::Interface::LayoutRegistry,
+    QDBusConnection::sessionBus().disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                             PhosphorProtocol::Service::Interface::LayoutRegistry,
                                              QStringLiteral("daemonReady"), this, SLOT(onDaemonReadySignal()));
-    QDBusConnection::sessionBus().connect(Service::Name, Service::ObjectPath, Service::Interface::LayoutRegistry,
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::LayoutRegistry,
                                           QStringLiteral("daemonReady"), this, SLOT(onDaemonReadySignal()));
 }
 
@@ -250,96 +265,117 @@ void DaemonClient::connectDaemonSignals()
 {
     auto bus = QDBusConnection::sessionBus();
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                QStringLiteral("applyGeometryRequested"), this,
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("applyGeometryRequested"), this,
                 SLOT(handleApplyGeometry(QString, int, int, int, int, QString, QString, bool)));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                QStringLiteral("applyGeometriesBatch"), this,
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("applyGeometriesBatch"), this,
                 SLOT(handleApplyGeometriesBatch(PhosphorProtocol::WindowGeometryList, QString)));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                QStringLiteral("raiseWindowsRequested"), this, SLOT(handleRaiseWindows(QStringList)));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("raiseWindowsRequested"), this,
+                SLOT(handleRaiseWindows(QStringList)));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                QStringLiteral("activateWindowRequested"), this, SLOT(handleActivateWindow(QString)));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("activateWindowRequested"), this,
+                SLOT(handleActivateWindow(QString)));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                QStringLiteral("windowFloatingChanged"), this,
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowFloatingChanged"), this,
                 SLOT(handleWindowFloatingChanged(QString, bool, QString)));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                QStringLiteral("pendingRestoresAvailable"), this, SIGNAL(pendingRestoresAvailable()));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("pendingRestoresAvailable"), this,
+                SIGNAL(pendingRestoresAvailable()));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowTracking,
                 QStringLiteral("reapplyWindowGeometriesRequested"), this, SIGNAL(reapplyGeometriesRequested()));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowDrag, QStringLiteral("dragPolicyChanged"),
-                this, SLOT(handleDragPolicyChanged(QString, int)));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("dragPolicyChanged"), this,
+                SLOT(handleDragPolicyChanged(QString, int)));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowDrag, QStringLiteral("snapAssistReady"),
-                this, SLOT(handleSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("snapAssistReady"), this,
+                SLOT(handleSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowDrag,
-                QStringLiteral("restoreSizeDuringDragChanged"), this,
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("restoreSizeDuringDragChanged"), this,
                 SLOT(handleRestoreSizeDuringDrag(QString, int, int)));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowTracking,
                 QStringLiteral("moveSpecificWindowToZoneRequested"), this,
                 SLOT(handleMoveWindowToZone(QString, QString, int, int, int, int)));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                QStringLiteral("snapAllWindowsRequested"), this, SLOT(handleSnapAllWindows(QString)));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("snapAllWindowsRequested"), this,
+                SLOT(handleSnapAllWindows(QString)));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::Settings, QStringLiteral("settingsChanged"),
-                this, SIGNAL(settingsChanged()));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Settings, QStringLiteral("settingsChanged"), this,
+                SIGNAL(settingsChanged()));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::Screen, QStringLiteral("virtualScreensChanged"),
-                this, SIGNAL(virtualScreensChanged(QString)));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Screen, QStringLiteral("virtualScreensChanged"), this,
+                SIGNAL(virtualScreensChanged(QString)));
 
-    bus.connect(Service::Name, Service::ObjectPath, Service::Interface::Settings,
-                QStringLiteral("runningWindowsRequested"), this, SIGNAL(runningWindowsRequested()));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Settings, QStringLiteral("runningWindowsRequested"), this,
+                SIGNAL(runningWindowsRequested()));
 }
 
 void DaemonClient::disconnectDaemonSignals()
 {
     auto bus = QDBusConnection::sessionBus();
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                   QStringLiteral("applyGeometryRequested"), this,
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("applyGeometryRequested"), this,
                    SLOT(handleApplyGeometry(QString, int, int, int, int, QString, QString, bool)));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                   QStringLiteral("applyGeometriesBatch"), this,
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("applyGeometriesBatch"), this,
                    SLOT(handleApplyGeometriesBatch(PhosphorProtocol::WindowGeometryList, QString)));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                   QStringLiteral("raiseWindowsRequested"), this, SLOT(handleRaiseWindows(QStringList)));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                   QStringLiteral("activateWindowRequested"), this, SLOT(handleActivateWindow(QString)));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                   QStringLiteral("windowFloatingChanged"), this,
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("raiseWindowsRequested"), this,
+                   SLOT(handleRaiseWindows(QStringList)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("activateWindowRequested"),
+                   this, SLOT(handleActivateWindow(QString)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowFloatingChanged"), this,
                    SLOT(handleWindowFloatingChanged(QString, bool, QString)));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                   QStringLiteral("pendingRestoresAvailable"), this, SIGNAL(pendingRestoresAvailable()));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("pendingRestoresAvailable"),
+                   this, SIGNAL(pendingRestoresAvailable()));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::WindowTracking,
                    QStringLiteral("reapplyWindowGeometriesRequested"), this, SIGNAL(reapplyGeometriesRequested()));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowDrag,
-                   QStringLiteral("dragPolicyChanged"), this, SLOT(handleDragPolicyChanged(QString, int)));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowDrag,
-                   QStringLiteral("snapAssistReady"), this,
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("dragPolicyChanged"), this,
+                   SLOT(handleDragPolicyChanged(QString, int)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("snapAssistReady"), this,
                    SLOT(handleSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowDrag,
-                   QStringLiteral("restoreSizeDuringDragChanged"), this,
-                   SLOT(handleRestoreSizeDuringDrag(QString, int, int)));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("restoreSizeDuringDragChanged"),
+                   this, SLOT(handleRestoreSizeDuringDrag(QString, int, int)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::WindowTracking,
                    QStringLiteral("moveSpecificWindowToZoneRequested"), this,
                    SLOT(handleMoveWindowToZone(QString, QString, int, int, int, int)));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::WindowTracking,
-                   QStringLiteral("snapAllWindowsRequested"), this, SLOT(handleSnapAllWindows(QString)));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::Settings, QStringLiteral("settingsChanged"),
-                   this, SIGNAL(settingsChanged()));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::Screen,
-                   QStringLiteral("virtualScreensChanged"), this, SIGNAL(virtualScreensChanged(QString)));
-    bus.disconnect(Service::Name, Service::ObjectPath, Service::Interface::Settings,
-                   QStringLiteral("runningWindowsRequested"), this, SIGNAL(runningWindowsRequested()));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("snapAllWindowsRequested"),
+                   this, SLOT(handleSnapAllWindows(QString)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Settings, QStringLiteral("settingsChanged"), this,
+                   SIGNAL(settingsChanged()));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Screen, QStringLiteral("virtualScreensChanged"), this,
+                   SIGNAL(virtualScreensChanged(QString)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Settings, QStringLiteral("runningWindowsRequested"), this,
+                   SIGNAL(runningWindowsRequested()));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -434,7 +470,9 @@ void DaemonClient::handleSnapAssistReady(const QString& windowId, const QString&
 void DaemonClient::querySetting(const QString& key)
 {
     auto* watcher = new QDBusPendingCallWatcher(
-        ClientHelpers::asyncCall(Service::Interface::Settings, QStringLiteral("getSetting"), {key}), this);
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Settings,
+                                                   QStringLiteral("getSetting"), {key}),
+        this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, key](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         if (w->isError())
@@ -448,9 +486,9 @@ void DaemonClient::querySetting(const QString& key)
 
 void DaemonClient::probeDaemonAvailable(int timeoutMs)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath,
-                                                      QStringLiteral("org.freedesktop.DBus.Introspectable"),
-                                                      QStringLiteral("Introspect"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+        QStringLiteral("org.freedesktop.DBus.Introspectable"), QStringLiteral("Introspect"));
     auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg, timeoutMs), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();

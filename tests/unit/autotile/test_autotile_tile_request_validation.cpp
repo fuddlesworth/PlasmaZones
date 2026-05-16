@@ -5,7 +5,7 @@
  * @file test_autotile_tile_request_validation.cpp
  * @brief Producer-side guard for AutotileEngine::windowsTiled JSON.
  *
- * Phase 1B added TileRequestEntry::validationError(), and
+ * Phase 1B added PhosphorProtocol::TileRequestEntry::validationError(), and
  * AutotileAdaptor::slotWindowsTileRequested on the effect side drops any
  * batch entry that fails validation. The JSON producer in
  * AutotileEngine::applyTiling must therefore populate every field the
@@ -44,19 +44,19 @@ using namespace PhosphorProtocol;
 
 namespace {
 
-/// Mirrors AutotileAdaptor::onWindowsTiled's JSON → TileRequestList parse.
+/// Mirrors AutotileAdaptor::onWindowsTiled's JSON → PhosphorProtocol::TileRequestList parse.
 /// Kept in sync with src/dbus/autotileadaptor.cpp so the producer test
 /// exercises the exact same deserialization the D-Bus pipe performs.
-TileRequestList parseWindowsTiledJson(const QString& json)
+PhosphorProtocol::TileRequestList parseWindowsTiledJson(const QString& json)
 {
-    TileRequestList requests;
+    PhosphorProtocol::TileRequestList requests;
     QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
     if (!doc.isArray()) {
         return requests;
     }
     for (const QJsonValue& val : doc.array()) {
         QJsonObject obj = val.toObject();
-        TileRequestEntry entry;
+        PhosphorProtocol::TileRequestEntry entry;
         entry.windowId = obj.value(QLatin1String("windowId")).toString();
         entry.floating = obj.value(QLatin1String("floating")).toBool(false);
         if (!entry.floating) {
@@ -116,9 +116,9 @@ private Q_SLOTS:
         QVERIFY(tiledSpy.count() >= 1);
 
         const QString json = tiledSpy.last().first().toString();
-        const TileRequestList entries = parseWindowsTiledJson(json);
+        const PhosphorProtocol::TileRequestList entries = parseWindowsTiledJson(json);
         QVERIFY2(!entries.isEmpty(), "applyTiling emitted no entries");
-        for (const TileRequestEntry& entry : entries) {
+        for (const PhosphorProtocol::TileRequestEntry& entry : entries) {
             const QString err = entry.validationError();
             QVERIFY2(err.isEmpty(), qPrintable(err));
             // Belt-and-braces: the screenId must match what we retiled.
@@ -152,9 +152,9 @@ private Q_SLOTS:
         engine.retile(screenName);
 
         QVERIFY(tiledSpy.count() >= 1);
-        const TileRequestList entries = parseWindowsTiledJson(tiledSpy.last().first().toString());
+        const PhosphorProtocol::TileRequestList entries = parseWindowsTiledJson(tiledSpy.last().first().toString());
         QVERIFY(!entries.isEmpty());
-        for (const TileRequestEntry& entry : entries) {
+        for (const PhosphorProtocol::TileRequestEntry& entry : entries) {
             QVERIFY(entry.monocle);
             QVERIFY2(entry.validationError().isEmpty(), qPrintable(entry.validationError()));
             QCOMPARE(entry.screenId, screenName);
@@ -191,11 +191,11 @@ private Q_SLOTS:
         engine.retile(screenName);
 
         QVERIFY(tiledSpy.count() >= 1);
-        const TileRequestList entries = parseWindowsTiledJson(tiledSpy.last().first().toString());
+        const PhosphorProtocol::TileRequestList entries = parseWindowsTiledJson(tiledSpy.last().first().toString());
         QVERIFY2(!entries.isEmpty(), "applyTiling emitted no entries");
 
         bool sawFloating = false;
-        for (const TileRequestEntry& entry : entries) {
+        for (const PhosphorProtocol::TileRequestEntry& entry : entries) {
             QVERIFY2(entry.validationError().isEmpty(), qPrintable(entry.validationError()));
             QCOMPARE(entry.screenId, screenName);
             if (entry.floating) {

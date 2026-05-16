@@ -370,8 +370,8 @@ public:
     void hideShaderPreview() override;
 
     // Snap Assist overlay (window picker after snapping)
-    void showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
-                        const SnapAssistCandidateList& candidates) override;
+    void showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
+                        const PhosphorProtocol::SnapAssistCandidateList& candidates) override;
     void hideSnapAssist() override;
     bool isSnapAssistVisible() const override;
     bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,

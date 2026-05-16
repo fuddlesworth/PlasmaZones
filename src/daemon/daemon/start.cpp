@@ -546,7 +546,8 @@ void Daemon::connectShortcutSignals()
     // matching unregister fires on snapAssistDismissed via
     // WindowDragAdaptor::onSnapAssistDismissed.
     connect(m_overlayService.get(), &IOverlayService::snapAssistShown, this,
-            [this](const QString&, const EmptyZoneList&, const SnapAssistCandidateList&) {
+            [this](const QString&, const PhosphorProtocol::EmptyZoneList&,
+                   const PhosphorProtocol::SnapAssistCandidateList&) {
                 if (m_windowDragAdaptor) {
                     m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
                 }

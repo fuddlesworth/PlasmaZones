@@ -1002,7 +1002,7 @@ bool Daemon::init()
     // incorrectly processes the already-snapped window as autotile-managed.
     // Wired here (daemon) because engines must not know about each other.
     connect(snapEngine, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this,
-            [this](const QString& windowId, const WindowStateEntry&) {
+            [this](const QString& windowId, const PhosphorProtocol::WindowStateEntry&) {
                 if (m_autotileEngine) {
                     m_autotileEngine->clearModeSpecificFloatMarker(windowId);
                 }
@@ -1222,7 +1222,7 @@ bool Daemon::init()
 
     // Connect zone detection to overlay updates
     connect(m_zoneDetectionAdaptor, &ZoneDetectionAdaptor::zoneDetected, this,
-            [this](const QString& zoneId, const ZoneGeometryRect& geometry) {
+            [this](const QString& zoneId, const PhosphorProtocol::ZoneGeometryRect& geometry) {
                 Q_UNUSED(zoneId)
                 Q_UNUSED(geometry)
                 // Update overlay when zone is detected

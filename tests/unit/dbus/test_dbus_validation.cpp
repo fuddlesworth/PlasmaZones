@@ -33,19 +33,19 @@ class TestDbusValidation : public QObject
 private Q_SLOTS:
 
     // ═════════════════════════════════════════════════════════════════════
-    // DragOutcome
+    // PhosphorProtocol::DragOutcome
     // ═════════════════════════════════════════════════════════════════════
 
     void dragOutcome_noOp_noRequirements()
     {
-        DragOutcome o;
-        o.action = DragOutcome::NoOp;
+        PhosphorProtocol::DragOutcome o;
+        o.action = PhosphorProtocol::DragOutcome::NoOp;
         QVERIFY(o.validationError().isEmpty());
     }
 
     void dragOutcome_actionOutOfRange_rejected()
     {
-        DragOutcome o;
+        PhosphorProtocol::DragOutcome o;
         o.action = 999;
         o.windowId = QStringLiteral("win-1");
         const QString err = o.validationError();
@@ -55,7 +55,7 @@ private Q_SLOTS:
 
     void dragOutcome_negativeAction_rejected()
     {
-        DragOutcome o;
+        PhosphorProtocol::DragOutcome o;
         o.action = -1;
         const QString err = o.validationError();
         QVERIFY(!err.isEmpty());
@@ -64,8 +64,8 @@ private Q_SLOTS:
 
     void dragOutcome_applyFloatRequiresWindowId()
     {
-        DragOutcome o;
-        o.action = DragOutcome::ApplyFloat;
+        PhosphorProtocol::DragOutcome o;
+        o.action = PhosphorProtocol::DragOutcome::ApplyFloat;
         // windowId empty
         const QString err = o.validationError();
         QVERIFY(!err.isEmpty());
@@ -74,8 +74,8 @@ private Q_SLOTS:
 
     void dragOutcome_applyFloat_valid()
     {
-        DragOutcome o;
-        o.action = DragOutcome::ApplyFloat;
+        PhosphorProtocol::DragOutcome o;
+        o.action = PhosphorProtocol::DragOutcome::ApplyFloat;
         o.windowId = QStringLiteral("win-1");
         // x/y can be zero (top-left corner), targetScreenId optional
         QVERIFY(o.validationError().isEmpty());
@@ -83,8 +83,8 @@ private Q_SLOTS:
 
     void dragOutcome_applySnapRequiresZoneId()
     {
-        DragOutcome o;
-        o.action = DragOutcome::ApplySnap;
+        PhosphorProtocol::DragOutcome o;
+        o.action = PhosphorProtocol::DragOutcome::ApplySnap;
         o.windowId = QStringLiteral("win-1");
         o.width = 800;
         o.height = 600;
@@ -96,8 +96,8 @@ private Q_SLOTS:
 
     void dragOutcome_applySnapRequiresNonZeroSize()
     {
-        DragOutcome o;
-        o.action = DragOutcome::ApplySnap;
+        PhosphorProtocol::DragOutcome o;
+        o.action = PhosphorProtocol::DragOutcome::ApplySnap;
         o.windowId = QStringLiteral("win-1");
         o.zoneId = QStringLiteral("zone-1");
         o.width = 0;
@@ -109,8 +109,8 @@ private Q_SLOTS:
 
     void dragOutcome_applySnap_valid()
     {
-        DragOutcome o;
-        o.action = DragOutcome::ApplySnap;
+        PhosphorProtocol::DragOutcome o;
+        o.action = PhosphorProtocol::DragOutcome::ApplySnap;
         o.windowId = QStringLiteral("win-1");
         o.zoneId = QStringLiteral("zone-1");
         o.targetScreenId = QStringLiteral("DP-1");
@@ -123,8 +123,8 @@ private Q_SLOTS:
 
     void dragOutcome_restoreSizeRequiresNonZeroSize()
     {
-        DragOutcome o;
-        o.action = DragOutcome::RestoreSize;
+        PhosphorProtocol::DragOutcome o;
+        o.action = PhosphorProtocol::DragOutcome::RestoreSize;
         o.windowId = QStringLiteral("win-1");
         o.width = 800;
         o.height = 0;
@@ -135,8 +135,8 @@ private Q_SLOTS:
 
     void dragOutcome_cancelSnap_noSizeNeeded()
     {
-        DragOutcome o;
-        o.action = DragOutcome::CancelSnap;
+        PhosphorProtocol::DragOutcome o;
+        o.action = PhosphorProtocol::DragOutcome::CancelSnap;
         o.windowId = QStringLiteral("win-1");
         // CancelSnap has no geometry requirement
         QVERIFY(o.validationError().isEmpty());
@@ -144,8 +144,8 @@ private Q_SLOTS:
 
     void dragOutcome_notifyDragOutUnsnap_requiresWindowId()
     {
-        DragOutcome o;
-        o.action = DragOutcome::NotifyDragOutUnsnap;
+        PhosphorProtocol::DragOutcome o;
+        o.action = PhosphorProtocol::DragOutcome::NotifyDragOutUnsnap;
         // windowId empty
         const QString err = o.validationError();
         QVERIFY(!err.isEmpty());
@@ -153,25 +153,25 @@ private Q_SLOTS:
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // DragPolicy
+    // PhosphorProtocol::DragPolicy
     // ═════════════════════════════════════════════════════════════════════
 
     void dragPolicy_canonicalSnap_valid()
     {
-        DragPolicy p;
+        PhosphorProtocol::DragPolicy p;
         p.streamDragMoved = true;
         p.showOverlay = true;
         p.grabKeyboard = true;
         p.captureGeometry = true;
         p.screenId = QStringLiteral("DP-1");
-        p.bypassReason = DragBypassReason::None;
+        p.bypassReason = PhosphorProtocol::DragBypassReason::None;
         QVERIFY(p.validationError().isEmpty());
     }
 
     void dragPolicy_autotileBypassRequiresScreenId()
     {
-        DragPolicy p;
-        p.bypassReason = DragBypassReason::AutotileScreen;
+        PhosphorProtocol::DragPolicy p;
+        p.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
         p.captureGeometry = true;
         // screenId empty
         const QString err = p.validationError();
@@ -181,8 +181,8 @@ private Q_SLOTS:
 
     void dragPolicy_autotileBypass_valid()
     {
-        DragPolicy p;
-        p.bypassReason = DragBypassReason::AutotileScreen;
+        PhosphorProtocol::DragPolicy p;
+        p.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
         p.screenId = QStringLiteral("HP-1");
         p.captureGeometry = true;
         QVERIFY(p.validationError().isEmpty());
@@ -193,19 +193,19 @@ private Q_SLOTS:
         // beginDrag with empty startScreenId returns SnappingDisabled with
         // empty screenId. That path is deliberately tolerated — the drag
         // still needs to complete via endDrag NoOp.
-        DragPolicy p;
-        p.bypassReason = DragBypassReason::SnappingDisabled;
+        PhosphorProtocol::DragPolicy p;
+        p.bypassReason = PhosphorProtocol::DragBypassReason::SnappingDisabled;
         p.screenId = QString();
         QVERIFY(p.validationError().isEmpty());
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // TileRequestEntry
+    // PhosphorProtocol::TileRequestEntry
     // ═════════════════════════════════════════════════════════════════════
 
     void tileRequestEntry_emptyWindowId_rejected()
     {
-        TileRequestEntry e;
+        PhosphorProtocol::TileRequestEntry e;
         e.screenId = QStringLiteral("DP-1");
         e.width = 800;
         e.height = 600;
@@ -216,7 +216,7 @@ private Q_SLOTS:
 
     void tileRequestEntry_emptyScreenId_rejected()
     {
-        TileRequestEntry e;
+        PhosphorProtocol::TileRequestEntry e;
         e.windowId = QStringLiteral("win-1");
         e.width = 800;
         e.height = 600;
@@ -227,7 +227,7 @@ private Q_SLOTS:
 
     void tileRequestEntry_negativeSize_rejected()
     {
-        TileRequestEntry e;
+        PhosphorProtocol::TileRequestEntry e;
         e.windowId = QStringLiteral("win-1");
         e.screenId = QStringLiteral("DP-1");
         e.width = -10;
@@ -239,7 +239,7 @@ private Q_SLOTS:
 
     void tileRequestEntry_tiledZeroSize_rejected()
     {
-        TileRequestEntry e;
+        PhosphorProtocol::TileRequestEntry e;
         e.windowId = QStringLiteral("win-1");
         e.screenId = QStringLiteral("DP-1");
         e.floating = false;
@@ -254,7 +254,7 @@ private Q_SLOTS:
     {
         // Floating requests legitimately carry zero size — the plugin
         // resolves geometry from the current frame.
-        TileRequestEntry e;
+        PhosphorProtocol::TileRequestEntry e;
         e.windowId = QStringLiteral("win-1");
         e.screenId = QStringLiteral("DP-1");
         e.floating = true;
@@ -265,7 +265,7 @@ private Q_SLOTS:
 
     void tileRequestEntry_tiledValid()
     {
-        TileRequestEntry e;
+        PhosphorProtocol::TileRequestEntry e;
         e.windowId = QStringLiteral("win-1");
         e.screenId = QStringLiteral("DP-1");
         e.zoneId = QStringLiteral("zone-1");
@@ -277,12 +277,12 @@ private Q_SLOTS:
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // BridgeRegistrationResult
+    // PhosphorProtocol::BridgeRegistrationResult
     // ═════════════════════════════════════════════════════════════════════
 
     void bridgeRegistration_valid()
     {
-        BridgeRegistrationResult r;
+        PhosphorProtocol::BridgeRegistrationResult r;
         r.apiVersion = QStringLiteral("2");
         r.bridgeName = QStringLiteral("kwin");
         r.sessionId = QStringLiteral("abcd-1234");
@@ -293,7 +293,7 @@ private Q_SLOTS:
     {
         // "REJECTED" is how the daemon signals version mismatch. It's
         // not an invalid result — callers branch on it explicitly.
-        BridgeRegistrationResult r;
+        PhosphorProtocol::BridgeRegistrationResult r;
         r.apiVersion = QStringLiteral("999");
         r.bridgeName = QString(); // sentinel path may leave these empty
         r.sessionId = QStringLiteral("REJECTED");
@@ -302,7 +302,7 @@ private Q_SLOTS:
 
     void bridgeRegistration_emptyApiVersion_rejected()
     {
-        BridgeRegistrationResult r;
+        PhosphorProtocol::BridgeRegistrationResult r;
         r.bridgeName = QStringLiteral("kwin");
         r.sessionId = QStringLiteral("abcd-1234");
         const QString err = r.validationError();
@@ -312,7 +312,7 @@ private Q_SLOTS:
 
     void bridgeRegistration_nonNumericApiVersion_rejected()
     {
-        BridgeRegistrationResult r;
+        PhosphorProtocol::BridgeRegistrationResult r;
         r.apiVersion = QStringLiteral("one");
         r.bridgeName = QStringLiteral("kwin");
         r.sessionId = QStringLiteral("abcd-1234");
@@ -323,7 +323,7 @@ private Q_SLOTS:
 
     void bridgeRegistration_emptyBridgeName_rejected()
     {
-        BridgeRegistrationResult r;
+        PhosphorProtocol::BridgeRegistrationResult r;
         r.apiVersion = QStringLiteral("2");
         r.sessionId = QStringLiteral("abcd-1234");
         const QString err = r.validationError();
@@ -333,7 +333,7 @@ private Q_SLOTS:
 
     void bridgeRegistration_emptySessionId_rejected()
     {
-        BridgeRegistrationResult r;
+        PhosphorProtocol::BridgeRegistrationResult r;
         r.apiVersion = QStringLiteral("2");
         r.bridgeName = QStringLiteral("kwin");
         const QString err = r.validationError();
@@ -342,14 +342,15 @@ private Q_SLOTS:
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // DragBypassReason wire round-trip
+    // PhosphorProtocol::DragBypassReason wire round-trip
     // ═════════════════════════════════════════════════════════════════════
 
     void dragBypassReason_wireRoundTrip_all()
     {
         // Every enum value must round-trip through the wire format.
-        for (auto r : {DragBypassReason::None, DragBypassReason::AutotileScreen, DragBypassReason::SnappingDisabled,
-                       DragBypassReason::ContextDisabled}) {
+        for (auto r : {PhosphorProtocol::DragBypassReason::None, PhosphorProtocol::DragBypassReason::AutotileScreen,
+                       PhosphorProtocol::DragBypassReason::SnappingDisabled,
+                       PhosphorProtocol::DragBypassReason::ContextDisabled}) {
             QCOMPARE(bypassReasonFromWireString(toWireString(r)), r);
         }
     }
@@ -359,8 +360,8 @@ private Q_SLOTS:
         // Unknown wire strings map to None to preserve the legacy
         // fall-through behavior where unrecognized values didn't match
         // the autotile branch.
-        QCOMPARE(bypassReasonFromWireString(QStringLiteral("future_reason")), DragBypassReason::None);
-        QCOMPARE(bypassReasonFromWireString(QString()), DragBypassReason::None);
+        QCOMPARE(bypassReasonFromWireString(QStringLiteral("future_reason")), PhosphorProtocol::DragBypassReason::None);
+        QCOMPARE(bypassReasonFromWireString(QString()), PhosphorProtocol::DragBypassReason::None);
     }
 };
 

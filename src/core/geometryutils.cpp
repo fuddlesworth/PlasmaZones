@@ -151,12 +151,12 @@ QRect getZoneGeometryForScreen(Phosphor::Screens::ScreenManager* mgr, PhosphorZo
     return ::PhosphorZones::GeometryUtils::getZoneGeometryForScreen(mgr, zone, screen, screenId, layout, zp, og);
 }
 
-static EmptyZoneList buildEmptyZoneListImpl(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
-                                            const std::optional<QRect>& screenGeometry, const QRect& availableGeometry,
-                                            const QString& screenId, int zonePadding,
-                                            const ::PhosphorLayout::EdgeGaps& outerGaps, bool useAvail,
-                                            ISettings* settings, const QRect& overlayOriginRect, QScreen* physScreen,
-                                            const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty)
+static PhosphorProtocol::EmptyZoneList
+buildEmptyZoneListImpl(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
+                       const std::optional<QRect>& screenGeometry, const QRect& availableGeometry,
+                       const QString& screenId, int zonePadding, const ::PhosphorLayout::EdgeGaps& outerGaps,
+                       bool useAvail, ISettings* settings, const QRect& overlayOriginRect, QScreen* physScreen,
+                       const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty)
 {
     QRect resolvedScreenGeom;
     QRect resolvedAvailGeom;
@@ -173,7 +173,7 @@ static EmptyZoneList buildEmptyZoneListImpl(Phosphor::Screens::ScreenManager* mg
         return {};
     }
 
-    EmptyZoneList result;
+    PhosphorProtocol::EmptyZoneList result;
     for (PhosphorZones::Zone* zone : layout->zones()) {
         if (!isZoneEmpty(zone)) {
             continue;
@@ -189,7 +189,7 @@ static EmptyZoneList buildEmptyZoneListImpl(Phosphor::Screens::ScreenManager* mg
             ? zone->borderRadius()
             : (settings ? settings->borderRadius() : ::PhosphorZones::ZoneDefaults::BorderRadius);
 
-        EmptyZoneEntry entry;
+        PhosphorProtocol::EmptyZoneEntry entry;
         entry.zoneId = zone->id().toString();
         entry.x = overlayGeom.x();
         entry.y = overlayGeom.y();
@@ -210,9 +210,9 @@ static EmptyZoneList buildEmptyZoneListImpl(Phosphor::Screens::ScreenManager* mg
     return result;
 }
 
-EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout, QScreen* screen,
-                                 ISettings* settings,
-                                 const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty)
+PhosphorProtocol::EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
+                                                   QScreen* screen, ISettings* settings,
+                                                   const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty)
 {
     if (!layout || !screen) {
         return {};
@@ -229,9 +229,9 @@ EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, Phosphor
                                   settings, QRect(), screen, isZoneEmpty);
 }
 
-EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
-                                 const QString& screenId, QScreen* physScreen, ISettings* settings,
-                                 const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty)
+PhosphorProtocol::EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
+                                                   const QString& screenId, QScreen* physScreen, ISettings* settings,
+                                                   const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty)
 {
     if (!layout) {
         return {};
@@ -251,7 +251,8 @@ EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, Phosphor
                                       outerGaps, useAvail, settings, vsGeom, nullptr, isZoneEmpty);
     }
 
-    return physScreen ? buildEmptyZoneList(mgr, layout, physScreen, settings, isZoneEmpty) : EmptyZoneList{};
+    return physScreen ? buildEmptyZoneList(mgr, layout, physScreen, settings, isZoneEmpty)
+                      : PhosphorProtocol::EmptyZoneList{};
 }
 
 } // namespace GeometryUtils
