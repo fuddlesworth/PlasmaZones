@@ -142,15 +142,14 @@ void main() {
         float sdf = roundedBoxSDF(fragCoord - iResolution.xy * 0.5, innerHalf, radius);
         // Panel coverage: AA'd across the 1-px band just inside the edge.
         float panelMask = 1.0 - smoothstep(-1.0, 0.0, sdf);
-        // Shadow rings the box and stays full-strength under that 1-px
-        // AA band, so the panel fades onto the shadow with no
-        // transparent seam — but it does NOT extend under the solid
-        // panel interior (which would tint the whole popup darker).
-        float shadowA = 0.0;
-        if (sdf > -1.0) {
-            shadowA = (sdf <= 0.0) ? shadowOpacity
-                                   : dropShadowAlpha(sdf, shadowMargin, shadowOpacity);
-        }
+        // Shadow rings the box at full strength right at the edge, then
+        // attenuated by the panel's own coverage: it vanishes smoothly
+        // under the solid interior (no darkening of the popup) yet still
+        // backs the edge AA band so the panel fades onto the shadow with
+        // neither a transparent seam nor a 1-px alpha step.
+        float baseShadowA = (sdf <= 0.0) ? shadowOpacity
+                                         : dropShadowAlpha(sdf, shadowMargin, shadowOpacity);
+        float shadowA = baseShadowA * (1.0 - panelMask);
 
         vec3 rgb = vec3(0.0);
         float panelAlpha = 0.0;

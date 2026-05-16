@@ -17,6 +17,9 @@ PopupWindow {
     property int contentHeight: 320
     // Inset of the content body inside the border.
     property real contentMargins: 14
+    // Corner rounding of the visible popup — shared by the border
+    // Rectangle and the shader's rounded-box SDF so they stay aligned.
+    property int cornerRadius: 14
     // Transparent ring around the visible popup that the drop shadow is
     // drawn into. The xdg_popup surface is oversized by this on every
     // side and the shader fills the ring with the shadow falloff.
@@ -52,7 +55,7 @@ PopupWindow {
             "customParams1_y": 0,
             "customParams1_z": 0.9,
             "customParams1_w": 0,
-            "customParams2_x": 14,
+            "customParams2_x": popup.cornerRadius,
             "customParams2_y": 24,
             "customParams3_x": popup.shadowMargin,
             "customParams4_y": 0.45
@@ -66,7 +69,7 @@ PopupWindow {
         anchors.fill: parent
         anchors.margins: popup.shadowMargin
         color: "transparent"
-        radius: 14
+        radius: popup.cornerRadius
         border.color: "#80a6adc8"
         border.width: 1
     }
