@@ -5,9 +5,9 @@
 #include <PhosphorProtocol/BridgeMarshalling.h>
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/Registration.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
-#include <PhosphorProtocol/ServiceConstants.h>
 
 #include <QTest>
 

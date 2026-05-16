@@ -56,6 +56,7 @@ add_library(PhosphorDBus SHARED
 add_library(PhosphorDBus::PhosphorDBus ALIAS PhosphorDBus)
 
 generate_export_header(PhosphorDBus
+    BASE_NAME PhosphorDBus
     EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/PhosphorDBus/phosphordbus_export.h
     EXPORT_MACRO_NAME PHOSPHORDBUS_EXPORT
 )

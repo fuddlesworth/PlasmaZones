@@ -152,6 +152,7 @@ add_library(PhosphorScreens SHARED
 add_library(PhosphorScreens::PhosphorScreens ALIAS PhosphorScreens)
 
 generate_export_header(PhosphorScreens
+    BASE_NAME PhosphorScreens
     EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/phosphorscreens_export.h
     EXPORT_MACRO_NAME PHOSPHORSCREENS_EXPORT
 )

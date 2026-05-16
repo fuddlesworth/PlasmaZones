@@ -341,8 +341,8 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, DragPolicy& p)
     QString bypassWire;
     arg >> p.streamDragMoved >> p.showOverlay >> p.grabKeyboard >> p.captureGeometry >> p.immediateFloatOnStart
         >> p.screenId >> bypassWire;
-    p.bypassReason = bypassReasonFromWireString(bypassWire);
     arg.endStructure();
+    p.bypassReason = bypassReasonFromWireString(bypassWire);
     return arg;
 }
 
@@ -368,9 +368,9 @@ void registerWireTypes()
 {
     // IMPORTANT: register each type under BOTH its qualified and unqualified
     // names. Q_DECLARE_METATYPE must be at global scope, so it registers under
-    // the fully-qualified name "PlasmaZones::Foo". The authoritative fix is to
-    // fully-qualify the type in every adaptor slot parameter declaration (see
-    // e.g. autotileadaptor.h) so moc records "PlasmaZones::Foo" and matches
+    // the fully-qualified name "PhosphorProtocol::Foo". The authoritative fix is
+    // to fully-qualify the type in every adaptor slot parameter declaration (see
+    // e.g. autotileadaptor.h) so moc records "PhosphorProtocol::Foo" and matches
     // the qualified registration. This unqualified-alias registration is a
     // defensive belt-and-suspenders so that a future adaptor written with
     // unqualified slot parameters still works rather than crashing D-Bus

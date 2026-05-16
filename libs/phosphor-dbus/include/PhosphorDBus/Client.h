@@ -40,7 +40,11 @@ public:
      * @param service     Destination D-Bus service name.
      * @param objectPath  Destination object path.
      * @param log         Logging category for call-failure warnings; when
-     *                    null, `lcPhosphorDBus()` is used.
+     *                    null, `lcPhosphorDBus()` is used. Must have static /
+     *                    program lifetime: `fireAndForget`'s async callback
+     *                    dereferences it after the `Client` itself may be
+     *                    gone. Categories declared with `Q_LOGGING_CATEGORY`
+     *                    satisfy this; a stack-allocated category does not.
      */
     Client(QDBusConnection connection, QString service, QString objectPath, const QLoggingCategory* log = nullptr);
 

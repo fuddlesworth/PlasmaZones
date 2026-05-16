@@ -7,8 +7,8 @@
 #include <PhosphorCompositor/IGeometryHandler.h>
 #include <PhosphorCompositor/IDragHandler.h>
 #include <PhosphorCompositor/ILifecycleHandler.h>
-#include <PhosphorProtocol/WindowMarshalling.h>
-#include <PhosphorProtocol/ZoneMarshalling.h>
+#include <PhosphorProtocol/WindowTypes.h>
+#include <PhosphorProtocol/ZoneTypes.h>
 
 #include <QObject>
 #include <QRect>

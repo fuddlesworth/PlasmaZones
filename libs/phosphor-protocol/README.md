@@ -52,7 +52,7 @@ Plus the cross-cutting headers:
 |--------|---------|
 | `PhosphorProtocol/ServiceConstants.h` | Canonical service name, object path, interface names (`org.plasmazones.Autotile`, `.Screen`, `.Overlay`, …), API version, timeouts. **QtCore only** — shipped by `::Types`. |
 | `PhosphorProtocol/Registration.h`     | `registerWireTypes()` — one-shot metatype registration; call once at startup. |
-| `PhosphorProtocol/ClientHelpers.h`    | `daemonClient()` — a `PhosphorDBus::Client` value bound to the daemon — plus thin `ClientHelpers::` wrappers (`fireAndForget`, `asyncCall`, `syncCall`, `loadSettingAsync`). |
+| `PhosphorProtocol/ClientHelpers.h`    | `daemonClient()` — a `PhosphorDBus::Client` value bound to the daemon — plus thin `ClientHelpers::` wrappers (`fireAndForget`, `sendOneWay`, `asyncCall`, `syncCall`, `loadSettingAsync`). |
 | `PhosphorProtocol/PhosphorProtocol.h` | Umbrella convenience header that pulls in everything; prefer the per-interface headers. |
 
 A `*Types.h` header is pure value vocabulary (`Q_DECLARE_METATYPE`, no
