@@ -1,11 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Reusable drop-shadow helper for PhosphorShell panel shaders.
-// `#include "shadow.glsl"` to render the panel's drop-shadow strip
-// without copying the falloff math. Pair with corners.glsl: feed the
-// `carvedOutlineDistance()` result in so the shadow follows a carved
-// corner.
+// Reusable drop-shadow helpers for PhosphorShell panel/popup shaders.
+// `#include "shadow.glsl"` to render a shadow without copying the
+// falloff math:
+//   - shadowStripAlpha() — a one-edge strip shadow below a panel that
+//     is flush with a screen edge. Pair with corners.glsl's
+//     carvedOutlineDistance() so the strip follows a carved corner.
+//   - dropShadowAlpha() — an all-around soft shadow ringing a floating
+//     surface (popup). Pair with corners.glsl's roundedBoxSDF().
 //
 // No `#version` / no UBO references — include this AFTER the `#version`
 // line and the `layout` blocks of the consuming shader.
@@ -25,6 +28,22 @@ float shadowStripAlpha(float distFromOutline, float shadowSizePx, float shadowOp
         return 0.0;
     }
     float t = distFromOutline / shadowSizePx;
+    float falloff = 1.0 - t;
+    return shadowOpacity * falloff * falloff;
+}
+
+// Soft drop-shadow alpha for a fragment `sdfDist` pixels OUTSIDE a
+// rounded box (positive = outside; pass roundedBoxSDF() from
+// corners.glsl). Alpha is `shadowOpacity` right at the box edge and
+// falls off quadratically to 0 over `margin` pixels. Returns 0 inside
+// the box. For a floating surface (popup), oversize the surface by
+// `margin` on every side, make the visible element the inset rounded
+// box, and ring it with this.
+float dropShadowAlpha(float sdfDist, float margin, float shadowOpacity) {
+    if (sdfDist <= 0.0 || margin <= 0.0) {
+        return 0.0;
+    }
+    float t = clamp(sdfDist / margin, 0.0, 1.0);
     float falloff = 1.0 - t;
     return shadowOpacity * falloff * falloff;
 }
