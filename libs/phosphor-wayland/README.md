@@ -52,6 +52,7 @@ touches this lib through `registerLayerShellPlugin()` at startup.
 | `PhosphorWayland::LayerSurface::KeyboardInteractivity` | None / Exclusive / OnDemand |
 | `PhosphorWayland::LayerSurfaceProps`       | Property-key constants used by `LayerSurface` ↔ QPA plugin |
 | `PhosphorWayland::registerLayerShellPlugin`| Header-only env-var setup before `QGuiApplication` |
+| `PhosphorWayland::addCompositorLostCallback` / `removeCompositorLostCallback` | Process-wide subscription to `zwlr_layer_shell_v1` global-removal (one-shot, thread-safe) |
 
 ## Typical use
 
@@ -95,18 +96,15 @@ int main(int argc, char** argv) {
   before the compositor starts. The fallback checks
   `$XDG_RUNTIME_DIR/wayland-{0,1}` for COSMIC and socket-activation
   setups that don't set `WAYLAND_DISPLAY`.
-- **Compositor-lost detection is incomplete.** The QPA plugin
-  receives the `wlr-layer-shell` global-removal signal but doesn't
-  yet expose it through a public API. The default
-  `PhosphorWaylandTransport` in
-  [`phosphor-layer`](../phosphor-layer/README.md) currently fires
-  compositor-lost only on `aboutToQuit` (clean exit). Mid-session
-  compositor crashes are not detected until this lib gains a public
-  global-removal accessor.
-- **Split out of `phosphor-shell`.** The Phase B refactor moved the
-  shader-domain headers to
-  [`phosphor-shaders`](../phosphor-shaders/README.md); what stayed
-  here is the Wayland layer-shell integration.
+- **Compositor-lost is exposed publicly.** The QPA plugin observes
+  `wl_registry::global_remove` for `zwlr_layer_shell_v1` and forwards
+  the edge through `PhosphorWayland::addCompositorLostCallback`
+  (see `<PhosphorWayland/CompositorLost.h>`). The broadcaster is
+  one-shot per process and tolerates registration before
+  `QGuiApplication`. The default `PhosphorWaylandTransport` in
+  [`phosphor-layer`](../phosphor-layer/README.md) subscribes through
+  this seam, so mid-session compositor crashes fire transport
+  callbacks alongside the existing clean-exit `aboutToQuit` path.
 
 ## Dependencies
 
@@ -117,4 +115,4 @@ int main(int argc, char** argv) {
 
 - [`phosphor-layer`](../phosphor-layer/README.md) — policy layer (roles, per-screen registry, topology coordinator) on top of `LayerSurface`.
 - [`phosphor-surfaces`](../phosphor-surfaces/README.md) — higher-level surface manager with QML + Vulkan wiring.
-- [`phosphor-shaders`](../phosphor-shaders/README.md) — sibling lib that owns the shader-domain headers split out of the old `phosphor-shell`.
+- [`phosphor-shaders`](../phosphor-shaders/README.md) — shader-domain headers (`BaseUniforms`, `IUniformExtension`, `ShaderRegistry`).

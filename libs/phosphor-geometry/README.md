@@ -9,17 +9,14 @@
 
 ## Responsibility
 
-Both the snap engine and the autotile engine post-process algorithm
-output before handing rects to the compositor. They share the same set
-of corrections — clamp to screen, eliminate overlaps, grow zones to
-respect window minimum sizes, project geometry into the overlay
-window's local coordinate system. `phosphor-geometry` is a thin
-QtCore + QtGui leaf library that owns those primitives so neither
-engine carries a private copy.
+Pure-function corrections shared by the snap engine and the autotile
+engine: clamp to screen, eliminate overlaps, grow zones to respect
+window minimum sizes, project geometry into an overlay window's local
+coordinate system.
 
-The functions are pure: input rects in, output rects out, no Qt
-objects, no signals, no allocation beyond the obvious. Headless
-geometry tests can link the lib without any GUI infrastructure.
+Input rects in, output rects out — no Qt objects, no signals, no
+allocation beyond the result vector. Headless geometry tests link the
+lib without GUI infrastructure.
 
 ## Key types
 

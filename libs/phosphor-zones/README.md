@@ -85,12 +85,10 @@ if (!hitZoneId.isNull()) {
 - **Relative coordinates on disk.** Zone rects in JSON are normalised to
   the `0.0 - 1.0` range, so the same layout works on any screen size.
   Conversion to pixels happens at read-time.
-- **CRUD lives on the concrete registry, not a separate manager.** Earlier
-  iterations of this lib carried an `ILayoutManager` interface family;
-  it has been collapsed into `LayoutRegistry` plus `IZoneLayoutRegistry`,
-  matching the shape of `phosphor-tiles`'s `AlgorithmRegistry`. One
-  concrete class for everything; the interface only exists where mocking
-  is useful.
+- **CRUD lives on the concrete registry, not a separate manager.**
+  `LayoutRegistry` is the single concrete class; `IZoneLayoutRegistry`
+  exists only where mocking is useful. This mirrors
+  `phosphor-tiles`'s `AlgorithmRegistry` shape.
 - **No process-global singleton.** Composition roots construct one
   `LayoutRegistry` per process and inject it into every consumer. Tests
   build their own per-fixture instance.

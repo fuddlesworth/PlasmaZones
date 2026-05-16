@@ -141,16 +141,11 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
             }
         }
 
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-            PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowOpened"));
-        msg << windowId;
-        msg << screenId;
-        msg << minWidth;
-        msg << minHeight;
-
-        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
-        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        auto* watcher =
+            new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
+                                            PhosphorProtocol::Service::Interface::Autotile,
+                                            QStringLiteral("windowOpened"), {windowId, screenId, minWidth, minHeight}),
+                                        this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             if (w->isError()) {
@@ -229,13 +224,11 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         return;
     }
 
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-        PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowsOpenedBatch"));
-    msg << QVariant::fromValue(batchEntries);
-
-    QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
-    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    auto* watcher =
+        new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
+                                        PhosphorProtocol::Service::Interface::Autotile,
+                                        QStringLiteral("windowsOpenedBatch"), {QVariant::fromValue(batchEntries)}),
+                                    this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, batchWindowIds](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         if (w->isError()) {
@@ -345,11 +338,10 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         const int fallbackW = savedPreAutotileGeo.isValid() ? std::max(0, qRound(savedPreAutotileGeo.width())) : 0;
         const int fallbackH = savedPreAutotileGeo.isValid() ? std::max(0, qRound(savedPreAutotileGeo.height())) : 0;
 
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-            PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getValidatedPreTileGeometry"));
-        msg << windowId;
-        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), m_effect);
+        auto* watcher = new QDBusPendingCallWatcher(
+            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("getValidatedPreTileGeometry"), {windowId}),
+            m_effect);
         connect(watcher, &QDBusPendingCallWatcher::finished, m_effect,
                 [this, safeW, wid, fallbackW, fallbackH](QDBusPendingCallWatcher* pw) {
                     pw->deleteLater();
@@ -623,13 +615,17 @@ void AutotileHandler::connectSignals()
 
 void AutotileHandler::loadSettings()
 {
-    // Query initial autotile screen set from daemon asynchronously.
+    // Query initial autotile screen set from daemon asynchronously. The
+    // foreign org.freedesktop.DBus.Properties interface is correct for D-Bus
+    // property access; ClientHelpers can't be used here because it hard-wires
+    // the org.plasmazones interface. Bound by SyncCallTimeoutMs so a wedged
+    // daemon doesn't leak a watcher for Qt's default 25 s.
     QDBusMessage msg =
         QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     msg << PhosphorProtocol::Service::Interface::Autotile << QStringLiteral("autotileScreens");
 
-    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg);
+    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();

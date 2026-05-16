@@ -8,16 +8,14 @@
 
 ## Responsibility
 
-This is the core business logic for window-zone management. It tracks
-which windows are in which zones, handles floating/unfloating, auto-snaps
-new windows to their last-used zone, resnaps all windows when layouts or
-screens change, rotates windows between zones, and provides empty-zone
-queries for snap-assist.
+Window-zone management state. Tracks which windows are in which zones,
+handles floating / unfloating, auto-snaps new windows to their last-used
+zone, resnaps when layouts or screens change, rotates windows between
+zones, and provides empty-zone queries for snap-assist.
 
 The daemon owns a `WindowTrackingService` instance and exposes it over
-D-Bus. Any compositor plugin benefits from this logic without linking
-this library directly — the daemon does the thinking, the plugin applies
-geometry.
+D-Bus. Compositor plugins consume the resulting geometry through that
+surface rather than linking this library directly.
 
 ## Key types
 
@@ -27,7 +25,7 @@ geometry.
 | `IGeometryResolver` | Interface for gap/padding resolution (consumer provides) |
 | `PlacementConfig` | Value struct for runtime config (replaces ISettings dependency) |
 
-## Usage
+## Typical use
 
 ```cpp
 #include <PhosphorPlacement/WindowTrackingService.h>
@@ -36,7 +34,7 @@ geometry.
 
 class MyResolver : public PhosphorPlacement::IGeometryResolver {
     int resolveZonePadding(PhosphorZones::Layout* layout, const QString& screenId) const override {
-        return 8; // or read from your config
+        return 8;
     }
     PhosphorLayout::EdgeGaps resolveOuterGaps(PhosphorZones::Layout* layout, const QString& screenId) const override {
         return PhosphorLayout::EdgeGaps::uniform(8);
@@ -52,14 +50,7 @@ wts.setSnapState(snapState);
 wts.setWindowRegistry(registry);
 ```
 
-## Link dependencies
+## Dependencies
 
-```cmake
-target_link_libraries(my_target PRIVATE
-    PhosphorPlacement::PhosphorPlacement
-)
-```
-
-Transitive deps: PhosphorEngine, PhosphorSnapEngine, PhosphorZones,
-PhosphorProtocol, PhosphorScreens, PhosphorWorkspaces, PhosphorIdentity,
-PhosphorLayoutApi.
+- `QtCore`
+- [`phosphor-engine`](../phosphor-engine/README.md), [`phosphor-snap-engine`](../phosphor-snap-engine/README.md), [`phosphor-zones`](../phosphor-zones/README.md), [`phosphor-protocol`](../phosphor-protocol/README.md), [`phosphor-screens`](../phosphor-screens/README.md), [`phosphor-workspaces`](../phosphor-workspaces/README.md), [`phosphor-identity`](../phosphor-identity/README.md), [`phosphor-layout-api`](../phosphor-layout-api/README.md)

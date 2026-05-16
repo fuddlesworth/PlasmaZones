@@ -10,14 +10,10 @@
 
 ## Responsibility
 
-Several Phosphor libraries need the same pattern: walk a set of
-directories, parse each file (flat `*.json`, or a metadata-pack
-subdirectory) into a typed record, watch the directories for live edits,
-debounce rescans, apply user files that shadow bundled ones with the
-same ID, and emit one bulk-update signal per scan. Every consumer that
-implemented this independently ended up with subtly different
-debouncing and parent-watch logic. `phosphor-fsloader` owns the
-mechanism once.
+Walk a set of directories, parse each file (flat `*.json`, or a
+metadata-pack subdirectory) into a typed record, watch the directories
+for live edits, debounce rescans, apply user files that shadow bundled
+ones with the same ID, and emit one bulk-update signal per scan.
 
 The library factors the work into:
 
@@ -122,9 +118,6 @@ registry.refresh();
   consumes it, nobody in between peeks. The metadata-pack variant adds
   a typed `Payload` template parameter for registries that don't need
   the erasure.
-- **Renamed from `phosphor-jsonloader`.** The earlier name no longer
-  fit once the metadata-pack scan strategy and the shared filesystem
-  primitives moved in.
 
 ## Dependencies
 

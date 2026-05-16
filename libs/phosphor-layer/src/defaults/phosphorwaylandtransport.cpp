@@ -5,6 +5,7 @@
 
 #include "../internal.h"
 
+#include <PhosphorWayland/CompositorLost.h>
 #include <PhosphorWayland/LayerSurface.h>
 
 #include <QQuickWindow>
@@ -178,24 +179,35 @@ class PhosphorWaylandTransport::Impl
 public:
     CompositorLostBroadcaster m_broadcaster;
     QMetaObject::Connection m_aboutToQuitConnection;
+    PhosphorWayland::CompositorLostCookie m_globalRemovedCookie = 0;
 };
 
 PhosphorWaylandTransport::PhosphorWaylandTransport()
     : m_impl(std::make_unique<Impl>())
 {
-    // PhosphorWayland's QPA plugin owns the wlr-layer-shell global-removal
-    // signal but does not expose it through a public API. The best we can
-    // do from user-space is listen for application shutdown — when Qt
-    // enters aboutToQuit the wl_display is about to disconnect, so every
-    // active layer surface is effectively lost. Consumers that need
-    // earlier detection (mid-session compositor crash) should subscribe
-    // via PhosphorWayland::LayerShellIntegration once it gains a public
-    // accessor; this default covers the "clean compositor exit" case.
+    // Two upstream signals collapse into the single compositor-lost edge
+    // exposed by this transport:
+    //
+    //   1. PhosphorWayland::addCompositorLostCallback — fires when the QPA
+    //      plugin observes wl_registry::global_remove for zwlr_layer_shell_v1
+    //      mid-session (compositor crash / restart). Detected before Qt
+    //      starts tearing down.
+    //   2. QGuiApplication::aboutToQuit — fires on clean exit, after the
+    //      QPA plugin's destructor has run, so every active layer surface
+    //      is effectively lost regardless of whether the compositor sent a
+    //      removal first.
+    //
+    // The internal broadcaster is idempotent (`fire()` is a one-shot), so
+    // whichever signal arrives first wins and the second is a no-op.
     m_impl->m_aboutToQuitConnection = m_impl->m_broadcaster.hookAboutToQuit();
+    m_impl->m_globalRemovedCookie = PhosphorWayland::addCompositorLostCallback([this] {
+        m_impl->m_broadcaster.fire();
+    });
 }
 
 PhosphorWaylandTransport::~PhosphorWaylandTransport()
 {
+    PhosphorWayland::removeCompositorLostCallback(m_impl->m_globalRemovedCookie);
     QObject::disconnect(m_impl->m_aboutToQuitConnection);
 }
 

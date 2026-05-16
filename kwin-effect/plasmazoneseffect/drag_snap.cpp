@@ -96,12 +96,10 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // shape was a 9-tuple of out-params) with a typed struct.
     QPointF cursorAtRelease = m_dragTracker->lastCursorPos();
 
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                       PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("endDrag"));
-    msg << windowId << static_cast<int>(cursorAtRelease.x()) << static_cast<int>(cursorAtRelease.y())
-        << static_cast<int>(m_currentModifiers) << static_cast<int>(m_currentMouseButtons) << cancelled;
-    QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(msg);
+    QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("endDrag"),
+        {windowId, static_cast<int>(cursorAtRelease.x()), static_cast<int>(cursorAtRelease.y()),
+         static_cast<int>(m_currentModifiers), static_cast<int>(m_currentMouseButtons), cancelled});
 
     QPointer<KWin::EffectWindow> safeWindow = window;
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
@@ -271,11 +269,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
 void PlasmaZonesEffect::callCancelSnap()
 {
     qCInfo(lcEffect) << "Calling cancelSnap (drag cancelled by Escape or external event)";
-    // QDBusMessage::createMethodCall — purely local, no D-Bus introspection.
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                       PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("cancelSnap"));
-    QDBusConnection::sessionBus().asyncCall(msg);
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
+                                                QStringLiteral("cancelSnap"));
 }
 
 void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString& method, const QList<QVariant>& args,

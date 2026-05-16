@@ -9,10 +9,9 @@
 
 ## Responsibility
 
-Applications built on Phosphor tend to have structured settings: hierarchical
-groups like `Snapping`, `Snapping.Behavior`, `Snapping.Behavior.ZoneSpan`,
-typed values (bool, int, color, string), defaults, and validation.
-`phosphor-config` gives consumers:
+Structured settings with hierarchical groups (e.g. `Snapping`,
+`Snapping.Behavior`, `Snapping.Behavior.ZoneSpan`), typed values (bool,
+int, color, string), defaults, and validation. The library provides:
 
 - **A `Store` front-end** with `value(key, default)` and `setValue(key, value)`
   over a pluggable `IBackend`. Backends ship for JSON files, QSettings, and

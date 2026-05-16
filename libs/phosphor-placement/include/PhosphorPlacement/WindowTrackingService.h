@@ -552,6 +552,31 @@ public:
      */
     void migrateScreenAssignmentsFromVirtual(const QString& physicalScreenId);
 
+    /**
+     * @brief Find physical screens whose state still references virtual ids,
+     *        excluding screens the caller knows are still subdivided.
+     *
+     * Sweeps every state store that holds a screen id (active screen
+     * assignments, pre-float assignments, pending restore queues, pre-tile
+     * geometry on the snap engine) and returns the set of physical screen ids
+     * for which any stored value is still a "physId/vs:N" form whose physId
+     * is NOT in @p subdividedPhysicalIds.
+     *
+     * Pair with @ref migrateScreenAssignmentsFromVirtual on each returned id
+     * to clean up state left over from a config change applied while the
+     * daemon was offline.
+     *
+     * Owning the scan here (rather than the daemon enumerating each store)
+     * keeps state-shape knowledge inside WTS — adding a new screen-id-bearing
+     * store updates this method, not every caller.
+     *
+     * @param subdividedPhysicalIds Physical ids that legitimately have
+     *        virtual subdivisions in the current config (these are kept).
+     * @return Physical ids that should have @ref migrateScreenAssignmentsFromVirtual
+     *         applied. Empty when state is consistent with the policy.
+     */
+    QSet<QString> physicalScreensWithStaleVirtualAssignments(const QSet<QString>& subdividedPhysicalIds) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Resolution Change Handling
     // ═══════════════════════════════════════════════════════════════════════════
