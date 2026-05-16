@@ -49,4 +49,6 @@ qt_add_qml_module(phosphor_shell_example
     RESOURCES
         shaders/frosted_glass.frag
         shaders/gradient.frag
+        shaders/corners.glsl
+        shaders/shadow.glsl
 )
