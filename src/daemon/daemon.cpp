@@ -975,6 +975,11 @@ bool Daemon::init()
     m_scrollEngine = std::move(engines.scroll);
     m_screenModeRouter = std::move(engines.router);
 
+    // ScrollEngine is geometry-agnostic: when its strip state changes the
+    // daemon resolves pixel geometry and pushes it to the effect.
+    connect(m_scrollEngine.get(), &PhosphorEngine::PlacementEngineBase::placementChanged, this,
+            &Daemon::onScrollPlacementChanged);
+
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::settingsPersistRequested, this, [this]() {
         if (m_settings) {
             m_settings->save();

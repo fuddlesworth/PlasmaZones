@@ -387,6 +387,16 @@ private:
     void updateScrollScreens();
 
     /**
+     * @brief Resolve scroll-mode geometry for a screen and push it to the effect.
+     *
+     * Connected to ScrollEngine::placementChanged. ScrollEngine is
+     * geometry-agnostic, so the daemon resolves the strip here via
+     * resolveScrollLayout() against the screen's working area and emits the
+     * result through WindowTrackingAdaptor::applyGeometriesBatch.
+     */
+    void onScrollPlacementChanged(const QString& screenId);
+
+    /**
      * @brief Respond to a Phosphor::Screens::ScreenManager VS cache change for a physical screen
      *
      * Wired to Phosphor::Screens::ScreenManager::virtualScreensChanged. Performs the post-change
