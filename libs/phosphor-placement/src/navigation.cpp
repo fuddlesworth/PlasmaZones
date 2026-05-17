@@ -107,10 +107,16 @@ PhosphorProtocol::EmptyZoneList WindowTrackingService::getEmptyZones(const QStri
         return {};
     }
 
-    // Resolve physical screen for fallback (virtual screen IDs resolve to their backing QScreen*)
-    QScreen* screen =
-        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : QGuiApplication::primaryScreen());
-    if (!screen) {
+    // Resolve physical screen for fallback (virtual screen IDs resolve to their backing physical output)
+    const Phosphor::Screens::PhysicalScreen screen =
+        m_screenManager ? m_screenManager->physicalScreenFor(screenId) : Phosphor::Screens::PhysicalScreen{};
+    QRect physicalGeom = screen.geometry;
+    if (!m_screenManager) {
+        if (QScreen* primary = QGuiApplication::primaryScreen()) {
+            physicalGeom = primary->geometry();
+        }
+    }
+    if (!physicalGeom.isValid()) {
         return {};
     }
 
@@ -130,7 +136,7 @@ PhosphorProtocol::EmptyZoneList WindowTrackingService::getEmptyZones(const QStri
     // a smaller VS produced zones sized for the full monitor.
     QRect scopeGeom = m_screenManager ? m_screenManager->screenGeometry(screenId) : QRect();
     if (!scopeGeom.isValid()) {
-        scopeGeom = screen->geometry();
+        scopeGeom = physicalGeom;
     }
     const QRect scopeAvailGeom = m_screenManager ? m_screenManager->actualAvailableGeometry(screen) : scopeGeom;
     const QRect availForLayout =
@@ -207,9 +213,9 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
         return QRect();
     }
 
-    // Resolve physical screen (virtual IDs resolve to backing QScreen*)
+    // Resolve physical screen (virtual IDs resolve to their backing physical output)
     QScreen* screen =
-        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : QGuiApplication::primaryScreen());
+        m_screenManager ? m_screenManager->physicalScreenFor(screenId).qscreen : QGuiApplication::primaryScreen();
     if (!screen) {
         return QRect();
     }
@@ -229,7 +235,7 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
     // scaling factors (e.g. 1.2x on ultrawides).
     QRectF combined;
     QScreen* screen =
-        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : QGuiApplication::primaryScreen());
+        m_screenManager ? m_screenManager->physicalScreenFor(screenId).qscreen : QGuiApplication::primaryScreen();
     if (!screen) {
         return combined.toAlignedRect();
     }

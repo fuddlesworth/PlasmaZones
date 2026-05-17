@@ -56,8 +56,7 @@ private Q_SLOTS:
 
     void testPanelGeometryReadyFiresOnStartWithNoSource()
     {
-        ScreenManager mgr(ScreenManagerConfig{/*panelSource=*/nullptr, /*configStore=*/nullptr,
-                                              /*useGeometrySensors=*/false});
+        ScreenManager mgr(ScreenManagerConfig{.useGeometrySensors = false});
         QVERIFY(!mgr.isPanelGeometryReady());
         QSignalSpy spy(&mgr, &ScreenManager::panelGeometryReady);
         mgr.start();
@@ -69,7 +68,7 @@ private Q_SLOTS:
 
     void testPanelGeometryReadyFiresOnceEvenAcrossRestart()
     {
-        ScreenManager mgr(ScreenManagerConfig{nullptr, nullptr, false});
+        ScreenManager mgr(ScreenManagerConfig{.useGeometrySensors = false});
         QSignalSpy spy(&mgr, &ScreenManager::panelGeometryReady);
         mgr.start();
         QVERIFY(spy.wait(2000));
@@ -89,7 +88,7 @@ private Q_SLOTS:
 
     void testStopIsIdempotent()
     {
-        ScreenManager mgr(ScreenManagerConfig{nullptr, nullptr, false});
+        ScreenManager mgr(ScreenManagerConfig{.useGeometrySensors = false});
         mgr.start();
         mgr.stop();
         mgr.stop(); // second stop must not crash or throw
@@ -99,7 +98,7 @@ private Q_SLOTS:
     void testStartIsIdempotent()
     {
         NoOpPanelSource src;
-        ScreenManager mgr(ScreenManagerConfig{&src, nullptr, false});
+        ScreenManager mgr(ScreenManagerConfig{.panelSource = &src, .useGeometrySensors = false});
         QSignalSpy spy(&mgr, &ScreenManager::panelGeometryReady);
         mgr.start();
         mgr.start(); // second start must be a no-op
@@ -123,7 +122,7 @@ private Q_SLOTS:
         }
 
         InMemoryConfigStore store;
-        ScreenManager mgr(ScreenManagerConfig{nullptr, &store, false});
+        ScreenManager mgr(ScreenManagerConfig{.configStore = &store, .useGeometrySensors = false});
 
         mgr.start();
         QVERIFY(!mgr.hasVirtualScreens(physId));
@@ -155,7 +154,7 @@ private Q_SLOTS:
         cfg.screens.append(makeDef(physId, 1, QRectF(0.5, 0.0, 0.5, 1.0)));
         QVERIFY(store.save(physId, cfg));
 
-        ScreenManager mgr(ScreenManagerConfig{nullptr, &store, false});
+        ScreenManager mgr(ScreenManagerConfig{.configStore = &store, .useGeometrySensors = false});
         mgr.start();
         QVERIFY(mgr.hasVirtualScreens(physId));
 
@@ -177,8 +176,7 @@ private Q_SLOTS:
         if (physId.isEmpty()) {
             QSKIP("no primary screen available under offscreen QPA");
         }
-        ScreenManager mgr(ScreenManagerConfig{nullptr, nullptr, false,
-                                              /*maxVirtualScreensPerPhysical=*/2});
+        ScreenManager mgr(ScreenManagerConfig{.useGeometrySensors = false, .maxVirtualScreensPerPhysical = 2});
         mgr.start();
 
         VirtualScreenConfig tooMany;
@@ -197,7 +195,7 @@ private Q_SLOTS:
         }
 
         InMemoryConfigStore store;
-        ScreenManager mgr(ScreenManagerConfig{nullptr, &store, false});
+        ScreenManager mgr(ScreenManagerConfig{.configStore = &store, .useGeometrySensors = false});
         mgr.start();
 
         VirtualScreenConfig cfg;

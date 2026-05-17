@@ -6,15 +6,10 @@
 
 #include "PhosphorScreens/Manager.h"
 
-#include "PhosphorScreens/ScreenIdentity.h"
 #include "PhosphorScreens/VirtualScreen.h"
 #include "screenslogging.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
-
-#include <QGuiApplication>
-#include <QScreen>
-#include <QSet>
 
 #include <algorithm>
 #include <limits>
@@ -178,31 +173,17 @@ QStringList ScreenManager::effectiveScreenIds() const
     }
 
     QStringList result;
-    for (auto* screen : m_trackedScreens) {
-        QString physId = ScreenIdentity::identifierFor(screen);
-        if (!ScreenIdentity::findByIdOrName(physId)) {
-            // Identifier round-trip fails — QScreen* exists in our tracked
-            // list but its identifier doesn't resolve back to any currently-
-            // connected screen. Either a hotplug race (screen removal in
-            // flight — transient, bounded by the screenRemoved path clearing
-            // the caches) OR persisted-ID drift that will keep failing until
-            // the store is rewritten. Warn-once per physId per session so
-            // the drift case is visible without spamming the transient one.
-            if (!m_warnedEffectiveIdMisses.contains(physId)) {
-                m_warnedEffectiveIdMisses.insert(physId);
-                qCWarning(lcPhosphorScreens)
-                    << "effectiveScreenIds: skipping tracked screen" << (screen ? screen->name() : QString())
-                    << "— identifier" << physId
-                    << "does not resolve back to a live QScreen (persisted-ID drift suspected)";
-            } else {
-                qCDebug(lcPhosphorScreens) << "effectiveScreenIds: still-unresolved identifier" << physId;
-            }
+    for (const auto& screen : m_trackedScreens) {
+        const QString physId = screen.identifier;
+        if (physId.isEmpty()) {
+            // A tracked screen with no identifier carries no persistable ID
+            // — skip it rather than emit an empty effective-screen entry
+            // that no VS config or layout could ever key against. The
+            // production provider always derives at least a connector-name
+            // identifier, so this only guards synthetic identity-less
+            // screens.
             continue;
         }
-        // Screen resolved — clear any stale warn-once entry so a transient
-        // hotplug race that recovers doesn't permanently suppress a later,
-        // legitimately-new miss.
-        m_warnedEffectiveIdMisses.remove(physId);
         auto it = m_virtualConfigs.constFind(physId);
         if (it != m_virtualConfigs.constEnd() && it->hasSubdivisions()) {
             for (const auto& vs : it->screens) {
@@ -253,8 +234,8 @@ QRect ScreenManager::screenGeometry(const QString& screenId) const
         }
         return QRect();
     }
-    QScreen* screen = ScreenIdentity::findByIdOrName(screenId);
-    return screen ? screen->geometry() : QRect();
+    const PhysicalScreen screen = trackedScreenFor(screenId);
+    return screen.isValid() ? screen.geometry : QRect();
 }
 
 QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
@@ -266,8 +247,8 @@ QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
             return QRect();
         }
         QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
-        QScreen* screen = ScreenIdentity::findByIdOrName(physId);
-        if (!screen) {
+        const PhysicalScreen screen = trackedScreenFor(physId);
+        if (!screen.isValid()) {
             return vsGeom;
         }
         QRect physAvail = actualAvailableGeometry(screen);
@@ -281,14 +262,13 @@ QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
         return result;
     }
 
-    QScreen* screen = ScreenIdentity::findByIdOrName(screenId);
-    return screen ? actualAvailableGeometry(screen) : QRect();
+    const PhysicalScreen screen = trackedScreenFor(screenId);
+    return screen.isValid() ? actualAvailableGeometry(screen) : QRect();
 }
 
-QScreen* ScreenManager::physicalQScreenFor(const QString& screenId) const
+PhysicalScreen ScreenManager::physicalScreenFor(const QString& screenId) const
 {
-    QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
-    return ScreenIdentity::findByIdOrName(physId);
+    return trackedScreenFor(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
 }
 
 bool ScreenManager::hasVirtualScreens(const QString& physicalScreenId) const
@@ -317,18 +297,18 @@ VirtualScreenDef::PhysicalEdges ScreenManager::physicalEdgesFor(const QString& s
 
 QString ScreenManager::virtualScreenAt(const QPoint& globalPos, const QString& physicalScreenId) const
 {
-    QScreen* screen = ScreenIdentity::findByIdOrName(physicalScreenId);
+    const PhysicalScreen screen = trackedScreenFor(physicalScreenId);
     return virtualScreenAtWithScreen(globalPos, physicalScreenId, screen);
 }
 
 QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const QString& physicalScreenId,
-                                                 QScreen* screen) const
+                                                 const PhysicalScreen& screen) const
 {
     auto it = m_virtualConfigs.constFind(physicalScreenId);
-    if (it == m_virtualConfigs.constEnd() || !screen) {
+    if (it == m_virtualConfigs.constEnd() || !screen.isValid()) {
         return {};
     }
-    QRect physGeom = screen->geometry();
+    QRect physGeom = screen.geometry;
     for (const auto& vs : it->screens) {
         QRect absGeom = vs.absoluteGeometry(physGeom);
         if (containsExclusive(absGeom, globalPos)) {
@@ -350,17 +330,17 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
 
 QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
 {
-    for (auto* screen : m_trackedScreens) {
+    for (const auto& screen : m_trackedScreens) {
         // Exclusive-right containment (shared helper) to match VS lookup
         // semantics — a point on the boundary between two adjacent physical
         // screens belongs to the screen whose origin is that pixel, never
         // both. QRect::contains() is inclusive on all four edges, which
         // would pick the first screen in iteration order and hide layout
         // bugs where two screens share an edge.
-        if (!containsExclusive(screen->geometry(), globalPos)) {
+        if (!containsExclusive(screen.geometry, globalPos)) {
             continue;
         }
-        QString physId = ScreenIdentity::identifierFor(screen);
+        const QString physId = screen.identifier;
         if (hasVirtualScreens(physId)) {
             QString vsId = virtualScreenAtWithScreen(globalPos, physId, screen);
             if (!vsId.isEmpty()) {
@@ -403,12 +383,12 @@ void ScreenManager::rebuildVirtualGeometryCache(const QString& physicalScreenId)
     if (it == m_virtualConfigs.constEnd()) {
         return;
     }
-    QScreen* screen = ScreenIdentity::findByIdOrName(physicalScreenId);
-    if (!screen) {
+    const PhysicalScreen screen = trackedScreenFor(physicalScreenId);
+    if (!screen.isValid()) {
         return;
     }
     invalidateVirtualGeometryCache(physicalScreenId);
-    QRect physGeom = screen->geometry();
+    QRect physGeom = screen.geometry;
     for (const auto& vs : it->screens) {
         m_virtualGeometryCache.insert(vs.id, vs.absoluteGeometry(physGeom));
     }

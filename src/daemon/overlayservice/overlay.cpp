@@ -97,7 +97,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     QHash<QString, QRect> targetGeometries;
     if (haveEffective) {
         for (const QString& screenId : effectiveIds) {
-            QScreen* physScreen = mgr->physicalQScreenFor(screenId);
+            const Phosphor::Screens::PhysicalScreen phys = mgr->physicalScreenFor(screenId);
+            QScreen* physScreen = phys.qscreen;
             if (!physScreen) {
                 continue;
             }

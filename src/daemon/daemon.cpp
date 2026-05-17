@@ -131,15 +131,15 @@ Daemon::Daemon(QObject* parent)
     , m_virtualScreenStore(std::make_unique<SettingsConfigStore>(m_settings.get()))
     , m_screenManager(std::make_unique<Phosphor::Screens::ScreenManager>(
           Phosphor::Screens::ScreenManager::Config{
-              /*panelSource=*/m_panelSource.get(),
-              /*configStore=*/m_virtualScreenStore.get(),
-              /*useGeometrySensors=*/true,
+              .panelSource = m_panelSource.get(),
+              .configStore = m_virtualScreenStore.get(),
+              .useGeometrySensors = true,
               // Align the lib's cap with the daemon's source-of-truth (Settings
               // uses ConfigDefaults::maxVirtualScreensPerPhysical() when
               // validating writes). A lower cap here would silently reject
               // configs Settings accepted, leaving Settings ↔ Phosphor::Screens::ScreenManager
               // divergent.
-              /*maxVirtualScreensPerPhysical=*/ConfigDefaults::maxVirtualScreensPerPhysical(),
+              .maxVirtualScreensPerPhysical = ConfigDefaults::maxVirtualScreensPerPhysical(),
           },
           nullptr))
     , m_shaderRegistry(std::make_unique<ShaderRegistry>(nullptr))
@@ -752,11 +752,11 @@ bool Daemon::init()
                 }
                 // This is a screen-specific layout different from the active one
                 // Only recalculate for the specific screen
-                QScreen* screen = m_screenManager->screenByName(screenId);
-                if (screen) {
+                const Phosphor::Screens::PhysicalScreen screen = m_screenManager->screenByName(screenId);
+                if (screen.isValid() && screen.qscreen) {
                     m_layoutComputeService->requestRecalculate(
                         layout, screenId,
-                        GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, screen));
+                        GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, screen.qscreen));
                 }
                 // Note: We don't change zone detector or overlay here since
                 // they work with the active layout, not per-screen layouts

@@ -113,14 +113,15 @@ inline ZoneSelectorConfig defaultZoneSelectorConfig()
 }
 
 // Resolve target screen from a screen name/ID string with fallback to primary.
-// Uses ScreenManager::physicalQScreenFor which handles virtual screen IDs +
+// Uses ScreenManager::physicalScreenFor which handles virtual screen IDs +
 // connector names. Falls back to the primary screen when the manager is null
 // (unit tests) or the lookup returns nothing.
 inline QScreen* resolveTargetScreen(Phosphor::Screens::ScreenManager* mgr, const QString& screenId)
 {
     if (mgr) {
-        if (QScreen* s = mgr->physicalQScreenFor(screenId)) {
-            return s;
+        const Phosphor::Screens::PhysicalScreen phys = mgr->physicalScreenFor(screenId);
+        if (phys.isValid() && phys.qscreen) {
+            return phys.qscreen;
         }
     }
     QScreen* s = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);

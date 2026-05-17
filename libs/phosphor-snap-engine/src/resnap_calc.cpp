@@ -370,7 +370,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
 
     // Resolve physical screen for zone geometry calculation
     auto* screenManager = m_windowTracker->screenManager();
-    QScreen* screen = (screenManager ? screenManager->physicalQScreenFor(screenId) : QGuiApplication::primaryScreen());
+    QScreen* screen =
+        screenManager ? screenManager->physicalScreenFor(screenId).qscreen : QGuiApplication::primaryScreen();
     if (!screen) {
         return result;
     }
@@ -495,7 +496,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
         // Resolve physical screen for zone geometry calculation
         auto* screenManager = m_windowTracker->screenManager();
         QScreen* screen =
-            (screenManager ? screenManager->physicalQScreenFor(screenId) : QGuiApplication::primaryScreen());
+            screenManager ? screenManager->physicalScreenFor(screenId).qscreen : QGuiApplication::primaryScreen();
         if (!screen) {
             continue;
         }

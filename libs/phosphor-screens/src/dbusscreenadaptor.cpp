@@ -495,7 +495,13 @@ QRect DBusScreenAdaptor::getAvailableGeometry(const QString& screenId)
     if (!screen) {
         return QRect();
     }
-    return m_screenManager ? m_screenManager->actualAvailableGeometry(screen) : screen->availableGeometry();
+    if (!m_screenManager) {
+        return screen->availableGeometry();
+    }
+    // The QScreen* overload resolves the connector against the manager and
+    // falls back to QScreen::availableGeometry() when it is not tracked, so
+    // an empty rect is never reported over D-Bus for a live screen.
+    return m_screenManager->actualAvailableGeometry(screen);
 }
 
 QRect DBusScreenAdaptor::getScreenGeometry(const QString& screenId)

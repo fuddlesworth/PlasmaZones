@@ -244,13 +244,22 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
     if (!savedScreen.isEmpty() && !currentScreenName.isEmpty()
         && !Phosphor::Screens::ScreenIdentity::screensMatch(savedScreen, currentScreenName)) {
         auto* mgr = m_screenManager;
-        QScreen* target = mgr ? mgr->physicalQScreenFor(currentScreenName)
-                              : Phosphor::Screens::ScreenIdentity::findByIdOrName(currentScreenName);
-        if (target) {
-            // For virtual screens, prefer virtual screen bounds over full physical screen
-            QRect available = (mgr && mgr->screenGeometry(currentScreenName).isValid())
-                ? mgr->screenAvailableGeometry(currentScreenName)
-                : target->availableGeometry();
+        QRect available;
+        bool haveTarget = false;
+        if (mgr) {
+            const Phosphor::Screens::PhysicalScreen target = mgr->physicalScreenFor(currentScreenName);
+            if (target.isValid()) {
+                haveTarget = true;
+                // For virtual screens, prefer virtual screen bounds over full physical screen
+                available = mgr->screenGeometry(currentScreenName).isValid()
+                    ? mgr->screenAvailableGeometry(currentScreenName)
+                    : mgr->actualAvailableGeometry(target);
+            }
+        } else if (QScreen* target = Phosphor::Screens::ScreenIdentity::findByIdOrName(currentScreenName)) {
+            haveTarget = true;
+            available = target->availableGeometry();
+        }
+        if (haveTarget) {
             // Clamp size to fit within the target screen (the window may have been
             // larger than the target VS when captured on a wider screen/physical monitor).
             int w = qMin(geo.width(), available.width());

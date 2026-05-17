@@ -46,7 +46,7 @@ QRectF resolveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZone
     QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(
         PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
     if (!screen && mgr) {
-        screen = mgr->physicalQScreenFor(screenId);
+        screen = mgr->physicalScreenFor(screenId).qscreen;
     }
     if (screen) {
         return GeometryUtils::effectiveScreenGeometry(mgr, layout, screen);
@@ -57,7 +57,7 @@ QRectF resolveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZone
 QScreen* resolvePhysicalQScreen(Phosphor::Screens::ScreenManager* mgr, const QString& screenId)
 {
     if (mgr) {
-        QScreen* screen = mgr->physicalQScreenFor(screenId);
+        QScreen* screen = mgr->physicalScreenFor(screenId).qscreen;
         if (screen) {
             return screen;
         }

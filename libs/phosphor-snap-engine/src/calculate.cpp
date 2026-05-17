@@ -65,9 +65,9 @@ SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QSt
             qCWarning(PhosphorSnapEngine::lcSnapEngine)
                 << "App rule: no screen manager, falling back to primary screen for" << windowClass;
         }
-        QScreen* screen =
-            (screenManager ? screenManager->physicalQScreenFor(effectiveScreen) : QGuiApplication::primaryScreen());
-        if (!screen) {
+        const bool screenFound = screenManager ? screenManager->physicalScreenFor(effectiveScreen).isValid()
+                                               : (QGuiApplication::primaryScreen() != nullptr);
+        if (!screenFound) {
             qCInfo(PhosphorSnapEngine::lcSnapEngine)
                 << "App rule: screen" << effectiveScreen << "not found for" << windowClass
                 << (match.targetScreen.isEmpty() ? "(current screen)" : "(target screen)") << ", skipping";
