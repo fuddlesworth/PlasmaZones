@@ -153,6 +153,15 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
         }
     }
 
+    // Push KWin's authoritative per-screen work area (clientArea/MaximizeArea)
+    // so the daemon's available-geometry computation uses the compositor's
+    // exact panel struts instead of the plasmashell D-Bus + layer-shell sensor
+    // heuristic — which mis-attributes struts (everything onto the bottom
+    // edge) for top-panel layouts when the D-Bus panel query returns nothing.
+    if (m_screenChangeHandler) {
+        m_screenChangeHandler->scheduleClientAreaReport();
+    }
+
     // Re-push cursor screen — use the cached effective screen ID (which includes
     // virtual screen IDs like "A/vs:0") so the daemon's shortcut handler resolves
     // to the correct virtual screen, not the physical monitor.

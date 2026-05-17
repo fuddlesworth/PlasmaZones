@@ -197,6 +197,30 @@ public:
     /// underlying timer fires, the timer restarts.
     void scheduleDelayedPanelRequery(int delayMs);
 
+    // ─── Compositor-reported available geometry ──────────────────────────
+
+    /**
+     * @brief Record the authoritative per-screen available geometry as
+     *        reported by the compositor.
+     *
+     * The KWin effect queries @c KWin::clientArea(MaximizeArea) — the exact
+     * panel-excluded work area the compositor itself reserves for maximized
+     * windows, with correct per-edge strut attribution and correct
+     * auto-hide handling — and pushes it here over D-Bus.
+     *
+     * This is the highest-priority source in @ref calculateAvailableGeometry:
+     * when an entry exists for a screen it fully determines that screen's
+     * available rect, bypassing the layer-shell sensor + plasmashell D-Bus
+     * heuristic. That heuristic can only *guess* which edge a strut belongs
+     * to, and guesses wrong (attributes everything to the bottom edge) for
+     * top-panel layouts when the plasmashell D-Bus query returns no panels.
+     *
+     * Pass an invalid or empty rect to clear the override for @p screenName
+     * and fall back to the heuristic. Keyed by connector name. A redundant
+     * call (same rect already recorded) is a no-op.
+     */
+    void setCompositorAvailableGeometry(const QString& screenName, const QRect& available);
+
 Q_SIGNALS:
     void screenAdded(const PhysicalScreen& screen);
     void screenRemoved(const PhysicalScreen& screen);
@@ -294,6 +318,14 @@ private:
     // here without also re-auditing every const accessor to make sure
     // the mutation isn't leaked via returned QString&/QRect& references.
     mutable QHash<QString, QRect> m_availableGeometryCache;
+
+    // Authoritative per-screen available geometry pushed by the compositor
+    // bridge (the KWin effect's clientArea/MaximizeArea query). Keyed by
+    // connector name. When an entry exists for a screen it overrides the
+    // sensor/D-Bus heuristic entirely in calculateAvailableGeometry — see
+    // setCompositorAvailableGeometry. Cleared per-screen on screen removal
+    // (destroyGeometrySensor) and wholesale on stop().
+    QHash<QString, QRect> m_compositorAvailableGeometry;
 
     // Virtual screen configurations, keyed by physical screen ID.
     QHash<QString, VirtualScreenConfig> m_virtualConfigs;
