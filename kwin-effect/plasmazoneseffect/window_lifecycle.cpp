@@ -556,6 +556,10 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Autotile,
                                                        QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                        QStringLiteral("notifyWindowFocused"));
+    } else if (m_autotileHandler->isScrollScreen(screenId)) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scroll,
+                                                       QStringLiteral("notifyWindowFocused"), {windowId, screenId},
+                                                       QStringLiteral("notifyWindowFocused"));
     }
 }
 
