@@ -217,7 +217,7 @@ SettingsFlickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
-            text: i18n("Override the global per-event animation for specific windows. Useful when one app should dissolve while everything else uses the default open animation, or when a slow app should animate faster.")
+            text: i18n("Override the global per-event animation for specific windows.")
             visible: true
         }
 
@@ -231,7 +231,7 @@ SettingsFlickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
-            text: i18n("Animations are skipped for filtered windows. Specific App Rules below override these filters: a rule whose pattern matches a window will animate it even when the filter excludes it.")
+            text: i18n("Filtered windows are not animated. An App Rule below overrides the filter: if its pattern matches a window, that window animates even when a filter excludes it.")
             visible: true
         }
 
