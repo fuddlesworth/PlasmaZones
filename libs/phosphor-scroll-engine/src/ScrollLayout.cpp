@@ -72,15 +72,36 @@ QHash<QString, QRectF> resolveScrollLayout(const ScrollScreenState& state, const
     // coordinate that maps to the inner-left edge of the working area.
     const int activeIndex = state.activeColumnIndex();
     qreal viewPos = 0.0;
-    if (activeIndex >= 0 && activeIndex < stripX.size()) {
-        viewPos = stripX.at(activeIndex);
-        // viewOffset is an offset *within* the focused column's width — add it
-        // only when that column is actually visible. A fully-minimized
-        // (collapsed) focused column has zero width and its stripX already
-        // coincides with the next visible column, so anchor there with no
-        // offset rather than scrolling the strip to a zero-width slot.
+    if (activeIndex >= 0 && activeIndex < columns.size()) {
         if (widths.at(activeIndex) > 0.0) {
-            viewPos += state.viewOffset();
+            // Focused column is visible: anchor on it, plus the in-column
+            // viewOffset (an offset *within* the focused column's width).
+            viewPos = stripX.at(activeIndex) + state.viewOffset();
+        } else {
+            // Focused column is fully minimized (collapsed, zero width).
+            // viewOffset is meaningless against a zero-width column, and the
+            // collapsed column's own stripX is only on-screen when a visible
+            // column follows it — a trailing run of collapsed columns has a
+            // stripX past the strip's end, which would scroll every visible
+            // column off the left edge. Anchor on the nearest visible column
+            // (forward first, since a mid-strip collapsed column shares the
+            // next column's stripX; otherwise the last visible column).
+            int anchor = -1;
+            for (int ci = activeIndex; ci < columns.size(); ++ci) {
+                if (widths.at(ci) > 0.0) {
+                    anchor = ci;
+                    break;
+                }
+            }
+            if (anchor < 0) {
+                for (int ci = activeIndex - 1; ci >= 0; --ci) {
+                    if (widths.at(ci) > 0.0) {
+                        anchor = ci;
+                        break;
+                    }
+                }
+            }
+            viewPos = (anchor >= 0) ? stripX.at(anchor) : 0.0;
         }
     }
 

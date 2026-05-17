@@ -372,28 +372,36 @@ void ScrollHandler::loadSettings()
 
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QDBusVariant> reply = *w;
-        if (reply.isValid()) {
-            const QStringList screens = reply.value().variant().toStringList();
-            m_scrollScreens = QSet<QString>(screens.cbegin(), screens.cend());
-            qCInfo(lcEffect) << "Loaded scroll screens:" << m_scrollScreens;
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, epoch = m_daemonEpoch](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                // A reply in flight from before a daemon (re)connect is stale:
+                // onDaemonReady has since bumped the epoch, cleared the tracking sets
+                // and re-issued loadSettings. Applying this older scrollScreens
+                // snapshot (and its batch re-announce) would clobber the fresh state.
+                if (epoch != m_daemonEpoch) {
+                    return;
+                }
+                QDBusPendingReply<QDBusVariant> reply = *w;
+                if (reply.isValid()) {
+                    const QStringList screens = reply.value().variant().toStringList();
+                    m_scrollScreens = QSet<QString>(screens.cbegin(), screens.cend());
+                    qCInfo(lcEffect) << "Loaded scroll screens:" << m_scrollScreens;
 
-            if (!m_scrollScreens.isEmpty()) {
-                // Batch-notify all existing windows on scroll screens in one
-                // D-Bus call instead of per-window windowOpened round-trips.
-                // loadSettings() runs only at construction or right after
-                // onDaemonReady() — both leave m_notifiedWindows empty — so no
-                // explicit reset is needed: every window is reported afresh,
-                // and a window already added individually in the async gap is
-                // correctly skipped (no duplicate windowOpened).
-                notifyWindowsAddedBatch(KWin::effects->stackingOrder());
-            }
-        } else {
-            qCDebug(lcEffect) << "Scroll screens: query failed, daemon may not be running";
-        }
-    });
+                    if (!m_scrollScreens.isEmpty()) {
+                        // Batch-notify all existing windows on scroll screens in one
+                        // D-Bus call instead of per-window windowOpened round-trips.
+                        // loadSettings() runs only at construction or right after
+                        // onDaemonReady() — both leave m_notifiedWindows empty — so no
+                        // explicit reset is needed: every window is reported afresh,
+                        // and a window already added individually in the async gap is
+                        // correctly skipped (no duplicate windowOpened).
+                        notifyWindowsAddedBatch(KWin::effects->stackingOrder());
+                    }
+                } else {
+                    qCDebug(lcEffect) << "Scroll screens: query failed, daemon may not be running";
+                }
+            });
 }
 
 QStringList ScrollHandler::trackedWindowsOnScreen(const QString& screenId) const

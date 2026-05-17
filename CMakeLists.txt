@@ -461,6 +461,7 @@ install(FILES
     dbus/org.plasmazones.LayoutRegistry.xml
     dbus/org.plasmazones.Overlay.xml
     dbus/org.plasmazones.Screen.xml
+    dbus/org.plasmazones.Scroll.xml
     dbus/org.plasmazones.Settings.xml
     dbus/org.plasmazones.SettingsApp.xml
     dbus/org.plasmazones.Shader.xml

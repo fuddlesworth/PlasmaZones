@@ -1556,9 +1556,8 @@ void Daemon::stop()
     // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
     // DBusScreenAdaptor, WindowDragAdaptor, SnapAdaptor, AutotileAdaptor,
-    // ScrollAdaptor) all
-    // ship `= default` destructors (verified — see their class headers),
-    // so they have no dtor body to UAF. QDBusConnection::unregisterObject
+    // ScrollAdaptor) all ship `= default` destructors (verified — see their
+    // class headers), so they have no dtor body to UAF. QDBusConnection::unregisterObject
     // (invoked above) blocks new method dispatch to them before we begin
     // tearing down, and Qt's sender-destruction auto-disconnect cleans
     // up signal wiring when the borrowed sender (m_layoutManager, etc.)

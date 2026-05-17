@@ -6,8 +6,8 @@
 Planning document. Status: **Phases 0 ✅, 1 ✅ and 2 ✅ complete** — the scroll engine,
 geometry resolver, `Mode::Scroll` routing, daemon geometry pipeline, and the full window
 lifecycle (open/close/focus, minimize, screen hotplug & geometry change, fixed-size
-windows) are implemented, built, and tested (186 suite tests green). Phase 0 detail in
-[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 3.
+windows) are implemented, built, and tested — the full `ctest` suite is green. Phase 0
+detail in [`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 3.
 
 ## 1. Goal
 
@@ -272,7 +272,9 @@ Phase 5 ("Settings, UI").
   mirroring `AutotileHandler` — neither handler knows the other's mode.
 - ✅ **Minimize / unminimize** (M2) — Karousel's `TiledMinimized`: a minimized window
   keeps its slot in the strip but drops out of the resolved layout; a fully-minimized
-  column collapses with no gap and reappears in place on restore.
+  column collapses with no gap and reappears in place on restore. Minimizing the focused
+  window hands focus to the first still-visible window in strip order, so the viewport
+  never anchors on a hidden window.
 - ✅ **Screen hotplug / geometry change** (M3) — the daemon re-resolves every scroll
   strip on a debounced geometry change; `ScrollHandler` re-homes windows that move
   between monitors or virtual screens; the scroll-screen-set diff adopts or releases
