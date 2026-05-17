@@ -333,6 +333,16 @@ target_include_directories(plasmazones_rendering
         $<INSTALL_INTERFACE:include/plasmazones>
 )
 
+# Versioned SONAME — mirrors plasmazones_core above. Without VERSION /
+# SOVERSION the library installs as a bare libplasmazones_rendering.so
+# with no SONAME; dpkg-shlibdeps then can't derive a package dependency
+# from it ("can't extract name and version from library name"). Every
+# other shipped library is versioned — keep this one consistent.
+set_target_properties(plasmazones_rendering PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION 1
+)
+
 install(TARGETS plasmazones_rendering
     EXPORT PlasmaZonesTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
