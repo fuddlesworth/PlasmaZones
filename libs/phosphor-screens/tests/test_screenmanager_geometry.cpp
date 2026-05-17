@@ -89,6 +89,7 @@ private Q_SLOTS:
         // No panel source / sensors, so available geometry == full rect —
         // and it must follow the move rather than stay at the old origin.
         QCOMPARE(mgr.screenGeometry(QStringLiteral("DP-1")), moved);
+        QVERIFY(mgr.physicalScreenFor(QStringLiteral("DP-1")).isValid());
         QCOMPARE(mgr.actualAvailableGeometry(mgr.physicalScreenFor(QStringLiteral("DP-1"))), moved);
     }
 
@@ -108,6 +109,7 @@ private Q_SLOTS:
 
         QCOMPARE(availSpy.count(), 1);
         QCOMPARE(availSpy.at(0).at(1).toRect(), resized);
+        QVERIFY(mgr.physicalScreenFor(QStringLiteral("DP-1")).isValid());
         QCOMPARE(mgr.actualAvailableGeometry(mgr.physicalScreenFor(QStringLiteral("DP-1"))), resized);
     }
 
@@ -124,7 +126,12 @@ private Q_SLOTS:
 
         // Output drops on DPMS-off, then re-appears at a transient origin.
         fake.removeScreen(QStringLiteral("DP-1"));
-        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+        const QRect transient(0, 0, 1920, 1080);
+        fake.addScreen(QStringLiteral("DP-1"), transient);
+
+        // The re-added output is tracked, sitting at its transient origin.
+        QVERIFY(mgr.physicalScreenFor(QStringLiteral("DP-1")).isValid());
+        QCOMPARE(mgr.screenGeometry(QStringLiteral("DP-1")), transient);
 
         QSignalSpy availSpy(&mgr, &ScreenManager::availableGeometryChanged);
 
@@ -134,6 +141,7 @@ private Q_SLOTS:
 
         QCOMPARE(availSpy.count(), 1);
         QCOMPARE(availSpy.at(0).at(1).toRect(), settled);
+        QVERIFY(mgr.physicalScreenFor(QStringLiteral("DP-1")).isValid());
         QCOMPARE(mgr.actualAvailableGeometry(mgr.physicalScreenFor(QStringLiteral("DP-1"))), settled);
     }
 };

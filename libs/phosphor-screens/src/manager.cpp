@@ -25,12 +25,12 @@ namespace Phosphor::Screens {
 ScreenManager::ScreenManager(ScreenManagerConfig cfg, QObject* parent)
     : QObject(parent)
     , m_cfg(cfg)
-{
     // Default to a live Qt-backed provider when the host didn't inject one.
     // Parented to `this`, so the manager owns it and it shares the manager's
     // lifetime — matching the "consumer owns an injected provider, manager
     // owns the default" split documented on ScreenManagerConfig.
-    m_screenProvider = m_cfg.screenProvider ? m_cfg.screenProvider : new QtScreenProvider(this);
+    , m_screenProvider(m_cfg.screenProvider ? m_cfg.screenProvider : new QtScreenProvider(this))
+{
 }
 
 ScreenManager::~ScreenManager()
@@ -193,17 +193,17 @@ void ScreenManager::syncTrackedScreens()
     m_trackedScreens = m_screenProvider->screens();
 }
 
-const PhysicalScreen* ScreenManager::trackedScreenByName(const QString& name) const
+PhysicalScreen ScreenManager::trackedScreenByName(const QString& name) const
 {
     for (const auto& screen : m_trackedScreens) {
         if (screen.name == name) {
-            return &screen;
+            return screen;
         }
     }
-    return nullptr;
+    return {};
 }
 
-const PhysicalScreen* ScreenManager::trackedScreenFor(const QString& screenId) const
+PhysicalScreen ScreenManager::trackedScreenFor(const QString& screenId) const
 {
     if (screenId.isEmpty()) {
         // Empty resolves to the primary output — mirrors the historical
@@ -216,10 +216,10 @@ const PhysicalScreen* ScreenManager::trackedScreenFor(const QString& screenId) c
     // stamped onto PhysicalScreen::identifier.
     for (const auto& screen : m_trackedScreens) {
         if (screen.identifier == screenId || screen.name == screenId) {
-            return &screen;
+            return screen;
         }
     }
-    return nullptr;
+    return {};
 }
 
 void ScreenManager::createGeometrySensor(const PhysicalScreen& screen)
@@ -424,13 +424,13 @@ void ScreenManager::onSensorGeometryChanged(const QString& screenName)
     if (!sensor) {
         return;
     }
-    const PhysicalScreen* screen = trackedScreenByName(screenName);
-    if (!screen) {
+    const PhysicalScreen screen = trackedScreenByName(screenName);
+    if (!screen.isValid()) {
         return;
     }
     const QRect sensorGeom = sensor->geometry();
     qCDebug(lcPhosphorScreens) << "onSensorGeometryChanged: screen=" << screenName << "sensorGeometry=" << sensorGeom
-                               << "screenGeometry=" << screen->geometry;
+                               << "screenGeometry=" << screen.geometry;
     if (!sensorGeom.isValid() || sensorGeom.width() <= 0 || sensorGeom.height() <= 0) {
         return;
     }
@@ -444,7 +444,7 @@ void ScreenManager::onSensorGeometryChanged(const QString& screenName)
     if (m_cfg.panelSource) {
         m_cfg.panelSource->requestRequery();
     }
-    calculateAvailableGeometry(*screen);
+    calculateAvailableGeometry(screen);
 }
 
 void ScreenManager::onPanelOffsetsChanged(QScreen* screen)
@@ -454,8 +454,9 @@ void ScreenManager::onPanelOffsetsChanged(QScreen* screen)
     // geometry snapshot. An untracked screen (hotplug race) is skipped; the
     // panelGeometryReady latch below still advances.
     if (screen) {
-        if (const PhysicalScreen* tracked = trackedScreenByName(screen->name())) {
-            calculateAvailableGeometry(*tracked);
+        const PhysicalScreen tracked = trackedScreenByName(screen->name());
+        if (tracked.isValid()) {
+            calculateAvailableGeometry(tracked);
         }
     }
 
@@ -602,8 +603,9 @@ void ScreenManager::onProviderScreenAdded(const PhysicalScreen& screen)
     propagateIdentifierDrift(oldIds);
 
     if (m_cfg.useGeometrySensors) {
-        if (const PhysicalScreen* tracked = trackedScreenByName(screen.name)) {
-            createGeometrySensor(*tracked);
+        const PhysicalScreen tracked = trackedScreenByName(screen.name);
+        if (tracked.isValid()) {
+            createGeometrySensor(tracked);
         }
     }
     Q_EMIT screenAdded(screen);

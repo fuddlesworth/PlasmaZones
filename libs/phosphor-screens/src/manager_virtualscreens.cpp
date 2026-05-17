@@ -234,8 +234,8 @@ QRect ScreenManager::screenGeometry(const QString& screenId) const
         }
         return QRect();
     }
-    const PhysicalScreen* screen = trackedScreenFor(screenId);
-    return screen ? screen->geometry : QRect();
+    const PhysicalScreen screen = trackedScreenFor(screenId);
+    return screen.isValid() ? screen.geometry : QRect();
 }
 
 QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
@@ -247,11 +247,11 @@ QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
             return QRect();
         }
         QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
-        const PhysicalScreen* screen = trackedScreenFor(physId);
-        if (!screen) {
+        const PhysicalScreen screen = trackedScreenFor(physId);
+        if (!screen.isValid()) {
             return vsGeom;
         }
-        QRect physAvail = actualAvailableGeometry(*screen);
+        QRect physAvail = actualAvailableGeometry(screen);
         QRect result = vsGeom.intersected(physAvail);
         if (!result.isValid() || result.width() < MinUsableScreenDimension
             || result.height() < MinUsableScreenDimension) {
@@ -262,15 +262,13 @@ QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
         return result;
     }
 
-    const PhysicalScreen* screen = trackedScreenFor(screenId);
-    return screen ? actualAvailableGeometry(*screen) : QRect();
+    const PhysicalScreen screen = trackedScreenFor(screenId);
+    return screen.isValid() ? actualAvailableGeometry(screen) : QRect();
 }
 
 PhysicalScreen ScreenManager::physicalScreenFor(const QString& screenId) const
 {
-    QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
-    const PhysicalScreen* screen = trackedScreenFor(physId);
-    return screen ? *screen : PhysicalScreen{};
+    return trackedScreenFor(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
 }
 
 bool ScreenManager::hasVirtualScreens(const QString& physicalScreenId) const
@@ -299,18 +297,18 @@ VirtualScreenDef::PhysicalEdges ScreenManager::physicalEdgesFor(const QString& s
 
 QString ScreenManager::virtualScreenAt(const QPoint& globalPos, const QString& physicalScreenId) const
 {
-    const PhysicalScreen* screen = trackedScreenFor(physicalScreenId);
+    const PhysicalScreen screen = trackedScreenFor(physicalScreenId);
     return virtualScreenAtWithScreen(globalPos, physicalScreenId, screen);
 }
 
 QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const QString& physicalScreenId,
-                                                 const PhysicalScreen* screen) const
+                                                 const PhysicalScreen& screen) const
 {
     auto it = m_virtualConfigs.constFind(physicalScreenId);
-    if (it == m_virtualConfigs.constEnd() || !screen) {
+    if (it == m_virtualConfigs.constEnd() || !screen.isValid()) {
         return {};
     }
-    QRect physGeom = screen->geometry;
+    QRect physGeom = screen.geometry;
     for (const auto& vs : it->screens) {
         QRect absGeom = vs.absoluteGeometry(physGeom);
         if (containsExclusive(absGeom, globalPos)) {
@@ -344,7 +342,7 @@ QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
         }
         const QString physId = screen.identifier;
         if (hasVirtualScreens(physId)) {
-            QString vsId = virtualScreenAtWithScreen(globalPos, physId, &screen);
+            QString vsId = virtualScreenAtWithScreen(globalPos, physId, screen);
             if (!vsId.isEmpty()) {
                 return vsId;
             }
@@ -385,12 +383,12 @@ void ScreenManager::rebuildVirtualGeometryCache(const QString& physicalScreenId)
     if (it == m_virtualConfigs.constEnd()) {
         return;
     }
-    const PhysicalScreen* screen = trackedScreenFor(physicalScreenId);
-    if (!screen) {
+    const PhysicalScreen screen = trackedScreenFor(physicalScreenId);
+    if (!screen.isValid()) {
         return;
     }
     invalidateVirtualGeometryCache(physicalScreenId);
-    QRect physGeom = screen->geometry;
+    QRect physGeom = screen.geometry;
     for (const auto& vs : it->screens) {
         m_virtualGeometryCache.insert(vs.id, vs.absoluteGeometry(physGeom));
     }

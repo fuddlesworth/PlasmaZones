@@ -27,10 +27,25 @@ PhysicalScreen FakeScreenProvider::primaryScreen() const
 
 void FakeScreenProvider::addScreen(const QString& name, const QRect& geometry, const QString& identifier)
 {
+    // Connector names are unique among connected outputs — PhysicalScreen
+    // identity keys on `name`, and the manager's name-keyed caches assume
+    // it. Refuse a duplicate so a mis-sequenced test (a re-add with no
+    // intervening removeScreen) fails loudly rather than passing vacuously
+    // against an impossible topology.
+    for (const auto& existing : m_screens) {
+        if (existing.name == name) {
+            qWarning("FakeScreenProvider::addScreen: connector '%s' already present — ignoring duplicate",
+                     qPrintable(name));
+            return;
+        }
+    }
     // identifier defaults to the connector name so identifier-keyed
     // lookups still resolve for a screen the test didn't bother to
     // assign a distinct EDID-style id.
-    const PhysicalScreen screen{name, identifier.isEmpty() ? name : identifier, geometry, nullptr};
+    const PhysicalScreen screen{.name = name,
+                                .identifier = identifier.isEmpty() ? name : identifier,
+                                .geometry = geometry,
+                                .qscreen = nullptr};
     m_screens.append(screen);
     if (m_primaryName.isEmpty()) {
         m_primaryName = name;
@@ -56,6 +71,12 @@ void FakeScreenProvider::moveScreen(const QString& name, const QRect& newGeometr
 {
     for (auto& screen : m_screens) {
         if (screen.name == name) {
+            if (screen.geometry == newGeometry) {
+                // No actual change. QtScreenProvider relays
+                // QScreen::geometryChanged, which Qt suppresses on a no-op
+                // move — the fake matches that contract.
+                return;
+            }
             screen.geometry = newGeometry;
             Q_EMIT screenGeometryChanged(screen);
             return;

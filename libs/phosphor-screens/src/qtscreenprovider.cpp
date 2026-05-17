@@ -18,7 +18,10 @@ PhysicalScreen toPhysicalScreen(QScreen* screen)
     if (!screen) {
         return {};
     }
-    return PhysicalScreen{screen->name(), ScreenIdentity::identifierFor(screen), screen->geometry(), screen};
+    return PhysicalScreen{.name = screen->name(),
+                          .identifier = ScreenIdentity::identifierFor(screen),
+                          .geometry = screen->geometry(),
+                          .qscreen = screen};
 }
 } // namespace
 

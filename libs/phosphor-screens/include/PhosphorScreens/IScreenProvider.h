@@ -36,6 +36,10 @@ public:
     explicit IScreenProvider(QObject* parent = nullptr)
         : QObject(parent)
     {
+        // PhysicalScreen rides this interface's signals — register it so a
+        // queued connection or QSignalSpy can marshal it. qRegisterMetaType
+        // is idempotent, so paying it per provider construction is harmless.
+        qRegisterMetaType<PhysicalScreen>();
     }
     ~IScreenProvider() override = default;
 

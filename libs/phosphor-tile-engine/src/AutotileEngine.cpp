@@ -3444,8 +3444,9 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
         return QRect();
     }
 
-    return m_screenManager ? m_screenManager->actualAvailableGeometry(m_screenManager->screenByName(screen->name()))
-                           : screen->availableGeometry();
+    // m_screenManager is non-null here — the !m_screenManager early-return
+    // at the top of this function already handled that case.
+    return m_screenManager->actualAvailableGeometry(m_screenManager->screenByName(screen->name()));
 }
 
 bool AutotileEngine::isKnownScreen(const QString& screenId) const

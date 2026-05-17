@@ -222,10 +222,12 @@ private:
     // resyncs through this rather than mutating the vector incrementally.
     void syncTrackedScreens();
 
-    // Tracked-screen lookups. Return a pointer into m_trackedScreens (valid
-    // only until the next syncTrackedScreens) or nullptr.
-    const PhysicalScreen* trackedScreenByName(const QString& name) const;
-    const PhysicalScreen* trackedScreenFor(const QString& screenId) const;
+    // Tracked-screen lookups. Return a copy of the matching tracked screen,
+    // or an invalid PhysicalScreen when nothing matches. By value rather
+    // than a pointer-into-m_trackedScreens so a caller cannot dangle it
+    // across a syncTrackedScreens that re-assigns the vector.
+    PhysicalScreen trackedScreenByName(const QString& name) const;
+    PhysicalScreen trackedScreenFor(const QString& screenId) const;
 
     // Geometry sensor (layer-shell) lifecycle. Keyed by connector name.
     void createGeometrySensor(const PhysicalScreen& screen);
@@ -290,7 +292,7 @@ private:
     void rebuildVirtualGeometryCache(const QString& physicalScreenId) const;
 
     QString virtualScreenAtWithScreen(const QPoint& globalPos, const QString& physicalScreenId,
-                                      const PhysicalScreen* screen) const;
+                                      const PhysicalScreen& screen) const;
 
     /// Detect identifier flips between @p oldIds (connector name → prior
     /// identifier) and the current tracked identifiers, re-key

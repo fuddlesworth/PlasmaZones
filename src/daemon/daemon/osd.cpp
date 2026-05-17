@@ -421,8 +421,11 @@ void Daemon::syncModeFromAssignments()
             const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
             if (!effectiveIds.isEmpty()) {
                 focusedScreenId = effectiveIds.first();
-            } else if (!m_screenManager->screens().isEmpty()) {
-                focusedScreenId = m_screenManager->screens().first().identifier;
+            } else {
+                const auto trackedScreens = m_screenManager->screens();
+                if (!trackedScreens.isEmpty()) {
+                    focusedScreenId = trackedScreens.first().identifier;
+                }
             }
         }
         if (!focusedScreenId.isEmpty()) {
