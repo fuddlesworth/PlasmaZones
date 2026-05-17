@@ -30,11 +30,53 @@
 
 #include "../autotilehandler.h"
 #include "../navigationhandler.h"
+#include "../scrollhandler.h"
 #include "../snapassisthandler.h"
+
+#include <QtMath>
 
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+
+namespace {
+/// Fit a scroll-mode window into its tile slot. A window that cannot fill the
+/// slot — fixed-size or max-constrained — keeps its constrained size, centred
+/// in the slot: the Phase 2 MVP fallback for non-resizable windows. A normal
+/// resizable window is returned the slot unchanged.
+QRect constrainToScrollSlot(KWin::EffectWindow* window, const QRect& slot)
+{
+    KWin::Window* kw = window ? window->window() : nullptr;
+    if (!kw) {
+        return slot;
+    }
+    const QSizeF minS = kw->minSize();
+    const QSizeF maxS = kw->maxSize();
+
+    int w = slot.width();
+    int h = slot.height();
+    // maxSize() reports a large sentinel for unconstrained windows, so a
+    // genuine maximum clamps here and an unconstrained one is left alone.
+    if (maxS.width() > 0.0 && w > maxS.width()) {
+        w = qFloor(maxS.width());
+    }
+    if (maxS.height() > 0.0 && h > maxS.height()) {
+        h = qFloor(maxS.height());
+    }
+    // A minimum larger than the slot means the window will overflow — accepted
+    // for the MVP; pin it to the minimum so the daemon's rect is honoured.
+    if (minS.width() > 0.0 && w < minS.width()) {
+        w = qCeil(minS.width());
+    }
+    if (minS.height() > 0.0 && h < minS.height()) {
+        h = qCeil(minS.height());
+    }
+    if (w == slot.width() && h == slot.height()) {
+        return slot; // fills the slot exactly — nothing to centre
+    }
+    return QRect(slot.x() + (slot.width() - w) / 2, slot.y() + (slot.height() - h) / 2, w, h);
+}
+} // namespace
 
 void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& action, const QString& reason,
                                                const QString& sourceZoneId, const QString& targetZoneId,
@@ -253,6 +295,13 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         PendingApply p;
         p.window = QPointer<KWin::EffectWindow>(window);
         p.geometry = entry.toRect();
+        // Scroll-mode windows that cannot fill their tile slot (fixed-size or
+        // max-constrained) are centred within it; record the resolved rect so
+        // ScrollHandler can detect and correct an app-initiated resize.
+        if (action == QLatin1String("scroll")) {
+            p.geometry = constrainToScrollSlot(window, p.geometry);
+            m_scrollHandler->recordAppliedGeometry(getWindowId(window), p.geometry);
+        }
         p.screenId = entry.screenId;
         pending.append(p);
     }

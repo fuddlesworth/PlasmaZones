@@ -6,9 +6,12 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QRect>
 #include <QSet>
 #include <QString>
 #include <QStringList>
+
+class QTimer;
 
 namespace KWin {
 class EffectWindow;
@@ -73,6 +76,15 @@ public:
     /// and adds it to the new one when either is scroll mode.
     void handleWindowOutputChanged(KWin::EffectWindow* w);
 
+    /// Record the geometry the daemon last resolved for a scroll window, so
+    /// an app-initiated resize away from it can be detected and corrected.
+    void recordAppliedGeometry(const QString& windowId, const QRect& geometry);
+
+    /// React to a scroll window's frame geometry changing. An app resizing
+    /// itself out of its tile slot is re-asserted (debounced); the strip owns
+    /// scroll-window geometry.
+    void onWindowFrameGeometryChanged(KWin::EffectWindow* w);
+
     /// Report a focus change to the scroll engine. No-op off scroll screens.
     void notifyWindowFocused(const QString& windowId, const QString& screenId);
 
@@ -102,6 +114,9 @@ public Q_SLOTS:
 private:
     /// Tracked windows currently reported as being on @p screenId.
     QStringList trackedWindowsOnScreen(const QString& screenId) const;
+    /// Debounced re-assert: snap every drifted window back to the geometry the
+    /// daemon resolved for it.
+    void flushReasserts();
 
     PlasmaZonesEffect* m_effect;
 
@@ -111,6 +126,11 @@ private:
     /// Windows closed before their windowOpened D-Bus call resolved; the
     /// matching open is suppressed when it arrives (D-Bus ordering race).
     QSet<QString> m_pendingCloses;
+    /// windowId → geometry the daemon last resolved for it; the reference
+    /// point for detecting app-initiated resizes.
+    QHash<QString, QRect> m_appliedGeometry;
+    QSet<QString> m_reassertPending; ///< Windows awaiting a debounced re-assert.
+    QTimer* m_reassertTimer = nullptr;
 };
 
 } // namespace PlasmaZones

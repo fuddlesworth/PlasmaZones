@@ -19,6 +19,7 @@
 #include <QDBusPendingReply>
 #include <QDBusVariant>
 #include <QLoggingCategory>
+#include <QTimer>
 #include <QVariant>
 #include <QtMath>
 
@@ -26,10 +27,20 @@ namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
+namespace {
+/// Debounce window for re-asserting geometry after an app-initiated resize —
+/// long enough to coalesce a noisy resize stream into one corrective move.
+constexpr int kReassertDebounceMs = 150;
+} // namespace
+
 ScrollHandler::ScrollHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
     , m_effect(effect)
+    , m_reassertTimer(new QTimer(this))
 {
+    m_reassertTimer->setSingleShot(true);
+    m_reassertTimer->setInterval(kReassertDebounceMs);
+    connect(m_reassertTimer, &QTimer::timeout, this, &ScrollHandler::flushReasserts);
 }
 
 namespace {
@@ -164,6 +175,8 @@ void ScrollHandler::onWindowClosed(const QString& windowId, const QString& scree
     }
     m_notifiedWindows.remove(windowId);
     m_notifiedWindowScreens.remove(windowId);
+    m_appliedGeometry.remove(windowId);
+    m_reassertPending.remove(windowId);
 
     if (m_scrollScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
@@ -222,6 +235,64 @@ void ScrollHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // Arrived somewhere new — notifyWindowAdded re-adds it iff the new screen
     // is a scroll-mode screen and the window is eligible.
     notifyWindowAdded(w);
+}
+
+void ScrollHandler::recordAppliedGeometry(const QString& windowId, const QRect& geometry)
+{
+    m_appliedGeometry[windowId] = geometry;
+    // The window is being moved to match this geometry — drop any stale
+    // re-assert queued from an earlier drift.
+    m_reassertPending.remove(windowId);
+}
+
+void ScrollHandler::onWindowFrameGeometryChanged(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    if (!m_notifiedWindows.contains(windowId)) {
+        return; // not a scroll-tracked window
+    }
+    const auto it = m_appliedGeometry.constFind(windowId);
+    if (it == m_appliedGeometry.constEnd()) {
+        return; // the daemon has not resolved a geometry to compare against yet
+    }
+    // Ignore sub-pixel rounding and small compositor size-hint adjustments; a
+    // genuine app-initiated resize drifts further than the tolerance.
+    constexpr int kTolerance = 4;
+    const QRect frame = w->frameGeometry().toRect();
+    const QRect& expected = it.value();
+    const bool drifted = qAbs(frame.x() - expected.x()) > kTolerance || qAbs(frame.y() - expected.y()) > kTolerance
+        || qAbs(frame.width() - expected.width()) > kTolerance || qAbs(frame.height() - expected.height()) > kTolerance;
+    if (!drifted) {
+        m_reassertPending.remove(windowId);
+        return;
+    }
+    // Debounce: coalesce a noisy resize stream (and any in-progress user drag)
+    // into one corrective move once it settles.
+    m_reassertPending.insert(windowId);
+    m_reassertTimer->start();
+}
+
+void ScrollHandler::flushReasserts()
+{
+    const QStringList pending(m_reassertPending.cbegin(), m_reassertPending.cend());
+    m_reassertPending.clear();
+    for (const QString& windowId : pending) {
+        const auto it = m_appliedGeometry.constFind(windowId);
+        if (it == m_appliedGeometry.constEnd() || !m_notifiedWindows.contains(windowId)) {
+            continue;
+        }
+        KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+        if (!w || w->isDeleted()) {
+            continue;
+        }
+        // Re-assert the daemon's resolved geometry — an app cannot resize its
+        // way out of the scroll strip. Interactive resize arrives in Phase 3.
+        m_effect->applySnapGeometry(w, it.value(), /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+        qCDebug(lcEffect) << "Re-asserted scroll geometry for" << windowId << "->" << it.value();
+    }
 }
 
 void ScrollHandler::notifyWindowFocused(const QString& windowId, const QString& screenId)

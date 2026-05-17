@@ -457,6 +457,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowFrameGeometryChanged);
 
+    // Scroll: re-assert the strip geometry if an app resizes its window out
+    // of its tile slot (debounced inside the handler).
+    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_scrollHandler.get(),
+            &ScrollHandler::onWindowFrameGeometryChanged);
+
     // Frame-geometry shadow: push the latest geometry to the daemon so
     // daemon-local shortcut handlers (float toggle, etc.) can read fresh
     // geometry without round-tripping. Debounced at ~50ms per window via
