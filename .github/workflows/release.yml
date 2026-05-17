@@ -1024,7 +1024,11 @@ jobs:
           # no-op rather than an empty commit. OBS reruns the source service
           # and rebuilds automatically on every source commit.
           osc addremove
-          if [[ -n "$(osc status)" ]]; then
+          # Capture status on its own line: a failing `osc status` then
+          # aborts the job under `set -e`, instead of being read as an
+          # empty result and silently mistaken for "no changes".
+          STATUS="$(osc status)"
+          if [[ -n "$STATUS" ]]; then
               osc commit -m "Update to $VERSION"
               echo "✅ Committed plasmazones $VERSION to $OBS_PROJECT — OBS will rebuild"
           else
