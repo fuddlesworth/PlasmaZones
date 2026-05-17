@@ -6,10 +6,64 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/WindowTypeEnum.h>
 
+#include <virtualdesktops.h>
 #include <window.h>
 
 #include <utility>
+
+namespace {
+
+/// Map KWin's overlapping window-type predicates onto exactly one
+/// PhosphorProtocol::WindowType. Ordered most-specific-first because a window
+/// can satisfy several predicates at once (a modal dialog is both a dialog and
+/// modal — modality is orthogonal state, deliberately not a WindowType).
+/// Returns the enum's underlying int so the value can cross D-Bus without the
+/// effect exposing the enum type on a public interface.
+int windowTypeFor(KWin::EffectWindow* w)
+{
+    using PhosphorProtocol::WindowType;
+    if (!w) {
+        return static_cast<int>(WindowType::Unknown);
+    }
+    if (w->isDesktop()) {
+        return static_cast<int>(WindowType::Desktop);
+    }
+    if (w->isDock()) {
+        return static_cast<int>(WindowType::Dock);
+    }
+    if (w->isOnScreenDisplay()) {
+        return static_cast<int>(WindowType::OnScreenDisplay);
+    }
+    if (w->isNotification()) {
+        return static_cast<int>(WindowType::Notification);
+    }
+    if (w->isSplash()) {
+        return static_cast<int>(WindowType::Splash);
+    }
+    if (w->isTooltip()) {
+        return static_cast<int>(WindowType::Tooltip);
+    }
+    if (w->isDropdownMenu() || w->isPopupMenu() || w->isMenu()) {
+        return static_cast<int>(WindowType::Menu);
+    }
+    if (w->isUtility()) {
+        return static_cast<int>(WindowType::Utility);
+    }
+    if (w->isDialog()) {
+        return static_cast<int>(WindowType::Dialog);
+    }
+    if (w->isPopupWindow()) {
+        return static_cast<int>(WindowType::Popup);
+    }
+    if (w->isNormalWindow()) {
+        return static_cast<int>(WindowType::Normal);
+    }
+    return static_cast<int>(WindowType::Unknown);
+}
+
+} // namespace
 
 namespace PlasmaZones {
 
@@ -98,10 +152,32 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w)
     const QString desktopFile = window ? window->desktopFileName() : QString();
     const QString title = w->caption();
 
+    // windowRole is the X11 WM_WINDOW_ROLE — empty for Wayland-native windows.
+    const QString windowRole = window ? window->windowRole() : QString();
+    const int pid = static_cast<int>(w->pid());
+
+    // virtualDesktop: 0 = on all desktops / unknown; otherwise the 1-based x11
+    // desktop number of the window's first desktop. A window spanning several
+    // (but not all) desktops reports its first — the registry stores one int.
+    int virtualDesktop = 0;
+    if (window) {
+        const QList<KWin::VirtualDesktop*> desktops = window->desktops();
+        if (!desktops.isEmpty() && desktops.first()) {
+            virtualDesktop = static_cast<int>(desktops.first()->x11DesktopNumber());
+        }
+    }
+
+    // activity: empty = on all activities / unknown; otherwise the first UUID.
+    const QStringList activities = w->activities();
+    const QString activity = activities.isEmpty() ? QString() : activities.first();
+
+    const int windowType = windowTypeFor(w);
+
     // Fire-and-forget — the daemon side is idempotent.
     PhosphorProtocol::ClientHelpers::fireAndForget(
         this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setWindowMetadata"),
-        {instanceId, appId, desktopFile, title}, QStringLiteral("setWindowMetadata"));
+        {instanceId, appId, desktopFile, title, windowRole, pid, virtualDesktop, activity, windowType},
+        QStringLiteral("setWindowMetadata"));
 }
 
 void PlasmaZonesEffect::flushPendingFrameGeometry()

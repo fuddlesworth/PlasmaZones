@@ -7,6 +7,7 @@
 #include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
+#include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
 
 #include <QTest>
@@ -139,6 +140,42 @@ private Q_SLOTS:
     }
 
     // SnapAssistCandidate round-trip is covered by test_compositor_common.
+
+    // ── WindowType enum ──────────────────────────────────────────────────
+
+    void testWindowTypeStringRoundTrip()
+    {
+        for (int v = windowTypeMinValue; v <= windowTypeMaxValue; ++v) {
+            const auto type = static_cast<WindowType>(v);
+            const auto parsed = windowTypeFromString(windowTypeToString(type));
+            QVERIFY(parsed.has_value());
+            QVERIFY(*parsed == type);
+        }
+    }
+
+    void testWindowTypeFromStringCaseInsensitive()
+    {
+        const auto upper = windowTypeFromString(QStringLiteral("DIALOG"));
+        QVERIFY(upper.has_value() && *upper == WindowType::Dialog);
+        const auto mixed = windowTypeFromString(QStringLiteral("DiAlOg"));
+        QVERIFY(mixed.has_value() && *mixed == WindowType::Dialog);
+    }
+
+    void testWindowTypeFromStringUnknownTokenIsNullopt()
+    {
+        QVERIFY(!windowTypeFromString(QStringLiteral("not-a-type")).has_value());
+        QVERIFY(!windowTypeFromString(QString()).has_value());
+    }
+
+    void testWindowTypeFromIntClampsOutOfRange()
+    {
+        QVERIFY(windowTypeFromInt(static_cast<int>(WindowType::Dialog)) == WindowType::Dialog);
+        QVERIFY(windowTypeFromInt(-1) == WindowType::Unknown);
+        QVERIFY(windowTypeFromInt(9999) == WindowType::Unknown);
+        QVERIFY(!isValidWindowType(-1));
+        QVERIFY(!isValidWindowType(9999));
+        QVERIFY(isValidWindowType(static_cast<int>(WindowType::Popup)));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestPhosphorProtocol)

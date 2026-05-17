@@ -56,6 +56,7 @@ target_link_libraries(PhosphorEngine
         Qt6::Core
         Qt6::Gui
         PhosphorGeometry::PhosphorGeometry
+        PhosphorProtocol::Types
     PRIVATE
         PhosphorIdentity::PhosphorIdentity
 )

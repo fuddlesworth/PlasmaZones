@@ -369,6 +369,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);
         connect(kw, &KWin::Window::desktopFileNameChanged, this, pushLatest);
         connect(kw, &KWin::Window::captionChanged, this, pushLatest);
+        // Per-window virtual-desktop / activity / role changes also refresh the
+        // registry so context-aware rule resolution sees current values. Same
+        // record-only contract: no retroactive re-evaluation of committed state.
+        connect(kw, &KWin::Window::desktopsChanged, this, pushLatest);
+        connect(kw, &KWin::Window::activitiesChanged, this, pushLatest);
+        connect(kw, &KWin::Window::windowRoleChanged, this, pushLatest);
     }
 
     // Detect drag start/end via KWin's per-window signals instead of polling.

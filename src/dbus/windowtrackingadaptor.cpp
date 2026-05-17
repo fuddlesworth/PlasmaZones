@@ -500,7 +500,9 @@ void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* re
 }
 
 void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const QString& appId,
-                                              const QString& desktopFile, const QString& title)
+                                              const QString& desktopFile, const QString& title,
+                                              const QString& windowRole, int pid, int virtualDesktop,
+                                              const QString& activity, int windowType)
 {
     if (!m_windowRegistry) {
         // Registry not wired yet — during daemon startup the kwin-effect may
@@ -517,6 +519,17 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
     meta.appId = appId;
     meta.desktopFile = desktopFile;
     meta.title = title;
+    meta.windowRole = windowRole;
+    meta.pid = pid;
+    meta.virtualDesktop = virtualDesktop;
+    meta.activity = activity;
+    // windowType crossed D-Bus as a plain int — clamp out-of-range values
+    // (version skew, a malformed caller) to Unknown rather than casting blind.
+    if (!PhosphorProtocol::isValidWindowType(windowType)) {
+        qCWarning(lcDbusWindow) << "setWindowMetadata: out-of-range windowType" << windowType << "for instance"
+                                << instanceId << "— treating as Unknown";
+    }
+    meta.windowType = PhosphorProtocol::windowTypeFromInt(windowType);
     m_windowRegistry->upsert(instanceId, meta);
 }
 

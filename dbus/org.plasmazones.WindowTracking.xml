@@ -533,6 +533,36 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier the cursor is now on (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
             </arg>
         </method>
+        <method name="setWindowMetadata">
+            <annotation name="org.gtk.GDBus.DocString" value="Register or update metadata for a live window. Called by the compositor bridge on window-added and on every mutation of the window's app class, desktop file, caption, virtual desktop, activity, or role. Idempotent — safe to call on every observation; a no-op if metadata is unchanged."/>
+            <arg name="instanceId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Opaque compositor handle, stable for the window lifetime (KWin internalId)."/>
+            </arg>
+            <arg name="appId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Current app class (mutable)."/>
+            </arg>
+            <arg name="desktopFile" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Current desktop file name (mutable, may be empty)."/>
+            </arg>
+            <arg name="title" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Current caption (mutable, may be empty)."/>
+            </arg>
+            <arg name="windowRole" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="X11 WM_WINDOW_ROLE (empty for Wayland-native windows)."/>
+            </arg>
+            <arg name="pid" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Process id (0 = unknown)."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="1-based x11 desktop number (0 = all desktops / unknown)."/>
+            </arg>
+            <arg name="activity" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Activity UUID (empty = all activities / unknown)."/>
+            </arg>
+            <arg name="windowType" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="PhosphorProtocol::WindowType underlying value; out-of-range values are clamped to Unknown."/>
+            </arg>
+        </method>
         <method name="windowClosed">
             <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was closed (cleanup)."/>
             <arg name="windowId" type="s" direction="in">

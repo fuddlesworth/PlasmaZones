@@ -195,10 +195,16 @@ public Q_SLOTS:
      * internalId(); Hyprland's address on a future bridge). It is opaque to
      * the daemon — never parsed.
      *
-     * @param instanceId  Opaque compositor handle (stable for window lifetime)
-     * @param appId       Current app class (mutable)
-     * @param desktopFile Current desktop file name (mutable, may be empty)
-     * @param title       Current caption (mutable, may be empty)
+     * @param instanceId     Opaque compositor handle (stable for window lifetime)
+     * @param appId          Current app class (mutable)
+     * @param desktopFile    Current desktop file name (mutable, may be empty)
+     * @param title          Current caption (mutable, may be empty)
+     * @param windowRole     X11 WM_WINDOW_ROLE (empty for Wayland-native windows)
+     * @param pid            Process id (0 = unknown)
+     * @param virtualDesktop 1-based x11 desktop number (0 = all desktops / unknown)
+     * @param activity       Activity UUID (empty = all activities / unknown)
+     * @param windowType     PhosphorProtocol::WindowType underlying value; out-of-range
+     *                       values are clamped to WindowType::Unknown
      *
      * Emits no D-Bus signal. Populates the daemon's WindowRegistry; consumers
      * subscribe to the registry's Qt signals directly.
@@ -207,7 +213,8 @@ public Q_SLOTS:
      * is unchanged.
      */
     void setWindowMetadata(const QString& instanceId, const QString& appId, const QString& desktopFile,
-                           const QString& title);
+                           const QString& title, const QString& windowRole, int pid, int virtualDesktop,
+                           const QString& activity, int windowType);
 
     // windowSnapped, windowSnappedMultiZone, windowUnsnapped, windowsSnappedBatch,
     // recordSnapIntent moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
