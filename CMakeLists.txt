@@ -374,6 +374,7 @@ add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts (IN
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
+add_subdirectory(libs/phosphor-scroll-engine) # niri-style scrollable-tiling strip data model
 
 # ─── Engine QML firewall ─────────────────────────────────────────────────────
 #
