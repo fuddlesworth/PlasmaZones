@@ -190,6 +190,8 @@ public:
     // exclusions so the two filter sets can diverge.
     Q_PROPERTY(bool animationExcludeTransientWindows READ animationExcludeTransientWindows WRITE
                    setAnimationExcludeTransientWindows NOTIFY animationExcludeTransientWindowsChanged)
+    Q_PROPERTY(bool animationExcludeNotificationsAndOsd READ animationExcludeNotificationsAndOsd WRITE
+                   setAnimationExcludeNotificationsAndOsd NOTIFY animationExcludeNotificationsAndOsdChanged)
     Q_PROPERTY(int animationMinimumWindowWidth READ animationMinimumWindowWidth WRITE setAnimationMinimumWindowWidth
                    NOTIFY animationMinimumWindowWidthChanged)
     Q_PROPERTY(int animationMinimumWindowHeight READ animationMinimumWindowHeight WRITE setAnimationMinimumWindowHeight
@@ -634,6 +636,8 @@ public:
     // exclusions but stored under `Animations.WindowFiltering`.
     bool animationExcludeTransientWindows() const override;
     void setAnimationExcludeTransientWindows(bool exclude) override;
+    bool animationExcludeNotificationsAndOsd() const override;
+    void setAnimationExcludeNotificationsAndOsd(bool exclude) override;
     int animationMinimumWindowWidth() const override;
     void setAnimationMinimumWindowWidth(int width) override;
     int animationMinimumWindowHeight() const override;

@@ -1570,6 +1570,9 @@ PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey
 PZ_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
 PZ_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
                   animationExcludeTransientWindowsChanged)
+PZ_STORE_GET(bool, animationExcludeNotificationsAndOsd, animationsWindowFilteringGroup, notificationsAndOsdKey, bool)
+PZ_STORE_SET_BOOL(setAnimationExcludeNotificationsAndOsd, animationsWindowFilteringGroup, notificationsAndOsdKey,
+                  animationExcludeNotificationsAndOsdChanged)
 PZ_STORE_GET(int, animationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey, int)
 PZ_STORE_SET_INT(setAnimationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey,
                  animationMinimumWindowWidthChanged)

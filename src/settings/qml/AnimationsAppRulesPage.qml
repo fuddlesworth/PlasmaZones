@@ -263,6 +263,23 @@ SettingsFlickable {
                 }
 
                 SettingsRow {
+                    title: i18n("Exclude notifications and OSDs")
+                    description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
+
+                    SettingsSwitch {
+                        checked: appSettings.animationExcludeNotificationsAndOsd
+                        accessibleName: i18n("Exclude notifications and on-screen displays from animations")
+                        onToggled: function(newValue) {
+                            appSettings.animationExcludeNotificationsAndOsd = newValue;
+                        }
+                    }
+
+                }
+
+                SettingsSeparator {
+                }
+
+                SettingsRow {
                     title: i18n("Minimum window width")
                     description: appSettings.animationMinimumWindowWidth === 0 ? i18n("Disabled. No width threshold.") : i18n("Windows narrower than this will not animate")
 

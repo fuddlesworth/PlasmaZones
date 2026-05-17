@@ -503,6 +503,14 @@ public:
     {
         return false;
     }
+    // Notification and OSD surfaces are excluded from window-event
+    // animations by default — unlike transient windows they are almost
+    // never something a user wants a window-open shader on, and they
+    // are driven by the shell rather than the user. Opt-in available.
+    static bool animationExcludeNotificationsAndOsd()
+    {
+        return true;
+    }
     static int animationMinimumWindowWidth()
     {
         return 0;
