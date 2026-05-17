@@ -49,6 +49,9 @@ void discoverMinSize(KWin::EffectWindow* w, int& minWidth, int& minHeight)
 {
     minWidth = 0;
     minHeight = 0;
+    if (!w) {
+        return;
+    }
     if (KWin::Window* kw = w->window()) {
         const QSizeF minSize = kw->minSize();
         if (minSize.isValid()) {
@@ -337,11 +340,19 @@ void ScrollHandler::onDaemonReady()
     // Bump the epoch so any D-Bus reply still in flight from before this
     // (re)connect skips its rollback instead of corrupting the rebuilt sets.
     ++m_daemonEpoch;
-    loadSettings();
-    connectSignals();
+    // Reset every tracking structure before re-querying — a daemon (re)connect
+    // rebuilds scroll state from scratch, so no stale entry may survive into
+    // the new session. In particular a pending re-assert must be dropped: it
+    // targets geometry the old daemon resolved, which the new one has not.
+    // Cleared first so loadSettings()'s async batch reply repopulates cleanly.
     m_notifiedWindows.clear();
     m_notifiedWindowScreens.clear();
     m_pendingCloses.clear();
+    m_appliedGeometry.clear();
+    m_reassertPending.clear();
+    m_reassertTimer->stop();
+    connectSignals();
+    loadSettings();
 }
 
 void ScrollHandler::connectSignals()

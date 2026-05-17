@@ -31,9 +31,10 @@
         <!-- Batch form used on daemon startup / mode toggle-on to avoid
              per-window D-Bus round-trips. -->
         <method name="windowsOpenedBatch">
-            <arg name="entries" type="a(ssii)" direction="in"/>
-            <annotation name="org.qtproject.QtDBus.QtTypeName.In0"
-                        value="PhosphorProtocol::WindowOpenedList"/>
+            <arg name="entries" type="a(ssii)" direction="in">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In0"
+                            value="PhosphorProtocol::WindowOpenedList"/>
+            </arg>
         </method>
 
         <method name="windowClosed">

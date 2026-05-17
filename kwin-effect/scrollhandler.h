@@ -51,18 +51,6 @@ public:
     /// scroll-mode screen. No-op for windows on autotile/snap screens.
     void notifyWindowAdded(KWin::EffectWindow* w);
 
-    /**
-     * @brief Batch-report windows on scroll screens in one D-Bus call.
-     *
-     * Used on effect startup and daemon (re)connect instead of per-window
-     * windowOpened round-trips.
-     *
-     * @param windows Candidate windows to process.
-     * @param resetNotified Drop each window from the notified set before
-     *        processing, so a daemon restart re-announces existing windows.
-     */
-    void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows, bool resetNotified = false);
-
     /// Report a window close to the scroll engine if it was on a scroll screen.
     void onWindowClosed(const QString& windowId, const QString& screenId);
 
@@ -100,6 +88,19 @@ public Q_SLOTS:
     void slotScrollScreensChanged(const QStringList& screenIds);
 
 private:
+    /**
+     * @brief Batch-report windows on scroll screens in one D-Bus call.
+     *
+     * Used on effect startup and daemon (re)connect instead of per-window
+     * windowOpened round-trips. Internal — driven by loadSettings() and
+     * slotScrollScreensChanged().
+     *
+     * @param windows Candidate windows to process.
+     * @param resetNotified Drop each window from the notified set before
+     *        processing, so a daemon restart re-announces existing windows.
+     */
+    void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows, bool resetNotified = false);
+
     /// Tracked windows currently reported as being on @p screenId.
     QStringList trackedWindowsOnScreen(const QString& screenId) const;
     /// Debounced re-assert: snap every drifted window back to the geometry the

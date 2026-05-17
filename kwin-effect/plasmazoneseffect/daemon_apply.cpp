@@ -64,7 +64,9 @@ QRect constrainToScrollSlot(KWin::EffectWindow* window, const QRect& slot)
         h = qFloor(maxS.height());
     }
     // A minimum larger than the slot means the window will overflow — accepted
-    // for the MVP; pin it to the minimum so the daemon's rect is honoured.
+    // for the MVP; pin it to the minimum so the daemon's rect is honoured. The
+    // min clamp runs after the max clamp, so a window with contradictory hints
+    // (minSize > maxSize) resolves to its minimum.
     if (minS.width() > 0.0 && w < minS.width()) {
         w = qCeil(minS.width());
     }
