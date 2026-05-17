@@ -263,6 +263,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // window from the old screen's tiling state immediately.
             m_autotileHandler->handleWindowOutputChanged(safeW);
 
+            // Scroll mode: re-home the window between scroll strips (or out of
+            // scroll entirely) to match the monitor it moved to.
+            m_scrollHandler->handleWindowOutputChanged(safeW);
+
             // For snapping→snapping cross-screen moves: notify the daemon which
             // decides whether to unsnap based on its own state. If the daemon just
             // assigned this window to the new screen (restore/resnap/snap assist),
@@ -343,6 +347,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // (snapping→autotile). The autotile handler's own detection only
             // covers windows it already tracks.
             m_autotileHandler->handleWindowOutputChanged(safeW);
+
+            // Scroll mode: a scroll-tracked window crossing a virtual-screen
+            // boundary likewise re-homes to the destination strip.
+            m_scrollHandler->handleWindowOutputChanged(safeW);
 
             // For snapping→snapping cross-VS moves: notify the daemon
             if (!m_autotileHandler->isAutotileScreen(oldScreenId) && !m_autotileHandler->isAutotileScreen(newScreenId)

@@ -68,6 +68,11 @@ public:
     /// minimized) is treated as a fresh open.
     void onWindowMinimizedChanged(KWin::EffectWindow* w);
 
+    /// React to a window moving between screens (monitor hotplug, "move to
+    /// screen", or a virtual-screen crossing). Drops it from the old strip
+    /// and adds it to the new one when either is scroll mode.
+    void handleWindowOutputChanged(KWin::EffectWindow* w);
+
     /// Report a focus change to the scroll engine. No-op off scroll screens.
     void notifyWindowFocused(const QString& windowId, const QString& screenId);
 
@@ -95,6 +100,9 @@ public Q_SLOTS:
     void slotScrollScreensChanged(const QStringList& screenIds);
 
 private:
+    /// Tracked windows currently reported as being on @p screenId.
+    QStringList trackedWindowsOnScreen(const QString& screenId) const;
+
     PlasmaZonesEffect* m_effect;
 
     QSet<QString> m_scrollScreens; ///< Screens currently in scroll mode.

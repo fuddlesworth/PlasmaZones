@@ -202,6 +202,28 @@ void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
     qCDebug(lcEffect) << "Notified scroll: windowMinimizedChanged" << windowId << minimized;
 }
 
+void ScrollHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    const QString newScreenId = m_effect->getWindowScreenId(w);
+    const bool wasTracked = m_notifiedWindows.contains(windowId);
+    if (wasTracked && m_notifiedWindowScreens.value(windowId) == newScreenId) {
+        return; // a tracked window whose screen did not actually change
+    }
+
+    // Left its old strip — drop it there. onWindowClosed reports windowClosed
+    // only when the old screen is (still) scroll mode.
+    if (wasTracked) {
+        onWindowClosed(windowId, m_notifiedWindowScreens.value(windowId));
+    }
+    // Arrived somewhere new — notifyWindowAdded re-adds it iff the new screen
+    // is a scroll-mode screen and the window is eligible.
+    notifyWindowAdded(w);
+}
+
 void ScrollHandler::notifyWindowFocused(const QString& windowId, const QString& screenId)
 {
     if (!m_scrollScreens.contains(screenId)) {
@@ -270,9 +292,42 @@ void ScrollHandler::loadSettings()
     });
 }
 
+QStringList ScrollHandler::trackedWindowsOnScreen(const QString& screenId) const
+{
+    QStringList ids;
+    for (auto it = m_notifiedWindowScreens.cbegin(); it != m_notifiedWindowScreens.cend(); ++it) {
+        if (it.value() == screenId) {
+            ids.append(it.key());
+        }
+    }
+    return ids;
+}
+
 void ScrollHandler::slotScrollScreensChanged(const QStringList& screenIds)
 {
-    m_scrollScreens = QSet<QString>(screenIds.cbegin(), screenIds.cend());
+    const QSet<QString> updated(screenIds.cbegin(), screenIds.cend());
+    const QSet<QString> added = updated - m_scrollScreens;
+    const QSet<QString> removed = m_scrollScreens - updated;
+
+    // Screens leaving scroll mode: drop their tracked windows from the engine
+    // first — while m_scrollScreens still marks them scroll, since
+    // onWindowClosed gates its report on that. The windows stay put; another
+    // placement mode now owns them.
+    for (const QString& screenId : removed) {
+        const QStringList stale = trackedWindowsOnScreen(screenId);
+        for (const QString& windowId : stale) {
+            onWindowClosed(windowId, screenId);
+        }
+    }
+
+    m_scrollScreens = updated;
+
+    // Screens entering scroll mode: batch-report the windows already on them
+    // so a runtime layout switch or a hotplugged scroll-mode monitor adopts
+    // existing windows, not only ones opened afterwards.
+    if (!added.isEmpty()) {
+        notifyWindowsAddedBatch(KWin::effects->stackingOrder(), /*resetNotified=*/false);
+    }
     qCDebug(lcEffect) << "Scroll screens updated:" << m_scrollScreens;
 }
 
