@@ -196,6 +196,19 @@ Features:
 %install
 %cmake_install
 
+# This package ships PlasmaZones as an end-user application, not a
+# Phosphor SDK. Drop the development files the component libraries
+# install: public headers, CMake package configs, and the unversioned
+# .so devel symlinks. Only the versioned runtime libraries (.so.*) are
+# kept. Without this openSUSE's rpmlint fails the build on
+# devel-file-in-non-devel-package; there is no -devel subpackage by
+# design. Every Phosphor/plasmazones library sets SOVERSION, so the
+# bare .so is always a devel symlink and never the runtime object.
+rm -rf %{buildroot}%{_includedir}/Phosphor*
+rm -rf %{buildroot}%{_libdir}/cmake/Phosphor*
+rm -f  %{buildroot}%{_libdir}/libPhosphor*.so
+rm -f  %{buildroot}%{_libdir}/libplasmazones*.so
+
 %post
 # Refresh KDE service cache
 /usr/bin/kbuildsycoca6 --noincremental 2>/dev/null || :
@@ -236,19 +249,13 @@ echo ""
 # plasmazones core/rendering libs. Globbed by naming convention: this
 # is a single monolithic package, the build installs only this
 # project's files, so a new component library needs no spec edit.
-# `.so*` covers the versioned objects and the unversioned devel
-# symlink (headers and the .so ship together — there is no -devel
-# subpackage). Excludes the QML plugin under qt6/qml/, which the
-# glob below owns.
-%{_libdir}/libPhosphor*.so*
-%{_libdir}/libplasmazones*.so*
-
-# Development files — public headers and CMake package configs, one
-# set per component that exports an API. Globbed for the same reason
-# as the libraries above. Note PhosphorIdentity is header-only (config
-# + headers, no .so) and is picked up here.
-%{_includedir}/Phosphor*/
-%{_libdir}/cmake/Phosphor*/
+# Only the versioned runtime objects (.so.*) are shipped — the
+# unversioned .so devel symlinks, public headers and CMake package
+# configs are stripped in %install (this is an end-user application,
+# not a Phosphor SDK, and there is no -devel subpackage by design).
+# Excludes the QML plugin under qt6/qml/, which the glob below owns.
+%{_libdir}/libPhosphor*.so.*
+%{_libdir}/libplasmazones*.so.*
 
 # KWin effect plugin. openSUSE: own the parent plugin directories so the
 # OBS "directories not owned by a package" check passes — no hard
