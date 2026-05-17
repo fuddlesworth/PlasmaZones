@@ -113,10 +113,18 @@ BuildRequires:  systemd-rpm-macros
 %{?systemd_requires}
 
 # Build-time KWin upstream version (Fedora). kwin-devel is BuildRequired above,
-# so it is installed when this spec is parsed by rpmbuild. The query falls back
-# to a permissive minimum if kwin-devel is somehow absent, which only affects
-# local rebuilds — CI always has kwin-devel.
-%global kwin_version %(rpm -q --qf '%%{VERSION}' kwin-devel 2>/dev/null || echo 6.6.0)
+# so it is installed when this spec is parsed in the rpmbuild chroot. The query
+# falls back to a permissive minimum when kwin-devel is absent — notably the
+# minimal COPR SRPM-build chroot, where the spec only has to parse.
+#
+# `rpm -q` prints "package kwin-devel is not installed" to STDOUT (not stderr)
+# and exits non-zero when the package is missing, so a bare
+# `rpm -q ... || echo 6.6.0` leaves that message in the macro and `echo` adds
+# a SECOND line. A multi-line macro then injects a newline into every
+# `Requires: kwin = %{kwin_version}` use, and rpm parses the stray `6.6.0` as
+# its own tag ("Unknown tag: 6.6.0"). Capture stdout first and only emit it on
+# success so the macro is always a single clean token.
+%global kwin_version %(out=$(rpm -q --qf '%%{VERSION}' kwin-devel 2>/dev/null) && echo "$out" || echo 6.6.0)
 
 # Runtime dependencies — RPM auto-generates most from sonames;
 # explicit Requires ensure minimum versions on Fedora.
