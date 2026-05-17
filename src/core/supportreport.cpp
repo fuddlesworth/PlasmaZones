@@ -247,9 +247,12 @@ QString SupportReport::sectionSession()
     return readAndRedactFile(ConfigDefaults::sessionFilePath(), QStringLiteral("session file"));
 }
 
-static QStringList journalctlArgs(const QString& identifier, int sinceMinutes, bool longForm = false)
+static QStringList journalctlArgs(const QString& identifier, int sinceMinutes, bool longForm = false,
+                                  bool userScope = true)
 {
-    QStringList args{QStringLiteral("--user")};
+    QStringList args;
+    if (userScope)
+        args << QStringLiteral("--user");
     if (longForm) {
         args << QStringLiteral("--identifier=%1").arg(identifier);
     } else {
@@ -274,34 +277,49 @@ static QByteArray runJournalctl(const QStringList& args)
     return proc.readAllStandardOutput();
 }
 
+// Collects the journal for `identifier` over the last `sinceMinutes`. Tries the
+// user journal with -t, then --identifier (some systemd versions report the
+// syslog tag differently), then the system journal (a compositor that is not a
+// systemd user service logs there instead of the user journal). Returns the raw
+// output, or an empty QByteArray if journalctl is unavailable / produced nothing.
+static QByteArray collectJournal(const QString& identifier, int sinceMinutes)
+{
+    QByteArray raw = runJournalctl(journalctlArgs(identifier, sinceMinutes));
+    if (QString::fromUtf8(raw).trimmed().isEmpty())
+        raw = runJournalctl(journalctlArgs(identifier, sinceMinutes, true));
+    if (QString::fromUtf8(raw).trimmed().isEmpty())
+        raw = runJournalctl(journalctlArgs(identifier, sinceMinutes, false, /*userScope=*/false));
+    return raw;
+}
+
+// Caps `lines` to the most recent MaxLogLines, prepending a truncation notice
+// when lines were dropped. Keeping the *newest* lines mirrors what a support
+// archive needs (the entries around a failure) and stays consistent with
+// scripts/plasmazones-report.sh.
+static QString capLogLines(const QStringList& lines)
+{
+    if (lines.size() <= MaxLogLines)
+        return lines.join(QLatin1Char('\n'));
+
+    QString output = QStringLiteral("... (%1 lines total, showing last %2) ...\n").arg(lines.size()).arg(MaxLogLines);
+    output += lines.mid(lines.size() - MaxLogLines).join(QLatin1Char('\n'));
+    return output;
+}
+
 QString SupportReport::sectionLogs(int sinceMinutes)
 {
-    // thread_local for consistency with redactHomePath — sectionLogs runs off the
-    // main thread via QtConcurrent::run in ControlAdaptor::generateSupportReport.
-    thread_local const QString tag = QStringLiteral("plasmazonesd");
-    QByteArray rawOutput = runJournalctl(journalctlArgs(tag, sinceMinutes));
-
-    // Fall back to --identifier if -t returned nothing useful.
-    // Some systemd versions report the syslog tag differently.
-    if (QString::fromUtf8(rawOutput).trimmed().isEmpty()) {
-        rawOutput = runJournalctl(journalctlArgs(tag, sinceMinutes, true));
-    }
-
+    // collectSnapshot()/generateFromSnapshot() run off the main thread via
+    // QtConcurrent::run in ControlAdaptor::generateSupportReport.
+    const QByteArray rawOutput = collectJournal(QStringLiteral("plasmazonesd"), sinceMinutes);
     if (rawOutput.isEmpty())
-        return QStringLiteral("*(journalctl timed out or not available)*\n");
+        return QStringLiteral("*(no log entries in the last %1 minutes, or journalctl unavailable)*\n")
+            .arg(sinceMinutes);
 
-    QString output = QString::fromUtf8(rawOutput);
+    const QString output = QString::fromUtf8(rawOutput);
     if (output.trimmed().isEmpty())
         return QStringLiteral("*(no log entries in the last %1 minutes)*\n").arg(sinceMinutes);
 
-    // Cap line count
-    const QStringList lines = output.split(QLatin1Char('\n'));
-    if (lines.size() > MaxLogLines) {
-        output = QStringLiteral("... (%1 lines total, showing last %2) ...\n").arg(lines.size()).arg(MaxLogLines);
-        output += lines.mid(lines.size() - MaxLogLines).join(QLatin1Char('\n'));
-    }
-
-    return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(output));
+    return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(capLogLines(output.split(QLatin1Char('\n')))));
 }
 
 QString SupportReport::sectionEffectLogs(int sinceMinutes)
@@ -310,20 +328,17 @@ QString SupportReport::sectionEffectLogs(int sinceMinutes)
     // entries are tagged "kwin_wayland", not "plasmazonesd" — sectionLogs()
     // never captures them. Without this section a non-registering effect is
     // invisible in the report.
-    thread_local const QString tag = QStringLiteral("kwin_wayland");
-    QByteArray rawOutput = runJournalctl(journalctlArgs(tag, sinceMinutes));
-
-    // Fall back to --identifier if -t returned nothing, mirroring sectionLogs().
-    if (QString::fromUtf8(rawOutput).trimmed().isEmpty())
-        rawOutput = runJournalctl(journalctlArgs(tag, sinceMinutes, true));
-
+    const QByteArray rawOutput = collectJournal(QStringLiteral("kwin_wayland"), sinceMinutes);
     if (rawOutput.isEmpty())
-        return QStringLiteral("*(journalctl timed out or not available)*\n");
+        return QStringLiteral(
+                   "*(no kwin_wayland journal in the last %1 minutes, or journalctl unavailable — "
+                   "the KWin effect is likely not loaded)*\n")
+            .arg(sinceMinutes);
 
     // Keep only PlasmaZones effect lines — the rest of the kwin_wayland journal
-    // is unrelated compositor noise. Every effect logging category
-    // ("plasmazones.effect", "kwin.effect.plasmazones.*") contains the
-    // substring "plasmazones", and KWin's message pattern prints the category.
+    // is unrelated compositor noise. Every effect logging category begins with
+    // "plasmazones" (e.g. "plasmazones.effect"), and Qt's default message
+    // pattern prints the category, so a substring match catches every line.
     QStringList kept;
     const QStringList lines = QString::fromUtf8(rawOutput).split(QLatin1Char('\n'));
     for (const QString& line : lines) {
@@ -338,13 +353,7 @@ QString SupportReport::sectionEffectLogs(int sinceMinutes)
             .arg(sinceMinutes);
     }
 
-    QString output = kept.join(QLatin1Char('\n'));
-    if (kept.size() > MaxLogLines) {
-        output = QStringLiteral("... (%1 lines total, showing last %2) ...\n").arg(kept.size()).arg(MaxLogLines);
-        output += kept.mid(kept.size() - MaxLogLines).join(QLatin1Char('\n'));
-    }
-
-    return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(output));
+    return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(capLogLines(kept)));
 }
 
 QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceMinutes)

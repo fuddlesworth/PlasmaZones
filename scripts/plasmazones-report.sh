@@ -191,14 +191,17 @@ if command -v journalctl &>/dev/null; then
         _jctl() { journalctl "$@"; }
     fi
 
+    # collect_journal <scope> <journalctl-args...>
+    #   <scope> is "--user" or "--system".
     collect_journal() {
+        local scope="$1"; shift
         local out err exit_code=0
         # Capture stdout and stderr separately so journalctl warnings
         # (e.g., "No entries") don't pollute the log output.
         err=$(mktemp "${TMPDIR:-/tmp}/pz-journal-err.XXXXXX")
         # Ensure temp file is cleaned up even if the script is killed mid-function.
         trap 'rm -f "$err"; trap - RETURN' RETURN
-        out=$(_jctl --user "$@" \
+        out=$(_jctl "$scope" "$@" \
             --since "$JOURNAL_SINCE min ago" \
             --no-pager -o short-iso 2>"$err") || exit_code=$?
         if [[ $exit_code -ne 0 ]] && [[ $exit_code -ne 1 ]]; then
@@ -210,17 +213,19 @@ if command -v journalctl &>/dev/null; then
         printf '%s' "$out"
     }
 
-    JOURNAL=$(collect_journal -t plasmazonesd)
+    JOURNAL=$(collect_journal --user -t plasmazonesd)
 
     # Fallback: try --identifier if -t returned nothing
     if [[ -z "${JOURNAL:-}" ]]; then
-        JOURNAL=$(collect_journal --identifier=plasmazonesd)
+        JOURNAL=$(collect_journal --user --identifier=plasmazonesd)
     fi
 
-    # Truncate to MaxLogLines, then redact via temp file to avoid SIGPIPE
+    # Truncate to the most recent MaxLogLines (the entries around a failure),
+    # then redact via temp file to avoid SIGPIPE. tail keeps the newest lines,
+    # matching SupportReport::capLogLines() in src/core/supportreport.cpp.
     if [[ -n "${JOURNAL:-}" ]]; then
         printf '%s\n' "$JOURNAL" > "$STAGING/journal.raw"
-        head -n "$MAX_LOG_LINES" "$STAGING/journal.raw" | redact_home > "$STAGING/journal.log"
+        tail -n "$MAX_LOG_LINES" "$STAGING/journal.raw" | redact_home > "$STAGING/journal.log"
         rm -f "$STAGING/journal.raw"
     fi
 
@@ -229,14 +234,19 @@ if command -v journalctl &>/dev/null; then
     # lines (every effect log category contains "plasmazones"). Without this a
     # non-loading effect — the most common "drags/shortcuts do nothing" cause —
     # leaves no trace in the archive.
-    KWIN_JOURNAL=$(collect_journal -t kwin_wayland)
+    KWIN_JOURNAL=$(collect_journal --user -t kwin_wayland)
     if [[ -z "${KWIN_JOURNAL:-}" ]]; then
-        KWIN_JOURNAL=$(collect_journal --identifier=kwin_wayland)
+        KWIN_JOURNAL=$(collect_journal --user --identifier=kwin_wayland)
+    fi
+    # Fall back to the system journal: a compositor that is not a systemd user
+    # service logs there instead of the user journal.
+    if [[ -z "${KWIN_JOURNAL:-}" ]]; then
+        KWIN_JOURNAL=$(collect_journal --system -t kwin_wayland)
     fi
     if [[ -n "${KWIN_JOURNAL:-}" ]]; then
         printf '%s\n' "$KWIN_JOURNAL" > "$STAGING/kwin-effect.raw"
         grep -i plasmazones "$STAGING/kwin-effect.raw" 2>/dev/null \
-            | head -n "$MAX_LOG_LINES" | redact_home > "$STAGING/kwin-effect.log" || true
+            | tail -n "$MAX_LOG_LINES" | redact_home > "$STAGING/kwin-effect.log" || true
         rm -f "$STAGING/kwin-effect.raw"
         # grep matched nothing → drop the empty file rather than ship a blank.
         [[ -s "$STAGING/kwin-effect.log" ]] || rm -f "$STAGING/kwin-effect.log"

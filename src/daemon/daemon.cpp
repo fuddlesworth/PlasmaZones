@@ -55,10 +55,10 @@
 #include "../core/geometryutils.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include "../core/logging.h"
-#include "../pz_i18n.h"
 #include "../core/animationbootstrap.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
+#include "../pz_i18n.h"
 #include "../config/configdefaults.h"
 #include "../config/settingsconfigstore.h"
 #include <PhosphorScreens/DBusScreenAdaptor.h>
@@ -95,6 +95,13 @@ namespace {
 // Conceptually distinct from DELAYED_PANEL_REQUERY_MS in autotile.cpp (which schedules a
 // follow-up panel geometry requery after the debounced update completes).
 constexpr int GEOMETRY_UPDATE_DEBOUNCE_MS = 400;
+
+// Grace period (ms) for the KWin effect to register as a compositor bridge
+// after daemon startup. Comfortably longer than a healthy effect takes to
+// register (sub-second once KWin and the daemon's D-Bus name are both up),
+// even when the daemon starts before KWin during login — so a timeout means
+// a genuine failure, not a race.
+constexpr int BRIDGE_WATCHDOG_TIMEOUT_MS = 20000;
 } // anonymous namespace
 
 Daemon::Daemon(QObject* parent)
@@ -1302,13 +1309,11 @@ void Daemon::start()
     m_running = true;
     // NOTE: daemonReady() is emitted by finalizeStartup() — do NOT emit again here.
 
-    // Arm the compositor-bridge registration watchdog. 20s is comfortably
-    // longer than a healthy effect takes to register (sub-second once KWin
-    // and the daemon's D-Bus name are both up), even when the daemon starts
-    // before KWin during login — so a timeout means a genuine failure, not a
-    // race. Skip if the effect already registered during init().
+    // Arm the compositor-bridge registration watchdog. See
+    // BRIDGE_WATCHDOG_TIMEOUT_MS for the grace-period rationale. Skip if the
+    // effect already registered during init().
     if (m_compositorBridge && !m_compositorBridge->isBridgeRegistered()) {
-        m_bridgeWatchdogTimer.start(20000);
+        m_bridgeWatchdogTimer.start(BRIDGE_WATCHDOG_TIMEOUT_MS);
     }
 }
 
@@ -1328,11 +1333,12 @@ void Daemon::warnCompositorBridgeMissing()
         return;
     }
 
-    qCWarning(lcDaemon) << "Compositor bridge did not register within 20s of startup —"
-                        << "the PlasmaZones KWin effect is not running. Window dragging,"
-                        << "keyboard shortcuts, and snapping will not work. Enable the"
-                        << "PlasmaZones effect in System Settings > Desktop Effects, then"
-                        << "restart the Plasma session so KWin loads it.";
+    qCWarning(lcDaemon) << "Compositor bridge did not register within" << (BRIDGE_WATCHDOG_TIMEOUT_MS / 1000)
+                        << "s of startup — the PlasmaZones KWin effect is not running or"
+                        << "failed to register. Window dragging, keyboard shortcuts, and"
+                        << "snapping will not work. Enable the PlasmaZones effect in System"
+                        << "Settings > Desktop Effects, then restart the Plasma session so"
+                        << "KWin loads it.";
 
     // Raise a desktop notification via the freedesktop spec so the user sees
     // the problem without having to read the journal. A direct method call
@@ -1349,9 +1355,9 @@ void Daemon::warnCompositorBridgeMissing()
            << QStringLiteral("plasmazones") // app_icon
            << PzI18n::tr("PlasmaZones: window manager integration inactive") // summary
            << PzI18n::tr(
-                  "The PlasmaZones KWin effect is not running, so window dragging and "
-                  "shortcuts will not work. Enable it in System Settings > Desktop Effects, "
-                  "then restart the Plasma session.") // body
+                  "The PlasmaZones KWin effect has not registered with the daemon, so window "
+                  "dragging and shortcuts will not work. Make sure it is enabled in System "
+                  "Settings > Desktop Effects, then restart the Plasma session.") // body
            << QStringList() // actions
            << QVariantMap() // hints
            << -1; // timeout (server default)
