@@ -189,11 +189,13 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
         }
     }
 
-    // Notification and OSD surfaces — excluded from window-event
-    // animations by default; the user can opt in via the Window
-    // Filtering toggle (animationExcludeNotificationsAndOsd). Placed
-    // after the rule-override so a class-targeted rule can still
-    // re-enable them, mirroring the transient filter below.
+    // Notification and OSD surfaces — excluded by default via the
+    // Window Filtering toggle (animationExcludeNotificationsAndOsd).
+    // Most shell notifications/OSDs are layer-shell surfaces already
+    // rejected by the structural block above; this catches the
+    // remainder — notification windows some apps spawn as ordinary
+    // toplevels. Placed after the rule-override so a class-targeted
+    // rule can still re-enable them, mirroring the transient filter.
     if (m_animationExcludeNotificationsAndOsd && (w->isNotification() || w->isOnScreenDisplay())) {
         return false;
     }
