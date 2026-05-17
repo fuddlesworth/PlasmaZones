@@ -40,6 +40,11 @@ constexpr int REAPPLY_DELAY_MS = 0;
 
 void Daemon::updateAutotileScreens()
 {
+    // Scroll-mode screens resolve on the same triggers as autotile; resolve
+    // them first so the autotile-engine guard below cannot suppress scroll
+    // resolution (the two engines are independent).
+    updateScrollScreens();
+
     if (!m_autotileEngine || !m_layoutManager || !m_screenManager) {
         return;
     }

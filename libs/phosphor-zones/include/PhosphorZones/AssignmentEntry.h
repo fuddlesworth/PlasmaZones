@@ -76,21 +76,24 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
 }
 
 /**
- * @brief Explicit per-context assignment entry storing both mode fields
+ * @brief Explicit per-context assignment entry storing the per-mode payload fields
  *
- * Each screen/desktop/activity context stores an explicit Mode, SnappingLayout (UUID),
- * and PhosphorTiles::TilingAlgorithm. Toggling between modes only flips the mode field —
- * the other field is preserved, eliminating the need for shadow assignments.
+ * Each screen/desktop/activity context stores an explicit Mode plus the
+ * SnappingLayout (UUID), TilingAlgorithm, and scrollSetting payloads. Toggling
+ * between modes only flips the mode field — the other payload fields are
+ * preserved, eliminating the need for shadow assignments.
  */
 struct AssignmentEntry
 {
     enum Mode {
         Snapping = 0,
-        Autotile = 1
+        Autotile = 1,
+        Scroll = 2
     };
     Mode mode = Snapping;
     QString snappingLayout; // UUID string of manual layout
     QString tilingAlgorithm; // e.g. "dwindle", "wide", "tall"
+    QString scrollSetting; // scroll-mode tuning id ("" = engine defaults)
 
     QString activeLayoutId() const
     {
@@ -106,15 +109,22 @@ struct AssignmentEntry
             // get the algorithm (empty = engine default).
             return PhosphorLayout::LayoutId::makeAutotileId(tilingAlgorithm);
         }
+        if (mode == Scroll) {
+            // Mirrors autotile: a mode-only scroll entry (empty scrollSetting)
+            // serialises to the bare prefix "scroll:", which the cascade
+            // accepts as non-empty so modeForScreen reports Scroll.
+            return PhosphorLayout::LayoutId::makeScrollId(scrollSetting);
+        }
         return snappingLayout;
     }
     bool isValid() const
     {
-        return !snappingLayout.isEmpty() || !tilingAlgorithm.isEmpty();
+        return !snappingLayout.isEmpty() || !tilingAlgorithm.isEmpty() || !scrollSetting.isEmpty();
     }
     bool operator==(const AssignmentEntry& other) const
     {
-        return mode == other.mode && snappingLayout == other.snappingLayout && tilingAlgorithm == other.tilingAlgorithm;
+        return mode == other.mode && snappingLayout == other.snappingLayout && tilingAlgorithm == other.tilingAlgorithm
+            && scrollSetting == other.scrollSetting;
     }
 
     /** @brief Update an existing AssignmentEntry from a layoutId, preserving the "other" field.
@@ -128,6 +138,9 @@ struct AssignmentEntry
         if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             entry.mode = Autotile;
             entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        } else if (PhosphorLayout::LayoutId::isScroll(layoutId)) {
+            entry.mode = Scroll;
+            entry.scrollSetting = PhosphorLayout::LayoutId::extractScrollSettingId(layoutId);
         } else {
             entry.mode = Snapping;
             entry.snappingLayout = layoutId;
@@ -141,6 +154,9 @@ struct AssignmentEntry
         if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             entry.mode = Autotile;
             entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        } else if (PhosphorLayout::LayoutId::isScroll(layoutId)) {
+            entry.mode = Scroll;
+            entry.scrollSetting = PhosphorLayout::LayoutId::extractScrollSettingId(layoutId);
         } else {
             entry.mode = Snapping;
             entry.snappingLayout = layoutId;

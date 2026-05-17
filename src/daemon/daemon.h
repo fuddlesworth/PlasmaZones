@@ -376,6 +376,27 @@ private:
     void updateAutotileScreens();
 
     /**
+     * @brief Resolve which screens are in scroll mode and update ScrollEngine.
+     *
+     * Mirrors updateAutotileScreens() for the scroll placement engine: reads
+     * each screen's assignment, collects the ones carrying a "scroll:" id, and
+     * pushes the set (plus the current desktop/activity context) to the scroll
+     * engine. Invoked from updateAutotileScreens() so both engines resolve on
+     * the same triggers.
+     */
+    void updateScrollScreens();
+
+    /**
+     * @brief Resolve scroll-mode geometry for a screen and push it to the effect.
+     *
+     * Connected to ScrollEngine::placementChanged. ScrollEngine is
+     * geometry-agnostic, so the daemon resolves the strip here via
+     * resolveScrollLayout() against the screen's working area and emits the
+     * result through WindowTrackingAdaptor::applyGeometriesBatch.
+     */
+    void onScrollPlacementChanged(const QString& screenId);
+
+    /**
      * @brief Respond to a Phosphor::Screens::ScreenManager VS cache change for a physical screen
      *
      * Wired to Phosphor::Screens::ScreenManager::virtualScreensChanged. Performs the post-change
@@ -572,6 +593,7 @@ private:
     // Window engines (held as base class; concrete types known only in daemon.cpp/enginefactory.cpp)
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_snapEngine;
+    std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_scrollEngine;
     /// Single source of truth for "which engine owns screen X". Used by
     /// WindowTrackingAdaptor and (via @ref engineForScreen) daemon-internal
     /// dispatch paths. Owns no state of its own — just delegates to the

@@ -3,7 +3,10 @@
 
 # Scroll mode — niri-style scrollable tiling
 
-Planning document. Status: **pre-implementation research complete, Phase 0 not started.**
+Planning document. Status: **Phase 0 ✅ and Phase 1 ✅ complete** — the scroll engine,
+geometry resolver, `Mode::Scroll` routing, and daemon geometry pipeline are implemented,
+built, and tested (186 suite tests green). Phase 0 detail in
+[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 2.
 
 ## 1. Goal
 
@@ -180,13 +183,14 @@ full-reflow (`calculateZones(windowCount) -> QVector<QRect>`), which is fundamen
 incompatible with niri's "opening a window resizes nothing" and has nowhere to hold
 per-column widths, per-tile heights, view offset, or focused indices.
 
-**`IPlacementEngine` will probably need extending.** niri operations — `consume`/`expel`
-window, `set-column-width`, scroll-the-viewport — likely have no equivalent on the
-current interface. New virtual methods on `IPlacementEngine` ripple into `SnapEngine` and
-`AutotileEngine` (which must at least no-op them). Phase 0 assesses the gap and the
-blast radius before any interface change is committed. Scroll-only commands that make no
-sense for the other engines should live on `ScrollEngine`'s concrete type and be reached
-after a `dynamic_cast` / mode check, not forced onto the shared interface.
+**`IPlacementEngine` needs six new methods — zero blast radius** (confirmed by Phase 0).
+The six niri operations with no current equivalent — `consume`/`expel` window, set/cycle
+column width, set/cycle window height, scroll-the-viewport, center-column — are added as
+**optional virtuals with no-op defaults**, following the existing autotile-only group
+(`increaseMasterRatio`, `focusMaster`, …). `SnapEngine` and `AutotileEngine` inherit the
+defaults and need no source changes. Basic navigation (focus/move/swap in four
+directions) already maps onto the existing direction-string methods. See the findings
+doc §2.
 
 Suggested home: a new `libs/phosphor-scroll-engine` library (LGPL-2.1-or-later, matching
 `phosphor-tile-engine`), holding the pure-logic strip model unit-tested in isolation,
@@ -216,32 +220,47 @@ animated); *applying* real geometry is limited to the visible range ±1 column.
 
 ## 6. Phased implementation plan
 
-### Phase 0 — Feasibility verification (~3 days)
+### Phase 0 — Feasibility verification
 
-Ordered by risk — stop and reconsider if item 1 fails.
+Static code review **complete** — results in
+[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Summary:
 
-1. **Paint-transform culling test (highest risk).** In a throwaway effect build,
-   determine whether KWin calls `paintWindow()` for a window whose real geometry is
-   (a) partially off-screen, (b) fully off-screen. The answer dictates the §4.1
-   animation model; if fully-off-screen windows are culled, the corrected ordering in
-   §4.1 is mandatory and unavoidable.
-2. **Synchronous `move()` test.** Confirm `kwin-effect/` can call
-   `effectWindow->window()->move()` and that it applies synchronously in the target
-   KWin version.
-3. **Input dead-zone test.** Confirm a paint-transformed window's clicks land at its
-   real geometry, and that this only affects fully-off-screen windows.
-4. **`IPlacementEngine` contract review.** Read the actual `IPlacementEngine` header;
-   list which niri operations have no method, and assess the impact of adding them on
-   `SnapEngine` / `AutotileEngine` (see §5).
+1. **`IPlacementEngine` contract review — DONE.** Required surface satisfiable; six niri
+   ops added as zero-impact optional virtuals; `IPlacementState` and per-context state
+   already fit.
+2. **Self-write disambiguation — DONE.** Already solved in-tree (`m_inDaemonGeometryApply`).
+3. **Focus — DONE.** Path exists; needs a `force` activation parameter on
+   `ICompositorBridge`. focus-follows-mouse already handled.
+4. **Paint-transform culling — RESOLVED by code review.** PlasmaZones' paint pipeline
+   already renders windows outside their frame geometry for every snap/autotile
+   animation (`PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS` + `setTransformed()` +
+   `WindowAnimator`). Scroll mode reuses `WindowAnimator` directly. See findings §3.
 
-### Phase 1 — Strip data model + engine skeleton
+**Phase 0 conclusion: no blockers.** Ready for Phase 1.
 
-- New `libs/phosphor-scroll-engine`: `ScrollScreenState` / `Column` / `Tile` model +
-  relayout logic. Pure logic, no KWin — fully unit-tested.
-- `ScrollEngine : IPlacementEngine` skeleton; `Mode::Scroll` in `AssignmentEntry`;
-  `ScreenModeRouter` dispatch; any agreed `IPlacementEngine` additions.
-- Re-entrancy guard for engine-initiated moves + pending-resize set with size tolerance
-  (§4.2).
+### Phase 1 — Strip data model + engine skeleton — ✅ COMPLETE
+
+- ✅ `libs/phosphor-scroll-engine`: `ScrollScreenState` / `Column` / `Tile` model +
+  `resolveScrollLayout()` geometry resolver. Pure logic, no KWin — 32 unit tests.
+- ✅ `ScrollEngine : IPlacementEngine` (extends `PlacementEngineBase`); the four niri
+  operations added as optional `IPlacementEngine` virtuals.
+- ✅ `Mode::Scroll` in `AssignmentEntry`; `LayoutId` `scroll:` helpers; `ScreenModeRouter`
+  dispatch to a third engine; per-mode disable-list settings keys.
+- ✅ Daemon integration: the engine factory constructs `ScrollEngine`;
+  `updateScrollScreens()` resolves scroll-mode screens; `onScrollPlacementChanged()`
+  resolves geometry and pushes it to the effect via `applyGeometriesBatch`.
+
+Re-entrancy: the geometry pipeline rides the effect's existing
+`slotApplyGeometriesBatch` path, which already raises the `m_inDaemonGeometryApply`
+guard — no separate guard needed. `ScrollEngine` is geometry-agnostic, so it issues
+no compositor moves of its own; the `ICompositorBridge::move()` / forced-activation
+additions sketched in the Phase 0 findings are deferred — they are an optimisation for
+a future direct-bridge path, not required by the implemented effect-batch pipeline.
+
+Deferred to later phases (were surveyed under "M3c" but belong elsewhere per this
+plan's phase boundaries): the niri-op **keyboard shortcuts** → Phase 3 ("wire to
+`ShortcutManager`"); the **`ScrollAdaptor`** D-Bus interface for KCM selection →
+Phase 5 ("Settings, UI").
 
 ### Phase 2 — Window lifecycle
 

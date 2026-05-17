@@ -79,6 +79,25 @@ target_link_libraries(test_placement_engine_base PRIVATE Qt6::Test Qt6::Core Pho
 add_test(NAME test_placement_engine_base COMMAND test_placement_engine_base)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# scroll/ - Scrollable-tiling strip data model (PhosphorScrollEngine)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_column scroll/test_column.cpp)
+target_link_libraries(test_column PRIVATE Qt6::Test Qt6::Core PhosphorScrollEngine)
+add_test(NAME test_column COMMAND test_column)
+
+add_executable(test_scroll_screen_state scroll/test_scroll_screen_state.cpp)
+target_link_libraries(test_scroll_screen_state PRIVATE Qt6::Test Qt6::Core PhosphorScrollEngine)
+add_test(NAME test_scroll_screen_state COMMAND test_scroll_screen_state)
+
+add_executable(test_scroll_layout scroll/test_scroll_layout.cpp)
+target_link_libraries(test_scroll_layout PRIVATE Qt6::Test Qt6::Core PhosphorScrollEngine)
+add_test(NAME test_scroll_layout COMMAND test_scroll_layout)
+
+add_executable(test_scroll_engine scroll/test_scroll_engine.cpp)
+target_link_libraries(test_scroll_engine PRIVATE Qt6::Test Qt6::Core PhosphorScrollEngine PhosphorEngine)
+add_test(NAME test_scroll_engine COMMAND test_scroll_engine)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Tiling Algorithm Tests (split by algorithm family)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_tiling_algo_masterstack autotile/test_tiling_algo_masterstack.cpp)

@@ -27,6 +27,7 @@
 #include "core/screenmoderouter.h"
 #include "../helpers/AutotileTestHelpers.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
@@ -40,6 +41,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     SnapEngine* m_snapEngine = nullptr;
     AutotileEngine* m_autotileEngine = nullptr;
+    PhosphorScrollEngine::ScrollEngine* m_scrollEngine = nullptr;
     ScreenModeRouter* m_router = nullptr;
 
 private Q_SLOTS:
@@ -66,13 +68,18 @@ private Q_SLOTS:
         // share the test-process registry.
         m_autotileEngine = new AutotileEngine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
-        m_router = new ScreenModeRouter(m_layoutManager, m_snapEngine, m_autotileEngine);
+        // ScrollEngine has no constructor dependencies.
+        m_scrollEngine = new PhosphorScrollEngine::ScrollEngine(nullptr);
+
+        m_router = new ScreenModeRouter(m_layoutManager, m_snapEngine, m_autotileEngine, m_scrollEngine);
     }
 
     void cleanup()
     {
         delete m_router;
         m_router = nullptr;
+        delete m_scrollEngine;
+        m_scrollEngine = nullptr;
         delete m_autotileEngine;
         m_autotileEngine = nullptr;
         delete m_snapEngine;
@@ -162,19 +169,19 @@ private Q_SLOTS:
 
     void modePredicates_areMutuallyExclusive()
     {
-        // For any given screen, isSnapMode and isAutotileMode must disagree.
-        // Today PhosphorZones::AssignmentEntry::Mode is 2-valued so this is tautological;
-        // the test pins the invariant so if the enum gains a third state
-        // (e.g. a "Disabled" mode) the predicate pair is forced to update
-        // in lockstep.
-        const QStringList screens = {QStringLiteral("DP-1"), QStringLiteral("DP-2"), QStringLiteral("HDMI-1"),
+        // For any given screen exactly one of isSnapMode / isAutotileMode /
+        // isScrollMode is true — the predicate trio must stay exhaustive and
+        // mutually exclusive as PhosphorZones::AssignmentEntry::Mode grows.
+        const QStringList screens = {QStringLiteral("DP-1"), QStringLiteral("DP-2"), QStringLiteral("DP-3"),
                                      QStringLiteral("phys/vs:0"), QString()};
         m_autotileEngine->setAutotileScreens({QStringLiteral("DP-1"), QStringLiteral("phys/vs:0")});
+        m_scrollEngine->setActiveScreens({QStringLiteral("DP-2")});
 
         for (const QString& sid : screens) {
-            const bool isSnap = m_router->isSnapMode(sid);
-            const bool isAuto = m_router->isAutotileMode(sid);
-            QVERIFY2(isSnap != isAuto, qPrintable(QStringLiteral("mode predicate collision on %1").arg(sid)));
+            const int trueCount = (m_router->isSnapMode(sid) ? 1 : 0) + (m_router->isAutotileMode(sid) ? 1 : 0)
+                + (m_router->isScrollMode(sid) ? 1 : 0);
+            QVERIFY2(trueCount == 1,
+                     qPrintable(QStringLiteral("mode predicates not exhaustive/exclusive on %1").arg(sid)));
         }
     }
 
@@ -229,6 +236,27 @@ private Q_SLOTS:
         const auto result = m_router->partitionByMode(input);
         QVERIFY(result.snap.isEmpty());
         QCOMPARE(result.autotile, input);
+    }
+
+    // ─── scroll mode ──────────────────────────────────────────────────────
+
+    void engineFor_scrollScreen_returnsScrollEngine()
+    {
+        m_scrollEngine->setActiveScreens({QStringLiteral("DP-1")});
+        PhosphorEngine::IPlacementEngine* engine = m_router->engineFor(QStringLiteral("DP-1"));
+        QVERIFY(engine != nullptr);
+        QCOMPARE(static_cast<PhosphorEngine::IPlacementEngine*>(m_scrollEngine), engine);
+    }
+
+    void partitionByMode_includesScrollBucket()
+    {
+        m_autotileEngine->setAutotileScreens({QStringLiteral("DP-2")});
+        m_scrollEngine->setActiveScreens({QStringLiteral("DP-3")});
+        const QStringList input{QStringLiteral("DP-1"), QStringLiteral("DP-2"), QStringLiteral("DP-3")};
+        const auto result = m_router->partitionByMode(input);
+        QCOMPARE(result.snap, QStringList{QStringLiteral("DP-1")});
+        QCOMPARE(result.autotile, QStringList{QStringLiteral("DP-2")});
+        QCOMPARE(result.scroll, QStringList{QStringLiteral("DP-3")});
     }
 };
 

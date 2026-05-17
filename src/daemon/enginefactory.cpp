@@ -6,6 +6,7 @@
 // Concrete engine includes — only this TU needs them.
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include "../core/screenmoderouter.h"
 
 namespace PlasmaZones {
@@ -34,10 +35,17 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
     // isActiveOnScreen routing.
     snap->setAutotileEngine(autotile.get());
 
-    // --- ScreenModeRouter ---
-    auto router = std::make_unique<ScreenModeRouter>(layoutManager, snap.get(), autotile.get());
+    // --- ScrollEngine ---
+    // ScrollEngine is geometry-agnostic and receives window events via the
+    // router, so — unlike autotile/snap — it needs no ScreenManager,
+    // WindowTrackingService, algorithm registry or zone detector.
+    auto scroll = std::make_unique<PhosphorScrollEngine::ScrollEngine>(nullptr);
+    scroll->setEngineSettings(settings);
 
-    return EngineSet{std::move(autotile), std::move(snap), std::move(router)};
+    // --- ScreenModeRouter ---
+    auto router = std::make_unique<ScreenModeRouter>(layoutManager, snap.get(), autotile.get(), scroll.get());
+
+    return EngineSet{std::move(autotile), std::move(snap), std::move(scroll), std::move(router)};
 }
 
 } // namespace PlasmaZones

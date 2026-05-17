@@ -550,6 +550,35 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // OPTIONAL: Scrollable-tiling operations (scroll engine; no-op elsewhere)
+    //
+    // niri-style column/tile operations with no equivalent among the generic
+    // navigation intents above. Snap and autotile engines inherit the no-op
+    // defaults — they have no notion of columns or an unbounded strip.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Pull the focused window of the next column into the focused column.
+    virtual void consumeWindowIntoColumn(const NavigationContext& ctx)
+    {
+        Q_UNUSED(ctx)
+    }
+    /// Push the focused window out of its column into a new column of its own.
+    virtual void expelWindowFromColumn(const NavigationContext& ctx)
+    {
+        Q_UNUSED(ctx)
+    }
+    /// Cycle the focused column's width through the configured width presets.
+    virtual void cyclePresetColumnWidth(const NavigationContext& ctx)
+    {
+        Q_UNUSED(ctx)
+    }
+    /// Cycle the focused window's height through the configured height presets.
+    virtual void cyclePresetWindowHeight(const NavigationContext& ctx)
+    {
+        Q_UNUSED(ctx)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Engine state serialization
     // ═══════════════════════════════════════════════════════════════════════════
 

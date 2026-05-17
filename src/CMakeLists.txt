@@ -191,6 +191,7 @@ target_link_libraries(plasmazones_core
         PhosphorPlacement::PhosphorPlacement
         PhosphorTileEngine::PhosphorTileEngine
         PhosphorSnapEngine::PhosphorSnapEngine
+        PhosphorScrollEngine::PhosphorScrollEngine
         PhosphorIdentity::PhosphorIdentity
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorProtocol::PhosphorProtocol
@@ -359,6 +360,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/signals.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
+    daemon/daemon/scroll.cpp
     daemon/daemon/osd.cpp
     daemon/daemon.h
     daemon/daemon/helpers.h
