@@ -1553,9 +1553,10 @@ void Daemon::stop()
     // explicit teardown for the same "queued D-Bus call lands during
     // destruction window" defense-in-depth.
     //
-    // The other eight raw-Qt-parented adaptors (LayoutAdaptor,
+    // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
-    // DBusScreenAdaptor, WindowDragAdaptor, SnapAdaptor, AutotileAdaptor) all
+    // DBusScreenAdaptor, WindowDragAdaptor, SnapAdaptor, AutotileAdaptor,
+    // ScrollAdaptor) all
     // ship `= default` destructors (verified — see their class headers),
     // so they have no dtor body to UAF. QDBusConnection::unregisterObject
     // (invoked above) blocks new method dispatch to them before we begin

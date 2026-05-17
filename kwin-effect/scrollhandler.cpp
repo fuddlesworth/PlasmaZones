@@ -193,6 +193,7 @@ void ScrollHandler::onWindowClosed(const QString& windowId, const QString& scree
     m_notifiedWindowScreens.remove(windowId);
     m_appliedGeometry.remove(windowId);
     m_reassertPending.remove(windowId);
+    m_reasserted.remove(windowId);
 
     if (m_scrollScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
@@ -264,8 +265,10 @@ void ScrollHandler::recordAppliedGeometry(const QString& windowId, const QRect& 
 {
     m_appliedGeometry[windowId] = geometry;
     // The window is being moved to match this geometry — drop any stale
-    // re-assert queued from an earlier drift.
+    // re-assert queued from an earlier drift, and reset the re-assert budget:
+    // a fresh daemon resolve is a new episode.
     m_reassertPending.remove(windowId);
+    m_reasserted.remove(windowId);
 }
 
 void ScrollHandler::onWindowFrameGeometryChanged(KWin::EffectWindow* w)
@@ -299,6 +302,14 @@ void ScrollHandler::onWindowFrameGeometryChanged(KWin::EffectWindow* w)
         m_reassertPending.remove(windowId);
         return;
     }
+    if (m_reasserted.contains(windowId)) {
+        // Already re-asserted once since the daemon last resolved this window.
+        // The residual drift is the window's own size constraints (e.g. an X11
+        // terminal's cell-size increments) that it cannot resolve to the exact
+        // tile rect — re-asserting again would just loop. Accept it; the next
+        // daemon push (recordAppliedGeometry) resets the budget.
+        return;
+    }
     // Debounce: coalesce a noisy resize stream (and any in-progress user drag)
     // into one corrective move once it settles.
     m_reassertPending.insert(windowId);
@@ -321,6 +332,10 @@ void ScrollHandler::flushReasserts()
         // Re-assert the daemon's resolved geometry — an app cannot resize its
         // way out of the scroll strip. Interactive resize arrives in Phase 3.
         m_effect->applySnapGeometry(w, it.value(), /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+        // One re-assert per daemon-resolve episode: if the window still drifts
+        // after this, it physically cannot hit the tile rect (size hints), so
+        // onWindowFrameGeometryChanged must not re-queue it into a loop.
+        m_reasserted.insert(windowId);
         qCDebug(lcEffect) << "Re-asserted scroll geometry for" << windowId << "->" << it.value();
     }
 }
@@ -350,6 +365,7 @@ void ScrollHandler::onDaemonReady()
     m_pendingCloses.clear();
     m_appliedGeometry.clear();
     m_reassertPending.clear();
+    m_reasserted.clear();
     m_reassertTimer->stop();
     connectSignals();
     loadSettings();

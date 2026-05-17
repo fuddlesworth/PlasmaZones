@@ -73,13 +73,22 @@ QHash<QString, QRectF> resolveScrollLayout(const ScrollScreenState& state, const
     const int activeIndex = state.activeColumnIndex();
     qreal viewPos = 0.0;
     if (activeIndex >= 0 && activeIndex < stripX.size()) {
-        viewPos = stripX.at(activeIndex) + state.viewOffset();
+        viewPos = stripX.at(activeIndex);
+        // viewOffset is an offset *within* the focused column's width — add it
+        // only when that column is actually visible. A fully-minimized
+        // (collapsed) focused column has zero width and its stripX already
+        // coincides with the next visible column, so anchor there with no
+        // offset rather than scrolling the strip to a zero-width slot.
+        if (widths.at(activeIndex) > 0.0) {
+            viewPos += state.viewOffset();
+        }
     }
 
     for (int ci = 0; ci < columns.size(); ++ci) {
         // Lay out only the visible (non-minimized) tiles. A minimized tile
         // keeps its place in the column order but contributes no geometry.
         QVector<const Tile*> visible;
+        visible.reserve(columns.at(ci).tileCount());
         for (const Tile& tile : columns.at(ci).tiles()) {
             if (!tile.minimized) {
                 visible.append(&tile);

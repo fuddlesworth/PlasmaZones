@@ -119,6 +119,10 @@ private:
     /// point for detecting app-initiated resizes.
     QHash<QString, QRect> m_appliedGeometry;
     QSet<QString> m_reassertPending; ///< Windows awaiting a debounced re-assert.
+    /// Windows already re-asserted since the daemon last resolved them — caps
+    /// re-assertion at one attempt per resolve episode so a window that cannot
+    /// hit the exact tile rect (X11 size increments) does not loop.
+    QSet<QString> m_reasserted;
     QTimer* m_reassertTimer = nullptr;
     /// Incremented on every daemon (re)connect. A D-Bus reply captures the
     /// epoch at call time and skips its rollback if the daemon reconnected
