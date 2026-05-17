@@ -187,6 +187,41 @@ void Daemon::updateAutotileScreens()
     }
 
     qCDebug(lcDaemon) << "Updated autotile screens=" << autotileScreens;
+
+    // Scroll-mode screens resolve on the same triggers (layout assignment,
+    // desktop/activity switch, startup); keep them in sync from here.
+    updateScrollScreens();
+}
+
+void Daemon::updateScrollScreens()
+{
+    if (!m_scrollEngine || !m_layoutManager || !m_screenManager) {
+        return;
+    }
+
+    const int desktop = currentDesktop();
+    const QString activity = currentActivity();
+
+    // Align the engine's per-context key with the daemon's current
+    // desktop/activity before resolving — mirrors the setCurrentDesktop /
+    // setCurrentActivity-before-update pattern used for autotile.
+    m_scrollEngine->setCurrentDesktop(desktop);
+    m_scrollEngine->setCurrentActivity(activity);
+
+    QSet<QString> scrollScreens;
+    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+    for (const QString& screenId : effectiveIds) {
+        if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Scroll, screenId, desktop, activity)) {
+            continue;
+        }
+        const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+        if (PhosphorLayout::LayoutId::isScroll(assignmentId)) {
+            scrollScreens.insert(screenId);
+        }
+    }
+
+    m_scrollEngine->setActiveScreens(scrollScreens);
+    qCDebug(lcDaemon) << "Updated scroll screens=" << scrollScreens;
 }
 
 /**

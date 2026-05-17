@@ -376,6 +376,17 @@ private:
     void updateAutotileScreens();
 
     /**
+     * @brief Resolve which screens are in scroll mode and update ScrollEngine.
+     *
+     * Mirrors updateAutotileScreens() for the scroll placement engine: reads
+     * each screen's assignment, collects the ones carrying a "scroll:" id, and
+     * pushes the set (plus the current desktop/activity context) to the scroll
+     * engine. Invoked from updateAutotileScreens() so both engines resolve on
+     * the same triggers.
+     */
+    void updateScrollScreens();
+
+    /**
      * @brief Respond to a Phosphor::Screens::ScreenManager VS cache change for a physical screen
      *
      * Wired to Phosphor::Screens::ScreenManager::virtualScreensChanged. Performs the post-change
