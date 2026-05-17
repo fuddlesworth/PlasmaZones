@@ -148,7 +148,7 @@ jobs:
           fi
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: deb-kde-neon
           path: dist/*.*deb
@@ -229,7 +229,7 @@ jobs:
           cp ~/rpmbuild/RPMS/*/*.rpm dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: rpm-fedora-${{ matrix.fedora }}
           path: dist/*.rpm
@@ -306,7 +306,7 @@ jobs:
           cp ~/rpmbuild/RPMS/*/*.rpm dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: rpm-opensuse-tumbleweed
           path: dist/*.rpm
@@ -397,7 +397,7 @@ jobs:
           tar czf plasmazones-${VERSION}-linux-x86_64.tar.gz "$DIRNAME"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: generic-linux-tarball
           path: plasmazones-*-linux-x86_64.tar.gz
@@ -511,7 +511,7 @@ jobs:
           mv packaging/arch/*.pkg.tar.zst dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: arch-package
           path: dist/*.pkg.tar.zst
@@ -553,7 +553,7 @@ jobs:
           cat plasmazones.nix
 
       - name: Upload Nix package artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: nix-package
           path: plasmazones.nix
