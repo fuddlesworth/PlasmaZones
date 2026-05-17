@@ -89,6 +89,10 @@ add_executable(test_scroll_screen_state scroll/test_scroll_screen_state.cpp)
 target_link_libraries(test_scroll_screen_state PRIVATE Qt6::Test Qt6::Core PhosphorScrollEngine)
 add_test(NAME test_scroll_screen_state COMMAND test_scroll_screen_state)
 
+add_executable(test_scroll_layout scroll/test_scroll_layout.cpp)
+target_link_libraries(test_scroll_layout PRIVATE Qt6::Test Qt6::Core PhosphorScrollEngine)
+add_test(NAME test_scroll_layout COMMAND test_scroll_layout)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Tiling Algorithm Tests (split by algorithm family)
 # ═══════════════════════════════════════════════════════════════════════════════

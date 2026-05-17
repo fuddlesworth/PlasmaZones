@@ -141,6 +141,13 @@ void Column::setActiveTileIndex(int index)
     clampActiveTileIndex();
 }
 
+void Column::setActiveTileHeight(const WindowHeight& height)
+{
+    if (m_activeTileIndex >= 0 && m_activeTileIndex < m_tiles.size()) {
+        m_tiles[m_activeTileIndex].height = height;
+    }
+}
+
 const Tile* Column::activeTile() const
 {
     if (m_activeTileIndex < 0 || m_activeTileIndex >= m_tiles.size()) {

@@ -23,8 +23,10 @@ add_library(PhosphorScrollEngine SHARED
     include/PhosphorScrollEngine/ScrollTypes.h
     include/PhosphorScrollEngine/Column.h
     include/PhosphorScrollEngine/ScrollScreenState.h
+    include/PhosphorScrollEngine/ScrollLayout.h
     src/Column.cpp
     src/ScrollScreenState.cpp
+    src/ScrollLayout.cpp
 )
 add_library(PhosphorScrollEngine::PhosphorScrollEngine ALIAS PhosphorScrollEngine)
 

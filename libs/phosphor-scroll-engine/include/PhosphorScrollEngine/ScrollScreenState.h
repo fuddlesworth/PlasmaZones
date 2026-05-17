@@ -95,6 +95,12 @@ public:
     /// Reorder the focused tile within its column by @p delta; focus follows.
     bool moveTile(int delta);
 
+    // ── Width / height intent ───────────────────────────────────────────
+    /// Set the focused column's width intent (no-op when the strip is empty).
+    void setActiveColumnWidth(const ColumnWidth& width);
+    /// Set the focused tile's height intent (no-op when the strip is empty).
+    void setActiveTileHeight(const WindowHeight& height);
+
     // ── Floating set ────────────────────────────────────────────────────
     /// Mark @p windowId floating — removes it from the strip if tiled.
     void markFloating(const QString& windowId);

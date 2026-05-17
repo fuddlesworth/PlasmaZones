@@ -177,6 +177,20 @@ bool ScrollScreenState::moveTile(int delta)
     return column.moveTile(column.activeTileIndex(), target);
 }
 
+void ScrollScreenState::setActiveColumnWidth(const ColumnWidth& width)
+{
+    if (m_activeColumnIndex >= 0) {
+        m_columns[m_activeColumnIndex].setWidth(width);
+    }
+}
+
+void ScrollScreenState::setActiveTileHeight(const WindowHeight& height)
+{
+    if (m_activeColumnIndex >= 0) {
+        m_columns[m_activeColumnIndex].setActiveTileHeight(height);
+    }
+}
+
 void ScrollScreenState::markFloating(const QString& windowId)
 {
     if (windowId.isEmpty()) {

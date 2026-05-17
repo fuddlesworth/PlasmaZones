@@ -62,6 +62,8 @@ public:
         return m_activeTileIndex;
     }
     void setActiveTileIndex(int index);
+    /// Set the height intent of the focused tile (no-op when the column is empty).
+    void setActiveTileHeight(const WindowHeight& height);
     const Tile* activeTile() const;
 
     // ── Width intent ────────────────────────────────────────────────────
