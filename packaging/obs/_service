@@ -1,0 +1,19 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  OBS source service for the home:fuddlesworth/plasmazones package.
+
+  download_files parses plasmazones.spec, expands Source0
+  (%{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz) and
+  fetches that tarball from GitHub on the OBS server. The release
+  workflow (.github/workflows/release.yml, job publish-obs) stamps the
+  real Version into the spec before each `osc commit`, so the service
+  needs no version parameter — it always resolves to the tag just cut.
+
+  Users add the resulting repository with:
+    sudo zypper addrepo \
+      https://download.opensuse.org/repositories/home:fuddlesworth/openSUSE_Tumbleweed/home:fuddlesworth.repo
+-->
+<services>
+  <service name="download_files"/>
+</services>
