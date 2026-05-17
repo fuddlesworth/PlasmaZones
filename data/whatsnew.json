@@ -1,6 +1,16 @@
 {
     "releases": [
         {
+            "version": "3.0.2",
+            "date": "2026-05-17",
+            "highlights": [
+                "Fixed layouts shifting toward the desktop origin after a monitor powered off and back on, such as on DPMS wake or hotplug (#465, #467)",
+                "Fixed windows being laid out over panels on the first layout pass at startup (#466)",
+                "Support reports and the daemon now show whether the KWin effect bridge is connected",
+                "openSUSE packages are now published to the openSUSE Build Service"
+            ]
+        },
+        {
             "version": "3.0.0",
             "date": "2026-05-16",
             "highlights": [
