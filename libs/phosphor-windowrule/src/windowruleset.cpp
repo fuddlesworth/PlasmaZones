@@ -1,0 +1,197 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorWindowRule/WindowRuleSet.h>
+
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonValue>
+#include <QSaveFile>
+
+#include "windowrulelogging.h"
+
+namespace PhosphorWindowRule {
+
+namespace {
+
+constexpr QLatin1StringView kKeyVersion{"_version"};
+constexpr QLatin1StringView kKeyRules{"rules"};
+
+} // namespace
+
+std::optional<WindowRule> WindowRuleSet::ruleById(const QUuid& id) const
+{
+    for (const WindowRule& rule : m_rules) {
+        if (rule.id == id) {
+            return rule;
+        }
+    }
+    return std::nullopt;
+}
+
+bool WindowRuleSet::addRule(const WindowRule& rule)
+{
+    if (!rule.isValid()) {
+        qCWarning(lcWindowRule) << "addRule: rejecting invalid rule. id:" << rule.id.toString();
+        return false;
+    }
+    if (ruleById(rule.id)) {
+        qCWarning(lcWindowRule) << "addRule: rejecting rule with a colliding id:" << rule.id.toString();
+        return false;
+    }
+    m_rules.append(rule);
+    ++m_revision;
+    return true;
+}
+
+bool WindowRuleSet::updateRule(const WindowRule& rule)
+{
+    if (!rule.isValid()) {
+        qCWarning(lcWindowRule) << "updateRule: rejecting invalid rule. id:" << rule.id.toString();
+        return false;
+    }
+    for (int i = 0; i < m_rules.size(); ++i) {
+        if (m_rules.at(i).id == rule.id) {
+            m_rules[i] = rule;
+            ++m_revision;
+            return true;
+        }
+    }
+    qCWarning(lcWindowRule) << "updateRule: no rule with id:" << rule.id.toString();
+    return false;
+}
+
+bool WindowRuleSet::removeRule(const QUuid& id)
+{
+    for (int i = 0; i < m_rules.size(); ++i) {
+        if (m_rules.at(i).id == id) {
+            m_rules.removeAt(i);
+            ++m_revision;
+            return true;
+        }
+    }
+    return false;
+}
+
+int WindowRuleSet::setRules(const QList<WindowRule>& rules)
+{
+    QList<WindowRule> validated;
+    validated.reserve(rules.size());
+    for (const WindowRule& rule : rules) {
+        if (!rule.isValid()) {
+            qCWarning(lcWindowRule) << "setRules: dropping invalid rule. id:" << rule.id.toString();
+            continue;
+        }
+        validated.append(rule);
+    }
+    m_rules = std::move(validated);
+    ++m_revision;
+    return m_rules.size();
+}
+
+void WindowRuleSet::clear()
+{
+    if (!m_rules.isEmpty()) {
+        m_rules.clear();
+    }
+    ++m_revision;
+}
+
+QJsonObject WindowRuleSet::toJson() const
+{
+    QJsonObject o;
+    o.insert(kKeyVersion, SchemaVersion);
+    QJsonArray arr;
+    for (const WindowRule& rule : m_rules) {
+        arr.append(rule.toJson());
+    }
+    o.insert(kKeyRules, arr);
+    return o;
+}
+
+std::optional<WindowRuleSet> WindowRuleSet::fromJson(const QJsonObject& obj)
+{
+    // The library refuses any version other than its own — migration is the
+    // config layer's job, never the library's.
+    const QJsonValue versionValue = obj.value(kKeyVersion);
+    if (!versionValue.isDouble() || versionValue.toInt() != SchemaVersion) {
+        qCWarning(lcWindowRule) << "WindowRuleSet::fromJson refusing a non-v" << SchemaVersion
+                                << "document. _version:" << versionValue;
+        return std::nullopt;
+    }
+
+    WindowRuleSet set;
+    const QJsonValue rulesValue = obj.value(kKeyRules);
+    if (!rulesValue.isArray()) {
+        qCWarning(lcWindowRule) << "WindowRuleSet::fromJson: `rules` is missing or not an array — loading empty set.";
+        return set;
+    }
+    for (const QJsonValue& v : rulesValue.toArray()) {
+        if (!v.isObject()) {
+            qCWarning(lcWindowRule) << "WindowRuleSet::fromJson: rule entry is not an object — dropping.";
+            continue;
+        }
+        const auto rule = WindowRule::fromJson(v.toObject());
+        if (!rule) {
+            continue;
+        }
+        if (set.ruleById(rule->id)) {
+            qCWarning(lcWindowRule) << "WindowRuleSet::fromJson: dropping rule with a duplicate id:"
+                                    << rule->id.toString();
+            continue;
+        }
+        set.m_rules.append(*rule);
+    }
+    // A freshly loaded set starts at revision 0 — the load is the baseline.
+    set.m_revision = 0;
+    return set;
+}
+
+std::optional<WindowRuleSet> WindowRuleSet::loadFromFile(const QString& path)
+{
+    QFile file(path);
+    if (!file.exists()) {
+        qCWarning(lcWindowRule) << "WindowRuleSet::loadFromFile: file does not exist:" << path;
+        return std::nullopt;
+    }
+    if (!file.open(QIODevice::ReadOnly)) {
+        qCWarning(lcWindowRule) << "WindowRuleSet::loadFromFile: cannot open file:" << path << file.errorString();
+        return std::nullopt;
+    }
+    const QByteArray data = file.readAll();
+    file.close();
+
+    QJsonParseError error;
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+    if (error.error != QJsonParseError::NoError || !doc.isObject()) {
+        qCWarning(lcWindowRule) << "WindowRuleSet::loadFromFile: malformed JSON in" << path << error.errorString();
+        return std::nullopt;
+    }
+    return fromJson(doc.object());
+}
+
+bool WindowRuleSet::saveToFile(const QString& path) const
+{
+    // QSaveFile gives atomic temp-write + rename — a crash mid-write never
+    // leaves a truncated rule store.
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qCWarning(lcWindowRule) << "WindowRuleSet::saveToFile: cannot open file for writing:" << path
+                                << file.errorString();
+        return false;
+    }
+    const QJsonDocument doc(toJson());
+    if (file.write(doc.toJson(QJsonDocument::Indented)) < 0) {
+        qCWarning(lcWindowRule) << "WindowRuleSet::saveToFile: write failed:" << path << file.errorString();
+        file.cancelWriting();
+        return false;
+    }
+    if (!file.commit()) {
+        qCWarning(lcWindowRule) << "WindowRuleSet::saveToFile: commit failed:" << path << file.errorString();
+        return false;
+    }
+    return true;
+}
+
+} // namespace PhosphorWindowRule

@@ -1,0 +1,144 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <QHash>
+#include <QJsonObject>
+#include <QString>
+#include <QStringList>
+
+#include <functional>
+#include <optional>
+
+#include "phosphorwindowrule_export.h"
+
+namespace PhosphorWindowRule {
+
+/**
+ * @brief One action carried by a WindowRule.
+ *
+ * A RuleAction is a `{ type, params }` pair. The `type` selects an
+ * ActionDescriptor in the ActionRegistry; the descriptor maps the action to
+ * a **slot** and validates/serializes its `params`.
+ *
+ * Conflict resolution during evaluation is **first-matching-rule-wins per
+ * slot** — actions in different slots stack, actions in the same slot do not.
+ * Some action types compute their slot from a `params` field (the animation
+ * actions are scoped by their `event`), so the slot is resolved through the
+ * registry rather than stored on the action.
+ */
+struct PHOSPHORWINDOWRULE_EXPORT RuleAction
+{
+    QString type; ///< registered action type id (e.g. "setEngineMode")
+    QJsonObject params; ///< action-specific payload
+
+    bool operator==(const RuleAction& other) const
+    {
+        return type == other.type && params == other.params;
+    }
+    bool operator!=(const RuleAction& other) const
+    {
+        return !(*this == other);
+    }
+
+    QJsonObject toJson() const;
+
+    /// Strict loader — validates against the ActionRegistry; returns nullopt
+    /// for an unregistered type or params that fail descriptor validation.
+    static std::optional<RuleAction> fromJson(const QJsonObject& obj);
+};
+
+/**
+ * @brief Static metadata describing one registered action type.
+ *
+ * Adding a future rule type is registering one of these — no new matcher, no
+ * new file, no new UI page. The descriptor owns:
+ *   - the `slotFor` resolver (a function so animation actions can scope their
+ *     slot by an `event` param),
+ *   - a `validate` predicate run on load,
+ *   - whether the action is **terminal** (an `Exclude` action stops evaluation).
+ */
+struct PHOSPHORWINDOWRULE_EXPORT ActionDescriptor
+{
+    QString type; ///< the action type id
+    /// Resolves the slot for a concrete action's params. Returning an empty
+    /// string means the action contributes no slot (treated as invalid).
+    std::function<QString(const QJsonObject& params)> slotFor;
+    /// Returns true if @p params is a well-formed payload for this type.
+    std::function<bool(const QJsonObject& params)> validate;
+    /// Terminal actions (Exclude) stop evaluation once their rule matches.
+    bool terminal = false;
+};
+
+/**
+ * @brief Process-wide registry of action descriptors.
+ *
+ * The built-in descriptors register on first access via `instance()`. The
+ * registry is the single source of truth for an action's slot, validation,
+ * and terminal flag — `RuleAction`, `RuleEvaluator`, and the loaders all
+ * consult it.
+ */
+class PHOSPHORWINDOWRULE_EXPORT ActionRegistry
+{
+public:
+    /// The shared process-wide registry, pre-populated with the built-ins.
+    static ActionRegistry& instance();
+
+    /// Register (or replace) a descriptor. Used by the built-ins and by
+    /// future-phase consumers that add new action types.
+    void registerAction(const ActionDescriptor& descriptor);
+
+    /// True if @p type names a registered action.
+    bool isRegistered(const QString& type) const;
+
+    /// The descriptor for @p type, or nullopt if unregistered.
+    std::optional<ActionDescriptor> descriptor(const QString& type) const;
+
+    /// The slot a concrete @p action resolves to, or an empty string if the
+    /// type is unregistered or its descriptor rejects the params.
+    QString slotFor(const RuleAction& action) const;
+
+    /// True if @p action is a terminal action (Exclude).
+    bool isTerminal(const RuleAction& action) const;
+
+    /// True if @p action passes its descriptor's validation.
+    bool validate(const RuleAction& action) const;
+
+    /// All registered type ids — for UI enumeration / tests.
+    QStringList registeredTypes() const;
+
+private:
+    ActionRegistry();
+    void registerBuiltins();
+
+    QHash<QString, ActionDescriptor> m_descriptors;
+};
+
+// ── Built-in action type ids — canonical wire strings ──
+namespace ActionType {
+inline constexpr QLatin1StringView SetEngineMode{"setEngineMode"};
+inline constexpr QLatin1StringView SetSnappingLayout{"setSnappingLayout"};
+inline constexpr QLatin1StringView SetTilingAlgorithm{"setTilingAlgorithm"};
+inline constexpr QLatin1StringView DisableEngine{"disableEngine"};
+inline constexpr QLatin1StringView Exclude{"exclude"};
+inline constexpr QLatin1StringView Float{"float"};
+inline constexpr QLatin1StringView OverrideAnimationShader{"overrideAnimationShader"};
+inline constexpr QLatin1StringView OverrideAnimationTiming{"overrideAnimationTiming"};
+inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
+} // namespace ActionType
+
+// ── Built-in slot ids ──
+namespace ActionSlot {
+inline constexpr QLatin1StringView EngineMode{"engine-mode"};
+inline constexpr QLatin1StringView Layout{"layout"};
+inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
+inline constexpr QLatin1StringView Manage{"manage"};
+inline constexpr QLatin1StringView Float{"float"};
+inline constexpr QLatin1StringView Opacity{"opacity"};
+// Animation slots are event-scoped: "anim-shader:<event>" / "anim-timing:<event>".
+inline constexpr QLatin1StringView AnimShaderPrefix{"anim-shader:"};
+inline constexpr QLatin1StringView AnimTimingPrefix{"anim-timing:"};
+} // namespace ActionSlot
+
+} // namespace PhosphorWindowRule

@@ -1,0 +1,349 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorWindowRule/MatchExpression.h>
+
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QTest>
+
+using namespace PhosphorWindowRule;
+using PhosphorProtocol::WindowType;
+
+namespace {
+
+WindowQuery firefoxQuery()
+{
+    WindowQuery q;
+    q.appId = QStringLiteral("org.mozilla.firefox");
+    q.windowClass = QStringLiteral("firefox");
+    q.title = QStringLiteral("Mozilla Firefox — Settings");
+    q.pid = 1234;
+    q.windowType = WindowType::Normal;
+    q.isFullscreen = false;
+    q.screenId = QStringLiteral("DP-2");
+    q.virtualDesktop = 2;
+    q.activity = QStringLiteral("{work}");
+    return q;
+}
+
+} // namespace
+
+class TestMatchExpression : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+
+    // ── Catch-all ──
+
+    void testDefaultExpression_isCatchAll()
+    {
+        MatchExpression expr;
+        QVERIFY(expr.isCatchAll());
+        QVERIFY(expr.evaluate(firefoxQuery()));
+        // Catch-all matches a windowless context query too.
+        WindowQuery ctx;
+        ctx.screenId = QStringLiteral("HDMI-1");
+        QVERIFY(expr.evaluate(ctx));
+        QVERIFY(expr.isContextOnly());
+    }
+
+    void testEmptyAll_isAlwaysTrue()
+    {
+        const auto expr = MatchExpression::makeAll({});
+        QVERIFY(expr.evaluate(firefoxQuery()));
+    }
+
+    void testEmptyAny_isAlwaysFalse()
+    {
+        const auto expr = MatchExpression::makeAny({});
+        QVERIFY(!expr.evaluate(firefoxQuery()));
+    }
+
+    void testEmptyNone_isAlwaysTrue()
+    {
+        const auto expr = MatchExpression::makeNone({});
+        QVERIFY(expr.evaluate(firefoxQuery()));
+    }
+
+    // ── String operators ──
+
+    void testEquals_caseInsensitive()
+    {
+        const auto expr = MatchExpression::makeLeaf(Field::WindowClass, Operator::Equals, QStringLiteral("FireFox"));
+        QVERIFY(expr.evaluate(firefoxQuery()));
+    }
+
+    void testContains()
+    {
+        const auto expr = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("fox"));
+        QVERIFY(expr.evaluate(firefoxQuery()));
+    }
+
+    void testContains_emptyPatternNeverMatches()
+    {
+        const auto expr = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QString());
+        QVERIFY(!expr.evaluate(firefoxQuery()));
+    }
+
+    void testStartsWith_endsWith()
+    {
+        const auto starts = MatchExpression::makeLeaf(Field::WindowClass, Operator::StartsWith, QStringLiteral("fire"));
+        const auto ends = MatchExpression::makeLeaf(Field::WindowClass, Operator::EndsWith, QStringLiteral("fox"));
+        QVERIFY(starts.evaluate(firefoxQuery()));
+        QVERIFY(ends.evaluate(firefoxQuery()));
+    }
+
+    void testRegex()
+    {
+        const auto expr =
+            MatchExpression::makeLeaf(Field::Title, Operator::Regex, QStringLiteral("Settings|Preferences"));
+        QVERIFY(expr.evaluate(firefoxQuery()));
+    }
+
+    void testRegex_caching_sharedAcrossCopies()
+    {
+        const auto expr = MatchExpression::makeLeaf(Field::Title, Operator::Regex, QStringLiteral("Settings"));
+        // Evaluate the original, then a copy; both must produce the same
+        // result (the copy shares the compiled program).
+        QVERIFY(expr.evaluate(firefoxQuery()));
+        MatchExpression copy = expr;
+        QVERIFY(copy.evaluate(firefoxQuery()));
+    }
+
+    void testAppIdMatches()
+    {
+        const auto expr = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("firefox"));
+        QVERIFY(expr.evaluate(firefoxQuery()));
+    }
+
+    // ── Absent window field ──
+
+    void testAbsentWindowField_neverMatches()
+    {
+        WindowQuery ctx;
+        ctx.screenId = QStringLiteral("DP-2");
+        const auto expr = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox"));
+        QVERIFY(!expr.evaluate(ctx));
+    }
+
+    // ── Numeric / bool / windowType ──
+
+    void testNumericComparison()
+    {
+        const auto gt = MatchExpression::makeLeaf(Field::Pid, Operator::GreaterThan, 1000);
+        const auto lt = MatchExpression::makeLeaf(Field::Pid, Operator::LessThan, 1000);
+        const auto eq = MatchExpression::makeLeaf(Field::Pid, Operator::Equals, 1234);
+        QVERIFY(gt.evaluate(firefoxQuery()));
+        QVERIFY(!lt.evaluate(firefoxQuery()));
+        QVERIFY(eq.evaluate(firefoxQuery()));
+    }
+
+    void testBoolField()
+    {
+        const auto isFalse = MatchExpression::makeLeaf(Field::IsFullscreen, Operator::Equals, false);
+        QVERIFY(isFalse.evaluate(firefoxQuery()));
+    }
+
+    void testWindowTypeField()
+    {
+        const auto expr =
+            MatchExpression::makeLeaf(Field::WindowType, Operator::Equals, static_cast<int>(WindowType::Normal));
+        QVERIFY(expr.evaluate(firefoxQuery()));
+        const auto dialog =
+            MatchExpression::makeLeaf(Field::WindowType, Operator::Equals, static_cast<int>(WindowType::Dialog));
+        QVERIFY(!dialog.evaluate(firefoxQuery()));
+    }
+
+    void testInOperator_strings()
+    {
+        const QVariantList screens{QStringLiteral("DP-1"), QStringLiteral("DP-2")};
+        const auto expr = MatchExpression::makeLeaf(Field::ScreenId, Operator::In, screens);
+        QVERIFY(expr.evaluate(firefoxQuery()));
+    }
+
+    void testInOperator_numeric()
+    {
+        const QVariantList desktops{1, 2, 3};
+        const auto expr = MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::In, desktops);
+        QVERIFY(expr.evaluate(firefoxQuery()));
+    }
+
+    // ── Composites ──
+
+    void testAll_andSemantics()
+    {
+        const auto expr = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-2")),
+        });
+        QVERIFY(expr.evaluate(firefoxQuery()));
+
+        const auto fails = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("HDMI-9")),
+        });
+        QVERIFY(!fails.evaluate(firefoxQuery()));
+    }
+
+    void testAny_orSemantics()
+    {
+        const auto expr = MatchExpression::makeAny({
+            MatchExpression::makeLeaf(Field::WindowClass, Operator::Equals, QStringLiteral("chrome")),
+            MatchExpression::makeLeaf(Field::WindowClass, Operator::Equals, QStringLiteral("firefox")),
+        });
+        QVERIFY(expr.evaluate(firefoxQuery()));
+    }
+
+    void testNone_notAnySemantics()
+    {
+        const auto expr = MatchExpression::makeNone({
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("eDP-1")),
+        });
+        QVERIFY(expr.evaluate(firefoxQuery())); // not on eDP-1
+
+        const auto blocks = MatchExpression::makeNone({
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-2")),
+        });
+        QVERIFY(!blocks.evaluate(firefoxQuery())); // is on DP-2
+    }
+
+    void testNestedComposite()
+    {
+        // appId matches code AND (windowType==dialog OR title regex) AND NOT(screen eDP-1)
+        const auto expr = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("firefox")),
+            MatchExpression::makeAny({
+                MatchExpression::makeLeaf(Field::WindowType, Operator::Equals, static_cast<int>(WindowType::Dialog)),
+                MatchExpression::makeLeaf(Field::Title, Operator::Regex, QStringLiteral("Settings")),
+            }),
+            MatchExpression::makeNone({
+                MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("eDP-1")),
+            }),
+        });
+        QVERIFY(expr.evaluate(firefoxQuery()));
+    }
+
+    // ── isContextOnly ──
+
+    void testIsContextOnly()
+    {
+        const auto ctxLeaf = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-2"));
+        QVERIFY(ctxLeaf.isContextOnly());
+
+        const auto winLeaf = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+        QVERIFY(!winLeaf.isContextOnly());
+
+        const auto ctxComposite = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-2")),
+            MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 2),
+        });
+        QVERIFY(ctxComposite.isContextOnly());
+
+        const auto mixedComposite = MatchExpression::makeAll({ctxLeaf, winLeaf});
+        QVERIFY(!mixedComposite.isContextOnly());
+    }
+
+    // ── Validation ──
+
+    void testValidation_rejectsStringOpOnNumericField()
+    {
+        const auto expr = MatchExpression::makeLeaf(Field::Pid, Operator::Contains, QStringLiteral("12"));
+        QVERIFY(!expr.isValid());
+    }
+
+    void testValidation_rejectsAppIdMatchesOnNonAppId()
+    {
+        const auto expr = MatchExpression::makeLeaf(Field::WindowClass, Operator::AppIdMatches, QStringLiteral("x"));
+        QVERIFY(!expr.isValid());
+    }
+
+    void testValidation_rejectsNumericCompareOnString()
+    {
+        const auto expr = MatchExpression::makeLeaf(Field::Title, Operator::GreaterThan, 5);
+        QVERIFY(!expr.isValid());
+    }
+
+    void testValidation_rejectsBadRegex()
+    {
+        const auto expr = MatchExpression::makeLeaf(Field::Title, Operator::Regex, QStringLiteral("[unclosed"));
+        QVERIFY(!expr.isValid());
+    }
+
+    void testValidation_acceptsValidLeaf()
+    {
+        const auto expr = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox"));
+        QVERIFY(expr.isValid());
+    }
+
+    // ── JSON round-trip ──
+
+    void testJson_leafRoundTrip()
+    {
+        const auto expr = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox"));
+        const auto reloaded = MatchExpression::fromJson(expr.toJson());
+        QVERIFY(reloaded.has_value());
+        QCOMPARE(*reloaded, expr);
+    }
+
+    void testJson_compositeRoundTrip()
+    {
+        const auto expr = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("code")),
+            MatchExpression::makeAny({
+                MatchExpression::makeLeaf(Field::WindowType, Operator::Equals, static_cast<int>(WindowType::Dialog)),
+                MatchExpression::makeLeaf(Field::Title, Operator::Regex, QStringLiteral("Settings")),
+            }),
+        });
+        const auto reloaded = MatchExpression::fromJson(expr.toJson());
+        QVERIFY(reloaded.has_value());
+        QCOMPARE(*reloaded, expr);
+    }
+
+    void testJson_catchAllRoundTrip()
+    {
+        MatchExpression expr; // catch-all All{}
+        const auto reloaded = MatchExpression::fromJson(expr.toJson());
+        QVERIFY(reloaded.has_value());
+        QVERIFY(reloaded->isCatchAll());
+    }
+
+    void testJson_rejectsUnknownField()
+    {
+        QJsonObject o;
+        o.insert(QStringLiteral("field"), QStringLiteral("bogus"));
+        o.insert(QStringLiteral("op"), QStringLiteral("equals"));
+        o.insert(QStringLiteral("value"), QStringLiteral("x"));
+        QVERIFY(!MatchExpression::fromJson(o).has_value());
+    }
+
+    void testJson_rejectsUnknownOperator()
+    {
+        QJsonObject o;
+        o.insert(QStringLiteral("field"), QStringLiteral("appId"));
+        o.insert(QStringLiteral("op"), QStringLiteral("bogus"));
+        o.insert(QStringLiteral("value"), QStringLiteral("x"));
+        QVERIFY(!MatchExpression::fromJson(o).has_value());
+    }
+
+    void testJson_rejectsMultipleCompositeKeys()
+    {
+        QJsonObject o;
+        o.insert(QStringLiteral("all"), QJsonArray{});
+        o.insert(QStringLiteral("any"), QJsonArray{});
+        QVERIFY(!MatchExpression::fromJson(o).has_value());
+    }
+
+    void testJson_rejectsInvalidLeaf()
+    {
+        QJsonObject o;
+        o.insert(QStringLiteral("field"), QStringLiteral("pid"));
+        o.insert(QStringLiteral("op"), QStringLiteral("contains"));
+        o.insert(QStringLiteral("value"), QStringLiteral("12"));
+        QVERIFY(!MatchExpression::fromJson(o).has_value());
+    }
+};
+
+QTEST_MAIN(TestMatchExpression)
+#include "test_matchexpression.moc"

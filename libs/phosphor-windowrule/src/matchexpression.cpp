@@ -1,0 +1,402 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorWindowRule/MatchExpression.h>
+
+#include <PhosphorIdentity/WindowId.h>
+
+#include <QJsonArray>
+#include <QJsonValue>
+
+#include "windowrulelogging.h"
+
+namespace PhosphorWindowRule {
+
+namespace {
+
+// Canonical JSON keys. `constexpr QLatin1StringView` lets call sites use the
+// constants directly as QLatin1String without per-call wrapping.
+constexpr QLatin1StringView kKeyField{"field"};
+constexpr QLatin1StringView kKeyOp{"op"};
+constexpr QLatin1StringView kKeyValue{"value"};
+constexpr QLatin1StringView kKeyAll{"all"};
+constexpr QLatin1StringView kKeyAny{"any"};
+constexpr QLatin1StringView kKeyNone{"none"};
+
+/// True if @p op is a string-only operator (substring family + Regex).
+bool operatorIsStringOnly(Operator op)
+{
+    switch (op) {
+    case Operator::Contains:
+    case Operator::StartsWith:
+    case Operator::EndsWith:
+    case Operator::Regex:
+        return true;
+    case Operator::Equals:
+    case Operator::AppIdMatches:
+    case Operator::In:
+    case Operator::GreaterThan:
+    case Operator::LessThan:
+        return false;
+    }
+    return false;
+}
+
+/// True if @p op is a numeric-comparison operator.
+bool operatorIsNumeric(Operator op)
+{
+    return op == Operator::GreaterThan || op == Operator::LessThan;
+}
+
+/// String comparison honouring the operator family. Case-insensitive
+/// throughout, matching the design's string-match contract.
+bool stringMatch(const QString& subject, Operator op, const QString& pattern)
+{
+    switch (op) {
+    case Operator::Equals:
+        return subject.compare(pattern, Qt::CaseInsensitive) == 0;
+    case Operator::Contains:
+        // An empty pattern would otherwise match everything — a dangerous
+        // "match every window" rule. Reject it explicitly.
+        return !pattern.isEmpty() && subject.contains(pattern, Qt::CaseInsensitive);
+    case Operator::StartsWith:
+        return !pattern.isEmpty() && subject.startsWith(pattern, Qt::CaseInsensitive);
+    case Operator::EndsWith:
+        return !pattern.isEmpty() && subject.endsWith(pattern, Qt::CaseInsensitive);
+    case Operator::AppIdMatches:
+        return PhosphorIdentity::WindowId::appIdMatches(subject, pattern);
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
+// ── Construction ────────────────────────────────────────────────────────
+
+MatchExpression MatchExpression::makeLeaf(const Predicate& predicate)
+{
+    MatchExpression expr;
+    expr.m_kind = Kind::Leaf;
+    expr.m_predicate = predicate;
+    return expr;
+}
+
+MatchExpression MatchExpression::makeLeaf(Field field, Operator op, const QVariant& value)
+{
+    return makeLeaf(Predicate{field, op, value});
+}
+
+MatchExpression MatchExpression::makeAll(const QList<MatchExpression>& children)
+{
+    MatchExpression expr;
+    expr.m_kind = Kind::All;
+    expr.m_children = children;
+    return expr;
+}
+
+MatchExpression MatchExpression::makeAny(const QList<MatchExpression>& children)
+{
+    MatchExpression expr;
+    expr.m_kind = Kind::Any;
+    expr.m_children = children;
+    return expr;
+}
+
+MatchExpression MatchExpression::makeNone(const QList<MatchExpression>& children)
+{
+    MatchExpression expr;
+    expr.m_kind = Kind::None;
+    expr.m_children = children;
+    return expr;
+}
+
+// ── Introspection ───────────────────────────────────────────────────────
+
+bool MatchExpression::isContextOnly() const
+{
+    if (m_kind == Kind::Leaf) {
+        switch (m_predicate.field) {
+        case Field::ScreenId:
+        case Field::VirtualDesktop:
+        case Field::Activity:
+            return true;
+        default:
+            return false;
+        }
+    }
+    // A composite is context-only iff every child is.
+    for (const auto& child : m_children) {
+        if (!child.isContextOnly()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+const QRegularExpression& MatchExpression::compiledRegex() const
+{
+    if (!m_compiledRegex) {
+        m_compiledRegex = std::make_shared<QRegularExpression>(m_predicate.value.toString(),
+                                                               QRegularExpression::CaseInsensitiveOption);
+    }
+    return *m_compiledRegex;
+}
+
+// ── Validation ──────────────────────────────────────────────────────────
+
+bool MatchExpression::isValid() const
+{
+    if (m_kind != Kind::Leaf) {
+        for (const auto& child : m_children) {
+            if (!child.isValid()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    const Field field = m_predicate.field;
+    const Operator op = m_predicate.op;
+
+    // AppIdMatches only applies to AppId.
+    if (op == Operator::AppIdMatches && field != Field::AppId) {
+        return false;
+    }
+    // String operators require a string field.
+    if (operatorIsStringOnly(op) && !fieldIsString(field)) {
+        return false;
+    }
+    // Numeric comparisons require a numeric field.
+    if (operatorIsNumeric(op) && !fieldIsNumeric(field)) {
+        return false;
+    }
+    // In requires a list value.
+    if (op == Operator::In && m_predicate.value.metaType().id() != QMetaType::QVariantList) {
+        return false;
+    }
+    // A Regex pattern must compile.
+    if (op == Operator::Regex) {
+        const QRegularExpression re(m_predicate.value.toString());
+        if (!re.isValid()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// ── Evaluation ──────────────────────────────────────────────────────────
+
+bool MatchExpression::evaluate(const WindowQuery& query) const
+{
+    switch (m_kind) {
+    case Kind::Leaf:
+        return evaluateLeaf(query);
+    case Kind::All:
+        // Empty All{} is the always-true catch-all (fold identity for AND).
+        for (const auto& child : m_children) {
+            if (!child.evaluate(query)) {
+                return false;
+            }
+        }
+        return true;
+    case Kind::Any:
+        // Empty Any{} is always-false (fold identity for OR).
+        for (const auto& child : m_children) {
+            if (child.evaluate(query)) {
+                return true;
+            }
+        }
+        return false;
+    case Kind::None:
+        // None{} matches iff no child matches; empty None{} is always-true.
+        for (const auto& child : m_children) {
+            if (child.evaluate(query)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
+{
+    const std::optional<QVariant> resolved = query.valueForField(m_predicate.field);
+    // An absent window attribute can never match — this is what makes
+    // window-property predicates inert during windowless context resolution.
+    if (!resolved) {
+        return false;
+    }
+    const QVariant& subject = *resolved;
+    const Operator op = m_predicate.op;
+    const QVariant& value = m_predicate.value;
+
+    // ── Set membership ──
+    if (op == Operator::In) {
+        const QVariantList set = value.toList();
+        for (const QVariant& candidate : set) {
+            if (fieldIsString(m_predicate.field)) {
+                if (subject.toString().compare(candidate.toString(), Qt::CaseInsensitive) == 0) {
+                    return true;
+                }
+            } else if (subject.toInt() == candidate.toInt()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ── Boolean fields ──
+    if (fieldIsBool(m_predicate.field)) {
+        // Only Equals is meaningful on a flag.
+        if (op != Operator::Equals) {
+            return false;
+        }
+        return subject.toBool() == value.toBool();
+    }
+
+    // ── Numeric fields (Pid / VirtualDesktop) ──
+    if (fieldIsNumeric(m_predicate.field)) {
+        const int lhs = subject.toInt();
+        const int rhs = value.toInt();
+        switch (op) {
+        case Operator::Equals:
+            return lhs == rhs;
+        case Operator::GreaterThan:
+            return lhs > rhs;
+        case Operator::LessThan:
+            return lhs < rhs;
+        default:
+            return false;
+        }
+    }
+
+    // ── WindowType — compared by its underlying int (Equals only here;
+    //    In is handled above) ──
+    if (m_predicate.field == Field::WindowType) {
+        if (op != Operator::Equals) {
+            return false;
+        }
+        return subject.toInt() == value.toInt();
+    }
+
+    // ── String fields ──
+    if (op == Operator::Regex) {
+        const QRegularExpression& re = compiledRegex();
+        if (!re.isValid()) {
+            return false;
+        }
+        return re.match(subject.toString()).hasMatch();
+    }
+    return stringMatch(subject.toString(), op, value.toString());
+}
+
+// ── Serialization ───────────────────────────────────────────────────────
+
+QJsonObject MatchExpression::toJson() const
+{
+    QJsonObject o;
+    switch (m_kind) {
+    case Kind::Leaf:
+        o.insert(kKeyField, fieldToString(m_predicate.field));
+        o.insert(kKeyOp, operatorToString(m_predicate.op));
+        o.insert(kKeyValue, QJsonValue::fromVariant(m_predicate.value));
+        break;
+    case Kind::All:
+    case Kind::Any:
+    case Kind::None: {
+        QJsonArray arr;
+        for (const auto& child : m_children) {
+            arr.append(child.toJson());
+        }
+        const QLatin1StringView key = (m_kind == Kind::All) ? kKeyAll : (m_kind == Kind::Any) ? kKeyAny : kKeyNone;
+        o.insert(key, arr);
+        break;
+    }
+    }
+    return o;
+}
+
+std::optional<MatchExpression> MatchExpression::fromJson(const QJsonObject& obj)
+{
+    // Composite — exactly one of all/any/none must be present and an array.
+    const auto loadComposite = [](const QJsonValue& arrayValue, Kind kind) -> std::optional<MatchExpression> {
+        if (!arrayValue.isArray()) {
+            qCWarning(lcWindowRule) << "Composite match node has a non-array body — dropping expression.";
+            return std::nullopt;
+        }
+        QList<MatchExpression> children;
+        for (const QJsonValue& v : arrayValue.toArray()) {
+            if (!v.isObject()) {
+                qCWarning(lcWindowRule) << "Composite child is not an object — dropping expression.";
+                return std::nullopt;
+            }
+            const auto child = MatchExpression::fromJson(v.toObject());
+            if (!child) {
+                return std::nullopt;
+            }
+            children.append(*child);
+        }
+        switch (kind) {
+        case Kind::All:
+            return MatchExpression::makeAll(children);
+        case Kind::Any:
+            return MatchExpression::makeAny(children);
+        case Kind::None:
+            return MatchExpression::makeNone(children);
+        case Kind::Leaf:
+            break;
+        }
+        return std::nullopt;
+    };
+
+    const bool hasAll = obj.contains(kKeyAll);
+    const bool hasAny = obj.contains(kKeyAny);
+    const bool hasNone = obj.contains(kKeyNone);
+    const int compositeCount = (hasAll ? 1 : 0) + (hasAny ? 1 : 0) + (hasNone ? 1 : 0);
+
+    if (compositeCount > 1) {
+        qCWarning(lcWindowRule) << "Match node carries more than one composite key — dropping expression.";
+        return std::nullopt;
+    }
+    if (hasAll) {
+        return loadComposite(obj.value(kKeyAll), Kind::All);
+    }
+    if (hasAny) {
+        return loadComposite(obj.value(kKeyAny), Kind::Any);
+    }
+    if (hasNone) {
+        return loadComposite(obj.value(kKeyNone), Kind::None);
+    }
+
+    // Leaf — must carry a valid field + operator.
+    const auto field = fieldFromString(obj.value(kKeyField).toString());
+    const auto op = operatorFromString(obj.value(kKeyOp).toString());
+    if (!field || !op) {
+        qCWarning(lcWindowRule) << "Leaf match predicate has an unknown field/operator — dropping expression. field:"
+                                << obj.value(kKeyField).toString() << "op:" << obj.value(kKeyOp).toString();
+        return std::nullopt;
+    }
+    MatchExpression leaf = makeLeaf(*field, *op, obj.value(kKeyValue).toVariant());
+    if (!leaf.isValid()) {
+        qCWarning(lcWindowRule) << "Leaf match predicate is structurally invalid (field/operator mismatch or bad"
+                                   " regex) — dropping expression. field:"
+                                << fieldToString(*field) << "op:" << operatorToString(*op);
+        return std::nullopt;
+    }
+    return leaf;
+}
+
+bool MatchExpression::operator==(const MatchExpression& other) const
+{
+    if (m_kind != other.m_kind) {
+        return false;
+    }
+    if (m_kind == Kind::Leaf) {
+        return m_predicate == other.m_predicate;
+    }
+    return m_children == other.m_children;
+}
+
+} // namespace PhosphorWindowRule

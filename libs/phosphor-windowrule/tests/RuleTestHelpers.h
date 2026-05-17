@@ -1,0 +1,91 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+// Shared concise constructors for the phosphor-windowrule test suite. Header
+// only — every test that needs them includes this directly.
+
+#include <PhosphorWindowRule/PhosphorWindowRule.h>
+
+#include <QJsonObject>
+#include <QUuid>
+
+namespace PhosphorWindowRule::TestHelpers {
+
+inline RuleAction engineMode(const QString& mode)
+{
+    RuleAction a;
+    a.type = QString(ActionType::SetEngineMode);
+    a.params.insert(QStringLiteral("mode"), mode);
+    return a;
+}
+
+inline RuleAction snappingLayout(const QString& layoutId)
+{
+    RuleAction a;
+    a.type = QString(ActionType::SetSnappingLayout);
+    a.params.insert(QStringLiteral("layoutId"), layoutId);
+    return a;
+}
+
+inline RuleAction tilingAlgorithm(const QString& algorithm)
+{
+    RuleAction a;
+    a.type = QString(ActionType::SetTilingAlgorithm);
+    a.params.insert(QStringLiteral("algorithm"), algorithm);
+    return a;
+}
+
+inline RuleAction disableEngine()
+{
+    RuleAction a;
+    a.type = QString(ActionType::DisableEngine);
+    return a;
+}
+
+inline RuleAction excludeAction()
+{
+    RuleAction a;
+    a.type = QString(ActionType::Exclude);
+    return a;
+}
+
+inline RuleAction floatAction()
+{
+    RuleAction a;
+    a.type = QString(ActionType::Float);
+    return a;
+}
+
+inline RuleAction overrideShader(const QString& event, const QString& effectId)
+{
+    RuleAction a;
+    a.type = QString(ActionType::OverrideAnimationShader);
+    a.params.insert(QStringLiteral("event"), event);
+    a.params.insert(QStringLiteral("effectId"), effectId);
+    return a;
+}
+
+inline RuleAction setOpacity(double value)
+{
+    RuleAction a;
+    a.type = QString(ActionType::SetOpacity);
+    a.params.insert(QStringLiteral("value"), value);
+    return a;
+}
+
+inline WindowRule makeRule(const QString& name, int priority, const MatchExpression& match,
+                           const QList<RuleAction>& actions)
+{
+    WindowRule r;
+    r.id = QUuid::createUuid();
+    r.name = name;
+    r.enabled = true;
+    r.priority = priority;
+    r.match = match;
+    r.actions = actions;
+    return r;
+}
+
+} // namespace PhosphorWindowRule::TestHelpers
