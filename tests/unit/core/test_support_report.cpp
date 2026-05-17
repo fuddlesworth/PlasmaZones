@@ -81,8 +81,49 @@ private Q_SLOTS:
         QVERIFY(report.contains(QStringLiteral("## Config")));
         QVERIFY(report.contains(QStringLiteral("## Layouts")));
         QVERIFY(report.contains(QStringLiteral("## Autotile")));
+        QVERIFY(report.contains(QStringLiteral("## Compositor Bridge")));
         QVERIFY(report.contains(QStringLiteral("## Session State")));
         QVERIFY(report.contains(QStringLiteral("## Recent Logs")));
+        QVERIFY(report.contains(QStringLiteral("## KWin Effect Logs")));
+    }
+
+    void testGenerate_bridgeUnavailable_whenNoBridgeInfo()
+    {
+        // Default Snapshot has hasBridgeInfo=false (daemon not running, or the
+        // blocking generate() convenience overload which can't reach the bridge).
+        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        QVERIFY(report.contains(QStringLiteral("compositor bridge state unavailable")));
+    }
+
+    void testGenerate_bridgeNotRegistered_warnsNotConnected()
+    {
+        SupportReport::Snapshot snap;
+        snap.hasBridgeInfo = true;
+        snap.bridgeRegistered = false;
+        const QString report = SupportReport::generateFromSnapshot(snap, 30);
+        QVERIFY(report.contains(QStringLiteral("NOT CONNECTED")));
+        // The fix the user must apply is spelled out in the section.
+        QVERIFY(report.contains(QStringLiteral("Desktop Effects")));
+    }
+
+    void testGenerate_bridgeRegistered_showsCompositorDetails()
+    {
+        SupportReport::Snapshot snap;
+        snap.hasBridgeInfo = true;
+        snap.bridgeRegistered = true;
+        snap.bridgeName = QStringLiteral("kwin");
+        snap.bridgeVersion = QStringLiteral("3");
+        snap.bridgeCapabilities = {QStringLiteral("borderless"), QStringLiteral("modifiers")};
+        const QString report = SupportReport::generateFromSnapshot(snap, 30);
+        QVERIFY(report.contains(QStringLiteral("**Status:** connected")));
+        // Match the rendered lines specifically — a bare "kwin" substring is
+        // also produced by the unrelated "no kwin_wayland journal" message in
+        // the KWin Effect Logs section, so it would pass even if the
+        // compositor name were never rendered.
+        QVERIFY(report.contains(QStringLiteral("**Compositor:** kwin")));
+        QVERIFY(report.contains(QStringLiteral("**Effect protocol version:** 3")));
+        QVERIFY(report.contains(QStringLiteral("borderless, modifiers")));
+        QVERIFY(!report.contains(QStringLiteral("NOT CONNECTED")));
     }
 
     void testGenerate_sinceMinutesCapped()

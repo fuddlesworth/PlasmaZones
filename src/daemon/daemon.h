@@ -67,6 +67,7 @@ class LayoutAdaptor;
 class SettingsAdaptor;
 class ShaderAdaptor;
 class ControlAdaptor;
+class CompositorBridgeAdaptor;
 class OverlayAdaptor;
 class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
@@ -553,6 +554,9 @@ private:
     // window (and any queued D-Bus call landing in that window would UAF).
     ShaderAdaptor* m_shaderAdaptor = nullptr;
     ControlAdaptor* m_controlAdaptor = nullptr;
+    // Compositor bridge adaptor (KWin effect ↔ daemon protocol endpoint).
+    // Parented to `this`; holds only plain state, so it needs no detach().
+    CompositorBridgeAdaptor* m_compositorBridge = nullptr;
 
     // Mode tracking
     std::unique_ptr<ModeTracker> m_modeTracker;
@@ -741,6 +745,14 @@ private:
 
     // After geometry updates settle, request KWin effect to re-apply window positions (panel editor fix)
     QTimer m_reapplyGeometriesTimer;
+
+    // Watchdog: if the KWin effect has not registered as a compositor bridge
+    // within a grace period after startup, window control is dead (drags and
+    // shortcuts do nothing). On timeout the daemon logs a diagnostic warning
+    // and raises a desktop notification. Stopped early once the bridge
+    // registers. Single-shot.
+    QTimer m_bridgeWatchdogTimer;
+    void warnCompositorBridgeMissing();
 };
 
 } // namespace PlasmaZones

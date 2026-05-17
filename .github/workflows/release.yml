@@ -639,11 +639,10 @@ jobs:
             echo ""
             echo "**openSUSE Tumbleweed (OBS):**"
             echo '```bash'
-            echo "sudo zypper addrepo https://download.opensuse.org/repositories/home:ilFrance/openSUSE_Tumbleweed/home:ilFrance.repo"
+            echo "sudo zypper addrepo https://download.opensuse.org/repositories/home:fuddlesworth/openSUSE_Tumbleweed/home:fuddlesworth.repo"
             echo "sudo zypper refresh"
             echo "sudo zypper install plasmazones"
             echo '```'
-            echo "> Community-maintained package by [ilFrance](https://build.opensuse.org/package/show/home:ilFrance/plasmazones)"
             echo ""
             echo "**Universal Linux (AppDir):**"
             echo "For Fedora Atomic, Steam Deck, or non-root user installation:"
@@ -927,6 +926,113 @@ jobs:
             git commit -m "Update to $VERSION"
             git push
             echo "✅ Published plasmazones $VERSION to AUR"
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Publish to openSUSE Build Service (OBS)
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Commits the spec + _service to the home:fuddlesworth/plasmazones OBS
+  # package; OBS then fetches the release tarball (via the download_files
+  # source service) and rebuilds for every enabled repository. Gated on the
+  # openSUSE Tumbleweed RPM build so a spec that fails to build is never
+  # pushed to the repo users have added with `zypper addrepo`.
+  #
+  # Setup (one-time):
+  #   1. Sign in at https://build.opensuse.org with an openSUSE account.
+  #   2. Create project "home:fuddlesworth" and package "plasmazones"
+  #      (Home Project -> Create Package), or via osc:
+  #        osc meta pkg -e home:fuddlesworth plasmazones
+  #   3. In the project's "Repositories" tab add openSUSE_Tumbleweed for
+  #      x86_64 and aarch64. PlasmaZones needs Plasma/KF6/Qt 6.6+, so Leap
+  #      is not a viable target — Tumbleweed (and optionally Slowroll) only.
+  #   4. Add two GitHub Actions secrets (Settings -> Secrets and variables
+  #      -> Actions):
+  #        OBS_USERNAME — your build.opensuse.org login
+  #        OBS_PASSWORD — that account's password
+  #   5. Optionally retire the old home:ilFrance/plasmazones package so
+  #      users are not split across two repositories.
+  publish-obs:
+    name: Publish to openSUSE OBS
+    needs: [version, build-rpm-opensuse]
+    runs-on: ubuntu-latest
+    # Skip pre-releases — the home:fuddlesworth repo users add with
+    # `zypper addrepo` is a stable channel. Single source of truth: the
+    # version job's `is_prerelease` output, same as publish-aur.
+    if: needs.version.outputs.is_prerelease != 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install osc (OBS command-line client)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends osc
+
+      - name: Configure osc credentials
+        env:
+          OBS_USERNAME: ${{ secrets.OBS_USERNAME }}
+          OBS_PASSWORD: ${{ secrets.OBS_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${OBS_USERNAME:-}" || -z "${OBS_PASSWORD:-}" ]]; then
+              echo "Error: OBS_USERNAME / OBS_PASSWORD secrets are not set" >&2
+              exit 1
+          fi
+          # Pin the plaintext credentials manager: without it osc falls
+          # back to an interactive keyring prompt on the first API call,
+          # which hangs the runner. The file is chmod 600 and lives only
+          # on the ephemeral CI VM; GitHub masks the secret values in logs.
+          mkdir -p ~/.config/osc
+          cat > ~/.config/osc/oscrc << EOF
+          [general]
+          apiurl = https://api.opensuse.org
+
+          [https://api.opensuse.org]
+          credentials_mgr_class = osc.credentials.PlaintextConfigFileCredentialsManager
+          user = $OBS_USERNAME
+          pass = $OBS_PASSWORD
+          EOF
+          chmod 600 ~/.config/osc/oscrc
+
+      - name: Stamp version and changelog into spec
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.version.outputs.version }}"
+          # OBS builds from the committed spec, so it must carry the real
+          # version (download_files resolves Source0's %{version}) and the
+          # release changelog — not the 0.0.0 placeholder. Same templating
+          # as the build-rpm-opensuse job above.
+          sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
+          bash packaging/generate-changelog.sh rpm
+
+      - name: Commit package to OBS
+        env:
+          OBS_PROJECT: home:fuddlesworth
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.version.outputs.version }}"
+          # Check out the existing OBS package working copy — the project
+          # and package must already exist (see the setup notes above).
+          osc checkout "$OBS_PROJECT" plasmazones
+          PKGDIR="$OBS_PROJECT/plasmazones"
+          cp packaging/rpm/plasmazones.spec "$PKGDIR/plasmazones.spec"
+          cp packaging/obs/_service "$PKGDIR/_service"
+          cd "$PKGDIR"
+          # addremove stages new files and drops removed ones; commit only
+          # when something actually changed so re-running the same tag is a
+          # no-op rather than an empty commit. OBS reruns the source service
+          # and rebuilds automatically on every source commit.
+          osc addremove
+          # Capture status on its own line: a failing `osc status` then
+          # aborts the job under `set -e`, instead of being read as an
+          # empty result and silently mistaken for "no changes".
+          STATUS="$(osc status)"
+          if [[ -n "$STATUS" ]]; then
+              osc commit -m "Update to $VERSION"
+              echo "✅ Committed plasmazones $VERSION to $OBS_PROJECT — OBS will rebuild"
+          else
+              echo "No changes to commit"
           fi
 
   # ═══════════════════════════════════════════════════════════════════════════

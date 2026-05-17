@@ -5,6 +5,7 @@
 #include "snapadaptor.h"
 #include "windowtrackingadaptor.h"
 #include "layoutadaptor.h"
+#include "compositorbridgeadaptor.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -27,7 +28,8 @@ namespace PlasmaZones {
 ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor, LayoutAdaptor* layoutAdaptor,
                                PhosphorZones::LayoutRegistry* layoutManager,
                                PhosphorEngine::IPlacementEngine* autotileEngine,
-                               Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
+                               Phosphor::Screens::ScreenManager* screenManager,
+                               CompositorBridgeAdaptor* compositorBridge, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_wta(wta)
     , m_snapAdaptor(snapAdaptor)
@@ -35,6 +37,7 @@ ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdap
     , m_layoutManager(layoutManager)
     , m_autotileEngine(autotileEngine)
     , m_screenManager(screenManager)
+    , m_compositorBridge(compositorBridge)
 {
 }
 
@@ -153,6 +156,7 @@ void ControlAdaptor::detach()
     m_layoutManager = nullptr;
     m_autotileEngine = nullptr;
     m_screenManager = nullptr;
+    m_compositorBridge = nullptr;
 }
 
 QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessage& message)
@@ -184,6 +188,18 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
 
     // Snapshot QObject state on the main thread (these pointers are not thread-safe).
     auto snapshot = SupportReport::collectSnapshot(m_screenManager, m_layoutManager, m_autotileEngine);
+
+    // Compositor bridge state lives in the dbus layer, so SupportReport (core/)
+    // cannot read it directly — fold it into the snapshot here. Whether the
+    // KWin effect has registered is the single most useful diagnostic for the
+    // "dragging and shortcuts do nothing" class of bug.
+    if (m_compositorBridge) {
+        snapshot.hasBridgeInfo = true;
+        snapshot.bridgeRegistered = m_compositorBridge->isBridgeRegistered();
+        snapshot.bridgeName = m_compositorBridge->bridgeName();
+        snapshot.bridgeVersion = m_compositorBridge->bridgeVersion();
+        snapshot.bridgeCapabilities = m_compositorBridge->bridgeCapabilities();
+    }
 
     // Run blocking work (file I/O, journalctl) off the main thread.
     // No parent — lifetime managed explicitly by the two signal handlers below.
