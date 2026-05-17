@@ -200,34 +200,29 @@ echo ""
 %doc README.md
 
 # Executables
+%{_bindir}/phosphor-shell
 %{_bindir}/plasmazonesd
 %{_bindir}/plasmazones-editor
-%{_bindir}/plasmazones-settings
 %{_bindir}/plasmazones-report
+%{_bindir}/plasmazones-settings
 
-# Libraries
-%{_libdir}/libPhosphorAnimation.so*
-%{_libdir}/libPhosphorAudio.so*
-%{_libdir}/libPhosphorConfig.so*
-%{_libdir}/libPhosphorEngineApi.so*
-%{_libdir}/libPhosphorFsLoader.so*
-%{_libdir}/libPhosphorGeometry.so*
-%{_libdir}/libPhosphorIdentity.so*
-%{_libdir}/libPhosphorLayer.so*
-%{_libdir}/libPhosphorLayoutApi.so*
-%{_libdir}/libPhosphorProtocol.so*
-%{_libdir}/libPhosphorRendering.so*
-%{_libdir}/libPhosphorScreens.so*
-%{_libdir}/libPhosphorShaders.so*
-%{_libdir}/libPhosphorShortcuts.so*
-%{_libdir}/libPhosphorSnapEngine.so*
-%{_libdir}/libPhosphorSurfaces.so*
-%{_libdir}/libPhosphorTileEngine.so*
-%{_libdir}/libPhosphorTiles.so*
-%{_libdir}/libPhosphorWayland.so*
-%{_libdir}/libPhosphorZones.so*
-%{_libdir}/libplasmazones_core.so*
-%{_libdir}/libplasmazones_rendering.so*
+# Component libraries — every Phosphor component library plus the
+# plasmazones core/rendering libs. Globbed by naming convention: this
+# is a single monolithic package, the build installs only this
+# project's files, so a new component library needs no spec edit.
+# `.so*` covers the versioned objects and the unversioned devel
+# symlink (headers and the .so ship together — there is no -devel
+# subpackage). Excludes the QML plugin under qt6/qml/, which the
+# glob below owns.
+%{_libdir}/libPhosphor*.so*
+%{_libdir}/libplasmazones*.so*
+
+# Development files — public headers and CMake package configs, one
+# set per component that exports an API. Globbed for the same reason
+# as the libraries above. Note PhosphorIdentity is header-only (config
+# + headers, no .so) and is picked up here.
+%{_includedir}/Phosphor*/
+%{_libdir}/cmake/Phosphor*/
 
 # KWin effect plugin
 %{_libdir}/qt6/plugins/kwin/effects/plugins/kwin_effect_plasmazones.so
@@ -235,108 +230,24 @@ echo ""
 # Layer-shell QPA plugin (PhosphorWayland)
 %{_libdir}/qt6/plugins/wayland-shell-integration/phosphorwayland-qpa.so
 
-# PhosphorLayoutApi development headers and CMake config
-%{_includedir}/PhosphorLayoutApi/
-%{_libdir}/cmake/PhosphorLayoutApi/
-
-# PhosphorZones development headers and CMake config
-%{_includedir}/PhosphorZones/
-%{_libdir}/cmake/PhosphorZones/
-
-# PhosphorIdentity development headers and CMake config
-%{_includedir}/PhosphorIdentity/
-%{_libdir}/cmake/PhosphorIdentity/
-
-# PhosphorTiles development headers and CMake config
-%{_includedir}/PhosphorTiles/
-%{_libdir}/cmake/PhosphorTiles/
-
-# PhosphorConfig development headers and CMake config
-%{_includedir}/PhosphorConfig/
-%{_libdir}/cmake/PhosphorConfig/
-
-# PhosphorWayland development headers, CMake config, and runtime data
-# (bundled shaders + wayland protocol XMLs installed to _datadir/phosphorwayland/).
-%{_includedir}/PhosphorWayland/
-%{_libdir}/cmake/PhosphorWayland/
-%{_datadir}/phosphorwayland/
-
-# PhosphorRendering development headers and CMake config
-%{_includedir}/PhosphorRendering/
-%{_libdir}/cmake/PhosphorRendering/
-
-# PhosphorLayer development headers and CMake config
-%{_includedir}/PhosphorLayer/
-%{_libdir}/cmake/PhosphorLayer/
-
-# PhosphorAnimation development headers, CMake config, and QML module
-%{_includedir}/PhosphorAnimation/
-%{_libdir}/cmake/PhosphorAnimation/
-%{_libdir}/qt6/qml/org/phosphor/animation/
-
-# PhosphorAudio development headers and CMake config
-%{_includedir}/PhosphorAudio/
-%{_libdir}/cmake/PhosphorAudio/
-
-# PhosphorEngineApi development headers and CMake config
-%{_includedir}/PhosphorEngineApi/
-%{_libdir}/cmake/PhosphorEngineApi/
-
-# PhosphorFsLoader development headers and CMake config
-%{_includedir}/PhosphorFsLoader/
-%{_libdir}/cmake/PhosphorFsLoader/
-
-# PhosphorGeometry development headers and CMake config
-%{_includedir}/PhosphorGeometry/
-%{_libdir}/cmake/PhosphorGeometry/
-
-# PhosphorProtocol development headers and CMake config
-%{_includedir}/PhosphorProtocol/
-%{_libdir}/cmake/PhosphorProtocol/
-
-# PhosphorScreens development headers and CMake config
-%{_includedir}/PhosphorScreens/
-%{_libdir}/cmake/PhosphorScreens/
-
-# PhosphorShaders development headers, CMake config, and GLSL data
-%{_includedir}/PhosphorShaders/
-%{_libdir}/cmake/PhosphorShaders/
-%{_datadir}/phosphorshaders/
-
-# PhosphorShortcuts development headers and CMake config
-%{_includedir}/PhosphorShortcuts/
-%{_libdir}/cmake/PhosphorShortcuts/
-
-# PhosphorSnapEngine development headers and CMake config
-%{_includedir}/PhosphorSnapEngine/
-%{_libdir}/cmake/PhosphorSnapEngine/
-
-# PhosphorSurfaces development headers and CMake config
-%{_includedir}/PhosphorSurfaces/
-%{_libdir}/cmake/PhosphorSurfaces/
-
-# PhosphorTileEngine development headers and CMake config
-%{_includedir}/PhosphorTileEngine/
-%{_libdir}/cmake/PhosphorTileEngine/
-
 # KCM sub-modules (System Settings)
 %{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_plasmazones_*.so
+
+# QML modules (PhosphorAnimation and any future org.phosphor module)
+%{_libdir}/qt6/qml/org/phosphor/
 
 # D-Bus interfaces
 %{_datadir}/dbus-1/interfaces/org.plasmazones.*.xml
 
-# Desktop files
-%{_datadir}/applications/org.plasmazones.editor.desktop
-%{_datadir}/applications/org.plasmazones.daemon.desktop
-%{_datadir}/applications/org.plasmazones.settings.desktop
-%{_datadir}/applications/kcm_plasmazones_*.desktop
-
 # D-Bus session activation file (daemon auto-launch on first bus call)
 %{_datadir}/dbus-1/services/org.plasmazones.service
 
-# AppStream metainfo for distro app stores (Discover, GNOME Software, …)
-%{_datadir}/metainfo/org.plasmazones.editor.metainfo.xml
-%{_datadir}/metainfo/org.plasmazones.settings.metainfo.xml
+# Desktop files
+%{_datadir}/applications/org.plasmazones.*.desktop
+%{_datadir}/applications/kcm_plasmazones_*.desktop
+
+# AppStream metainfo for distro app stores (Discover, GNOME Software, ...)
+%{_datadir}/metainfo/org.plasmazones.*.metainfo.xml
 
 # KGlobalAccel component (display name + icon in Shortcuts KCM)
 %{_datadir}/kglobalaccel/plasmazonesd.desktop
@@ -344,17 +255,17 @@ echo ""
 # System Settings category
 %{_datadir}/systemsettings/categories/settings-windowmanagement-plasmazones.desktop
 
-# Data files
+# Runtime data — application data plus the bundled Phosphor component
+# data trees (phosphor-shell assets, phosphorshaders GLSL,
+# phosphorwayland shaders + protocol XMLs).
 %{_datadir}/plasmazones/
+%{_datadir}/phosphor*/
 
-# Icons
-%{_datadir}/icons/hicolor/scalable/apps/plasmazones.svg
-%{_datadir}/icons/hicolor/scalable/apps/plasmazones-editor.svg
-%{_datadir}/icons/hicolor/scalable/apps/plasmazones-settings.svg
-%{_datadir}/icons/hicolor-light/scalable/apps/plasmazones.svg
-%{_datadir}/icons/hicolor-light/scalable/apps/plasmazones-editor.svg
-%{_datadir}/icons/hicolor-light/scalable/apps/plasmazones-settings.svg
-
+# Icons — only this package's SVGs land in the buildroot's hicolor
+# theme dirs, so the glob owns exactly our files without claiming the
+# shared theme directories.
+%{_datadir}/icons/hicolor/scalable/apps/*.svg
+%{_datadir}/icons/hicolor-light/scalable/apps/*.svg
 
 # Systemd user service
 %{_userunitdir}/plasmazones.service
