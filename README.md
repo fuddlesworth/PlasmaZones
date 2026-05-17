@@ -68,7 +68,8 @@ Requirements: a Wayland compositor with layer-shell support, Qt 6.6+, CMake 3.16
 
 1. Enable the daemon: `systemctl --user enable --now plasmazones.service`
 2. Open the settings app: `plasmazones-settings` (or **System Settings → PlasmaZones** on KDE)
-3. **Drag any window while holding Alt** — zones appear, drop to snap.
+3. **KDE only:** enable the effect in **System Settings → Window Management → Desktop Effects → PlasmaZones**. Snapping is routed through this KWin effect — until it is ticked, dragging a window does nothing.
+4. **Drag any window while holding Alt** — zones appear, drop to snap.
 
 Full first-run tour: **[Getting started →](https://phosphor-works.github.io/plasmazones/getting-started/)**.
 
