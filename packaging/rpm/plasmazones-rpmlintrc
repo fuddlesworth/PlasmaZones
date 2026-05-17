@@ -1,0 +1,27 @@
+# rpmlint configuration for the openSUSE OBS build of PlasmaZones.
+#
+# OBS runs rpmlint as a post-build check and fails the build when the
+# cumulative "badness" exceeds its threshold. Every filter below
+# suppresses a finding that has been reviewed and is correct as the
+# package ships — each is scoped as narrowly as possible so genuine
+# regressions are still reported.
+
+# libPhosphorAnimationQmlShared.so is a QML-module runtime library: Qt
+# loads QML plugin libraries by exact, unversioned filename from the
+# module's import directory, so the bare .so is required at runtime and
+# is not a developer-facing devel symlink. Scoped to this one file.
+addFilter("devel-file-in-non-devel-package.*libPhosphorAnimationQmlShared")
+
+# The System Settings KCM .desktop files reference the systemsettings
+# host binary, which ships in the systemsettings package — that is how
+# every KCM is packaged, not a missing dependency.
+addFilter("desktopfile-without-binary.*systemsettings")
+
+# hicolor-icon-theme is an ordinary runtime dependency; no particular
+# version is required, so the unversioned Requires is intentional.
+addFilter("branding-requires-unversioned.*hicolor-icon-theme")
+
+# The test suite is built and run from the source tree and CI, not
+# during packaging — the spec configures the build with
+# -DBUILD_TESTING=OFF — so the package has no %check section by design.
+addFilter("no-%check-section")
