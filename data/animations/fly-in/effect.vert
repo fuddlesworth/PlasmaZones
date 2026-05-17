@@ -36,7 +36,8 @@
 //    card on this path), and the FBO is the redirected window texture's
 //    full bounds. Adding `offsetPx` to position.x directly translates
 //    the rendered window across the screen — no remap needed. texCoord
-//    is passed through unchanged, same as the daemon path.
+//    is flipped to a Y-down screen UV on the kwin path (KWin's
+//    offscreen FBO is Y-up); the daemon delivers it Y-down already.
 
 #version 450
 

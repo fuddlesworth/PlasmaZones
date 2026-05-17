@@ -11,11 +11,11 @@
 // fly into the part of the surface that sits outside the original
 // anchor.
 //
-// texCoord is passed through unchanged on both paths — KWin's
-// `OffscreenData::paint` and the daemon's Qt-RHI quad deliver it in
-// the same Y=0-at-top orientation. Only `gl_Position` differs (KWin
-// needs the MVP matrix). See `animation_uniforms.glsl` for the
-// contract. Matches morph/effect.vert.
+// vTexCoord is a Y-down screen UV on both paths. The daemon's Qt-RHI
+// quad delivers texCoord Y-down already; KWin's `OffscreenData::paint`
+// delivers it from a Y-up offscreen FBO, so the kwin path flips it.
+// `gl_Position` also differs (KWin needs the MVP matrix). See
+// `animation_uniforms.glsl` for the contract. Matches morph/effect.vert.
 
 #version 450
 
