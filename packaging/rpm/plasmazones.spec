@@ -121,7 +121,7 @@ BuildRequires:  systemd-rpm-macros
 # and exits non-zero when the package is missing, so a bare
 # `rpm -q ... || echo 6.6.0` leaves that message in the macro and `echo` adds
 # a SECOND line. A multi-line macro then injects a newline into every
-# `Requires: kwin = %{kwin_version}` use, and rpm parses the stray `6.6.0` as
+# `Requires: kwin = %%{kwin_version}` use, and rpm parses the stray `6.6.0` as
 # its own tag ("Unknown tag: 6.6.0"). Capture stdout first and only emit it on
 # success so the macro is always a single clean token.
 %global kwin_version %(out=$(rpm -q --qf '%%{VERSION}' kwin-devel 2>/dev/null) && echo "$out" || echo 6.6.0)
@@ -141,7 +141,7 @@ Requires:       kwin = %{kwin_version}
 Requires:       hicolor-icon-theme
 
 # Post-install scriptlet dependencies — must be in preamble (rpmbuild
-# parses Requires(post) only here; placing them after %install is
+# parses Requires(post) only here; placing them after %%install is
 # silently dropped on stricter parsers). hicolor-icon-theme is already
 # in Requires above; the post-only entries are the cache-refresh tools.
 # Scoped to Fedora because openSUSE provides equivalent functionality
