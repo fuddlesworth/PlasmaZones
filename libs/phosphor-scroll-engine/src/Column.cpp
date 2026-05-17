@@ -135,6 +135,32 @@ bool Column::moveTile(int from, int to)
     return true;
 }
 
+bool Column::hasVisibleTiles() const
+{
+    for (const Tile& tile : m_tiles) {
+        if (!tile.minimized) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Column::isWindowMinimized(const QString& windowId) const
+{
+    const int index = indexOfWindow(windowId);
+    return index >= 0 && m_tiles.at(index).minimized;
+}
+
+bool Column::setWindowMinimized(const QString& windowId, bool minimized)
+{
+    const int index = indexOfWindow(windowId);
+    if (index < 0 || m_tiles.at(index).minimized == minimized) {
+        return false;
+    }
+    m_tiles[index].minimized = minimized;
+    return true;
+}
+
 void Column::setActiveTileIndex(int index)
 {
     m_activeTileIndex = index;
@@ -172,6 +198,7 @@ QJsonObject Column::toJson() const
         QJsonObject tileObj;
         tileObj.insert(QLatin1String("windowId"), tile.windowId);
         tileObj.insert(QLatin1String("height"), windowHeightToJson(tile.height));
+        tileObj.insert(QLatin1String("minimized"), tile.minimized);
         tiles.append(tileObj);
     }
 
@@ -192,6 +219,7 @@ Column Column::fromJson(const QJsonObject& obj)
         Tile tile;
         tile.windowId = tileObj.value(QLatin1String("windowId")).toString();
         tile.height = windowHeightFromJson(tileObj.value(QLatin1String("height")).toObject());
+        tile.minimized = tileObj.value(QLatin1String("minimized")).toBool(false);
         if (!tile.windowId.isEmpty()) {
             column.m_tiles.append(tile);
         }

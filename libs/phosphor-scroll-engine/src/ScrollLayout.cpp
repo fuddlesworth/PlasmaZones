@@ -50,17 +50,21 @@ QHash<QString, QRectF> resolveScrollLayout(const ScrollScreenState& state, const
     const qreal usableW = qMax(workArea.width() - 2.0 * outer, qreal(0.0));
     const qreal usableH = qMax(workArea.height() - 2.0 * outer, qreal(0.0));
 
-    // Column widths and strip-space X positions (columns packed left to
-    // right from strip-x 0, separated by the inner gap).
-    QVector<qreal> widths;
-    QVector<qreal> stripX;
-    widths.reserve(columns.size());
-    stripX.reserve(columns.size());
+    // Column widths and strip-space X positions. Columns pack left to right
+    // from strip-x 0, separated by the inner gap. A column whose every tile
+    // is minimized collapses out of the strip — zero width, no gap, the
+    // cursor does not advance — so it keeps its slot in the column order
+    // (restored when one of its tiles is unminimized) without leaving a gap.
+    QVector<qreal> widths(columns.size(), 0.0);
+    QVector<qreal> stripX(columns.size(), 0.0);
     qreal cursor = 0.0;
-    for (const Column& column : columns) {
-        stripX.append(cursor);
-        const qreal width = resolveColumnWidth(column.width(), usableW);
-        widths.append(width);
+    for (int ci = 0; ci < columns.size(); ++ci) {
+        stripX[ci] = cursor;
+        if (!columns.at(ci).hasVisibleTiles()) {
+            continue; // collapsed column — keeps its slot, takes no strip space
+        }
+        const qreal width = resolveColumnWidth(columns.at(ci).width(), usableW);
+        widths[ci] = width;
         cursor += width + inner;
     }
 
@@ -68,15 +72,52 @@ QHash<QString, QRectF> resolveScrollLayout(const ScrollScreenState& state, const
     // coordinate that maps to the inner-left edge of the working area.
     const int activeIndex = state.activeColumnIndex();
     qreal viewPos = 0.0;
-    if (activeIndex >= 0 && activeIndex < stripX.size()) {
-        viewPos = stripX.at(activeIndex) + state.viewOffset();
+    if (activeIndex >= 0 && activeIndex < columns.size()) {
+        if (widths.at(activeIndex) > 0.0) {
+            // Focused column is visible: anchor on it, plus the in-column
+            // viewOffset (an offset *within* the focused column's width).
+            viewPos = stripX.at(activeIndex) + state.viewOffset();
+        } else {
+            // Focused column is fully minimized (collapsed, zero width).
+            // viewOffset is meaningless against a zero-width column, and the
+            // collapsed column's own stripX is only on-screen when a visible
+            // column follows it — a trailing run of collapsed columns has a
+            // stripX past the strip's end, which would scroll every visible
+            // column off the left edge. Anchor on the nearest visible column
+            // (forward first, since a mid-strip collapsed column shares the
+            // next column's stripX; otherwise the last visible column).
+            int anchor = -1;
+            for (int ci = activeIndex; ci < columns.size(); ++ci) {
+                if (widths.at(ci) > 0.0) {
+                    anchor = ci;
+                    break;
+                }
+            }
+            if (anchor < 0) {
+                for (int ci = activeIndex - 1; ci >= 0; --ci) {
+                    if (widths.at(ci) > 0.0) {
+                        anchor = ci;
+                        break;
+                    }
+                }
+            }
+            viewPos = (anchor >= 0) ? stripX.at(anchor) : 0.0;
+        }
     }
 
     for (int ci = 0; ci < columns.size(); ++ci) {
-        const QVector<Tile>& tiles = columns.at(ci).tiles();
-        const int tileCount = static_cast<int>(tiles.size());
+        // Lay out only the visible (non-minimized) tiles. A minimized tile
+        // keeps its place in the column order but contributes no geometry.
+        QVector<const Tile*> visible;
+        visible.reserve(columns.at(ci).tileCount());
+        for (const Tile& tile : columns.at(ci).tiles()) {
+            if (!tile.minimized) {
+                visible.append(&tile);
+            }
+        }
+        const int tileCount = static_cast<int>(visible.size());
         if (tileCount == 0) {
-            continue; // ScrollScreenState never exposes an empty column; defensive.
+            continue; // empty or fully-minimized column — nothing to place
         }
 
         const qreal columnX = usableX + stripX.at(ci) - viewPos;
@@ -90,24 +131,25 @@ QHash<QString, QRectF> resolveScrollLayout(const ScrollScreenState& state, const
         qreal weightSum = 0.0;
         int autoCount = 0;
         for (int ti = 0; ti < tileCount; ++ti) {
-            const qreal concrete = resolveConcreteTileHeight(tiles.at(ti).height, usableH, config.presetWindowHeights);
+            const qreal concrete =
+                resolveConcreteTileHeight(visible.at(ti)->height, usableH, config.presetWindowHeights);
             if (concrete >= 0.0) {
                 heights[ti] = concrete;
                 concreteTotal += concrete;
             } else {
                 ++autoCount;
-                weightSum += qMax(tiles.at(ti).height.weight, qreal(0.0));
+                weightSum += qMax(visible.at(ti)->height.weight, qreal(0.0));
             }
         }
         const qreal autoSpace = qMax(availableH - concreteTotal, qreal(0.0));
 
         // Second pass: size the Auto tiles from the leftover space and lay
-        // every tile out top to bottom.
+        // every visible tile out top to bottom.
         qreal y = usableY;
         for (int ti = 0; ti < tileCount; ++ti) {
             qreal height = heights.at(ti);
             if (height < 0.0) {
-                const qreal weight = qMax(tiles.at(ti).height.weight, qreal(0.0));
+                const qreal weight = qMax(visible.at(ti)->height.weight, qreal(0.0));
                 height = (weightSum > 0.0) ? autoSpace * weight / weightSum : autoSpace / autoCount;
             }
             // Floor to a positive height, mirroring resolveColumnWidth — a
@@ -115,7 +157,7 @@ QHash<QString, QRectF> resolveScrollLayout(const ScrollScreenState& state, const
             // whose concrete heights exhaust the space) is not usable
             // downstream.
             height = qMax(height, qreal(1.0));
-            geometries.insert(tiles.at(ti).windowId, QRectF(columnX, y, columnW, height));
+            geometries.insert(visible.at(ti)->windowId, QRectF(columnX, y, columnW, height));
             y += height + inner;
         }
     }

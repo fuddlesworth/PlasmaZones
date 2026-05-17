@@ -1,0 +1,59 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<node>
+    <!--
+        org.plasmazones.Scroll — niri-style scrollable-tiling control.
+
+        The KWin effect reports window lifecycle for screens in scroll mode to
+        this interface; the daemon forwards each event to the ScrollEngine.
+        Window geometry flows back to the effect over org.plasmazones.WindowTracking
+        (applyGeometriesBatch), shared with the other placement modes.
+    -->
+    <interface name="org.plasmazones.Scroll">
+        <!-- Screens currently in scroll mode. The effect subscribes to the
+             change signal so it knows whose windows to report here. -->
+        <property name="scrollScreens" type="as" access="read"/>
+
+        <signal name="scrollScreensChanged">
+            <arg name="screenIds" type="as"/>
+        </signal>
+
+        <!-- A new window appeared on a scroll-mode screen. -->
+        <method name="windowOpened">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="screenId" type="s" direction="in"/>
+        </method>
+
+        <!-- Batch form used on daemon startup / mode toggle-on to avoid
+             per-window D-Bus round-trips. The (ssii) entry struct is shared
+             with org.plasmazones.Autotile; scroll's strip model is
+             size-agnostic, so the trailing minWidth/minHeight ints are
+             ignored (non-resizable windows are fitted to the tile slot
+             effect-side). -->
+        <method name="windowsOpenedBatch">
+            <arg name="entries" type="a(ssii)" direction="in">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In0"
+                            value="PhosphorProtocol::WindowOpenedList"/>
+            </arg>
+        </method>
+
+        <method name="windowClosed">
+            <arg name="windowId" type="s" direction="in"/>
+        </method>
+
+        <method name="notifyWindowFocused">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="screenId" type="s" direction="in"/>
+        </method>
+
+        <!-- A scroll-mode window was minimized (true) or restored (false).
+             A minimized window keeps its slot in the strip but drops out of
+             the visible layout. -->
+        <method name="windowMinimizedChanged">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="minimized" type="b" direction="in"/>
+        </method>
+    </interface>
+</node>

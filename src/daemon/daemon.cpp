@@ -75,6 +75,7 @@
 #include "../dbus/windowtrackingadaptor.h"
 #include "../dbus/windowdragadaptor.h"
 #include "../dbus/autotileadaptor.h"
+#include "../dbus/scrolladaptor.h"
 #include "../dbus/snapadaptor.h"
 #include "../dbus/shaderadaptor.h"
 #include "../dbus/compositorbridgeadaptor.h"
@@ -970,6 +971,7 @@ bool Daemon::init()
                                  m_virtualDesktopManager.get(), m_windowRegistry.get(), this);
     auto* autotileEngine = engines.autotile.get();
     auto* snapEngine = engines.snap.get();
+    auto* scrollEngine = engines.scroll.get();
     m_autotileEngine = std::move(engines.autotile);
     m_snapEngine = std::move(engines.snap);
     m_scrollEngine = std::move(engines.scroll);
@@ -1106,6 +1108,7 @@ bool Daemon::init()
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setScreenModeRouter(m_screenModeRouter.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
+    m_scrollAdaptor = new ScrollAdaptor(scrollEngine, this);
 
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members
@@ -1500,6 +1503,9 @@ void Daemon::stop()
     if (m_autotileAdaptor) {
         m_autotileAdaptor->clearEngine();
     }
+    if (m_scrollAdaptor) {
+        m_scrollAdaptor->clearEngine();
+    }
     if (m_snapAdaptor) {
         m_snapAdaptor->clearEngine();
     }
@@ -1547,16 +1553,16 @@ void Daemon::stop()
     // explicit teardown for the same "queued D-Bus call lands during
     // destruction window" defense-in-depth.
     //
-    // The other eight raw-Qt-parented adaptors (LayoutAdaptor,
+    // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
-    // DBusScreenAdaptor, WindowDragAdaptor, SnapAdaptor, AutotileAdaptor) all
-    // ship `= default` destructors (verified — see their class headers),
-    // so they have no dtor body to UAF. QDBusConnection::unregisterObject
+    // DBusScreenAdaptor, WindowDragAdaptor, SnapAdaptor, AutotileAdaptor,
+    // ScrollAdaptor) all ship `= default` destructors (verified — see their
+    // class headers), so they have no dtor body to UAF. QDBusConnection::unregisterObject
     // (invoked above) blocks new method dispatch to them before we begin
     // tearing down, and Qt's sender-destruction auto-disconnect cleans
     // up signal wiring when the borrowed sender (m_layoutManager, etc.)
     // is destroyed during member destruction. Adding detach() to those
-    // eight would require null-guarding every slot body (they currently
+    // nine would require null-guarding every slot body (they currently
     // rely on the "borrowed pointer is always valid" invariant), which
     // is a larger refactor than the defense-in-depth buys. If a future
     // adaptor grows a dtor body that derefs a borrowed member, add

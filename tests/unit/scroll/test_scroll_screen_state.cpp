@@ -19,6 +19,7 @@ private Q_SLOTS:
     void addToActiveColumn();
     void removeDropsEmptyColumn();
     void consumeAndExpel();
+    void minimizeKeepsSlot();
     void focusAndMoveColumns();
     void tileNavigation();
     void placementAndFloating();
@@ -109,6 +110,46 @@ void TestScrollScreenState::consumeAndExpel()
     QCOMPARE(state.columnCount(), 2);
     QCOMPARE(state.activeColumnIndex(), 1);
     QCOMPARE(state.focusedWindowId(), QStringLiteral("b"));
+}
+
+void TestScrollScreenState::minimizeKeepsSlot()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b"));
+    state.addColumnForWindow(QStringLiteral("c")); // [a][b][c]
+
+    QVERIFY(state.focusWindow(QStringLiteral("b")));
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true));
+    QVERIFY(state.isWindowMinimized(QStringLiteral("b")));
+    QCOMPARE(state.columnCount(), 3); // slot kept — the column is not dropped
+    QCOMPARE(state.tiledWindowCount(), 3); // still tiled, only hidden
+    // Minimizing focused "b" hands focus to the first still-visible window in
+    // strip order — deterministically "a".
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("a"));
+
+    QVERIFY(!state.setWindowMinimized(QStringLiteral("b"), true)); // already minimized — no-op
+    QVERIFY(!state.setWindowMinimized(QStringLiteral("missing"), true));
+
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), false)); // restore
+    QVERIFY(!state.isWindowMinimized(QStringLiteral("b")));
+
+    // The minimized flag survives a JSON round-trip.
+    QVERIFY(state.setWindowMinimized(QStringLiteral("c"), true));
+    const ScrollScreenState restored = ScrollScreenState::fromJson(state.toJson());
+    QVERIFY(restored.isWindowMinimized(QStringLiteral("c")));
+    QVERIFY(!restored.isWindowMinimized(QStringLiteral("a")));
+
+    // Every tiled window minimized: setWindowMinimized still reports each
+    // change, every slot is kept, and focus is left on its (now hidden)
+    // window — there is nothing visible to hand off to — rather than cleared.
+    // "c" is already minimized above; minimizing "a" then "b" completes the set.
+    QVERIFY(state.setWindowMinimized(QStringLiteral("a"), true));
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true));
+    QCOMPARE(state.tiledWindowCount(), 3); // all still tiled, just hidden
+    QCOMPARE(state.columnCount(), 3); // every slot kept
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("b")); // retained, not cleared
+    QVERIFY(state.isWindowMinimized(state.focusedWindowId())); // ...even though hidden
 }
 
 void TestScrollScreenState::focusAndMoveColumns()

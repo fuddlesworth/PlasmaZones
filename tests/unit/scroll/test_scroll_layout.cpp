@@ -36,6 +36,10 @@ private Q_SLOTS:
     void fixedHeightTileTakesSpaceFirst();
     void presetHeightResolved();
     void fixedWidthColumn();
+    void minimizedTileExcluded();
+    void fullyMinimizedColumnCollapses();
+    void collapsedFocusedColumnIgnoresViewOffset();
+    void soleColumnCollapsesToEmptyLayout();
     void visibilityHelper();
 };
 
@@ -136,6 +140,97 @@ void TestScrollLayout::fixedWidthColumn()
 
     const QHash<QString, QRectF> geometry = resolveScrollLayout(state, kWorkArea, standardConfig());
     QCOMPARE(geometry.value(QStringLiteral("a")).width(), 300.0);
+}
+
+void TestScrollLayout::minimizedTileExcluded()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addWindowToActiveColumn(QStringLiteral("b")); // column [a, b]
+
+    // With "b" minimized, "a" alone fills the column's full height — the
+    // minimized tile takes no slot in the vertical layout.
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true));
+    const QHash<QString, QRectF> geometry = resolveScrollLayout(state, kWorkArea, standardConfig());
+    QCOMPARE(static_cast<int>(geometry.size()), 1);
+    QVERIFY(!geometry.contains(QStringLiteral("b")));
+    QCOMPARE(geometry.value(QStringLiteral("a")), QRectF(10.0, 10.0, 490.0, 780.0));
+}
+
+void TestScrollLayout::fullyMinimizedColumnCollapses()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b"));
+    state.addColumnForWindow(QStringLiteral("c")); // [a][b][c]
+    QVERIFY(state.focusWindow(QStringLiteral("a")));
+
+    // Minimizing the whole middle column collapses it out of the strip with
+    // no gap: "c" sits flush after "a", exactly where "b" used to be.
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true));
+    const QHash<QString, QRectF> geometry = resolveScrollLayout(state, kWorkArea, standardConfig());
+    QVERIFY(!geometry.contains(QStringLiteral("b")));
+    QCOMPARE(geometry.value(QStringLiteral("a")), QRectF(10.0, 10.0, 490.0, 780.0));
+    QCOMPARE(geometry.value(QStringLiteral("c")), QRectF(510.0, 10.0, 490.0, 780.0));
+
+    // Restoring "b" brings it back in its original slot, between "a" and "c".
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), false));
+    const QHash<QString, QRectF> restored = resolveScrollLayout(state, kWorkArea, standardConfig());
+    QCOMPARE(restored.value(QStringLiteral("b")), QRectF(510.0, 10.0, 490.0, 780.0));
+    QCOMPARE(restored.value(QStringLiteral("c")), QRectF(1010.0, 10.0, 490.0, 780.0));
+}
+
+void TestScrollLayout::collapsedFocusedColumnIgnoresViewOffset()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b")); // [a][b]
+
+    // Minimize "b" (the last column): it collapses to zero width. Then focus
+    // that collapsed column directly — viewOffset is an offset *within* the
+    // focused column, meaningless against a zero-width one.
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true));
+    QVERIFY(state.focusWindow(QStringLiteral("b")));
+
+    state.setViewOffset(0.0);
+    const QHash<QString, QRectF> noOffset = resolveScrollLayout(state, kWorkArea, standardConfig());
+    state.setViewOffset(500.0);
+    const QHash<QString, QRectF> withOffset = resolveScrollLayout(state, kWorkArea, standardConfig());
+
+    QVERIFY(!withOffset.contains(QStringLiteral("b"))); // collapsed — no geometry
+    // The non-zero viewOffset had no effect: the focused column is collapsed.
+    QCOMPARE(withOffset.value(QStringLiteral("a")), noOffset.value(QStringLiteral("a")));
+    // ...and the strip stays on-screen: a collapsed *trailing* focused column
+    // has no visible column after it, so the viewport anchors on the nearest
+    // visible column to the left — "a" sits at the work-area origin rather
+    // than scrolled off the left edge.
+    QCOMPARE(withOffset.value(QStringLiteral("a")), QRectF(10.0, 10.0, 490.0, 780.0));
+
+    // Positive control: with a *visible* focused column, viewOffset DOES shift
+    // the strip — proving the equality above is the collapsed-column guard at
+    // work, not the resolver ignoring viewOffset unconditionally.
+    QVERIFY(state.focusWindow(QStringLiteral("a")));
+    state.setViewOffset(100.0);
+    const QHash<QString, QRectF> shifted = resolveScrollLayout(state, kWorkArea, standardConfig());
+    QCOMPARE(shifted.value(QStringLiteral("a")).x(), noOffset.value(QStringLiteral("a")).x() - 100.0);
+}
+
+void TestScrollLayout::soleColumnCollapsesToEmptyLayout()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+
+    // The strip's only window is minimized: its column collapses, leaving no
+    // visible tile anywhere. resolveScrollLayout must return an empty hash
+    // (not a stale or zero-size rect, not a crash).
+    QVERIFY(state.setWindowMinimized(QStringLiteral("a"), true));
+    const QHash<QString, QRectF> geometry = resolveScrollLayout(state, kWorkArea, standardConfig());
+    QVERIFY(geometry.isEmpty());
+
+    // Restoring it brings the window back — default column width 0.5 * 980.
+    QVERIFY(state.setWindowMinimized(QStringLiteral("a"), false));
+    const QHash<QString, QRectF> restored = resolveScrollLayout(state, kWorkArea, standardConfig());
+    QCOMPARE(restored.value(QStringLiteral("a")), QRectF(10.0, 10.0, 490.0, 780.0));
 }
 
 void TestScrollLayout::visibilityHelper()

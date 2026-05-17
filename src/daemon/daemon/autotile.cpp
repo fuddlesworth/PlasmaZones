@@ -572,6 +572,17 @@ void Daemon::processPendingGeometryUpdates()
     if (m_autotileEngine && m_autotileEngine->isEnabled()) {
         m_autotileEngine->retile();
     }
+
+    // Re-resolve scroll-mode strips against the new screen geometry. The
+    // ScrollEngine is geometry-agnostic — a working-area change (resolution,
+    // scale, panel add/remove) only takes effect when the daemon re-runs
+    // resolveScrollLayout, which onScrollPlacementChanged does per screen.
+    if (m_scrollEngine && m_scrollEngine->isEnabled()) {
+        const QSet<QString> scrollScreens = m_scrollEngine->activeScreens();
+        for (const QString& screenId : scrollScreens) {
+            onScrollPlacementChanged(screenId);
+        }
+    }
 }
 
 } // namespace PlasmaZones

@@ -275,16 +275,6 @@ private:
     void applyFloatCleanup(const QString& windowId);
 
     /**
-     * @brief Check if a window is eligible for autotile notification
-     *
-     * Shared predicate used by both notifyWindowAdded and notifyWindowsAddedBatch
-     * to keep filtering logic in sync.
-     *
-     * @return true if the window should be notified to the autotile daemon
-     */
-    bool isEligibleForAutotileNotify(KWin::EffectWindow* w) const;
-
-    /**
      * @brief Cancel a pending debounced minimize→float commit.
      *
      * No-op if no timer is pending for the window. Called from the

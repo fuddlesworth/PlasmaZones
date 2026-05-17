@@ -19,6 +19,7 @@
 #include "../dragtracker.h"
 #include "../navigationhandler.h"
 #include "../screenchangehandler.h"
+#include "../scrollhandler.h"
 #include "../windowanimator.h"
 
 namespace PlasmaZones {
@@ -119,6 +120,9 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 
     // Standard path: notify autotile first, then try snap restore
     m_autotileHandler->notifyWindowAdded(w);
+    // Scroll mode reports independently — it acts only on scroll-mode
+    // screens, which are disjoint from autotile screens.
+    m_scrollHandler->notifyWindowAdded(w);
 
     if (!onAutotileScreen && canSnapRestore) {
         callResolveWindowRestore(w);
@@ -170,6 +174,8 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
 
     // Notify autotile handler for cleanup (tracking sets + autotile D-Bus)
     m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId);
+    // Scroll handler does the same for scroll-mode screens.
+    m_scrollHandler->onWindowClosed(closedWindowId, closedScreenId);
 
     // Remove the window's border item (parent WindowItem is being destroyed anyway,
     // but clean up our tracking hash to avoid stale entries).
@@ -257,6 +263,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // window from the old screen's tiling state immediately.
             m_autotileHandler->handleWindowOutputChanged(safeW);
 
+            // Scroll mode: re-home the window between scroll strips (or out of
+            // scroll entirely) to match the monitor it moved to.
+            m_scrollHandler->handleWindowOutputChanged(safeW);
+
             // For snapping→snapping cross-screen moves: notify the daemon which
             // decides whether to unsnap based on its own state. If the daemon just
             // assigned this window to the new screen (restore/resnap/snap assist),
@@ -337,6 +347,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // (snapping→autotile). The autotile handler's own detection only
             // covers windows it already tracks.
             m_autotileHandler->handleWindowOutputChanged(safeW);
+
+            // Scroll mode: a scroll-tracked window crossing a virtual-screen
+            // boundary likewise re-homes to the destination strip.
+            m_scrollHandler->handleWindowOutputChanged(safeW);
 
             // For snapping→snapping cross-VS moves: notify the daemon
             if (!m_autotileHandler->isAutotileScreen(oldScreenId) && !m_autotileHandler->isAutotileScreen(newScreenId)
@@ -443,6 +457,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowFrameGeometryChanged);
 
+    // Scroll: re-assert the strip geometry if an app resizes its window out
+    // of its tile slot (debounced inside the handler).
+    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_scrollHandler.get(),
+            &ScrollHandler::onWindowFrameGeometryChanged);
+
     // Frame-geometry shadow: push the latest geometry to the daemon so
     // daemon-local shortcut handlers (float toggle, etc.) can read fresh
     // geometry without round-tripping. Debounced at ~50ms per window via
@@ -470,6 +489,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // Autotile: track minimize/unminimize to remove/re-add windows from tiling
     connect(w, &KWin::EffectWindow::minimizedChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowMinimizedChanged);
+
+    // Scroll: track minimize/unminimize — a minimized scroll window keeps its
+    // slot in the strip but drops out of the visible layout.
+    connect(w, &KWin::EffectWindow::minimizedChanged, m_scrollHandler.get(), &ScrollHandler::onWindowMinimizedChanged);
 
     // Snap mode: track minimize/unminimize to float/unfloat snapped windows
     connect(w, &KWin::EffectWindow::minimizedChanged, this, &PlasmaZonesEffect::slotWindowMinimizedChanged);
@@ -551,11 +574,15 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                    QStringLiteral("windowActivated"), {windowId, screenId});
 
-    // Notify autotile engine of focus change so m_windowToScreen is updated
+    // Notify the placement engine of the focus change. Autotile needs it to
+    // update m_windowToScreen; scroll needs it to track the focused column.
+    // The screen sets are disjoint, so at most one branch fires.
     if (m_autotileHandler->isAutotileScreen(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Autotile,
                                                        QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                        QStringLiteral("notifyWindowFocused"));
+    } else {
+        m_scrollHandler->notifyWindowFocused(windowId, screenId);
     }
 }
 

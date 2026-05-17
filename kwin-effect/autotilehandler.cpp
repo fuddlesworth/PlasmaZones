@@ -98,7 +98,7 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
 
 void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
 {
-    if (!isEligibleForAutotileNotify(w)) {
+    if (!m_effect->isEligibleForTilingNotify(w)) {
         return;
     }
 
@@ -117,7 +117,8 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
     QString screenId = m_effect->getWindowScreenId(w);
     m_notifiedWindowScreens[windowId] = screenId;
 
-    // Only notify autotile daemon for windows on autotile screens
+    // Only notify autotile daemon for windows on autotile screens. Scroll-mode
+    // screens are handled independently by ScrollHandler.
     if (m_autotileScreens.contains(screenId)) {
         // Save pre-autotile geometry BEFORE the daemon tiles the window.
         // Without this, a window launched directly into autotile has no saved
@@ -169,7 +170,7 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
     QStringList batchWindowIds; // for error rollback
 
     for (KWin::EffectWindow* w : windows) {
-        if (!isEligibleForAutotileNotify(w)) {
+        if (!m_effect->isEligibleForTilingNotify(w)) {
             continue;
         }
 
@@ -469,7 +470,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
         m_savedAutotileStackingOrder[screenId].removeAll(windowId);
     }
 
-    // Notify autotile daemon
+    // Notify autotile daemon. Scroll-mode screens are handled by ScrollHandler.
     if (m_autotileScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Autotile,
                                                        QStringLiteral("windowClosed"), {windowId},

@@ -18,6 +18,10 @@ struct Tile
 {
     QString windowId;
     WindowHeight height;
+    /// A minimized tile keeps its slot in the column/strip order but is
+    /// excluded from the visible layout — Karousel's `TiledMinimized` state.
+    /// Cleared on unminimize, restoring the window in place.
+    bool minimized = false;
 };
 
 /// A vertical stack of one or more tiles — one cell of the horizontal strip
@@ -54,6 +58,17 @@ public:
     /// Reorder a tile. Returns true if @p from and @p to are valid and differ;
     /// tile focus follows the moved tile.
     bool moveTile(int from, int to);
+
+    // ── Minimize state ──────────────────────────────────────────────────
+    /// Whether the column has at least one non-minimized tile. A column with
+    /// none collapses out of the visible strip while keeping its slot order.
+    bool hasVisibleTiles() const;
+    /// Whether @p windowId's tile is minimized. False if the window is not
+    /// in this column.
+    bool isWindowMinimized(const QString& windowId) const;
+    /// Set the minimized flag of @p windowId's tile. Returns true only if the
+    /// flag actually changed.
+    bool setWindowMinimized(const QString& windowId, bool minimized);
 
     // ── Active tile ─────────────────────────────────────────────────────
     /// Index of the focused tile, or -1 when the column is empty.

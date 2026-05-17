@@ -35,6 +35,7 @@ private Q_SLOTS:
     void windowLifecycle();
     void focusAndMoveNavigation();
     void consumeAndExpel();
+    void minimizeWindow();
     void cyclePresetWidth();
     void cyclePresetHeight();
     void floatToggle();
@@ -105,6 +106,46 @@ void TestScrollEngine::consumeAndExpel()
 
     engine.expelWindowFromColumn(ctx);
     QCOMPARE(state->columnCount(), 2);
+}
+
+void TestScrollEngine::minimizeWindow()
+{
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    engine.windowOpened(QStringLiteral("b"), QStringLiteral("S1"));
+    QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+
+    engine.windowMinimizedChanged(QStringLiteral("b"), true);
+    QCOMPARE(spy.count(), 1);
+    const ScrollScreenState* state = scrollState(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY(state->isWindowMinimized(QStringLiteral("b")));
+    QCOMPARE(state->columnCount(), 2); // the slot is kept
+    QVERIFY(engine.isWindowTracked(QStringLiteral("b"))); // still tracked while minimized
+    // "b" was the focused window (opened last); minimizing it hands focus to
+    // the nearest still-visible window so the viewport never anchors on a
+    // hidden window.
+    QCOMPARE(state->focusedWindowId(), QStringLiteral("a"));
+
+    engine.windowMinimizedChanged(QStringLiteral("b"), true); // no change — no signal
+    QCOMPARE(spy.count(), 1);
+
+    engine.windowMinimizedChanged(QStringLiteral("b"), false); // restore
+    QCOMPARE(spy.count(), 2);
+    QVERIFY(!state->isWindowMinimized(QStringLiteral("b")));
+
+    engine.windowMinimizedChanged(QStringLiteral("missing"), true); // untracked — no-op
+    QCOMPARE(spy.count(), 2);
+
+    // Every window minimized: focus has nowhere visible to go, so it is left
+    // on its window rather than cleared. Minimizing focused "a" hands focus to
+    // "b"; minimizing "b" then finds nothing visible and leaves focus on "b".
+    engine.windowMinimizedChanged(QStringLiteral("a"), true);
+    engine.windowMinimizedChanged(QStringLiteral("b"), true);
+    QVERIFY(state->isWindowMinimized(QStringLiteral("a")));
+    QVERIFY(state->isWindowMinimized(QStringLiteral("b")));
+    QCOMPARE(state->focusedWindowId(), QStringLiteral("b")); // retained, not cleared
+    QCOMPARE(state->columnCount(), 2); // both slots kept
 }
 
 void TestScrollEngine::cyclePresetWidth()

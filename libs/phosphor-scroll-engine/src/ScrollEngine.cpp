@@ -181,8 +181,10 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
 
 void ScrollEngine::windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
-    // Minimum-size constraints are honoured at geometry-resolution time
-    // (daemon side); the strip model itself is size-agnostic.
+    // minWidth/minHeight are part of the IPlacementEngine::windowOpened
+    // signature (autotile uses them for column sizing). Scroll's strip model
+    // is size-agnostic: a non-resizable window is fitted to its tile slot
+    // effect-side (constrainToScrollSlot), so the constraints are unused here.
     Q_UNUSED(minWidth)
     Q_UNUSED(minHeight)
     if (windowId.isEmpty() || screenId.isEmpty() || m_windowToKey.contains(windowId)) {
@@ -219,6 +221,18 @@ void ScrollEngine::windowFocused(const QString& windowId, const QString& screenI
         return;
     }
     if (ScrollScreenState* state = stateForKey(it.value(), /*create=*/false); state && state->focusWindow(windowId)) {
+        emitChanged(it.value().screenId);
+    }
+}
+
+void ScrollEngine::windowMinimizedChanged(const QString& windowId, bool minimized)
+{
+    const auto it = m_windowToKey.constFind(windowId);
+    if (it == m_windowToKey.constEnd()) {
+        return;
+    }
+    if (ScrollScreenState* state = stateForKey(it.value(), /*create=*/false);
+        state && state->setWindowMinimized(windowId, minimized)) {
         emitChanged(it.value().screenId);
     }
 }

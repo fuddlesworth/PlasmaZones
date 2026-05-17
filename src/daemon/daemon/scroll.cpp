@@ -4,6 +4,7 @@
 #include "../daemon.h"
 
 #include "../../core/logging.h"
+#include "../../dbus/scrolladaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../config/settings.h"
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -61,7 +62,17 @@ void Daemon::updateScrollScreens()
         }
     }
 
+    const bool screensChanged = (m_scrollEngine->activeScreens() != scrollScreens);
     m_scrollEngine->setActiveScreens(scrollScreens);
+    if (screensChanged && m_scrollAdaptor) {
+        // Tell the KWin effect which screens are scroll-mode so it reports
+        // their windows to the org.plasmazones.Scroll interface. The payload
+        // is sourced from ScrollAdaptor::scrollScreens() — the same accessor
+        // that backs the scrollScreens property — so the signal and a
+        // subsequent property read cannot disagree. It is sorted there, since
+        // QSet iteration order is unspecified.
+        Q_EMIT m_scrollAdaptor->scrollScreensChanged(m_scrollAdaptor->scrollScreens());
+    }
     qCDebug(lcDaemon) << "Updated scroll screens=" << scrollScreens;
 }
 

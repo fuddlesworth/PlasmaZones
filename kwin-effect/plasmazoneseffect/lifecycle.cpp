@@ -25,6 +25,7 @@
 #include <QVarLengthArray>
 
 #include "../autotilehandler.h"
+#include "../scrollhandler.h"
 #include "../compositorclock.h"
 #include "../dragtracker.h"
 #include "../kwin_compositor_bridge.h"
@@ -42,6 +43,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 PlasmaZonesEffect::PlasmaZonesEffect()
     : OffscreenEffect()
     , m_autotileHandler(std::make_unique<AutotileHandler>(this))
+    , m_scrollHandler(std::make_unique<ScrollHandler>(this))
     , m_navigationHandler(std::make_unique<NavigationHandler>(this))
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
     , m_snapAssistHandler(std::make_unique<SnapAssistHandler>(this))
@@ -502,6 +504,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Connect to autotile D-Bus signals
     m_autotileHandler->connectSignals();
     m_autotileHandler->loadSettings();
+
+    // Connect to scroll D-Bus signals
+    m_scrollHandler->connectSignals();
+    m_scrollHandler->loadSettings();
 
     // Verify daemon availability asynchronously to avoid blocking the compositor.
     // CRITICAL: Do NOT use synchronous isServiceRegistered() here. The daemon

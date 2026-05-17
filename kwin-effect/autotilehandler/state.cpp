@@ -262,43 +262,6 @@ void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId, con
     }
 }
 
-bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
-{
-    if (!w || !m_effect->shouldHandleWindow(w)) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (not handleable)"
-                          << (w ? m_effect->getWindowId(w) : QStringLiteral("null"));
-        return false;
-    }
-    if (!m_effect->isTileableWindow(w)) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (not tileable)" << m_effect->getWindowId(w);
-        return false;
-    }
-    if (w->isMinimized()) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (minimized)" << m_effect->getWindowId(w);
-        return false;
-    }
-    if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (wrong desktop/activity)"
-                          << m_effect->getWindowId(w);
-        return false;
-    }
-    // Reject windows smaller than the user-configured minimum size.
-    // Prevents small utility windows (emoji picker, color picker, etc.)
-    // from entering the tiling tree and disrupting the layout.
-    const QRectF frame = w->frameGeometry();
-    if ((m_effect->m_cachedMinWindowWidth > 0 && frame.width() < m_effect->m_cachedMinWindowWidth)
-        || (m_effect->m_cachedMinWindowHeight > 0 && frame.height() < m_effect->m_cachedMinWindowHeight)) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (too small)" << m_effect->getWindowId(w)
-                          << "size=" << frame.size() << "threshold=" << m_effect->m_cachedMinWindowWidth << "x"
-                          << m_effect->m_cachedMinWindowHeight;
-        return false;
-    }
-    qCDebug(lcEffect) << "isEligibleForAutotileNotify: accepted" << m_effect->getWindowId(w) << "size=" << frame.size()
-                      << "class=" << w->windowClass() << "skipSwitcher=" << w->isSkipSwitcher()
-                      << "keepAbove=" << w->keepAbove() << "transient=" << (w->transientFor() != nullptr);
-    return true;
-}
-
 void AutotileHandler::applyFloatCleanup(const QString& windowId)
 {
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);

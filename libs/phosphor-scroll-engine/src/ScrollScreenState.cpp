@@ -76,6 +76,34 @@ bool ScrollScreenState::removeWindow(const QString& windowId)
     return true;
 }
 
+bool ScrollScreenState::setWindowMinimized(const QString& windowId, bool minimized)
+{
+    const int columnIndex = locateWindow(windowId).first;
+    if (columnIndex < 0) {
+        return false;
+    }
+    if (!m_columns[columnIndex].setWindowMinimized(windowId, minimized)) {
+        return false; // flag already in the requested state
+    }
+    // The focused window must stay visible: the viewport offset and keyboard
+    // navigation anchor on the focused column/tile. Hand focus to the nearest
+    // still-visible window when the one being minimized was focused. (A
+    // subsequent windowFocused event from the compositor may refine this.)
+    if (minimized && focusedWindowId() == windowId) {
+        const QString visible = firstVisibleWindowId();
+        if (!visible.isEmpty()) {
+            focusWindow(visible);
+        }
+    }
+    return true;
+}
+
+bool ScrollScreenState::isWindowMinimized(const QString& windowId) const
+{
+    const int columnIndex = locateWindow(windowId).first;
+    return columnIndex >= 0 && m_columns.at(columnIndex).isWindowMinimized(windowId);
+}
+
 bool ScrollScreenState::consumeIntoColumn()
 {
     if (m_activeColumnIndex < 0) {
@@ -371,6 +399,18 @@ void ScrollScreenState::refocus(const QString& preferredWindowId)
         }
     }
     clampActiveColumnIndex();
+}
+
+QString ScrollScreenState::firstVisibleWindowId() const
+{
+    for (const Column& column : m_columns) {
+        for (const Tile& tile : column.tiles()) {
+            if (!tile.minimized) {
+                return tile.windowId;
+            }
+        }
+    }
+    return QString();
 }
 
 } // namespace PhosphorScrollEngine
