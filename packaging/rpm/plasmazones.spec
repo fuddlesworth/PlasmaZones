@@ -27,7 +27,14 @@ Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 ExclusiveArch:  x86_64 aarch64
 
 # Build tools
-BuildRequires:  /usr/bin/wayland-scanner
+# wayland-scanner: protocol-glue code generator, located by CMake via
+# find_program (CMakeLists.txt:186, libs/phosphor-wayland/CMakeLists.txt:46).
+# Depend on the pkgconfig(wayland-scanner) capability, not the bare
+# /usr/bin/wayland-scanner file path: the file-path form is reported
+# unresolvable by OBS on openSUSE Tumbleweed. wayland-devel ships both the
+# wayland-scanner binary and wayland-scanner.pc on Fedora and openSUSE, so
+# the pkgconfig capability resolves everywhere and pulls in the executable.
+BuildRequires:  pkgconfig(wayland-scanner)
 BuildRequires:  cmake >= 3.16
 BuildRequires:  extra-cmake-modules >= 6.6.0
 BuildRequires:  gcc-c++
