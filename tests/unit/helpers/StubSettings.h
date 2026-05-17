@@ -461,6 +461,19 @@ public:
         Q_EMIT animationExcludeTransientWindowsChanged();
         Q_EMIT settingsChanged();
     }
+    bool animationExcludeNotificationsAndOsd() const override
+    {
+        return m_animationExcludeNotificationsAndOsd;
+    }
+    void setAnimationExcludeNotificationsAndOsd(bool exclude) override
+    {
+        if (m_animationExcludeNotificationsAndOsd == exclude) {
+            return;
+        }
+        m_animationExcludeNotificationsAndOsd = exclude;
+        Q_EMIT animationExcludeNotificationsAndOsdChanged();
+        Q_EMIT settingsChanged();
+    }
     int animationMinimumWindowWidth() const override
     {
         return m_animationMinimumWindowWidth;
@@ -893,6 +906,7 @@ private:
     QVariantList m_dragActivationTriggers;
     PhosphorAnimationShaders::AnimationAppRuleList m_animationAppRules;
     bool m_animationExcludeTransientWindows = false;
+    bool m_animationExcludeNotificationsAndOsd = true;
     int m_animationMinimumWindowWidth = 0;
     int m_animationMinimumWindowHeight = 0;
     QStringList m_animationExcludedApplications;

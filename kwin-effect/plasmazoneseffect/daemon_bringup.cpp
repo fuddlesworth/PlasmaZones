@@ -521,6 +521,15 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("animationExcludeTransientWindows"), [this](const QVariant& v) {
         m_animationExcludeTransientWindows = v.toBool();
     });
+    // Default true (exclude). Guard on isValid() so a failed reply
+    // leaves the member at its `true` init rather than `toBool()`'s
+    // false-on-invalid — otherwise a missed fetch would animate
+    // notifications/OSDs until the next successful settings load.
+    loadSettingAsync(QStringLiteral("animationExcludeNotificationsAndOsd"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_animationExcludeNotificationsAndOsd = v.toBool();
+        }
+    });
     // Clamp on the effect side as a defence-in-depth — the daemon's
     // schema validator already bounds these to [0, 2000], but a
     // malformed reply (`toInt()` returning 0 on a non-int variant or

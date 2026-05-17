@@ -357,6 +357,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(transientWindowsKey, "TransientWindows")
+    PZ_CONFIG_KEY(notificationsAndOsdKey, "NotificationsAndOsd")
     PZ_CONFIG_KEY(minimumWindowWidthKey, "MinimumWindowWidth")
     PZ_CONFIG_KEY(minimumWindowHeightKey, "MinimumWindowHeight")
     PZ_CONFIG_KEY(applicationsKey, "Applications")

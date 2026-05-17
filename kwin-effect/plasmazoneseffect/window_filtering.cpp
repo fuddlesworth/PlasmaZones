@@ -156,6 +156,17 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
 
     const QString windowClass = w->windowClass();
 
+    // Structural non-window surfaces — panels (docks), the desktop,
+    // plasmoid / Plasma-shell surfaces, and other special or
+    // skip-switcher windows are never application windows; a
+    // window-event shader on them is always wrong. Hard-excluded with
+    // no toggle and ahead of the rule-override path, mirroring the
+    // structural rejections `shouldHandleWindow()` already applies.
+    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isSkipSwitcher()
+        || isPlasmaShellSurface(windowClass)) {
+        return false;
+    }
+
     // Rule-override path. ANY AnimationAppRule whose classPattern
     // substring-matches the window's class signals deliberate user
     // intent to animate this app — kind (Shader vs Timing) and
@@ -176,6 +187,17 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
                 }
             }
         }
+    }
+
+    // Notification and OSD surfaces — excluded by default via the
+    // Window Filtering toggle (animationExcludeNotificationsAndOsd).
+    // Most shell notifications/OSDs are layer-shell surfaces already
+    // rejected by the structural block above; this catches the
+    // remainder — notification windows some apps spawn as ordinary
+    // toplevels. Placed after the rule-override so a class-targeted
+    // rule can still re-enable them, mirroring the transient filter.
+    if (m_animationExcludeNotificationsAndOsd && (w->isNotification() || w->isOnScreenDisplay())) {
+        return false;
     }
 
     // Transient-window filter — covers dialogs / popups / tooltips /

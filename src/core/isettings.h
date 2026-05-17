@@ -121,6 +121,8 @@ public:
     // lives in its own namespace so the two filter sets can diverge.
     virtual bool animationExcludeTransientWindows() const = 0;
     virtual void setAnimationExcludeTransientWindows(bool exclude) = 0;
+    virtual bool animationExcludeNotificationsAndOsd() const = 0;
+    virtual void setAnimationExcludeNotificationsAndOsd(bool exclude) = 0;
     virtual int animationMinimumWindowWidth() const = 0;
     virtual void setAnimationMinimumWindowWidth(int width) = 0;
     virtual int animationMinimumWindowHeight() const = 0;
@@ -302,6 +304,7 @@ Q_SIGNALS:
     // (the kwin-effect, the AnimationsPageController) don't have to
     // discriminate when filtering NOTIFY traffic.
     void animationExcludeTransientWindowsChanged();
+    void animationExcludeNotificationsAndOsdChanged();
     void animationMinimumWindowWidthChanged();
     void animationMinimumWindowHeightChanged();
     void animationExcludedApplicationsChanged();

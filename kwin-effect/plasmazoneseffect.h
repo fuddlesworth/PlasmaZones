@@ -639,6 +639,11 @@ private:
     // targeted rule). Defaults are permissive (no filter) until D-Bus
     // populates them; matches the per-key defaults in ConfigDefaults.
     bool m_animationExcludeTransientWindows = false;
+    // Notification / OSD surfaces — excluded by default (see
+    // ConfigDefaults::animationExcludeNotificationsAndOsd). Initialised
+    // to the exclude default rather than the permissive value above so
+    // a pre-D-Bus window event doesn't flash a shader on a notification.
+    bool m_animationExcludeNotificationsAndOsd = true;
     int m_animationMinWindowWidth = 0;
     int m_animationMinWindowHeight = 0;
     QStringList m_animationExcludedApplications;

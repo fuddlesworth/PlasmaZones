@@ -487,6 +487,8 @@ void SettingsAdaptor::initializeRegistry()
     // user can disable animations for an app while still snapping it.
     REGISTER_BOOL_SETTING("animationExcludeTransientWindows", animationExcludeTransientWindows,
                           setAnimationExcludeTransientWindows)
+    REGISTER_BOOL_SETTING("animationExcludeNotificationsAndOsd", animationExcludeNotificationsAndOsd,
+                          setAnimationExcludeNotificationsAndOsd)
     REGISTER_INT_SETTING("animationMinimumWindowWidth", animationMinimumWindowWidth, setAnimationMinimumWindowWidth)
     REGISTER_INT_SETTING("animationMinimumWindowHeight", animationMinimumWindowHeight, setAnimationMinimumWindowHeight)
     REGISTER_STRINGLIST_SETTING("animationExcludedApplications", animationExcludedApplications,

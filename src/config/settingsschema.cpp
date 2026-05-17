@@ -530,6 +530,7 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
         {CD::applicationsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
         {CD::windowClassesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
         {CD::transientWindowsKey(), CD::animationExcludeTransientWindows(), QMetaType::Bool},
+        {CD::notificationsAndOsdKey(), CD::animationExcludeNotificationsAndOsd(), QMetaType::Bool},
         {CD::minimumWindowWidthKey(),
          CD::animationMinimumWindowWidth(),
          QMetaType::Int,
