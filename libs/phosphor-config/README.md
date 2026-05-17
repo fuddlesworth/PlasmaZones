@@ -96,4 +96,4 @@ MigrationRunner::registerStep(1, 2,
 
 ## Dependencies
 
-- `QtCore` only. Zero Phosphor deps; this is a leaf library.
+- `QtCore`, `QtGui`. Zero Phosphor deps; this is a leaf library.

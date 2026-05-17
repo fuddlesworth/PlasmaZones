@@ -24,18 +24,18 @@ pure-compute consumers:
 | CMake target | Links | Linked by |
 |--------------|-------|-----------|
 | `PhosphorScreens::Core`            | `Qt6::Core` + `Qt6::Gui` | Domain libraries (zones, snap/tile engines, placement) that need topology + identity but never touch the bus. |
-| `PhosphorScreens::PhosphorScreens` | `::Core` + `Qt6::DBus` + `PhosphorProtocol::Types` | The daemon and anything that needs the D-Bus surface (`DBusScreenAdaptor`, `PlasmaPanelSource`, `Resolver`). |
+| `PhosphorScreens::PhosphorScreens` | `::Core` + `Qt6::DBus` + `PhosphorProtocol::Types` | The daemon and anything that needs the D-Bus surface (`DBusScreenAdaptor`, `PlasmaPanelSource`, `ScreenResolver`). |
 
 ## Key types
 
 | Type | Purpose |
 |------|---------|
 | `Phosphor::Screens::ScreenManager`      | Physical + virtual topology state with change signals as screens come and go. |
-| `Phosphor::Screens::Resolver`           | Point-to-screen lookup; accepts an optional D-Bus endpoint override. |
+| `Phosphor::Screens::ScreenResolver`     | Point-to-screen lookup; accepts an optional D-Bus endpoint override. |
 | `Phosphor::Screens::IPanelSource`       | Pluggable panel-reservation source per desktop (Plasma, GNOME, wlr). |
 | `Phosphor::Screens::PlasmaPanelSource`  | Bundled `IPanelSource` for `org.kde.plasmashell` reservations. |
-| `Phosphor::Screens::VirtualScreen`      | One rectangular sub-region of a physical screen with its own screen ID. |
-| `Phosphor::Screens::Swapper`            | D-Bus-addressable directional virtual-screen swaps (`left`, `right`, `up`, `down`). |
+| `Phosphor::Screens::VirtualScreenDef`   | One rectangular sub-region of a physical screen with its own screen ID. |
+| `Phosphor::Screens::VirtualScreenSwapper` | D-Bus-addressable directional virtual-screen swaps (`left`, `right`, `up`, `down`). |
 | `Phosphor::Screens::DBusScreenAdaptor`  | Canonical `org.plasmazones.Screen` D-Bus surface. |
 | `Phosphor::Screens::IConfigStore`       | Persisted virtual-screen configuration. `InMemoryConfigStore` is the default for tests. |
 

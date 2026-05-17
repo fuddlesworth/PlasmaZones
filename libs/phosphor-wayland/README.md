@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
 
 ## Dependencies
 
-- `QtCore`, `QtGui`, `QtQuick`
+- `QtCore`, `QtGui`
 - `wayland-client`, `wlr-layer-shell-v1` protocol, `Qt6::WaylandClientPrivate`
 
 ## See also

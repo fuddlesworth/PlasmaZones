@@ -36,10 +36,10 @@ The library factors the work into:
   [`phosphor-shaders`](../phosphor-shaders/README.md)' `ShaderRegistry`
   and [`phosphor-animation`](../phosphor-animation/README.md)'s
   `AnimationShaderRegistry`.
-- **`JsonEnvelopeValidator`** — shared envelope validation: parses the
+- **`validateJsonEnvelope`** — shared envelope validation: parses the
   file, checks the `"name"` field is non-empty and matches the
-  filename, returns the rest of the JSON object for the sink's
-  schema-specific `fromJson`.
+  filename, returns a `JsonEnvelope` carrying the rest of the JSON
+  object for the sink's schema-specific `fromJson`.
 
 `MetadataPackRegistryBase` is the QObject base every metadata-pack
 registry inherits from; it owns the `WatchedDirectorySet` plus the
@@ -58,7 +58,7 @@ hand-rolling identically.
 | `PhosphorFsLoader::ParsedEntry`                   | Parse-result value type with source-path metadata; `std::any` payload |
 | `PhosphorFsLoader::MetadataPackScanStrategy<P>`   | Subdirectory-with-`metadata.json` strategy |
 | `PhosphorFsLoader::MetadataPackRegistryBase`      | QObject base that owns the strategy + watcher; provides the search-path surface |
-| `PhosphorFsLoader::JsonEnvelopeValidator`         | Shared `"name"`-field envelope validator |
+| `PhosphorFsLoader::validateJsonEnvelope`          | Shared `"name"`-field envelope validator returning a `JsonEnvelope` |
 
 ## Typical use
 

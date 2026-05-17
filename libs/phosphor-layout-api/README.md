@@ -45,18 +45,18 @@ shouldn't care which source a layout came from.
 
 | Type | Purpose |
 |------|---------|
-| `PhosphorLayoutApi::ILayoutSource`              | Abstract layout producer |
-| `PhosphorLayoutApi::ILayoutSourceFactory`       | Builds an `ILayoutSource` for a given layout-ID |
-| `PhosphorLayoutApi::ILayoutSourceRegistry`      | Provider-side enumeration; emits `contentsChanged` |
-| `PhosphorLayoutApi::LayoutSourceProviderRegistry` | Process-wide "which providers exist" registrar |
-| `PhosphorLayoutApi::LayoutSourceBundle`         | Per-process bundle of resolved provider instances |
-| `PhosphorLayoutApi::LayoutId`                   | Stable string identifier, value-semantic |
-| `PhosphorLayoutApi::AlgorithmMetadata`          | Tiling algorithm self-description |
-| `PhosphorLayoutApi::AspectRatioClass`           | Screen aspect bucket (Narrow / Normal / Wide) |
-| `PhosphorLayoutApi::EdgeGaps`                   | Inner/outer spacing value type |
-| `PhosphorLayoutApi::GapKeys`                    | JSON key constants for roundtrip |
-| `PhosphorLayoutApi::CompositeLayoutSource`      | Multiplexes several `ILayoutSource`s |
-| `PhosphorLayoutApi::LayoutPreview`              | Paint-a-thumbnail helper for pickers |
+| `PhosphorLayout::ILayoutSource`              | Abstract layout producer |
+| `PhosphorLayout::ILayoutSourceFactory`       | Builds an `ILayoutSource` for a given layout-ID |
+| `PhosphorLayout::ILayoutSourceRegistry`      | Provider-side enumeration; emits `contentsChanged` |
+| `PhosphorLayout::LayoutSourceProviderRegistry` | Process-wide "which providers exist" registrar |
+| `PhosphorLayout::LayoutSourceBundle`         | Per-process bundle of resolved provider instances |
+| `PhosphorLayout::LayoutId`                   | Stable string identifier, value-semantic |
+| `PhosphorLayout::AlgorithmMetadata`          | Tiling algorithm self-description |
+| `PhosphorLayout::AspectRatioClass`           | Screen aspect bucket (Narrow / Normal / Wide) |
+| `PhosphorLayout::EdgeGaps`                   | Inner/outer spacing value type |
+| `PhosphorLayout::GapKeys`                    | JSON key constants for roundtrip |
+| `PhosphorLayout::CompositeLayoutSource`      | Multiplexes several `ILayoutSource`s |
+| `PhosphorLayout::LayoutPreview`              | Paint-a-thumbnail helper for pickers |
 
 ## Typical use
 
@@ -65,19 +65,21 @@ Implement a custom layout source:
 ```cpp
 #include <PhosphorLayoutApi/ILayoutSource.h>
 
-class MyLayoutSource : public PhosphorLayoutApi::ILayoutSource {
+class MyLayoutSource : public PhosphorLayout::ILayoutSource {
 public:
-    PhosphorZones::Layout layoutFor(
-        const PhosphorLayoutApi::LayoutQuery &q) const override
+    QVector<PhosphorLayout::LayoutPreview> availableLayouts() const override
     {
-        PhosphorZones::Layout layout;
-        // Populate zones based on q.screenRect, q.windows, q.activity…
-        return layout;
+        QVector<PhosphorLayout::LayoutPreview> previews;
+        // Populate one LayoutPreview per layout this source can render…
+        return previews;
     }
 
-    PhosphorLayoutApi::LayoutId id() const override
+    PhosphorLayout::LayoutPreview previewAt(
+        const QString &id, int windowCount, const QSize &canvas) override
     {
-        return PhosphorLayoutApi::LayoutId{QStringLiteral("my-source")};
+        PhosphorLayout::LayoutPreview preview;
+        // Populate zones for the requested entry…
+        return preview;
     }
 };
 ```
@@ -86,8 +88,8 @@ Chain two sources for screens with different preferences:
 
 ```cpp
 CompositeLayoutSource composite;
-composite.addScreen("output-1", zonesSource);   // user-drawn
-composite.addScreen("output-2", autotileSource);
+composite.addSource(zonesSource);                // user-drawn
+composite.addSource(autotileSource);
 
 ILayoutSource *combined = &composite;            // consumers don't know the difference
 ```
@@ -108,8 +110,7 @@ ILayoutSource *combined = &composite;            // consumers don't know the dif
 
 ## Dependencies
 
-- `QtCore`, `QtGui`
-- [`phosphor-identity`](../phosphor-identity/README.md) — window IDs in `LayoutQuery`
+- `QtCore`
 
 ## See also
 

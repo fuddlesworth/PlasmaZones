@@ -47,7 +47,7 @@ runtime engine that drives them lives in
 
 | Type | Purpose |
 |------|---------|
-| `PhosphorTiles::TilingAlgorithm`             | Abstract base; `layoutFor(TilingParams) -> Layout` |
+| `PhosphorTiles::TilingAlgorithm`             | Abstract base; `calculateZones(const TilingParams&) -> QVector<QRect>` |
 | `PhosphorTiles::TilingState`                 | Per-screen window order + master count + split tree; implements `IPlacementState` |
 | `PhosphorTiles::SplitTree`                   | Binary-split tree node + ratio used by tree-style algorithms |
 | `PhosphorTiles::ITileAlgorithmRegistry`      | Read-side contract; subclasses `ILayoutSourceRegistry` |
@@ -68,14 +68,20 @@ Register and run a scripted algorithm:
 ```cpp
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 
 using namespace PhosphorTiles;
 
+// Built-in C++ algorithms (master-stack, BSP, columns, …) register
+// themselves in the constructor — there is no discovery call.
 AlgorithmRegistry reg;
-reg.discoverBuiltins();                                      // master-stack, spiral, …
-reg.discoverScripts(QStandardPaths::AppDataLocation);        // user *.js
 
-auto alg = reg.algorithm(QStringLiteral("master-stack"));
+// User *.js algorithms: point a loader at an XDG-relative subdirectory
+// and scan. Discovered scripts register against the injected registry.
+ScriptedAlgorithmLoader loader(QStringLiteral("plasmazones/algorithms"), &reg);
+loader.scanAndRegister();
+
+auto *alg = reg.algorithm(QStringLiteral("master-stack"));
 AutotileLayoutSource src(&reg);
 // … src is an ILayoutSource the same way ZonesLayoutSource is.
 ```
@@ -127,10 +133,10 @@ function calculateZones(params) {
 
 ## Dependencies
 
-- `QtCore`, `QtGui`, `QtQml` (for `QJSEngine` in the sandbox)
+- `QtCore`, `QtQml` (for `QJSEngine` in the sandbox)
 - [`phosphor-layout-api`](../phosphor-layout-api/README.md) — `ILayoutSource` + factory + registry contracts
 - [`phosphor-engine`](../phosphor-engine/README.md) — `IPlacementState` (implemented by `TilingState`)
-- [`phosphor-zones`](../phosphor-zones/README.md) — `Layout` and `Zone` value types
+- [`phosphor-fsloader`](../phosphor-fsloader/README.md) — filesystem-backed registry skeleton for scripted-algorithm discovery
 
 ## See also
 

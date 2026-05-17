@@ -52,5 +52,5 @@ wts.setWindowRegistry(registry);
 
 ## Dependencies
 
-- `QtCore`
+- `QtCore`, `QtGui`
 - [`phosphor-engine`](../phosphor-engine/README.md), [`phosphor-snap-engine`](../phosphor-snap-engine/README.md), [`phosphor-zones`](../phosphor-zones/README.md), [`phosphor-protocol`](../phosphor-protocol/README.md), [`phosphor-screens`](../phosphor-screens/README.md), [`phosphor-workspaces`](../phosphor-workspaces/README.md), [`phosphor-identity`](../phosphor-identity/README.md), [`phosphor-layout-api`](../phosphor-layout-api/README.md)

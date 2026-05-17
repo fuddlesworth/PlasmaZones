@@ -50,7 +50,7 @@ lib without GUI infrastructure.
 
 ## Dependencies
 
-- `QtCore`, `QtGui`
+- `QtCore`
 
 ## See also
 

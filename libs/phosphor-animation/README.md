@@ -45,7 +45,7 @@ through [`phosphor-fsloader`](../phosphor-fsloader/README.md).
 | `PhosphorAnimation::MotionSpec<T>`            | Runtime call-site bundle: profile, clock, retarget policy, callbacks. |
 | `PhosphorAnimation::IMotionClock`             | Pull-model clock contract; one per output for mixed refresh rates |
 | `PhosphorAnimation::QtQuickClock`             | `QQuickWindow`-bound `IMotionClock` (gated on `PHOSPHOR_ANIMATION_QUICK=ON`) |
-| `PhosphorAnimation::Curve`                    | Polymorphic base; every curve family implements `step()` returning a `WindowMotion` |
+| `PhosphorAnimation::Curve`                    | Polymorphic base; every curve family implements `step()` advancing a `CurveState` |
 | `PhosphorAnimation::Easing`                   | Cubic-Bézier curve family (ease-out, ease-in-out, etc.) |
 | `PhosphorAnimation::Spring`                   | Critically-damped spring with configurable tension and friction |
 | `PhosphorAnimation::CurveRegistry`            | Name-to-curve factory; lets profiles reference curves by string |
@@ -138,10 +138,11 @@ QVariantMap params  = sp.parameters.value_or(QVariantMap{});
 
 ## Dependencies
 
-- `QtCore`, `QtGui`, `QtQml` (always)
-- `Qt6::Quick` only when `PHOSPHOR_ANIMATION_QUICK=ON`
+- `QtCore`, `QtGui`, `QtQuick`, `QtQuickPrivate`, `QtQml`
 - [`phosphor-fsloader`](../phosphor-fsloader/README.md) — directory loaders for curves, profiles, shader packs
+- [`phosphor-shaders`](../phosphor-shaders/README.md) — header-only consumption of `CustomParamsKey.h`
 - [`phosphor-layer`](../phosphor-layer/README.md) — `ISurfaceAnimator` (implemented by `SurfaceAnimator`)
+- [`phosphor-rendering`](../phosphor-rendering/README.md)
 
 ## See also
 

@@ -66,14 +66,13 @@ contract, which is also trivial to mock.
 using namespace PhosphorZones;
 
 LayoutRegistry *registry = /* injected */;
-const Layout *current = registry->layoutForContext({screenId, desktop, activity});
+Layout *current = registry->layoutForScreen(screenId, desktop, activity);
 
 // Detect which zone the cursor is over
 ZoneDetector det;
-det.setLayout(*current);
-QUuid hitZoneId = det.zoneAt(cursorPos, Qt::ShiftModifier);
-if (!hitZoneId.isNull()) {
-    const Zone *z = current->zoneById(hitZoneId);
+det.setLayout(current);
+Zone *z = det.zoneAtPoint(cursorPos);
+if (z) {
     overlay.highlight(*z);
 }
 ```
@@ -100,9 +99,11 @@ if (!hitZoneId.isNull()) {
 ## Dependencies
 
 - `QtCore`, `QtGui`
-- [`phosphor-identity`](../phosphor-identity/README.md) — window IDs for assignments
 - [`phosphor-layout-api`](../phosphor-layout-api/README.md) — `ILayoutSource` and registry contracts
+- [`phosphor-geometry`](../phosphor-geometry/README.md) — zone clamping, overlap resolution, rect-to-JSON helpers
 - [`phosphor-config`](../phosphor-config/README.md) — `IBackend` for assignment persistence
+- [`phosphor-identity`](../phosphor-identity/README.md) — window IDs for assignments (private link)
+- [`phosphor-screens`](../phosphor-screens/README.md) — screen-id normalisation (private link)
 
 ## See also
 

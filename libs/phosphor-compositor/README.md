@@ -43,7 +43,7 @@ placement logic directly — the daemon decides *where*, the plugin applies
 #include <PhosphorCompositor/ICompositorBridge.h>
 #include <PhosphorCompositor/IGeometryHandler.h>
 
-class MyBridge : public PlasmaZones::ICompositorBridge { /* ... */ };
+class MyBridge : public PhosphorCompositor::ICompositorBridge { /* ... */ };
 
 class MyPlugin : public PhosphorCompositor::IGeometryHandler,
                  public PhosphorCompositor::IDragHandler,

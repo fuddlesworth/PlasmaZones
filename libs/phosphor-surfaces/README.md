@@ -52,8 +52,9 @@ auto* surface = mgr.createSurface(surfaceCfg, /*parent*/ this);
 
 ## Dependencies
 
-- `QtCore`, `QtQuick`, `QtQml`
+- `QtCore`, `QtQuick`
 - [`phosphor-layer`](../phosphor-layer/README.md) — `Surface` / `SurfaceFactory` / transport primitives
+- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md) — UI-pattern recipes on top of `PhosphorLayer::Role`
 
 ## See also
 

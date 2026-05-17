@@ -65,7 +65,9 @@ don't carry their own copies and the daemon wires them up once.
 
 ## Dependencies
 
-- `QtCore`
+- `QtCore`, `QtGui`
+- [`phosphor-geometry`](../phosphor-geometry/README.md)
+- [`phosphor-identity`](../phosphor-identity/README.md)
 
 ## See also
 

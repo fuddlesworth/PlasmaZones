@@ -23,9 +23,9 @@ replaces it with three cooperating pieces:
   ping-pong buffers, input-channel textures (`iChannel0..3`,
   Shadertoy-style), and writeable depth attachments.
 - **`ShaderCompiler`** — a runtime GLSL to SPIR-V compiler using
-  `glslang`. Feeds into Qt's shader pipeline. Caches compiled modules
-  keyed on source-hash and target-API, so re-entering the editor doesn't
-  recompile unchanged shaders.
+  `Qt6::ShaderToolsPrivate`. Feeds into Qt's shader pipeline. Caches
+  compiled modules keyed on source-hash and target-API, so re-entering
+  the editor doesn't recompile unchanged shaders.
 
 A second pair of types specialises the base node for the **zone-overlay**
 case: `ZoneShaderNodeRhi` adds a labels texture binding and zone counts
@@ -87,9 +87,9 @@ ShaderEffect {
 
 ## Dependencies
 
-- `QtCore`, `QtGui`, `QtQuick`, `QtQml`
+- `QtCore`, `QtGui`, `QtQuick`, `QtSvg`
 - [`phosphor-shaders`](../phosphor-shaders/README.md) — `BaseUniforms`, `IUniformExtension`
-- `glslang` for runtime compilation
+- `Qt6::ShaderToolsPrivate` for runtime compilation
 
 ## See also
 

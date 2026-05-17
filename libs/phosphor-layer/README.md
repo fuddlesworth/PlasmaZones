@@ -126,7 +126,7 @@ s->hide();
 
 ## Dependencies
 
-- `QtCore`, `QtGui`, `QtQml`
+- `QtCore`, `QtGui`, `QtQml`, `QtQuick`
 - [`phosphor-wayland`](../phosphor-wayland/README.md). Default transport binds to its `LayerSurface`.
 
 ## See also
