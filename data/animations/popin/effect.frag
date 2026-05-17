@@ -51,5 +51,5 @@ void main()
     vec2 sampleUv = (uv - center) / max(scale, 0.001) + center;
 
     // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-    fragColor = texture(uTexture0, sampleUv) * boundaryMask(sampleUv);
+    fragColor = surfaceColor(sampleUv) * boundaryMask(sampleUv);
 }

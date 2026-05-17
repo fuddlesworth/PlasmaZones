@@ -36,7 +36,8 @@
 //    card on this path), and the FBO is the redirected window texture's
 //    full bounds. Adding `offsetPx` to position.x directly translates
 //    the rendered window across the screen — no remap needed. texCoord
-//    is passed through unchanged, same as the daemon path.
+//    is flipped to a Y-down screen UV on the kwin path (KWin's
+//    offscreen FBO is Y-up); the daemon delivers it Y-down already.
 
 #version 450
 
@@ -52,10 +53,15 @@ uniform mat4 modelViewProjectionMatrix;
 #endif
 
 void main() {
-    // texCoord pass-through — KWin and the daemon both deliver it
-    // Y=0-at-top. Mirrors `kKwinDefaultVertexSource` /
-    // `kDefaultVertexShaderSource` from the C++ side.
+    // texCoord -> Y-down screen UV. The daemon's Qt-RHI quad delivers
+    // it Y-down already; KWin's offscreen FBO is Y-up, so flip on that
+    // path. Mirrors `kKwinDefaultVertexSource` and the canonical
+    // header's vertex-stage contract.
+#ifdef PLASMAZONES_KWIN
+    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);
+#else
     vTexCoord = texCoord;
+#endif
 
     // Horizontal translation amount, monotonically reducing 1 → 0 over
     // iTime. Clamp because bouncy curves overshoot iTime past 1 — we

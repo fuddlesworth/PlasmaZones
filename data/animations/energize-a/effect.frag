@@ -172,7 +172,7 @@ void main()
     // pre-multiplied space, so we scale the effect colour by the
     // sampled alpha to avoid the "halo of effect colour around
     // transparent regions" artefact that plain mix would produce.
-    vec4 sampled = texture(uTexture0, uv);
+    vec4 sampled = surfaceColor(uv);
     float tint = 0.25 * (1.0 - windowAlpha);
     sampled.rgb = mix(sampled.rgb, effectColor * sampled.a, tint);
     sampled *= windowAlpha;

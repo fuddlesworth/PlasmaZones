@@ -80,8 +80,12 @@
 #define uIsFullscreen (false)
 
 // ── I/O bridges (premul ↔ straight-alpha) ───────────────────────────
+// Reads the surface through `surfaceColor()` (from animation_uniforms.glsl,
+// which the caller contract above requires be included first) so the
+// kwin-path Y-flip is applied — a raw `texture(uTexture0, ...)` here
+// would render the surface upside-down on the compositor path.
 vec4 getInputColor(vec2 coords) {
-    vec4 color = texture(uTexture0, coords);
+    vec4 color = surfaceColor(coords);
     if (color.a > 0.0) {
         color.rgb /= color.a;
     }

@@ -41,7 +41,7 @@ void main() {
     // edge-pixel bleed.
     vec2 warped = (uv - 0.5) * x + 0.5;
 
-    vec4 win = texture(uTexture0, warped) * boundaryMask(warped);
+    vec4 win = surfaceColor(warped) * boundaryMask(warped);
 
     float in_bounds = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
     fragColor = win * x * in_bounds;

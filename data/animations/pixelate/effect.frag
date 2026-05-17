@@ -68,7 +68,7 @@ void main()
     // last-row texel for that cell, smearing the window's edge alpha
     // (rounded corners, drop shadows) into a ~½-cell-wide band past
     // the original surface boundary.
-    vec4 sampled = texture(uTexture0, cell) * boundaryMask(cell);
+    vec4 sampled = surfaceColor(cell) * boundaryMask(cell);
 
     // The captured surface already encodes its own alpha; the parent-
     // chain scene-graph opacity is applied at blend time, so the

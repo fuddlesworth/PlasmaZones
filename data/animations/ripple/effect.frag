@@ -52,7 +52,7 @@ void main() {
 
         vec2 wuv = uv + offset * intensity;
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-        vec4 color = texture(uTexture0, wuv) * boundaryMask(wuv);
+        vec4 color = surfaceColor(wuv) * boundaryMask(wuv);
 
         float alpha = smoothstep(1.0, 0.5, p);
         result = color * alpha;
@@ -73,7 +73,7 @@ void main() {
 
         vec2 wuv = uv + offset * intensity;
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-        vec4 color = texture(uTexture0, wuv) * boundaryMask(wuv);
+        vec4 color = surfaceColor(wuv) * boundaryMask(wuv);
 
         float alpha = smoothstep(0.0, 0.3, p);
         result = color * alpha;

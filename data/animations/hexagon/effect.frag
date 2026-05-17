@@ -120,7 +120,7 @@ void main()
         // through the clamp-to-edge sampler.
         vec2 lookupOffset = tileProgress * hex.xy / texScale / max(1.0 - tileProgress, 0.001);
         vec2 lookupCoords = uv + lookupOffset;
-        oColor = texture(uTexture0, lookupCoords) * boundaryMask(lookupCoords);
+        oColor = surfaceColor(lookupCoords) * boundaryMask(lookupCoords);
 
         vec4 glow = glowColor;
         vec4 line = lineColor;

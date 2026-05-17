@@ -49,7 +49,7 @@ void main() {
     vec2 distorted = uv + dir * ripple;
 
     // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-    vec4 win = texture(uTexture0, distorted) * boundaryMask(distorted);
+    vec4 win = surfaceColor(distorted) * boundaryMask(distorted);
 
     float reveal = smoothstep(0.05, -0.02, d - front);
     vec4 mixed = win * reveal;

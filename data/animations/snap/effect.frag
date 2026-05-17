@@ -72,7 +72,7 @@ void main() {
             vec2 sample_uv = (uv - layer_target * converge) / (1.0 - converge);
 
             // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-            vec4 color = texture(uTexture0, sample_uv) * boundaryMask(sample_uv);
+            vec4 color = surfaceColor(sample_uv) * boundaryMask(sample_uv);
 
             float belongs = step(abs(pixel_layer - layer), 0.5);
             inner += color * belongs * layer_alpha;
@@ -80,7 +80,7 @@ void main() {
 
         float initial_fade = smoothstep(0.0, 0.05, p);
         inner.a *= mix(1.0, 0.0, initial_fade);
-        vec4 base_color = texture(uTexture0, uv);
+        vec4 base_color = surfaceColor(uv);
         float base_alpha = 1.0 - smoothstep(0.0, 0.1, p);
 
         result = base_color * base_alpha + inner * (1.0 - base_alpha);
@@ -113,7 +113,7 @@ void main() {
             vec2 sample_uv = (uv - layer_target * converge) / (1.0 - converge);
 
             // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-            vec4 color = texture(uTexture0, sample_uv) * boundaryMask(sample_uv);
+            vec4 color = surfaceColor(sample_uv) * boundaryMask(sample_uv);
 
             float belongs = step(abs(pixel_layer - layer), 0.5);
             inner += color * belongs * layer_alpha;
@@ -121,7 +121,7 @@ void main() {
 
         float initial_form = smoothstep(0.0, 0.05, rp);
         inner.a *= mix(1.0, 0.0, initial_form);
-        vec4 base_color = texture(uTexture0, uv);
+        vec4 base_color = surfaceColor(uv);
         float base_alpha = 1.0 - smoothstep(0.0, 0.1, rp);
 
         result = base_color * base_alpha + inner * (1.0 - base_alpha);

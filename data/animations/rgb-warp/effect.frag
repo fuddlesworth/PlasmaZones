@@ -121,9 +121,9 @@ void main()
     vec2 sampleR = uv + vec2(0.0, offset * mulR);
     vec2 sampleG = uv + vec2(0.0, offset * mulG);
     vec2 sampleB = uv + vec2(0.0, offset * mulB);
-    vec4 colorR = texture(uTexture0, sampleR) * boundaryMask(sampleR);
-    vec4 colorG = texture(uTexture0, sampleG) * boundaryMask(sampleG);
-    vec4 colorB = texture(uTexture0, sampleB) * boundaryMask(sampleB);
+    vec4 colorR = surfaceColor(sampleR) * boundaryMask(sampleR);
+    vec4 colorG = surfaceColor(sampleG) * boundaryMask(sampleG);
+    vec4 colorB = surfaceColor(sampleB) * boundaryMask(sampleB);
 
     // Recombine. The texture is pre-multiplied; un-premultiply each
     // channel against its OWN alpha (those are the only valid divisors

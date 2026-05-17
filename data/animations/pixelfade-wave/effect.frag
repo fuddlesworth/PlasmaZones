@@ -52,7 +52,7 @@ void main() {
     // uTexture0's clamp-to-edge sampler returns the last-column /
     // last-row texel for that cell, smearing the window's edge alpha
     // into a ~½-cell-wide band past the surface boundary.
-    vec4 win = texture(uTexture0, q) * boundaryMask(q);
+    vec4 win = surfaceColor(q) * boundaryMask(q);
 
     float reveal = smoothstep(0.0, 1.0, wave_p);
     fragColor = win * reveal;
