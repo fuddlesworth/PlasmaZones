@@ -431,7 +431,9 @@ void ScreenManager::calculateAvailableGeometry(const PhysicalScreen& screen)
         // screen resize by a frame, and an available rect spilling past the
         // output would corrupt every downstream relative-geometry calculation.
         const QRect clamped = compIt.value().intersected(screenGeom);
-        if (clamped.isValid() && !clamped.isEmpty()) {
+        // QRect::isValid() is the exact negation of isEmpty() — a valid rect
+        // is non-empty by definition, so isValid() alone is the usable check.
+        if (clamped.isValid()) {
             availGeom = clamped;
             source = QStringLiteral("compositor");
         }
@@ -600,7 +602,9 @@ void ScreenManager::setCompositorAvailableGeometry(const QString& screenName, co
     // source. Both paths early-return when nothing actually changed so a
     // redundant push (the effect re-reports every screen on each trigger)
     // collapses to a no-op instead of churning availableGeometryChanged.
-    const bool valid = available.isValid() && !available.isEmpty();
+    // QRect::isValid() already implies a non-empty rect (isEmpty() == !isValid()),
+    // so it covers every zero- or negative-size payload the effect can send.
+    const bool valid = available.isValid();
     if (valid) {
         if (m_compositorAvailableGeometry.value(screenName) == available) {
             return;

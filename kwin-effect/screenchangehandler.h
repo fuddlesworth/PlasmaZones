@@ -19,13 +19,17 @@ namespace PlasmaZones {
 class PlasmaZonesEffect;
 
 /**
- * @brief Handles debounced screen geometry changes and window repositioning.
+ * @brief Liaises screen and work-area changes between KWin and the daemon.
  *
  * Monitors virtualScreenGeometryChanged (resolution / monitor setup changes),
  * debounces rapid-fire signals, and requests updated window geometries from
- * the daemon when the screen size actually changes.
+ * the daemon when the screen size actually changes. Also handles the daemon's
+ * reapplyWindowGeometriesRequested signal.
  *
- * Also handles the daemon's reapplyWindowGeometriesRequested signal.
+ * Additionally reports KWin's authoritative per-screen work area
+ * (`clientArea(MaximizeArea)`) to the daemon: it tracks panel (dock) windows
+ * and pushes a fresh snapshot whenever a panel is added, removed, or resized,
+ * or the screen layout changes — see @ref scheduleClientAreaReport.
  */
 class ScreenChangeHandler : public QObject
 {
@@ -34,7 +38,7 @@ class ScreenChangeHandler : public QObject
 public:
     explicit ScreenChangeHandler(PlasmaZonesEffect* effect, QObject* parent = nullptr);
 
-    /// Stop the debounce timers (called from effect destructor)
+    /// Stop the debounce timer (called from effect destructor)
     void stop();
 
     /// Schedule a push of KWin's authoritative per-screen work area

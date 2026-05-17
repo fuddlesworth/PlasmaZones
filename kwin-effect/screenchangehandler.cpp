@@ -294,7 +294,9 @@ void ScreenChangeHandler::reportClientArea()
             continue;
         }
         const QRect work = KWin::effects->clientArea(KWin::MaximizeArea, output, desktop).toRect();
-        if (!work.isValid() || work.isEmpty()) {
+        // isValid() is the exact negation of isEmpty() for QRect — a degenerate
+        // (zero/negative-size) work area is skipped by this single check.
+        if (!work.isValid()) {
             continue;
         }
         qCDebug(lcScreenChange) << "Reporting KWin work area for" << output->name() << "=" << work;
