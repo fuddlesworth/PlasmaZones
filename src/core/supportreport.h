@@ -70,6 +70,16 @@ public:
         bool autotileEnabled = false;
         QStringList autotileScreens;
         bool hasAutotileEngine = false;
+
+        // Compositor bridge (KWin effect) state. The bridge adaptor lives in
+        // the dbus layer, which core/ must not depend on, so these fields are
+        // populated by ControlAdaptor after collectSnapshot() returns rather
+        // than inside collectSnapshot() itself.
+        bool hasBridgeInfo = false;
+        bool bridgeRegistered = false;
+        QString bridgeName;
+        QString bridgeVersion;
+        QStringList bridgeCapabilities;
     };
 
     /**
@@ -132,8 +142,10 @@ private:
     static QString sectionConfig();
     static QString sectionLayouts(const Snapshot& snapshot);
     static QString sectionAutotile(const Snapshot& snapshot);
+    static QString sectionCompositorBridge(const Snapshot& snapshot);
     static QString sectionSession();
     static QString sectionLogs(int sinceMinutes);
+    static QString sectionEffectLogs(int sinceMinutes);
 };
 
 } // namespace PlasmaZones
