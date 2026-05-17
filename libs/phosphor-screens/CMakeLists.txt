@@ -86,8 +86,11 @@ set(phosphorscreenscore_public_HDRS
     include/PhosphorScreens/IConfigStore.h
     include/PhosphorScreens/InMemoryConfigStore.h
     include/PhosphorScreens/IPanelSource.h
+    include/PhosphorScreens/IScreenProvider.h
     include/PhosphorScreens/Manager.h
     include/PhosphorScreens/NoOpPanelSource.h
+    include/PhosphorScreens/PhysicalScreen.h
+    include/PhosphorScreens/QtScreenProvider.h
     include/PhosphorScreens/ScreenIdentity.h
     include/PhosphorScreens/Swapper.h
     include/PhosphorScreens/VirtualScreen.h
@@ -98,6 +101,7 @@ add_library(PhosphorScreensCore SHARED
     src/screenslogging.h
     src/manager.cpp
     src/manager_virtualscreens.cpp
+    src/qtscreenprovider.cpp
     src/screenidentity.cpp
     src/screenslogging.cpp
     src/swapper.cpp
