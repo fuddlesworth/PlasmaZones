@@ -202,14 +202,17 @@ public:
     PZ_CONFIG_KEY(showOnAllMonitorsKey, "ShowOnAllMonitors")
     PZ_CONFIG_KEY(filterByAspectRatioKey, "FilterByAspectRatio")
 
-    // Display — per-mode disable lists (v3+). Each pair is independent: disabling
-    // a monitor for snap leaves autotile gates untouched, and vice versa.
+    // Display — per-mode disable lists (v3+). Each mode's set is independent:
+    // disabling a monitor for snap leaves the autotile and scroll gates untouched.
     PZ_CONFIG_KEY(snappingDisabledMonitorsKey, "SnappingDisabledMonitors")
     PZ_CONFIG_KEY(autotileDisabledMonitorsKey, "AutotileDisabledMonitors")
+    PZ_CONFIG_KEY(scrollDisabledMonitorsKey, "ScrollDisabledMonitors")
     PZ_CONFIG_KEY(snappingDisabledDesktopsKey, "SnappingDisabledDesktops")
     PZ_CONFIG_KEY(autotileDisabledDesktopsKey, "AutotileDisabledDesktops")
+    PZ_CONFIG_KEY(scrollDisabledDesktopsKey, "ScrollDisabledDesktops")
     PZ_CONFIG_KEY(snappingDisabledActivitiesKey, "SnappingDisabledActivities")
     PZ_CONFIG_KEY(autotileDisabledActivitiesKey, "AutotileDisabledActivities")
+    PZ_CONFIG_KEY(scrollDisabledActivitiesKey, "ScrollDisabledActivities")
 
     // Snapping.Behavior.WindowHandling
     PZ_CONFIG_KEY(keepOnResolutionChangeKey, "KeepOnResolutionChange")

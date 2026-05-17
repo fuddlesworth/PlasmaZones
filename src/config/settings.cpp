@@ -156,6 +156,9 @@ void Settings::load()
     const QStringList autotileDesktopsBefore = disabledDesktops(Mode::Autotile);
     const QStringList snapActivitiesBefore = disabledActivities(Mode::Snapping);
     const QStringList autotileActivitiesBefore = disabledActivities(Mode::Autotile);
+    const QStringList scrollMonitorsBefore = disabledMonitors(Mode::Scroll);
+    const QStringList scrollDesktopsBefore = disabledDesktops(Mode::Scroll);
+    const QStringList scrollActivitiesBefore = disabledActivities(Mode::Scroll);
 
     m_configBackend->reparseConfiguration();
 
@@ -206,6 +209,12 @@ void Settings::load()
         Q_EMIT disabledActivitiesChanged(Mode::Snapping);
     if (disabledActivities(Mode::Autotile) != autotileActivitiesBefore)
         Q_EMIT disabledActivitiesChanged(Mode::Autotile);
+    if (disabledMonitors(Mode::Scroll) != scrollMonitorsBefore)
+        Q_EMIT disabledMonitorsChanged(Mode::Scroll);
+    if (disabledDesktops(Mode::Scroll) != scrollDesktopsBefore)
+        Q_EMIT disabledDesktopsChanged(Mode::Scroll);
+    if (disabledActivities(Mode::Scroll) != scrollActivitiesBefore)
+        Q_EMIT disabledActivitiesChanged(Mode::Scroll);
 
     if (anyChanged)
         Q_EMIT settingsChanged();
@@ -1215,18 +1224,39 @@ PZ_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showO
 namespace {
 QString disabledMonitorsKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
 {
-    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledMonitorsKey()
-                                                            : ConfigDefaults::snappingDisabledMonitorsKey();
+    switch (mode) {
+    case PhosphorZones::AssignmentEntry::Autotile:
+        return ConfigDefaults::autotileDisabledMonitorsKey();
+    case PhosphorZones::AssignmentEntry::Scroll:
+        return ConfigDefaults::scrollDisabledMonitorsKey();
+    case PhosphorZones::AssignmentEntry::Snapping:
+        break;
+    }
+    return ConfigDefaults::snappingDisabledMonitorsKey();
 }
 QString disabledDesktopsKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
 {
-    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledDesktopsKey()
-                                                            : ConfigDefaults::snappingDisabledDesktopsKey();
+    switch (mode) {
+    case PhosphorZones::AssignmentEntry::Autotile:
+        return ConfigDefaults::autotileDisabledDesktopsKey();
+    case PhosphorZones::AssignmentEntry::Scroll:
+        return ConfigDefaults::scrollDisabledDesktopsKey();
+    case PhosphorZones::AssignmentEntry::Snapping:
+        break;
+    }
+    return ConfigDefaults::snappingDisabledDesktopsKey();
 }
 QString disabledActivitiesKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
 {
-    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledActivitiesKey()
-                                                            : ConfigDefaults::snappingDisabledActivitiesKey();
+    switch (mode) {
+    case PhosphorZones::AssignmentEntry::Autotile:
+        return ConfigDefaults::autotileDisabledActivitiesKey();
+    case PhosphorZones::AssignmentEntry::Scroll:
+        return ConfigDefaults::scrollDisabledActivitiesKey();
+    case PhosphorZones::AssignmentEntry::Snapping:
+        break;
+    }
+    return ConfigDefaults::snappingDisabledActivitiesKey();
 }
 } // namespace
 
