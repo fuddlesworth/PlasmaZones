@@ -11,6 +11,9 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorConfig/MigrationRunner.h>
 #include <PhosphorConfig/Schema.h>
+#include <PhosphorWindowRule/ContextRuleBridge.h>
+#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
 
 #include <QColor>
 #include <QDir>
@@ -39,6 +42,7 @@ PhosphorConfig::Schema makeMigrationSchema()
     s.migrations = {
         {1, &ConfigMigration::migrateV1ToV2},
         {2, &ConfigMigration::migrateV2ToV3},
+        {3, &ConfigMigration::migrateV3ToV4},
     };
     return s;
 }
@@ -48,9 +52,10 @@ std::span<const MigrationStep> ConfigMigration::migrationSteps()
 {
     // Kept for callers/tests that want a flat list of PZ-native steps. Built
     // once lazily; the underlying function pointers never change at runtime.
-    static const std::array<MigrationStep, 2> s_steps{{
+    static const std::array<MigrationStep, 3> s_steps{{
         {1, &ConfigMigration::migrateV1ToV2},
         {2, &ConfigMigration::migrateV2ToV3},
+        {3, &ConfigMigration::migrateV3ToV4},
     }};
     return {s_steps.data(), s_steps.size()};
 }
@@ -153,9 +158,19 @@ bool ConfigMigration::ensureJsonConfigImpl()
                 if (err.error == QJsonParseError::NoError && doc.isObject()) {
                     const int version = doc.object().value(ConfigKeys::versionKey()).toInt(0);
                     if (version < ConfigSchemaVersion) {
-                        return runMigrationChain(jsonPath);
+                        if (!runMigrationChain(jsonPath)) {
+                            return false;
+                        }
+                        // The v3→v4 chain step stamps _version and stashes
+                        // disable-list data; the two-file conversion (reading
+                        // assignments.json, writing windowrules.json) happens
+                        // here, after the chain. Idempotent — safe to always run.
+                        return finalizeV4Conversion(jsonPath);
                     }
-                    return true; // Already at current version
+                    // Already at current version — finalizeV4Conversion is a
+                    // no-op once windowrules.json exists, but run it so a
+                    // crash that left assignments.json behind still completes.
+                    return finalizeV4Conversion(jsonPath);
                 }
                 corrupt = true;
             }
@@ -189,7 +204,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
                     "ConfigMigration: corrupt JSON config moved to %s — no INI to re-migrate from, "
                     "using defaults",
                     qPrintable(corruptBak));
-                return true;
+                return finalizeV4Conversion(jsonPath);
             }
             qWarning("ConfigMigration: corrupt JSON config moved to %s — re-migrating from INI",
                      qPrintable(corruptBak));
@@ -205,7 +220,10 @@ bool ConfigMigration::ensureJsonConfigImpl()
 
     const QString iniPath = ConfigDefaults::legacyConfigFilePath();
     if (!QFile::exists(iniPath)) {
-        return true; // Fresh install — no old config to migrate
+        // Fresh install — no old config. Still run the v4 finalizer so a
+        // stray assignments.json from a partial earlier conversion is folded
+        // into windowrules.json rather than left orphaned.
+        return finalizeV4Conversion(jsonPath);
     }
 
     qInfo("ConfigMigration: migrating %s → %s", qPrintable(iniPath), qPrintable(jsonPath));
@@ -224,7 +242,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
     }
 
     qInfo("ConfigMigration: migration complete");
-    return true;
+    return finalizeV4Conversion(jsonPath);
 }
 
 void ConfigMigration::resetMigrationGuardForTesting()
@@ -1119,6 +1137,357 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 
     // Stamp literal 3 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
     root[ConfigKeys::versionKey()] = 3;
+}
+
+// ── Schema migration: v3 → v4 ───────────────────────────────────────────────
+// Window-rule consolidation — Phase 3.
+//
+// The v4 conversion produces the new windowrules.json store: every zone
+// Assignment and per-mode disable entry becomes a context-only WindowRule.
+//
+// SCOPE NOTE — additive conversion. The full Phase 3 design has windowrules.json
+// SUPERSEDE assignments.json and remove the Display.*Disabled* keys, which is
+// only safe once LayoutRegistry and Settings have been re-implemented to read
+// the rule store. That re-implementation is deferred (see the Phase 3 report);
+// until it lands, the running daemon's LayoutRegistry still reads
+// assignments.json and Settings still reads the Display.*Disabled* keys.
+//
+// So this migration is ADDITIVE: it builds windowrules.json from the v3 data
+// but LEAVES assignments.json and the config.json disable keys in place. The
+// schema bumps to 4 (windowrules.json is the canonical v4 artifact); the v3
+// inputs survive as the runtime source until the LayoutRegistry/Settings
+// re-implementation removes them in a follow-up.
+//
+// A MigrationStep is `void(QJsonObject&)` — it can only touch config.json.
+// This step copies (does not remove) the disable-list values into a
+// `_v4DisableStash` root key for finalizeV4Conversion to consume, and stamps
+// `_version = 4`. finalizeV4Conversion (a post-chain step) reads that stash +
+// assignments.json and writes windowrules.json.
+
+namespace {
+// The temporary root key migrateV3ToV4 writes and finalizeV4Conversion
+// consumes + strips. Not a real schema key — it never survives a completed
+// conversion.
+constexpr QLatin1String kV4DisableStashKey{"_v4DisableStash"};
+} // namespace
+
+void ConfigMigration::migrateV3ToV4(QJsonObject& root)
+{
+    // Defense-in-depth idempotency guard, mirroring the earlier steps.
+    if (root.value(ConfigKeys::versionKey()).toInt(0) >= 4) {
+        return;
+    }
+
+    const QJsonObject display = root.value(ConfigKeys::displayGroup()).toObject();
+
+    // Copy (do NOT remove) the disable-list values — see the SCOPE NOTE above.
+    // The runtime Settings layer still reads these keys; they are duplicated
+    // into windowrules.json as DisableEngine rules for the future unified UI.
+    QJsonObject stash;
+    stash.insert(QLatin1String("snappingMonitors"),
+                 display.value(ConfigKeys::snappingDisabledMonitorsKey()).toString());
+    stash.insert(QLatin1String("autotileMonitors"),
+                 display.value(ConfigKeys::autotileDisabledMonitorsKey()).toString());
+    stash.insert(QLatin1String("snappingDesktops"),
+                 display.value(ConfigKeys::snappingDisabledDesktopsKey()).toString());
+    stash.insert(QLatin1String("autotileDesktops"),
+                 display.value(ConfigKeys::autotileDisabledDesktopsKey()).toString());
+    stash.insert(QLatin1String("snappingActivities"),
+                 display.value(ConfigKeys::snappingDisabledActivitiesKey()).toString());
+    stash.insert(QLatin1String("autotileActivities"),
+                 display.value(ConfigKeys::autotileDisabledActivitiesKey()).toString());
+
+    root[kV4DisableStashKey] = stash;
+
+    // Stamp literal 4 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
+    root[ConfigKeys::versionKey()] = 4;
+}
+
+// ── v4 finalizer: the two-file conversion ───────────────────────────────────
+
+namespace {
+
+/// Parse a comma-separated disable list, dropping empties / whitespace.
+QStringList parseDisableList(const QString& csv)
+{
+    QStringList out;
+    for (const QString& part : csv.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+        const QString trimmed = part.trimmed();
+        if (!trimmed.isEmpty()) {
+            out.append(trimmed);
+        }
+    }
+    return out;
+}
+
+/// Build a context rule from a v3 monitor disable-list entry (`screenId`).
+PhosphorWindowRule::WindowRule disableRuleForMonitor(const QString& screenId, bool autotile)
+{
+    const QString name = (autotile ? QStringLiteral("Autotile off · ") : QStringLiteral("Snapping off · ")) + screenId;
+    return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, 0, QString(), autotile);
+}
+
+/// Build a context rule from a v3 desktop disable-list entry (`screenId/N`).
+/// Returns nullopt on a malformed entry.
+std::optional<PhosphorWindowRule::WindowRule> disableRuleForDesktop(const QString& entry, bool autotile)
+{
+    const int slash = entry.lastIndexOf(QLatin1Char('/'));
+    if (slash <= 0 || slash == entry.size() - 1) {
+        return std::nullopt;
+    }
+    const QString screenId = entry.left(slash);
+    bool ok = false;
+    const int desktop = entry.mid(slash + 1).toInt(&ok);
+    if (!ok || desktop <= 0) {
+        return std::nullopt;
+    }
+    const QString name = (autotile ? QStringLiteral("Autotile off · ") : QStringLiteral("Snapping off · ")) + screenId
+        + QStringLiteral(" · Desktop ") + QString::number(desktop);
+    return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, desktop, QString(), autotile);
+}
+
+/// Build a context rule from a v3 activity disable-list entry
+/// (`screenId/activityUuid`). Returns nullopt on a malformed entry.
+std::optional<PhosphorWindowRule::WindowRule> disableRuleForActivity(const QString& entry, bool autotile)
+{
+    const int slash = entry.indexOf(QLatin1Char('/'));
+    if (slash <= 0 || slash == entry.size() - 1) {
+        return std::nullopt;
+    }
+    const QString screenId = entry.left(slash);
+    const QString activity = entry.mid(slash + 1);
+    const QString name = (autotile ? QStringLiteral("Autotile off · ") : QStringLiteral("Snapping off · ")) + screenId
+        + QStringLiteral(" · Activity");
+    return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, 0, activity, autotile);
+}
+
+/// Parse one Assignment:* group name into (screenId, desktop, activity).
+/// Returns false on a malformed name.
+bool parseAssignmentGroup(const QString& groupName, const QString& prefix, QString& screenId, int& desktop,
+                          QString& activity)
+{
+    if (!groupName.startsWith(prefix)) {
+        return false;
+    }
+    QString remainder = groupName.mid(prefix.size());
+    if (remainder.isEmpty()) {
+        return false;
+    }
+    desktop = 0;
+    activity.clear();
+    const int actIdx = remainder.indexOf(QLatin1String(":Activity:"));
+    if (actIdx >= 0) {
+        const QString a = remainder.mid(actIdx + 10);
+        if (!a.isEmpty()) {
+            activity = a;
+        }
+        remainder = remainder.left(actIdx);
+    }
+    const int deskIdx = remainder.indexOf(QLatin1String(":Desktop:"));
+    if (deskIdx >= 0) {
+        bool ok = false;
+        const int d = remainder.mid(deskIdx + 9).toInt(&ok);
+        if (ok && d > 0) {
+            desktop = d;
+        }
+        remainder = remainder.left(deskIdx);
+    }
+    screenId = remainder;
+    return !screenId.isEmpty();
+}
+
+/// Human-readable label for a migrated assignment rule.
+QString assignmentRuleName(const QString& screenId, int desktop, const QString& activity)
+{
+    QString name = screenId;
+    if (desktop > 0) {
+        name += QStringLiteral(" · Desktop ") + QString::number(desktop);
+    }
+    if (!activity.isEmpty()) {
+        name += QStringLiteral(" · Activity");
+    }
+    return name;
+}
+
+} // namespace
+
+bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
+{
+    const QString windowRulesPath = ConfigDefaults::windowRulesFilePath();
+    const QString assignmentsPath = ConfigDefaults::assignmentsFilePath();
+
+    // ── Idempotency guard ──────────────────────────────────────────────────
+    // The conversion is one-shot. Once windowrules.json exists at _version>=4
+    // the work is done — skip everything (running twice must be a no-op).
+    if (QFile::exists(windowRulesPath)) {
+        QFile wf(windowRulesPath);
+        if (wf.open(QIODevice::ReadOnly)) {
+            QJsonParseError err;
+            const QJsonDocument doc = QJsonDocument::fromJson(wf.readAll(), &err);
+            if (err.error == QJsonParseError::NoError && doc.isObject()
+                && doc.object().value(ConfigKeys::versionKey()).toInt(0) >= 4) {
+                return true;
+            }
+        }
+    }
+
+    // ── Read config.json + extract the disable stash ───────────────────────
+    QJsonObject configRoot;
+    bool haveConfig = false;
+    if (QFile::exists(jsonPath)) {
+        QFile cf(jsonPath);
+        if (cf.open(QIODevice::ReadOnly)) {
+            QJsonParseError err;
+            const QJsonDocument doc = QJsonDocument::fromJson(cf.readAll(), &err);
+            if (err.error == QJsonParseError::NoError && doc.isObject()) {
+                configRoot = doc.object();
+                haveConfig = true;
+            }
+        }
+    }
+
+    const QJsonObject stash = configRoot.value(kV4DisableStashKey).toObject();
+
+    // ── Read assignments.json ──────────────────────────────────────────────
+    QJsonObject assignmentsRoot;
+    bool haveAssignments = false;
+    if (QFile::exists(assignmentsPath)) {
+        QFile af(assignmentsPath);
+        if (af.open(QIODevice::ReadOnly)) {
+            QJsonParseError err;
+            const QJsonDocument doc = QJsonDocument::fromJson(af.readAll(), &err);
+            if (err.error == QJsonParseError::NoError && doc.isObject()) {
+                assignmentsRoot = doc.object();
+                haveAssignments = true;
+            } else {
+                qWarning("ConfigMigration: assignments.json is malformed — skipping assignment migration");
+            }
+        }
+    }
+
+    // If there is nothing to convert at all (no stash, no assignments file)
+    // AND config.json carries no stash key, there is no v3 data to migrate —
+    // but we still want a windowrules.json to exist so the daemon's store has
+    // a stable file. Write an empty set in that case.
+
+    QList<PhosphorWindowRule::WindowRule> rules;
+
+    // ── Assignment rules ───────────────────────────────────────────────────
+    QJsonObject quickLayoutsToRelocate;
+    if (haveAssignments) {
+        const QString prefix = ConfigKeys::assignmentGroupPrefix();
+        for (auto it = assignmentsRoot.constBegin(); it != assignmentsRoot.constEnd(); ++it) {
+            const QString& groupName = it.key();
+            if (groupName == ConfigKeys::quickLayoutsGroup()) {
+                // QuickLayouts slots are NOT rules — relocate them to config.json.
+                quickLayoutsToRelocate = it.value().toObject();
+                continue;
+            }
+            QString screenId;
+            int desktop = 0;
+            QString activity;
+            if (!parseAssignmentGroup(groupName, prefix, screenId, desktop, activity)) {
+                continue;
+            }
+            const QJsonObject grp = it.value().toObject();
+            const int modeInt = grp.value(QLatin1String("Mode")).toInt(0);
+            const bool autotile = (modeInt == 1);
+            const QString snappingLayout = grp.value(QLatin1String("SnappingLayout")).toString();
+            const QString tilingAlgorithm = grp.value(QLatin1String("TilingAlgorithm")).toString();
+
+            rules.append(PhosphorWindowRule::ContextRuleBridge::makeAssignmentRule(
+                assignmentRuleName(screenId, desktop, activity), screenId, desktop, activity, autotile, snappingLayout,
+                tilingAlgorithm));
+        }
+    }
+
+    // ── Provider-default catch-all rule ────────────────────────────────────
+    // The cascade falls through to a lowest-priority empty-All{} rule when no
+    // pinned context rule matches. Derive its mode/layout from the global
+    // defaults in config.json: a configured DefaultLayoutId means snapping;
+    // otherwise the Tiling default algorithm means autotile; otherwise a bare
+    // snapping placeholder.
+    {
+        const QJsonObject snapping = configRoot.value(ConfigKeys::snappingGroup()).toObject();
+        const QJsonObject behavior = snapping.value(QLatin1String("Behavior")).toObject();
+        const QJsonObject windowHandling = behavior.value(QLatin1String("WindowHandling")).toObject();
+        const QString defaultLayoutId = windowHandling.value(QLatin1String("DefaultLayoutId")).toString();
+
+        const QJsonObject tiling = configRoot.value(ConfigKeys::tilingGroup()).toObject();
+        const QJsonObject tilingAlgo = tiling.value(QLatin1String("Algorithm")).toObject();
+        const QString defaultAlgorithm = tilingAlgo.value(QLatin1String("Default")).toString();
+
+        bool autotileDefault = false;
+        QString providerLayout;
+        QString providerAlgorithm;
+        if (!defaultLayoutId.isEmpty()) {
+            providerLayout = defaultLayoutId;
+        } else if (!defaultAlgorithm.isEmpty()) {
+            autotileDefault = true;
+            providerAlgorithm = defaultAlgorithm;
+        }
+        rules.append(PhosphorWindowRule::ContextRuleBridge::makeProviderDefaultRule(
+            QStringLiteral("Default"), autotileDefault, providerLayout, providerAlgorithm));
+    }
+
+    // ── Disable-list rules ─────────────────────────────────────────────────
+    auto appendMonitorRules = [&rules](const QString& csv, bool autotile) {
+        for (const QString& entry : parseDisableList(csv)) {
+            rules.append(disableRuleForMonitor(entry, autotile));
+        }
+    };
+    auto appendDesktopRules = [&rules](const QString& csv, bool autotile) {
+        for (const QString& entry : parseDisableList(csv)) {
+            if (const auto rule = disableRuleForDesktop(entry, autotile)) {
+                rules.append(*rule);
+            }
+        }
+    };
+    auto appendActivityRules = [&rules](const QString& csv, bool autotile) {
+        for (const QString& entry : parseDisableList(csv)) {
+            if (const auto rule = disableRuleForActivity(entry, autotile)) {
+                rules.append(*rule);
+            }
+        }
+    };
+    appendMonitorRules(stash.value(QLatin1String("snappingMonitors")).toString(), false);
+    appendMonitorRules(stash.value(QLatin1String("autotileMonitors")).toString(), true);
+    appendDesktopRules(stash.value(QLatin1String("snappingDesktops")).toString(), false);
+    appendDesktopRules(stash.value(QLatin1String("autotileDesktops")).toString(), true);
+    appendActivityRules(stash.value(QLatin1String("snappingActivities")).toString(), false);
+    appendActivityRules(stash.value(QLatin1String("autotileActivities")).toString(), true);
+
+    // ── Write windowrules.json (atomic) ────────────────────────────────────
+    PhosphorWindowRule::WindowRuleSet ruleSet;
+    ruleSet.setRules(rules);
+    QDir().mkpath(QFileInfo(windowRulesPath).absolutePath());
+    if (!ruleSet.saveToFile(windowRulesPath)) {
+        qWarning("ConfigMigration: failed to write %s — aborting v4 conversion", qPrintable(windowRulesPath));
+        return false;
+    }
+    qInfo("ConfigMigration: wrote %d window rules to %s", ruleSet.count(), qPrintable(windowRulesPath));
+
+    // ── Rewrite config.json: strip the temporary stash key ─────────────────
+    // Only the `_v4DisableStash` scratch key is removed — the real
+    // Display.*Disabled* keys and the QuickLayouts data stay in place (see the
+    // SCOPE NOTE on migrateV3ToV4: the runtime still reads them). When the
+    // LayoutRegistry/Settings re-implementation lands, a follow-up will strip
+    // the disable keys and relocate QuickLayouts here.
+    if (haveConfig && configRoot.contains(kV4DisableStashKey)) {
+        configRoot.remove(kV4DisableStashKey);
+        if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
+            qWarning("ConfigMigration: failed to rewrite %s after v4 conversion", qPrintable(jsonPath));
+            return false;
+        }
+    }
+    Q_UNUSED(quickLayoutsToRelocate);
+
+    // NOTE: assignments.json is intentionally NOT deleted — the running
+    // daemon's LayoutRegistry still reads it. windowrules.json is the
+    // forward-looking v4 artifact; the supersede-and-delete happens once the
+    // LayoutRegistry re-implementation consumes the rule store.
+
+    return true;
 }
 
 } // namespace PlasmaZones

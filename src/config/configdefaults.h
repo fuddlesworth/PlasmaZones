@@ -640,6 +640,12 @@ public:
     // and PhosphorZones::LayoutRegistry have independent ownership of their files.
     PLASMAZONES_EXPORT static QString assignmentsFilePath();
 
+    // Returns the absolute path to windowrules.json (the unified WindowRule
+    // store — schema v4). Separate from config.json so frequent daemon-driven
+    // rule writes do not churn the cold user-settings blob. The daemon is the
+    // sole writer; see docs/window-rule-refactor-design.md §5.
+    PLASMAZONES_EXPORT static QString windowRulesFilePath();
+
     // Returns the absolute path to the legacy plasmazonesrc file (INI format).
     // Used only by the one-time migration module.
     PLASMAZONES_EXPORT static QString legacyConfigFilePath();

@@ -58,6 +58,8 @@ set(plasmazones_core_SRCS
     # with createAssignmentsBackend() + the "plasmazones/layouts" subdir inline.
     core/unifiedlayoutlist.cpp
     core/unifiedlayoutlist.h
+    core/windowrulestore.cpp
+    core/windowrulestore.h
     common/layoutpreviewserialize.cpp
     common/layoutpreviewserialize.h
     common/screenidresolver.cpp
@@ -114,6 +116,8 @@ set(plasmazones_core_SRCS
     dbus/overlayadaptor.h
     dbus/zonedetectionadaptor.cpp
     dbus/zonedetectionadaptor.h
+    dbus/windowruleadaptor.cpp
+    dbus/windowruleadaptor.h
     # snapnavigationtargets moved to libs/phosphor-snap-engine/
     dbus/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor/navigation.cpp
@@ -199,16 +203,15 @@ target_link_libraries(plasmazones_core
         PhosphorWayland::PhosphorWayland
         PhosphorTiles::PhosphorTiles
         PhosphorZones::PhosphorZones
+        # PhosphorWindowRule: the unified LGPL rule engine. PUBLIC since
+        # Phase 3 — core/windowrulestore.h surfaces WindowRuleSet, and
+        # config/configmigration.cpp builds rules during the v3→v4 conversion,
+        # so consumers of plasmazones_core need the include path + link edge.
+        PhosphorWindowRule::PhosphorWindowRule
     PRIVATE
         Wayland::Client
         Qt6::Concurrent
         Qt6::WaylandClientPrivate
-        # PhosphorWindowRule: the unified LGPL rule engine. Linked here in
-        # Phase 2 to establish the shared evaluator binary across the daemon
-        # and the effect. The daemon's own exclusion enforcement migrates onto
-        # RuleEvaluator in Phase 3 (impl-plan §2.4); PRIVATE because no daemon
-        # public header surfaces the rule types yet.
-        PhosphorWindowRule::PhosphorWindowRule
 )
 
 # PhosphorShortcuts: plasmazones_core uses ONLY the Integration::IAdhocRegistrar header

@@ -23,7 +23,12 @@ namespace PlasmaZones {
 /// v2: nested dot-path groups (Snapping.Behavior.ZoneSpan, Tiling.Gaps, etc.)
 /// v3: per-mode disable lists — Snapping.Behavior.Display.{Disabled*} relocates
 ///     to Display.{Snapping,Autotile}Disabled{Monitors,Desktops,Activities}.
-inline constexpr int ConfigSchemaVersion = 3;
+/// v4: window-rule consolidation — zone Assignments (assignments.json) and the
+///     per-mode disable lists become context-only WindowRules in the new
+///     windowrules.json store. config.json loses the Display.*Disabled* keys;
+///     assignments.json is superseded. QuickLayouts slots relocate back into
+///     config.json. See docs/window-rule-refactor-design.md §8.
+inline constexpr int ConfigSchemaVersion = 4;
 
 /// A single schema migration step: transforms root JSON in-place from
 /// fromVersion to fromVersion+1, then stamps the new _version.
@@ -89,6 +94,30 @@ public:
     // Public so the MigrationStep function pointers can reference them.
     static void migrateV1ToV2(QJsonObject& root);
     static void migrateV2ToV3(QJsonObject& root);
+
+    /// v3 → v4 schema step. A MigrationStep is `void(QJsonObject&)` — it can
+    /// only touch config.json. This step removes the Display.*Disabled* keys
+    /// and stashes their values under a temporary `_v4DisableStash` root key
+    /// for @ref finalizeV4Conversion to consume. It stamps `_version = 4`.
+    static void migrateV3ToV4(QJsonObject& root);
+
+    /// Post-chain finalizer for the v4 conversion. The two-file migration
+    /// (config.json + assignments.json → windowrules.json) cannot live in a
+    /// single `void(QJsonObject&)` MigrationStep, so this runs after the
+    /// chain, from @ref ensureJsonConfigImpl.
+    ///
+    /// It reads assignments.json + the `_v4DisableStash` left in config.json,
+    /// builds the WindowRuleSet, writes windowrules.json (atomic), relocates
+    /// the QuickLayouts slots back into config.json, then — as the last,
+    /// irreversible step — deletes assignments.json.
+    ///
+    /// Idempotent: a no-op when windowrules.json already exists at
+    /// `_version >= 4`. Safe to call on every startup.
+    ///
+    /// @param jsonPath Path to config.json (assignments.json / windowrules.json
+    ///                 are derived as siblings via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool finalizeV4Conversion(const QString& jsonPath);
 
 private:
     ConfigMigration() = default;

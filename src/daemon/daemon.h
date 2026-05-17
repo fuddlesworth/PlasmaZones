@@ -72,6 +72,8 @@ class OverlayAdaptor;
 class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class WindowDragAdaptor;
+class WindowRuleAdaptor;
+class WindowRuleStore;
 class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
@@ -427,6 +429,9 @@ private:
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
+    // Unified WindowRule store (windowrules.json). Declared after
+    // m_configBackend; the WindowRuleAdaptor borrows it.
+    std::unique_ptr<WindowRuleStore> m_windowRuleStore;
     // Daemon-owned tile-algorithm registry. Replaces the old
     // AlgorithmRegistry::instance() singleton — per-process ownership is
     // the only shape that works once PlasmaZones becomes a plugin-based
@@ -554,6 +559,12 @@ private:
     // window (and any queued D-Bus call landing in that window would UAF).
     ShaderAdaptor* m_shaderAdaptor = nullptr;
     ControlAdaptor* m_controlAdaptor = nullptr;
+    // Unified WindowRule store + its D-Bus adaptor. The store owns
+    // windowrules.json (daemon sole writer); the adaptor exposes it on
+    // org.plasmazones.WindowRules. Adaptor is Qt-parented (raw pointer); it
+    // borrows the store, so stop() calls detach() before the store unique_ptr
+    // is destroyed.
+    WindowRuleAdaptor* m_windowRuleAdaptor = nullptr;
     // Compositor bridge adaptor (KWin effect ↔ daemon protocol endpoint).
     // Parented to `this`; holds only plain state, so it needs no detach().
     CompositorBridgeAdaptor* m_compositorBridge = nullptr;

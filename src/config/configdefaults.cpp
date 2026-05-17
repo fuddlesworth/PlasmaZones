@@ -39,6 +39,11 @@ QString ConfigDefaults::assignmentsFilePath()
     return configDir() + QStringLiteral("/plasmazones/assignments.json");
 }
 
+QString ConfigDefaults::windowRulesFilePath()
+{
+    return configDir() + QStringLiteral("/plasmazones/windowrules.json");
+}
+
 QString ConfigDefaults::legacyConfigFilePath()
 {
     return configDir() + QStringLiteral("/plasmazonesrc");

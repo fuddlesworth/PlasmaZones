@@ -79,6 +79,8 @@
 #include "../dbus/shaderadaptor.h"
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/controladaptor.h"
+#include "../dbus/windowruleadaptor.h"
+#include "../core/windowrulestore.h"
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
@@ -111,6 +113,9 @@ Daemon::Daemon(QObject* parent)
     , m_configBackend(createDefaultConfigBackend())
     , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
                                                                       QStringLiteral("plasmazones/layouts")))
+    // Unified WindowRule store — loads windowrules.json (written by the v3→v4
+    // migration). Daemon is the sole writer; the WindowRuleAdaptor exposes it.
+    , m_windowRuleStore(std::make_unique<WindowRuleStore>())
     , m_layoutComputeService(std::make_unique<PhosphorZones::LayoutComputeService>(nullptr))
     // m_curveRegistry / m_profileRegistry are default-constructed (no
     // init-list entries) — daemon.h declares them between m_layoutComputeService
@@ -866,6 +871,11 @@ bool Daemon::init()
     // that owns m_shaderRegistry runs its destructor.
     m_shaderAdaptor = new ShaderAdaptor(m_shaderRegistry.get(), this);
 
+    // Window rule adaptor - the unified org.plasmazones.WindowRules surface.
+    // Held as a member so stop() can detach() it before the unique_ptr that
+    // owns m_windowRuleStore runs its destructor.
+    m_windowRuleAdaptor = new WindowRuleAdaptor(m_windowRuleStore.get(), this);
+
     // Compositor bridge adaptor - compositor-agnostic window control protocol.
     // Held as a member so the support report and the registration watchdog
     // can query its state. Ownership stays with `this` via QObject parent.
@@ -1561,6 +1571,9 @@ void Daemon::stop()
     }
     if (m_controlAdaptor) {
         m_controlAdaptor->detach();
+    }
+    if (m_windowRuleAdaptor) {
+        m_windowRuleAdaptor->detach();
     }
 
     // Provider lambdas already cleared at the top of stop() (before the

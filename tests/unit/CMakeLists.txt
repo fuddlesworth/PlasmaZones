@@ -242,6 +242,18 @@ add_executable(test_configmigration config/test_configmigration.cpp)
 target_link_libraries(test_configmigration PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_configmigration COMMAND test_configmigration)
 
+# v3 → v4 window-rule consolidation migration.
+add_executable(test_migration_v3_to_v4 config/test_migration_v3_to_v4.cpp)
+target_link_libraries(test_migration_v3_to_v4
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorWindowRule::PhosphorWindowRule)
+add_test(NAME test_migration_v3_to_v4 COMMAND test_migration_v3_to_v4)
+
+# WindowRuleStore — daemon-side windowrules.json persistence + mutation API.
+add_executable(test_windowrule_store config/test_windowrule_store.cpp)
+target_link_libraries(test_windowrule_store
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorWindowRule::PhosphorWindowRule)
+add_test(NAME test_windowrule_store COMMAND test_windowrule_store)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # daemon/ - Daemon-level Integration Tests (animation profile publication, etc.)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -299,6 +311,13 @@ pz_add_test(test_layout_zones core/test_layout_zones.cpp)
 pz_add_test(test_layoutmanager_persistence core/test_layoutmanager_persistence.cpp)
 pz_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
 pz_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
+
+# Cascade-fidelity proof for the window-rule context model — the priority
+# formula reproduces the legacy zone-Assignment cascade.
+add_executable(test_windowrule_cascade_fidelity core/test_windowrule_cascade_fidelity.cpp)
+target_link_libraries(test_windowrule_cascade_fidelity
+    PRIVATE Qt6::Test Qt6::Core PhosphorWindowRule::PhosphorWindowRule)
+add_test(NAME test_windowrule_cascade_fidelity COMMAND test_windowrule_cascade_fidelity)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Virtual Screen Tests (ID utilities, data model, Phosphor::Screens::ScreenManager)
