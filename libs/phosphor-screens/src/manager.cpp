@@ -624,6 +624,16 @@ void ScreenManager::onScreenGeometryChanged(const QRect& geometry)
         invalidateVirtualGeometryCache();
     }
     m_effectiveScreenIdsDirty = true;
+    // Recompute available geometry against the new screen rect. The
+    // available-geometry cache is screen-origin-relative (availGeom is
+    // built from screenGeom.x()/y() in calculateAvailableGeometry), so a
+    // moved or resized output must refresh it. Without this, an output
+    // re-added at a transient (0,0) origin — DPMS wake, hotplug — keeps
+    // its stale (0,0)-based available rect even after QScreen settles to
+    // the real position, and every layout anchored to that screen renders
+    // shifted to the desktop origin. Mirrors the recompute that
+    // onSensorGeometryChanged and onPanelOffsetsChanged already perform.
+    calculateAvailableGeometry(screen);
     Q_EMIT screenGeometryChanged(screen, geometry);
 }
 
