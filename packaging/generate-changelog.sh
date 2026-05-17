@@ -165,6 +165,12 @@ generate_rpm() {
             echo "* $(iso_to_rpm "$date") fuddlesworth - $version-1"
         fi
 
+        # Escape RPM macros: a bare % in changelog text is expanded by
+        # rpm (rpmlint's macro-in-%changelog, and at worst a mangled
+        # entry). Doubling it keeps the text literal. RPM only — the
+        # Debian changelog has no macro syntax.
+        bullet="${bullet//%/%%}"
+
         if [[ "$bullet" == "  "* ]]; then
             echo " $bullet"
         else

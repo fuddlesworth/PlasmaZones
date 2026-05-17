@@ -7,6 +7,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.2] - 2026-05-17
+
+### Added
+
+- **KWin effect bridge status in diagnostics**: support reports and the daemon now surface whether the KWin effect bridge is connected, so it is clear at a glance whether the required effect is loaded and communicating with the daemon.
+- **openSUSE packages on OBS**: the release pipeline now publishes openSUSE packages to the openSUSE Build Service.
+
+### Changed
+
+- **ScreenManager decoupled from `QScreen`**: the screen add, remove, move, and resize lifecycle moved behind an injectable `IScreenProvider` seam so it can be regression-tested without a live display. This is an internal refactor with no user-visible behavior change; it adds regression coverage for the multi-monitor geometry path.
+
+### Fixed
+
+- **Layout shift after a screen powers off and back on** ([#465](https://github.com/fuddlesworth/PlasmaZones/discussions/465), [#467](https://github.com/fuddlesworth/PlasmaZones/pull/467)): when a monitor reappeared at a transient `(0,0)` origin on DPMS wake or hotplug, its available geometry stayed pinned to the old origin even after the output settled, shifting every layout anchored to that screen toward the desktop origin. Available geometry is now recomputed whenever a screen moves or resizes.
+- **Panels ignored on the first layout pass** ([#466](https://github.com/fuddlesworth/PlasmaZones/pull/466)): the `panelGeometryReady` signal could fail to fire on the first panel query, so components computing initial zone geometry at startup laid windows out against the full screen rect instead of the panel-reserved area. The signal now fires reliably on the first panel reading.
+- **EPEL RPM builds** ([#462](https://github.com/fuddlesworth/PlasmaZones/pull/462)): macros inside spec-file comments were expanded by `rpmbuild` on EPEL and broke the build. Comment macros are now escaped.
+
 ## [3.0.1] - 2026-05-16
 
 ### Fixed
@@ -1281,7 +1298,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.1...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.2...HEAD
+[3.0.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.7...v3.0.0
 [2.8.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.1...v2.8.2

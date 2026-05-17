@@ -1017,6 +1017,7 @@ jobs:
           osc checkout "$OBS_PROJECT" plasmazones
           PKGDIR="$OBS_PROJECT/plasmazones"
           cp packaging/rpm/plasmazones.spec "$PKGDIR/plasmazones.spec"
+          cp packaging/rpm/plasmazones-rpmlintrc "$PKGDIR/plasmazones-rpmlintrc"
           cp packaging/obs/_service "$PKGDIR/_service"
           cd "$PKGDIR"
           # addremove stages new files and drops removed ones; commit only
