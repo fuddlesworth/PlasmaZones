@@ -55,7 +55,7 @@ void main() {
         vec2 scaled_uv = (uv - center) / scale + center;
 
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-        vec4 color = texture(uTexture0, scaled_uv) * boundaryMask(scaled_uv);
+        vec4 color = surfaceColor(scaled_uv) * boundaryMask(scaled_uv);
 
         float alpha = smoothstep(1.0 - revealStart, 1.0 - revealEnd, p);
 
@@ -71,7 +71,7 @@ void main() {
         vec2 scaled_uv = (uv - center) / scale + center;
 
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-        vec4 color = texture(uTexture0, scaled_uv) * boundaryMask(scaled_uv);
+        vec4 color = surfaceColor(scaled_uv) * boundaryMask(scaled_uv);
 
         float alpha = smoothstep(revealStart, revealEnd, p);
 

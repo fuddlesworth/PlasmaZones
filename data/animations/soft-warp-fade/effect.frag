@@ -45,7 +45,7 @@ void main() {
     vec2 warped = uv + warp * strength;
 
     // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-    vec4 win = texture(uTexture0, warped) * boundaryMask(warped);
+    vec4 win = surfaceColor(warped) * boundaryMask(warped);
 
     float t = smoothstep(0.05, 0.95, p);
     t = t * t * (3.0 - 2.0 * t);

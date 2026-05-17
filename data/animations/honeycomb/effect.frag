@@ -185,6 +185,6 @@ void main()
     // Premult-alpha invariant: multiplying both colour and alpha by
     // the same scalar keeps the daemon's blend pipeline composing
     // correctly with the parent chain's opacity.
-    vec4 sampled = texture(uTexture0, vTexCoord);
+    vec4 sampled = surfaceColor(vTexCoord);
     fragColor = sampled * (1.0 - steppedMask);
 }

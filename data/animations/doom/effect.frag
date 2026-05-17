@@ -108,7 +108,7 @@ void main()
     // the bottom rather than smearing edge texels via clamp-to-edge.
     vec2 inside    = step(vec2(0.0), sampleUV) * step(sampleUV, vec2(1.0));
     float onScreen = inside.x * inside.y;
-    vec4 sampled   = texture(uTexture0, sampleUV) * onScreen;
+    vec4 sampled   = surfaceColor(sampleUV) * onScreen;
 
     // Top/bottom soft edge so the column tops fade rather than pop.
     float edgeFade = smoothstep(0.0, 0.1, uv.y) * smoothstep(0.0, 0.1, 1.0 - uv.y);

@@ -26,20 +26,27 @@
 // The `#define PLASMAZONES_KWIN` switch describes the uniform-binding
 // ABI, not the runtime's feature set.
 //
-// Custom vertex stage: animation shaders are authored against a
-// Y=0-at-top texCoord convention. BOTH runtimes deliver texCoord in
-// that orientation — the daemon's Qt-RHI quad and KWin's
-// `OffscreenData::paint` agree — so a vertex stage simply passes it
-// through: `vTexCoord = texCoord`, identical on both paths. (An
-// earlier revision applied a `1.0 - texCoord.y` flip on the kwin path
-// in the belief that KWin's FBO sampling was Y-up; it is not, and the
-// flip rendered every window animation upside-down.) The ONLY
-// per-runtime difference is `gl_Position`: the kwin path multiplies
-// `position` by `modelViewProjectionMatrix`, the daemon emits
-// clip-space directly. See `kKwinDefaultVertexSource` in
+// Coordinate convention: `vTexCoord` is a Y-down screen UV — y = 0 at
+// the TOP of the surface — on BOTH runtimes, so effect-space math may
+// use it directly. The vertex stage is what guarantees that: the
+// daemon's Qt-RHI quad emits texCoord Y-down already and passes it
+// through (`vTexCoord = texCoord`); the kwin path receives texCoord
+// from KWin's Y-up offscreen FBO and flips it
+// (`vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y)`). `gl_Position`
+// also differs: the kwin path multiplies `position` by
+// `modelViewProjectionMatrix`, the daemon emits clip-space directly.
+// See `kKwinDefaultVertexSource` in
 // `kwin-effect/plasmazoneseffect/shader_transitions.cpp` and
 // `kDefaultVertexShaderSource` in
 // `libs/phosphor-rendering/src/shadereffect.cpp`.
+//
+// Surface texture: the redirected surface is stored in a Y-up texture
+// on the kwin path (KWin's bottom-origin FBO) and a Y-down texture on
+// the daemon, so — unlike `vTexCoord` — it does NOT share one
+// convention. Never sample `uTexture0` directly; call
+// `surfaceColor(uv)` (defined at the end of this header). It flips on
+// the kwin path so one shader source reads the surface upright on
+// both runtimes.
 //
 // Layout-drift guard: the offsets in the UBO branch MUST stay aligned
 // with `PhosphorShaders::BaseUniforms`. The C++ side enforces that via
@@ -241,5 +248,26 @@ layout(binding = 9) uniform sampler2D uTexture2;
 layout(binding = 10) uniform sampler2D uTexture3;
 
 #endif // PLASMAZONES_KWIN
+
+// ─── Surface sampling helper ───────────────────────────────────────────
+// Read the transitioning surface (the redirected window / popup
+// content) through this helper instead of sampling `uTexture0`
+// directly. `uv` is a Y-down screen UV — pass `vTexCoord` (or any
+// coordinate derived from it) straight in.
+//
+// The surface texture's storage orientation is the one thing the two
+// runtimes genuinely disagree on: KWin's offscreen FBO is bottom-origin
+// (Y-up), the daemon's Qt-RHI texture is top-origin (Y-down). This
+// helper flips the sample coordinate on the kwin path so the returned
+// texel is upright on both runtimes — keeping effect-space math, which
+// uses the Y-down `vTexCoord` directly, decoupled from the surface
+// texture's physical layout.
+vec4 surfaceColor(vec2 uv) {
+#ifdef PLASMAZONES_KWIN
+    return texture(uTexture0, vec2(uv.x, 1.0 - uv.y));
+#else
+    return texture(uTexture0, uv);
+#endif
+}
 
 #endif // PLASMAZONES_ANIMATION_UNIFORMS_GLSL

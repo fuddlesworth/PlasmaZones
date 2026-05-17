@@ -68,5 +68,5 @@ void main()
         fragColor = vec4(0.0);
         return;
     }
-    fragColor = texture(uTexture0, sampleUv);
+    fragColor = surfaceColor(sampleUv);
 }

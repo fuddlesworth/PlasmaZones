@@ -28,14 +28,16 @@ uniform mat4 modelViewProjectionMatrix;
 #endif
 
 void main() {
-    // texCoord pass-through — KWin and the daemon both deliver it
-    // Y=0-at-top. Mirrors `kKwinDefaultVertexSource` /
-    // `kDefaultVertexShaderSource` on the C++ side. Only gl_Position
-    // differs: KWin needs the MVP matrix, the daemon emits clip space.
-    vTexCoord = texCoord;
+    // texCoord -> Y-down screen UV. The daemon's Qt-RHI quad delivers
+    // it Y-down already; KWin's offscreen FBO is Y-up, so flip on that
+    // path. Mirrors `kKwinDefaultVertexSource` and the canonical
+    // header's vertex-stage contract. gl_Position also differs: KWin
+    // needs the MVP matrix, the daemon emits clip space.
 #ifdef PLASMAZONES_KWIN
+    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);
     gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);
 #else
+    vTexCoord = texCoord;
     gl_Position = vec4(position, 0.0, 1.0);
 #endif
 }

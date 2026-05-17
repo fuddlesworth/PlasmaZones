@@ -55,7 +55,7 @@ void main() {
     // shape wave-warp wants (off-surface = transparent), but without
     // the edge-pixel bleed.
     vec2 warped = (uv - 0.5) * m + 0.5;
-    vec4 win = texture(uTexture0, warped) * boundaryMask(warped);
+    vec4 win = surfaceColor(warped) * boundaryMask(warped);
 
     float in_bounds = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
     fragColor = win * m * in_bounds;

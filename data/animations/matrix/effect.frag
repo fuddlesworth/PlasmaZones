@@ -197,7 +197,7 @@ vec4 getInputColor(vec2 coords) {
     if (coords.x < 0.0 || coords.x > 1.0 || coords.y < 0.0 || coords.y > 1.0) {
         return vec4(0.0);
     }
-    vec4 color = texture(uTexture0, coords);
+    vec4 color = surfaceColor(coords);
     if (color.a > 0.001) {
         color.rgb /= color.a;
     }

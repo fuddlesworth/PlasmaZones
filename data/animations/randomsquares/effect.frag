@@ -37,7 +37,7 @@ void main() {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
     vec2 uv = vTexCoord;
-    vec4 win = texture(uTexture0, uv);
+    vec4 win = surfaceColor(uv);
 
     vec2 sz = vec2(gridDensity);
     float r = rs_rand(floor(sz * uv));

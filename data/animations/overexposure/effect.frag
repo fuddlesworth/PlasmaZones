@@ -44,7 +44,7 @@ void main() {
     vec2 uv = vTexCoord;
     float PI = 3.141592653589793;
 
-    vec4 win = texture(uTexture0, uv);
+    vec4 win = surfaceColor(uv);
 
     float to_m = p + sin(PI * p) * strength;
     fragColor = vec4(

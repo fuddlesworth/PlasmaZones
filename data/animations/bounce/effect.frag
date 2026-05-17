@@ -54,7 +54,7 @@ void main() {
     // edge sampler would otherwise smear the top row of texels along
     // the leading edge of the drop. The mask bands sit OUTSIDE [0, 1]
     // so identity sampling (idle end of the bounce) is unaffected.
-    vec4 win = texture(uTexture0, sample_uv) * boundaryMask(sample_uv);
+    vec4 win = surfaceColor(sample_uv) * boundaryMask(sample_uv);
 
     float reveal = step(d, 0.0);
     fragColor = win * reveal;

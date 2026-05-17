@@ -58,7 +58,7 @@ void main()
     // uTexture0's clamp-to-edge sampler returns the last-column /
     // last-row texel for that cell, smearing the window's edge alpha
     // into a ~½-cell-wide band past the surface boundary.
-    vec4 sampled    = texture(uTexture0, cellUV) * boundaryMask(cellUV);
+    vec4 sampled    = surfaceColor(cellUV) * boundaryMask(cellUV);
 
     // Spoke parameterisation. `down = (0, 1)`; `dot(down, fragDir)`
     // is just `fragDir.y`. `acos(y)` ∈ [0, π], divided by 2π gives

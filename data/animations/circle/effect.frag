@@ -48,7 +48,7 @@ void main() {
     float m = smoothstep(-smoothness, 0.0, dist - p * (1.0 + smoothness));
     float reveal = 1.0 - m;
 
-    vec4 color = texture(uTexture0, uv);
+    vec4 color = surfaceColor(uv);
 
     fragColor = color * reveal;
 }

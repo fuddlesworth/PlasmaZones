@@ -31,7 +31,7 @@ void main() {
     float p = clamp(iTime, 0.0, 1.0);
     vec2 uv = vTexCoord;
 
-    vec4 win = texture(uTexture0, uv);
+    vec4 win = surfaceColor(uv);
 
     float colorMag = length(win.rgb);
     float m = step(colorMag, p);

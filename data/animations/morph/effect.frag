@@ -75,7 +75,7 @@ void main()
     // and lose sub-pixel AA on the silhouette.
     vec2 sampleUv = anchorUv - warp;
     vec2 sampleInside = step(vec2(0.0), sampleUv) * step(sampleUv, vec2(1.0));
-    vec4 warpedSample = texture(uTexture0, sampleUv) * sampleInside.x * sampleInside.y;
+    vec4 warpedSample = surfaceColor(sampleUv) * sampleInside.x * sampleInside.y;
 
     float feather = max(strength, 0.005);
     vec2 lo = smoothstep(vec2(-feather), vec2(0.0), anchorUv);

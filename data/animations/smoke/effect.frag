@@ -90,7 +90,7 @@ void main() {
         vec2 warped_uv = uv + (wr - 0.5) * distort_strength;
 
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-        vec4 color = texture(uTexture0, warped_uv) * boundaryMask(warped_uv);
+        vec4 color = surfaceColor(warped_uv) * boundaryMask(warped_uv);
 
         float tail = smoothstep(1.0, 0.8, p);
         result = color * remain * tail;
@@ -118,7 +118,7 @@ void main() {
         vec2 warped_uv = uv + (wr - 0.5) * distort_strength;
 
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-        vec4 color = texture(uTexture0, warped_uv) * boundaryMask(warped_uv);
+        vec4 color = surfaceColor(warped_uv) * boundaryMask(warped_uv);
 
         result = color * reveal;
     }

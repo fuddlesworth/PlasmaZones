@@ -75,7 +75,7 @@ void main()
     // uTexture0's clamp-to-edge sampler returns the last-column /
     // last-row texel for that cell, smearing the window's edge alpha
     // into a ~½-cell-wide band past the surface boundary.
-    vec4 sampled    = texture(uTexture0, cellUV) * boundaryMask(cellUV);
+    vec4 sampled    = surfaceColor(cellUV) * boundaryMask(cellUV);
 
     // Per-cell noise threshold gates the dissolve so the wavefront
     // is a chunky speckled pattern rather than a smooth ring. A cell

@@ -129,7 +129,7 @@ vec4 blurredInputColor(vec2 uv, float radius, float samples)
         // around the centre so the corners drift ~5% past the anchor,
         // and uTexture0's clamp-to-edge sampler would otherwise smear
         // the edge texel into a halo around the shrinking-orb silhouette.
-        return texture(uTexture0, uv) * boundaryMask(uv);
+        return surfaceColor(uv) * boundaryMask(uv);
     }
     vec4 acc = vec4(0.0);
     float totalWeight = 0.0;
@@ -153,7 +153,7 @@ vec4 blurredInputColor(vec2 uv, float radius, float samples)
             vec2 off = vec2(cos(d), sin(d)) * radius * (1.0 - s) / flooredResolution;
             vec2 tap = uv + off;
             float w = boundaryMask(tap);
-            acc += texture(uTexture0, tap) * w;
+            acc += surfaceColor(tap) * w;
             totalWeight += w;
         }
     }
@@ -217,7 +217,7 @@ void main()
     // of smearing the edge texel via clamp-to-edge.
     vec4 windowCol = (blurAmount > 0.0)
         ? blurredInputColor(windowUV, (1.0 - progress) * blurAmount, 3.0)
-        : texture(uTexture0, windowUV) * boundaryMask(windowUV);
+        : surfaceColor(windowUV) * boundaryMask(windowUV);
 
     // Don't draw glow where the window itself is transparent
     // (window-content shaped, not square mask).

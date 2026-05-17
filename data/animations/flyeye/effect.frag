@@ -43,7 +43,7 @@ void main() {
     // anchor edge along the lens facets, and uTexture0's clamp-to-
     // edge sampler would otherwise smear the rim texels into the
     // facet ripple.
-    vec4 win = texture(uTexture0, sample_uv) * boundaryMask(sample_uv);
+    vec4 win = surfaceColor(sample_uv) * boundaryMask(sample_uv);
 
     fragColor = win * p;
 }

@@ -180,7 +180,7 @@ void main()
     // tint is 0.5 (matter "becomes energy"). Tint is computed on
     // pre-multiplied colour so transparent regions don't acquire a
     // colour halo.
-    vec4 sampled = texture(uTexture0, uv);
+    vec4 sampled = surfaceColor(uv);
     float tint = 0.5 * (1.0 - windowAlpha);
     sampled.rgb = mix(sampled.rgb, effectColor * sampled.a, tint);
     sampled *= windowAlpha;

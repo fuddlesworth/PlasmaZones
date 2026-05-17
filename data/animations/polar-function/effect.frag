@@ -33,7 +33,7 @@ void main() {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
     vec2 uv = vTexCoord;
-    vec4 win = texture(uTexture0, uv);
+    vec4 win = surfaceColor(uv);
 
     int segments = int(segmentsParam);
     float angle = atan(uv.y - 0.5, uv.x - 0.5);

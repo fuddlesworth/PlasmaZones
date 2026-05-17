@@ -128,7 +128,7 @@ void main()
     vec2 sampleUV  = coords + center;
     vec2 inside    = step(vec2(0.0), sampleUV) * step(sampleUV, vec2(1.0));
     float onScreen = inside.x * inside.y;
-    vec4 sampled   = texture(uTexture0, sampleUV) * onScreen;
+    vec4 sampled   = surfaceColor(sampleUV) * onScreen;
 
     // Alpha envelope: linear in iTime. Keeping this linear (rather
     // than smootherstepping) means the suction/whirl amplitudes and

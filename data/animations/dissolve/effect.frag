@@ -49,6 +49,6 @@ void main()
     // surface alpha. Multiplying both colour and alpha keeps the
     // pre-multiplied-alpha invariant the daemon's blend pipeline
     // expects.
-    vec4 sampled = texture(uTexture0, uv);
+    vec4 sampled = surfaceColor(uv);
     fragColor = sampled * (1.0 - gate);
 }

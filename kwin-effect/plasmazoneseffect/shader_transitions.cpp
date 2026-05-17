@@ -543,23 +543,28 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     //     name-only and would mismatch our `texCoord` vs KWin's
     //     `texcoord`).
     //
-    // texCoord is passed straight through, exactly as the daemon's
-    // `kDefaultVertexShaderSource` does. KWin's `OffscreenData::paint`
-    // populates the texCoord attribute in the same Y=0-at-top
-    // orientation the daemon's Qt-RHI quad delivers, so a flip here
-    // would render the whole window upside-down for every animation.
-    // (An earlier version applied `1.0 - texCoord.y` on the belief
-    // that KWin's FBO sampling was Y-up; it is not — the flip was the
-    // bug.) The only kwin-vs-daemon difference is `gl_Position`: KWin
-    // needs the modelViewProjectionMatrix to place the redirected
+    // texCoord is flipped to a Y-down screen UV. KWin's
+    // `OffscreenData::paint` populates the texCoord attribute from its
+    // bottom-origin offscreen FBO (Y-up). The shader contract — and the
+    // daemon's `kDefaultVertexShaderSource` — expect `vTexCoord` Y-down
+    // (y = 0 at the top), so flip here. The redirected window texture
+    // is Y-up to match KWin's FBO, which is why shaders read it through
+    // `surfaceColor()` (which re-flips the sample coordinate) instead
+    // of sampling `uTexture0` directly — see the canonical header
+    // `data/animations/shared/animation_uniforms.glsl`. Without the
+    // flip, `vTexCoord` is Y-up on this path: the window still composes
+    // upright (the Y-up texture cancels it) but every screen-space
+    // effect — matrix rain direction, directional wipes — renders
+    // inverted. The other kwin-vs-daemon difference is `gl_Position`:
+    // KWin needs the modelViewProjectionMatrix to place the redirected
     // quad, the daemon emits clip-space directly.
     //
     // Authors that ship a per-shader vertex stage via metadata's
     // `vertexShader` field own the matrix / attribute contract
-    // themselves: emit `vTexCoord = texCoord` (pass-through, same on
-    // both paths) and multiply `position` by modelViewProjectionMatrix
-    // on the kwin path. See the canonical GLSL header
-    // (`data/animations/shared/animation_uniforms.glsl`).
+    // themselves: emit the same `vTexCoord` flip under
+    // `#ifdef PLASMAZONES_KWIN` and multiply `position` by
+    // modelViewProjectionMatrix on the kwin path. See the canonical
+    // GLSL header (`data/animations/shared/animation_uniforms.glsl`).
     static const QByteArray kKwinDefaultVertexSource = QByteArrayLiteral(
         "#version 450\n"
         "\n"
@@ -571,7 +576,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         "uniform mat4 modelViewProjectionMatrix;\n"
         "\n"
         "void main() {\n"
-        "    vTexCoord = texCoord;\n"
+        "    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);\n"
         "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
         "}\n");
 

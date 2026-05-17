@@ -92,7 +92,7 @@ void main()
     // transparent so the squash doesn't smear edge texels.
     vec2 inside    = step(vec2(0.0), coords) * step(coords, vec2(1.0));
     float onScreen = inside.x * inside.y;
-    vec4 sampled   = texture(uTexture0, coords) * onScreen;
+    vec4 sampled   = surfaceColor(coords) * onScreen;
 
     // Tint toward the flash colour as the collapse progresses.
     // sampled is pre-multiplied; multiplying the flash colour by

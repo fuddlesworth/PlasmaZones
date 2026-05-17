@@ -47,7 +47,7 @@ void main()
     // single sample so the endpoint frames don't pay the redundant
     // texture cost on every fragment.
     if (strength < 1e-4) {
-        fragColor = texture(uTexture0, uv);
+        fragColor = surfaceColor(uv);
         return;
     }
 
@@ -78,9 +78,9 @@ void main()
     // Qt Quick uses premultiplied-alpha blending, so un-premultiply
     // each sample before extracting the single channel, then
     // re-premultiply against the chosen alpha.
-    vec4 sR = texture(uTexture0, uvR);
-    vec4 sG = texture(uTexture0, uvG);
-    vec4 sB = texture(uTexture0, uvB);
+    vec4 sR = surfaceColor(uvR);
+    vec4 sG = surfaceColor(uvG);
+    vec4 sB = surfaceColor(uvB);
     // Output alpha is the MAX of the three sample alphas, not just sG.a.
     // When chromatic offset lands R or B on opaque pixels but G on a
     // transparent edge, using sG.a alone would zero the entire pixel and

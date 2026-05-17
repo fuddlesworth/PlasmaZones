@@ -31,10 +31,13 @@ uniform mat4 modelViewProjectionMatrix;
 #endif
 
 void main() {
-    vTexCoord = texCoord;
 #ifdef PLASMAZONES_KWIN
+    // kwin's offscreen FBO is Y-up; flip so vTexCoord is the Y-down
+    // screen UV the shader contract specifies on both runtimes.
+    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);
     gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);
 #else
+    vTexCoord = texCoord;
     gl_Position = vec4(position, 0.0, 1.0);
 #endif
 }

@@ -46,6 +46,6 @@ void main()
     float alpha = smoothstep(scaledVis - fw, scaledVis, coord);
     alpha = 1.0 - alpha; // 1 inside the revealed region, 0 outside
 
-    vec4 sampled = texture(uTexture0, uv);
+    vec4 sampled = surfaceColor(uv);
     fragColor = sampled * alpha;
 }
