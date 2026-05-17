@@ -416,6 +416,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     for (KWin::EffectWindow* existing : KWin::effects->stackingOrder()) {
         m_screenChangeHandler->trackDockWindow(existing);
     }
+    // clientArea(MaximizeArea) is queried for the current virtual desktop, so a
+    // panel that reserves space on only one desktop changes the work area when
+    // the user switches desktops — re-push so the daemon tracks per-desktop
+    // struts too.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, m_screenChangeHandler.get(),
+            &ScreenChangeHandler::scheduleClientAreaReport);
 
     // Belt-and-suspenders: windowClosed removes animations, but if a deferred
     // timer re-adds one between windowClosed and windowDeleted, the Item tree

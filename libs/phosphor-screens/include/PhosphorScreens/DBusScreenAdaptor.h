@@ -63,7 +63,8 @@ public Q_SLOTS:
     /// the compositor (the KWin effect's `clientArea(MaximizeArea)` query).
     /// Overrides the panel-strut heuristic in ScreenManager. @p screenName is
     /// a connector name (e.g. `DP-1`); @p x / @p y / @p width / @p height are
-    /// the work-area rect. A zero-size rect clears the override.
+    /// the work-area rect. An invalid or zero-size rect clears the override —
+    /// a defensive contract; the effect itself always reports a valid rect.
     void setAvailableGeometryFromKWin(const QString& screenName, int x, int y, int width, int height);
     QRect getAvailableGeometry(const QString& screenId);
     QRect getScreenGeometry(const QString& screenId);

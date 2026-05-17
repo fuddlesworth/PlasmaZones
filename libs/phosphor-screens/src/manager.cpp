@@ -415,16 +415,10 @@ void ScreenManager::calculateAvailableGeometry(const PhysicalScreen& screen)
     QRect availGeom(screenGeom.x() + effLeft, screenGeom.y() + effTop, screenGeom.width() - effLeft - effRight,
                     screenGeom.height() - effTop - effBottom);
 
-    // Source 0 (highest priority): compositor-reported client area. The KWin
-    // effect queries KWin::clientArea(MaximizeArea) — the exact panel-excluded
-    // work area the compositor itself reserves for maximized windows, with
-    // correct per-edge strut attribution and correct auto-hide handling — and
-    // pushes it via setCompositorAvailableGeometry. When present it overrides
-    // the sensor + D-Bus heuristic above, which can only guess per-edge strut
-    // attribution and gets it wrong (dumps everything onto the bottom edge)
-    // for top-panel layouts when the plasmashell D-Bus query returns no
-    // panels. The heuristic stays computed above as the fallback for sessions
-    // where the effect is not loaded.
+    // Source 0 (highest priority): compositor-reported client area. When the
+    // KWin effect has pushed a rect for this screen it overrides the sensor +
+    // D-Bus heuristic computed above; the heuristic remains the fallback for
+    // sessions where the effect is not loaded. See setCompositorAvailableGeometry.
     if (const auto compIt = m_compositorAvailableGeometry.constFind(screenKey);
         compIt != m_compositorAvailableGeometry.constEnd()) {
         // Clamp to the current screen rect — the compositor snapshot can lag a
@@ -609,6 +603,10 @@ void ScreenManager::setCompositorAvailableGeometry(const QString& screenName, co
         if (m_compositorAvailableGeometry.value(screenName) == available) {
             return;
         }
+        // Stored unclamped on purpose: calculateAvailableGeometry re-intersects
+        // it with the current screen rect on every recompute, so an override
+        // that arrives before a screen-resize is processed self-corrects once
+        // the new geometry lands — no need to re-push or re-clamp here.
         m_compositorAvailableGeometry.insert(screenName, available);
         qCInfo(lcPhosphorScreens) << "Compositor available geometry for" << screenName << "=" << available;
     } else {

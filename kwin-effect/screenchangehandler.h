@@ -38,7 +38,8 @@ class ScreenChangeHandler : public QObject
 public:
     explicit ScreenChangeHandler(PlasmaZonesEffect* effect, QObject* parent = nullptr);
 
-    /// Stop the debounce timer (called from effect destructor)
+    /// Stop the debounce timer and suppress any pending client-area report
+    /// (called from effect destructor).
     void stop();
 
     /// Schedule a push of KWin's authoritative per-screen work area
@@ -95,6 +96,11 @@ private:
     // dock signals within one event-loop turn into a single report — see
     // scheduleClientAreaReport().
     bool m_clientAreaReportQueued = false;
+
+    // Set by stop() from the effect destructor. Suppresses both new schedules
+    // and an already-queued report that would otherwise fire a stray D-Bus
+    // call between stop() and this handler's destruction.
+    bool m_stopped = false;
 };
 
 } // namespace PlasmaZones

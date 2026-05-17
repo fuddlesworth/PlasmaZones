@@ -44,6 +44,10 @@ ScreenChangeHandler::ScreenChangeHandler(PlasmaZonesEffect* effect, QObject* par
 void ScreenChangeHandler::stop()
 {
     m_screenChangeDebounce.stop();
+    // Suppress any client-area report still queued for a later event-loop
+    // turn — without this guard it would fire a stray D-Bus call between
+    // stop() and this handler's destruction.
+    m_stopped = true;
 }
 
 void ScreenChangeHandler::slotScreenGeometryChanged()
@@ -255,6 +259,9 @@ void ScreenChangeHandler::onWindowClosed(KWin::EffectWindow* w)
 
 void ScreenChangeHandler::scheduleClientAreaReport()
 {
+    if (m_stopped) {
+        return; // Handler is shutting down — no further reports.
+    }
     if (m_clientAreaReportQueued) {
         return; // A report is already queued for this event-loop turn.
     }
@@ -269,6 +276,9 @@ void ScreenChangeHandler::scheduleClientAreaReport()
         this,
         [this]() {
             m_clientAreaReportQueued = false;
+            if (m_stopped) {
+                return; // stop() ran after this report was queued.
+            }
             reportClientArea();
         },
         Qt::QueuedConnection);
@@ -285,8 +295,9 @@ void ScreenChangeHandler::reportClientArea()
     // clientArea(MaximizeArea) is the exact panel-excluded work area KWin
     // reserves for maximized windows: correct per-edge strut attribution,
     // and auto-hide panels (no strut) correctly excluded. The desktop
-    // argument is required by the API; panels span virtual desktops, so the
-    // current desktop is representative.
+    // argument is required by the API — we pass the current desktop, and a
+    // desktopChanged signal re-schedules a report so per-desktop panels stay
+    // tracked.
     KWin::VirtualDesktop* desktop = KWin::effects->currentDesktop();
     const auto outputs = KWin::effects->screens();
     for (KWin::LogicalOutput* output : outputs) {

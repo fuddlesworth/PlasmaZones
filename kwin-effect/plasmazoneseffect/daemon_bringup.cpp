@@ -154,10 +154,7 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     }
 
     // Push KWin's authoritative per-screen work area (clientArea/MaximizeArea)
-    // so the daemon's available-geometry computation uses the compositor's
-    // exact panel struts instead of the plasmashell D-Bus + layer-shell sensor
-    // heuristic — which mis-attributes struts (everything onto the bottom
-    // edge) for top-panel layouts when the D-Bus panel query returns nothing.
+    // now that the bridge is up — see ScreenChangeHandler::scheduleClientAreaReport.
     if (m_screenChangeHandler) {
         m_screenChangeHandler->scheduleClientAreaReport();
     }
