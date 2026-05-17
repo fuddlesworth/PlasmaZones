@@ -39,7 +39,7 @@ public:
     /// and layout manager. None of the pointers are owned; they must
     /// outlive the router.
     ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager, PhosphorEngine::IPlacementEngine* snapEngine,
-                     PhosphorEngine::IPlacementEngine* autotileEngine);
+                     PhosphorEngine::IPlacementEngine* autotileEngine, PhosphorEngine::IPlacementEngine* scrollEngine);
 
     /// Current mode for @p screenId. Consults the autotile engine's
     /// live set first (mode is derived from assignment + context) and
@@ -58,6 +58,7 @@ public:
     /// Convenience predicates. @see modeFor for the fallback semantics.
     bool isSnapMode(const QString& screenId) const;
     bool isAutotileMode(const QString& screenId) const;
+    bool isScrollMode(const QString& screenId) const;
 
     /// Split a list of screen ids into snap-mode and autotile-mode
     /// buckets. Useful for multi-screen cleanup and resnap paths that
@@ -67,6 +68,7 @@ public:
     {
         QStringList snap;
         QStringList autotile;
+        QStringList scroll;
     };
     Partitioned partitionByMode(const QStringList& screenIds) const;
 
@@ -74,6 +76,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorEngine::IPlacementEngine* m_snapEngine;
     PhosphorEngine::IPlacementEngine* m_autotileEngine;
+    PhosphorEngine::IPlacementEngine* m_scrollEngine;
 };
 
 } // namespace PlasmaZones

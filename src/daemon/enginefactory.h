@@ -28,6 +28,10 @@ namespace PhosphorSnapEngine {
 class SnapEngine;
 }
 
+namespace PhosphorScrollEngine {
+class ScrollEngine;
+}
+
 namespace PhosphorEngine {
 class WindowRegistry;
 }
@@ -49,6 +53,7 @@ struct EngineSet
 {
     std::unique_ptr<PhosphorTileEngine::AutotileEngine> autotile;
     std::unique_ptr<PhosphorSnapEngine::SnapEngine> snap;
+    std::unique_ptr<PhosphorScrollEngine::ScrollEngine> scroll;
     std::unique_ptr<ScreenModeRouter> router;
 };
 

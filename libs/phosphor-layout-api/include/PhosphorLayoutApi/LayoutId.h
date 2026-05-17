@@ -62,5 +62,36 @@ inline QString makeAutotileId(const QString& algorithmId)
     return AutotilePrefix + algorithmId;
 }
 
+inline constexpr QLatin1String ScrollPrefix{"scroll:"};
+
+inline bool isScroll(const QString& id)
+{
+    return id.startsWith(ScrollPrefix);
+}
+
+/// Extract the scroll-settings id portion from a scroll preview id.
+/// Mirrors @ref extractAlgorithmId — callers check @c isScroll first; misuse
+/// warns and returns empty rather than asserting.
+inline QString extractScrollSettingId(const QString& id)
+{
+    if (!isScroll(id)) {
+        qWarning("PhosphorLayout::LayoutId::extractScrollSettingId called with non-scroll id: %s", qUtf8Printable(id));
+        return QString();
+    }
+    if (id.size() <= ScrollPrefix.size()) {
+        return {};
+    }
+    return id.mid(ScrollPrefix.size());
+}
+
+inline QString makeScrollId(const QString& settingId)
+{
+    // An empty settingId is a legitimate caller intent: "scroll mode, let the
+    // engine use its defaults". The bare prefix "scroll:" round-trips cleanly,
+    // mirroring makeAutotileId — the assignment cascade treats it as non-empty
+    // so modeForScreen correctly reports Scroll.
+    return ScrollPrefix + settingId;
+}
+
 } // namespace LayoutId
 } // namespace PhosphorLayout

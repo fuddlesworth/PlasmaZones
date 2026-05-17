@@ -86,11 +86,13 @@ struct AssignmentEntry
 {
     enum Mode {
         Snapping = 0,
-        Autotile = 1
+        Autotile = 1,
+        Scroll = 2
     };
     Mode mode = Snapping;
     QString snappingLayout; // UUID string of manual layout
     QString tilingAlgorithm; // e.g. "dwindle", "wide", "tall"
+    QString scrollSetting; // scroll-mode tuning id ("" = engine defaults)
 
     QString activeLayoutId() const
     {
@@ -106,6 +108,12 @@ struct AssignmentEntry
             // get the algorithm (empty = engine default).
             return PhosphorLayout::LayoutId::makeAutotileId(tilingAlgorithm);
         }
+        if (mode == Scroll) {
+            // Mirrors autotile: a mode-only scroll entry (empty scrollSetting)
+            // serialises to the bare prefix "scroll:", which the cascade
+            // accepts as non-empty so modeForScreen reports Scroll.
+            return PhosphorLayout::LayoutId::makeScrollId(scrollSetting);
+        }
         return snappingLayout;
     }
     bool isValid() const
@@ -114,7 +122,8 @@ struct AssignmentEntry
     }
     bool operator==(const AssignmentEntry& other) const
     {
-        return mode == other.mode && snappingLayout == other.snappingLayout && tilingAlgorithm == other.tilingAlgorithm;
+        return mode == other.mode && snappingLayout == other.snappingLayout && tilingAlgorithm == other.tilingAlgorithm
+            && scrollSetting == other.scrollSetting;
     }
 
     /** @brief Update an existing AssignmentEntry from a layoutId, preserving the "other" field.
@@ -128,6 +137,9 @@ struct AssignmentEntry
         if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             entry.mode = Autotile;
             entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        } else if (PhosphorLayout::LayoutId::isScroll(layoutId)) {
+            entry.mode = Scroll;
+            entry.scrollSetting = PhosphorLayout::LayoutId::extractScrollSettingId(layoutId);
         } else {
             entry.mode = Snapping;
             entry.snappingLayout = layoutId;
@@ -141,6 +153,9 @@ struct AssignmentEntry
         if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             entry.mode = Autotile;
             entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        } else if (PhosphorLayout::LayoutId::isScroll(layoutId)) {
+            entry.mode = Scroll;
+            entry.scrollSetting = PhosphorLayout::LayoutId::extractScrollSettingId(layoutId);
         } else {
             entry.mode = Snapping;
             entry.snappingLayout = layoutId;
