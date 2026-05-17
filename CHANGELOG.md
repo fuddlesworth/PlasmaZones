@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-05-16
+
+### Fixed
+
+- **AUR `plasmazones-bin` package**: ship `LICENSE` and `COPYING.LESSER` in the release tarball. The binary package installs its licenses from the tarball root and was failing in `package()` because those files were never staged into it.
+- **COPR builds**: the `kwin_version` spec macro expanded to a multi-line string when `kwin-devel` was absent — as in COPR's minimal SRPM-build chroot — which injected a newline into every `Requires: kwin = ...` and aborted the build with `Unknown tag: 6.6.0`. The macro now always resolves to a single version token.
+- **Debian package**: version the `libplasmazones_rendering` shared library so it installs with a SONAME, consistent with every other shipped library and silencing a `dpkg-shlibdeps` warning.
+
 ## [3.0.0] - 2026-05-16
 
 ### Added
@@ -1273,7 +1281,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.1...HEAD
+[3.0.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.7...v3.0.0
 [2.8.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.1...v2.8.2
 [2.8.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.0...v2.8.1
