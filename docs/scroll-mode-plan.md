@@ -3,10 +3,11 @@
 
 # Scroll mode — niri-style scrollable tiling
 
-Planning document. Status: **Phase 0 ✅ and Phase 1 ✅ complete** — the scroll engine,
-geometry resolver, `Mode::Scroll` routing, and daemon geometry pipeline are implemented,
-built, and tested (186 suite tests green). Phase 0 detail in
-[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 2.
+Planning document. Status: **Phases 0 ✅, 1 ✅ and 2 ✅ complete** — the scroll engine,
+geometry resolver, `Mode::Scroll` routing, daemon geometry pipeline, and the full window
+lifecycle (open/close/focus, minimize, screen hotplug & geometry change, fixed-size
+windows) are implemented, built, and tested (186 suite tests green). Phase 0 detail in
+[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 3.
 
 ## 1. Goal
 
@@ -262,25 +263,35 @@ plan's phase boundaries): the niri-op **keyboard shortcuts** → Phase 3 ("wire 
 `ShortcutManager`"); the **`ScrollAdaptor`** D-Bus interface for KCM selection →
 Phase 5 ("Settings, UI").
 
-### Phase 2 — Window lifecycle
+### Phase 2 — Window lifecycle — ✅ COMPLETE
 
-- **Open** → new column on the window's output's strip; **close** → remove column/tile,
-  explicitly handling "last visible window closed" focus selection.
-- **Focus** → update active indices + recompute view offset.
-- **App-initiated resize** → relayout the affected column; debounce noisy resize streams.
-- **Minimize / unminimize** → decide and document the rule: a minimized tiled window is
-  removed from the visible strip but its slot/order is remembered, and restored on
-  unminimize (Karousel's `TiledMinimized` state).
-- **Fixed-size / non-resizable windows** → MVP fallback: keep the window at its native
-  size, centered within its column slot (no full floating layer yet — see §7).
-- **Virtual desktop / activity switch** → activate that context's strip; a window pinned
-  to all desktops or multiple activities is force-collapsed to the current context (as
-  Karousel does) or excluded — decide and document.
-- **Screen hotplug / geometry change** → re-resolve outputs, reassign orphaned strips,
-  re-assert geometry on `outputChanged` / rearrange signals (§4.1). This area is already
-  fragile in the codebase — treat as a first-class task, not an afterthought.
-- Aggressive early filtering of transient / clipboard / dock / popup windows.
-- Apply resolved geometry through the effect via `move()`. No animation yet — snap.
+- ✅ **Open / close / focus** (M1) — windows on a scroll-mode screen are reported to
+  the `ScrollEngine` over `org.plasmazones.Scroll`; the engine adds/removes columns and
+  tracks the focused column. The effect-side `ScrollHandler` owns this surface,
+  mirroring `AutotileHandler` — neither handler knows the other's mode.
+- ✅ **Minimize / unminimize** (M2) — Karousel's `TiledMinimized`: a minimized window
+  keeps its slot in the strip but drops out of the resolved layout; a fully-minimized
+  column collapses with no gap and reappears in place on restore.
+- ✅ **Screen hotplug / geometry change** (M3) — the daemon re-resolves every scroll
+  strip on a debounced geometry change; `ScrollHandler` re-homes windows that move
+  between monitors or virtual screens; the scroll-screen-set diff adopts or releases
+  windows when a screen enters or leaves scroll mode at runtime.
+- ✅ **App-initiated resize** (M4) — a window that drifts from its resolved tile
+  geometry is snapped back, debounced to coalesce noisy resize streams.
+- ✅ **Fixed-size / non-resizable windows** (M4) — MVP fallback: the window keeps its
+  constrained size, centered within its tile slot (no floating layer yet — see §7).
+- ✅ **Filtering** — transient / clipboard / dock / popup / menu / tooltip / modal /
+  keep-above / minimized / off-desktop / undersized windows are all rejected by
+  `PlasmaZonesEffect::isEligibleForTilingNotify`, shared with autotile.
+- ✅ **Geometry application** — resolved rects ride the effect's existing
+  `applyGeometriesBatch` path. No animation yet — snap.
+
+**Virtual desktop / activity switch**: handled structurally — `ScrollEngine` keys one
+strip per (screen, desktop, activity) and `updateScrollScreens()` sets the engine's
+context on every switch, so each desktop/activity shows its own strip. The narrower
+decision for a window *pinned to all desktops / multiple activities* (force-collapse to
+the current context vs. exclude) is deferred — sticky-window handling is carried forward
+with the Phase 3 navigation work.
 
 ### Phase 3 — Navigation & niri command vocabulary
 
