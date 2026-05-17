@@ -85,7 +85,8 @@ public:
     /// Karousel's TiledMinimized state — so its column collapses out of view
     /// (and reappears in place) without losing column/tile order. Returns
     /// true if the state changed. Minimizing the focused window hands focus
-    /// to the nearest still-visible window.
+    /// to the first still-visible window in strip order; if every tiled
+    /// window is minimized, focus is left unchanged.
     bool setWindowMinimized(const QString& windowId, bool minimized);
     /// Whether @p windowId is a minimized tiled window.
     bool isWindowMinimized(const QString& windowId) const;

@@ -135,6 +135,7 @@ set(plasmazones_core_SRCS
     dbus/windowdragadaptor.h
     dbus/autotileadaptor.cpp
     dbus/scrolladaptor.cpp
+    dbus/scrolladaptor.h
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor.h
     dbus/snapadaptor.cpp

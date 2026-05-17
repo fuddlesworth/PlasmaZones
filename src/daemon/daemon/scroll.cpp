@@ -67,7 +67,11 @@ void Daemon::updateScrollScreens()
     if (screensChanged && m_scrollAdaptor) {
         // Tell the KWin effect which screens are scroll-mode so it reports
         // their windows to the org.plasmazones.Scroll interface.
-        Q_EMIT m_scrollAdaptor->scrollScreensChanged(QStringList(scrollScreens.cbegin(), scrollScreens.cend()));
+        // Sorted so the signal payload is deterministic — QSet iteration
+        // order is unspecified, which would otherwise emit spurious churn.
+        QStringList scrollScreenIds(scrollScreens.cbegin(), scrollScreens.cend());
+        scrollScreenIds.sort();
+        Q_EMIT m_scrollAdaptor->scrollScreensChanged(scrollScreenIds);
     }
     qCDebug(lcDaemon) << "Updated scroll screens=" << scrollScreens;
 }

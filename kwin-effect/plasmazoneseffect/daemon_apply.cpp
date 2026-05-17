@@ -74,7 +74,9 @@ QRect constrainToScrollSlot(KWin::EffectWindow* window, const QRect& slot)
     if (w == slot.width() && h == slot.height()) {
         return slot; // fills the slot exactly — nothing to centre
     }
-    return QRect(slot.x() + (slot.width() - w) / 2, slot.y() + (slot.height() - h) / 2, w, h);
+    // Centre the constrained size; qMax keeps an over-min window pinned to the
+    // slot's top-left (overflowing only right/bottom) rather than off both edges.
+    return QRect(slot.x() + qMax(0, (slot.width() - w) / 2), slot.y() + qMax(0, (slot.height() - h) / 2), w, h);
 }
 } // namespace
 

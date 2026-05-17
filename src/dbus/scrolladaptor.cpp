@@ -26,7 +26,11 @@ QStringList ScrollAdaptor::scrollScreens() const
         return {};
     }
     const QSet<QString> screens = m_engine->activeScreens();
-    return QStringList(screens.cbegin(), screens.cend());
+    // Sorted for a deterministic property value — QSet iteration order is
+    // unspecified.
+    QStringList ids(screens.cbegin(), screens.cend());
+    ids.sort();
+    return ids;
 }
 
 void ScrollAdaptor::clearEngine()

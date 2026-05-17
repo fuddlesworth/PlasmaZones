@@ -242,7 +242,8 @@ Static code review **complete** — results in
 ### Phase 1 — Strip data model + engine skeleton — ✅ COMPLETE
 
 - ✅ `libs/phosphor-scroll-engine`: `ScrollScreenState` / `Column` / `Tile` model +
-  `resolveScrollLayout()` geometry resolver. Pure logic, no KWin — 32 unit tests.
+  `resolveScrollLayout()` geometry resolver. Pure logic, no KWin, with a dedicated
+  unit-test suite.
 - ✅ `ScrollEngine : IPlacementEngine` (extends `PlacementEngineBase`); the four niri
   operations added as optional `IPlacementEngine` virtuals.
 - ✅ `Mode::Scroll` in `AssignmentEntry`; `LayoutId` `scroll:` helpers; `ScreenModeRouter`

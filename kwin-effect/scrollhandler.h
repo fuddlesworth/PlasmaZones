@@ -95,18 +95,6 @@ public:
     void connectSignals();
     void loadSettings();
 
-    /// Whether @p screenId is currently in scroll mode.
-    bool isScrollScreen(const QString& screenId) const
-    {
-        return m_scrollScreens.contains(screenId);
-    }
-
-    /// Whether @p windowId has been reported open to the scroll engine.
-    bool isTrackedWindow(const QString& windowId) const
-    {
-        return m_notifiedWindows.contains(windowId);
-    }
-
 public Q_SLOTS:
     /// Daemon told us the scroll-mode screen set changed.
     void slotScrollScreensChanged(const QStringList& screenIds);
@@ -131,6 +119,10 @@ private:
     QHash<QString, QRect> m_appliedGeometry;
     QSet<QString> m_reassertPending; ///< Windows awaiting a debounced re-assert.
     QTimer* m_reassertTimer = nullptr;
+    /// Incremented on every daemon (re)connect. A D-Bus reply captures the
+    /// epoch at call time and skips its rollback if the daemon reconnected
+    /// meanwhile — onDaemonReady has already rebuilt the tracking sets.
+    int m_daemonEpoch = 0;
 };
 
 } // namespace PlasmaZones

@@ -635,7 +635,7 @@ private:
     QStringList m_excludedWindowClasses;
 
     // Minimum window size for autotile eligibility. Windows smaller than this
-    // are rejected by isEligibleForAutotileNotify() to prevent small utility
+    // are rejected by isEligibleForTilingNotify() to prevent small utility
     // windows (emoji picker, color picker, etc.) from entering the tiling tree.
     // Defaults match ConfigDefaults::minimumWindowWidth/Height() (200/150).
     // The async loadSettingAsync() call in loadCachedSettings() overrides

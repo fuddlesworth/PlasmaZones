@@ -92,15 +92,22 @@ void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w)
                                         PhosphorProtocol::Service::Interface::Scroll, QStringLiteral("windowOpened"),
                                         {windowId, screenId, minWidth, minHeight}),
                                     this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        if (w->isError()) {
-            qCWarning(lcEffect) << "scroll windowOpened D-Bus call failed for" << windowId << ":"
-                                << w->error().message();
-            m_notifiedWindows.remove(windowId);
-            m_notifiedWindowScreens.remove(windowId);
-        }
-    });
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, windowId, epoch = m_daemonEpoch](QDBusPendingCallWatcher* watcher) {
+                watcher->deleteLater();
+                if (!watcher->isError()) {
+                    return;
+                }
+                qCWarning(lcEffect) << "scroll windowOpened D-Bus call failed for" << windowId << ":"
+                                    << watcher->error().message();
+                // Skip the rollback if the daemon reconnected meanwhile —
+                // onDaemonReady has already rebuilt the tracking sets, and
+                // removing windowId here would corrupt that fresh state.
+                if (epoch == m_daemonEpoch) {
+                    m_notifiedWindows.remove(windowId);
+                    m_notifiedWindowScreens.remove(windowId);
+                }
+            });
     qCDebug(lcEffect) << "Notified scroll: windowOpened" << windowId << "on screen" << screenId
                       << "minSize:" << minWidth << "x" << minHeight;
 }
@@ -153,16 +160,22 @@ void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
                                         PhosphorProtocol::Service::Interface::Scroll,
                                         QStringLiteral("windowsOpenedBatch"), {QVariant::fromValue(batchEntries)}),
                                     this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, batchWindowIds](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        if (w->isError()) {
-            qCWarning(lcEffect) << "scroll windowsOpenedBatch D-Bus call failed:" << w->error().message();
-            for (const QString& wid : batchWindowIds) {
-                m_notifiedWindows.remove(wid);
-                m_notifiedWindowScreens.remove(wid);
-            }
-        }
-    });
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, batchWindowIds, epoch = m_daemonEpoch](QDBusPendingCallWatcher* watcher) {
+                watcher->deleteLater();
+                if (!watcher->isError()) {
+                    return;
+                }
+                qCWarning(lcEffect) << "scroll windowsOpenedBatch D-Bus call failed:" << watcher->error().message();
+                // Skip the rollback if the daemon reconnected meanwhile.
+                if (epoch != m_daemonEpoch) {
+                    return;
+                }
+                for (const QString& wid : batchWindowIds) {
+                    m_notifiedWindows.remove(wid);
+                    m_notifiedWindowScreens.remove(wid);
+                }
+            });
     qCInfo(lcEffect) << "Notified scroll: windowsOpenedBatch with" << batchEntries.size() << "windows";
 }
 
@@ -209,6 +222,13 @@ void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
     if (!m_scrollScreens.contains(screenId)) {
         return;
     }
+    if (minimized) {
+        // A minimized window leaves the visible layout — its resolved-geometry
+        // reference is stale until the strip re-resolves on restore. Drop it so
+        // onWindowFrameGeometryChanged cannot re-assert against a stale slot.
+        m_appliedGeometry.remove(windowId);
+        m_reassertPending.remove(windowId);
+    }
     PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
                                                    QStringLiteral("windowMinimizedChanged"), {windowId, minimized},
                                                    QStringLiteral("windowMinimizedChanged"));
@@ -248,6 +268,13 @@ void ScrollHandler::recordAppliedGeometry(const QString& windowId, const QRect& 
 void ScrollHandler::onWindowFrameGeometryChanged(KWin::EffectWindow* w)
 {
     if (!w) {
+        return;
+    }
+    // Never correct geometry mid interactive move/resize — that would fight
+    // the user's drag. A minimized window is not in the visible layout, so its
+    // frame changes are KWin bookkeeping, not an app resize. After an
+    // interactive op ends, a final frame change re-runs this and re-asserts.
+    if (w->isUserMove() || w->isUserResize() || w->isMinimized()) {
         return;
     }
     const QString windowId = m_effect->getWindowId(w);
@@ -307,6 +334,9 @@ void ScrollHandler::notifyWindowFocused(const QString& windowId, const QString& 
 
 void ScrollHandler::onDaemonReady()
 {
+    // Bump the epoch so any D-Bus reply still in flight from before this
+    // (re)connect skips its rollback instead of corrupting the rebuilt sets.
+    ++m_daemonEpoch;
     loadSettings();
     connectSignals();
     m_notifiedWindows.clear();
