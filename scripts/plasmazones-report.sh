@@ -53,6 +53,7 @@ while [[ $# -gt 0 ]]; do
             echo "  session.json     Window session state (home paths redacted)"
             echo "  data/            User data (layouts, algorithms, shaders, etc.)"
             echo "  journal.log      Recent plasmazonesd journal entries"
+            echo "  kwin-effect.log  Recent PlasmaZones KWin effect journal entries"
             exit 0
             ;;
         *)
@@ -221,6 +222,24 @@ if command -v journalctl &>/dev/null; then
         printf '%s\n' "$JOURNAL" > "$STAGING/journal.raw"
         head -n "$MAX_LOG_LINES" "$STAGING/journal.raw" | redact_home > "$STAGING/journal.log"
         rm -f "$STAGING/journal.raw"
+    fi
+
+    # KWin effect logs: the effect runs inside the kwin_wayland process, so its
+    # journal is tagged "kwin_wayland", not "plasmazonesd". Filter to PlasmaZones
+    # lines (every effect log category contains "plasmazones"). Without this a
+    # non-loading effect — the most common "drags/shortcuts do nothing" cause —
+    # leaves no trace in the archive.
+    KWIN_JOURNAL=$(collect_journal -t kwin_wayland)
+    if [[ -z "${KWIN_JOURNAL:-}" ]]; then
+        KWIN_JOURNAL=$(collect_journal --identifier=kwin_wayland)
+    fi
+    if [[ -n "${KWIN_JOURNAL:-}" ]]; then
+        printf '%s\n' "$KWIN_JOURNAL" > "$STAGING/kwin-effect.raw"
+        grep -i plasmazones "$STAGING/kwin-effect.raw" 2>/dev/null \
+            | head -n "$MAX_LOG_LINES" | redact_home > "$STAGING/kwin-effect.log" || true
+        rm -f "$STAGING/kwin-effect.raw"
+        # grep matched nothing → drop the empty file rather than ship a blank.
+        [[ -s "$STAGING/kwin-effect.log" ]] || rm -f "$STAGING/kwin-effect.log"
     fi
 fi
 

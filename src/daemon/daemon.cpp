@@ -16,6 +16,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusError>
+#include <QDBusInterface>
 #include <QDir>
 #include <QFile>
 #include <QSet>
@@ -55,6 +56,7 @@
 #include "../core/geometryutils.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include "../core/logging.h"
+#include "../pz_i18n.h"
 #include "../core/animationbootstrap.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
@@ -859,10 +861,9 @@ bool Daemon::init()
     m_shaderAdaptor = new ShaderAdaptor(m_shaderRegistry.get(), this);
 
     // Compositor bridge adaptor - compositor-agnostic window control protocol.
-    // Captured as a local so we can wire its bridgeRegistered signal to
-    // WindowDragAdaptor::resetDragState below. Ownership stays with `this`
-    // via QObject parent (passed to constructor).
-    auto* compositorBridge = new CompositorBridgeAdaptor(this);
+    // Held as a member so the support report and the registration watchdog
+    // can query its state. Ownership stays with `this` via QObject parent.
+    m_compositorBridge = new CompositorBridgeAdaptor(this);
 
     // Overlay adaptor - overlay visibility and highlighting
     m_overlayAdaptor = new OverlayAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(),
@@ -921,11 +922,24 @@ bool Daemon::init()
     // no knowledge of the prior drag. Clear it eagerly so the next dragStarted
     // from the fresh effect lands on a clean slate instead of silently
     // colliding with a mismatched windowId in the next handler.
-    connect(compositorBridge, &CompositorBridgeAdaptor::bridgeRegistered, m_windowDragAdaptor,
+    connect(m_compositorBridge, &CompositorBridgeAdaptor::bridgeRegistered, m_windowDragAdaptor,
             [this](const QString& compositorName, const QString&, const QStringList&) {
                 qCInfo(lcDaemon) << "Compositor bridge registered (" << compositorName
                                  << ") — clearing any stale drag state held by daemon";
                 m_windowDragAdaptor->clearForCompositorReconnect();
+            });
+
+    // Registration watchdog: the KWin effect should register as a compositor
+    // bridge within a few seconds of startup. If it never does, the daemon is
+    // alive but has no window control — drags and shortcuts silently do
+    // nothing. Stop the watchdog as soon as the bridge registers; otherwise
+    // warnCompositorBridgeMissing() fires once on timeout. Connecting to the
+    // adaptor (not m_windowDragAdaptor) so a re-registration also cancels it.
+    m_bridgeWatchdogTimer.setSingleShot(true);
+    connect(&m_bridgeWatchdogTimer, &QTimer::timeout, this, &Daemon::warnCompositorBridgeMissing);
+    connect(m_compositorBridge, &CompositorBridgeAdaptor::bridgeRegistered, &m_bridgeWatchdogTimer,
+            [this](const QString&, const QString&, const QStringList&) {
+                m_bridgeWatchdogTimer.stop();
             });
 
     // Initialize scripted algorithm loader BEFORE engine construction so that
@@ -1083,8 +1097,9 @@ bool Daemon::init()
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members
     // it borrows are destroyed.
-    m_controlAdaptor = new ControlAdaptor(m_windowTrackingAdaptor, m_snapAdaptor, m_layoutAdaptor,
-                                          m_layoutManager.get(), autotileEngine, m_screenManager.get(), this);
+    m_controlAdaptor =
+        new ControlAdaptor(m_windowTrackingAdaptor, m_snapAdaptor, m_layoutAdaptor, m_layoutManager.get(),
+                           autotileEngine, m_screenManager.get(), m_compositorBridge, this);
 
     // Handle KCM assignment change resnap/OSD. This runs AFTER the KCM's batch
     // save completes (all setAssignmentEntry + notifyReload finished), so all
@@ -1287,6 +1302,48 @@ void Daemon::start()
     // (or leak past) the startup OSD that finalizeStartup() is responsible for.
     m_running = true;
     // NOTE: daemonReady() is emitted by finalizeStartup() — do NOT emit again here.
+
+    // Arm the compositor-bridge registration watchdog. 20s is comfortably
+    // longer than a healthy effect takes to register (sub-second once KWin
+    // and the daemon's D-Bus name are both up), even when the daemon starts
+    // before KWin during login — so a timeout means a genuine failure, not a
+    // race. Skip if the effect already registered during init().
+    if (m_compositorBridge && !m_compositorBridge->isBridgeRegistered()) {
+        m_bridgeWatchdogTimer.start(20000);
+    }
+}
+
+void Daemon::warnCompositorBridgeMissing()
+{
+    // Re-check: the watchdog is stopped on bridgeRegistered, but a registration
+    // landing in the same event-loop turn as the timeout could still reach
+    // here. Treat a registered bridge as success and stay silent.
+    if (!m_compositorBridge || m_compositorBridge->isBridgeRegistered()) {
+        return;
+    }
+
+    qCWarning(lcDaemon) << "Compositor bridge did not register within 20s of startup —"
+                        << "the PlasmaZones KWin effect is not running. Window dragging,"
+                        << "keyboard shortcuts, and snapping will not work. Enable the"
+                        << "PlasmaZones effect in System Settings > Desktop Effects, then"
+                        << "restart the Plasma session so KWin loads it.";
+
+    // Raise a desktop notification via the freedesktop spec so the user sees
+    // the problem without having to read the journal. QDBusInterface avoids a
+    // hard dependency on KNotification; every Plasma session runs a
+    // notification server. Fire-and-forget — a missing server is non-fatal.
+    QDBusInterface notify(QStringLiteral("org.freedesktop.Notifications"),
+                          QStringLiteral("/org/freedesktop/Notifications"),
+                          QStringLiteral("org.freedesktop.Notifications"), QDBusConnection::sessionBus());
+    if (!notify.isValid()) {
+        return;
+    }
+    notify.asyncCall(QStringLiteral("Notify"), QStringLiteral("PlasmaZones"), 0u, QStringLiteral("plasmazones"),
+                     PzI18n::tr("PlasmaZones: window manager integration inactive"),
+                     PzI18n::tr("The PlasmaZones KWin effect is not running, so window dragging and "
+                                "shortcuts will not work. Enable it in System Settings > Desktop Effects, "
+                                "then restart the Plasma session."),
+                     QStringList(), QVariantMap(), -1);
 }
 
 void Daemon::stop()

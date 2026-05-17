@@ -215,6 +215,33 @@ QString SupportReport::sectionAutotile(const Snapshot& snapshot)
     return out;
 }
 
+QString SupportReport::sectionCompositorBridge(const Snapshot& snapshot)
+{
+    if (!snapshot.hasBridgeInfo)
+        return QStringLiteral("*(daemon not running — compositor bridge state unavailable)*\n");
+
+    if (snapshot.bridgeRegistered) {
+        QString out;
+        out += QStringLiteral("**Status:** connected\n");
+        out += QStringLiteral("**Compositor:** %1\n").arg(snapshot.bridgeName);
+        out += QStringLiteral("**Effect protocol version:** %1\n").arg(snapshot.bridgeVersion);
+        if (!snapshot.bridgeCapabilities.isEmpty()) {
+            out += QStringLiteral("**Capabilities:** %1\n").arg(snapshot.bridgeCapabilities.join(QStringLiteral(", ")));
+        }
+        return out;
+    }
+
+    // Not registered: this is the failure mode behind "dragging and shortcuts
+    // do nothing" — the daemon runs fine but has no window control without the
+    // effect. Spell out the fix so the report is self-diagnosing.
+    return QStringLiteral(
+        "**Status:** NOT CONNECTED — the KWin effect has not registered with the daemon.\n\n"
+        "Window dragging, keyboard shortcuts, and snapping cannot work without it. "
+        "Verify that the **PlasmaZones** effect is enabled in System Settings → Desktop Effects, "
+        "then restart the Plasma session so KWin loads it. See the KWin Effect Logs section below "
+        "for why the effect failed to load or register.\n");
+}
+
 QString SupportReport::sectionSession()
 {
     return readAndRedactFile(ConfigDefaults::sessionFilePath(), QStringLiteral("session file"));
@@ -277,6 +304,49 @@ QString SupportReport::sectionLogs(int sinceMinutes)
     return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(output));
 }
 
+QString SupportReport::sectionEffectLogs(int sinceMinutes)
+{
+    // The KWin effect runs inside the kwin_wayland process, so its journal
+    // entries are tagged "kwin_wayland", not "plasmazonesd" — sectionLogs()
+    // never captures them. Without this section a non-registering effect is
+    // invisible in the report.
+    thread_local const QString tag = QStringLiteral("kwin_wayland");
+    QByteArray rawOutput = runJournalctl(journalctlArgs(tag, sinceMinutes));
+
+    // Fall back to --identifier if -t returned nothing, mirroring sectionLogs().
+    if (QString::fromUtf8(rawOutput).trimmed().isEmpty())
+        rawOutput = runJournalctl(journalctlArgs(tag, sinceMinutes, true));
+
+    if (rawOutput.isEmpty())
+        return QStringLiteral("*(journalctl timed out or not available)*\n");
+
+    // Keep only PlasmaZones effect lines — the rest of the kwin_wayland journal
+    // is unrelated compositor noise. Every effect logging category
+    // ("plasmazones.effect", "kwin.effect.plasmazones.*") contains the
+    // substring "plasmazones", and KWin's message pattern prints the category.
+    QStringList kept;
+    const QStringList lines = QString::fromUtf8(rawOutput).split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        if (line.contains(QLatin1String("plasmazones"), Qt::CaseInsensitive))
+            kept.append(line);
+    }
+
+    if (kept.isEmpty()) {
+        return QStringLiteral(
+                   "*(no PlasmaZones effect log entries in the last %1 minutes — "
+                   "the KWin effect is likely not loaded)*\n")
+            .arg(sinceMinutes);
+    }
+
+    QString output = kept.join(QLatin1Char('\n'));
+    if (kept.size() > MaxLogLines) {
+        output = QStringLiteral("... (%1 lines total, showing last %2) ...\n").arg(kept.size()).arg(MaxLogLines);
+        output += kept.mid(kept.size() - MaxLogLines).join(QLatin1Char('\n'));
+    }
+
+    return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(output));
+}
+
 QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceMinutes)
 {
     sinceMinutes = (sinceMinutes <= 0) ? DefaultSinceMinutes : qMin(sinceMinutes, MaxSinceMinutes);
@@ -308,12 +378,20 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
     report += sectionAutotile(snapshot);
     report += QLatin1Char('\n');
 
+    report += QStringLiteral("## Compositor Bridge\n");
+    report += sectionCompositorBridge(snapshot);
+    report += QLatin1Char('\n');
+
     report += QStringLiteral("## Session State\n");
     report += sectionSession();
     report += QLatin1Char('\n');
 
     report += QStringLiteral("## Recent Logs (last %1 minutes)\n").arg(sinceMinutes);
     report += sectionLogs(sinceMinutes);
+    report += QLatin1Char('\n');
+
+    report += QStringLiteral("## KWin Effect Logs (last %1 minutes)\n").arg(sinceMinutes);
+    report += sectionEffectLogs(sinceMinutes);
     report += QLatin1Char('\n');
 
     // Sanitize any literal </details> in section content that would prematurely
