@@ -27,7 +27,14 @@ Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 ExclusiveArch:  x86_64 aarch64
 
 # Build tools
-BuildRequires:  /usr/bin/wayland-scanner
+# wayland-scanner: protocol-glue code generator, located by CMake via
+# find_program (CMakeLists.txt:186, libs/phosphor-wayland/CMakeLists.txt:46).
+# Depend on the pkgconfig(wayland-scanner) capability, not the bare
+# /usr/bin/wayland-scanner file path: the file-path form is reported
+# unresolvable by OBS on openSUSE Tumbleweed. wayland-devel ships both the
+# wayland-scanner binary and wayland-scanner.pc on Fedora and openSUSE, so
+# the pkgconfig capability resolves everywhere and pulls in the executable.
+BuildRequires:  pkgconfig(wayland-scanner)
 BuildRequires:  cmake >= 3.16
 BuildRequires:  extra-cmake-modules >= 6.6.0
 BuildRequires:  gcc-c++
@@ -86,6 +93,17 @@ BuildRequires:  kf6-kirigami-devel >= 6.6.0
 # systems with a mismatched KWin instead of installing silently broken.
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
+# find_package(KWin) (kwin-effect/CMakeLists.txt:20) pulls in KWinConfig.cmake,
+# which find_dependency()s the targets below (see KWinConfig.cmake.in, Plasma
+# 6.6). openSUSE's kwin6-devel does not drag these into the build root itself,
+# so the KWin effect's CMake configure step fails without them. KF6Config /
+# KF6CoreAddons currently arrive transitively, but are listed explicitly so the
+# dependency is not silently load-bearing on another package.
+BuildRequires:  cmake(KF6Config)
+BuildRequires:  cmake(KF6CoreAddons)
+BuildRequires:  cmake(KF6WindowSystem)
+BuildRequires:  pkgconfig(epoxy)
+BuildRequires:  pkgconfig(libdrm)
 BuildRequires:  cmake(Qt6WaylandClient)
 BuildRequires:  cmake(Qt6WaylandClientPrivate)
 BuildRequires:  wayland-devel
@@ -145,7 +163,7 @@ Requires:       hicolor-icon-theme
 # silently dropped on stricter parsers). hicolor-icon-theme is already
 # in Requires above; the post-only entries are the cache-refresh tools.
 # Scoped to Fedora because openSUSE provides equivalent functionality
-# via %suse_update_desktop_file and file-triggers, and ships these
+# via %%suse_update_desktop_file and file-triggers, and ships these
 # tools under different package names.
 %if !0%{?suse_version}
 Requires(post): /usr/bin/gtk-update-icon-cache
@@ -178,7 +196,22 @@ Features:
 %install
 %cmake_install
 
+# This package ships PlasmaZones as an end-user application, not a
+# Phosphor SDK. Drop the development files the component libraries
+# install: public headers, CMake package configs, and the unversioned
+# .so devel symlinks. Only the versioned runtime libraries (.so.*) are
+# kept. Without this openSUSE's rpmlint fails the build on
+# devel-file-in-non-devel-package; there is no -devel subpackage by
+# design. Every Phosphor/plasmazones library sets SOVERSION, so the
+# bare .so is always a devel symlink and never the runtime object.
+rm -rf %{buildroot}%{_includedir}/Phosphor*
+rm -rf %{buildroot}%{_libdir}/cmake/Phosphor*
+rm -f  %{buildroot}%{_libdir}/libPhosphor*.so
+rm -f  %{buildroot}%{_libdir}/libplasmazones*.so
+
 %post
+# Register newly installed shared libraries with the dynamic linker.
+/sbin/ldconfig
 # Refresh KDE service cache
 /usr/bin/kbuildsycoca6 --noincremental 2>/dev/null || :
 # Update icon / desktop / MIME caches
@@ -196,6 +229,7 @@ echo ""
 %systemd_user_preun plasmazones.service
 
 %postun
+/sbin/ldconfig
 /usr/bin/kbuildsycoca6 --noincremental 2>/dev/null || :
 /usr/bin/gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 /usr/bin/update-desktop-database -q %{_datadir}/applications &>/dev/null || :
@@ -218,21 +252,22 @@ echo ""
 # plasmazones core/rendering libs. Globbed by naming convention: this
 # is a single monolithic package, the build installs only this
 # project's files, so a new component library needs no spec edit.
-# `.so*` covers the versioned objects and the unversioned devel
-# symlink (headers and the .so ship together — there is no -devel
-# subpackage). Excludes the QML plugin under qt6/qml/, which the
-# glob below owns.
-%{_libdir}/libPhosphor*.so*
-%{_libdir}/libplasmazones*.so*
+# Only the versioned runtime objects (.so.*) are shipped — the
+# unversioned .so devel symlinks, public headers and CMake package
+# configs are stripped in %%install (this is an end-user application,
+# not a Phosphor SDK, and there is no -devel subpackage by design).
+# Excludes the QML plugin under qt6/qml/, which the glob below owns.
+%{_libdir}/libPhosphor*.so.*
+%{_libdir}/libplasmazones*.so.*
 
-# Development files — public headers and CMake package configs, one
-# set per component that exports an API. Globbed for the same reason
-# as the libraries above. Note PhosphorIdentity is header-only (config
-# + headers, no .so) and is picked up here.
-%{_includedir}/Phosphor*/
-%{_libdir}/cmake/Phosphor*/
-
-# KWin effect plugin
+# KWin effect plugin. openSUSE: own the parent plugin directories so the
+# OBS "directories not owned by a package" check passes — no hard
+# dependency drags them in. On Fedora the kwin package owns them.
+%if 0%{?suse_version}
+%dir %{_libdir}/qt6/plugins/kwin
+%dir %{_libdir}/qt6/plugins/kwin/effects
+%dir %{_libdir}/qt6/plugins/kwin/effects/plugins
+%endif
 %{_libdir}/qt6/plugins/kwin/effects/plugins/kwin_effect_plasmazones.so
 
 # Layer-shell QPA plugin (PhosphorWayland)
@@ -260,7 +295,13 @@ echo ""
 # KGlobalAccel component (display name + icon in Shortcuts KCM)
 %{_datadir}/kglobalaccel/plasmazonesd.desktop
 
-# System Settings category
+# System Settings category. openSUSE: own the parent directories (same
+# OBS unowned-directory check as the KWin effect above); the
+# systemsettings package owns them on Fedora.
+%if 0%{?suse_version}
+%dir %{_datadir}/systemsettings
+%dir %{_datadir}/systemsettings/categories
+%endif
 %{_datadir}/systemsettings/categories/settings-windowmanagement-plasmazones.desktop
 
 # Runtime data — application data plus the bundled Phosphor component
@@ -269,11 +310,13 @@ echo ""
 %{_datadir}/plasmazones/
 %{_datadir}/phosphor*/
 
-# Icons — only this package's SVGs land in the buildroot's hicolor
-# theme dirs, so the glob owns exactly our files without claiming the
-# shared theme directories.
+# Icons — the standard hicolor theme directories are owned by
+# hicolor-icon-theme (a hard Requires), so glob only our SVGs there.
+# hicolor-light is a PlasmaZones-specific theme variant that no other
+# package ships, so own its whole tree — otherwise the OBS
+# "directories not owned by a package" check fails.
 %{_datadir}/icons/hicolor/scalable/apps/*.svg
-%{_datadir}/icons/hicolor-light/scalable/apps/*.svg
+%{_datadir}/icons/hicolor-light/
 
 # Systemd user service
 %{_userunitdir}/plasmazones.service
