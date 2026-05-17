@@ -168,13 +168,10 @@ buildEmptyZoneListImpl(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Lay
     } else if (physScreen) {
         resolvedScreenGeom = physScreen->geometry();
         // Mirror the screenGeometry branch above: never let an invalid
-        // available rect through. ScreenManager::actualAvailableGeometry
-        // returns an invalid QRect when screenByName cannot resolve the
-        // connector against the tracked set; fall back to the full screen
-        // rect so empty-zone geometry is never computed against an empty
-        // reference.
-        const QRect avail =
-            mgr ? mgr->actualAvailableGeometry(mgr->screenByName(physScreen->name())) : physScreen->availableGeometry();
+        // available rect through. actualAvailableGeometry(QScreen*) already
+        // falls back to QScreen::availableGeometry(); guard the result so
+        // empty-zone geometry is never computed against an empty reference.
+        const QRect avail = mgr ? mgr->actualAvailableGeometry(physScreen) : physScreen->availableGeometry();
         resolvedAvailGeom = avail.isValid() ? avail : resolvedScreenGeom;
         resolvedOverlayOrigin = physScreen->geometry();
     } else {

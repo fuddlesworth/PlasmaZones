@@ -4,6 +4,7 @@
 #include "PhosphorScreens/QtScreenProvider.h"
 
 #include "PhosphorScreens/ScreenIdentity.h"
+#include "screenslogging.h"
 
 #include <QGuiApplication>
 #include <QScreen>
@@ -28,6 +29,16 @@ PhysicalScreen toPhysicalScreen(QScreen* screen)
 QtScreenProvider::QtScreenProvider(QObject* parent)
     : IScreenProvider(parent)
 {
+    if (!qApp) {
+        // Constructed before QGuiApplication exists — Qt's screen signals
+        // cannot be wired up, so this provider would stay permanently deaf
+        // to add/remove/geometry events. Surface it rather than fail
+        // silently; the default-provider path runs in ScreenManager's own
+        // constructor, so a misordered host setup lands here.
+        qCWarning(lcPhosphorScreens) << "QtScreenProvider constructed before QGuiApplication exists — "
+                                        "screen add/remove/geometry events will not be delivered.";
+        return;
+    }
     connect(qApp, &QGuiApplication::screenAdded, this, &QtScreenProvider::onQtScreenAdded);
     connect(qApp, &QGuiApplication::screenRemoved, this, &QtScreenProvider::onQtScreenRemoved);
     for (auto* screen : QGuiApplication::screens()) {

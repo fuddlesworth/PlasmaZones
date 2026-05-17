@@ -498,12 +498,10 @@ QRect DBusScreenAdaptor::getAvailableGeometry(const QString& screenId)
     if (!m_screenManager) {
         return screen->availableGeometry();
     }
-    // screenByName resolves the connector against the manager's tracked set.
-    // A live QScreen the manager has not tracked yet would yield an invalid
-    // PhysicalScreen — fall back to the QScreen's own availableGeometry
-    // rather than report an empty rect over D-Bus.
-    const PhysicalScreen tracked = m_screenManager->screenByName(screen->name());
-    return tracked.isValid() ? m_screenManager->actualAvailableGeometry(tracked) : screen->availableGeometry();
+    // The QScreen* overload resolves the connector against the manager and
+    // falls back to QScreen::availableGeometry() when it is not tracked, so
+    // an empty rect is never reported over D-Bus for a live screen.
+    return m_screenManager->actualAvailableGeometry(screen);
 }
 
 QRect DBusScreenAdaptor::getScreenGeometry(const QString& screenId)

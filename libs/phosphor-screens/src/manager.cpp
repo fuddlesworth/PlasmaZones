@@ -508,6 +508,20 @@ QRect ScreenManager::actualAvailableGeometry(const PhysicalScreen& screen) const
     return screenGeom;
 }
 
+QRect ScreenManager::actualAvailableGeometry(QScreen* screen) const
+{
+    if (!screen) {
+        return QRect();
+    }
+    // Resolve against the tracked set so the value-typed overload's cache
+    // (keyed by connector name, populated for tracked screens) stays
+    // consistent. A live QScreen the manager has not tracked yet — a
+    // hotplug race — misses the tracked set; fall back to the QScreen's own
+    // availableGeometry rather than surface an empty rect.
+    const PhysicalScreen tracked = trackedScreenByName(screen->name());
+    return tracked.isValid() ? actualAvailableGeometry(tracked) : screen->availableGeometry();
+}
+
 bool ScreenManager::isPanelGeometryReady() const
 {
     // Tracks the first @ref panelGeometryReady emission, not the panel

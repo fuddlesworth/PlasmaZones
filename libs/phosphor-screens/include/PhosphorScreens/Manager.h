@@ -94,6 +94,14 @@ public:
     void stop();
 
     // ─── Physical screen queries ─────────────────────────────────────────
+    //
+    // screens() / primaryScreen() / screenByName() reflect the screen
+    // provider's LIVE output set. physicalScreenFor() and the
+    // screenGeometry() / screenAvailableGeometry() resolvers below instead
+    // read the TRACKED snapshot refreshed on each lifecycle signal — the two
+    // agree except transiently, inside a lifecycle slot mid-resync. Prefer
+    // the tracked resolvers for geometry work so a query stays consistent
+    // with the available-geometry cache.
 
     QVector<PhysicalScreen> screens() const;
     PhysicalScreen primaryScreen() const;
@@ -122,6 +130,21 @@ public:
      * instance now so the cache no longer needs file-static storage.
      */
     QRect actualAvailableGeometry(const PhysicalScreen& screen) const;
+
+    /**
+     * @brief Bridge overload for consumers that still hold a live @c QScreen*.
+     *
+     * Resolves @p screen to a tracked @ref PhysicalScreen and delegates to
+     * the value-typed overload. Falls back to @c QScreen::availableGeometry()
+     * when the connector is not in the tracked set (e.g. a hotplug race),
+     * and to an invalid QRect when @p screen is null — so the caller never
+     * sees an empty rect for a screen Qt still considers live.
+     *
+     * The single conversion point for the @c QScreen* → @ref PhysicalScreen
+     * available-geometry path: prefer it over an ad-hoc
+     * @c actualAvailableGeometry(screenByName(...)) at the call site.
+     */
+    QRect actualAvailableGeometry(QScreen* screen) const;
 
     /**
      * @brief Has the panel source produced its first reading?
