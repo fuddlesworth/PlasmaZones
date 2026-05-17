@@ -155,6 +155,81 @@ private Q_SLOTS:
         QVERIFY(mgr.physicalScreenFor(QStringLiteral("DP-1")).isValid());
         QCOMPARE(mgr.actualAvailableGeometry(mgr.physicalScreenFor(QStringLiteral("DP-1"))), settled);
     }
+
+    // Compositor-reported client area (the KWin effect's clientArea push)
+    // overrides the panel-strut heuristic. Direct regression for discussion
+    // #461: a top panel left the heuristic attributing the whole reservation
+    // to the bottom edge — the compositor source pins the correct top inset.
+    void testCompositorGeometryOverridesHeuristic()
+    {
+        FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+
+        ScreenManager mgr(ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        mgr.start();
+
+        const PhysicalScreen screen = mgr.physicalScreenFor(QStringLiteral("DP-1"));
+        QVERIFY(screen.isValid());
+        // No panel source / sensors: the heuristic yields the full screen rect.
+        QCOMPARE(mgr.actualAvailableGeometry(screen), QRect(0, 0, 1920, 1080));
+
+        QSignalSpy availSpy(&mgr, &ScreenManager::availableGeometryChanged);
+
+        // KWin reports a 32px top panel.
+        const QRect topPanelWorkArea(0, 32, 1920, 1048);
+        mgr.setCompositorAvailableGeometry(QStringLiteral("DP-1"), topPanelWorkArea);
+
+        QCOMPARE(availSpy.count(), 1);
+        QCOMPARE(availSpy.at(0).at(1).toRect(), topPanelWorkArea);
+        QCOMPARE(mgr.actualAvailableGeometry(screen), topPanelWorkArea);
+
+        // A redundant push of the identical rect is a no-op — no extra signal.
+        mgr.setCompositorAvailableGeometry(QStringLiteral("DP-1"), topPanelWorkArea);
+        QCOMPARE(availSpy.count(), 1);
+
+        // Clearing the override (empty rect) reverts to the heuristic.
+        mgr.setCompositorAvailableGeometry(QStringLiteral("DP-1"), QRect());
+        QCOMPARE(availSpy.count(), 2);
+        QCOMPARE(mgr.actualAvailableGeometry(screen), QRect(0, 0, 1920, 1080));
+    }
+
+    // A compositor rect spilling past the output is clamped to the screen —
+    // guards against a snapshot that lags a resize corrupting downstream
+    // relative-geometry math.
+    void testCompositorGeometryClampedToScreen()
+    {
+        FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+
+        ScreenManager mgr(ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        mgr.start();
+
+        // 32px top inset but height still the full 1080 — bottom edge spills
+        // 32px past the output. The intersect clamps it back.
+        mgr.setCompositorAvailableGeometry(QStringLiteral("DP-1"), QRect(0, 32, 1920, 1080));
+        QCOMPARE(mgr.actualAvailableGeometry(mgr.physicalScreenFor(QStringLiteral("DP-1"))), QRect(0, 32, 1920, 1048));
+    }
+
+    // A compositor override is dropped when its screen disconnects, so a
+    // same-connector reconnect starts from the heuristic rather than a stale
+    // rect for the old output.
+    void testCompositorGeometryDroppedOnScreenRemoval()
+    {
+        FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+
+        ScreenManager mgr(ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        mgr.start();
+
+        mgr.setCompositorAvailableGeometry(QStringLiteral("DP-1"), QRect(0, 32, 1920, 1048));
+        QCOMPARE(mgr.actualAvailableGeometry(mgr.physicalScreenFor(QStringLiteral("DP-1"))), QRect(0, 32, 1920, 1048));
+
+        fake.removeScreen(QStringLiteral("DP-1"));
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+
+        // Override gone — back to the heuristic's full-screen rect.
+        QCOMPARE(mgr.actualAvailableGeometry(mgr.physicalScreenFor(QStringLiteral("DP-1"))), QRect(0, 0, 1920, 1080));
+    }
 };
 
 QTEST_MAIN(TestScreenManagerGeometry)

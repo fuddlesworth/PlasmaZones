@@ -161,6 +161,12 @@ void ScreenManager::stop()
     m_cachedEffectiveScreenIds.clear();
     m_effectiveScreenIdsDirty = true;
     m_virtualGeometryCache.clear();
+
+    // Drop compositor-reported overrides — the KWin effect re-pushes a fresh
+    // clientArea snapshot for every screen when it re-registers the bridge,
+    // so keeping stale rects across a stop/start cycle would only risk a
+    // transient mismatch before that push lands.
+    m_compositorAvailableGeometry.clear();
 }
 
 QVector<PhysicalScreen> ScreenManager::screens() const
@@ -290,6 +296,10 @@ void ScreenManager::destroyGeometrySensor(const QString& screenName)
         sensor->deleteLater();
     }
     m_availableGeometryCache.remove(screenName);
+    // A disconnected screen's compositor override is meaningless — drop it so
+    // a same-connector reconnect starts from the heuristic until the effect
+    // re-pushes a fresh clientArea for the new output.
+    m_compositorAvailableGeometry.remove(screenName);
 }
 
 void ScreenManager::calculateAvailableGeometry(const PhysicalScreen& screen)
@@ -402,17 +412,45 @@ void ScreenManager::calculateAvailableGeometry(const PhysicalScreen& screen)
         source = QStringLiteral("fallback");
     }
 
-    const QRect availGeom(screenGeom.x() + effLeft, screenGeom.y() + effTop, screenGeom.width() - effLeft - effRight,
-                          screenGeom.height() - effTop - effBottom);
+    QRect availGeom(screenGeom.x() + effLeft, screenGeom.y() + effTop, screenGeom.width() - effLeft - effRight,
+                    screenGeom.height() - effTop - effBottom);
+
+    // Source 0 (highest priority): compositor-reported client area. The KWin
+    // effect queries KWin::clientArea(MaximizeArea) — the exact panel-excluded
+    // work area the compositor itself reserves for maximized windows, with
+    // correct per-edge strut attribution and correct auto-hide handling — and
+    // pushes it via setCompositorAvailableGeometry. When present it overrides
+    // the sensor + D-Bus heuristic above, which can only guess per-edge strut
+    // attribution and gets it wrong (dumps everything onto the bottom edge)
+    // for top-panel layouts when the plasmashell D-Bus query returns no
+    // panels. The heuristic stays computed above as the fallback for sessions
+    // where the effect is not loaded.
+    if (const auto compIt = m_compositorAvailableGeometry.constFind(screenKey);
+        compIt != m_compositorAvailableGeometry.constEnd()) {
+        // Clamp to the current screen rect — the compositor snapshot can lag a
+        // screen resize by a frame, and an available rect spilling past the
+        // output would corrupt every downstream relative-geometry calculation.
+        const QRect clamped = compIt.value().intersected(screenGeom);
+        if (clamped.isValid() && !clamped.isEmpty()) {
+            availGeom = clamped;
+            source = QStringLiteral("compositor");
+        }
+    }
 
     const QRect oldGeom = m_availableGeometryCache.value(screenKey);
     if (availGeom == oldGeom) {
         return;
     }
 
+    // Log effective insets derived from the final rect so the line is correct
+    // regardless of which source won (the eff* locals reflect only the
+    // heuristic path and would be stale under a compositor override).
     qCInfo(lcPhosphorScreens) << "calculateAvailableGeometry: screen=" << screenKey << "screenGeom=" << screenGeom
-                              << "available=" << availGeom << "source=" << source << "effOffsets L=" << effLeft
-                              << "T=" << effTop << "R=" << effRight << "B=" << effBottom;
+                              << "available=" << availGeom << "source=" << source
+                              << "effOffsets L=" << (availGeom.x() - screenGeom.x())
+                              << "T=" << (availGeom.y() - screenGeom.y())
+                              << "R=" << (screenGeom.right() - availGeom.right())
+                              << "B=" << (screenGeom.bottom() - availGeom.bottom());
 
     m_availableGeometryCache.insert(screenKey, availGeom);
     Q_EMIT availableGeometryChanged(screen, availGeom);
@@ -549,6 +587,40 @@ void ScreenManager::scheduleDelayedPanelRequery(int delayMs)
     // semantic instead of silently dropping the call. Callers that truly
     // want a delay pass a positive value.
     m_cfg.panelSource->requestRequery(delayMs);
+}
+
+void ScreenManager::setCompositorAvailableGeometry(const QString& screenName, const QRect& available)
+{
+    if (screenName.isEmpty()) {
+        return;
+    }
+
+    // An invalid/empty rect clears the override and reverts the screen to the
+    // sensor + D-Bus heuristic. A valid rect records it as the authoritative
+    // source. Both paths early-return when nothing actually changed so a
+    // redundant push (the effect re-reports every screen on each trigger)
+    // collapses to a no-op instead of churning availableGeometryChanged.
+    const bool valid = available.isValid() && !available.isEmpty();
+    if (valid) {
+        if (m_compositorAvailableGeometry.value(screenName) == available) {
+            return;
+        }
+        m_compositorAvailableGeometry.insert(screenName, available);
+        qCInfo(lcPhosphorScreens) << "Compositor available geometry for" << screenName << "=" << available;
+    } else {
+        if (m_compositorAvailableGeometry.remove(screenName) == 0) {
+            return;
+        }
+        qCInfo(lcPhosphorScreens) << "Compositor available geometry cleared for" << screenName;
+    }
+
+    // Recompute against the new authoritative source. calculateAvailableGeometry
+    // diffs against m_availableGeometryCache and only emits availableGeometryChanged
+    // on a real change, so the daemon's reapply path stays edge-triggered.
+    const PhysicalScreen tracked = trackedScreenByName(screenName);
+    if (tracked.isValid()) {
+        calculateAvailableGeometry(tracked);
+    }
 }
 
 void ScreenManager::propagateIdentifierDrift(const QHash<QString, QString>& oldIds)

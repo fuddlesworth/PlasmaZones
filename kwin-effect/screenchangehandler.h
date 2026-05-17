@@ -34,8 +34,25 @@ class ScreenChangeHandler : public QObject
 public:
     explicit ScreenChangeHandler(PlasmaZonesEffect* effect, QObject* parent = nullptr);
 
-    /// Stop the debounce timer (called from effect destructor)
+    /// Stop the debounce timers (called from effect destructor)
     void stop();
+
+    /// Schedule a push of KWin's authoritative per-screen work area
+    /// (`clientArea(MaximizeArea)`) to the daemon. Coalesces every call made
+    /// within one event-loop turn into a single queued report — so a burst
+    /// of dock add/close/resize signals (session startup, a panel-editor
+    /// drag) produces one push, and that push runs after KWin's synchronous
+    /// strut recompute for the turn. Safe to call before the daemon bridge
+    /// is registered — the report no-ops until it is, and the daemon-ready
+    /// path schedules another.
+    void scheduleClientAreaReport();
+
+    /// Hook @p w for work-area reporting when it is a panel (dock): connects
+    /// its geometry-changed signal and schedules a report. A no-op for
+    /// non-dock windows. Called for every `windowAdded` and once per
+    /// already-mapped window at effect startup so pre-existing panels are
+    /// covered too.
+    void trackDockWindow(KWin::EffectWindow* w);
 
     /// True while a screen geometry change is pending (debounce timer running
     /// or reapply in progress). Used to suppress false windowScreenChanged
@@ -49,10 +66,19 @@ public Q_SLOTS:
     void slotScreenGeometryChanged();
     void slotReapplyWindowGeometriesRequested();
 
+    /// Connected to `EffectsHandler::windowClosed` — schedules a work-area
+    /// report when @p w is a panel (dock) so the strut it freed reaches the
+    /// daemon. A no-op for non-dock windows.
+    void onWindowClosed(KWin::EffectWindow* w);
+
 private:
     void applyScreenGeometryChange();
     void fetchAndApplyWindowGeometries();
     void applyWindowGeometries(const PhosphorProtocol::WindowGeometryList& geometries);
+
+    /// Push KWin's `clientArea(MaximizeArea)` for every output to the daemon.
+    /// Runs as the queued continuation scheduled by @ref scheduleClientAreaReport.
+    void reportClientArea();
 
     PlasmaZonesEffect* m_effect;
     QTimer m_screenChangeDebounce;
@@ -60,6 +86,11 @@ private:
     QRect m_lastVirtualScreenGeometry;
     bool m_reapplyInProgress = false;
     bool m_reapplyPending = false;
+
+    // Set while a queued reportClientArea() is pending. Collapses a burst of
+    // dock signals within one event-loop turn into a single report — see
+    // scheduleClientAreaReport().
+    bool m_clientAreaReportQueued = false;
 };
 
 } // namespace PlasmaZones
