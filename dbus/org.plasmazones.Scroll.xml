@@ -1,0 +1,48 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<node>
+    <!--
+        org.plasmazones.Scroll — niri-style scrollable-tiling control.
+
+        The KWin effect reports window lifecycle for screens in scroll mode to
+        this interface; the daemon forwards each event to the ScrollEngine.
+        Window geometry flows back to the effect over org.plasmazones.WindowTracking
+        (applyGeometriesBatch), shared with the other placement modes.
+    -->
+    <interface name="org.plasmazones.Scroll">
+        <!-- Screens currently in scroll mode. The effect subscribes to the
+             change signal so it knows whose windows to report here. -->
+        <property name="scrollScreens" type="as" access="read"/>
+
+        <signal name="scrollScreensChanged">
+            <arg name="screenIds" type="as"/>
+        </signal>
+
+        <!-- A new window appeared on a scroll-mode screen. -->
+        <method name="windowOpened">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="minWidth" type="i" direction="in"/>
+            <arg name="minHeight" type="i" direction="in"/>
+        </method>
+
+        <!-- Batch form used on daemon startup / mode toggle-on to avoid
+             per-window D-Bus round-trips. -->
+        <method name="windowsOpenedBatch">
+            <arg name="entries" type="a(ssii)" direction="in"/>
+            <annotation name="org.qtproject.QtDBus.QtTypeName.In0"
+                        value="PhosphorProtocol::WindowOpenedList"/>
+        </method>
+
+        <method name="windowClosed">
+            <arg name="windowId" type="s" direction="in"/>
+        </method>
+
+        <method name="notifyWindowFocused">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="screenId" type="s" direction="in"/>
+        </method>
+    </interface>
+</node>

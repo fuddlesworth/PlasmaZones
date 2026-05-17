@@ -76,6 +76,7 @@ class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
 class AutotileAdaptor;
+class ScrollAdaptor;
 class ScreenModeRouter;
 class SettingsConfigStore;
 class SnapAdaptor;
@@ -605,6 +606,7 @@ private:
     std::unique_ptr<Phosphor::Screens::VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
+    ScrollAdaptor* m_scrollAdaptor = nullptr;
 
     /// Phase 6: animation shader effect discovery. Scans
     /// `plasmazones/animations` from XDG data dirs and monitors for

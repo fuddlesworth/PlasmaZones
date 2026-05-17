@@ -75,6 +75,7 @@
 #include "../dbus/windowtrackingadaptor.h"
 #include "../dbus/windowdragadaptor.h"
 #include "../dbus/autotileadaptor.h"
+#include "../dbus/scrolladaptor.h"
 #include "../dbus/snapadaptor.h"
 #include "../dbus/shaderadaptor.h"
 #include "../dbus/compositorbridgeadaptor.h"
@@ -970,6 +971,7 @@ bool Daemon::init()
                                  m_virtualDesktopManager.get(), m_windowRegistry.get(), this);
     auto* autotileEngine = engines.autotile.get();
     auto* snapEngine = engines.snap.get();
+    auto* scrollEngine = engines.scroll.get();
     m_autotileEngine = std::move(engines.autotile);
     m_snapEngine = std::move(engines.snap);
     m_scrollEngine = std::move(engines.scroll);
@@ -1106,6 +1108,7 @@ bool Daemon::init()
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setScreenModeRouter(m_screenModeRouter.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
+    m_scrollAdaptor = new ScrollAdaptor(scrollEngine, this);
 
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members
@@ -1499,6 +1502,9 @@ void Daemon::stop()
     // access freed memory. After clearing, ensureEngine() returns false.
     if (m_autotileAdaptor) {
         m_autotileAdaptor->clearEngine();
+    }
+    if (m_scrollAdaptor) {
+        m_scrollAdaptor->clearEngine();
     }
     if (m_snapAdaptor) {
         m_snapAdaptor->clearEngine();
