@@ -475,9 +475,11 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     loadSettingAsync(QStringLiteral("excludedApplications"), [this](const QVariant& v) {
         m_excludedApplications = v.toStringList();
+        rebuildSnappingExclusionRuleSet();
     });
     loadSettingAsync(QStringLiteral("excludedWindowClasses"), [this](const QVariant& v) {
         m_excludedWindowClasses = v.toStringList();
+        rebuildSnappingExclusionRuleSet();
     });
     loadSettingAsync(QStringLiteral("minimumWindowWidth"), [this](const QVariant& v) {
         m_cachedMinWindowWidth = v.toInt();
@@ -550,9 +552,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("animationExcludedApplications"), [this](const QVariant& v) {
         m_animationExcludedApplications = v.toStringList();
+        rebuildAnimationExclusionRuleSet();
     });
     loadSettingAsync(QStringLiteral("animationExcludedWindowClasses"), [this](const QVariant& v) {
         m_animationExcludedWindowClasses = v.toStringList();
+        rebuildAnimationExclusionRuleSet();
     });
 
     loadShaderProfileFromDbus();

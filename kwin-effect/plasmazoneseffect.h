@@ -14,6 +14,9 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
+
+#include <PhosphorWindowRule/RuleEvaluator.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -617,6 +620,18 @@ private:
     QStringList m_excludedApplications;
     QStringList m_excludedWindowClasses;
 
+    // Window-rule view of the snapping/tiling exclusion lists. ExclusionListBridge
+    // converts the two QStringLists above into a WindowRuleSet of terminal
+    // Exclude rules; the bound RuleEvaluator drives shouldHandleWindow()'s
+    // exclusion gate. Rebuilt by rebuildSnappingExclusionRuleSet() on every
+    // exclusion-list D-Bus load. Declaration ORDER MATTERS — the rule set
+    // must precede (and outlive) the evaluator that binds a reference to it.
+    PhosphorWindowRule::WindowRuleSet m_snappingExclusionRuleSet;
+    PhosphorWindowRule::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
+
+    /// Rebuild m_snappingExclusionRuleSet from the snapping exclusion lists.
+    void rebuildSnappingExclusionRuleSet();
+
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForAutotileNotify() to prevent small utility
     // windows (emoji picker, color picker, etc.) from entering the tiling tree.
@@ -648,6 +663,17 @@ private:
     int m_animationMinWindowHeight = 0;
     QStringList m_animationExcludedApplications;
     QStringList m_animationExcludedWindowClasses;
+
+    // Window-rule view of the animation exclusion lists — same bridge as the
+    // snapping exclusions, separate rule set because the user can configure
+    // divergent filter lists. Drives shouldAnimateWindow()'s exclusion gate.
+    // Rebuilt by rebuildAnimationExclusionRuleSet() on every animation
+    // exclusion-list D-Bus load. Declaration ORDER MATTERS (see above).
+    PhosphorWindowRule::WindowRuleSet m_animationExclusionRuleSet;
+    PhosphorWindowRule::RuleEvaluator m_animationExclusionEvaluator{m_animationExclusionRuleSet};
+
+    /// Rebuild m_animationExclusionRuleSet from the animation exclusion lists.
+    void rebuildAnimationExclusionRuleSet();
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end

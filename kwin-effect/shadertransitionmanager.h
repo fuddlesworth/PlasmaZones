@@ -10,6 +10,9 @@
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
+#include <PhosphorWindowRule/RuleEvaluator.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
+
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
 
@@ -89,6 +92,26 @@ public:
     const PhosphorAnimationShaders::AnimationAppRuleList& appRules() const
     {
         return m_animationAppRules;
+    }
+
+    /// Rebuild the animation `WindowRuleSet` from the current `appRules()`.
+    /// Call after every mutation of `m_animationAppRules` (the D-Bus load
+    /// callback). The bridge converts the App Rule list into rule-engine
+    /// form; the bound `RuleEvaluator` picks up the new revision transparently
+    /// and its match cache is invalidated.
+    void rebuildAnimationRuleSet();
+
+    /// The evaluator bound to the animation rule set. Resolution of the
+    /// animation App Rule cascade routes through this.
+    const PhosphorWindowRule::RuleEvaluator& animationRuleEvaluator() const
+    {
+        return m_animationRuleEvaluator;
+    }
+
+    /// The animation rule set itself — for the `!isEmpty()` fast path.
+    const PhosphorWindowRule::WindowRuleSet& animationRuleSet() const
+    {
+        return m_animationRuleSet;
     }
 
     /// Per-event motion-profile tree mirrored from the daemon's
@@ -230,6 +253,17 @@ private:
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     PhosphorAnimationShaders::AnimationAppRuleList m_animationAppRules;
     PhosphorAnimation::ProfileTree m_motionProfileTree;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Window-rule view of the animation App Rules
+    //
+    // `m_animationRuleSet` is the bridge-converted form of `m_animationAppRules`,
+    // rebuilt by `rebuildAnimationRuleSet()` on every App Rule D-Bus load.
+    // `m_animationRuleEvaluator` binds a const reference to it — declaration
+    // ORDER MATTERS: the rule set must outlive (and precede) the evaluator.
+    // ═══════════════════════════════════════════════════════════════════════════
+    PhosphorWindowRule::WindowRuleSet m_animationRuleSet;
+    PhosphorWindowRule::RuleEvaluator m_animationRuleEvaluator{m_animationRuleSet};
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Texture Cache

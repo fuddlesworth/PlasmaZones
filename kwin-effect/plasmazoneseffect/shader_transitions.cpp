@@ -3,11 +3,11 @@
 
 #include "../plasmazoneseffect.h"
 #include "shader_internal.h"
+#include "shader_resolve.h"
 
 #include "../windowanimator.h"
 
 #include <PhosphorAnimation/AnimationAppRule.h>
-#include <PhosphorAnimation/AnimationAppRuleResolver.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -1172,10 +1172,12 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // tree fallthrough (the user's "no animation for this app on this
     // event" sentinel).
     const QString windowClass = window->windowClass();
-    const auto& appRules = m_shaderManager.appRules();
     const auto& profileTree = m_shaderManager.profileTree();
-    const auto profile =
-        PhosphorAnimationShaders::resolveAnimationShaderProfile(appRules, profileTree, windowClass, profilePath);
+    // Cascade routed through the unified RuleEvaluator: the effect-local
+    // shader_resolve shim walks the event-scoped `anim-shader:<event>` slot
+    // and falls through to the per-event ShaderProfileTree on a miss.
+    const auto profile = PlasmaZones::resolveAnimationShaderProfile(m_shaderManager.animationRuleEvaluator(),
+                                                                    profileTree, windowClass, profilePath);
     // Per-event base duration. The daemon mirrors its motion
     // PhosphorProfileRegistry into `motionProfileTree` over D-Bus —
     // ProfileTree::resolve walks `window.open → window → global` and
@@ -1210,8 +1212,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // the same (class, event) bumps the per-event base. A rule with
     // durationMs == 0 is the inherit sentinel and falls through to the
     // per-event base resolved above.
-    const int effectiveDurationMs =
-        PhosphorAnimationShaders::resolveAnimationDuration(appRules, windowClass, profilePath, baseDurationMs);
+    const int effectiveDurationMs = PlasmaZones::resolveAnimationDuration(m_shaderManager.animationRuleEvaluator(),
+                                                                          windowClass, profilePath, baseDurationMs);
     if (profile.effectiveEffectId().isEmpty()) {
         // Default-state path: a fresh user with no shader overrides
         // anywhere in the tree resolves every event to empty effectId,
@@ -1221,13 +1223,14 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         // overrides (so an empty resolve here is genuinely surprising —
         // the documented prune / D-Bus-race scenarios), otherwise
         // demote to DEBUG.
-        if (profileTree.overriddenPaths().isEmpty() && appRules.isEmpty()) {
+        const int ruleCount = m_shaderManager.animationRuleSet().count();
+        if (profileTree.overriddenPaths().isEmpty() && ruleCount == 0) {
             qCDebug(lcEffect) << "tryBeginShader[" << profilePath
                               << "]: no shader assigned (tree empty — default state)";
         } else {
             qCWarning(lcEffect) << "tryBeginShader[" << profilePath
                                 << "]: no shader assigned (cascade returned empty effectId, tree size="
-                                << profileTree.overriddenPaths().size() << " rules=" << appRules.size() << ")";
+                                << profileTree.overriddenPaths().size() << " rules=" << ruleCount << ")";
         }
         return;
     }
@@ -1283,6 +1286,10 @@ void PlasmaZonesEffect::loadAnimationAppRulesFromDbus()
             if (doc.isArray()) {
                 auto& rules = m_shaderManager.appRules();
                 rules = PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array());
+                // Rebuild the WindowRuleSet view so the RuleEvaluator-backed
+                // resolvers and shouldAnimateWindow()'s hasAnyMatch query see
+                // the new rules. setRules() bumps the revision → cache invalid.
+                m_shaderManager.rebuildAnimationRuleSet();
                 qCDebug(lcEffect) << "loadAnimationAppRulesFromDbus: loaded" << rules.size() << "rules";
             } else {
                 qCWarning(lcEffect) << "Failed to parse animationAppRules from D-Bus — not a JSON array";

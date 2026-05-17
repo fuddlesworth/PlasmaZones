@@ -48,6 +48,8 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/drag_snap.cpp
     plasmazoneseffect/paint_pipeline.cpp
     plasmazoneseffect/shader_transitions.cpp
+    plasmazoneseffect/shader_resolve.cpp
+    plasmazoneseffect/shader_resolve.h
     plasmazoneseffect/shader_internal.h
     plasmazoneseffect/types.h
     shadertransitionmanager.h
@@ -108,6 +110,13 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # the re-export and this target would break mysteriously. Named
     # here so the link graph matches the include graph.
     PhosphorAnimation::PhosphorAnimation
+    # PhosphorWindowRule: the unified LGPL rule engine. The effect resolves
+    # the animation App Rules and its exclusion lists through RuleEvaluator,
+    # via the in-memory bridge headers (AnimationAppRuleBridge.h /
+    # ExclusionListBridge.h) which convert the loaded config objects into a
+    # WindowRuleSet. Both the effect and the daemon link this one library so
+    # there is exactly one match-code implementation (GPL->LGPL link is fine).
+    PhosphorWindowRule::PhosphorWindowRule
     # ShaderIncludeResolver: kwin-effect resolves `#include` directives
     # in animation shader source so the canonical header inlines before
     # the `#define PLASMAZONES_KWIN` injection selects its default-block

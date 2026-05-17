@@ -203,6 +203,12 @@ target_link_libraries(plasmazones_core
         Wayland::Client
         Qt6::Concurrent
         Qt6::WaylandClientPrivate
+        # PhosphorWindowRule: the unified LGPL rule engine. Linked here in
+        # Phase 2 to establish the shared evaluator binary across the daemon
+        # and the effect. The daemon's own exclusion enforcement migrates onto
+        # RuleEvaluator in Phase 3 (impl-plan §2.4); PRIVATE because no daemon
+        # public header surfaces the rule types yet.
+        PhosphorWindowRule::PhosphorWindowRule
 )
 
 # PhosphorShortcuts: plasmazones_core uses ONLY the Integration::IAdhocRegistrar header
