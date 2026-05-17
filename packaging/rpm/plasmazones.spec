@@ -93,6 +93,17 @@ BuildRequires:  kf6-kirigami-devel >= 6.6.0
 # systems with a mismatched KWin instead of installing silently broken.
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
+# find_package(KWin) (kwin-effect/CMakeLists.txt:20) pulls in KWinConfig.cmake,
+# which find_dependency()s the targets below (see KWinConfig.cmake.in, Plasma
+# 6.6). openSUSE's kwin6-devel does not drag these into the build root itself,
+# so the KWin effect's CMake configure step fails without them. KF6Config /
+# KF6CoreAddons currently arrive transitively, but are listed explicitly so the
+# dependency is not silently load-bearing on another package.
+BuildRequires:  cmake(KF6Config)
+BuildRequires:  cmake(KF6CoreAddons)
+BuildRequires:  cmake(KF6WindowSystem)
+BuildRequires:  pkgconfig(epoxy)
+BuildRequires:  pkgconfig(libdrm)
 BuildRequires:  cmake(Qt6WaylandClient)
 BuildRequires:  cmake(Qt6WaylandClientPrivate)
 BuildRequires:  wayland-devel
