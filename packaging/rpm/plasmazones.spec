@@ -163,7 +163,7 @@ Requires:       hicolor-icon-theme
 # silently dropped on stricter parsers). hicolor-icon-theme is already
 # in Requires above; the post-only entries are the cache-refresh tools.
 # Scoped to Fedora because openSUSE provides equivalent functionality
-# via %suse_update_desktop_file and file-triggers, and ships these
+# via %%suse_update_desktop_file and file-triggers, and ships these
 # tools under different package names.
 %if !0%{?suse_version}
 Requires(post): /usr/bin/gtk-update-icon-cache
@@ -210,6 +210,8 @@ rm -f  %{buildroot}%{_libdir}/libPhosphor*.so
 rm -f  %{buildroot}%{_libdir}/libplasmazones*.so
 
 %post
+# Register newly installed shared libraries with the dynamic linker.
+/sbin/ldconfig
 # Refresh KDE service cache
 /usr/bin/kbuildsycoca6 --noincremental 2>/dev/null || :
 # Update icon / desktop / MIME caches
@@ -227,6 +229,7 @@ echo ""
 %systemd_user_preun plasmazones.service
 
 %postun
+/sbin/ldconfig
 /usr/bin/kbuildsycoca6 --noincremental 2>/dev/null || :
 /usr/bin/gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 /usr/bin/update-desktop-database -q %{_datadir}/applications &>/dev/null || :
@@ -251,7 +254,7 @@ echo ""
 # project's files, so a new component library needs no spec edit.
 # Only the versioned runtime objects (.so.*) are shipped — the
 # unversioned .so devel symlinks, public headers and CMake package
-# configs are stripped in %install (this is an end-user application,
+# configs are stripped in %%install (this is an end-user application,
 # not a Phosphor SDK, and there is no -devel subpackage by design).
 # Excludes the QML plugin under qt6/qml/, which the glob below owns.
 %{_libdir}/libPhosphor*.so.*
