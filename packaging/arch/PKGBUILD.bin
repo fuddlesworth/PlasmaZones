@@ -10,9 +10,9 @@ pkgdesc='Window tiling and autotiling for KDE Plasma (binary)'
 arch=('x86_64')
 url='https://github.com/fuddlesworth/PlasmaZones'
 # Dual-licensed: the main daemon + KCM + editor are GPL-3.0-or-later; the
-# eight shipped shared libraries (libPhosphorLayoutApi, libPhosphorZones, libPhosphorIdentity, libPhosphorTiles, libPhosphorConfig, libPhosphorWayland, libPhosphorRendering,
-# libPhosphorLayer) are LGPL-2.1-or-later. The binary tarball contains all
-# of them so both licenses apply to this package.
+# bundled Phosphor component shared libraries are LGPL-2.1-or-later. The
+# binary tarball contains all of them so both licenses apply to this
+# package.
 license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
 
 # Exact KWin upstream version this binary was built against. The kwin-effect
@@ -45,14 +45,15 @@ sha256sums=('SKIP')
 install=plasmazones.install
 
 package() {
-    # Release tarball contains the full install prefix, including
-    # libPhosphorLayoutApi.so*, libPhosphorZones.so*, libPhosphorIdentity.so*, libPhosphorTiles.so*, libPhosphorConfig.so*, libPhosphorWayland.so*, libPhosphorRendering.so*, libPhosphorLayer.so*,
-    # CMake configs, and headers — a straight copy preserves them.
+    # Release tarball contains the full install prefix, including every
+    # Phosphor component shared library, the CMake configs, and the
+    # headers — a straight copy preserves them.
     cp -a "$srcdir/plasmazones-linux-x86_64/usr" "$pkgdir/usr"
 
-    # License files — GPL-3.0-or-later (main) + LGPL-2.1-or-later (the eight
-    # Phosphor* libraries). The release tarball carries both at its root, so
-    # install from there rather than assuming they exist in $srcdir.
+    # License files — GPL-3.0-or-later (main) + LGPL-2.1-or-later (the
+    # bundled Phosphor component libraries). The release tarball carries
+    # both at its root, so install from there rather than assuming they
+    # exist in $srcdir.
     install -Dm644 "$srcdir/plasmazones-linux-x86_64/LICENSE" \
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
     install -Dm644 "$srcdir/plasmazones-linux-x86_64/COPYING.LESSER" \
