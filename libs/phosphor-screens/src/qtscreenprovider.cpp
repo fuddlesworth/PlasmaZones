@@ -63,6 +63,12 @@ void QtScreenProvider::watchScreen(QScreen* screen)
 
 void QtScreenProvider::onQtScreenAdded(QScreen* screen)
 {
+    // A topology change can promote or demote identical-monitor
+    // disambiguation suffixes on screens OTHER than this one, so drop the
+    // computed-identifier cache before deriving any PhysicalScreen — the
+    // ScreenManager's identifier-drift detection depends on screens()
+    // returning freshly disambiguated identifiers from here on.
+    ScreenIdentity::invalidateComputedIdentifiers();
     watchScreen(screen);
     Q_EMIT screenAdded(toPhysicalScreen(screen));
 }
@@ -70,13 +76,22 @@ void QtScreenProvider::onQtScreenAdded(QScreen* screen)
 void QtScreenProvider::onQtScreenRemoved(QScreen* screen)
 {
     // QGuiApplication emits screenRemoved while the QScreen is still
-    // valid, so snapshot it before the geometryChanged disconnect and
-    // the signal. The geometryChanged connection would auto-tear with
-    // the QScreen anyway; dropping it here just keeps teardown explicit.
+    // valid, so snapshot it — with its pre-removal identifier — before any
+    // cache invalidation or the geometryChanged disconnect. The
+    // geometryChanged connection would auto-tear with the QScreen anyway;
+    // dropping it here just keeps teardown explicit.
     const PhysicalScreen removed = toPhysicalScreen(screen);
     if (screen) {
         disconnect(screen, &QScreen::geometryChanged, this, nullptr);
+        // The EDID-serial cache is keyed on the connector: drop this
+        // connector's entry so a different monitor hot-plugged onto the
+        // same port resolves fresh.
+        ScreenIdentity::invalidateEdidCache(removed.name);
     }
+    // Rebuild disambiguation for the surviving screens — removing a
+    // same-model sibling can collapse a "/CONNECTOR" suffix back to a
+    // bare identifier.
+    ScreenIdentity::invalidateComputedIdentifiers();
     Q_EMIT screenRemoved(removed);
 }
 

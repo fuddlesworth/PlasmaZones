@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "PhosphorScreens/PhysicalScreen.h"
 #include "VirtualScreen.h"
 #include "phosphorscreenscore_export.h"
 
@@ -10,22 +11,26 @@
 #include <QMap>
 #include <QObject>
 #include <QPointer>
-#include <QScreen>
 #include <QSet>
 #include <QTimer>
 #include <QVector>
 
+class QScreen;
 class QWindow;
 
 namespace Phosphor::Screens {
 
 class IConfigStore;
 class IPanelSource;
+class IScreenProvider;
 
 /**
  * @brief Construction-time wiring for ScreenManager.
  *
  * All members default-construct to a "nothing fancy" state:
+ *   - screenProvider null → ScreenManager builds its own QtScreenProvider
+ *     (the live QGuiApplication-backed source). Inject a FakeScreenProvider
+ *     to drive the add/remove/move/resize sequence from a test.
  *   - panelSource null  → ScreenManager treats panel offsets as zero,
  *     emits @ref ScreenManager::panelGeometryReady on the next event
  *     loop turn.
@@ -33,7 +38,9 @@ class IPanelSource;
  *   - useGeometrySensors true → create layer-shell sensor windows for
  *     real-time available-area tracking.
  *
- * Pointers are non-owning. Source/store must outlive the manager.
+ * Pointers are non-owning EXCEPT a null @ref screenProvider, where the
+ * manager owns the QtScreenProvider it constructs. An injected source /
+ * store / provider must outlive the manager.
  *
  * Top-level (not nested in ScreenManager) so its in-class member
  * initialisers are reachable at the @ref ScreenManager constructor's
@@ -41,6 +48,7 @@ class IPanelSource;
  */
 struct ScreenManagerConfig
 {
+    IScreenProvider* screenProvider = nullptr;
     IPanelSource* panelSource = nullptr;
     IConfigStore* configStore = nullptr;
     bool useGeometrySensors = true;
@@ -51,7 +59,8 @@ struct ScreenManagerConfig
  * @brief Centralized screen-topology service.
  *
  * Owns:
- *   • physical screen monitoring (QGuiApplication add/remove/geometry signals)
+ *   • physical screen monitoring (via an injected IScreenProvider —
+ *     add/remove/geometry lifecycle, decoupled from QGuiApplication)
  *   • virtual-screen subdivision cache (synced from an injected IConfigStore)
  *   • per-screen available-geometry computation (panel offsets via an
  *     injected IPanelSource + layer-shell sensor windows)
@@ -74,9 +83,10 @@ public:
     /**
      * @brief Begin tracking screens.
      *
-     * Connects to QGuiApplication add/remove signals, attaches per-screen
-     * geometry sensors (when enabled), starts the panel source, and
-     * subscribes to the config store's @c changed signal for VS refresh.
+     * Connects to the screen provider's add/remove/geometry signals,
+     * snapshots the current output set, attaches per-screen geometry
+     * sensors (when enabled), starts the panel source, and subscribes to
+     * the config store's @c changed signal for VS refresh.
      */
     void start();
 
@@ -85,9 +95,9 @@ public:
 
     // ─── Physical screen queries ─────────────────────────────────────────
 
-    QVector<QScreen*> screens() const;
-    QScreen* primaryScreen() const;
-    QScreen* screenByName(const QString& name) const;
+    QVector<PhysicalScreen> screens() const;
+    PhysicalScreen primaryScreen() const;
+    PhysicalScreen screenByName(const QString& name) const;
 
     /// Maximum number of virtual screens per physical monitor this manager
     /// will admit. Mirrors @ref ScreenManagerConfig::maxVirtualScreensPerPhysical
@@ -103,14 +113,15 @@ public:
      * @brief Per-screen panel-aware available geometry.
      *
      * Reads from the live cache populated by sensor windows + panel-source
-     * data. Falls back to @c QScreen::availableGeometry() when the cache
+     * data. Falls back to @c QScreen::availableGeometry() (or the full
+     * screen rect for a synthetic screen with no QScreen) when the cache
      * has no entry for @p screen yet (e.g. before @ref panelGeometryReady
-     * fires). Returns invalid QRect on null screen.
+     * fires). Returns an invalid QRect on an invalid PhysicalScreen.
      *
      * Was a static helper in the pre-extraction class; lives on the
      * instance now so the cache no longer needs file-static storage.
      */
-    QRect actualAvailableGeometry(QScreen* screen) const;
+    QRect actualAvailableGeometry(const PhysicalScreen& screen) const;
 
     /**
      * @brief Has the panel source produced its first reading?
@@ -146,7 +157,9 @@ public:
     QRect screenGeometry(const QString& screenId) const;
     QRect screenAvailableGeometry(const QString& screenId) const;
 
-    QScreen* physicalQScreenFor(const QString& screenId) const;
+    /// The physical output a (physical or virtual) screen ID resolves to.
+    /// Returns an invalid PhysicalScreen when nothing tracked matches.
+    PhysicalScreen physicalScreenFor(const QString& screenId) const;
     VirtualScreenDef::PhysicalEdges physicalEdgesFor(const QString& screenId) const;
 
     QString virtualScreenAt(const QPoint& globalPos, const QString& physicalScreenId) const;
@@ -162,10 +175,10 @@ public:
     void scheduleDelayedPanelRequery(int delayMs);
 
 Q_SIGNALS:
-    void screenAdded(QScreen* screen);
-    void screenRemoved(QScreen* screen);
-    void screenGeometryChanged(QScreen* screen, const QRect& geometry);
-    void availableGeometryChanged(QScreen* screen, const QRect& availableGeometry);
+    void screenAdded(const PhysicalScreen& screen);
+    void screenRemoved(const PhysicalScreen& screen);
+    void screenGeometryChanged(const PhysicalScreen& screen);
+    void availableGeometryChanged(const PhysicalScreen& screen, const QRect& availableGeometry);
 
     /// Fired once when @ref isPanelGeometryReady transitions to true.
     /// Components that need accurate panel geometry (window restoration,
@@ -199,22 +212,29 @@ Q_SIGNALS:
     void screenIdentifierChanged(const QString& oldId, const QString& newId);
 
 private Q_SLOTS:
-    void onScreenAdded(QScreen* screen);
-    void onScreenRemoved(QScreen* screen);
-    void onScreenGeometryChanged(const QRect& geometry);
+    void onProviderScreenAdded(const PhysicalScreen& screen);
+    void onProviderScreenRemoved(const PhysicalScreen& screen);
+    void onProviderScreenGeometryChanged(const PhysicalScreen& screen);
 
 private:
-    void connectScreenSignals(QScreen* screen);
-    void disconnectScreenSignals(QScreen* screen);
+    // Rebuild m_trackedScreens from the provider's current output set.
+    // The provider is the single source of truth — every lifecycle slot
+    // resyncs through this rather than mutating the vector incrementally.
+    void syncTrackedScreens();
 
-    // Geometry sensor (layer-shell) lifecycle
-    void createGeometrySensor(QScreen* screen);
-    void destroyGeometrySensor(QScreen* screen);
-    void onSensorGeometryChanged(QScreen* screen);
+    // Tracked-screen lookups. Return a pointer into m_trackedScreens (valid
+    // only until the next syncTrackedScreens) or nullptr.
+    const PhysicalScreen* trackedScreenByName(const QString& name) const;
+    const PhysicalScreen* trackedScreenFor(const QString& screenId) const;
+
+    // Geometry sensor (layer-shell) lifecycle. Keyed by connector name.
+    void createGeometrySensor(const PhysicalScreen& screen);
+    void destroyGeometrySensor(const QString& screenName);
+    void onSensorGeometryChanged(const QString& screenName);
 
     // Reads sensor + IPanelSource offsets for @p screen, updates
     // m_availableGeometryCache, fires availableGeometryChanged on diff.
-    void calculateAvailableGeometry(QScreen* screen);
+    void calculateAvailableGeometry(const PhysicalScreen& screen);
 
     void onPanelOffsetsChanged(QScreen* screen);
     void onPanelRequeryCompleted();
@@ -222,14 +242,20 @@ private:
     void onConfigStoreChanged();
 
     Config m_cfg;
+
+    // The effective screen provider — either the injected one or a
+    // QtScreenProvider the manager constructed (parented to `this`) when
+    // the config left it null.
+    IScreenProvider* m_screenProvider = nullptr;
+
     bool m_running = false;
     bool m_panelGeometryReadyEmitted = false;
 
-    QVector<QScreen*> m_trackedScreens;
+    QVector<PhysicalScreen> m_trackedScreens;
 
-    // Layer-shell sensor windows (one per screen) — track live available
-    // area size from the compositor.
-    QHash<QScreen*, QPointer<QWindow>> m_geometrySensors;
+    // Layer-shell sensor windows (one per screen, keyed by connector name)
+    // — track live available area size from the compositor.
+    QHash<QString, QPointer<QWindow>> m_geometrySensors;
 
     // Per-screen-name available-geometry cache (was file-static in
     // pre-extraction class — instance state now to avoid singleton coupling).
@@ -252,12 +278,6 @@ private:
 
     mutable QHash<QString, QRect> m_virtualGeometryCache;
 
-    // Warn-once set for effectiveScreenIds() identifier-round-trip misses.
-    // A tracked QScreen whose identifierFor() no longer resolves back via
-    // findByIdOrName is usually a stale persisted-config drift — surface it
-    // loudly once per physId per session instead of burying it at qCDebug.
-    mutable QSet<QString> m_warnedEffectiveIdMisses;
-
     // Warn-once set for screenGeometry() virtual-screen cache misses. A stale
     // "physId/vs:N" id that survives a VS-config change gets queried
     // repeatedly (per cursor move, per snap commit) — warn once per id rather
@@ -269,14 +289,15 @@ private:
     void invalidateVirtualGeometryCache(const QString& physicalScreenId = {}) const;
     void rebuildVirtualGeometryCache(const QString& physicalScreenId) const;
 
-    QString virtualScreenAtWithScreen(const QPoint& globalPos, const QString& physicalScreenId, QScreen* screen) const;
+    QString virtualScreenAtWithScreen(const QPoint& globalPos, const QString& physicalScreenId,
+                                      const PhysicalScreen* screen) const;
 
-    /// Detect identifier flips between @p oldIds and the current computed
-    /// identifiers, re-key @c m_virtualConfigs in place, and emit
-    /// @ref screenIdentifierChanged so external stores can migrate too.
-    /// Called from @ref onScreenAdded and @ref onScreenRemoved after the
-    /// identifier caches are invalidated.
-    void propagateIdentifierDrift(const QHash<QScreen*, QString>& oldIds);
+    /// Detect identifier flips between @p oldIds (connector name → prior
+    /// identifier) and the current tracked identifiers, re-key
+    /// @c m_virtualConfigs in place, and emit @ref screenIdentifierChanged
+    /// so external stores can migrate too. Called from the add/remove
+    /// slots after @ref syncTrackedScreens has refreshed the tracked set.
+    void propagateIdentifierDrift(const QHash<QString, QString>& oldIds);
 };
 
 } // namespace Phosphor::Screens
