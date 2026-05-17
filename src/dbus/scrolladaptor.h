@@ -59,7 +59,7 @@ public:
     void clearEngine();
 
 public Q_SLOTS:
-    void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight);
+    void windowOpened(const QString& windowId, const QString& screenId);
     void windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList& entries);
     void windowClosed(const QString& windowId);
     void notifyWindowFocused(const QString& windowId, const QString& screenId);

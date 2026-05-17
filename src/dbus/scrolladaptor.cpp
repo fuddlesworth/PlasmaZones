@@ -47,12 +47,12 @@ bool ScrollAdaptor::ensureEngine(const char* methodName) const
     return true;
 }
 
-void ScrollAdaptor::windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
+void ScrollAdaptor::windowOpened(const QString& windowId, const QString& screenId)
 {
     if (!ensureEngine("windowOpened")) {
         return;
     }
-    m_engine->windowOpened(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
+    m_engine->windowOpened(windowId, screenId);
 }
 
 void ScrollAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList& entries)
@@ -60,8 +60,12 @@ void ScrollAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
     if (!ensureEngine("windowsOpenedBatch")) {
         return;
     }
+    // WindowOpenedList is shared with org.plasmazones.Autotile and carries
+    // per-entry minWidth/minHeight; scroll's strip model is size-agnostic and
+    // ignores them (non-resizable windows are fitted to the tile slot
+    // effect-side), so only windowId/screenId are forwarded.
     for (const PhosphorProtocol::WindowOpenedEntry& entry : entries) {
-        m_engine->windowOpened(entry.windowId, entry.screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
+        m_engine->windowOpened(entry.windowId, entry.screenId);
     }
 }
 

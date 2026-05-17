@@ -24,12 +24,14 @@
         <method name="windowOpened">
             <arg name="windowId" type="s" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>
-            <arg name="minWidth" type="i" direction="in"/>
-            <arg name="minHeight" type="i" direction="in"/>
         </method>
 
         <!-- Batch form used on daemon startup / mode toggle-on to avoid
-             per-window D-Bus round-trips. -->
+             per-window D-Bus round-trips. The (ssii) entry struct is shared
+             with org.plasmazones.Autotile; scroll's strip model is
+             size-agnostic, so the trailing minWidth/minHeight ints are
+             ignored (non-resizable windows are fitted to the tile slot
+             effect-side). -->
         <method name="windowsOpenedBatch">
             <arg name="entries" type="a(ssii)" direction="in">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.In0"

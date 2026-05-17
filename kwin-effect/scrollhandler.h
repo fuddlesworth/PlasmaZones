@@ -93,13 +93,13 @@ private:
      *
      * Used on effect startup and daemon (re)connect instead of per-window
      * windowOpened round-trips. Internal — driven by loadSettings() and
-     * slotScrollScreensChanged().
+     * slotScrollScreensChanged(). Windows already in m_notifiedWindows are
+     * skipped; a caller needing a full re-announce (daemon reconnect) clears
+     * the notified set first — see onDaemonReady().
      *
      * @param windows Candidate windows to process.
-     * @param resetNotified Drop each window from the notified set before
-     *        processing, so a daemon restart re-announces existing windows.
      */
-    void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows, bool resetNotified = false);
+    void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows);
 
     /// Tracked windows currently reported as being on @p screenId.
     QStringList trackedWindowsOnScreen(const QString& screenId) const;

@@ -10,7 +10,6 @@
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
-#include <window.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -21,7 +20,6 @@
 #include <QLoggingCategory>
 #include <QTimer>
 #include <QVariant>
-#include <QtMath>
 
 namespace PlasmaZones {
 
@@ -42,25 +40,6 @@ ScrollHandler::ScrollHandler(PlasmaZonesEffect* effect, QObject* parent)
     m_reassertTimer->setInterval(kReassertDebounceMs);
     connect(m_reassertTimer, &QTimer::timeout, this, &ScrollHandler::flushReasserts);
 }
-
-namespace {
-/// Discover a window's minimum size, ceil-rounded; 0×0 when unconstrained.
-void discoverMinSize(KWin::EffectWindow* w, int& minWidth, int& minHeight)
-{
-    minWidth = 0;
-    minHeight = 0;
-    if (!w) {
-        return;
-    }
-    if (KWin::Window* kw = w->window()) {
-        const QSizeF minSize = kw->minSize();
-        if (minSize.isValid()) {
-            minWidth = qCeil(minSize.width());
-            minHeight = qCeil(minSize.height());
-        }
-    }
-}
-} // namespace
 
 void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w)
 {
@@ -86,15 +65,10 @@ void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w)
     m_notifiedWindows.insert(windowId);
     m_notifiedWindowScreens[windowId] = screenId;
 
-    int minWidth = 0;
-    int minHeight = 0;
-    discoverMinSize(w, minWidth, minHeight);
-
-    auto* watcher =
-        new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
-                                        PhosphorProtocol::Service::Interface::Scroll, QStringLiteral("windowOpened"),
-                                        {windowId, screenId, minWidth, minHeight}),
-                                    this);
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scroll,
+                                                   QStringLiteral("windowOpened"), {windowId, screenId}),
+        this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, windowId, epoch = m_daemonEpoch](QDBusPendingCallWatcher* watcher) {
                 watcher->deleteLater();
@@ -111,11 +85,10 @@ void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w)
                     m_notifiedWindowScreens.remove(windowId);
                 }
             });
-    qCDebug(lcEffect) << "Notified scroll: windowOpened" << windowId << "on screen" << screenId
-                      << "minSize:" << minWidth << "x" << minHeight;
+    qCDebug(lcEffect) << "Notified scroll: windowOpened" << windowId << "on screen" << screenId;
 }
 
-void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows, bool resetNotified)
+void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows)
 {
     PhosphorProtocol::WindowOpenedList batchEntries;
     QStringList batchWindowIds; // for error rollback
@@ -132,24 +105,19 @@ void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         if (m_pendingCloses.remove(windowId)) {
             continue;
         }
-        if (resetNotified) {
-            m_notifiedWindows.remove(windowId);
-        }
         if (m_notifiedWindows.contains(windowId)) {
-            continue;
+            continue; // already reported — callers clear the set for a full re-announce
         }
         m_notifiedWindows.insert(windowId);
         m_notifiedWindowScreens[windowId] = screenId;
 
-        int minWidth = 0;
-        int minHeight = 0;
-        discoverMinSize(w, minWidth, minHeight);
-
+        // The shared WindowOpenedList carries minWidth/minHeight (autotile uses
+        // them for column sizing); scroll's strip model is size-agnostic, so
+        // they are left at their 0 default — a non-resizable window is fitted
+        // to its tile slot effect-side via constrainToScrollSlot.
         PhosphorProtocol::WindowOpenedEntry entry;
         entry.windowId = windowId;
         entry.screenId = screenId;
-        entry.minWidth = minWidth;
-        entry.minHeight = minHeight;
         batchEntries.append(entry);
         batchWindowIds.append(windowId);
     }
@@ -415,7 +383,12 @@ void ScrollHandler::loadSettings()
             if (!m_scrollScreens.isEmpty()) {
                 // Batch-notify all existing windows on scroll screens in one
                 // D-Bus call instead of per-window windowOpened round-trips.
-                notifyWindowsAddedBatch(KWin::effects->stackingOrder(), /*resetNotified=*/true);
+                // loadSettings() runs only at construction or right after
+                // onDaemonReady() — both leave m_notifiedWindows empty — so no
+                // explicit reset is needed: every window is reported afresh,
+                // and a window already added individually in the async gap is
+                // correctly skipped (no duplicate windowOpened).
+                notifyWindowsAddedBatch(KWin::effects->stackingOrder());
             }
         } else {
             qCDebug(lcEffect) << "Scroll screens: query failed, daemon may not be running";
@@ -457,7 +430,7 @@ void ScrollHandler::slotScrollScreensChanged(const QStringList& screenIds)
     // so a runtime layout switch or a hotplugged scroll-mode monitor adopts
     // existing windows, not only ones opened afterwards.
     if (!added.isEmpty()) {
-        notifyWindowsAddedBatch(KWin::effects->stackingOrder(), /*resetNotified=*/false);
+        notifyWindowsAddedBatch(KWin::effects->stackingOrder());
     }
     qCDebug(lcEffect) << "Scroll screens updated:" << m_scrollScreens;
 }

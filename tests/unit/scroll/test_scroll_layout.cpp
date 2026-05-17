@@ -38,6 +38,7 @@ private Q_SLOTS:
     void fixedWidthColumn();
     void minimizedTileExcluded();
     void fullyMinimizedColumnCollapses();
+    void collapsedFocusedColumnIgnoresViewOffset();
     void visibilityHelper();
 };
 
@@ -176,6 +177,31 @@ void TestScrollLayout::fullyMinimizedColumnCollapses()
     const QHash<QString, QRectF> restored = resolveScrollLayout(state, kWorkArea, standardConfig());
     QCOMPARE(restored.value(QStringLiteral("b")), QRectF(510.0, 10.0, 490.0, 780.0));
     QCOMPARE(restored.value(QStringLiteral("c")), QRectF(1010.0, 10.0, 490.0, 780.0));
+}
+
+void TestScrollLayout::collapsedFocusedColumnIgnoresViewOffset()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b")); // [a][b]
+
+    // Minimize "b": its column collapses to zero width. Then focus that
+    // collapsed column directly — viewOffset is an offset *within* the
+    // focused column, meaningless against a zero-width one, so resolution
+    // must anchor on the column's strip position and ignore the offset.
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true));
+    QVERIFY(state.focusWindow(QStringLiteral("b")));
+
+    state.setViewOffset(0.0);
+    const QHash<QString, QRectF> noOffset = resolveScrollLayout(state, kWorkArea, standardConfig());
+    state.setViewOffset(500.0);
+    const QHash<QString, QRectF> withOffset = resolveScrollLayout(state, kWorkArea, standardConfig());
+
+    QVERIFY(!withOffset.contains(QStringLiteral("b"))); // collapsed — no geometry
+    QVERIFY(withOffset.contains(QStringLiteral("a")));
+    // The non-zero viewOffset had no effect: the focused column is collapsed,
+    // so "a" lands in exactly the same place as with a zero offset.
+    QCOMPARE(withOffset.value(QStringLiteral("a")), noOffset.value(QStringLiteral("a")));
 }
 
 void TestScrollLayout::visibilityHelper()
