@@ -76,6 +76,7 @@ static_assert(
 
 // Forward declarations for helper classes
 class AutotileHandler;
+class ScrollHandler;
 class KWinCompositorBridge;
 class NavigationHandler;
 class ScreenChangeHandler;
@@ -231,6 +232,16 @@ private:
     bool isTileableWindow(KWin::EffectWindow* w) const;
 
     /**
+     * @brief Whether @p w should be reported to a tiling engine on open.
+     *
+     * Mode-agnostic eligibility predicate shared by AutotileHandler and
+     * ScrollHandler: rejects non-handleable / non-tileable / minimized /
+     * off-desktop windows and those below the user's minimum-size floor.
+     * The per-mode handler still gates on its own screen set afterwards.
+     */
+    bool isEligibleForTilingNotify(KWin::EffectWindow* w) const;
+
+    /**
      * @brief Animation-side window filter.
      *
      * Returns true when @p w should animate, false when the user's
@@ -378,6 +389,10 @@ private:
     {
         return m_autotileHandler.get();
     }
+    ScrollHandler* scrollHandler() const
+    {
+        return m_scrollHandler.get();
+    }
 
     /**
      * @brief Emit navigationFeedback D-Bus signal
@@ -473,6 +488,7 @@ public:
 private:
     // Friend classes for helpers
     friend class AutotileHandler;
+    friend class ScrollHandler;
     friend class NavigationHandler;
     friend class ScreenChangeHandler;
     friend class SnapAssistHandler;
@@ -484,6 +500,7 @@ private:
     // Helper class instances
     // ═══════════════════════════════════════════════════════════════════════════════
     std::unique_ptr<AutotileHandler> m_autotileHandler;
+    std::unique_ptr<ScrollHandler> m_scrollHandler;
 
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 

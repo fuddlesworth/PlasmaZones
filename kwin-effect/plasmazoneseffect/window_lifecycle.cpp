@@ -19,6 +19,7 @@
 #include "../dragtracker.h"
 #include "../navigationhandler.h"
 #include "../screenchangehandler.h"
+#include "../scrollhandler.h"
 #include "../windowanimator.h"
 
 namespace PlasmaZones {
@@ -119,6 +120,9 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 
     // Standard path: notify autotile first, then try snap restore
     m_autotileHandler->notifyWindowAdded(w);
+    // Scroll mode reports independently — it acts only on scroll-mode
+    // screens, which are disjoint from autotile screens.
+    m_scrollHandler->notifyWindowAdded(w);
 
     if (!onAutotileScreen && canSnapRestore) {
         callResolveWindowRestore(w);
@@ -170,6 +174,8 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
 
     // Notify autotile handler for cleanup (tracking sets + autotile D-Bus)
     m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId);
+    // Scroll handler does the same for scroll-mode screens.
+    m_scrollHandler->onWindowClosed(closedWindowId, closedScreenId);
 
     // Remove the window's border item (parent WindowItem is being destroyed anyway,
     // but clean up our tracking hash to avoid stale entries).
@@ -551,15 +557,15 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                    QStringLiteral("windowActivated"), {windowId, screenId});
 
-    // Notify autotile engine of focus change so m_windowToScreen is updated
+    // Notify the placement engine of the focus change. Autotile needs it to
+    // update m_windowToScreen; scroll needs it to track the focused column.
+    // The screen sets are disjoint, so at most one branch fires.
     if (m_autotileHandler->isAutotileScreen(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Autotile,
                                                        QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                        QStringLiteral("notifyWindowFocused"));
-    } else if (m_autotileHandler->isScrollScreen(screenId)) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scroll,
-                                                       QStringLiteral("notifyWindowFocused"), {windowId, screenId},
-                                                       QStringLiteral("notifyWindowFocused"));
+    } else {
+        m_scrollHandler->notifyWindowFocused(windowId, screenId);
     }
 }
 

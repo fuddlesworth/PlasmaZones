@@ -265,6 +265,42 @@ bool PlasmaZonesEffect::isTileableWindow(KWin::EffectWindow* w) const
     return true;
 }
 
+bool PlasmaZonesEffect::isEligibleForTilingNotify(KWin::EffectWindow* w) const
+{
+    if (!w || !shouldHandleWindow(w)) {
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (not handleable)"
+                          << (w ? getWindowId(w) : QStringLiteral("null"));
+        return false;
+    }
+    if (!isTileableWindow(w)) {
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (not tileable)" << getWindowId(w);
+        return false;
+    }
+    if (w->isMinimized()) {
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (minimized)" << getWindowId(w);
+        return false;
+    }
+    if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (wrong desktop/activity)" << getWindowId(w);
+        return false;
+    }
+    // Reject windows smaller than the user-configured minimum size.
+    // Prevents small utility windows (emoji picker, color picker, etc.)
+    // from entering the tiling tree and disrupting the layout.
+    const QRectF frame = w->frameGeometry();
+    if ((m_cachedMinWindowWidth > 0 && frame.width() < m_cachedMinWindowWidth)
+        || (m_cachedMinWindowHeight > 0 && frame.height() < m_cachedMinWindowHeight)) {
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (too small)" << getWindowId(w)
+                          << "size=" << frame.size() << "threshold=" << m_cachedMinWindowWidth << "x"
+                          << m_cachedMinWindowHeight;
+        return false;
+    }
+    qCDebug(lcEffect) << "isEligibleForTilingNotify: accepted" << getWindowId(w) << "size=" << frame.size()
+                      << "class=" << w->windowClass() << "skipSwitcher=" << w->isSkipSwitcher()
+                      << "keepAbove=" << w->keepAbove() << "transient=" << (w->transientFor() != nullptr);
+    return true;
+}
+
 bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const
 {
     if (!w) {

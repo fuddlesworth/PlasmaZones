@@ -6,6 +6,7 @@
 #include "../autotilehandler.h"
 #include "../navigationhandler.h"
 #include "../screenchangehandler.h"
+#include "../scrollhandler.h"
 #include "../snapassisthandler.h"
 #include "../windowanimator.h"
 
@@ -254,6 +255,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
         m_autotileHandler->setPendingReactivateWindow(activeWin);
     }
     m_autotileHandler->onDaemonReady();
+    m_scrollHandler->onDaemonReady();
 
     // Re-announce all existing windows on autotile screens in one batch D-Bus
     // call instead of per-window windowOpened round-trips.

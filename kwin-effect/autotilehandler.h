@@ -115,11 +115,6 @@ public:
     {
         return m_autotileScreens;
     }
-    /// Whether @p screenId is currently in scroll mode.
-    bool isScrollScreen(const QString& screenId) const
-    {
-        return m_scrollScreens.contains(screenId);
-    }
 
     /// Check if a window is tracked by the autotile handler (in m_notifiedWindows).
     bool isTrackedWindow(const QString& windowId) const
@@ -248,7 +243,6 @@ public Q_SLOTS:
     void slotFocusWindowRequested(const QString& windowId);
     void slotEnabledChanged(bool enabled);
     void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
-    void slotScrollScreensChanged(const QStringList& screenIds);
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
 
     // Window state change handlers (connected per-window in setupWindowConnections)
@@ -279,16 +273,6 @@ private:
      * (per-window D-Bus signal path) and slotWindowsTileRequested (batch float path).
      */
     void applyFloatCleanup(const QString& windowId);
-
-    /**
-     * @brief Check if a window is eligible for autotile notification
-     *
-     * Shared predicate used by both notifyWindowAdded and notifyWindowsAddedBatch
-     * to keep filtering logic in sync.
-     *
-     * @return true if the window should be notified to the autotile daemon
-     */
-    bool isEligibleForAutotileNotify(KWin::EffectWindow* w) const;
 
     /**
      * @brief Cancel a pending debounced minimize→float commit.
@@ -334,7 +318,6 @@ private:
     PlasmaZonesEffect* m_effect;
 
     QSet<QString> m_autotileScreens;
-    QSet<QString> m_scrollScreens; ///< Screens in scroll mode (from org.plasmazones.Scroll).
     /// Pre-autotile frame geometry, keyed [screenId][windowId].
     ///
     /// Ownership: this is a local cache. The daemon's

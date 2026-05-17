@@ -59,6 +59,8 @@ set(plasmazones_effect_SRCS
     autotilehandler/tiling.cpp
     navigationhandler.cpp
     navigationhandler.h
+    scrollhandler.cpp
+    scrollhandler.h
     screenchangehandler.cpp
     screenchangehandler.h
     snapassisthandler.cpp

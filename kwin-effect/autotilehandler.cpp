@@ -98,7 +98,7 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
 
 void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
 {
-    if (!isEligibleForAutotileNotify(w)) {
+    if (!m_effect->isEligibleForTilingNotify(w)) {
         return;
     }
 
@@ -117,15 +117,9 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
     QString screenId = m_effect->getWindowScreenId(w);
     m_notifiedWindowScreens[windowId] = screenId;
 
-    // Notify the placement daemon for windows on a tiling screen — autotile
-    // or scroll. The two screen sets are disjoint (a screen has one mode).
-    const bool isAutotile = m_autotileScreens.contains(screenId);
-    const bool isScroll = m_scrollScreens.contains(screenId);
-    if (!isAutotile && !isScroll) {
-        return;
-    }
-
-    if (isAutotile) {
+    // Only notify autotile daemon for windows on autotile screens. Scroll-mode
+    // screens are handled independently by ScrollHandler.
+    if (m_autotileScreens.contains(screenId)) {
         // Save pre-autotile geometry BEFORE the daemon tiles the window.
         // Without this, a window launched directly into autotile has no saved
         // geometry — floating it would leave it at its tiled position instead
@@ -137,35 +131,34 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
         // this flag the isWindowFloating() guard would drop the one-shot save.
         saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(),
                                          /*knownFreeFloating=*/true);
-    }
 
-    int minWidth = 0;
-    int minHeight = 0;
-    KWin::Window* kw = w->window();
-    if (kw) {
-        const QSizeF minSize = kw->minSize();
-        if (minSize.isValid()) {
-            minWidth = qCeil(minSize.width());
-            minHeight = qCeil(minSize.height());
+        int minWidth = 0;
+        int minHeight = 0;
+        KWin::Window* kw = w->window();
+        if (kw) {
+            const QSizeF minSize = kw->minSize();
+            if (minSize.isValid()) {
+                minWidth = qCeil(minSize.width());
+                minHeight = qCeil(minSize.height());
+            }
         }
-    }
 
-    const QString iface =
-        isAutotile ? PhosphorProtocol::Service::Interface::Autotile : PhosphorProtocol::Service::Interface::Scroll;
-    auto* watcher = new QDBusPendingCallWatcher(
-        PhosphorProtocol::ClientHelpers::asyncCall(iface, QStringLiteral("windowOpened"),
-                                                   {windowId, screenId, minWidth, minHeight}),
-        this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        if (w->isError()) {
-            qCWarning(lcEffect) << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
-            m_notifiedWindows.remove(windowId);
-            m_notifiedWindowScreens.remove(windowId);
-        }
-    });
-    qCDebug(lcEffect) << "Notified" << (isAutotile ? "autotile" : "scroll") << ": windowOpened" << windowId
-                      << "on screen" << screenId << "minSize:" << minWidth << "x" << minHeight;
+        auto* watcher =
+            new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
+                                            PhosphorProtocol::Service::Interface::Autotile,
+                                            QStringLiteral("windowOpened"), {windowId, screenId, minWidth, minHeight}),
+                                        this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            if (w->isError()) {
+                qCWarning(lcEffect) << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
+                m_notifiedWindows.remove(windowId);
+                m_notifiedWindowScreens.remove(windowId);
+            }
+        });
+        qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenId
+                          << "minSize:" << minWidth << "x" << minHeight;
+    }
 }
 
 void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows,
@@ -177,7 +170,7 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
     QStringList batchWindowIds; // for error rollback
 
     for (KWin::EffectWindow* w : windows) {
-        if (!isEligibleForAutotileNotify(w)) {
+        if (!m_effect->isEligibleForTilingNotify(w)) {
             continue;
         }
 
@@ -477,16 +470,12 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
         m_savedAutotileStackingOrder[screenId].removeAll(windowId);
     }
 
-    // Notify the placement daemon — autotile or scroll, whichever owns the screen.
-    const bool closedAutotile = m_autotileScreens.contains(screenId);
-    const bool closedScroll = m_scrollScreens.contains(screenId);
-    if (closedAutotile || closedScroll) {
-        const QString iface = closedAutotile ? PhosphorProtocol::Service::Interface::Autotile
-                                             : PhosphorProtocol::Service::Interface::Scroll;
-        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, iface, QStringLiteral("windowClosed"), {windowId},
+    // Notify autotile daemon. Scroll-mode screens are handled by ScrollHandler.
+    if (m_autotileScreens.contains(screenId)) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Autotile,
+                                                       QStringLiteral("windowClosed"), {windowId},
                                                        QStringLiteral("windowClosed"));
-        qCDebug(lcEffect) << "Notified" << (closedAutotile ? "autotile" : "scroll") << ": windowClosed" << windowId
-                          << "on screen" << screenId;
+        qCDebug(lcEffect) << "Notified autotile: windowClosed" << windowId << "on screen" << screenId;
     }
 }
 
@@ -623,22 +612,7 @@ void AutotileHandler::connectSignals()
                 PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowFloatingChanged"), this,
                 SLOT(slotWindowFloatingChanged(QString, bool, QString)));
 
-    // Scroll mode: learn which screens are scroll-mode so notifyWindowAdded /
-    // onWindowClosed report their windows to org.plasmazones.Scroll.
-    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                   PhosphorProtocol::Service::Interface::Scroll, QStringLiteral("scrollScreensChanged"), this,
-                   SLOT(slotScrollScreensChanged(QStringList)));
-    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::Scroll, QStringLiteral("scrollScreensChanged"), this,
-                SLOT(slotScrollScreensChanged(QStringList)));
-
-    qCInfo(lcEffect) << "Connected to autotile + scroll D-Bus signals";
-}
-
-void AutotileHandler::slotScrollScreensChanged(const QStringList& screenIds)
-{
-    m_scrollScreens = QSet<QString>(screenIds.cbegin(), screenIds.cend());
-    qCDebug(lcEffect) << "Scroll screens updated:" << m_scrollScreens;
+    qCInfo(lcEffect) << "Connected to autotile D-Bus signals";
 }
 
 void AutotileHandler::loadSettings()
