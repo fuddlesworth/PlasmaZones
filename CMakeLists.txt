@@ -390,7 +390,7 @@ add_subdirectory(libs/phosphor-scroll-engine) # niri-style scrollable-tiling str
 # Refuse to configure if any engine target ever picks up a Qml/Quick
 # link. Cheap guardrail; failures here mean someone added a dependency
 # that drags Qml in transitively or wired a target up wrong.
-foreach(_pz_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine PhosphorEngine)
+foreach(_pz_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine PhosphorScrollEngine PhosphorEngine)
     if(TARGET ${_pz_engine_lib})
         get_target_property(_pz_engine_links ${_pz_engine_lib} LINK_LIBRARIES)
         if(_pz_engine_links)

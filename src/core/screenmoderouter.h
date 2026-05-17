@@ -41,12 +41,13 @@ public:
     ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager, PhosphorEngine::IPlacementEngine* snapEngine,
                      PhosphorEngine::IPlacementEngine* autotileEngine, PhosphorEngine::IPlacementEngine* scrollEngine);
 
-    /// Current mode for @p screenId. Consults the autotile engine's
-    /// live set first (mode is derived from assignment + context) and
-    /// falls back to the layout manager's cascade for unknown screens.
-    /// Returns Snapping when the screen isn't recognised — safest
-    /// default since snap-mode operations are generally idempotent
-    /// against missing state.
+    /// Current mode for @p screenId. Consults the autotile and scroll
+    /// engines' live sets first (mode is derived from assignment + context)
+    /// and falls back to the layout manager's cascade for unknown screens —
+    /// a stale cascade result of Autotile or Scroll is downgraded to
+    /// Snapping. Returns Snapping when the screen isn't recognised — safest
+    /// default since snap-mode operations are generally idempotent against
+    /// missing state.
     PhosphorZones::AssignmentEntry::Mode modeFor(const QString& screenId) const;
 
     /// The engine that owns placement on @p screenId. Callers should treat
@@ -60,10 +61,10 @@ public:
     bool isAutotileMode(const QString& screenId) const;
     bool isScrollMode(const QString& screenId) const;
 
-    /// Split a list of screen ids into snap-mode and autotile-mode
-    /// buckets. Useful for multi-screen cleanup and resnap paths that
-    /// need to iterate one engine at a time. Preserves input order
-    /// within each bucket.
+    /// Split a list of screen ids into snap-mode, autotile-mode and
+    /// scroll-mode buckets. Useful for multi-screen cleanup and resnap
+    /// paths that need to iterate one engine at a time. Preserves input
+    /// order within each bucket.
     struct Partitioned
     {
         QStringList snap;

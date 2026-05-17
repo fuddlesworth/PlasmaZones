@@ -76,11 +76,12 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
 }
 
 /**
- * @brief Explicit per-context assignment entry storing both mode fields
+ * @brief Explicit per-context assignment entry storing the per-mode payload fields
  *
- * Each screen/desktop/activity context stores an explicit Mode, SnappingLayout (UUID),
- * and PhosphorTiles::TilingAlgorithm. Toggling between modes only flips the mode field —
- * the other field is preserved, eliminating the need for shadow assignments.
+ * Each screen/desktop/activity context stores an explicit Mode plus the
+ * SnappingLayout (UUID), TilingAlgorithm, and scrollSetting payloads. Toggling
+ * between modes only flips the mode field — the other payload fields are
+ * preserved, eliminating the need for shadow assignments.
  */
 struct AssignmentEntry
 {
@@ -118,7 +119,7 @@ struct AssignmentEntry
     }
     bool isValid() const
     {
-        return !snappingLayout.isEmpty() || !tilingAlgorithm.isEmpty();
+        return !snappingLayout.isEmpty() || !tilingAlgorithm.isEmpty() || !scrollSetting.isEmpty();
     }
     bool operator==(const AssignmentEntry& other) const
     {

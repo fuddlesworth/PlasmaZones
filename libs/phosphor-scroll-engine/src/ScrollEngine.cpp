@@ -234,7 +234,8 @@ void ScrollEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
         return;
     }
     ScrollScreenState* state = stateForKey(it.value(), /*create=*/false);
-    if (!state) {
+    if (!state || state->isFloating(windowId) == shouldFloat) {
+        // Already in the requested state — no transition, no signal.
         return;
     }
     if (shouldFloat) {
@@ -340,9 +341,11 @@ void ScrollEngine::cycleFocus(bool forward, const NavigationContext& ctx)
     const int count = state->columnCount();
     const int current = state->activeColumnIndex();
     const int next = forward ? (current + 1) % count : (current - 1 + count) % count;
-    state->focusColumn(next - current);
-    emitChanged(screenId);
-    reportNav(true, QStringLiteral("focus"), screenId);
+    const bool moved = state->focusColumn(next - current);
+    if (moved) {
+        emitChanged(screenId);
+    }
+    reportNav(moved, QStringLiteral("focus"), screenId);
 }
 
 void ScrollEngine::reapplyLayout(const NavigationContext& ctx)
@@ -360,7 +363,10 @@ void ScrollEngine::toggleFocusedFloat(const NavigationContext& ctx)
     if (windowId.isEmpty()) {
         windowId = ctx.windowId;
     }
-    if (windowId.isEmpty()) {
+    // The focused-window path yields a tracked window; the ctx.windowId
+    // fallback may not — guard so an untracked id still reports feedback
+    // rather than silently no-op'ing inside toggleWindowFloat().
+    if (windowId.isEmpty() || !isWindowTracked(windowId)) {
         reportNav(false, QStringLiteral("float"), screenId);
         return;
     }
@@ -430,7 +436,12 @@ void ScrollEngine::cyclePresetColumnWidth(const NavigationContext& ctx)
         return;
     }
     const int current = state->activeColumn()->presetWidthIndex();
-    const int next = (current + 1) % m_presetColumnWidths.size();
+    const int next = (current + 1) % static_cast<int>(m_presetColumnWidths.size());
+    if (next == current) {
+        // Single-element preset list, already on it — nothing changes.
+        reportNav(false, QStringLiteral("width"), screenId);
+        return;
+    }
     state->setActiveColumnWidth(ColumnWidth::proportion(m_presetColumnWidths.at(next)), next);
     emitChanged(screenId);
     reportNav(true, QStringLiteral("width"), screenId);
@@ -447,7 +458,12 @@ void ScrollEngine::cyclePresetWindowHeight(const NavigationContext& ctx)
         return;
     }
     const int current = (tile->height.kind == WindowHeight::Kind::Preset) ? tile->height.presetIndex : -1;
-    const int next = (current + 1) % m_presetWindowHeights.size();
+    const int next = (current + 1) % static_cast<int>(m_presetWindowHeights.size());
+    if (next == current) {
+        // Single-element preset list, already on it — nothing changes.
+        reportNav(false, QStringLiteral("height"), screenId);
+        return;
+    }
     state->setActiveTileHeight(WindowHeight::preset(next));
     emitChanged(screenId);
     reportNav(true, QStringLiteral("height"), screenId);

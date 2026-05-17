@@ -49,21 +49,21 @@ struct WindowHeight
     qreal fixedPx = 0.0;
     int presetIndex = 0;
 
-    static WindowHeight automatic(qreal weight = 1.0)
+    static constexpr WindowHeight automatic(qreal weight = 1.0)
     {
         WindowHeight h;
         h.kind = Kind::Auto;
         h.weight = weight;
         return h;
     }
-    static WindowHeight fixed(qreal pixels)
+    static constexpr WindowHeight fixed(qreal pixels)
     {
         WindowHeight h;
         h.kind = Kind::Fixed;
         h.fixedPx = pixels;
         return h;
     }
-    static WindowHeight preset(int index)
+    static constexpr WindowHeight preset(int index)
     {
         WindowHeight h;
         h.kind = Kind::Preset;

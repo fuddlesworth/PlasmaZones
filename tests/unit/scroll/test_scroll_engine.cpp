@@ -36,6 +36,7 @@ private Q_SLOTS:
     void focusAndMoveNavigation();
     void consumeAndExpel();
     void cyclePresetWidth();
+    void cyclePresetHeight();
     void floatToggle();
     void perDesktopState();
     void serializeRoundTrip();
@@ -121,6 +122,22 @@ void TestScrollEngine::cyclePresetWidth()
     engine.cyclePresetColumnWidth(ctx);
     QCOMPARE(state->activeColumn()->presetWidthIndex(), 1);
     QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 0.5));
+}
+
+void TestScrollEngine::cyclePresetHeight()
+{
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    const NavigationContext ctx = contextFor(QStringLiteral("S1"));
+
+    engine.cyclePresetWindowHeight(ctx);
+    const ScrollScreenState* state = scrollState(engine, QStringLiteral("S1"));
+    QVERIFY(state && state->activeColumn() && state->activeColumn()->activeTile());
+    QCOMPARE(state->activeColumn()->activeTile()->height.kind, WindowHeight::Kind::Preset);
+    QCOMPARE(state->activeColumn()->activeTile()->height.presetIndex, 0);
+
+    engine.cyclePresetWindowHeight(ctx);
+    QCOMPARE(state->activeColumn()->activeTile()->height.presetIndex, 1);
 }
 
 void TestScrollEngine::floatToggle()

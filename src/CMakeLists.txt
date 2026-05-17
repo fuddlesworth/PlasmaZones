@@ -360,6 +360,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/signals.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
+    daemon/daemon/scroll.cpp
     daemon/daemon/osd.cpp
     daemon/daemon.h
     daemon/daemon/helpers.h

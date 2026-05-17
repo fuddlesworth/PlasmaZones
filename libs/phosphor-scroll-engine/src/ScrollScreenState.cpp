@@ -40,7 +40,7 @@ void ScrollScreenState::addColumnForWindow(const QString& windowId)
     Column column;
     column.appendTile(Tile{windowId, WindowHeight::automatic()});
     const int insertAt = (m_activeColumnIndex < 0) ? 0 : m_activeColumnIndex + 1;
-    m_columns.insert(insertAt, column);
+    m_columns.insert(insertAt, std::move(column));
     m_activeColumnIndex = insertAt;
 }
 
@@ -117,7 +117,7 @@ bool ScrollScreenState::expelFromColumn()
     Column column;
     column.appendTile(moved);
     const int insertAt = m_activeColumnIndex + 1;
-    m_columns.insert(insertAt, column);
+    m_columns.insert(insertAt, std::move(column));
     m_activeColumnIndex = insertAt;
     return true;
 }
@@ -184,6 +184,9 @@ bool ScrollScreenState::moveTile(int delta)
         return false;
     }
     Column& column = m_columns[m_activeColumnIndex];
+    if (column.isEmpty()) {
+        return false;
+    }
     const int target = qBound(0, column.activeTileIndex() + delta, column.tileCount() - 1);
     return column.moveTile(column.activeTileIndex(), target);
 }
@@ -251,7 +254,10 @@ bool ScrollScreenState::isFloating(const QString& windowId) const
 
 QStringList ScrollScreenState::floatingWindows() const
 {
-    return QStringList(m_floatingWindows.cbegin(), m_floatingWindows.cend());
+    // Sorted so the result is deterministic — QSet iteration order is not.
+    QStringList ids(m_floatingWindows.cbegin(), m_floatingWindows.cend());
+    ids.sort();
+    return ids;
 }
 
 QString ScrollScreenState::placementIdForWindow(const QString& windowId) const
@@ -278,8 +284,12 @@ QJsonObject ScrollScreenState::toJson() const
     for (const Column& column : m_columns) {
         columns.append(column.toJson());
     }
+    // Serialised sorted so toJson() output is byte-stable across runs
+    // (QSet iteration order is unspecified).
+    QStringList floatingIds(m_floatingWindows.cbegin(), m_floatingWindows.cend());
+    floatingIds.sort();
     QJsonArray floating;
-    for (const QString& id : m_floatingWindows) {
+    for (const QString& id : floatingIds) {
         floating.append(id);
     }
 
@@ -297,11 +307,22 @@ ScrollScreenState ScrollScreenState::fromJson(const QJsonObject& obj)
     ScrollScreenState state;
     state.m_screenId = obj.value(QLatin1String("screenId")).toString();
 
+    // A window id must be unique across the whole strip and the floating
+    // set — duplicates from malformed JSON would corrupt locateWindow(),
+    // removeWindow(), focusWindow() and the window counts. Drop any repeat.
+    QSet<QString> seen;
     const QJsonArray columns = obj.value(QLatin1String("columns")).toArray();
     for (const QJsonValue& value : columns) {
         Column column = Column::fromJson(value.toObject());
+        for (const QString& id : column.windowIds()) {
+            if (seen.contains(id)) {
+                column.removeWindow(id);
+            } else {
+                seen.insert(id);
+            }
+        }
         if (!column.isEmpty()) {
-            state.m_columns.append(column);
+            state.m_columns.append(std::move(column));
         }
     }
     state.m_viewOffset = obj.value(QLatin1String("viewOffset")).toDouble(0.0);
@@ -311,8 +332,9 @@ ScrollScreenState ScrollScreenState::fromJson(const QJsonObject& obj)
     const QJsonArray floating = obj.value(QLatin1String("floating")).toArray();
     for (const QJsonValue& value : floating) {
         const QString id = value.toString();
-        if (!id.isEmpty()) {
+        if (!id.isEmpty() && !seen.contains(id)) {
             state.m_floatingWindows.insert(id);
+            seen.insert(id);
         }
     }
     return state;

@@ -36,6 +36,9 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
     snap->setAutotileEngine(autotile.get());
 
     // --- ScrollEngine ---
+    // ScrollEngine is geometry-agnostic and receives window events via the
+    // router, so — unlike autotile/snap — it needs no ScreenManager,
+    // WindowTrackingService, algorithm registry or zone detector.
     auto scroll = std::make_unique<PhosphorScrollEngine::ScrollEngine>(nullptr);
     scroll->setEngineSettings(settings);
 

@@ -110,6 +110,11 @@ QHash<QString, QRectF> resolveScrollLayout(const ScrollScreenState& state, const
                 const qreal weight = qMax(tiles.at(ti).height.weight, qreal(0.0));
                 height = (weightSum > 0.0) ? autoSpace * weight / weightSum : autoSpace / autoCount;
             }
+            // Floor to a positive height, mirroring resolveColumnWidth — a
+            // zero-height window rect (zero-weight Auto tile, or a column
+            // whose concrete heights exhaust the space) is not usable
+            // downstream.
+            height = qMax(height, qreal(1.0));
             geometries.insert(tiles.at(ti).windowId, QRectF(columnX, y, columnW, height));
             y += height + inner;
         }

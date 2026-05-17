@@ -54,11 +54,13 @@ struct EngineSet
     std::unique_ptr<PhosphorTileEngine::AutotileEngine> autotile;
     std::unique_ptr<PhosphorSnapEngine::SnapEngine> snap;
     std::unique_ptr<PhosphorScrollEngine::ScrollEngine> scroll;
+    // Declared last so it is destroyed first: the router holds raw pointers
+    // into the three engines above and must not outlive them.
     std::unique_ptr<ScreenModeRouter> router;
 };
 
 /**
- * @brief Create both placement engines and the mode router.
+ * @brief Create all three placement engines (snap, autotile, scroll) and the mode router.
  *
  * Concrete engine headers are included in the .cpp — the factory header
  * only forward-declares them. The caller (Daemon) must wire persistence
