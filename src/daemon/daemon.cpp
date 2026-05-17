@@ -16,7 +16,6 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusError>
-#include <QDBusInterface>
 #include <QDir>
 #include <QFile>
 #include <QSet>
@@ -1315,6 +1314,13 @@ void Daemon::start()
 
 void Daemon::warnCompositorBridgeMissing()
 {
+    // Stay silent during shutdown. The watchdog may still be armed when the
+    // session ends, and a warning/notification raised on the way out is just
+    // noise — mirrors the OSD suppression gated on m_running/m_shuttingDown.
+    if (m_shuttingDown) {
+        return;
+    }
+
     // Re-check: the watchdog is stopped on bridgeRegistered, but a registration
     // landing in the same event-loop turn as the timeout could still reach
     // here. Treat a registered bridge as success and stay silent.
@@ -1329,21 +1335,27 @@ void Daemon::warnCompositorBridgeMissing()
                         << "restart the Plasma session so KWin loads it.";
 
     // Raise a desktop notification via the freedesktop spec so the user sees
-    // the problem without having to read the journal. QDBusInterface avoids a
-    // hard dependency on KNotification; every Plasma session runs a
-    // notification server. Fire-and-forget — a missing server is non-fatal.
-    QDBusInterface notify(QStringLiteral("org.freedesktop.Notifications"),
-                          QStringLiteral("/org/freedesktop/Notifications"),
-                          QStringLiteral("org.freedesktop.Notifications"), QDBusConnection::sessionBus());
-    if (!notify.isValid()) {
-        return;
-    }
-    notify.asyncCall(QStringLiteral("Notify"), QStringLiteral("PlasmaZones"), 0u, QStringLiteral("plasmazones"),
-                     PzI18n::tr("PlasmaZones: window manager integration inactive"),
-                     PzI18n::tr("The PlasmaZones KWin effect is not running, so window dragging and "
-                                "shortcuts will not work. Enable it in System Settings > Desktop Effects, "
-                                "then restart the Plasma session."),
-                     QStringList(), QVariantMap(), -1);
+    // the problem without having to read the journal. A direct method call
+    // (rather than QDBusInterface) keeps this off the main thread's critical
+    // path: QDBusInterface's constructor does a blocking Introspect round-trip,
+    // whereas createMethodCall + asyncCall is genuinely fire-and-forget. A
+    // missing notification server just makes the async call error out, which
+    // is fine. Mirrors the createMethodCall pattern used elsewhere in daemon.
+    QDBusMessage notify = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("/org/freedesktop/Notifications"),
+        QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("Notify"));
+    notify << QStringLiteral("PlasmaZones") // app_name
+           << 0u // replaces_id
+           << QStringLiteral("plasmazones") // app_icon
+           << PzI18n::tr("PlasmaZones: window manager integration inactive") // summary
+           << PzI18n::tr(
+                  "The PlasmaZones KWin effect is not running, so window dragging and "
+                  "shortcuts will not work. Enable it in System Settings > Desktop Effects, "
+                  "then restart the Plasma session.") // body
+           << QStringList() // actions
+           << QVariantMap() // hints
+           << -1; // timeout (server default)
+    QDBusConnection::sessionBus().asyncCall(notify);
 }
 
 void Daemon::stop()
