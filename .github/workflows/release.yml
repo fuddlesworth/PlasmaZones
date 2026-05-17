@@ -379,6 +379,11 @@ jobs:
           mkdir -p "$DIRNAME"
           mv AppDir/usr "$DIRNAME/"
 
+          # License files at the tarball root. A binary distribution must
+          # carry its own licenses, and the AUR plasmazones-bin package —
+          # which only ever has this tarball — installs them from here.
+          cp LICENSE COPYING.LESSER "$DIRNAME/"
+
           # Copy installer and uninstaller scripts to root of tarball
           cp packaging/local-install/install.sh "$DIRNAME/"
           cp packaging/local-install/uninstall.sh "$DIRNAME/"
