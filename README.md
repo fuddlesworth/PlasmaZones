@@ -60,7 +60,7 @@ systemctl --user enable --now plasmazones.service
 kbuildsycoca6 --noincremental    # KDE only — refresh the service cache
 ```
 
-Requirements: a Wayland compositor with layer-shell support, Qt 6.6+, CMake 3.16+, and a C++20 compiler. Optional: KDE Frameworks 6.6+ for the KWin effect and KCM integration, PlasmaActivities for activity-based layouts.
+Requirements: KDE Plasma 6 on Wayland — the integration runs as a KWin effect — plus Qt 6.6+, CMake 3.16+, and a C++20 compiler. Optional: KDE Frameworks 6.6+ for the settings KCM and KGlobalAccel shortcuts, PlasmaActivities for activity-based layouts. The portable build (`-DUSE_KDE_FRAMEWORKS=OFF`) drops the framework deps.
 
 ---
 
