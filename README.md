@@ -60,7 +60,7 @@ systemctl --user enable --now plasmazones.service
 kbuildsycoca6 --noincremental    # KDE only — refresh the service cache
 ```
 
-Requirements: a Wayland compositor with layer-shell support, Qt 6.6+, CMake 3.16+, and a C++20 compiler. Optional: KDE Frameworks 6.6+ for the KWin effect and KCM integration, PlasmaActivities for activity-based layouts.
+Requirements: KDE Plasma 6 on Wayland — the integration runs as a KWin effect — plus Qt 6.6+, CMake 3.16+, and a C++20 compiler. Optional: KDE Frameworks 6.6+ for the settings KCM and KGlobalAccel shortcuts, PlasmaActivities for activity-based layouts. The portable build (`-DUSE_KDE_FRAMEWORKS=OFF`) drops the framework deps.
 
 ---
 
@@ -68,7 +68,7 @@ Requirements: a Wayland compositor with layer-shell support, Qt 6.6+, CMake 3.16
 
 1. Enable the daemon: `systemctl --user enable --now plasmazones.service`
 2. Open the settings app: `plasmazones-settings` (or **System Settings → PlasmaZones** on KDE)
-3. **KDE only:** enable the effect in **System Settings → Window Management → Desktop Effects → PlasmaZones**. Snapping is routed through this KWin effect — until it is ticked, dragging a window does nothing.
+3. Enable the effect in **System Settings → Window Management → Desktop Effects → PlasmaZones**. This is required — PlasmaZones runs as a KWin effect, so nothing works until it is ticked.
 4. **Drag any window while holding Alt** — zones appear, drop to snap.
 
 Full first-run tour: **[Getting started →](https://phosphor-works.github.io/plasmazones/getting-started/)**.
