@@ -331,11 +331,14 @@ void ScrollHandler::flushReasserts()
         }
         // Re-assert the daemon's resolved geometry — an app cannot resize its
         // way out of the scroll strip. Interactive resize arrives in Phase 3.
-        m_effect->applySnapGeometry(w, it.value(), /*allowDuringDrag=*/false, /*skipAnimation=*/true);
-        // One re-assert per daemon-resolve episode: if the window still drifts
-        // after this, it physically cannot hit the tile rect (size hints), so
-        // onWindowFrameGeometryChanged must not re-queue it into a loop.
+        // Mark re-asserted BEFORE applySnapGeometry: moveResize emits
+        // windowFrameGeometryChanged synchronously, re-entering
+        // onWindowFrameGeometryChanged — which must already see this window as
+        // re-asserted so it does not re-queue a second cycle. One re-assert per
+        // daemon-resolve episode; a window that still drifts after it cannot
+        // hit the exact tile rect (size hints) and is left as-is.
         m_reasserted.insert(windowId);
+        m_effect->applySnapGeometry(w, it.value(), /*allowDuringDrag=*/false, /*skipAnimation=*/true);
         qCDebug(lcEffect) << "Re-asserted scroll geometry for" << windowId << "->" << it.value();
     }
 }
