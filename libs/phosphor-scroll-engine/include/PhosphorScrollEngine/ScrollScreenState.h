@@ -90,6 +90,9 @@ public:
     bool focusColumn(int delta);
     /// Move tile focus within the focused column by @p delta (clamped).
     bool focusTile(int delta);
+    /// Focus the column and tile holding @p windowId. Returns false if the
+    /// window is not tiled.
+    bool focusWindow(const QString& windowId);
     /// Reorder the focused column by @p delta; focus follows it.
     bool moveColumn(int delta);
     /// Reorder the focused tile within its column by @p delta; focus follows.
@@ -97,7 +100,9 @@ public:
 
     // ── Width / height intent ───────────────────────────────────────────
     /// Set the focused column's width intent (no-op when the strip is empty).
-    void setActiveColumnWidth(const ColumnWidth& width);
+    /// @p presetIndex tags which width preset the value corresponds to, or
+    /// -1 when the width is not one of the presets.
+    void setActiveColumnWidth(const ColumnWidth& width, int presetIndex = -1);
     /// Set the focused tile's height intent (no-op when the strip is empty).
     void setActiveTileHeight(const WindowHeight& height);
 

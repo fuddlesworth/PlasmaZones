@@ -19,14 +19,19 @@ endif()
 
 include(GenerateExportHeader)
 
+# ScrollEngine is a QObject (PlacementEngineBase subclass) — needs moc.
+set(CMAKE_AUTOMOC ON)
+
 add_library(PhosphorScrollEngine SHARED
     include/PhosphorScrollEngine/ScrollTypes.h
     include/PhosphorScrollEngine/Column.h
     include/PhosphorScrollEngine/ScrollScreenState.h
     include/PhosphorScrollEngine/ScrollLayout.h
+    include/PhosphorScrollEngine/ScrollEngine.h
     src/Column.cpp
     src/ScrollScreenState.cpp
     src/ScrollLayout.cpp
+    src/ScrollEngine.cpp
 )
 add_library(PhosphorScrollEngine::PhosphorScrollEngine ALIAS PhosphorScrollEngine)
 

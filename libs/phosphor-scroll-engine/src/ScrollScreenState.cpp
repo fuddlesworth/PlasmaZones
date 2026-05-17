@@ -152,6 +152,17 @@ bool ScrollScreenState::focusTile(int delta)
     return true;
 }
 
+bool ScrollScreenState::focusWindow(const QString& windowId)
+{
+    const auto [columnIndex, tileIndex] = locateWindow(windowId);
+    if (columnIndex < 0) {
+        return false;
+    }
+    m_activeColumnIndex = columnIndex;
+    m_columns[columnIndex].setActiveTileIndex(tileIndex);
+    return true;
+}
+
 bool ScrollScreenState::moveColumn(int delta)
 {
     if (m_activeColumnIndex < 0) {
@@ -177,10 +188,11 @@ bool ScrollScreenState::moveTile(int delta)
     return column.moveTile(column.activeTileIndex(), target);
 }
 
-void ScrollScreenState::setActiveColumnWidth(const ColumnWidth& width)
+void ScrollScreenState::setActiveColumnWidth(const ColumnWidth& width, int presetIndex)
 {
     if (m_activeColumnIndex >= 0) {
         m_columns[m_activeColumnIndex].setWidth(width);
+        m_columns[m_activeColumnIndex].setPresetWidthIndex(presetIndex);
     }
 }
 
