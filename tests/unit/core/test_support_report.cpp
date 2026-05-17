@@ -116,7 +116,12 @@ private Q_SLOTS:
         snap.bridgeCapabilities = {QStringLiteral("borderless"), QStringLiteral("modifiers")};
         const QString report = SupportReport::generateFromSnapshot(snap, 30);
         QVERIFY(report.contains(QStringLiteral("**Status:** connected")));
-        QVERIFY(report.contains(QStringLiteral("kwin")));
+        // Match the rendered lines specifically — a bare "kwin" substring is
+        // also produced by the unrelated "no kwin_wayland journal" message in
+        // the KWin Effect Logs section, so it would pass even if the
+        // compositor name were never rendered.
+        QVERIFY(report.contains(QStringLiteral("**Compositor:** kwin")));
+        QVERIFY(report.contains(QStringLiteral("**Effect protocol version:** 3")));
         QVERIFY(report.contains(QStringLiteral("borderless, modifiers")));
         QVERIFY(!report.contains(QStringLiteral("NOT CONNECTED")));
     }
