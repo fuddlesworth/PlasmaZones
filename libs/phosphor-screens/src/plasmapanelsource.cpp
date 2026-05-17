@@ -213,7 +213,16 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
         QHash<QString, Offsets> previous = m_offsets;
         m_offsets.clear();
 
+        // Flip m_ready BEFORE emitting panelOffsetsChanged. ScreenManager
+        // emits its one-shot panelGeometryReady from onPanelOffsetsChanged
+        // only when ready() is already true; emitting first would let every
+        // first-ready emission slip past that latch and the signal would
+        // never fire.
         const bool firstReady = !m_ready;
+        if (firstReady) {
+            m_ready = true;
+            qCInfo(lcPhosphorScreens) << "Panel geometry: ready, no Plasma shell";
+        }
         for (auto* screen : QGuiApplication::screens()) {
             // On the first-ready transition we want a fan-out for every
             // screen. Once ready, only screens whose prior offsets were
@@ -224,11 +233,6 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
             if (firstReady || previous.contains(screen->name())) {
                 Q_EMIT panelOffsetsChanged(screen);
             }
-        }
-
-        if (firstReady) {
-            m_ready = true;
-            qCInfo(lcPhosphorScreens) << "Panel geometry: ready, no Plasma shell";
         }
         if (emitRequeryCompleted) {
             Q_EMIT requeryCompleted();
@@ -421,6 +425,24 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
 
             m_offsets = std::move(newOffsets);
 
+            // Flip to ready BEFORE emitting any panelOffsetsChanged below.
+            // ScreenManager emits its one-shot panelGeometryReady from
+            // onPanelOffsetsChanged only when ready() is already true. On the
+            // first query m_offsets starts empty, so every screen with panel
+            // data lands in changedNames; if the changed-screen emissions
+            // fired with m_ready still false, the post-flip fan-out (which
+            // covers only screens NOT in changedNames) would be empty and
+            // panelGeometryReady would never fire.
+            //
+            // Only flip on a *successful* reply. A transient D-Bus failure
+            // must not leave us stuck "ready with no panels" — the watcher
+            // would then never retry first-ready on the next requestRequery.
+            const bool firstReady = (!m_ready && replyValid);
+            if (firstReady) {
+                m_ready = true;
+                qCInfo(lcPhosphorScreens) << "Panel geometry: ready";
+            }
+
             const auto qtScreens = QGuiApplication::screens();
             for (const QString& name : std::as_const(changedNames)) {
                 for (auto* qs : qtScreens) {
@@ -431,19 +453,11 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                 }
             }
 
-            // Only flip to ready on a *successful* reply. A transient D-Bus
-            // failure must not leave us stuck in "ready with no panels"
-            // forever — the watcher would then never retry first-ready on the
-            // next `requestRequery` because we'd already be ready. Callers
-            // gate startup work on this flag; giving them a false positive
-            // paints stale geometry.
-            if (!m_ready && replyValid) {
-                m_ready = true;
-                qCInfo(lcPhosphorScreens) << "Panel geometry: ready";
-                // First-ready transition — synthetic per-screen fan-out so
-                // listeners that wire panelGeometryReady to "now compute
-                // zones" pick up the offsets even if no per-screen diff
-                // fired (e.g. a screen with no panels at all).
+            if (firstReady) {
+                // First-ready fan-out for screens with no per-screen diff
+                // (e.g. a screen with no panels at all) so listeners that
+                // wire panelGeometryReady to "now compute zones" still get
+                // a kick for every screen.
                 for (auto* qs : qtScreens) {
                     if (!changedNames.contains(qs->name())) {
                         Q_EMIT panelOffsetsChanged(qs);
