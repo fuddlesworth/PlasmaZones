@@ -63,6 +63,11 @@ public:
     /// Report a window close to the scroll engine if it was on a scroll screen.
     void onWindowClosed(const QString& windowId, const QString& screenId);
 
+    /// Report a minimize/restore for a scroll-mode window. A window restored
+    /// from minimize without ever having been reported open (it opened
+    /// minimized) is treated as a fresh open.
+    void onWindowMinimizedChanged(KWin::EffectWindow* w);
+
     /// Report a focus change to the scroll engine. No-op off scroll screens.
     void notifyWindowFocused(const QString& windowId, const QString& screenId);
 

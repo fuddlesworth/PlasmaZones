@@ -77,4 +77,12 @@ void ScrollAdaptor::notifyWindowFocused(const QString& windowId, const QString& 
     m_engine->windowFocused(windowId, screenId);
 }
 
+void ScrollAdaptor::windowMinimizedChanged(const QString& windowId, bool minimized)
+{
+    if (!ensureEngine("windowMinimizedChanged")) {
+        return;
+    }
+    m_engine->windowMinimizedChanged(windowId, minimized);
+}
+
 } // namespace PlasmaZones

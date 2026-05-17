@@ -80,6 +80,16 @@ public:
     /// column if it becomes empty. Returns true if the window was found.
     bool removeWindow(const QString& windowId);
 
+    /// Mark @p windowId minimized or restored. A minimized tiled window keeps
+    /// its slot in the strip but is excluded from the resolved layout —
+    /// Karousel's TiledMinimized state — so its column collapses out of view
+    /// (and reappears in place) without losing column/tile order. Returns
+    /// true if the state changed. Minimizing the focused window hands focus
+    /// to the nearest still-visible window.
+    bool setWindowMinimized(const QString& windowId, bool minimized);
+    /// Whether @p windowId is a minimized tiled window.
+    bool isWindowMinimized(const QString& windowId) const;
+
     // ── niri column / tile operations ───────────────────────────────────
     /// Pull the focused tile of the next column into the focused column.
     bool consumeIntoColumn();
@@ -133,6 +143,9 @@ private:
     /// Re-point the focus at @p preferredWindowId if it is still tiled,
     /// otherwise clamp the active index into range.
     void refocus(const QString& preferredWindowId);
+    /// First non-minimized window in strip order, or empty when every tiled
+    /// window is minimized. Used to move focus off a window being minimized.
+    QString firstVisibleWindowId() const;
 
     QString m_screenId;
     QVector<Column> m_columns;

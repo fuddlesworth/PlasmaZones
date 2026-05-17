@@ -477,6 +477,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::minimizedChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowMinimizedChanged);
 
+    // Scroll: track minimize/unminimize — a minimized scroll window keeps its
+    // slot in the strip but drops out of the visible layout.
+    connect(w, &KWin::EffectWindow::minimizedChanged, m_scrollHandler.get(), &ScrollHandler::onWindowMinimizedChanged);
+
     // Snap mode: track minimize/unminimize to float/unfloat snapped windows
     connect(w, &KWin::EffectWindow::minimizedChanged, this, &PlasmaZonesEffect::slotWindowMinimizedChanged);
 }

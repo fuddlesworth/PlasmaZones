@@ -223,6 +223,18 @@ void ScrollEngine::windowFocused(const QString& windowId, const QString& screenI
     }
 }
 
+void ScrollEngine::windowMinimizedChanged(const QString& windowId, bool minimized)
+{
+    const auto it = m_windowToKey.constFind(windowId);
+    if (it == m_windowToKey.constEnd()) {
+        return;
+    }
+    if (ScrollScreenState* state = stateForKey(it.value(), /*create=*/false);
+        state && state->setWindowMinimized(windowId, minimized)) {
+        emitChanged(it.value().screenId);
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Float
 // ─────────────────────────────────────────────────────────────────────────

@@ -36,6 +36,8 @@ private Q_SLOTS:
     void fixedHeightTileTakesSpaceFirst();
     void presetHeightResolved();
     void fixedWidthColumn();
+    void minimizedTileExcluded();
+    void fullyMinimizedColumnCollapses();
     void visibilityHelper();
 };
 
@@ -136,6 +138,44 @@ void TestScrollLayout::fixedWidthColumn()
 
     const QHash<QString, QRectF> geometry = resolveScrollLayout(state, kWorkArea, standardConfig());
     QCOMPARE(geometry.value(QStringLiteral("a")).width(), 300.0);
+}
+
+void TestScrollLayout::minimizedTileExcluded()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addWindowToActiveColumn(QStringLiteral("b")); // column [a, b]
+
+    // With "b" minimized, "a" alone fills the column's full height — the
+    // minimized tile takes no slot in the vertical layout.
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true));
+    const QHash<QString, QRectF> geometry = resolveScrollLayout(state, kWorkArea, standardConfig());
+    QCOMPARE(static_cast<int>(geometry.size()), 1);
+    QVERIFY(!geometry.contains(QStringLiteral("b")));
+    QCOMPARE(geometry.value(QStringLiteral("a")), QRectF(10.0, 10.0, 490.0, 780.0));
+}
+
+void TestScrollLayout::fullyMinimizedColumnCollapses()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b"));
+    state.addColumnForWindow(QStringLiteral("c")); // [a][b][c]
+    QVERIFY(state.focusWindow(QStringLiteral("a")));
+
+    // Minimizing the whole middle column collapses it out of the strip with
+    // no gap: "c" sits flush after "a", exactly where "b" used to be.
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true));
+    const QHash<QString, QRectF> geometry = resolveScrollLayout(state, kWorkArea, standardConfig());
+    QVERIFY(!geometry.contains(QStringLiteral("b")));
+    QCOMPARE(geometry.value(QStringLiteral("a")), QRectF(10.0, 10.0, 490.0, 780.0));
+    QCOMPARE(geometry.value(QStringLiteral("c")), QRectF(510.0, 10.0, 490.0, 780.0));
+
+    // Restoring "b" brings it back in its original slot, between "a" and "c".
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), false));
+    const QHash<QString, QRectF> restored = resolveScrollLayout(state, kWorkArea, standardConfig());
+    QCOMPARE(restored.value(QStringLiteral("b")), QRectF(510.0, 10.0, 490.0, 780.0));
+    QCOMPARE(restored.value(QStringLiteral("c")), QRectF(1010.0, 10.0, 490.0, 780.0));
 }
 
 void TestScrollLayout::visibilityHelper()

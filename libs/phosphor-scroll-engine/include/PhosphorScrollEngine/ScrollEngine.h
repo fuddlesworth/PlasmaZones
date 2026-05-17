@@ -73,6 +73,11 @@ public:
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
+    /// React to a tracked window being minimized or restored. A minimized
+    /// window keeps its slot in the strip but drops out of the resolved
+    /// layout (Karousel's TiledMinimized). Scroll-specific — minimize has no
+    /// IPlacementEngine equivalent (autotile routes minimize through float).
+    void windowMinimizedChanged(const QString& windowId, bool minimized);
 
     // ── Float ───────────────────────────────────────────────────────────
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;

@@ -173,6 +173,35 @@ void ScrollHandler::onWindowClosed(const QString& windowId, const QString& scree
     }
 }
 
+void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    const bool minimized = w->isMinimized();
+
+    if (!m_notifiedWindows.contains(windowId)) {
+        // The window was never reported open — e.g. it opened already
+        // minimized (isEligibleForTilingNotify rejects minimized windows).
+        // On restore, treat it as a fresh open; a minimize for a window the
+        // engine never knew about needs no report.
+        if (!minimized) {
+            notifyWindowAdded(w);
+        }
+        return;
+    }
+
+    const QString screenId = m_notifiedWindowScreens.value(windowId);
+    if (!m_scrollScreens.contains(screenId)) {
+        return;
+    }
+    PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
+                                                   QStringLiteral("windowMinimizedChanged"), {windowId, minimized},
+                                                   QStringLiteral("windowMinimizedChanged"));
+    qCDebug(lcEffect) << "Notified scroll: windowMinimizedChanged" << windowId << minimized;
+}
+
 void ScrollHandler::notifyWindowFocused(const QString& windowId, const QString& screenId)
 {
     if (!m_scrollScreens.contains(screenId)) {

@@ -44,5 +44,13 @@
             <arg name="windowId" type="s" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>
         </method>
+
+        <!-- A scroll-mode window was minimized (true) or restored (false).
+             A minimized window keeps its slot in the strip but drops out of
+             the visible layout. -->
+        <method name="windowMinimizedChanged">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="minimized" type="b" direction="in"/>
+        </method>
     </interface>
 </node>

@@ -63,6 +63,7 @@ public Q_SLOTS:
     void windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList& entries);
     void windowClosed(const QString& windowId);
     void notifyWindowFocused(const QString& windowId, const QString& screenId);
+    void windowMinimizedChanged(const QString& windowId, bool minimized);
 
 Q_SIGNALS:
     /// Emitted when the set of scroll-mode screens changes; the KWin effect

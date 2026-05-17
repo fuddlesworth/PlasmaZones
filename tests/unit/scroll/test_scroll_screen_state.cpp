@@ -19,6 +19,7 @@ private Q_SLOTS:
     void addToActiveColumn();
     void removeDropsEmptyColumn();
     void consumeAndExpel();
+    void minimizeKeepsSlot();
     void focusAndMoveColumns();
     void tileNavigation();
     void placementAndFloating();
@@ -109,6 +110,35 @@ void TestScrollScreenState::consumeAndExpel()
     QCOMPARE(state.columnCount(), 2);
     QCOMPARE(state.activeColumnIndex(), 1);
     QCOMPARE(state.focusedWindowId(), QStringLiteral("b"));
+}
+
+void TestScrollScreenState::minimizeKeepsSlot()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b"));
+    state.addColumnForWindow(QStringLiteral("c")); // [a][b][c]
+
+    QVERIFY(state.focusWindow(QStringLiteral("b")));
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true));
+    QVERIFY(state.isWindowMinimized(QStringLiteral("b")));
+    QCOMPARE(state.columnCount(), 3); // slot kept — the column is not dropped
+    QCOMPARE(state.tiledWindowCount(), 3); // still tiled, only hidden
+    // The focused window must not be a minimized one.
+    QVERIFY(state.focusedWindowId() != QStringLiteral("b"));
+    QVERIFY(!state.isWindowMinimized(state.focusedWindowId()));
+
+    QVERIFY(!state.setWindowMinimized(QStringLiteral("b"), true)); // already minimized — no-op
+    QVERIFY(!state.setWindowMinimized(QStringLiteral("missing"), true));
+
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), false)); // restore
+    QVERIFY(!state.isWindowMinimized(QStringLiteral("b")));
+
+    // The minimized flag survives a JSON round-trip.
+    QVERIFY(state.setWindowMinimized(QStringLiteral("c"), true));
+    const ScrollScreenState restored = ScrollScreenState::fromJson(state.toJson());
+    QVERIFY(restored.isWindowMinimized(QStringLiteral("c")));
+    QVERIFY(!restored.isWindowMinimized(QStringLiteral("a")));
 }
 
 void TestScrollScreenState::focusAndMoveColumns()
