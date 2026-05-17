@@ -675,7 +675,10 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
         }
     }
     if (!areaGeom.isValid() && physScreen) {
-        areaGeom = mgr ? m_screenManager->actualAvailableGeometry(physInfo) : physScreen->availableGeometry();
+        // physInfo is valid only when it came from the manager; gate on that
+        // directly rather than `mgr` so the contract is self-evident here.
+        areaGeom =
+            physInfo.isValid() ? m_screenManager->actualAvailableGeometry(physInfo) : physScreen->availableGeometry();
     }
     if (!areaGeom.isValid()) {
         return QRect();

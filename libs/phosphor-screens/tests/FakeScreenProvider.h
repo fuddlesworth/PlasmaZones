@@ -36,15 +36,18 @@ public:
     /// to @p name when empty. The first screen added becomes primary.
     void addScreen(const QString& name, const QRect& geometry, const QString& identifier = QString());
 
-    /// Disconnect @p name and emit screenRemoved. No-op if not present.
+    /// Disconnect @p name and emit screenRemoved. Warns and no-ops if @p name
+    /// is not a connected output.
     void removeScreen(const QString& name);
 
-    /// Change @p name's geometry and emit screenGeometryChanged. No-op if
-    /// not present.
+    /// Change @p name's geometry and emit screenGeometryChanged. Emitting is
+    /// suppressed when @p newGeometry equals the current geometry (mirroring
+    /// Qt). Warns and no-ops if @p name is not a connected output.
     void moveScreen(const QString& name, const QRect& newGeometry);
 
     /// Designate @p name the primary output (no signal — primary is a
-    /// pull-only query in the IScreenProvider contract).
+    /// pull-only query in the IScreenProvider contract). Warns and leaves the
+    /// primary unchanged if @p name is not a connected output.
     void setPrimary(const QString& name);
 
 private:

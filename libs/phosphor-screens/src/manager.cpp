@@ -510,6 +510,7 @@ QRect ScreenManager::actualAvailableGeometry(const PhysicalScreen& screen) const
 
 QRect ScreenManager::actualAvailableGeometry(QScreen* screen) const
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (!screen) {
         return QRect();
     }
@@ -596,6 +597,9 @@ void ScreenManager::propagateIdentifierDrift(const QHash<QString, QString>& oldI
 
 void ScreenManager::onProviderScreenAdded(const PhysicalScreen& screen)
 {
+    // Mutates the GUI-thread-only caches via syncTrackedScreens / sensor
+    // creation — assert the IScreenProvider emitted on the GUI thread.
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (!screen.isValid()) {
         return;
     }
@@ -627,6 +631,9 @@ void ScreenManager::onProviderScreenAdded(const PhysicalScreen& screen)
 
 void ScreenManager::onProviderScreenRemoved(const PhysicalScreen& screen)
 {
+    // Mutates the GUI-thread-only caches (virtual-geometry cache, sensor map)
+    // — assert the IScreenProvider emitted on the GUI thread.
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (!screen.isValid()) {
         return;
     }
@@ -662,6 +669,9 @@ void ScreenManager::onProviderScreenRemoved(const PhysicalScreen& screen)
 
 void ScreenManager::onProviderScreenGeometryChanged(const PhysicalScreen& screen)
 {
+    // Mutates the GUI-thread-only caches (virtual-geometry + available-geometry)
+    // — assert the IScreenProvider emitted on the GUI thread.
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (!screen.isValid()) {
         return;
     }
@@ -682,7 +692,11 @@ void ScreenManager::onProviderScreenGeometryChanged(const PhysicalScreen& screen
     // to the real position, and every layout anchored to that screen
     // renders shifted to the desktop origin. Mirrors the recompute that
     // onSensorGeometryChanged and onPanelOffsetsChanged already perform.
-    calculateAvailableGeometry(screen);
+    //
+    // Recompute against the freshly-synced tracked snapshot rather than the
+    // signal payload, matching onProviderScreenAdded's createGeometrySensor
+    // call — the manager operates on its own tracked set, not raw payloads.
+    calculateAvailableGeometry(trackedScreenByName(screen.name));
     Q_EMIT screenGeometryChanged(screen);
 }
 

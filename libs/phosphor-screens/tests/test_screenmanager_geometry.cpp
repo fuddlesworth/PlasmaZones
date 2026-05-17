@@ -111,6 +111,13 @@ private Q_SLOTS:
         QCOMPARE(availSpy.at(0).at(1).toRect(), resized);
         QVERIFY(mgr.physicalScreenFor(QStringLiteral("DP-1")).isValid());
         QCOMPARE(mgr.actualAvailableGeometry(mgr.physicalScreenFor(QStringLiteral("DP-1"))), resized);
+
+        // A no-op resize (identical geometry) is suppressed by
+        // FakeScreenProvider — mirroring Qt, which does not fire
+        // QScreen::geometryChanged when geometry() is unchanged — so it
+        // triggers no recompute and no further availableGeometryChanged.
+        fake.moveScreen(QStringLiteral("DP-1"), resized);
+        QCOMPARE(availSpy.count(), 1);
     }
 
     // The #465 DPMS-wake shape exactly: an output drops, re-appears at a
@@ -132,6 +139,10 @@ private Q_SLOTS:
         // The re-added output is tracked, sitting at its transient origin.
         QVERIFY(mgr.physicalScreenFor(QStringLiteral("DP-1")).isValid());
         QCOMPARE(mgr.screenGeometry(QStringLiteral("DP-1")), transient);
+        // Pin the available rect at the transient stage: the re-add must not
+        // carry a stale pre-removal available rect — the exact #465 failure.
+        // With no panel source it equals the transient screen rect here.
+        QCOMPARE(mgr.actualAvailableGeometry(mgr.physicalScreenFor(QStringLiteral("DP-1"))), transient);
 
         QSignalSpy availSpy(&mgr, &ScreenManager::availableGeometryChanged);
 

@@ -112,6 +112,9 @@ void Daemon::connectScreenSignals()
                 // Invalidate cached EDID serial so a fresh sysfs read happens for this connector
                 // (handles the case where EDID wasn't available during very early startup)
                 Phosphor::Screens::ScreenIdentity::invalidateEdidCache(screen.name);
+                // The daemon's ScreenManager runs on the live QtScreenProvider,
+                // so a tracked screen always carries a real QScreen — qscreen
+                // is non-null here.
                 m_overlayService->handleScreenAdded(screen.qscreen);
                 // Recalculate zone geometries for all effective screen IDs on this physical screen.
                 // Note: VS cache restoration on screen re-add is no longer needed —

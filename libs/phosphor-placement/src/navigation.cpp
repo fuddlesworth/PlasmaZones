@@ -213,7 +213,7 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
         return QRect();
     }
 
-    // Resolve physical screen (virtual IDs resolve to backing QScreen*)
+    // Resolve physical screen (virtual IDs resolve to their backing physical output)
     QScreen* screen =
         m_screenManager ? m_screenManager->physicalScreenFor(screenId).qscreen : QGuiApplication::primaryScreen();
     if (!screen) {
