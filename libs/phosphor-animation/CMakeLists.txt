@@ -358,6 +358,17 @@ if(PHOSPHOR_ANIMATION_QML_INSTALL)
     )
 
     set(_phosphor_animation_qml_shared_plugin_target PhosphorAnimationQmlSharedplugin)
+
+    # The QML plugin and its backing PhosphorAnimationQmlShared library
+    # install side by side in the QML module directory, which is not on
+    # the linker's default search path. Give the plugin an $ORIGIN
+    # install RPATH so it resolves the sibling library — both at runtime
+    # and when Debian's dpkg-shlibdeps walks the dependency graph during
+    # packaging. Its other dependencies (PhosphorAnimation, Qt) live in
+    # the standard libdir and need no RPATH entry.
+    set_target_properties(${_phosphor_animation_qml_shared_plugin_target} PROPERTIES
+        INSTALL_RPATH "$ORIGIN"
+    )
 endif()
 
 # ===============================================================================
