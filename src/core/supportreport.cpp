@@ -57,16 +57,17 @@ SupportReport::Snapshot SupportReport::collectSnapshot(Phosphor::Screens::Screen
 
     if (screenManager) {
         snap.hasScreenManager = true;
-        const QVector<QScreen*> screens = screenManager->screens();
+        const QVector<Phosphor::Screens::PhysicalScreen> screens = screenManager->screens();
         snap.screens.reserve(screens.size());
-        for (QScreen* screen : screens) {
+        for (const Phosphor::Screens::PhysicalScreen& screen : screens) {
             Snapshot::ScreenInfo info;
-            info.name = screen->name();
-            info.geometry = screen->geometry();
-            info.available =
-                screenManager ? screenManager->actualAvailableGeometry(screen) : screen->availableGeometry();
-            info.refreshRate = screen->refreshRate();
-            info.devicePixelRatio = screen->devicePixelRatio();
+            info.name = screen.name;
+            info.geometry = screen.geometry;
+            info.available = screenManager->actualAvailableGeometry(screen);
+            if (screen.qscreen) {
+                info.refreshRate = screen.qscreen->refreshRate();
+                info.devicePixelRatio = screen.qscreen->devicePixelRatio();
+            }
             snap.screens.append(info);
         }
     }

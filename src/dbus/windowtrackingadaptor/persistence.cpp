@@ -316,8 +316,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     auto* mgr = m_service->screenManager();
     if (mgr) {
         for (const QString& sid : mgr->effectiveScreenIds()) {
-            QScreen* screen = mgr->physicalQScreenFor(sid);
-            if (!screen) {
+            if (!mgr->physicalScreenFor(sid).isValid()) {
                 continue;
             }
             QRect effGeom = mgr->screenGeometry(sid);

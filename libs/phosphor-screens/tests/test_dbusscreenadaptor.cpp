@@ -152,10 +152,10 @@ private Q_SLOTS:
         InMemoryConfigStore store(/*maxScreensPerPhysical=*/2);
         NoOpPanelSource panelSrc;
         ScreenManager mgr(ScreenManagerConfig{
-            /*panelSource=*/&panelSrc,
-            /*configStore=*/&store,
-            /*useGeometrySensors=*/false,
-            /*maxVirtualScreensPerPhysical=*/2,
+            .panelSource = &panelSrc,
+            .configStore = &store,
+            .useGeometrySensors = false,
+            .maxVirtualScreensPerPhysical = 2,
         });
         mgr.start();
 
@@ -194,8 +194,10 @@ private Q_SLOTS:
 
         InMemoryConfigStore store;
         NoOpPanelSource panelSrc;
-        ScreenManager mgr(ScreenManagerConfig{&panelSrc, &store, /*useGeometrySensors=*/false,
-                                              /*maxVirtualScreensPerPhysical=*/8});
+        ScreenManager mgr(ScreenManagerConfig{.panelSource = &panelSrc,
+                                              .configStore = &store,
+                                              .useGeometrySensors = false,
+                                              .maxVirtualScreensPerPhysical = 8});
         mgr.start();
 
         AdaptorHost host;
@@ -233,8 +235,10 @@ private Q_SLOTS:
 
         InMemoryConfigStore store;
         NoOpPanelSource panelSrc;
-        ScreenManager mgr(ScreenManagerConfig{&panelSrc, &store, /*useGeometrySensors=*/false,
-                                              /*maxVirtualScreensPerPhysical=*/8});
+        ScreenManager mgr(ScreenManagerConfig{.panelSource = &panelSrc,
+                                              .configStore = &store,
+                                              .useGeometrySensors = false,
+                                              .maxVirtualScreensPerPhysical = 8});
         mgr.start();
 
         // Seed VS config under an "old" id. Real drift would re-key the

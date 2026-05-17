@@ -181,12 +181,12 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             return virtualScreenIds.first();
         }
 
-        QScreen* physScreen = mgr->physicalQScreenFor(physicalScreenId);
-        if (!physScreen) {
+        const Phosphor::Screens::PhysicalScreen physScreen = mgr->physicalScreenFor(physicalScreenId);
+        if (!physScreen.isValid()) {
             return virtualScreenIds.first();
         }
 
-        QRectF absGeo = zone->calculateAbsoluteGeometry(QRectF(physScreen->geometry()));
+        QRectF absGeo = zone->calculateAbsoluteGeometry(QRectF(physScreen.geometry));
         QPoint center = absGeo.center().toPoint();
         QString vsId = mgr->virtualScreenAt(center, physicalScreenId);
         if (!vsId.isEmpty()) {

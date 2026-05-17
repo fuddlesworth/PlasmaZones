@@ -49,7 +49,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
     auto* mgr = m_screenManager;
     QScreen* targetScreen = nullptr;
     if (!targetScreenId.isEmpty()) {
-        targetScreen = mgr ? mgr->physicalQScreenFor(targetScreenId)
+        targetScreen = mgr ? mgr->physicalScreenFor(targetScreenId).qscreen
                            : Phosphor::Screens::ScreenIdentity::findByIdOrName(targetScreenId);
     }
 
@@ -88,7 +88,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
 
     if (mgr && !effectiveIds.isEmpty()) {
         for (const QString& screenId : effectiveIds) {
-            QScreen* physScreen = mgr->physicalQScreenFor(screenId);
+            QScreen* physScreen = mgr->physicalScreenFor(screenId).qscreen;
             if (!physScreen) {
                 continue;
             }
@@ -647,7 +647,7 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
 
     auto* mgr = m_screenManager;
     QScreen* physScreen =
-        mgr ? mgr->physicalQScreenFor(screenId) : Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+        mgr ? mgr->physicalScreenFor(screenId).qscreen : Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
 
     // Primary path: use layout/zone geometry pipeline with virtual screen bounds
     if (m_layoutManager && !m_selectedLayoutId.isEmpty()) {
@@ -674,8 +674,9 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
         }
     }
     if (!areaGeom.isValid() && physScreen) {
-        areaGeom = (m_screenManager ? m_screenManager->actualAvailableGeometry(physScreen)
-                                    : ((physScreen) ? (physScreen)->availableGeometry() : QRect()));
+        areaGeom =
+            (m_screenManager ? m_screenManager->actualAvailableGeometry(m_screenManager->physicalScreenFor(screenId))
+                             : physScreen->availableGeometry());
     }
     if (!areaGeom.isValid()) {
         return QRect();

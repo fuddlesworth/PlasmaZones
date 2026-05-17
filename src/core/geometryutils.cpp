@@ -167,7 +167,8 @@ buildEmptyZoneListImpl(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Lay
         resolvedOverlayOrigin = overlayOriginRect;
     } else if (physScreen) {
         resolvedScreenGeom = physScreen->geometry();
-        resolvedAvailGeom = mgr ? mgr->actualAvailableGeometry(physScreen) : physScreen->availableGeometry();
+        resolvedAvailGeom =
+            mgr ? mgr->actualAvailableGeometry(mgr->screenByName(physScreen->name())) : physScreen->availableGeometry();
         resolvedOverlayOrigin = physScreen->geometry();
     } else {
         return {};

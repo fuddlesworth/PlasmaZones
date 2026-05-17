@@ -422,7 +422,7 @@ void Daemon::syncModeFromAssignments()
             if (!effectiveIds.isEmpty()) {
                 focusedScreenId = effectiveIds.first();
             } else if (!m_screenManager->screens().isEmpty()) {
-                focusedScreenId = Phosphor::Screens::ScreenIdentity::identifierFor(m_screenManager->screens().first());
+                focusedScreenId = m_screenManager->screens().first().identifier;
             }
         }
         if (!focusedScreenId.isEmpty()) {

@@ -5,6 +5,7 @@
 
 #include "phosphorscreenscore_export.h"
 
+#include <QMetaType>
 #include <QRect>
 #include <QString>
 
@@ -74,3 +75,7 @@ inline size_t qHash(const PhysicalScreen& screen, size_t seed = 0)
 }
 
 } // namespace Phosphor::Screens
+
+// PhysicalScreen travels on the ScreenManager / IScreenProvider signals —
+// register it as a metatype so queued connections and QSignalSpy can carry it.
+Q_DECLARE_METATYPE(Phosphor::Screens::PhysicalScreen)

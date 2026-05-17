@@ -44,7 +44,8 @@ QRectF calculateZoneGeometryInAvailableArea(Phosphor::Screens::ScreenManager* mg
     if (!zone || !screen) {
         return QRectF();
     }
-    const QRectF availableGeom = mgr ? mgr->actualAvailableGeometry(screen) : screen->availableGeometry();
+    const QRectF availableGeom =
+        mgr ? mgr->actualAvailableGeometry(mgr->screenByName(screen->name())) : screen->availableGeometry();
     return zone->calculateAbsoluteGeometry(availableGeom);
 }
 
@@ -120,7 +121,7 @@ QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenManager* mgr, Zone* zone
         geom = calculateZoneGeometry(zone, screen);
     }
     QRectF screenGeom = useAvailableGeometry
-        ? (mgr ? mgr->actualAvailableGeometry(screen) : screen->availableGeometry())
+        ? (mgr ? mgr->actualAvailableGeometry(mgr->screenByName(screen->name())) : screen->availableGeometry())
         : screen->geometry();
     Phosphor::Screens::VirtualScreenDef::PhysicalEdges physEdges{true, true, true, true};
     if (mgr) {
@@ -185,7 +186,7 @@ QRectF effectiveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, Layout* la
     if (layout && layout->useFullScreenGeometry()) {
         return screen->geometry();
     }
-    return mgr ? mgr->actualAvailableGeometry(screen) : screen->availableGeometry();
+    return mgr ? mgr->actualAvailableGeometry(mgr->screenByName(screen->name())) : screen->availableGeometry();
 }
 
 QRectF effectiveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, Layout* layout, const QString& screenId)

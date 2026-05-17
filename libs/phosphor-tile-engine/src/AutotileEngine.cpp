@@ -213,12 +213,11 @@ void AutotileEngine::connectSignals()
     // Screen geometry changes
     if (m_screenManager) {
         connect(m_screenManager, &Phosphor::Screens::ScreenManager::availableGeometryChanged, this,
-                [this](QScreen* screen, const QRect&) {
-                    QPointer<QScreen> guardedScreen = screen;
-                    if (!guardedScreen) {
+                [this](const Phosphor::Screens::PhysicalScreen& screen, const QRect&) {
+                    if (!screen.isValid()) {
                         return;
                     }
-                    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(guardedScreen);
+                    const QString physId = screen.identifier;
                     // When virtual screens are configured, autotile state is keyed by
                     // virtual screen IDs — retile each one instead of the physical ID.
                     if (m_screenManager->hasVirtualScreens(physId)) {
@@ -3411,14 +3410,17 @@ QString AutotileEngine::screenForWindow(const QString& rawWindowId) const
 
     // R6 fix: Warn when falling back to primary screen — this may indicate a
     // missing screen name in windowOpened() or a stale m_windowToStateKey entry.
-    if (m_screenManager && m_screenManager->primaryScreen()) {
-        qCWarning(PhosphorTileEngine::lcTileEngine)
-            << "screenForWindow: window" << windowId << "not in m_windowToStateKey, falling back to primary screen";
-        // If the primary monitor is subdivided into virtual screens, return
-        // the first virtual screen ID instead of the physical ID.
-        const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(m_screenManager->primaryScreen());
-        const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
-        return vsIds.isEmpty() ? physId : vsIds.first();
+    if (m_screenManager) {
+        const Phosphor::Screens::PhysicalScreen primary = m_screenManager->primaryScreen();
+        if (primary.isValid()) {
+            qCWarning(PhosphorTileEngine::lcTileEngine)
+                << "screenForWindow: window" << windowId << "not in m_windowToStateKey, falling back to primary screen";
+            // If the primary monitor is subdivided into virtual screens, return
+            // the first virtual screen ID instead of the physical ID.
+            const QString physId = primary.identifier;
+            const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
+            return vsIds.isEmpty() ? physId : vsIds.first();
+        }
     }
 
     qCWarning(PhosphorTileEngine::lcTileEngine) << "screenForWindow: no screen found for window" << windowId;
@@ -3442,7 +3444,8 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
         return QRect();
     }
 
-    return m_screenManager ? m_screenManager->actualAvailableGeometry(screen) : screen->availableGeometry();
+    return m_screenManager ? m_screenManager->actualAvailableGeometry(m_screenManager->screenByName(screen->name()))
+                           : screen->availableGeometry();
 }
 
 bool AutotileEngine::isKnownScreen(const QString& screenId) const

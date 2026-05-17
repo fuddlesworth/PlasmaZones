@@ -495,7 +495,8 @@ QRect DBusScreenAdaptor::getAvailableGeometry(const QString& screenId)
     if (!screen) {
         return QRect();
     }
-    return m_screenManager ? m_screenManager->actualAvailableGeometry(screen) : screen->availableGeometry();
+    return m_screenManager ? m_screenManager->actualAvailableGeometry(m_screenManager->screenByName(screen->name()))
+                           : screen->availableGeometry();
 }
 
 QRect DBusScreenAdaptor::getScreenGeometry(const QString& screenId)

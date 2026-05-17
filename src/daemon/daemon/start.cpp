@@ -55,9 +55,10 @@ void Daemon::connectScreenSignals()
     // catches users plugging a second identical monitor mid-session, where
     // the disambiguation "/CONNECTOR" suffix kicks in for the first time.
     Utils::warnDuplicateScreenIds();
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenAdded, this, [](QScreen*) {
-        Utils::warnDuplicateScreenIds();
-    });
+    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenAdded, this,
+            [](const Phosphor::Screens::PhysicalScreen&) {
+                Utils::warnDuplicateScreenIds();
+            });
 
     // Settings → Phosphor::Screens::ScreenManager refresh flows exclusively through the
     // IConfigStore contract: SettingsConfigStore forwards
@@ -106,59 +107,62 @@ void Daemon::connectScreenSignals()
             });
 
     // Connect screen manager signals
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenAdded, this, [this](QScreen* screen) {
-        // Invalidate cached EDID serial so a fresh sysfs read happens for this connector
-        // (handles the case where EDID wasn't available during very early startup)
-        Phosphor::Screens::ScreenIdentity::invalidateEdidCache(screen->name());
-        m_overlayService->handleScreenAdded(screen);
-        // Recalculate zone geometries for all effective screen IDs on this physical screen.
-        // Note: VS cache restoration on screen re-add is no longer needed —
-        // Phosphor::Screens::ScreenManager::onScreenRemoved no longer wipes m_virtualConfigs, so
-        // the entry survives a disconnect and is reused as-is when the screen
-        // comes back. Settings is the source of truth and pushes updates via
-        // refreshVirtualConfigs() in response to its own change signal.
-        const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
-        const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
-        const int desktop = m_virtualDesktopManager->currentDesktop();
-        const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
-            ? m_activityManager->currentActivity()
-            : QString();
-        for (const QString& sid : vsIds) {
-            PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
-            if (screenLayout) {
-                PhosphorZones::LayoutComputeService::recalculateSync(
-                    screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
-            }
-        }
-    });
+    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenAdded, this,
+            [this](const Phosphor::Screens::PhysicalScreen& screen) {
+                // Invalidate cached EDID serial so a fresh sysfs read happens for this connector
+                // (handles the case where EDID wasn't available during very early startup)
+                Phosphor::Screens::ScreenIdentity::invalidateEdidCache(screen.name);
+                m_overlayService->handleScreenAdded(screen.qscreen);
+                // Recalculate zone geometries for all effective screen IDs on this physical screen.
+                // Note: VS cache restoration on screen re-add is no longer needed —
+                // Phosphor::Screens::ScreenManager::onScreenRemoved no longer wipes m_virtualConfigs, so
+                // the entry survives a disconnect and is reused as-is when the screen
+                // comes back. Settings is the source of truth and pushes updates via
+                // refreshVirtualConfigs() in response to its own change signal.
+                const QString physId = screen.identifier;
+                const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
+                const int desktop = m_virtualDesktopManager->currentDesktop();
+                const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
+                    ? m_activityManager->currentActivity()
+                    : QString();
+                for (const QString& sid : vsIds) {
+                    PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
+                    if (screenLayout) {
+                        PhosphorZones::LayoutComputeService::recalculateSync(
+                            screenLayout,
+                            GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
+                    }
+                }
+            });
 
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenRemoved, this, [this](QScreen* screen) {
-        // Suppress OSD shows for ~1 s after any screen removal — see m_screensSettlingUntil.
-        m_screensSettlingUntil = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenRemoved, this,
+            [this](const Phosphor::Screens::PhysicalScreen& screen) {
+                // Suppress OSD shows for ~1 s after any screen removal — see m_screensSettlingUntil.
+                m_screensSettlingUntil = std::chrono::steady_clock::now() + std::chrono::seconds(1);
 
-        m_overlayService->handleScreenRemoved(screen);
+                m_overlayService->handleScreenRemoved(screen.qscreen);
 
-        // Capture screen ID BEFORE invalidating cache (screenIdentifier reads cached EDID)
-        const QString removedName = screen->name();
-        const QString removedScreenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+                // Capture screen ID BEFORE invalidating cache (screenIdentifier reads cached EDID)
+                const QString removedName = screen.name;
+                const QString removedScreenId = screen.identifier;
 
-        // Invalidate cached EDID serial so a different monitor on this connector is detected
-        Phosphor::Screens::ScreenIdentity::invalidateEdidCache(removedName);
+                // Invalidate cached EDID serial so a different monitor on this connector is detected
+                Phosphor::Screens::ScreenIdentity::invalidateEdidCache(removedName);
 
-        // Clean stale entries from layout visibility restrictions
-        // Check both screen ID (new) and connector name (legacy)
-        for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
-            QStringList allowed = layout->allowedScreens();
-            if (allowed.isEmpty())
-                continue;
-            bool changed = false;
-            changed |= (allowed.removeAll(removedScreenId) > 0);
-            changed |= (allowed.removeAll(removedName) > 0);
-            if (changed) {
-                layout->setAllowedScreens(allowed);
-            }
-        }
-    });
+                // Clean stale entries from layout visibility restrictions
+                // Check both screen ID (new) and connector name (legacy)
+                for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
+                    QStringList allowed = layout->allowedScreens();
+                    if (allowed.isEmpty())
+                        continue;
+                    bool changed = false;
+                    changed |= (allowed.removeAll(removedScreenId) > 0);
+                    changed |= (allowed.removeAll(removedName) > 0);
+                    if (changed) {
+                        layout->setAllowedScreens(allowed);
+                    }
+                }
+            });
 
     connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenGeometryChanged, this, [this] {
         m_geometryUpdatePending = true;
@@ -855,8 +859,8 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // Trigger debounced geometry recalculation for the rest of the system
     // (overlays, panel requery, autotile retile). Reuse the same debounced
     // path as physical screen geometry changes.
-    if ((m_screenManager ? m_screenManager->physicalQScreenFor(physicalScreenId)
-                         : Phosphor::Screens::ScreenIdentity::findByIdOrName(physicalScreenId))) {
+    if (m_screenManager ? m_screenManager->physicalScreenFor(physicalScreenId).isValid()
+                        : (Phosphor::Screens::ScreenIdentity::findByIdOrName(physicalScreenId) != nullptr)) {
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
     }

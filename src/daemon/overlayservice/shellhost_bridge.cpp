@@ -193,8 +193,8 @@ void OverlayService::warmUpNotifications()
     const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
     int createdCount = 0;
     for (const QString& sid : effectiveIds) {
-        QScreen* physScreen =
-            m_screenManager ? m_screenManager->physicalQScreenFor(sid) : Utils::findScreenAtPosition(QPoint(0, 0));
+        QScreen* physScreen = m_screenManager ? m_screenManager->physicalScreenFor(sid).qscreen
+                                              : Utils::findScreenAtPosition(QPoint(0, 0));
         if (physScreen) {
             auto* state = ensurePassiveShellFor(sid, physScreen);
             if (state && state->shell && state->shell->shellSurface()) {

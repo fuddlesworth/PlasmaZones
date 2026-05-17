@@ -97,7 +97,7 @@ WindowDragAdaptor::ScreenResolution WindowDragAdaptor::resolveScreenAt(const QPo
     ScreenResolution result;
     result.screenId = effectiveScreenIdAt(qRound(globalPos.x()), qRound(globalPos.y()));
     result.physicalId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(result.screenId);
-    result.qscreen = m_screenManager ? m_screenManager->physicalQScreenFor(result.physicalId)
+    result.qscreen = m_screenManager ? m_screenManager->physicalScreenFor(result.physicalId).qscreen
                                      : Phosphor::Screens::ScreenIdentity::findByIdOrName(result.physicalId);
     if (!result.qscreen) {
         result.qscreen = screenAtPoint(qRound(globalPos.x()), qRound(globalPos.y()));
