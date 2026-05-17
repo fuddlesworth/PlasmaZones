@@ -250,7 +250,14 @@ echo ""
 %{_includedir}/Phosphor*/
 %{_libdir}/cmake/Phosphor*/
 
-# KWin effect plugin
+# KWin effect plugin. openSUSE: own the parent plugin directories so the
+# OBS "directories not owned by a package" check passes — no hard
+# dependency drags them in. On Fedora the kwin package owns them.
+%if 0%{?suse_version}
+%dir %{_libdir}/qt6/plugins/kwin
+%dir %{_libdir}/qt6/plugins/kwin/effects
+%dir %{_libdir}/qt6/plugins/kwin/effects/plugins
+%endif
 %{_libdir}/qt6/plugins/kwin/effects/plugins/kwin_effect_plasmazones.so
 
 # Layer-shell QPA plugin (PhosphorWayland)
@@ -278,7 +285,13 @@ echo ""
 # KGlobalAccel component (display name + icon in Shortcuts KCM)
 %{_datadir}/kglobalaccel/plasmazonesd.desktop
 
-# System Settings category
+# System Settings category. openSUSE: own the parent directories (same
+# OBS unowned-directory check as the KWin effect above); the
+# systemsettings package owns them on Fedora.
+%if 0%{?suse_version}
+%dir %{_datadir}/systemsettings
+%dir %{_datadir}/systemsettings/categories
+%endif
 %{_datadir}/systemsettings/categories/settings-windowmanagement-plasmazones.desktop
 
 # Runtime data — application data plus the bundled Phosphor component
@@ -287,11 +300,13 @@ echo ""
 %{_datadir}/plasmazones/
 %{_datadir}/phosphor*/
 
-# Icons — only this package's SVGs land in the buildroot's hicolor
-# theme dirs, so the glob owns exactly our files without claiming the
-# shared theme directories.
+# Icons — the standard hicolor theme directories are owned by
+# hicolor-icon-theme (a hard Requires), so glob only our SVGs there.
+# hicolor-light is a PlasmaZones-specific theme variant that no other
+# package ships, so own its whole tree — otherwise the OBS
+# "directories not owned by a package" check fails.
 %{_datadir}/icons/hicolor/scalable/apps/*.svg
-%{_datadir}/icons/hicolor-light/scalable/apps/*.svg
+%{_datadir}/icons/hicolor-light/
 
 # Systemd user service
 %{_userunitdir}/plasmazones.service
