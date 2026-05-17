@@ -50,15 +50,17 @@ let
     in
     if parsed != null then builtins.head parsed else "0.0.0";
 
-  # PlasmaZones requires Qt6 6.6+ and KWin 6.6+. Fail fast with a clear
-  # message when the provided nixpkgs has an older stack.
-  qtVersion = lib.getVersion qt6.qtbase;
-  hasQt66 = lib.versionAtLeast qtVersion "6.6";
 in
 
-assert hasQt66 || throw ''
+# PlasmaZones requires Qt6 6.6+ and KWin 6.6+. Fail fast with a clear
+# message when the provided nixpkgs has an older stack. The Qt version
+# is inlined here rather than bound in the `let` block above:
+# packaging/nix/generate-release-nix.sh strips the whole `let … in`
+# block when baking the release file, so a `let`-bound `hasQt66` would
+# leave this assert referencing an undefined variable.
+assert (lib.versionAtLeast (lib.getVersion qt6.qtbase) "6.6") || throw ''
   PlasmaZones requires Qt 6.6+ and KDE/Plasma 6.6+ (KWin 6.6+).
-  Your nixpkgs provides Qt ${qtVersion}.
+  Your nixpkgs provides Qt ${lib.getVersion qt6.qtbase}.
   Use a nixpkgs channel or revision that has the Plasma 6.6 stack.
 '';
 

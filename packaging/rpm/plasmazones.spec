@@ -199,12 +199,12 @@ echo ""
 %license COPYING.LESSER
 %doc README.md
 
-# Executables
-%{_bindir}/phosphor-shell
-%{_bindir}/plasmazonesd
-%{_bindir}/plasmazones-editor
-%{_bindir}/plasmazones-report
-%{_bindir}/plasmazones-settings
+# Executables — globbed by the plasmazones prefix (plasmazonesd plus
+# plasmazones-editor / -report / -settings). phosphor-shell is
+# deliberately NOT matched: it is gated behind the BUILD_PHOSPHOR_SHELL
+# CMake option (work in progress, default OFF), so packaging builds
+# never produce it and listing it explicitly would fail rpmbuild.
+%{_bindir}/plasmazones*
 
 # Component libraries — every Phosphor component library plus the
 # plasmazones core/rendering libs. Globbed by naming convention: this
