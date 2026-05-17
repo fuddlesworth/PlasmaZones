@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 
 #include <QRectF>
+#include <QVector2D>
 #include <QtGlobal>
 
 #include <array>
@@ -24,6 +25,39 @@ inline qint64 shaderClockNowMs()
 {
     using namespace std::chrono;
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
+/// Animation-shader anchor uniforms: where the captured window ("anchor")
+/// sits inside the shader's render target ("FBO").
+///
+///   • Anchor extent (default): the render target covers the window 1:1,
+///     so `resolution == anchorSize` and the anchor sits at the origin.
+///   • Surface extent (`fboExtent: "surface"`): the shader paints over the
+///     whole output, so `resolution` is the output size, `anchorSize`
+///     stays the window size, and `anchorPosInFbo` locates the window's
+///     top-left within the output. Surface-extent shaders read these (via
+///     `anchorRemap`) to composite the window into its sub-region.
+struct AnchorUniforms
+{
+    QVector2D resolution; ///< iResolution
+    QVector2D anchorSize; ///< iAnchorSize
+    QVector2D anchorPosInFbo; ///< iAnchorPosInFbo
+};
+
+/// Compute the anchor uniforms for a paintWindow tick. Pure geometry:
+/// `windowFrame` and `outputGeometry` are logical-pixel rects at 1:1
+/// scale (quad-list space and screen space coincide on the kwin path).
+/// See `AnchorUniforms` for the two extent modes.
+inline AnchorUniforms computeAnchorUniforms(const QRectF& windowFrame, const QRectF& outputGeometry, bool surfaceExtent)
+{
+    const QVector2D windowSize(static_cast<float>(windowFrame.width()), static_cast<float>(windowFrame.height()));
+    if (!surfaceExtent) {
+        return {windowSize, windowSize, QVector2D(0.0f, 0.0f)};
+    }
+    const QVector2D outputSize(static_cast<float>(outputGeometry.width()), static_cast<float>(outputGeometry.height()));
+    const QVector2D anchorPos(static_cast<float>(windowFrame.x() - outputGeometry.x()),
+                              static_cast<float>(windowFrame.y() - outputGeometry.y()));
+    return {outputSize, windowSize, anchorPos};
 }
 
 /// Pre-baked uniform / param key strings for the hot paths.

@@ -124,6 +124,15 @@ public:
                      KWin::WindowPaintData& data) override;
     void grabbedKeyboardEvent(QKeyEvent* e) override;
 
+protected:
+    // OffscreenEffect hook: deform the redirected window's quad list.
+    // For surface-extent shader transitions (metadata `fboExtent:
+    // "surface"`) this replaces the window quad with one spanning the
+    // window's output, so the shader can paint past the window bounds.
+    // Every other redirected window is left untouched (drawn 1:1 over
+    // its own geometry).
+    void apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data, KWin::WindowQuadList& quads) override;
+
 private Q_SLOTS:
     void slotWindowAdded(KWin::EffectWindow* w);
     void slotWindowClosed(KWin::EffectWindow* w);

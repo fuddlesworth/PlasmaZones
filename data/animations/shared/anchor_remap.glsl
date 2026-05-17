@@ -5,8 +5,11 @@
 // shaders (broken-glass, morph) that need to convert vTexCoord (which
 // spans the full surface FBO) into the captured anchor's UV space.
 //
-// On the kwin-effect path `iAnchorPosInFbo` is `(0, 0)` and
+// For anchor-extent shaders `iAnchorPosInFbo` is `(0, 0)` and
 // `iAnchorSize == iResolution`, so the remap collapses to identity.
+// Surface-extent shaders (`fboExtent: "surface"`) get a non-zero
+// `iAnchorPosInFbo` and output-sized `iResolution` on both the daemon
+// and the kwin-effect runtimes, so the remap is load-bearing there.
 //
 // Requires: <animation_uniforms.glsl> (provides iResolution,
 // iAnchorSize, iAnchorPosInFbo).

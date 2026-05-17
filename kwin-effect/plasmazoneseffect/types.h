@@ -152,6 +152,13 @@ struct ShaderTransition
     /// "fully revealed", which is exactly the semantic users expect for
     /// the corresponding `disappear` event.
     bool reverse = false;
+    /// True when the active animation declares `fboExtent: "surface"` in
+    /// its metadata. Surface-extent shaders (broken-glass, fly-in, morph)
+    /// paint past the window bounds, so `apply()` expands the drawn quad
+    /// to the window's output and paintWindow feeds output-relative
+    /// `iResolution` / `iAnchorPosInFbo` / `iAnchorSize`. Anchor-extent
+    /// transitions (the default) keep the window-sized quad and uniforms.
+    bool surfaceExtent = false;
     /// Per-leg frame counter. Bumped each paintWindow tick where this
     /// transition feeds the shader; reset to 0 on every fresh
     /// beginShaderTransition install (or supersession). Mirrors the daemon's

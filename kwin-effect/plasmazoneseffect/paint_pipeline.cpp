@@ -102,19 +102,35 @@ void PlasmaZonesEffect::postPaintScreen()
     if (!m_shaderManager.m_shaderTransitions.empty()) {
         const qint64 now = shaderClockNowMs();
         for (const auto& [w, transition] : m_shaderManager.m_shaderTransitions) {
-            if (transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs) {
-                if (w && !w->isDeleted()) {
-                    // Fall back to frameGeometry when expanded is empty
-                    // — a window with no shadow / decoration extents
-                    // reports an empty expanded rect, and `addLayerRepaint`
-                    // on an empty rect is a silent no-op that would stall
-                    // the time-based shader's iTime advance.
-                    QRect repaintRect = w->expandedGeometry().toAlignedRect();
-                    if (repaintRect.isEmpty()) {
-                        repaintRect = w->frameGeometry().toAlignedRect();
+            if (!w || w->isDeleted()) {
+                continue;
+            }
+            const bool timeBasedActive =
+                transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs;
+            if (transition.surfaceExtent) {
+                // Surface-extent transitions paint over the whole output,
+                // far past the window's expanded geometry — a window-layer
+                // repaint would clip to the window. Mirror KWin's own
+                // deformation effects (Magic Lamp) and repaint at the
+                // output level. Runs for animator-driven (durationMs == 0)
+                // transitions too: m_windowAnimator->scheduleRepaints()
+                // only dirties the window region, which is too small here.
+                if ((timeBasedActive || transition.durationMs == 0) && KWin::effects) {
+                    if (const auto* output = w->screen()) {
+                        KWin::effects->addRepaint(output->geometry());
                     }
-                    w->addLayerRepaint(repaintRect);
                 }
+            } else if (timeBasedActive) {
+                // Fall back to frameGeometry when expanded is empty
+                // — a window with no shadow / decoration extents
+                // reports an empty expanded rect, and `addLayerRepaint`
+                // on an empty rect is a silent no-op that would stall
+                // the time-based shader's iTime advance.
+                QRect repaintRect = w->expandedGeometry().toAlignedRect();
+                if (repaintRect.isEmpty()) {
+                    repaintRect = w->frameGeometry().toAlignedRect();
+                }
+                w->addLayerRepaint(repaintRect);
             }
         }
     }
@@ -239,13 +255,24 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                           "transition.frameCount must stay `int` to match GLSL `uniform int iFrame;`");
             const int iFrameValue = transition.frameCount++;
             const QRectF geo = w->frameGeometry();
+            // Anchor uniforms: anchor-extent transitions render 1:1 over
+            // the window; surface-extent transitions (fboExtent:
+            // "surface") render over the whole output, with the window
+            // placed at iAnchorPosInFbo. See ShaderInternal::computeAnchorUniforms.
+            QRectF outputGeo = geo;
+            if (const auto* output = w->screen()) {
+                const QRect outRect = output->geometry();
+                outputGeo = outRect;
+            }
+            const ShaderInternal::AnchorUniforms anchorUniforms =
+                ShaderInternal::computeAnchorUniforms(geo, outputGeo, transition.surfaceExtent);
             {
                 KWin::ShaderBinder binder(shader);
                 if (cached->iTimeLoc >= 0) {
                     shader->setUniform(cached->iTimeLoc, static_cast<float>(progress));
                 }
                 if (cached->iResolutionLoc >= 0) {
-                    shader->setUniform(cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
+                    shader->setUniform(cached->iResolutionLoc, anchorUniforms.resolution);
                 }
                 if (cached->iTimeDeltaLoc >= 0) {
                     shader->setUniform(cached->iTimeDeltaLoc, iTimeDelta);
@@ -377,24 +404,22 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     shader->setUniform(cached->iSurfaceScreenPosLoc, surfaceScreenPos);
                 }
                 if (cached->iAnchorSizeLoc >= 0) {
-                    // The window's frameGeometry IS the visible "card" on
-                    // the kwin path — there's no separate anchor-vs-FBO
-                    // distinction here, so iAnchorSize matches iResolution.
-                    shader->setUniform(cached->iAnchorSizeLoc,
-                                       QVector2D(static_cast<float>(geo.width()), static_cast<float>(geo.height())));
+                    // The captured window ("anchor") size. For anchor-
+                    // extent transitions this equals iResolution; for
+                    // surface-extent transitions it stays the window size
+                    // while iResolution grows to the output.
+                    shader->setUniform(cached->iAnchorSizeLoc, anchorUniforms.anchorSize);
                 }
                 if (cached->iAnchorPosInFboLoc >= 0) {
-                    // Always (0, 0) on the kwin path. The fragment shader's
-                    // `anchorRemap` math collapses to identity here:
-                    //   anchorTopLeftUv = (0, 0) / frame  = (0, 0)
-                    //   anchorSizeUv    = frame  / frame  = (1, 1)
-                    //   anchorUv        = vTexCoord - 0   = vTexCoord
-                    // so shaders that use anchorRemap (broken-glass, morph)
-                    // see coords in `[0, 1]` over the captured frame on
-                    // the kwin path. The daemon's surface-extent uses
-                    // non-zero iAnchorPosInFbo / iAnchorSize to produce
-                    // wider anchor-space coords from a surface-sized FBO.
-                    shader->setUniform(cached->iAnchorPosInFboLoc, QVector2D(0.0f, 0.0f));
+                    // The window's top-left within the shader's render
+                    // target. (0, 0) for anchor-extent transitions, where
+                    // the FBO covers the window 1:1 and `anchorRemap`
+                    // collapses to identity. For surface-extent transitions
+                    // (broken-glass, fly-in, morph) it is the window's
+                    // offset within its output, so `anchorRemap` converts
+                    // surface-UV back to anchor-space — matching the
+                    // daemon's surface-sized-FBO path.
+                    shader->setUniform(cached->iAnchorPosInFboLoc, anchorUniforms.anchorPosInFbo);
                 }
                 for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
                     const int loc = cached->customParamsLoc[slot];
@@ -548,6 +573,63 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     }
 
     OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+}
+
+void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data,
+                              KWin::WindowQuadList& quads)
+{
+    Q_UNUSED(mask)
+    Q_UNUSED(data)
+
+    // Only surface-extent transitions deform the quad list. Anchor-extent
+    // transitions and plain redirected windows are drawn 1:1 over their
+    // own geometry — leave their quads untouched.
+    auto it = m_shaderManager.m_shaderTransitions.find(window);
+    if (it == m_shaderManager.m_shaderTransitions.end() || !it->second.surfaceExtent || quads.isEmpty()) {
+        return;
+    }
+    const auto* output = window->screen();
+    if (!output) {
+        return;
+    }
+    const QRectF windowFrame = window->frameGeometry();
+    const QRect outputGeo = output->geometry();
+    if (windowFrame.isEmpty() || outputGeo.isEmpty()) {
+        return;
+    }
+
+    // The incoming quads span the captured window in KWin's quad-list
+    // coordinate space. Deriving the window's top-left from the actual
+    // quads (rather than assuming an origin) keeps the mapping correct
+    // whether KWin hands us window-local or screen-absolute quad
+    // coordinates: quad-list space ↔ screen space is a pure translation
+    // at 1:1 logical scale, so the same offset that maps the window also
+    // maps the output.
+    double qLeft = quads.first().left();
+    double qTop = quads.first().top();
+    for (const KWin::WindowQuad& q : quads) {
+        qLeft = qMin(qLeft, q.left());
+        qTop = qMin(qTop, q.top());
+    }
+    const double ox = qLeft + (outputGeo.x() - windowFrame.x());
+    const double oy = qTop + (outputGeo.y() - windowFrame.y());
+    const double ow = outputGeo.width();
+    const double oh = outputGeo.height();
+
+    // One quad covering the whole output, clockwise from top-left (the
+    // vertex order WindowQuad documents). texCoord is Y-up — KWin's
+    // offscreen FBO origin is bottom-left — and the kwin vertex stage
+    // flips it to the Y-down vTexCoord the animation-shader contract
+    // expects, so vTexCoord lands 0..1 over the output. The window
+    // content stays in uTexture0 (the window-sized redirect FBO);
+    // surface-extent shaders place it via iAnchorPosInFbo / anchorRemap.
+    KWin::WindowQuad surfaceQuad;
+    surfaceQuad[0] = KWin::WindowVertex(ox, oy, 0.0, 1.0);
+    surfaceQuad[1] = KWin::WindowVertex(ox + ow, oy, 1.0, 1.0);
+    surfaceQuad[2] = KWin::WindowVertex(ox + ow, oy + oh, 1.0, 0.0);
+    surfaceQuad[3] = KWin::WindowVertex(ox, oy + oh, 0.0, 0.0);
+    quads.clear();
+    quads.append(surfaceQuad);
 }
 
 } // namespace PlasmaZones

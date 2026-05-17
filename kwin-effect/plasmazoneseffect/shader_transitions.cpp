@@ -754,6 +754,11 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     const auto& cachedEntry = cacheIt->second;
     ShaderTransition transition;
     transition.cached = &cachedEntry;
+    // Surface-extent shaders (metadata `fboExtent: "surface"`) render past
+    // the window bounds; `apply()` and paintWindow read this flag to expand
+    // the drawn quad + anchor uniforms to the window's output.
+    transition.surfaceExtent =
+        (eff.fboExtentKind == PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind::Surface);
 
     // Translate the friendly parameter map (e.g. {"direction": 1,
     // "parallax": 0.2}) to slot keys, then pack each
