@@ -3,9 +3,10 @@
 
 # Scroll mode — niri-style scrollable tiling
 
-Planning document. Status: **Phase 0 static review complete — see
-[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). One empirical probe
-(scene culling) outstanding.**
+Planning document. Status: **Phase 0 ✅ and Phase 1 ✅ complete** — the scroll engine,
+geometry resolver, `Mode::Scroll` routing, and daemon geometry pipeline are implemented,
+built, and tested (186 suite tests green). Phase 0 detail in
+[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 2.
 
 ## 1. Goal
 
@@ -237,14 +238,29 @@ Static code review **complete** — results in
 
 **Phase 0 conclusion: no blockers.** Ready for Phase 1.
 
-### Phase 1 — Strip data model + engine skeleton
+### Phase 1 — Strip data model + engine skeleton — ✅ COMPLETE
 
-- New `libs/phosphor-scroll-engine`: `ScrollScreenState` / `Column` / `Tile` model +
-  relayout logic. Pure logic, no KWin — fully unit-tested.
-- `ScrollEngine : IPlacementEngine` skeleton; `Mode::Scroll` in `AssignmentEntry`;
-  `ScreenModeRouter` dispatch; any agreed `IPlacementEngine` additions.
-- Re-entrancy guard for engine-initiated moves + pending-resize set with size tolerance
-  (§4.2).
+- ✅ `libs/phosphor-scroll-engine`: `ScrollScreenState` / `Column` / `Tile` model +
+  `resolveScrollLayout()` geometry resolver. Pure logic, no KWin — 32 unit tests.
+- ✅ `ScrollEngine : IPlacementEngine` (extends `PlacementEngineBase`); the four niri
+  operations added as optional `IPlacementEngine` virtuals.
+- ✅ `Mode::Scroll` in `AssignmentEntry`; `LayoutId` `scroll:` helpers; `ScreenModeRouter`
+  dispatch to a third engine; per-mode disable-list settings keys.
+- ✅ Daemon integration: the engine factory constructs `ScrollEngine`;
+  `updateScrollScreens()` resolves scroll-mode screens; `onScrollPlacementChanged()`
+  resolves geometry and pushes it to the effect via `applyGeometriesBatch`.
+
+Re-entrancy: the geometry pipeline rides the effect's existing
+`slotApplyGeometriesBatch` path, which already raises the `m_inDaemonGeometryApply`
+guard — no separate guard needed. `ScrollEngine` is geometry-agnostic, so it issues
+no compositor moves of its own; the `ICompositorBridge::move()` / forced-activation
+additions sketched in the Phase 0 findings are deferred — they are an optimisation for
+a future direct-bridge path, not required by the implemented effect-batch pipeline.
+
+Deferred to later phases (were surveyed under "M3c" but belong elsewhere per this
+plan's phase boundaries): the niri-op **keyboard shortcuts** → Phase 3 ("wire to
+`ShortcutManager`"); the **`ScrollAdaptor`** D-Bus interface for KCM selection →
+Phase 5 ("Settings, UI").
 
 ### Phase 2 — Window lifecycle
 
