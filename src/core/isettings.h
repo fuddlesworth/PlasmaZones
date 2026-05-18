@@ -382,6 +382,10 @@ Q_SIGNALS:
     void cycleWindowForwardShortcutChanged();
     void cycleWindowBackwardShortcutChanged();
 
+    // Scroll-mode consume / expel column Shortcuts
+    void consumeWindowShortcutChanged();
+    void expelWindowShortcutChanged();
+
     // Resnap to New PhosphorZones::Layout Shortcut
     void resnapToNewLayoutShortcutChanged();
 

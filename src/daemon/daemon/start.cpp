@@ -499,6 +499,12 @@ void Daemon::connectShortcutSignals()
     connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool fwd) {
         handleCycle(fwd);
     });
+    connect(m_shortcutManager.get(), &ShortcutManager::consumeWindowRequested, this, [this]() {
+        handleConsume();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::expelWindowRequested, this, [this]() {
+        handleExpel();
+    });
     connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() {
         handleResnap();
     });

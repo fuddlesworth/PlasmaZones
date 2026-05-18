@@ -51,6 +51,8 @@ constexpr auto kIdRotateWindowsCW = "rotate_windows_clockwise";
 constexpr auto kIdRotateWindowsCCW = "rotate_windows_counterclockwise";
 constexpr auto kIdCycleWindowForward = "cycle_window_forward";
 constexpr auto kIdCycleWindowBackward = "cycle_window_backward";
+constexpr auto kIdConsumeWindow = "consume_window";
+constexpr auto kIdExpelWindow = "expel_window";
 constexpr auto kIdResnapToNewLayout = "resnap_to_new_layout";
 constexpr auto kIdSnapAllWindows = "snap_all_windows";
 constexpr auto kIdLayoutPicker = "layout_picker";
@@ -240,6 +242,17 @@ const StaticEntry kStaticEntries[] = {
      "Cycle Window Backward in Zone",
      [](ShortcutManager* sm) {
          Q_EMIT sm->cycleWindowsInZoneRequested(false);
+     }},
+
+    // ─── Scroll mode: consume / expel column ───────────────────────────────
+    {kIdConsumeWindow, &ConfigDefaults::consumeWindowShortcut, &Settings::consumeWindowShortcut,
+     "Consume Window Into Column",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->consumeWindowRequested();
+     }},
+    {kIdExpelWindow, &ConfigDefaults::expelWindowShortcut, &Settings::expelWindowShortcut, "Expel Window From Column",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->expelWindowRequested();
      }},
 
     // ─── Misc layout ops ───────────────────────────────────────────────────

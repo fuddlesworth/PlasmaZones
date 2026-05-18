@@ -459,6 +459,8 @@ public:
     PZ_CONFIG_KEY(rotateWindowsCounterclockwiseKey, "RotateWindowsCounterclockwise")
     PZ_CONFIG_KEY(cycleWindowForwardKey, "CycleWindowForward")
     PZ_CONFIG_KEY(cycleWindowBackwardKey, "CycleWindowBackward")
+    PZ_CONFIG_KEY(consumeWindowKey, "ConsumeWindow")
+    PZ_CONFIG_KEY(expelWindowKey, "ExpelWindow")
     PZ_CONFIG_KEY(resnapToNewLayoutKey, "ResnapToNewLayout")
     PZ_CONFIG_KEY(snapAllWindowsKey, "SnapAllWindows")
     PZ_CONFIG_KEY(layoutPickerKey, "LayoutPicker")

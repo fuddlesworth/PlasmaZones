@@ -2617,6 +2617,10 @@ PZ_STORE_SET_STRING(setCycleWindowForwardShortcut, shortcutsGlobalGroup, cycleWi
 PZ_STORE_GET(QString, cycleWindowBackwardShortcut, shortcutsGlobalGroup, cycleWindowBackwardKey, QString)
 PZ_STORE_SET_STRING(setCycleWindowBackwardShortcut, shortcutsGlobalGroup, cycleWindowBackwardKey,
                     cycleWindowBackwardShortcutChanged)
+PZ_STORE_GET(QString, consumeWindowShortcut, shortcutsGlobalGroup, consumeWindowKey, QString)
+PZ_STORE_SET_STRING(setConsumeWindowShortcut, shortcutsGlobalGroup, consumeWindowKey, consumeWindowShortcutChanged)
+PZ_STORE_GET(QString, expelWindowShortcut, shortcutsGlobalGroup, expelWindowKey, QString)
+PZ_STORE_SET_STRING(setExpelWindowShortcut, shortcutsGlobalGroup, expelWindowKey, expelWindowShortcutChanged)
 PZ_STORE_GET(QString, resnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey, QString)
 PZ_STORE_SET_STRING(setResnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey,
                     resnapToNewLayoutShortcutChanged)

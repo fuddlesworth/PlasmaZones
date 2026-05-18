@@ -90,6 +90,8 @@ Q_SIGNALS:
     void snapToZoneRequested(int zoneNumber);
     void rotateWindowsRequested(bool clockwise);
     void cycleWindowsInZoneRequested(bool forward);
+    void consumeWindowRequested();
+    void expelWindowRequested();
     void resnapToNewLayoutRequested();
     void snapAllWindowsRequested();
     void layoutPickerRequested();
