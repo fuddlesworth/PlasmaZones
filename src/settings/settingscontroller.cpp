@@ -646,6 +646,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
         QStringLiteral("snapping-apprules"),
+        QStringLiteral("scrolling"),
         QStringLiteral("exclusions"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
