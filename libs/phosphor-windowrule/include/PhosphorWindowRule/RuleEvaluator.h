@@ -111,6 +111,12 @@ private:
  *
  * The evaluator holds a reference to the rule set — the caller owns the set's
  * lifetime and must outlive the evaluator.
+ *
+ * Thread-safety: `hasAnyMatch()` is safe to call concurrently on a `const`
+ * evaluator — it reads only the bound rule set in list order and touches no
+ * cache. `resolve()`, `resolveCached()`, `highestPriorityMatch()` and
+ * `clearCache()` all mutate internal `mutable` caches (the match cache and the
+ * lazily-built priority-order index) and must be externally serialized.
  */
 class PHOSPHORWINDOWRULE_EXPORT RuleEvaluator
 {

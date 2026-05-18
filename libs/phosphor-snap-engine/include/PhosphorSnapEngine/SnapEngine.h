@@ -538,16 +538,21 @@ private:
     bool isAppIdExcluded(const QString& appId) const;
 
     /// Cached exclusion rule set + evaluator. Rebuilt by ensureExclusionCache()
-    /// only when the underlying settings lists differ from m_exclusionCacheKey.
+    /// only when the underlying settings lists differ from the cached keys.
     /// The RuleEvaluator holds a reference to the WindowRuleSet, so the set is
     /// heap-allocated (a stable address) and the evaluator is rebuilt in
-    /// lockstep with it.
+    /// lockstep with it. A non-null m_exclusionEvaluator IS the "cache valid"
+    /// signal — the rule set, evaluator and key fields are always set and
+    /// cleared together, so no separate validity flag is needed.
     void ensureExclusionCache() const;
+    // These mutable members are daemon-main-thread-only — every access path
+    // (window-open, navigation keystrokes) runs on the daemon's main thread,
+    // so the cache is intentionally unsynchronised. Do not access from another
+    // thread without adding locking.
     mutable std::unique_ptr<PhosphorWindowRule::WindowRuleSet> m_exclusionRuleSet;
     mutable std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_exclusionEvaluator;
     mutable QStringList m_exclusionCacheAppsKey;
     mutable QStringList m_exclusionCacheClassesKey;
-    mutable bool m_exclusionCacheValid = false;
 
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;

@@ -33,6 +33,9 @@ Kirigami.OverlaySheet {
     readonly property var _emptyMatch: ({
         "all": []
     })
+    /// Save is allowed only when the rule has at least one action and every
+    /// match leaf has a non-empty value.
+    readonly property bool _canSave: sheet._workingRule.actions !== undefined && sheet._workingRule.actions.length > 0 && sheet._matchHasFilledLeaves(sheet._workingRule.match)
 
     signal ruleSaved(var ruleJson)
 
@@ -49,6 +52,31 @@ Kirigami.OverlaySheet {
         var next = JSON.parse(JSON.stringify(sheet._workingRule));
         next[key] = value;
         sheet._workingRule = next;
+    }
+
+    /// True if every leaf predicate in @p node carries a non-empty value.
+    /// A leaf with an empty string / missing value would match an empty-string
+    /// id (e.g. the guided `ScreenId == ""` seed) — block saving that.
+    function _matchHasFilledLeaves(node) {
+        if (!node)
+            return true;
+
+        // Leaf — `field` is the discriminator (mirrors MatchExpressionEditor).
+        if (node.field !== undefined) {
+            var v = node.value;
+            if (v === undefined || v === null)
+                return false;
+
+            return String(v).length > 0;
+        }
+        // Composite — recurse into whichever child list is present.
+        var children = node.all || node.any || node.none || [];
+        for (var i = 0; i < children.length; ++i) {
+            if (!sheet._matchHasFilledLeaves(children[i]))
+                return false;
+
+        }
+        return true;
     }
 
     title: sheet.editing ? i18n("Edit Window Rule") : i18n("New Window Rule")
@@ -131,6 +159,13 @@ Kirigami.OverlaySheet {
             text: i18n("The first rule (by priority) to fill each action slot wins that slot — actions in different slots stack.")
         }
 
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Information
+            visible: !sheet._canSave
+            text: !sheet._workingRule.actions || sheet._workingRule.actions.length === 0 ? i18n("Add at least one action before saving.") : i18n("Every condition needs a value before this rule can be saved.")
+        }
+
     }
 
     footer: RowLayout {
@@ -147,8 +182,9 @@ Kirigami.OverlaySheet {
         Button {
             text: sheet.editing ? i18n("Save") : i18n("Add rule")
             icon.name: "dialog-ok-apply"
-            // A rule with no actions does nothing — block saving it.
-            enabled: sheet._workingRule.actions !== undefined && sheet._workingRule.actions.length > 0
+            // A rule with no actions does nothing, and a rule whose match has
+            // an empty leaf value would match an empty-string id — block both.
+            enabled: sheet._canSave
             Accessible.name: sheet.editing ? i18n("Save changes to this rule") : i18n("Add this rule")
             onClicked: {
                 sheet.ruleSaved(sheet._workingRule);

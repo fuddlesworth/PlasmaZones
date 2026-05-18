@@ -125,16 +125,16 @@ void SnapEngine::ensureExclusionCache() const
     auto* s = snapSettings();
     if (!s) {
         // No settings — drop any stale cache so a later wiring rebuilds it.
+        // A null m_exclusionEvaluator is itself the "cache invalid" signal.
         m_exclusionRuleSet.reset();
         m_exclusionEvaluator.reset();
         m_exclusionCacheAppsKey.clear();
         m_exclusionCacheClassesKey.clear();
-        m_exclusionCacheValid = false;
         return;
     }
     const QStringList apps = s->excludedApplications();
     const QStringList classes = s->excludedWindowClasses();
-    if (m_exclusionCacheValid && apps == m_exclusionCacheAppsKey && classes == m_exclusionCacheClassesKey) {
+    if (m_exclusionEvaluator && apps == m_exclusionCacheAppsKey && classes == m_exclusionCacheClassesKey) {
         return; // lists unchanged — cached set/evaluator still valid
     }
 
@@ -147,13 +147,12 @@ void SnapEngine::ensureExclusionCache() const
     m_exclusionEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(*m_exclusionRuleSet);
     m_exclusionCacheAppsKey = apps;
     m_exclusionCacheClassesKey = classes;
-    m_exclusionCacheValid = true;
 }
 
 bool SnapEngine::isAppIdExcluded(const QString& appId) const
 {
     ensureExclusionCache();
-    if (!m_exclusionEvaluator || m_exclusionRuleSet->isEmpty()) {
+    if (!m_exclusionEvaluator || !m_exclusionRuleSet || m_exclusionRuleSet->isEmpty()) {
         return false; // no settings, or no-exclusions fast path
     }
     PhosphorWindowRule::WindowQuery query;

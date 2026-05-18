@@ -69,10 +69,15 @@ ColumnLayout {
     }
 
     function _addLeafChild() {
+        // Derive the starting leaf from the controller's authoring metadata so
+        // QML never reconstructs the field/operator wire table itself.
+        var fields = matchEditor.controller.matchFields();
+        var firstField = fields[0];
+        var operators = matchEditor.controller.operatorsForField(firstField.value);
         var children = matchEditor._children.slice();
         children.push({
-            "field": "appId",
-            "op": "equals",
+            "field": firstField.wire,
+            "op": operators[0].wire,
             "value": ""
         });
         matchEditor._emitChildren(matchEditor._compositeKind, children);
@@ -126,10 +131,9 @@ ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
                 // Indentation guide proportional to depth.
-                Rectangle {
+                Item {
                     Layout.preferredWidth: matchEditor.depth * Kirigami.Units.largeSpacing
                     Layout.fillHeight: true
-                    color: "transparent"
                 }
 
                 ComboBox {

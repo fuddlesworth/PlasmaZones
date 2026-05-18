@@ -36,6 +36,11 @@ enum class Field : int {
     Activity = 12,
 };
 
+/// The number of distinct `Field` enumerators. `Field` is a contiguous range
+/// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
+/// tests iterate the range using it as the upper bound.
+inline constexpr int FieldCount = static_cast<int>(Field::Activity) + 1;
+
 /// Match operators. Not every operator is valid against every field —
 /// validity is enforced by Predicate::isValid(), not the parser.
 enum class Operator : int {
@@ -49,6 +54,10 @@ enum class Operator : int {
     GreaterThan = 7, ///< numeric compare (Pid / VirtualDesktop)
     LessThan = 8, ///< numeric compare (Pid / VirtualDesktop)
 };
+
+/// The number of distinct `Operator` enumerators. `Operator` is a contiguous
+/// range `[0, OperatorCount)`; bump this whenever an enumerator is added.
+inline constexpr int OperatorCount = static_cast<int>(Operator::LessThan) + 1;
 
 /// Canonical lowercase wire string for a Field.
 inline QString fieldToString(Field field)

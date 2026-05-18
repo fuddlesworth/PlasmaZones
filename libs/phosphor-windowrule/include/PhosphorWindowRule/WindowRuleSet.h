@@ -72,7 +72,10 @@ public:
     bool removeRule(const QUuid& id);
 
     /// Replace the entire ordered rule list. Invalid rules are dropped with a
-    /// logged diagnostic. Always bumps the revision. Returns the accepted count.
+    /// logged diagnostic. A list equal to the current set (after dropping
+    /// invalid rules) is a no-op and does not bump the revision — so the
+    /// RuleEvaluator's `(windowId, revision)` cache survives a no-op rewrite.
+    /// Returns the accepted count.
     int setRules(const QList<WindowRule>& rules);
 
     /// Drop every rule. Bumps the revision.

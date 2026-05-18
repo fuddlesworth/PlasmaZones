@@ -149,10 +149,8 @@ private:
         return root.value(QStringLiteral("rules")).toArray();
     }
 
-    /// Find the first rule whose match contains an exact ScreenId leaf for
-    /// @p screenId and (optionally) a desktop / activity pin. Returns an
-    /// empty object if none. We match by the rule's priority + a screenId
-    /// substring in the serialized match — simpler than re-parsing the tree.
+    /// Returns the first rule at the given @p priority, or an empty object if
+    /// none exists.
     QJsonObject findRuleByPriority(const QJsonArray& rules, int priority)
     {
         for (const QJsonValue& v : rules) {
@@ -281,15 +279,31 @@ private Q_SLOTS:
         // Each fixture Assignment migrated to a rule at the cascade priority
         // its pinned dimensions dictate. The four pinned levels must all be
         // present in the migrated rule set.
+        //
+        // Priorities 410/510 can also carry same-priority disable rules, so we
+        // assert against the assignment cascade explicitly: a rule that sets an
+        // engine mode and does NOT disable an engine.
+        const auto isAssignmentRule = [this](const QJsonObject& rule) {
+            const QStringList types = actionTypes(rule);
+            return types.contains(QLatin1String("setEngineMode")) && !types.contains(QLatin1String("disableEngine"));
+        };
+        const auto hasAssignmentAtPriority = [&](int priority) {
+            for (const QJsonObject& r : allRulesByPriority(rules, priority)) {
+                if (isAssignmentRule(r)) {
+                    return true;
+                }
+            }
+            return false;
+        };
 
         // Exact (screen+desktop+activity) → 610.
-        QVERIFY(!findRuleByPriority(rules, 610).isEmpty());
+        QVERIFY(hasAssignmentAtPriority(610));
         // Screen + activity → 510 (activity weight beats desktop).
-        QVERIFY(!findRuleByPriority(rules, 510).isEmpty());
+        QVERIFY(hasAssignmentAtPriority(510));
         // Screen + desktop → 410.
-        QVERIFY(!findRuleByPriority(rules, 410).isEmpty());
+        QVERIFY(hasAssignmentAtPriority(410));
         // Screen only → 310.
-        QVERIFY(!findRuleByPriority(rules, 310).isEmpty());
+        QVERIFY(hasAssignmentAtPriority(310));
     }
 
     // ─── Lossless three-action assignment rules ──────────────────────────

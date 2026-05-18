@@ -102,11 +102,13 @@ private Q_SLOTS:
         QVERIFY(expr.evaluate(firefoxQuery()));
     }
 
-    void testRegex_caching_sharedAcrossCopies()
+    void testRegex_copyEvaluatesCorrectly()
     {
         const auto expr = MatchExpression::makeLeaf(Field::Title, Operator::Regex, QStringLiteral("Settings"));
         // Evaluate the original, then a copy; both must produce the same
-        // result (the copy shares the compiled program).
+        // result. This proves copy-correctness of the cached regex program —
+        // it does NOT (and cannot, from outside) prove the program is
+        // physically shared rather than duplicated.
         QVERIFY(expr.evaluate(firefoxQuery()));
         MatchExpression copy = expr;
         QVERIFY(copy.evaluate(firefoxQuery()));

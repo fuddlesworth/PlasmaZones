@@ -23,8 +23,8 @@
  * SCOPE — this suite proves the rule MODEL is cascade-faithful: it exercises
  * the RuleEvaluator + ContextRuleBridge directly. LayoutRegistry's own
  * byte-identical re-implementation on this model is verified separately by
- * tests/unit/core/test_layoutmanager_assignment.cpp (the 42-assertion oracle,
- * which runs against the rule-backed registry). The connector-name /
+ * tests/unit/core/test_layoutmanager_assignment.cpp (the assignment oracle
+ * suite, which runs against the rule-backed registry). The connector-name /
  * virtual-screen fallback is a query-side retry loop in LayoutRegistry and is
  * out of this model-level suite's scope by design.
  */

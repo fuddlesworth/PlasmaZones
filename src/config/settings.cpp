@@ -1308,13 +1308,24 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
 
     // Snapshot the current entries for this (axis, mode) so a no-op write
     // does not fire a spurious changed signal. Compare canonically — both
-    // sides are de-duplicated, whitespace-trimmed sets.
-    const auto canonical = [](const QStringList& list) {
+    // sides are de-duplicated, whitespace-trimmed sets. The Monitor axis
+    // additionally resolves connector names → stable screen ids so the
+    // comparison matches the public getter (disabledMonitors), which always
+    // resolves on read: without this, re-saving a list that stores a
+    // connector name where the getter reports the canonical id would look
+    // like a change and misfire the changed signal.
+    const auto canonical = [axis](const QStringList& list) {
         QStringList c;
         for (const QString& raw : list) {
-            const QString trimmed = raw.trimmed();
-            if (!trimmed.isEmpty() && !c.contains(trimmed)) {
-                c.append(trimmed);
+            QString value = raw.trimmed();
+            if (axis == DisableAxis::Monitor && Phosphor::Screens::ScreenIdentity::isConnectorName(value)) {
+                const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(value);
+                if (resolved != value) {
+                    value = resolved;
+                }
+            }
+            if (!value.isEmpty() && !c.contains(value)) {
+                c.append(value);
             }
         }
         c.sort();
@@ -1322,6 +1333,16 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     };
     const QStringList before = canonical(disableEntriesFor(mode, axisInt));
     const QStringList after = canonical(entries);
+
+    // No-op guard: when the canonical disable sets are equal there is nothing
+    // to persist. Return AHEAD of the kept-rebuild + setAllRules call — the
+    // rebuild mints fresh QUuids per disable rule (makeDisableRule) and
+    // WindowRule::operator== compares ids, so an unchanged set would still
+    // produce a rule list that fails setAllRules's equality check, needlessly
+    // rewriting windowrules.json and firing rulesChanged().
+    if (before == after) {
+        return;
+    }
 
     // Rebuild the rule list: keep every rule that is NOT a disable rule of
     // this exact (axis, mode) family, then append the new entries.
@@ -1382,9 +1403,6 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
 
     m_windowRuleStore->setAllRules(kept);
 
-    if (before == after) {
-        return;
-    }
     Q_EMIT(this->*signalFn)(mode);
     Q_EMIT settingsChanged();
 }
@@ -2556,6 +2574,21 @@ void Settings::reset()
     // animation / exclude rules are untouched: reset() only owns the
     // settings surface). The store persists on setAllRules, so the final
     // load() below re-reads the now-cleared file.
+    //
+    // load()'s own per-mode change-detection snapshots the six disable lists
+    // from the *live* store; clearing the store before load() runs would
+    // leave that snapshot empty, so the per-mode disabled*Changed signals
+    // would never fire even when reset() actually removed disable rules.
+    // Snapshot the six lists here — before the clear — and re-emit the
+    // per-mode signals ourselves after load(), comparing against this
+    // pre-clear state.
+    using Mode = PhosphorZones::AssignmentEntry::Mode;
+    const QStringList resetSnapMonitorsBefore = disabledMonitors(Mode::Snapping);
+    const QStringList resetAutotileMonitorsBefore = disabledMonitors(Mode::Autotile);
+    const QStringList resetSnapDesktopsBefore = disabledDesktops(Mode::Snapping);
+    const QStringList resetAutotileDesktopsBefore = disabledDesktops(Mode::Autotile);
+    const QStringList resetSnapActivitiesBefore = disabledActivities(Mode::Snapping);
+    const QStringList resetAutotileActivitiesBefore = disabledActivities(Mode::Autotile);
     {
         namespace CRB = PhosphorWindowRule::ContextRuleBridge;
         QList<PhosphorWindowRule::WindowRule> kept;
@@ -2570,6 +2603,25 @@ void Settings::reset()
     }
 
     load();
+
+    // Re-emit per-mode disable signals against the pre-clear snapshot taken
+    // above. load()'s internal snapshot saw the already-cleared store, so it
+    // could not detect that reset() removed disable rules — this loop covers
+    // the gap. All six lists are empty post-clear, so any non-empty pre-clear
+    // list fires exactly once.
+    if (disabledMonitors(Mode::Snapping) != resetSnapMonitorsBefore)
+        Q_EMIT disabledMonitorsChanged(Mode::Snapping);
+    if (disabledMonitors(Mode::Autotile) != resetAutotileMonitorsBefore)
+        Q_EMIT disabledMonitorsChanged(Mode::Autotile);
+    if (disabledDesktops(Mode::Snapping) != resetSnapDesktopsBefore)
+        Q_EMIT disabledDesktopsChanged(Mode::Snapping);
+    if (disabledDesktops(Mode::Autotile) != resetAutotileDesktopsBefore)
+        Q_EMIT disabledDesktopsChanged(Mode::Autotile);
+    if (disabledActivities(Mode::Snapping) != resetSnapActivitiesBefore)
+        Q_EMIT disabledActivitiesChanged(Mode::Snapping);
+    if (disabledActivities(Mode::Autotile) != resetAutotileActivitiesBefore)
+        Q_EMIT disabledActivitiesChanged(Mode::Autotile);
+
     qCInfo(lcConfig) << "Settings reset to defaults";
 }
 

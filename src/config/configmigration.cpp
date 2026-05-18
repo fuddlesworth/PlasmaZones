@@ -1427,10 +1427,11 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         }
     }
 
-    // If there is nothing to convert at all (no stash, no assignments file)
-    // AND config.json carries no stash key, there is no v3 data to migrate —
-    // but we still want a windowrules.json to exist so the daemon's store has
-    // a stable file. Write an empty set in that case.
+    // windowrules.json is always written below (see "Write windowrules.json"),
+    // regardless of how much v3 data was found. When there is nothing to
+    // convert (no stash, no assignments file) the `rules` list stays empty and
+    // an empty rule set is written — the daemon's store still needs a stable
+    // file to exist on disk.
 
     QList<PhosphorWindowRule::WindowRule> rules;
 
@@ -1441,7 +1442,8 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         for (auto it = assignmentsRoot.constBegin(); it != assignmentsRoot.constEnd(); ++it) {
             const QString& groupName = it.key();
             if (groupName == ConfigKeys::quickLayoutsGroup()) {
-                // QuickLayouts slots are NOT rules — relocate them to config.json.
+                // QuickLayouts slots are NOT rules — relocate them to the
+                // quicklayouts.json sidecar.
                 quickLayoutsToRelocate = it.value().toObject();
                 continue;
             }

@@ -57,6 +57,23 @@ void collectFields(const MatchExpression& match, QList<Field>& out)
     }
 }
 
+/// Append every non-empty ScreenId leaf value in @p match to @p out.
+void collectScreenIds(const MatchExpression& match, QStringList& out)
+{
+    if (match.isLeaf()) {
+        if (match.predicate().field == Field::ScreenId) {
+            const QString value = match.predicate().value.toString();
+            if (!value.isEmpty()) {
+                out.append(value);
+            }
+        }
+        return;
+    }
+    for (const MatchExpression& child : match.children()) {
+        collectScreenIds(child, out);
+    }
+}
+
 /// True if @p match is a flat AND of leaf predicates (or a bare leaf, or the
 /// empty catch-all). A specialized section can edit exactly this shape;
 /// anything deeper graduates to Advanced.
@@ -117,7 +134,7 @@ QString actionLabel(const RuleAction& action)
         const int ms = action.params.value(QLatin1String("durationMs")).toInt();
         return ms > 0 ? PzI18n::tr("Timing %1 ms").arg(ms) : PzI18n::tr("Animation timing");
     }
-    return action.type;
+    return WindowRuleModel::actionTypeFallbackLabel(action.type);
 }
 
 } // namespace
@@ -146,6 +163,7 @@ QHash<int, QByteArray> WindowRuleModel::roleNames() const
         {ConditionCountRole, "conditionCount"},
         {ActionCountRole, "actionCount"},
         {IsCompositeRole, "isComposite"},
+        {ScreenIdsRole, "screenIds"},
         {MatchJsonRole, "matchJson"},
         {ActionsJsonRole, "actionsJson"},
         {RuleJsonRole, "ruleJson"},
@@ -181,6 +199,8 @@ QVariant WindowRuleModel::data(const QModelIndex& index, int role) const
         return rule.actions.size();
     case IsCompositeRole:
         return !matchIsSimpleConjunction(rule.match);
+    case ScreenIdsRole:
+        return screenIdsOf(rule.match);
     case MatchJsonRole:
         return rule.match.toJson().toVariantMap();
     case ActionsJsonRole: {
@@ -239,14 +259,14 @@ bool WindowRuleModel::addRule(const WindowRule& rule)
     return true;
 }
 
-bool WindowRuleModel::updateRule(const WindowRule& rule)
+WindowRuleModel::UpdateResult WindowRuleModel::updateRule(const WindowRule& rule)
 {
     const int row = indexOf(rule.id);
     if (row < 0 || !rule.isValid()) {
-        return false;
+        return UpdateResult::NotFound;
     }
     if (m_rules.at(row) == rule) {
-        return true; // no-op — do not churn the dirty bit
+        return UpdateResult::Unchanged; // no-op — caller must not dirty the page
     }
     // An edit can move a rule into a different section (e.g. adding an
     // animation action). A plain dataChanged does not prompt the QML section
@@ -258,7 +278,7 @@ bool WindowRuleModel::updateRule(const WindowRule& rule)
     if (sectionFor(rule) != before) {
         Q_EMIT ruleSectionChanged();
     }
-    return true;
+    return UpdateResult::Applied;
 }
 
 bool WindowRuleModel::removeRule(const QUuid& id)
@@ -444,6 +464,21 @@ int WindowRuleModel::conditionCount(const MatchExpression& match)
     QList<Field> fields;
     collectFields(match, fields);
     return fields.size();
+}
+
+QStringList WindowRuleModel::screenIdsOf(const MatchExpression& match)
+{
+    QStringList out;
+    collectScreenIds(match, out);
+    return out;
+}
+
+QString WindowRuleModel::actionTypeFallbackLabel(const QString& type)
+{
+    // No built-in label covers this type — it is an unknown / legacy /
+    // future-schema action. Surface the raw type id rather than an empty
+    // string so the user at least sees what the rule carries.
+    return type;
 }
 
 } // namespace PlasmaZones

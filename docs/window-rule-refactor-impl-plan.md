@@ -5,7 +5,7 @@
 
 | | |
 |---|---|
-| **Status** | Draft / proposal |
+| **Status** | Implemented — under review |
 | **Companion** | `docs/window-rule-refactor-design.md` (architecture), `docs/window-rules-page-mockup.svg` (UI) |
 | **Branch** | `feature/window-rule-refactor` (off `v3.1`) |
 | **Date** | 2026-05-17 |

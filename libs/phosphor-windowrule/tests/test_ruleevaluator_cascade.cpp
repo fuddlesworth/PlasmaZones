@@ -3,14 +3,14 @@
 
 // Cascade-fidelity oracle. Phase 1 writes this NOW so Phase 3's migration has
 // a behavioural reference: it proves that context-only rules, ordered by the
-// priority formula
-//
-//     priority = 300 + (activityPinned ? 200 : 0)
-//                    + (desktopPinned  ? 100 : 0)
-//                    + (screenPinned   ?  10 : 0)
-//
-// reproduce the existing zone-Assignment cascade
+// production `ContextRuleBridge` priority formula, reproduce the existing
+// zone-Assignment cascade
 // (exact -> activity -> desktop -> screen -> provider-default) exactly.
+//
+// The priority formula and the context match expression are NOT re-derived
+// here — both are delegated to `ContextRuleBridge` so this oracle exercises
+// the real production code path. `testPriorityBands` pins the literal bands
+// the bridge must keep producing.
 //
 // Priority bands:
 //   exact (screen+desktop+activity)  610
@@ -21,6 +21,8 @@
 
 #include "RuleTestHelpers.h"
 
+#include <PhosphorWindowRule/ContextRuleBridge.h>
+
 #include <QTest>
 
 using namespace PhosphorWindowRule;
@@ -28,42 +30,28 @@ using namespace PhosphorWindowRule::TestHelpers;
 
 namespace {
 
-constexpr int kBasePriority = 300;
-constexpr int kActivityWeight = 200;
-constexpr int kDesktopWeight = 100;
-constexpr int kScreenWeight = 10;
-
-/// The cascade -> priority formula under test.
+/// The cascade -> priority formula under test. Delegated to the production
+/// `ContextRuleBridge` so this oracle exercises the *real* formula rather than
+/// a hand-rolled copy that could silently drift from it.
 int cascadePriority(bool screenPinned, bool desktopPinned, bool activityPinned)
 {
-    return kBasePriority + (activityPinned ? kActivityWeight : 0) + (desktopPinned ? kDesktopWeight : 0)
-        + (screenPinned ? kScreenWeight : 0);
+    return ContextRuleBridge::contextPriority(screenPinned, desktopPinned, activityPinned);
 }
 
 /// Builds a context-only rule pinning the given dimensions, with one
 /// engine-mode action carrying @p tag as its mode so the test can read back
-/// which rule won.
+/// which rule won. The match expression and priority both come from the
+/// production `ContextRuleBridge` — the cascade fidelity this file asserts is
+/// the bridge's behaviour, not a re-implementation.
 WindowRule contextRule(const QString& name, const QString& screenId, int desktop, const QString& activity,
                        const QString& tag)
 {
-    QList<MatchExpression> leaves;
     const bool screenPinned = !screenId.isEmpty();
     const bool desktopPinned = desktop > 0;
     const bool activityPinned = !activity.isEmpty();
 
-    if (screenPinned) {
-        leaves.append(MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, screenId));
-    }
-    if (desktopPinned) {
-        leaves.append(MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, desktop));
-    }
-    if (activityPinned) {
-        leaves.append(MatchExpression::makeLeaf(Field::Activity, Operator::Equals, activity));
-    }
-
-    const MatchExpression match = leaves.isEmpty() ? MatchExpression{} // provider default catch-all
-                                                   : MatchExpression::makeAll(leaves);
-    const int priority = leaves.isEmpty() ? 0 : cascadePriority(screenPinned, desktopPinned, activityPinned);
+    const MatchExpression match = ContextRuleBridge::makeContextMatch(screenId, desktop, activity);
+    const int priority = ContextRuleBridge::contextPriority(screenPinned, desktopPinned, activityPinned);
     return makeRule(name, priority, match, {engineMode(tag)});
 }
 
@@ -88,10 +76,14 @@ private Q_SLOTS:
 
     void testPriorityBands()
     {
-        QCOMPARE(cascadePriority(true, true, true), 610); // exact
-        QCOMPARE(cascadePriority(true, false, true), 510); // screen + activity
-        QCOMPARE(cascadePriority(true, true, false), 410); // screen + desktop
-        QCOMPARE(cascadePriority(true, false, false), 310); // screen only
+        // Assert the production bridge formula reproduces the literal cascade
+        // bands. These constants are the cascade-fidelity contract — if the
+        // bridge ever changes its weights, this oracle must fail loudly.
+        QCOMPARE(ContextRuleBridge::contextPriority(true, true, true), 610); // exact
+        QCOMPARE(ContextRuleBridge::contextPriority(true, false, true), 510); // screen + activity
+        QCOMPARE(ContextRuleBridge::contextPriority(true, true, false), 410); // screen + desktop
+        QCOMPARE(ContextRuleBridge::contextPriority(true, false, false), 310); // screen only
+        QCOMPARE(ContextRuleBridge::contextPriority(false, false, false), 0); // provider default
     }
 
     void testActivityBeatsDesktop_structurally()

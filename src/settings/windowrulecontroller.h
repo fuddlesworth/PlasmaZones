@@ -48,6 +48,12 @@ class WindowRuleController : public QObject
     Q_PROPERTY(WindowRuleModel* model READ model CONSTANT)
     Q_PROPERTY(bool dirty READ isDirty NOTIFY dirtyChanged)
     Q_PROPERTY(bool daemonReachable READ daemonReachable NOTIFY daemonReachableChanged)
+    /// True when a daemon `rulesChanged` broadcast arrived while the page had
+    /// unsaved staged edits — `reload()` skipped the refresh to avoid stomping
+    /// them, so the staged set is now divergent from the daemon's. The page
+    /// surfaces a "rules changed on disk — review before saving" notice;
+    /// `commit()` would otherwise silently overwrite the daemon's newer rules.
+    Q_PROPERTY(bool daemonChangedWhileDirty READ daemonChangedWhileDirty NOTIFY daemonChangedWhileDirtyChanged)
 
 public:
     explicit WindowRuleController(QObject* parent = nullptr);
@@ -66,6 +72,11 @@ public:
     bool daemonReachable() const
     {
         return m_daemonReachable;
+    }
+
+    bool daemonChangedWhileDirty() const
+    {
+        return m_daemonChangedWhileDirty;
     }
 
     // ── Lifecycle / staging contract ──────────────────────────────────────
@@ -178,15 +189,14 @@ public:
 Q_SIGNALS:
     void dirtyChanged();
     void daemonReachableChanged();
-    /// Emitted when a `commit()` push to the daemon fails or partially drops
-    /// rules — `SettingsController` keeps the window-rules page dirty.
-    void commitFailed();
+    void daemonChangedWhileDirtyChanged();
 
 private:
     /// Flip the dirty bit to true and emit `dirtyChanged()`.
     void markDirty();
     void setDirty(bool dirty);
     void setDaemonReachable(bool reachable);
+    void setDaemonChangedWhileDirty(bool changed);
 
     /// Re-fetch the rule set from the daemon and load it into the model,
     /// unconditionally clearing the dirty bit. The public `reload()` slot
@@ -211,6 +221,7 @@ private:
     WindowRuleModel m_model;
     bool m_dirty = false;
     bool m_daemonReachable = false;
+    bool m_daemonChangedWhileDirty = false;
 };
 
 } // namespace PlasmaZones

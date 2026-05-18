@@ -110,6 +110,37 @@ private Q_SLOTS:
         QCOMPARE(action->params.value(QStringLiteral("mode")).toString(), QStringLiteral("autotile"));
     }
 
+    void testPriorityTie_stableAcrossThreeEqualRules()
+    {
+        // Three equal-priority rules — an unstable sort could pass a two-rule
+        // tie by luck, so prove stability with three distinct engine-mode tags.
+        // The first-added rule must win.
+        WindowRuleSet set;
+        set.addRule(makeRule(QStringLiteral("alpha"), 100, MatchExpression{}, {engineMode(QStringLiteral("alpha"))}));
+        set.addRule(makeRule(QStringLiteral("beta"), 100, MatchExpression{}, {engineMode(QStringLiteral("beta"))}));
+        set.addRule(makeRule(QStringLiteral("gamma"), 100, MatchExpression{}, {engineMode(QStringLiteral("gamma"))}));
+        RuleEvaluator eval(set);
+        const auto action = eval.resolve(konsoleQuery()).slot(QString(ActionSlot::EngineMode));
+        QVERIFY(action.has_value());
+        QCOMPARE(action->params.value(QStringLiteral("mode")).toString(), QStringLiteral("alpha"));
+    }
+
+    void testPriorityTie_reverseInsertionOrderProvesOrderIsTiebreaker()
+    {
+        // Same three tags inserted in the opposite order: if priority (all
+        // equal) were the tiebreaker the winner would be unchanged, but list
+        // order is — so "gamma" (now first-added) must win. This pins that the
+        // tiebreaker is insertion order, not priority or tag identity.
+        WindowRuleSet set;
+        set.addRule(makeRule(QStringLiteral("gamma"), 100, MatchExpression{}, {engineMode(QStringLiteral("gamma"))}));
+        set.addRule(makeRule(QStringLiteral("beta"), 100, MatchExpression{}, {engineMode(QStringLiteral("beta"))}));
+        set.addRule(makeRule(QStringLiteral("alpha"), 100, MatchExpression{}, {engineMode(QStringLiteral("alpha"))}));
+        RuleEvaluator eval(set);
+        const auto action = eval.resolve(konsoleQuery()).slot(QString(ActionSlot::EngineMode));
+        QVERIFY(action.has_value());
+        QCOMPARE(action->params.value(QStringLiteral("mode")).toString(), QStringLiteral("gamma"));
+    }
+
     // ── Slot-unfilled vs slot-filled-empty ──
 
     void testSlotUnfilled_isNullopt()
@@ -184,8 +215,15 @@ private Q_SLOTS:
                              {overrideShader(QStringLiteral("window.close"), QStringLiteral("popout"))}));
         RuleEvaluator eval(set);
         const ResolvedActions result = eval.resolve(konsoleQuery());
-        QVERIFY(result.hasSlot(QStringLiteral("anim-shader:window.open")));
-        QVERIFY(result.hasSlot(QStringLiteral("anim-shader:window.close")));
+        // Both event-scoped slots are filled — and each carries its own
+        // effectId, proving the two events resolve into independent slots
+        // rather than one clobbering the other.
+        const auto open = result.slot(QStringLiteral("anim-shader:window.open"));
+        const auto close = result.slot(QStringLiteral("anim-shader:window.close"));
+        QVERIFY(open.has_value());
+        QVERIFY(close.has_value());
+        QCOMPARE(open->params.value(QStringLiteral("effectId")).toString(), QStringLiteral("dissolve"));
+        QCOMPARE(close->params.value(QStringLiteral("effectId")).toString(), QStringLiteral("popout"));
     }
 
     // ── hasAnyMatch ──

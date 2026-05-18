@@ -23,6 +23,8 @@
 #include <QTest>
 #include <QUuid>
 
+#include <unistd.h>
+
 #include <PhosphorWindowRule/ContextRuleBridge.h>
 #include <PhosphorWindowRule/WindowRule.h>
 #include <PhosphorWindowRule/WindowRuleSet.h>
@@ -99,6 +101,11 @@ private Q_SLOTS:
         WindowRuleStore reloaded(storePath());
         QCOMPARE(reloaded.count(), 1);
         QVERIFY(reloaded.contains(a.id));
+
+        // Atomicity check: a successful QSaveFile commit leaves no temporary
+        // scratch file behind in the directory — only the final store file.
+        const QStringList entries = QDir(m_dir.path()).entryList(QDir::Files | QDir::Hidden | QDir::System, QDir::Name);
+        QCOMPARE(entries, QStringList{QStringLiteral("windowrules.json")});
     }
 
     // ─── Revision monotonicity ────────────────────────────────────────────
@@ -177,6 +184,13 @@ private Q_SLOTS:
 
     void testAddRule_propagatesSaveFailure()
     {
+        // root bypasses directory write permissions, so the read-only-dir
+        // trick cannot provoke a save failure when the suite runs as root
+        // (the project's Docker CI does). Skip rather than report a spurious
+        // failure.
+        if (::geteuid() == 0) {
+            QSKIP("save-failure test requires a non-root uid");
+        }
         WindowRuleStore store(storePath());
         // Make the store directory read-only so the QSaveFile temp-write +
         // rename inside save() fails. The in-memory mutation still succeeds,
@@ -198,6 +212,11 @@ private Q_SLOTS:
 
     void testSetAllRules_propagatesSaveFailure()
     {
+        // root bypasses directory write permissions — see
+        // testAddRule_propagatesSaveFailure.
+        if (::geteuid() == 0) {
+            QSKIP("save-failure test requires a non-root uid");
+        }
         WindowRuleStore store(storePath());
         QVERIFY(QFile::setPermissions(m_dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
 

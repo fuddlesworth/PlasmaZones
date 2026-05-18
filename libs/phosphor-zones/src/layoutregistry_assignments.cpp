@@ -28,6 +28,7 @@
 #include <PhosphorWindowRule/WindowQuery.h>
 #include <PhosphorWindowRule/WindowRule.h>
 
+#include <algorithm>
 #include <optional>
 
 namespace PhosphorZones {
@@ -58,68 +59,41 @@ QString contextRuleName(const QString& screenId, int virtualDesktop, const QStri
         + (activity.isEmpty() ? QString() : QStringLiteral(" · Activity"));
 }
 
-// True if @p rule's match is exactly the context shape for the pinned
-// dimensions of (screenId, virtualDesktop, activity) — i.e. the rule the
-// ContextRuleBridge would emit for that tuple. A rule pinning more or fewer
-// dimensions, or pinning different values, is NOT an exact match. This is
-// what hasExplicitAssignment relies on to distinguish a stored entry from a
-// wider cascade entry or the synthesized provider default.
+// Decode a match expression's pinned (screenId, desktop, activity) context
+// tuple via the shared ContextRuleBridge::contextDimsOf — the one classifier
+// for context-rule shape. A non-context / nested-composite match leaves all
+// three at their defaults (empty / 0).
+struct ContextDims
+{
+    QString screenId;
+    int virtualDesktop = 0;
+    QString activity;
+};
+ContextDims decodeDims(const PWR::MatchExpression& match)
+{
+    ContextDims dims;
+    CRB::contextDimsOf(match, dims.screenId, dims.virtualDesktop, dims.activity);
+    return dims;
+}
+
+// True if @p match is exactly the context shape for the pinned dimensions of
+// (screenId, virtualDesktop, activity) — i.e. the match ContextRuleBridge
+// would emit for that tuple. A match pinning more or fewer dimensions, or
+// pinning different values, is NOT an exact match. This is what
+// hasExplicitAssignment relies on to distinguish a stored entry from a wider
+// cascade entry or the synthesized provider default.
+//
+// Built on contextDimsOf so context-shape classification has a single path:
+// the decoded tuple must equal the requested tuple exactly. contextDimsOf
+// ignores window-property leaves, so an extra context-equality leaf would
+// surface as a different decoded value and a flat rule mixing a window
+// predicate with the context leaves would still decode to the same tuple —
+// the exact-equality test below is the discriminator.
 bool matchIsExactContext(const PWR::MatchExpression& match, const QString& screenId, int virtualDesktop,
                          const QString& activity)
 {
-    const bool wantScreen = !screenId.isEmpty();
-    const bool wantDesktop = virtualDesktop > 0;
-    const bool wantActivity = !activity.isEmpty();
-    const int wantCount = (wantScreen ? 1 : 0) + (wantDesktop ? 1 : 0) + (wantActivity ? 1 : 0);
-
-    // Collect the (field → value) equality leaves of the match expression.
-    QList<PWR::MatchExpression> leaves;
-    if (match.isCatchAll()) {
-        // empty All{} — only an exact match for the all-default tuple.
-        return wantCount == 0;
-    }
-    if (match.isLeaf()) {
-        leaves.append(match);
-    } else if (match.kind() == PWR::MatchExpression::Kind::All) {
-        leaves = match.children();
-    } else {
-        return false; // Any{} / None{} are never a context-assignment shape.
-    }
-    if (leaves.size() != wantCount) {
-        return false;
-    }
-
-    bool sawScreen = false;
-    bool sawDesktop = false;
-    bool sawActivity = false;
-    for (const PWR::MatchExpression& leaf : leaves) {
-        if (!leaf.isLeaf()) {
-            return false;
-        }
-        const PWR::MatchExpression::Predicate& p = leaf.predicate();
-        if (p.op != PWR::Operator::Equals) {
-            return false;
-        }
-        if (p.field == PWR::Field::ScreenId) {
-            if (!wantScreen || p.value.toString() != screenId) {
-                return false;
-            }
-            sawScreen = true;
-        } else if (p.field == PWR::Field::VirtualDesktop) {
-            if (!wantDesktop || p.value.toInt() != virtualDesktop) {
-                return false;
-            }
-            sawDesktop = true;
-        } else if (p.field == PWR::Field::Activity) {
-            if (!wantActivity || p.value.toString() != activity) {
-                return false;
-            }
-            sawActivity = true;
-        } else {
-            return false;
-        }
-    }
-    return sawScreen == wantScreen && sawDesktop == wantDesktop && sawActivity == wantActivity;
+    const ContextDims dims = decodeDims(match);
+    return dims.screenId == screenId && dims.virtualDesktop == virtualDesktop && dims.activity == activity;
 }
 
 // True if @p rule carries a SetEngineMode action. A context assignment rule
@@ -137,33 +111,49 @@ bool hasEngineModeAction(const PWR::WindowRule& rule)
     return false;
 }
 
+// Forward declarations: the shape predicates are defined just below but
+// isContextAssignmentRule references all three.
+bool matchIsExactContextBase(const PWR::MatchExpression& match);
+bool matchIsExactContextDesktop(const PWR::MatchExpression& match);
+bool matchIsExactContextActivity(const PWR::MatchExpression& match);
+
+// True if @p rule is a pure context-assignment rule for one of the cascade
+// families (per-screen-base / per-desktop / per-activity) — i.e. it carries a
+// SetEngineMode action AND its match is exactly a pinned context shape (not
+// the catch-all, not a window-property rule that happens to carry an
+// engine-mode action). The batch purge / clear loops gate on this so a
+// legitimate window-property rule carrying SetSnappingLayout / SetEngineMode
+// actions is never rebuilt — rebuilding force-injects SetEngineMode and
+// drops every other action, which would clobber a window-property rule.
+bool isContextAssignmentRule(const PWR::WindowRule& rule)
+{
+    if (!hasEngineModeAction(rule) || rule.match.isCatchAll()) {
+        return false;
+    }
+    return matchIsExactContextBase(rule.match) || matchIsExactContextDesktop(rule.match)
+        || matchIsExactContextActivity(rule.match);
+}
+
 // Shape predicates for the per-screen-base / per-desktop / per-activity
 // context rule families — used by the batch setters to drop one family
-// before writing the new entries. The (screen, desktop, activity)
-// decomposition is the shared ContextRuleBridge::contextDimsOf.
+// before writing the new entries, and by the introspection helpers to keep
+// their family filter identical to the batch setters'. The (screen, desktop,
+// activity) decomposition is the shared decodeDims (ContextRuleBridge::
+// contextDimsOf) — one classification path.
 bool matchIsExactContextBase(const PWR::MatchExpression& match)
 {
-    QString sid;
-    int desk = 0;
-    QString act;
-    CRB::contextDimsOf(match, sid, desk, act);
-    return !sid.isEmpty() && desk == 0 && act.isEmpty();
+    const ContextDims dims = decodeDims(match);
+    return !dims.screenId.isEmpty() && dims.virtualDesktop == 0 && dims.activity.isEmpty();
 }
 bool matchIsExactContextDesktop(const PWR::MatchExpression& match)
 {
-    QString sid;
-    int desk = 0;
-    QString act;
-    CRB::contextDimsOf(match, sid, desk, act);
-    return !sid.isEmpty() && desk > 0 && act.isEmpty();
+    const ContextDims dims = decodeDims(match);
+    return !dims.screenId.isEmpty() && dims.virtualDesktop > 0 && dims.activity.isEmpty();
 }
 bool matchIsExactContextActivity(const PWR::MatchExpression& match)
 {
-    QString sid;
-    int desk = 0;
-    QString act;
-    CRB::contextDimsOf(match, sid, desk, act);
-    return !sid.isEmpty() && !act.isEmpty();
+    const ContextDims dims = decodeDims(match);
+    return !dims.screenId.isEmpty() && !dims.activity.isEmpty();
 }
 
 // Build the AssignmentEntry encoded directly by a rule's action list (no
@@ -272,40 +262,84 @@ bool LayoutRegistry::removeAssignmentRule(const QString& screenId, int virtualDe
 
 bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
 {
-    // A snap layout was deleted. Every assignment rule whose SetSnappingLayout
-    // action carries this id must lose that reference — but NOT the whole
-    // rule. An Autotile-mode context rule can carry a stale SetSnappingLayout
-    // (the mode-toggle losslessness invariant), so blanket-deleting it would
-    // drop its SetEngineMode + SetTilingAlgorithm autotile intent. Rebuild
-    // each affected rule via ContextRuleBridge::makeAssignmentActions with the
-    // snapping layout cleared but mode + tilingAlgorithm preserved; only drop
-    // a rule that, after the clear, carries nothing but a default (Snapping)
-    // engine-mode — a pure Snapping mode-only context rule encodes no intent
-    // beyond the default, so it is dropped to match the legacy cleanup.
+    // A snap layout was deleted. Every rule whose SetSnappingLayout action
+    // carries this id must lose that reference — but NOT the whole rule, and
+    // NOT its other actions.
+    //
+    // Two rule shapes can carry a SetSnappingLayout action for the deleted id:
+    //
+    //  1. A pure context-assignment rule (per-screen / -desktop / -activity).
+    //     An Autotile-mode context rule can still carry a stale
+    //     SetSnappingLayout (mode-toggle losslessness), so blanket-deleting it
+    //     would drop its SetEngineMode + SetTilingAlgorithm autotile intent.
+    //     Rebuild via ContextRuleBridge::makeAssignmentActions with the
+    //     snapping layout cleared but mode + tilingAlgorithm preserved; only
+    //     drop the whole rule when, after the clear, nothing but a default
+    //     (Snapping) engine-mode remains — a pure Snapping mode-only context
+    //     rule encodes no intent beyond the default.
+    //
+    //  2. A window-property rule that legitimately carries a SetSnappingLayout
+    //     action (the phased rollout introduces exactly such rules). Rebuilding
+    //     it through makeAssignmentActions would force-inject a SetEngineMode
+    //     action and drop every other action it carries. Instead, surgically
+    //     remove ONLY the matching SetSnappingLayout action and leave all
+    //     other actions intact; drop the rule only if nothing meaningful
+    //     remains after the removal.
     QList<PWR::WindowRule> kept;
     bool changed = false;
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        const AssignmentEntry entry = entryFromRuleMatchActions(rule);
-        if (entry.snappingLayout != layoutId) {
+        const bool referencesDeleted =
+            std::any_of(rule.actions.cbegin(), rule.actions.cend(), [&layoutId](const PWR::RuleAction& action) {
+                return action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+                    && action.params.value(QLatin1String("layoutId")).toString() == layoutId;
+            });
+        if (!referencesDeleted) {
             kept.append(rule);
             continue;
         }
         changed = true;
 
-        // Drop the dead snapping reference; mode + tilingAlgorithm survive.
-        const bool autotile = (entry.mode == AssignmentEntry::Autotile);
-        if (!autotile && entry.tilingAlgorithm.isEmpty()) {
-            // Nothing meaningful remains — a bare Snapping engine-mode is the
-            // default. Drop the whole rule.
-            qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped rule" << rule.id.toString()
-                                << "— only a default Snapping mode remained after clearing the deleted layout";
+        if (isContextAssignmentRule(rule)) {
+            // Shape 1: rebuild the lossless context-action set with the dead
+            // snapping reference cleared; mode + tilingAlgorithm survive.
+            const AssignmentEntry entry = entryFromRuleMatchActions(rule);
+            const bool autotile = (entry.mode == AssignmentEntry::Autotile);
+            if (!autotile && entry.tilingAlgorithm.isEmpty()) {
+                // Nothing meaningful remains — a bare Snapping engine-mode is
+                // the default. Drop the whole rule.
+                qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped context rule" << rule.id.toString()
+                                    << "— only a default Snapping mode remained after clearing the deleted layout";
+                continue;
+            }
+            PWR::WindowRule rebuilt = rule;
+            rebuilt.actions = PWR::ContextRuleBridge::makeAssignmentActions(autotile, QString(), entry.tilingAlgorithm);
+            kept.append(rebuilt);
+            qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: rebuilt context rule" << rule.id.toString()
+                                << "— cleared deleted snapping layout, preserved mode/tilingAlgorithm";
             continue;
         }
-        PWR::WindowRule rebuilt = rule;
-        rebuilt.actions = PWR::ContextRuleBridge::makeAssignmentActions(autotile, QString(), entry.tilingAlgorithm);
-        kept.append(rebuilt);
-        qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: rebuilt rule" << rule.id.toString()
-                            << "— cleared deleted snapping layout, preserved mode/tilingAlgorithm";
+
+        // Shape 2: a window-property (or otherwise non-context) rule. Remove
+        // only the SetSnappingLayout actions referencing the deleted layout;
+        // every other action is preserved verbatim.
+        PWR::WindowRule trimmed = rule;
+        trimmed.actions.erase(std::remove_if(trimmed.actions.begin(), trimmed.actions.end(),
+                                             [&layoutId](const PWR::RuleAction& action) {
+                                                 return action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+                                                     && action.params.value(QLatin1String("layoutId")).toString()
+                                                     == layoutId;
+                                             }),
+                              trimmed.actions.end());
+        if (trimmed.actions.isEmpty()) {
+            // The rule's only action was the dead snapping reference — nothing
+            // meaningful remains, so drop it.
+            qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped rule" << rule.id.toString()
+                                << "— its only action referenced the deleted snapping layout";
+            continue;
+        }
+        kept.append(trimmed);
+        qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: trimmed rule" << rule.id.toString()
+                            << "— removed the SetSnappingLayout action for the deleted layout, kept all others";
     }
     if (changed) {
         m_ruleStore->setAllRules(kept);
@@ -557,7 +591,10 @@ void LayoutRegistry::clearAutotileAssignments()
     bool changed = false;
 
     for (PWR::WindowRule& rule : updated) {
-        if (!hasEngineModeAction(rule)) {
+        // Only pure context-assignment rules are flipped — a window-property
+        // rule that legitimately carries a SetEngineMode action must not be
+        // rebuilt (makeAssignmentActions would drop its other actions).
+        if (!isContextAssignmentRule(rule)) {
             continue;
         }
         const AssignmentEntry entry = entryFromRuleMatchActions(rule);
@@ -571,11 +608,8 @@ void LayoutRegistry::clearAutotileAssignments()
         changed = true;
 
         // Recover (screen, desktop) for the layoutAssigned signal.
-        QString sid;
-        int desk = 0;
-        QString act;
-        CRB::contextDimsOf(rule.match, sid, desk, act);
-        affected.append(qMakePair(sid, desk));
+        const ContextDims dims = decodeDims(rule.match);
+        affected.append(qMakePair(dims.screenId, dims.virtualDesktop));
     }
 
     // Drop autotile quick-layout slots.
@@ -760,17 +794,14 @@ QHash<QPair<QString, int>, QString> LayoutRegistry::desktopAssignments() const
 {
     QHash<QPair<QString, int>, QString> result;
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (!hasEngineModeAction(rule)) {
+        // Use the same per-desktop family classifier the batch setter uses,
+        // so a window-property rule carrying an engine-mode action plus an
+        // incidental VirtualDesktop== predicate cannot leak in.
+        if (!hasEngineModeAction(rule) || !matchIsExactContextDesktop(rule.match)) {
             continue;
         }
-        QString sid;
-        int desk = 0;
-        QString activity;
-        CRB::contextDimsOf(rule.match, sid, desk, activity);
-        // Per-desktop: virtualDesktop > 0 and activity empty.
-        if (desk > 0 && activity.isEmpty()) {
-            result[qMakePair(sid, desk)] = entryFromRuleMatchActions(rule).activeLayoutId();
-        }
+        const ContextDims dims = decodeDims(rule.match);
+        result[qMakePair(dims.screenId, dims.virtualDesktop)] = entryFromRuleMatchActions(rule).activeLayoutId();
     }
     return result;
 }
@@ -779,17 +810,14 @@ QHash<QPair<QString, QString>, QString> LayoutRegistry::activityAssignments() co
 {
     QHash<QPair<QString, QString>, QString> result;
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (!hasEngineModeAction(rule)) {
+        // Use the same per-activity family classifier the batch setter uses,
+        // so a window-property rule carrying an engine-mode action plus an
+        // incidental Activity== predicate cannot leak in.
+        if (!hasEngineModeAction(rule) || !matchIsExactContextActivity(rule.match)) {
             continue;
         }
-        QString sid;
-        int desk = 0;
-        QString activity;
-        CRB::contextDimsOf(rule.match, sid, desk, activity);
-        // Per-activity: activity non-empty (any desktop value).
-        if (!activity.isEmpty()) {
-            result[qMakePair(sid, activity)] = entryFromRuleMatchActions(rule).activeLayoutId();
-        }
+        const ContextDims dims = decodeDims(rule.match);
+        result[qMakePair(dims.screenId, dims.activity)] = entryFromRuleMatchActions(rule).activeLayoutId();
     }
     return result;
 }

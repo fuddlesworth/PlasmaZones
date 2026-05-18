@@ -20,7 +20,14 @@ WindowRuleStore::WindowRuleStore(const QString& filePath, QObject* parent)
     // QSaveFile (inside WindowRuleSet::saveToFile) needs the parent directory
     // to exist. The path is fixed for the store's lifetime, so create the
     // directory once here rather than on every mutating save().
-    QDir().mkpath(QFileInfo(m_filePath).absolutePath());
+    const QString parentDir = QFileInfo(m_filePath).absolutePath();
+    if (!QDir().mkpath(parentDir)) {
+        // Not fatal — load() still works for an existing file and a later
+        // save() will report its own failure — but a failed mkpath almost
+        // always means every save() will fail, so surface it now.
+        qCWarning(lcWindowRule) << "WindowRuleStore: failed to create config directory" << parentDir
+                                << "— saves may fail";
+    }
     load();
 }
 

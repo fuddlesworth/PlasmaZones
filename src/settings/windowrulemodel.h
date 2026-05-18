@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QList>
 #include <QString>
+#include <QStringList>
 #include <QUuid>
 
 #include <PhosphorWindowRule/WindowRule.h>
@@ -76,6 +77,7 @@ public:
         ConditionCountRole, ///< number of leaf predicates in the match tree
         ActionCountRole, ///< number of actions
         IsCompositeRole, ///< true if the match is a non-trivial composite
+        ScreenIdsRole, ///< QStringList of ScreenId leaf values in the match
         MatchJsonRole, ///< the match expression as a JSON object
         ActionsJsonRole, ///< the actions as a JSON array
         RuleJsonRole, ///< the whole rule as a JSON object
@@ -111,8 +113,19 @@ public:
     /// Append @p rule. Returns false if its id collides or it is invalid.
     bool addRule(const PhosphorWindowRule::WindowRule& rule);
 
-    /// Replace the rule with the same id. Returns false if no such rule.
-    bool updateRule(const PhosphorWindowRule::WindowRule& rule);
+    /// Outcome of an `updateRule()` call — lets the caller tell a genuine
+    /// no-op (identical rule) apart from an applied change so a no-op save
+    /// does not churn the dirty bit.
+    enum class UpdateResult {
+        NotFound, ///< no rule with that id, or @p rule is invalid
+        Unchanged, ///< the rule was already identical — nothing applied
+        Applied, ///< the rule was replaced and a change signal emitted
+    };
+
+    /// Replace the rule with the same id. Returns `NotFound` for an unknown id
+    /// or an invalid rule, `Unchanged` for an identical rule (no signal), and
+    /// `Applied` when the rule was replaced.
+    UpdateResult updateRule(const PhosphorWindowRule::WindowRule& rule);
 
     /// Remove the rule with @p id. Returns false if no such rule.
     bool removeRule(const QUuid& id);
@@ -140,6 +153,17 @@ public:
     /// Localized human label for a match Field. Shared with
     /// `WindowRuleController` so the 14-case table lives in exactly one place.
     static QString fieldLabel(PhosphorWindowRule::Field field);
+
+    /// Every non-empty `ScreenId` leaf value found anywhere in @p match.
+    /// Shared with `WindowRuleController` so the recursive walk lives in one
+    /// place — the model exposes it as `ScreenIdsRole`.
+    static QStringList screenIdsOf(const PhosphorWindowRule::MatchExpression& match);
+
+    /// Display label for an action type id that no built-in label covers —
+    /// the unknown / legacy / future-schema fallback. Shared by the model's
+    /// `actionSummary` and the controller's `actionTypes()` so the fallback
+    /// lives in exactly one place. Returns the raw type id verbatim.
+    static QString actionTypeFallbackLabel(const QString& type);
 
 Q_SIGNALS:
     void countChanged();

@@ -16,9 +16,15 @@
 
 namespace PhosphorZones {
 
+namespace {
+// Filename of the per-algorithm autotile-overrides JSON sidecar, relative to
+// the layout directory. Hoisted so the load and save paths share one literal.
+const QString kAutotileOverridesFile = QStringLiteral("/autotile-overrides.json");
+} // namespace
+
 QJsonObject LayoutRegistry::loadAllAutotileOverrides() const
 {
-    QFile file(m_layoutDirectory + QStringLiteral("/autotile-overrides.json"));
+    QFile file(m_layoutDirectory + kAutotileOverridesFile);
     if (!file.open(QIODevice::ReadOnly)) {
         return {};
     }
@@ -29,7 +35,7 @@ QJsonObject LayoutRegistry::loadAllAutotileOverrides() const
 void LayoutRegistry::saveAllAutotileOverrides(const QJsonObject& all)
 {
     ensureLayoutDirectory();
-    QFile file(m_layoutDirectory + QStringLiteral("/autotile-overrides.json"));
+    QFile file(m_layoutDirectory + kAutotileOverridesFile);
     if (!file.open(QIODevice::WriteOnly)) {
         qCWarning(lcZonesLib) << "Failed to save autotile overrides:" << file.errorString();
         return;

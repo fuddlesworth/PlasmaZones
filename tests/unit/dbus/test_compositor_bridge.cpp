@@ -276,15 +276,18 @@ private Q_SLOTS:
 
         QJsonObject obj = doc.object();
 
-        // Should have layouts array
+        // Should have layouts array, and the layout seeded in init() must surface.
         QVERIFY(obj.contains(QLatin1String("layouts")));
         QVERIFY(obj[QLatin1String("layouts")].isArray());
+        QVERIFY(obj[QLatin1String("layouts")].toArray().size() >= 1);
 
         // Should have windows array
         QVERIFY(obj.contains(QLatin1String("windows")));
+        QVERIFY(obj[QLatin1String("windows")].isArray());
 
-        // Should have activeLayoutId
+        // Should have activeLayoutId, non-empty because init() set an active layout.
         QVERIFY(obj.contains(QLatin1String("activeLayoutId")));
+        QVERIFY(!obj[QLatin1String("activeLayoutId")].toString().isEmpty());
     }
 
 private:

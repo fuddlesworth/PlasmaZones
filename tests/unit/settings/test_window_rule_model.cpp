@@ -73,7 +73,7 @@ WindowRule animationRule(const QString& windowClass, const QString& name)
     return rule;
 }
 
-/// Build a composite (ALL-of-two-leaves nesting an ANY) rule — the kind that
+/// Build a composite (ALL of {a leaf, a nested ANY}) rule — the kind that
 /// must graduate to Advanced.
 WindowRule compositeRule(const QString& name)
 {
@@ -173,14 +173,14 @@ void TestWindowRuleModel::crudByUuid()
     // Duplicate id is rejected.
     QVERIFY(!model.addRule(a));
 
-    // Update by id.
+    // Update by id — a real change applies.
     a.name = QStringLiteral("A renamed");
-    QVERIFY(model.updateRule(a));
+    QCOMPARE(model.updateRule(a), WindowRuleModel::UpdateResult::Applied);
     QCOMPARE(model.ruleById(a.id).name, QStringLiteral("A renamed"));
 
     // Update of an absent id fails.
     WindowRule ghost = monitorRule(QStringLiteral("DP-9"), QStringLiteral("Ghost"));
-    QVERIFY(!model.updateRule(ghost));
+    QCOMPARE(model.updateRule(ghost), WindowRuleModel::UpdateResult::NotFound);
 
     // Remove by id.
     QVERIFY(model.removeRule(a.id));
@@ -198,9 +198,9 @@ void TestWindowRuleModel::updateNoOpDoesNotChurn()
     QSignalSpy dataSpy(&model, &QAbstractItemModel::dataChanged);
     QSignalSpy sectionSpy(&model, &WindowRuleModel::ruleSectionChanged);
 
-    // Updating to an identical rule must NOT emit dataChanged or
-    // ruleSectionChanged.
-    QVERIFY(model.updateRule(a));
+    // Updating to an identical rule reports Unchanged and must NOT emit
+    // dataChanged or ruleSectionChanged.
+    QCOMPARE(model.updateRule(a), WindowRuleModel::UpdateResult::Unchanged);
     QCOMPARE(dataSpy.count(), 0);
     QCOMPARE(sectionSpy.count(), 0);
 }

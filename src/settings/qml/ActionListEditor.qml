@@ -34,13 +34,31 @@ ColumnLayout {
         editor.actionsChanged(next);
     }
 
+    /// A valid starting value for a parameter descriptor — driven entirely off
+    /// its `kind`, so the per-kind defaulting lives in exactly one place.
+    function _defaultParamValue(param) {
+        if (param.kind === "enum")
+            return (param.options && param.options.length > 0) ? param.options[0] : "";
+
+        if (param.kind === "number" || param.kind === "percent")
+            return param.min !== undefined ? param.min : 0;
+
+        return "";
+    }
+
     function _append() {
         // Guarded by the Add-action button's enabled state — there is always
-        // at least one registered type when this runs.
+        // at least one registered type when this runs. Pre-seed every param
+        // declared by the type's descriptor so a freshly-added action carries
+        // a complete (if not yet user-filled) param set.
+        var typeEntry = editor.actionTypeOptions[0];
+        var action = {
+            "type": typeEntry.value
+        };
+        var params = typeEntry.params || [];
+        for (var i = 0; i < params.length; ++i) action[params[i].key] = editor._defaultParamValue(params[i])
         var next = editor.actions.slice();
-        next.push({
-            "type": editor.actionTypeOptions[0].value
-        });
+        next.push(action);
         editor.actionsChanged(next);
     }
 

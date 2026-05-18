@@ -139,6 +139,13 @@ SettingsFlickable {
             text: i18n("The PlasmaZones daemon is not running — window rules cannot be loaded or saved until it starts.")
         }
 
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Warning
+            visible: page.controller.daemonChangedWhileDirty
+            text: i18n("The window rules changed on disk while you were editing — saving now will overwrite those changes. Review your edits before saving, or discard them to reload.")
+        }
+
         // ── Monitor overview strip ──
         SettingsCard {
             Layout.fillWidth: true

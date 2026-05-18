@@ -49,24 +49,6 @@ WindowRule ruleFromVariant(const QVariantMap& map)
     return rule.value_or(WindowRule{});
 }
 
-/// Append every ScreenId leaf value found anywhere in @p expr to @p out.
-/// Plain recursive walk — no per-call std::function allocation.
-void collectScreenIds(const MatchExpression& expr, QStringList& out)
-{
-    if (expr.isLeaf()) {
-        if (expr.predicate().field == Field::ScreenId) {
-            const QString value = expr.predicate().value.toString();
-            if (!value.isEmpty()) {
-                out.append(value);
-            }
-        }
-        return;
-    }
-    for (const MatchExpression& child : expr.children()) {
-        collectScreenIds(child, out);
-    }
-}
-
 QString operatorLabel(Operator op)
 {
     switch (op) {
@@ -128,9 +110,28 @@ QVariantList paramsForActionType(QLatin1StringView type)
         p[QStringLiteral("max")] = 100;
         p[QStringLiteral("scale")] = 0.01;
         params.append(p);
-    } else if (type == ActionType::OverrideAnimationShader || type == ActionType::OverrideAnimationTiming) {
+    } else if (type == ActionType::OverrideAnimationShader) {
+        // Wire keys must match PhosphorWindowRule::ActionRegistry's
+        // OverrideAnimationShader descriptor (`event`, `effectId`, `params`).
+        // `params` is a free-form shader-uniform object — not authorable
+        // through a flat key/kind descriptor, so it is intentionally omitted;
+        // a shader-uniform editor would graduate the rule to Advanced.
         params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("string"),
                                       PzI18n::tr("Event path, e.g. window.open")));
+        params.append(
+            paramDescriptor(QLatin1String("effectId"), QStringLiteral("string"), PzI18n::tr("Shader effect id")));
+    } else if (type == ActionType::OverrideAnimationTiming) {
+        // Wire keys must match the OverrideAnimationTiming descriptor
+        // (`event`, `curve`, `durationMs`). `curve` is a free-form easing
+        // descriptor edited through the dedicated curve editor, so it is
+        // intentionally omitted from the flat action-param schema here.
+        params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("string"),
+                                      PzI18n::tr("Event path, e.g. window.open")));
+        QVariantMap p =
+            paramDescriptor(QLatin1String("durationMs"), QStringLiteral("number"), PzI18n::tr("Duration (ms)"));
+        p[QStringLiteral("min")] = 0;
+        p[QStringLiteral("max")] = 60000;
+        params.append(p);
     }
     // float / disableEngine / exclude carry no parameters — empty list.
     return params;
@@ -165,7 +166,7 @@ QString actionTypeLabel(QLatin1StringView type)
     if (type == ActionType::SetOpacity) {
         return PzI18n::tr("Set opacity");
     }
-    return QString::fromLatin1(type);
+    return WindowRuleModel::actionTypeFallbackLabel(QString::fromLatin1(type));
 }
 
 } // namespace
@@ -207,6 +208,15 @@ void WindowRuleController::setDaemonReachable(bool reachable)
     }
     m_daemonReachable = reachable;
     Q_EMIT daemonReachableChanged();
+}
+
+void WindowRuleController::setDaemonChangedWhileDirty(bool changed)
+{
+    if (m_daemonChangedWhileDirty == changed) {
+        return;
+    }
+    m_daemonChangedWhileDirty = changed;
+    Q_EMIT daemonChangedWhileDirtyChanged();
 }
 
 std::optional<WindowRuleSet> WindowRuleController::fetchFromDaemon()
@@ -262,6 +272,7 @@ void WindowRuleController::fetchAndLoad()
         m_model.setRules({});
     }
     setDirty(false);
+    setDaemonChangedWhileDirty(false);
 }
 
 void WindowRuleController::reload()
@@ -271,6 +282,10 @@ void WindowRuleController::reload()
     // the staged set. The explicit revert()/commit() paths call fetchAndLoad()
     // directly so they bypass this guard.
     if (m_dirty) {
+        // The staged set is now divergent from the daemon's newer rules. Flag
+        // it so the page can warn the user before a commit() silently
+        // overwrites the daemon-side changes (lost update).
+        setDaemonChangedWhileDirty(true);
         return;
     }
     fetchAndLoad();
@@ -283,12 +298,12 @@ bool WindowRuleController::commit()
     }
     if (!pushToDaemon(m_model.rules())) {
         // The push failed (daemon down or a partial drop). Keep the dirty bit
-        // set so the user can retry; tell SettingsController to keep the page
-        // dirty too.
-        Q_EMIT commitFailed();
+        // set so the user can retry — the bool return tells
+        // SettingsController::save() to keep the page dirty.
         return false;
     }
     setDirty(false);
+    setDaemonChangedWhileDirty(false);
     return true;
 }
 
@@ -378,6 +393,10 @@ QString WindowRuleController::addRuleFromJson(const QVariantMap& ruleJson)
     if (!parsed || !parsed->isValid() || !m_model.addRule(*parsed)) {
         return QString();
     }
+    // Re-stamp priorities so two rules added back-to-back in the same band do
+    // not collide on the band-base priority — list order maps onto evaluation
+    // order exactly as it does after a drag-reorder.
+    renormalizePriorities();
     markDirty();
     return parsed->id.toString();
 }
@@ -385,11 +404,22 @@ QString WindowRuleController::addRuleFromJson(const QVariantMap& ruleJson)
 bool WindowRuleController::updateRuleFromJson(const QVariantMap& ruleJson)
 {
     const WindowRule rule = ruleFromVariant(ruleJson);
-    if (rule.id.isNull() || !m_model.updateRule(rule)) {
+    if (rule.id.isNull()) {
         return false;
     }
-    markDirty();
-    return true;
+    const WindowRuleModel::UpdateResult result = m_model.updateRule(rule);
+    switch (result) {
+    case WindowRuleModel::UpdateResult::NotFound:
+        return false;
+    case WindowRuleModel::UpdateResult::Unchanged:
+        // A genuine no-op save — the rule is unchanged, so do not dirty the
+        // page. Still report success: the caller's "save" intent succeeded.
+        return true;
+    case WindowRuleModel::UpdateResult::Applied:
+        markDirty();
+        return true;
+    }
+    return false;
 }
 
 bool WindowRuleController::removeRule(const QString& ruleId)
@@ -408,7 +438,9 @@ bool WindowRuleController::setRuleEnabled(const QString& ruleId, bool enabled)
         return false;
     }
     rule.enabled = enabled;
-    if (!m_model.updateRule(rule)) {
+    // The enabled-flag flip is guaranteed a real change (guarded above), so
+    // anything other than Applied is a model-level failure.
+    if (m_model.updateRule(rule) != WindowRuleModel::UpdateResult::Applied) {
         return false;
     }
     markDirty();
@@ -469,11 +501,9 @@ QVariantList WindowRuleController::rulesSnapshot() const
         entry[QStringLiteral("conditionCount")] = m_model.data(idx, WindowRuleModel::ConditionCountRole);
         entry[QStringLiteral("actionCount")] = m_model.data(idx, WindowRuleModel::ActionCountRole);
         entry[QStringLiteral("isComposite")] = m_model.data(idx, WindowRuleModel::IsCompositeRole);
-        QStringList screenIds;
-        collectScreenIds(
-            m_model.ruleById(QUuid::fromString(m_model.data(idx, WindowRuleModel::IdRole).toString())).match,
-            screenIds);
-        entry[QStringLiteral("screenIds")] = screenIds;
+        // ScreenIdsRole is computed in the model's data() — no per-row
+        // by-id lookup, so the snapshot stays O(n).
+        entry[QStringLiteral("screenIds")] = m_model.data(idx, WindowRuleModel::ScreenIdsRole);
         out.append(entry);
     }
     return out;
@@ -506,9 +536,7 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
                 continue;
             }
             // Walk the (flat or nested) match for a ScreenId == screenId leaf.
-            QStringList screenIds;
-            collectScreenIds(rule.match, screenIds);
-            if (!screenIds.contains(screenId)) {
+            if (!WindowRuleModel::screenIdsOf(rule.match).contains(screenId)) {
                 continue;
             }
             ++ruleCount;
@@ -543,9 +571,7 @@ QStringList WindowRuleController::ruleScreenIds(const QString& ruleId) const
     if (rule.id.isNull()) {
         return {};
     }
-    QStringList out;
-    collectScreenIds(rule.match, out);
-    return out;
+    return WindowRuleModel::screenIdsOf(rule.match);
 }
 
 QVariantList WindowRuleController::matchFields() const

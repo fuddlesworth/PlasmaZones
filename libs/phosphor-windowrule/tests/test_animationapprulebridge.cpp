@@ -112,7 +112,23 @@ private Q_SLOTS:
         QCOMPARE(set.count(), 1);
         // durationMs <= 0 is the "inherit" sentinel — the key is omitted.
         QVERIFY(!set.rules().first().actions.first().params.contains(QLatin1String("durationMs")));
+        // This case has BOTH an empty curve and a zero duration, so it only
+        // proves the duration gate jointly — testTimingRule_emptyCurveOmitsKey
+        // isolates the curve gate.
         QVERIFY(!set.rules().first().actions.first().params.contains(QLatin1String("curve")));
+    }
+
+    void testTimingRule_emptyCurveOmitsKey()
+    {
+        AnimationAppRuleList list;
+        // Non-zero duration with an empty curve — isolates the curve gate from
+        // the duration gate. The duration key is written; the curve key is not.
+        list.append(timingRule(QStringLiteral("konsole"), QStringLiteral("window.close"), QString(), 300));
+        const WindowRuleSet set = AnimationAppRuleBridge::toRuleSet(list);
+        QCOMPARE(set.count(), 1);
+        const QJsonObject& params = set.rules().first().actions.first().params;
+        QVERIFY(!params.contains(QLatin1String("curve")));
+        QCOMPARE(params.value(QLatin1String("durationMs")).toInt(), 300);
     }
 
     // ── Empty pattern / event are dropped ──

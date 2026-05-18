@@ -228,7 +228,8 @@ private Q_SLOTS:
         QVERIFY(loaded.has_value());
         QVERIFY(loaded->saveToFile(pathB));
 
-        QFile fa(pathA), fb(pathB);
+        QFile fa(pathA);
+        QFile fb(pathB);
         QVERIFY(fa.open(QIODevice::ReadOnly));
         QVERIFY(fb.open(QIODevice::ReadOnly));
         QCOMPARE(fa.readAll(), fb.readAll());

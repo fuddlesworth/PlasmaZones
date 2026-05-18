@@ -26,8 +26,8 @@ namespace PlasmaZones {
 /// v4: window-rule consolidation — zone Assignments (assignments.json) and the
 ///     per-mode disable lists become context-only WindowRules in the new
 ///     windowrules.json store. config.json loses the Display.*Disabled* keys;
-///     assignments.json is superseded. QuickLayouts slots relocate back into
-///     config.json. See docs/window-rule-refactor-design.md §8.
+///     assignments.json is superseded. QuickLayouts slots relocate to the
+///     quicklayouts.json sidecar. See docs/window-rule-refactor-design.md §8.
 inline constexpr int ConfigSchemaVersion = 4;
 
 /// A single schema migration step: transforms root JSON in-place from
@@ -108,8 +108,8 @@ public:
     ///
     /// It reads assignments.json + the `_v4DisableStash` left in config.json,
     /// builds the WindowRuleSet, writes windowrules.json (atomic), relocates
-    /// the QuickLayouts slots back into config.json, then — as the last,
-    /// irreversible step — deletes assignments.json.
+    /// the QuickLayouts slots into the quicklayouts.json sidecar, then — as
+    /// the last, irreversible step — deletes assignments.json.
     ///
     /// Idempotent: a no-op when windowrules.json already exists at
     /// `_version >= 4`. Safe to call on every startup.

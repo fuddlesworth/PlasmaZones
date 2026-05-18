@@ -15,8 +15,12 @@ private Q_SLOTS:
 
     void testFieldRoundTrip_data()
     {
+        // Canary: the loop bound is derived from FieldCount, not hard-coded.
+        // If this fails, an enumerator was added/removed without updating
+        // FieldCount in MatchTypes.h.
+        QCOMPARE(FieldCount, 13);
         QTest::addColumn<int>("fieldValue");
-        for (int v = 0; v <= 12; ++v) {
+        for (int v = 0; v < FieldCount; ++v) {
             QTest::addRow("field-%d", v) << v;
         }
     }
@@ -33,8 +37,11 @@ private Q_SLOTS:
 
     void testOperatorRoundTrip_data()
     {
+        // Canary: the loop bound is derived from OperatorCount — see
+        // testFieldRoundTrip_data.
+        QCOMPARE(OperatorCount, 9);
         QTest::addColumn<int>("opValue");
-        for (int v = 0; v <= 8; ++v) {
+        for (int v = 0; v < OperatorCount; ++v) {
             QTest::addRow("op-%d", v) << v;
         }
     }
