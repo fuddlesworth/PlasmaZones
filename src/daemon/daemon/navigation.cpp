@@ -111,6 +111,15 @@ void Daemon::handleFloat()
     // reaching back into WTA state.
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Float")) {
+        // Honor the per-context disable lists, same as handleSnap. Un-floating
+        // a window re-runs commitSnap; without this gate that re-snaps the
+        // window on a monitor / desktop / activity the user disabled
+        // (discussion #461 — observed re-snapping on a disabled desktop).
+        const auto mode =
+            m_screenModeRouter ? m_screenModeRouter->modeFor(ctx.screenId) : PhosphorZones::AssignmentEntry::Snapping;
+        if (isContextDisabled(m_settings.get(), mode, ctx.screenId, currentDesktop(), currentActivity())) {
+            return;
+        }
         nav->toggleFocusedFloat(ctx);
     }
 }
