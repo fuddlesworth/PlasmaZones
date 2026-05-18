@@ -188,9 +188,11 @@ void Daemon::handleSnap(int zoneNumber)
         // Honor the per-context disable lists. engineFor() routes purely on
         // mode and never consults them, so a keyboard snap-to-zone would
         // otherwise place a window on a monitor / desktop / activity the user
-        // disabled (discussion #461). Gate against the routed engine's mode.
-        const auto mode = nav->engineId() == QLatin1String("autotile") ? PhosphorZones::AssignmentEntry::Autotile
-                                                                       : PhosphorZones::AssignmentEntry::Snapping;
+        // disabled (discussion #461). Take the screen's mode from the router
+        // (the single source of truth) rather than inferring it from the
+        // engine-id string, which a future third engine would misroute.
+        const auto mode =
+            m_screenModeRouter ? m_screenModeRouter->modeFor(ctx.screenId) : PhosphorZones::AssignmentEntry::Snapping;
         if (isContextDisabled(m_settings.get(), mode, ctx.screenId, currentDesktop(), currentActivity())) {
             return;
         }

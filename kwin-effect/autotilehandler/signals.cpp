@@ -166,15 +166,21 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 // un-tiles the window, since the daemon does not resnap on a
                 // desktop switch. m_preAutotileGeometries is read non-
                 // destructively (the entry stays for the next genuine toggle).
-                auto screenIt = m_preAutotileGeometries.constFind(screenId);
-                if (screenIt != m_preAutotileGeometries.constEnd()) {
-                    const QString geoKey = AutotileStateHelpers::findSavedGeometryKey(screenIt.value(), windowId);
-                    if (!geoKey.isEmpty()) {
-                        const QRectF savedGeo = screenIt.value().value(geoKey);
-                        if (savedGeo.isValid()) {
-                            m_effect->applySnapGeometry(w, savedGeo.toRect());
-                        }
+                // Scan every screen's bucket for this window's saved rect — a
+                // window that transferred between autotile screens during the
+                // session may have its pre-autotile geometry stored under a
+                // screen key other than its current one.
+                for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd();
+                     ++sgIt) {
+                    const QString geoKey = AutotileStateHelpers::findSavedGeometryKey(sgIt.value(), windowId);
+                    if (geoKey.isEmpty()) {
+                        continue;
                     }
+                    const QRectF savedGeo = sgIt.value().value(geoKey);
+                    if (savedGeo.isValid()) {
+                        m_effect->applySnapGeometry(w, savedGeo.toRect());
+                    }
+                    break;
                 }
             }
             m_effect->updateAllBorders();

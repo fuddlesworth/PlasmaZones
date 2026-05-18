@@ -542,7 +542,11 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
 
     KWin::Window* kwinWindow = window->window();
     if (kwinWindow) {
-        qCInfo(lcEffect) << "moveResize: QRect=" << geo << "-> QRectF=" << QRectF(geo);
+        // DEBUG: the resolved rect is already logged at INFO above ("Setting
+        // window geometry from ... to ..."), which covers both the animated
+        // and non-animated paths — keep this one at debug to avoid a
+        // duplicate INFO line for the same apply.
+        qCDebug(lcEffect) << "moveResize: QRect=" << geo << "-> QRectF=" << QRectF(geo);
         kwinWindow->moveResize(QRectF(geo));
 
         repaintSnapRegions(window, oldFrame, geo);

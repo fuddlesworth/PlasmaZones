@@ -410,6 +410,15 @@ void WindowTrackingAdaptor::loadState()
                 // falls back to string parsing — same behavior as the old code
                 // but consistent with the rest of the codebase.
                 QString appId = m_service->currentAppIdFor(windowId);
+                // Skip a corrupt appId for the same reason the persisted-queue
+                // loop below does: currentAppIdFor falls back to string parsing
+                // here (the registry is empty during load), so a pre-3.0
+                // windowId yields a whitespace-bearing key no live window
+                // matches. Without this gate the merge would reintroduce the
+                // corrupt key the persisted-queue gate set out to drop.
+                if (!PhosphorIdentity::WindowId::isValidAppId(appId)) {
+                    continue;
+                }
                 PendingRestore pending;
                 pending.zoneIds = zoneIds;
                 pending.screenId = screen;

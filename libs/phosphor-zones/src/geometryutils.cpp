@@ -94,14 +94,14 @@ QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, Zone* zone, const QRectF&
     if (geoF.height() < 1.0) {
         geoF.setHeight(1.0);
     }
-    // Clamp the gapped rect to the reference (screen / available) area. A
-    // zone is a subdivision of the screen, so a well-formed zone's gapped
-    // rect is already inside referenceGeom and this is a no-op. It is a
-    // guard against malformed layout data — a hand-edited layout whose
-    // relative x+width or y+height exceeds 1.0 would otherwise place a
-    // window past the screen edge. Boundary validation on untrusted layout
-    // input, not a workaround.
-    if (referenceGeom.isValid()) {
+    // Clamp the gapped rect into the reference (screen / available) area.
+    // A well-formed zone is a subdivision of the screen, so its gapped rect
+    // is already inside referenceGeom and the contains() check makes this a
+    // true no-op. It acts only on malformed layout data — a hand-edited
+    // layout whose relative x+width or y+height exceeds 1.0 — which would
+    // otherwise place a window past the screen edge. Boundary validation on
+    // untrusted layout input, not a workaround.
+    if (referenceGeom.isValid() && !referenceGeom.contains(geoF)) {
         geoF = geoF.intersected(referenceGeom);
     }
     return geoF;

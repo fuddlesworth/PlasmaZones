@@ -8,6 +8,7 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include "../../core/isettings.h"
+#include "../../core/screenmoderouter.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 
 namespace PlasmaZones {
@@ -235,12 +236,20 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     // slot funnels through here — did not, so windows still snapped on a
     // disabled context (discussion #461). Gating here covers all restore
     // entry points in one place.
-    if (m_settings
-        && isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, result.screenId,
-                             m_engine->currentVirtualDesktop(), m_engine->currentActivity())) {
-        qCInfo(lcDbusWindow) << "applySnapResult: refusing auto-snap of" << windowId
-                             << "— PlasmaZones is disabled for screen" << result.screenId;
-        return false;
+    if (m_settings && !result.screenId.isEmpty()) {
+        // Gate against the DESTINATION screen's actual mode. A restore result
+        // can cross-screen-migrate (app rule / session restore) onto a screen
+        // whose mode differs from the caller's, so the disable list to consult
+        // is the one for result.screenId's mode — not a hard-coded Snapping.
+        const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter
+            ? m_screenModeRouter->modeFor(result.screenId)
+            : PhosphorZones::AssignmentEntry::Snapping;
+        if (isContextDisabled(m_settings, mode, result.screenId, m_engine->currentVirtualDesktop(),
+                              m_engine->currentActivity())) {
+            qCInfo(lcDbusWindow) << "applySnapResult: refusing auto-snap of" << windowId
+                                 << "— PlasmaZones is disabled for screen" << result.screenId;
+            return false;
+        }
     }
 
     snapX = result.geometry.x();
