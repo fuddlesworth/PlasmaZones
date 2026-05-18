@@ -383,10 +383,13 @@ with the Phase 3 navigation work.
   `deserializeEngineState()` are orchestrated by the daemon: `saveScrollState()` writes
   `scroll-session.json` on shutdown, `loadScrollState()` restores it at startup before
   the effect re-reports windows (a still-existing window's `windowOpened` then no-ops,
-  keeping its restored column). This survives a daemon restart (window IDs are stable
-  while KWin keeps running); it is intentionally stale after a full compositor restart
-  — exact-ID restore, no appId-keyed reconciliation (that complexity is out of scope
-  for v1, mirroring the autotile pending-restore boundary).
+  keeping its restored column). The restored strip is structural, so
+  `ScrollEngine::reconcileRestoredWindows()` prunes it against the live window set from
+  the effect's first `windowsOpenedBatch`: a window closed while the daemon was down
+  leaves no phantom column, and after a full compositor restart (every window ID is
+  new) the strip reconciles away cleanly. Restore stays exact-ID — no appId-keyed
+  reconciliation across sessions (out of scope for v1) — so the persisted strip is a
+  hint over the live set, mirroring how autotile reconciles its restored window order.
 
 ## 7. MVP scope cuts
 

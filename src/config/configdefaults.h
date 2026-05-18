@@ -1113,6 +1113,18 @@ public:
     {
         return 1.0;
     }
+    /// Window-height presets are fractions of the column content height. The
+    /// numeric bounds currently match column width, but they are kept as
+    /// distinct accessors so the two ranges can diverge without silently
+    /// sharing a constant.
+    static constexpr double scrollWindowHeightMin()
+    {
+        return 0.1;
+    }
+    static constexpr double scrollWindowHeightMax()
+    {
+        return 1.0;
+    }
     /// When true the viewport keeps the focused column centered; when false it
     /// scrolls the minimum amount to keep the column on-screen (niri "fit").
     static constexpr bool scrollCenterFocusedColumn()

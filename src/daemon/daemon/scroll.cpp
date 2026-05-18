@@ -26,6 +26,7 @@
 #include <QJsonParseError>
 #include <QRect>
 #include <QRectF>
+#include <QSaveFile>
 #include <QScreen>
 #include <QSet>
 #include <QString>
@@ -153,22 +154,14 @@ void Daemon::refreshScrollConfigFromSettings()
         return;
     }
 
-    // Coerce a persisted QVariantList of fractions into the engine's typed
-    // QVector<qreal>. Non-numeric junk is already dropped by the schema's
-    // clampFractionList validator, so a plain toReal() per entry suffices.
-    const auto toFractions = [](const QVariantList& list) {
-        QVector<qreal> out;
-        out.reserve(list.size());
-        for (const QVariant& v : list) {
-            out.append(v.toReal());
-        }
-        return out;
-    };
-
     // Global defaults. Per-screen overrides layer on top via the engine's
     // effective*() accessors — see applyPerScreenScrollOverrides() below.
-    scroll->setPresetColumnWidths(toFractions(m_settings->scrollPresetColumnWidths()));
-    scroll->setPresetWindowHeights(toFractions(m_settings->scrollPresetWindowHeights()));
+    // ScrollEngine::toFractionVector coerces the persisted QVariantList into
+    // the engine's typed QVector<qreal>; non-numeric junk is already dropped by
+    // the schema's clampFractionList validator.
+    using PhosphorScrollEngine::ScrollEngine;
+    scroll->setPresetColumnWidths(ScrollEngine::toFractionVector(m_settings->scrollPresetColumnWidths()));
+    scroll->setPresetWindowHeights(ScrollEngine::toFractionVector(m_settings->scrollPresetWindowHeights()));
     scroll->setDefaultColumnWidth(m_settings->scrollDefaultColumnWidth());
     scroll->setInnerGap(m_settings->scrollInnerGap());
     scroll->setOuterGap(m_settings->scrollOuterGap());
@@ -223,12 +216,19 @@ void Daemon::saveScrollState()
         QFile::remove(path);
         return;
     }
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    // QSaveFile commits atomically (write to a temp file, then rename), so a
+    // crash mid-write cannot leave a truncated scroll-session.json behind.
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
         qCWarning(lcDaemon) << "Failed to write scroll state to" << path;
         return;
     }
     file.write(QJsonDocument(state).toJson(QJsonDocument::Compact));
+    if (!file.commit()) {
+        qCWarning(lcDaemon) << "Failed to commit scroll state to" << path;
+        return;
+    }
+    qCDebug(lcDaemon) << "Saved scroll state to" << path;
 }
 
 void Daemon::loadScrollState()

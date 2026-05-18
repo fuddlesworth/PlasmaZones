@@ -51,10 +51,10 @@ private Q_SLOTS:
     void cyclePresetHeight();
     void toggleColumnFullWidth();
     void adjustColumnWidth();
-    void toggleCenterFocusedColumn();
     void floatToggle();
     void perDesktopState();
     void serializeRoundTrip();
+    void restoreReconciliation();
 };
 
 void TestScrollEngine::windowLifecycle()
@@ -426,41 +426,6 @@ void TestScrollEngine::adjustColumnWidth()
     QVERIFY(state->activeColumn() == nullptr);
 }
 
-void TestScrollEngine::toggleCenterFocusedColumn()
-{
-    ScrollEngine engine;
-    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
-    engine.windowOpened(QStringLiteral("b"), QStringLiteral("S2"));
-    const NavigationContext ctx = contextFor(QStringLiteral("S1"));
-    QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
-
-    // The viewport mode is engine-global and starts at Fit. A toggle from one
-    // screen flips it and re-resolves *every* scroll screen, not just the
-    // focused one — so both S1 and S2 emit placementChanged on each toggle.
-    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Fit);
-    engine.toggleCenterFocusedColumn(ctx);
-    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Centered);
-    QCOMPARE(spy.count(), 2);
-
-    // Both physical screens are re-resolved — not one screen twice.
-    QSet<QString> notified;
-    for (const auto& emission : spy) {
-        notified.insert(emission.at(0).toString());
-    }
-    QCOMPARE(notified, QSet<QString>({QStringLiteral("S1"), QStringLiteral("S2")}));
-
-    engine.toggleCenterFocusedColumn(ctx);
-    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Fit);
-    QCOMPARE(spy.count(), 4);
-
-    // The mode is engine-global, so a toggle still flips it when the focused
-    // screen has no strip of its own (S99 was never opened) — and it still
-    // re-resolves the scroll screens that do exist.
-    engine.toggleCenterFocusedColumn(contextFor(QStringLiteral("S99")));
-    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Centered);
-    QCOMPARE(spy.count(), 6);
-}
-
 void TestScrollEngine::floatToggle()
 {
     ScrollEngine engine;
@@ -514,6 +479,50 @@ void TestScrollEngine::serializeRoundTrip()
     const ScrollScreenState* state = scrollState(restored, QStringLiteral("S1"));
     QVERIFY(state);
     QCOMPARE(state->columnCount(), 2);
+}
+
+void TestScrollEngine::restoreReconciliation()
+{
+    // Build a three-column strip and persist it.
+    ScrollEngine source;
+    source.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    source.windowOpened(QStringLiteral("b"), QStringLiteral("S1"));
+    source.windowOpened(QStringLiteral("c"), QStringLiteral("S1"));
+    const QJsonObject saved = source.serializeEngineState();
+
+    // Restore it, then reconcile: the effect's first batch reports only a and
+    // c live — b was closed while the daemon was down. b's phantom column must
+    // be pruned; a and c keep their restored columns.
+    ScrollEngine restored;
+    restored.deserializeEngineState(saved);
+    QCOMPARE(scrollState(restored, QStringLiteral("S1"))->columnCount(), 3);
+    restored.reconcileRestoredWindows(QSet<QString>{QStringLiteral("a"), QStringLiteral("c")});
+    QVERIFY(restored.isWindowTracked(QStringLiteral("a")));
+    QVERIFY(!restored.isWindowTracked(QStringLiteral("b")));
+    QVERIFY(restored.isWindowTracked(QStringLiteral("c")));
+    QCOMPARE(scrollState(restored, QStringLiteral("S1"))->columnCount(), 2);
+
+    // Reconciliation is one-shot: a later batch (e.g. a screen entering scroll
+    // mode at runtime) must not prune the now-authoritative live strip.
+    restored.reconcileRestoredWindows(QSet<QString>{QStringLiteral("a")});
+    QVERIFY(restored.isWindowTracked(QStringLiteral("c")));
+    QCOMPARE(scrollState(restored, QStringLiteral("S1"))->columnCount(), 2);
+
+    // Zero live windows after a restart — the effect sends an empty batch and
+    // every restored column is reconciled away.
+    ScrollEngine emptied;
+    emptied.deserializeEngineState(saved);
+    emptied.reconcileRestoredWindows(QSet<QString>{});
+    QVERIFY(!emptied.isWindowTracked(QStringLiteral("a")));
+    const ScrollScreenState* emptiedState = scrollState(emptied, QStringLiteral("S1"));
+    QVERIFY(emptiedState == nullptr || emptiedState->columnCount() == 0);
+
+    // An engine with no pending restore ignores reconciliation entirely — a
+    // live-opened window is never pruned by a stray batch.
+    ScrollEngine fresh;
+    fresh.windowOpened(QStringLiteral("x"), QStringLiteral("S1"));
+    fresh.reconcileRestoredWindows(QSet<QString>{});
+    QVERIFY(fresh.isWindowTracked(QStringLiteral("x")));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngine)

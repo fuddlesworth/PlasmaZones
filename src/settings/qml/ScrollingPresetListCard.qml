@@ -14,6 +14,12 @@ import org.kde.kirigami as Kirigami
  * percent. The card never mutates @c values in place — every edit emits the
  * complete edited list through @c valuesModified so the page can route it
  * back through the Settings setter.
+ *
+ * The Repeater binds to an internal ListModel rather than the @c values array
+ * directly: a value edit updates that model in place and re-syncs only when
+ * the round-tripped @c values genuinely differ. An in-range edit round-trips
+ * to an identical list, so the delegates are not rebuilt and the spin box
+ * being edited keeps focus.
  */
 SettingsCard {
     id: card
@@ -24,7 +30,44 @@ SettingsCard {
 
     signal valuesModified(var values)
 
+    // Repopulate the internal model from `values`, but only when the two
+    // genuinely differ — an in-range edit round-trips back through Settings to
+    // an identical list, and skipping the rebuild then keeps every delegate
+    // (and the spin box's keyboard focus) alive.
+    function syncModel() {
+        const v = card.values || [];
+        if (presetModel.count === v.length) {
+            let identical = true;
+            for (let i = 0; i < v.length; ++i) {
+                if (presetModel.get(i).fraction !== v[i]) {
+                    identical = false;
+                    break;
+                }
+            }
+            if (identical)
+                return ;
+
+        }
+        presetModel.clear();
+        for (let i = 0; i < v.length; ++i) presetModel.append({
+            "fraction": v[i]
+        })
+    }
+
+    // Emit the current model contents as the complete edited list.
+    function emitValues() {
+        let out = [];
+        for (let i = 0; i < presetModel.count; ++i) out.push(presetModel.get(i).fraction)
+        card.valuesModified(out);
+    }
+
     collapsible: true
+    onValuesChanged: syncModel()
+    Component.onCompleted: syncModel()
+
+    ListModel {
+        id: presetModel
+    }
 
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
@@ -41,13 +84,13 @@ SettingsCard {
         }
 
         Repeater {
-            model: card.values
+            model: presetModel
 
             delegate: RowLayout {
                 id: presetRow
 
                 required property int index
-                required property var modelData
+                required property real fraction
 
                 Layout.fillWidth: true
                 Layout.leftMargin: Kirigami.Units.smallSpacing
@@ -63,15 +106,16 @@ SettingsCard {
                     from: 10
                     to: 100
                     stepSize: 5
-                    value: Math.round(presetRow.modelData * 100)
+                    value: Math.round(presetRow.fraction * 100)
                     Accessible.name: i18n("Preset %1 size in percent", presetRow.index + 1)
                     textFromValue: function(value, locale) {
                         return Number(value).toLocaleString(locale, 'f', 0) + "%";
                     }
                     onValueModified: {
-                        let copy = card.values.slice();
-                        copy[presetRow.index] = value / 100;
-                        card.valuesModified(copy);
+                        // Update the model in place — no structural change, so
+                        // the Repeater keeps this delegate (and its focus).
+                        presetModel.setProperty(presetRow.index, "fraction", value / 100);
+                        card.emitValues();
                     }
                 }
 
@@ -84,11 +128,10 @@ SettingsCard {
                     Accessible.name: i18n("Remove preset %1", presetRow.index + 1)
                     // Keep at least one preset — an empty list disables the
                     // cycle shortcut entirely.
-                    enabled: card.values.length > 1
+                    enabled: presetModel.count > 1
                     onClicked: {
-                        let copy = card.values.slice();
-                        copy.splice(presetRow.index, 1);
-                        card.valuesModified(copy);
+                        presetModel.remove(presetRow.index);
+                        card.emitValues();
                     }
                 }
 
@@ -101,9 +144,10 @@ SettingsCard {
             text: i18n("Add preset")
             icon.name: "list-add"
             onClicked: {
-                let copy = card.values.slice();
-                copy.push(0.5);
-                card.valuesModified(copy);
+                presetModel.append({
+                    "fraction": 0.5
+                });
+                card.emitValues();
             }
         }
 

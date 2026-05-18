@@ -78,8 +78,10 @@ public:
     /// already managed.
     void addColumnForWindow(const QString& windowId, const ColumnWidth& width = ColumnWidth::proportion(0.5));
     /// Add @p windowId as a new tile in the focused column, and focus it.
-    /// Falls back to addColumnForWindow when the strip is empty.
-    void addWindowToActiveColumn(const QString& windowId);
+    /// Falls back to addColumnForWindow when the strip is empty — that new
+    /// column then takes width intent @p width (the daemon passes the
+    /// configured default-column-width setting).
+    void addWindowToActiveColumn(const QString& windowId, const ColumnWidth& width = ColumnWidth::proportion(0.5));
     /// Remove @p windowId from the strip or the floating set. Drops the
     /// column if it becomes empty. Returns true if the window was found.
     bool removeWindow(const QString& windowId);

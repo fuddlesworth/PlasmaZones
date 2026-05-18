@@ -435,7 +435,9 @@ private:
      * to scroll-session.json on shutdown; loadScrollState() feeds it back
      * through deserializeEngineState() at startup, before the effect re-reports
      * windows (a still-existing window's windowOpened then no-ops, keeping its
-     * restored column).
+     * restored column). A restored window that did not survive the restart is
+     * pruned by ScrollEngine::reconcileRestoredWindows() when the effect's first
+     * windowsOpenedBatch arrives, so no phantom column lingers.
      */
     void saveScrollState();
     void loadScrollState();

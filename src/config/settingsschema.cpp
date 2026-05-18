@@ -59,22 +59,13 @@ auto clampDouble(double minVal, double maxVal)
     };
 }
 
-/// Canonicalize a fraction list: coerce each entry to a double clamped into
-/// [minVal, maxVal], dropping non-numeric entries. Used by the scroll-mode
-/// preset width / height lists — each entry is a fraction of the working area.
+/// Schema-validator factory wrapping the shared clampFractionListValue helper,
+/// for the scroll-mode preset width / height lists — each entry is a fraction
+/// of the working area.
 auto clampFractionList(double minVal, double maxVal)
 {
     return [minVal, maxVal](const QVariant& v) -> QVariant {
-        QVariantList out;
-        const QVariantList raw = v.toList();
-        for (const QVariant& entry : raw) {
-            bool ok = false;
-            const double d = entry.toDouble(&ok);
-            if (ok) {
-                out.append(qBound(minVal, d, maxVal));
-            }
-        }
-        return QVariant(out);
+        return QVariant(clampFractionListValue(v, minVal, maxVal));
     };
 }
 
@@ -902,8 +893,22 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          CD::scrollPresetWindowHeights(),
          QMetaType::QVariantList,
          {},
-         clampFractionList(CD::scrollColumnWidthMin(), CD::scrollColumnWidthMax())},
+         clampFractionList(CD::scrollWindowHeightMin(), CD::scrollWindowHeightMax())},
     };
+}
+
+QVariantList clampFractionListValue(const QVariant& value, double minVal, double maxVal)
+{
+    QVariantList out;
+    const QVariantList raw = value.toList();
+    for (const QVariant& entry : raw) {
+        bool ok = false;
+        const double d = entry.toDouble(&ok);
+        if (ok) {
+            out.append(qBound(minVal, d, maxVal));
+        }
+    }
+    return out;
 }
 
 } // namespace PlasmaZones

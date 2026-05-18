@@ -257,15 +257,29 @@ void Daemon::handleShrinkColumnWidth()
 void Daemon::handleToggleCenterFocusedColumn()
 {
     // Scroll mode: toggle the persisted viewport-centering setting. Phase 5
-    // makes the centering mode a setting, so the shortcut flips the setting —
-    // the change signal re-pushes it to ScrollEngine and re-resolves every
-    // scroll strip via refreshScrollConfigFromSettings(). Flipped
-    // unconditionally, like a settings-UI edit: the viewport mode is
-    // engine-global, so it must not be gated on the focused screen being a
-    // scroll screen.
-    if (m_settings) {
-        m_settings->setScrollCenterFocusedColumn(!m_settings->scrollCenterFocusedColumn());
+    // makes the centering mode a setting, so the shortcut flips it — the
+    // change signal re-pushes it to ScrollEngine and re-resolves every scroll
+    // strip via refreshScrollConfigFromSettings().
+    //
+    // The focused screen may carry a per-screen CenterFocusedColumn override,
+    // which shadows the global value (ScrollEngine::effectiveViewportMode).
+    // Flipping the global on such a screen would be a silent no-op, so the
+    // shortcut targets whichever level is actually in effect for that screen:
+    // the per-screen override when one exists, the global setting otherwise.
+    if (!m_settings) {
+        return;
     }
+    const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+    if (!screenId.isEmpty()) {
+        const QVariantMap overrides = m_settings->getPerScreenScrollSettings(screenId);
+        const auto it = overrides.constFind(QLatin1String(PerScreenScrollKey::CenterFocusedColumn));
+        if (it != overrides.constEnd()) {
+            m_settings->setPerScreenScrollSetting(screenId, QLatin1String(PerScreenScrollKey::CenterFocusedColumn),
+                                                  !it.value().toBool());
+            return;
+        }
+    }
+    m_settings->setScrollCenterFocusedColumn(!m_settings->scrollCenterFocusedColumn());
 }
 
 void Daemon::handleRestore()

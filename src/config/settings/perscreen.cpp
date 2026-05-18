@@ -4,6 +4,7 @@
 #include "../settings.h"
 #include "../configbackends.h"
 #include "../configdefaults.h"
+#include "../settingsschema.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
@@ -247,23 +248,6 @@ const QLatin1String kPerScreenScrollKeys[] = {
     QLatin1String(PerScreenScrollKey::PresetColumnWidths), QLatin1String(PerScreenScrollKey::PresetWindowHeights),
 };
 
-/// Clamp every entry of a fraction list into the scroll column-width range,
-/// dropping non-numeric junk. Mirrors settingsschema.cpp's clampFractionList so
-/// a per-screen preset override is range-checked exactly like the global list.
-QVariantList clampScrollFractionList(const QVariant& value)
-{
-    QVariantList out;
-    const QVariantList raw = value.toList();
-    for (const QVariant& entry : raw) {
-        bool ok = false;
-        const double d = entry.toDouble(&ok);
-        if (ok) {
-            out.append(qBound(ConfigDefaults::scrollColumnWidthMin(), d, ConfigDefaults::scrollColumnWidthMax()));
-        }
-    }
-    return out;
-}
-
 QVariant validatePerScreenScrollValue(const QString& key, const QVariant& value)
 {
     namespace K = PerScreenScrollKey;
@@ -278,8 +262,15 @@ QVariant validatePerScreenScrollValue(const QString& key, const QVariant& value)
             qBound(ConfigDefaults::scrollColumnWidthMin(), value.toDouble(), ConfigDefaults::scrollColumnWidthMax()));
     if (key == QLatin1String(K::CenterFocusedColumn))
         return QVariant(value.toBool());
-    if (key == QLatin1String(K::PresetColumnWidths) || key == QLatin1String(K::PresetWindowHeights))
-        return QVariant(clampScrollFractionList(value));
+    // Preset lists are range-checked with the shared clampFractionListValue —
+    // the same helper the global Scrolling.Layout schema uses — so a global
+    // and a per-screen preset list are validated identically.
+    if (key == QLatin1String(K::PresetColumnWidths))
+        return QVariant(clampFractionListValue(value, ConfigDefaults::scrollColumnWidthMin(),
+                                               ConfigDefaults::scrollColumnWidthMax()));
+    if (key == QLatin1String(K::PresetWindowHeights))
+        return QVariant(clampFractionListValue(value, ConfigDefaults::scrollWindowHeightMin(),
+                                               ConfigDefaults::scrollWindowHeightMax()));
     return QVariant();
 }
 

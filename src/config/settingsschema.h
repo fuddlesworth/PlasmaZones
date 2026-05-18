@@ -16,12 +16,21 @@
 
 #include <PhosphorConfig/Schema.h>
 
+#include <QVariant>
+#include <QVariantList>
+
 namespace PlasmaZones {
 
 /// Returns the full PZ settings schema, populated with every group migrated
 /// to PhosphorConfig::Store so far. Called once during Settings construction
 /// and handed to Store; add new groups here as they're migrated.
 PLASMAZONES_EXPORT PhosphorConfig::Schema buildSettingsSchema();
+
+/// Canonicalize a fraction list: coerce each entry to a double clamped into
+/// [minVal, maxVal], dropping non-numeric entries. Shared by the scroll-mode
+/// schema validators and the per-screen scroll override validator so a global
+/// and a per-screen preset list are range-checked identically.
+QVariantList clampFractionListValue(const QVariant& value, double minVal, double maxVal);
 
 // ─── Group helpers ──────────────────────────────────────────────────────────
 // Each helper appends one group's KeyDefs to the schema. Kept as free

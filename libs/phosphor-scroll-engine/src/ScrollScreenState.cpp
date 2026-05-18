@@ -45,13 +45,13 @@ void ScrollScreenState::addColumnForWindow(const QString& windowId, const Column
     m_activeColumnIndex = insertAt;
 }
 
-void ScrollScreenState::addWindowToActiveColumn(const QString& windowId)
+void ScrollScreenState::addWindowToActiveColumn(const QString& windowId, const ColumnWidth& width)
 {
     if (windowId.isEmpty() || containsWindow(windowId)) {
         return;
     }
     if (m_activeColumnIndex < 0) {
-        addColumnForWindow(windowId);
+        addColumnForWindow(windowId, width);
         return;
     }
     Column& column = m_columns[m_activeColumnIndex];

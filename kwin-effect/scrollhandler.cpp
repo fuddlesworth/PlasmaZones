@@ -131,9 +131,12 @@ void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         batchWindowIds.append(windowId);
     }
 
-    if (batchEntries.isEmpty()) {
-        return;
-    }
+    // An empty batch is still sent: org.plasmazones.Scroll.windowsOpenedBatch
+    // doubles as the daemon's post-restore reconcile signal. The daemon must
+    // receive one batch even when no scroll window currently exists — otherwise
+    // a restored strip whose windows all closed while the daemon was down would
+    // never be pruned. The daemon treats a zero-entry batch as "no live
+    // windows" and reconciles the restored strip away.
 
     auto* watcher =
         new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(

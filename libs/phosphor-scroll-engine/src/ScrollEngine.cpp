@@ -14,9 +14,7 @@ using PhosphorEngine::IPlacementState;
 using PhosphorEngine::NavigationContext;
 using PhosphorEngine::TilingStateKey;
 
-namespace {
-/// Coerce a QVariantList of numbers into the engine's typed fraction vector.
-QVector<qreal> toFractionVector(const QVariantList& list)
+QVector<qreal> ScrollEngine::toFractionVector(const QVariantList& list)
 {
     QVector<qreal> out;
     out.reserve(list.size());
@@ -25,7 +23,6 @@ QVector<qreal> toFractionVector(const QVariantList& list)
     }
     return out;
 }
-} // namespace
 
 ScrollEngine::ScrollEngine(QObject* parent)
     : PhosphorEngine::PlacementEngineBase(parent)
@@ -560,28 +557,6 @@ void ScrollEngine::adjustColumnWidth(qreal deltaFraction, const NavigationContex
     reportNav(true, QStringLiteral("width"), screenId);
 }
 
-void ScrollEngine::toggleCenterFocusedColumn(const NavigationContext& ctx)
-{
-    QString screenId;
-    resolveNavTarget(ctx, &screenId); // resolves screenId for the nav feedback
-
-    // The viewport mode is engine-global, so flip it through the setter
-    // unconditionally — even when the focused screen has no strip yet. Gating
-    // on the focused screen's state would let an empty scroll screen swallow
-    // the shortcut while every other scroll screen silently keeps the old mode.
-    setViewportMode(m_viewportMode == ScrollViewportMode::Fit ? ScrollViewportMode::Centered : ScrollViewportMode::Fit);
-    // Re-resolve every scroll screen — all of them resolve against this mode.
-    QSet<QString> notified;
-    for (const auto& entry : m_states) {
-        const QString& sid = entry.first.screenId;
-        if (!sid.isEmpty() && !notified.contains(sid)) {
-            notified.insert(sid);
-            emitChanged(sid);
-        }
-    }
-    reportNav(true, QStringLiteral("viewport"), screenId);
-}
-
 // ─────────────────────────────────────────────────────────────────────────
 // Tracking queries
 // ─────────────────────────────────────────────────────────────────────────
@@ -773,6 +748,30 @@ void ScrollEngine::deserializeEngineState(const QJsonObject& state)
         for (const QString& windowId : windows) {
             m_windowToKey.insert(windowId, key);
         }
+    }
+    // A restored strip is structural — it must be reconciled against the live
+    // window set once the effect reports it; see reconcileRestoredWindows().
+    m_pendingRestoreReconcile = !m_states.empty();
+}
+
+void ScrollEngine::reconcileRestoredWindows(const QSet<QString>& liveWindowIds)
+{
+    if (!m_pendingRestoreReconcile) {
+        return;
+    }
+    m_pendingRestoreReconcile = false; // one-shot — only the first batch reconciles
+
+    // Any restored window the live set did not confirm was closed while the
+    // daemon was down: drop it so its column does not linger as a phantom.
+    // Collected first, then removed, so m_windowToKey is not mutated mid-scan.
+    QStringList stale;
+    for (auto it = m_windowToKey.constBegin(); it != m_windowToKey.constEnd(); ++it) {
+        if (!liveWindowIds.contains(it.key())) {
+            stale.append(it.key());
+        }
+    }
+    for (const QString& windowId : stale) {
+        windowClosed(windowId);
     }
 }
 

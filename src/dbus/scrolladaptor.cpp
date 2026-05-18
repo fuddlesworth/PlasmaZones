@@ -64,9 +64,17 @@ void ScrollAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
     // per-entry minWidth/minHeight; scroll's strip model is size-agnostic and
     // ignores them (non-resizable windows are fitted to the tile slot
     // effect-side), so only windowId/screenId are forwarded.
+    QSet<QString> liveWindowIds;
+    liveWindowIds.reserve(entries.size());
     for (const PhosphorProtocol::WindowOpenedEntry& entry : entries) {
         m_engine->windowOpened(entry.windowId, entry.screenId);
+        liveWindowIds.insert(entry.windowId);
     }
+    // The effect's first batch after a daemon (re)connect is the complete live
+    // scroll-window set across every scroll screen — reconcile a just-restored
+    // strip against it so a window closed while the daemon was down leaves no
+    // phantom column. A no-op on every later (routine) batch.
+    m_engine->reconcileRestoredWindows(liveWindowIds);
 }
 
 void ScrollAdaptor::windowClosed(const QString& windowId)

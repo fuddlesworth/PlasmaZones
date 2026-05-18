@@ -113,7 +113,6 @@ public:
     void cyclePresetWindowHeight(const PhosphorEngine::NavigationContext& ctx) override;
     void toggleColumnFullWidth(const PhosphorEngine::NavigationContext& ctx) override;
     void adjustColumnWidth(qreal deltaFraction, const PhosphorEngine::NavigationContext& ctx) override;
-    void toggleCenterFocusedColumn(const PhosphorEngine::NavigationContext& ctx) override;
 
     // ── Tracking queries ────────────────────────────────────────────────
     bool isWindowTracked(const QString& windowId) const override;
@@ -125,6 +124,10 @@ public:
     // ── Preset lists (defaults match niri; settings override later) ─────
     void setPresetColumnWidths(const QVector<qreal>& fractions);
     void setPresetWindowHeights(const QVector<qreal>& fractions);
+    /// Coerce a QVariantList of numbers (e.g. a persisted preset list) into the
+    /// engine's typed fraction vector. Shared with the daemon, which pushes the
+    /// settings-backed preset lists through setPreset*().
+    static QVector<qreal> toFractionVector(const QVariantList& list);
     QVector<qreal> presetColumnWidths() const
     {
         return m_presetColumnWidths;
@@ -181,9 +184,9 @@ public:
     ///                                      QVariantList of qreal fractions
     /// An empty @p overrides clears the screen's overrides. The effective*()
     /// accessors resolve a screen's value as override → global default.
-    void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides);
-    void clearPerScreenConfig(const QString& screenId);
-    QVariantMap perScreenOverrides(const QString& screenId) const;
+    void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides) override;
+    void clearPerScreenConfig(const QString& screenId) override;
+    QVariantMap perScreenOverrides(const QString& screenId) const override;
 
     // ── Effective config (per-screen override → global default) ─────────
     QVector<qreal> effectivePresetColumnWidths(const QString& screenId) const;
@@ -202,6 +205,20 @@ public:
     void loadState() override;
     QJsonObject serializeEngineState() const override;
     void deserializeEngineState(const QJsonObject& state) override;
+
+    /// Reconcile a freshly restored strip against the live window set.
+    ///
+    /// deserializeEngineState() rebuilds the strip structurally from disk, so a
+    /// window closed while the daemon was down would survive as a phantom
+    /// column. The daemon calls this once, with the complete window set from
+    /// the effect's initial windowsOpenedBatch after a restore: any restored
+    /// window absent from @p liveWindowIds never came back and is pruned (its
+    /// column dropped when it empties). This makes the persisted strip a hint
+    /// over the live set rather than authoritative — mirroring autotile, whose
+    /// restored window order is likewise only ever reconciled against the
+    /// windows the effect actually reports. A no-op unless a restore is
+    /// pending, so the routine windowsOpenedBatch path stays unaffected.
+    void reconcileRestoredWindows(const QSet<QString>& liveWindowIds);
 
 protected:
     void onWindowClaimed(const QString& windowId) override;
@@ -237,6 +254,10 @@ private:
     /// Per-screen config overrides, keyed by screenId (screen-only, like
     /// autotile). Resolved over the globals above by the effective*() helpers.
     QHash<QString, QVariantMap> m_perScreenConfig;
+    /// True from a non-empty deserializeEngineState() until the first
+    /// reconcileRestoredWindows() prunes the restored strip against the live
+    /// window set. One-shot — see reconcileRestoredWindows().
+    bool m_pendingRestoreReconcile = false;
 };
 
 } // namespace PhosphorScrollEngine
