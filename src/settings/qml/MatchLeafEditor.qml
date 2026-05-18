@@ -147,8 +147,11 @@ RowLayout {
         id: numberValueEditor
 
         SpinBox {
+            // Numeric fields include Pid; real PIDs can exceed 999999
+            // (pid_max defaults to 4194304). Use the full positive int range
+            // so editing a high-PID rule does not silently clamp the value.
             from: 0
-            to: 999999
+            to: 2.14748e+09
             value: Number(leaf.node.value) || 0
             Accessible.name: i18n("Match value")
             onValueModified: leaf._emit(leaf.node.field, leaf.node.op, value)

@@ -53,7 +53,9 @@ private:
     {
         QFile f(storePathIn(dir));
         QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(json.toUtf8());
+        const QByteArray payload = json.toUtf8();
+        QCOMPARE(f.write(payload), static_cast<qint64>(payload.size()));
+        f.close();
     }
 
     /// True if a sentinel file can be created in @p dirPath — i.e. the

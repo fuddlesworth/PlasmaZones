@@ -11,12 +11,12 @@
             </arg>
         </method>
         <method name="setAllRules">
-            <annotation name="org.gtk.GDBus.DocString" value="Replace the entire rule set. The payload is a JSON object string in the { _version, rules } shape (or a bare object whose rules array carries the list). Malformed entries are dropped and a warning logs the dropped/accepted/total counts. Returns true if the payload parsed and persisted."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Replace the entire rule set. The payload is a JSON object string in the { _version, rules } shape (or a bare object whose rules array carries the list). Malformed entries are dropped and a warning logs the dropped/accepted/total counts. True if the payload parsed; a genuine change is also persisted."/>
             <arg name="rulesJson" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON object string carrying the rules array."/>
             </arg>
             <arg name="ok" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if the payload parsed and the set was persisted."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True if the payload parsed; a genuine change is also persisted."/>
             </arg>
         </method>
         <method name="addRule">

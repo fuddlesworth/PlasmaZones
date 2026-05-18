@@ -64,14 +64,24 @@ inline const QUuid& namespaceUuid()
     return ns;
 }
 
+/// Length-prefix a segment so concatenated identity keys are unambiguous: a
+/// `pattern` is an arbitrary string that may itself contain a `|`, so a plain
+/// `|`-joined key could collide for two distinct tuples. `"<len>:<segment>"`
+/// makes every tuple's encoding unique.
+inline QString encodeSegment(const QString& segment)
+{
+    return QString::number(segment.size()) + QLatin1Char(':') + segment;
+}
+
 /// Stable per-rule key. @p field and @p op disambiguate the rule families:
 /// the same pattern can produce a `DesktopFile Contains` rule, a
 /// `WindowClass Contains` rule (toRuleSet) and an `AppId AppIdMatches` rule
-/// (toDaemonRuleSet) — all three must carry distinct ids.
+/// (toDaemonRuleSet) — all three must carry distinct ids. Segments are
+/// length-prefixed so no two distinct tuples can collide.
 inline QString exclusionIdentityKey(Field field, Operator op, const QString& pattern)
 {
-    return QString::number(static_cast<int>(field)) + QLatin1Char('|') + QString::number(static_cast<int>(op))
-        + QLatin1Char('|') + pattern;
+    return encodeSegment(QString::number(static_cast<int>(field)))
+        + encodeSegment(QString::number(static_cast<int>(op))) + encodeSegment(pattern);
 }
 
 } // namespace detail

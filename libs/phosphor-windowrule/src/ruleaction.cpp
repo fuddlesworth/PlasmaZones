@@ -41,6 +41,14 @@ QJsonObject RuleAction::toJson() const
     // `acceptAny` action must never carry a user `"type"` param — it would be
     // silently clobbered. The strict-key check rejects it for any descriptor
     // with a non-empty `allowedKeys`, but free-form descriptors opt out.
+    if (params.contains(kKeyType)) {
+        // A free-form (`acceptAny`) action whose params carry a `"type"` key
+        // would have it silently clobbered by the insert below. Warn so the
+        // data loss is at least diagnosable.
+        qCWarning(lcWindowRule) << "RuleAction::toJson: params carry a reserved `type` key — it will be clobbered by "
+                                   "the action type. action type:"
+                                << type;
+    }
     QJsonObject o = params;
     o.insert(kKeyType, type);
     return o;

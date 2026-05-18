@@ -256,27 +256,44 @@ bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
         // list — so a QStringList leaf must be iterated through toStringList()
         // to evaluate correctly. Keep both branches so isValid()/evaluate()
         // agree on what an `In` leaf can carry.
+        const bool stringField = fieldIsString(m_predicate.field);
+        // For a numeric field, `subject` must itself parse as a number — a
+        // non-numeric subject would coerce to 0 via toInt() and spuriously
+        // match a `0` candidate.
+        bool subjectOk = false;
+        const int subjectInt = stringField ? 0 : subject.toInt(&subjectOk);
         if (value.metaType().id() == QMetaType::QStringList) {
             const QString subjectStr = subject.toString();
             for (const QString& candidate : value.toStringList()) {
-                if (fieldIsString(m_predicate.field)) {
+                if (stringField) {
                     if (subjectStr.compare(candidate, Qt::CaseInsensitive) == 0) {
                         return true;
                     }
-                } else if (subject.toInt() == candidate.toInt()) {
-                    return true;
+                } else if (subjectOk) {
+                    // Skip any candidate that does not parse as a number —
+                    // toInt() would otherwise coerce it to 0 and match a
+                    // zero-valued numeric subject.
+                    bool candidateOk = false;
+                    const int candidateInt = candidate.toInt(&candidateOk);
+                    if (candidateOk && subjectInt == candidateInt) {
+                        return true;
+                    }
                 }
             }
             return false;
         }
         const QVariantList set = value.toList();
         for (const QVariant& candidate : set) {
-            if (fieldIsString(m_predicate.field)) {
+            if (stringField) {
                 if (subject.toString().compare(candidate.toString(), Qt::CaseInsensitive) == 0) {
                     return true;
                 }
-            } else if (subject.toInt() == candidate.toInt()) {
-                return true;
+            } else if (subjectOk) {
+                bool candidateOk = false;
+                const int candidateInt = candidate.toInt(&candidateOk);
+                if (candidateOk && subjectInt == candidateInt) {
+                    return true;
+                }
             }
         }
         return false;

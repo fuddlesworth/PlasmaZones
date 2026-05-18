@@ -80,14 +80,24 @@ inline const QUuid& namespaceUuid()
     return ns;
 }
 
+/// Length-prefix a segment so concatenated identity keys are unambiguous: a
+/// `screenId` / `activity` may itself contain a `|`, so a plain `|`-joined key
+/// could collide for two distinct tuples. `"<len>:<segment>"` makes every
+/// tuple's encoding unique.
+inline QString encodeSegment(const QString& segment)
+{
+    return QString::number(segment.size()) + QLatin1Char(':') + segment;
+}
+
 /// Stable per-rule key for the v5-UUID derivation. @p family distinguishes the
 /// rule kinds that share a (screen, desktop, activity) tuple — an assignment
 /// rule and a disable rule for the same context must not collide on id.
+/// Segments are length-prefixed so no two distinct tuples can collide.
 inline QString contextIdentityKey(QLatin1StringView family, const QString& screenId, int virtualDesktop,
                                   const QString& activity)
 {
-    return QString(family) + QLatin1Char('|') + screenId + QLatin1Char('|') + QString::number(virtualDesktop)
-        + QLatin1Char('|') + activity;
+    return encodeSegment(QString(family)) + encodeSegment(screenId) + encodeSegment(QString::number(virtualDesktop))
+        + encodeSegment(activity);
 }
 
 } // namespace detail

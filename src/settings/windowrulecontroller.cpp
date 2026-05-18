@@ -27,7 +27,6 @@ namespace PlasmaZones {
 namespace {
 
 namespace ActionType = PhosphorWindowRule::ActionType;
-using PhosphorWindowRule::ActionRegistry;
 using PhosphorWindowRule::Field;
 using PhosphorWindowRule::MatchExpression;
 using PhosphorWindowRule::Operator;

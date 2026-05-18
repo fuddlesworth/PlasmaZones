@@ -77,6 +77,15 @@ Kirigami.OverlaySheet {
             return String(v).length > 0;
         }
         // Composite — recurse into whichever child list is present.
+        // An empty `all` is the legitimate catch-all and stays valid, but an
+        // empty `any` (matches nothing) or empty `none` (matches everything)
+        // is a degenerate group — block saving it.
+        if (node.any !== undefined || node.none !== undefined) {
+            var degenerate = node.any !== undefined ? node.any : node.none;
+            if (!degenerate || degenerate.length === 0)
+                return false;
+
+        }
         var children = node.all || node.any || node.none || [];
         for (var i = 0; i < children.length; ++i) {
             if (!sheet._matchHasFilledLeaves(children[i]))

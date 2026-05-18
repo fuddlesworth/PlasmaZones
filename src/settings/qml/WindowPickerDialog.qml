@@ -98,7 +98,7 @@ Kirigami.Dialog {
             dialog.requestTimedOut = true;
         }
 
-        target: settingsController
+        target: dialog.controller
     }
 
     ColumnLayout {

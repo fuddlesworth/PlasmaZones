@@ -520,7 +520,10 @@ private Q_SLOTS:
             QFile f(ConfigDefaults::windowRulesFilePath());
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
-        // The idempotency guard skips re-conversion — windowrules.json is
+        // The `windowRulesAlreadyConverted` probe loads windowrules.json as a
+        // v4 WindowRuleSet; on the second run it succeeds, so finalize takes
+        // the already-converted branch and only retries the idempotent
+        // cleanup steps instead of rebuilding — windowrules.json is
         // byte-identical, the rule count is unchanged.
         QCOMPARE(secondRun, firstRun);
         const int secondCount =

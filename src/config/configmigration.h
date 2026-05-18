@@ -114,6 +114,18 @@ public:
     /// Idempotent: a no-op when windowrules.json already exists at
     /// `_version >= 4`. Safe to call on every startup.
     ///
+    /// Rebuild trigger: a missing windowrules.json with a surviving
+    /// assignments.json ALWAYS triggers a rebuild, independent of any
+    /// config.json corruption context. There is no separate "config is
+    /// corrupt" guard — the rebuild keys solely off the two sidecar files.
+    ///
+    /// Degraded path under config corruption: if config.json is corrupt (or
+    /// absent) with no INI fallback, the rebuild proceeds with an empty
+    /// `configRoot`, so the provider-default rule is derived with empty
+    /// `DefaultLayoutId` / tiling-algorithm and degrades to the bare snapping
+    /// placeholder. This is accepted degradation — no regression versus the
+    /// pre-PR behaviour — and is intentionally not treated as a failure.
+    ///
     /// @param jsonPath Path to config.json (assignments.json / windowrules.json
     ///                 are derived as siblings via ConfigDefaults).
     /// @return true on success or a clean no-op; false on an I/O failure.

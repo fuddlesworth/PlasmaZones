@@ -8,6 +8,7 @@
 #include <QJsonDocument>
 #include <QJsonValue>
 #include <QSaveFile>
+#include <QSet>
 
 #include "windowrulelogging.h"
 
@@ -83,11 +84,21 @@ int WindowRuleSet::setRules(const QList<WindowRule>& rules)
 {
     QList<WindowRule> validated;
     validated.reserve(rules.size());
+    // Mirror fromJson's duplicate-id handling: keep the first entry for any id,
+    // drop later collisions. With deterministic v5 UUIDs two identical source
+    // entries derive the same id, so without this an in-memory set could hold
+    // duplicate ids that a save/load round-trip would silently de-dup.
+    QSet<QUuid> seenIds;
     for (const WindowRule& rule : rules) {
         if (!rule.isValid()) {
             qCWarning(lcWindowRule) << "setRules: dropping invalid rule. id:" << rule.id.toString();
             continue;
         }
+        if (seenIds.contains(rule.id)) {
+            qCWarning(lcWindowRule) << "setRules: dropping rule with a duplicate id:" << rule.id.toString();
+            continue;
+        }
+        seenIds.insert(rule.id);
         validated.append(rule);
     }
     // An identical list is not a mutation — skip the revision bump so the
