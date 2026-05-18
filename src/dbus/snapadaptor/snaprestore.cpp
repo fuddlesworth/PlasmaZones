@@ -242,11 +242,14 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
         // whose mode differs from the caller's, so the disable list to consult
         // is the one for result.screenId's mode — not a hard-coded Snapping.
         //
-        // The desktop and activity are the session's CURRENT ones, not the
-        // restore target's — SnapResult carries no destination desktop. The
-        // screen/mode axis is therefore the precise gate; desktop/activity are
-        // best-effort against the active context, so a window restoring onto a
-        // disabled NON-current desktop is not caught here.
+        // currentVirtualDesktop()/currentActivity() are the precise destination
+        // context here, not an approximation: a restore only ever targets the
+        // current desktop. Every calculator feeding this path either snaps a
+        // window opening now on the current desktop (calculateSnapToAppRule /
+        // calculateSnapToEmptyZone) or refuses outright when the saved desktop
+        // is not the current one — calculateRestoreFromSession and
+        // calculateSnapToLastZone both return noSnap on a desktop mismatch. A
+        // restored window therefore lands on the current desktop/activity.
         const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter
             ? m_screenModeRouter->modeFor(result.screenId)
             : PhosphorZones::AssignmentEntry::Snapping;
