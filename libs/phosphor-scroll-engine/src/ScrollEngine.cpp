@@ -237,6 +237,21 @@ void ScrollEngine::windowMinimizedChanged(const QString& windowId, bool minimize
     }
 }
 
+void ScrollEngine::windowDropped(const QString& draggedWindowId, const QString& anchorWindowId, bool placeAfter)
+{
+    const auto it = m_windowToKey.constFind(draggedWindowId);
+    if (it == m_windowToKey.constEnd()) {
+        return;
+    }
+    if (ScrollScreenState* state = stateForKey(it.value(), /*create=*/false);
+        state && state->moveColumnNextTo(draggedWindowId, anchorWindowId, placeAfter)) {
+        // The drag focused the window — make its screen active so the viewport
+        // fit-scrolls to it on the next resolve.
+        m_activeScreen = it.value().screenId;
+        emitChanged(it.value().screenId);
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Float
 // ─────────────────────────────────────────────────────────────────────────

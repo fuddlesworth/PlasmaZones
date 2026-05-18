@@ -3,11 +3,13 @@
 
 # Scroll mode — niri-style scrollable tiling
 
-Planning document. Status: **Phases 0 ✅, 1 ✅ and 2 ✅ complete** — the scroll engine,
-geometry resolver, `Mode::Scroll` routing, daemon geometry pipeline, and the full window
-lifecycle (open/close/focus, minimize, screen hotplug & geometry change, fixed-size
-windows) are implemented, built, and tested — the full `ctest` suite is green. Phase 0
-detail in [`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 3.
+Planning document. Status: **Phases 0 ✅, 1 ✅, 2 ✅ and 3 ✅ complete** — the scroll
+engine, geometry resolver, `Mode::Scroll` routing, daemon geometry pipeline, the full
+window lifecycle (open/close/focus, minimize, screen hotplug & geometry change,
+fixed-size windows) and navigation (viewport fit/centered scrolling, consume/expel
+shortcuts, drag-to-reorder, sticky-window exclusion) are implemented, built, and
+tested — the full `ctest` suite is green. Phase 0 detail in
+[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 4.
 
 ## 1. Goal
 
@@ -40,9 +42,11 @@ Key rules, all carried over verbatim:
 - **Intent vs. resolved geometry are separate.** Store column *width* and tile *height*
   as intent enums (`Proportion(f)` / `Fixed(px)` / `Preset(idx)`); recompute pixel rects
   on relayout. Never store pixels as the source of truth.
-- **The view offset is relative to the focused column**, not an absolute strip
-  coordinate. This is what stops the focused window drifting when columns to its left
-  are added/removed/resized.
+- **The viewport scroll position (`scrollX`) is an absolute strip coordinate** — the
+  strip-x that maps to the working area's inner-left edge. The daemon recomputes it on
+  every relayout (`computeViewportScroll`, `fit` or `centered`) so the focused column
+  stays on-screen; `fit` leaves an already-visible column untouched, which is what stops
+  the focused window jumping when columns to its left are added/removed/resized.
 - **Fullscreen / maximize / tabbed are column states**, not separate modes — they stay
   first-class participants in the strip.
 
@@ -203,7 +207,7 @@ Persistent per-context (screen / desktop / activity) state:
 ScrollScreenState
   columns: QVector<Column>
   activeColumnIdx
-  viewOffset            // relative to active column — NOT absolute
+  scrollX               // absolute strip-x at the viewport's inner-left edge
 Column
   tiles: QVector<Tile>  // each tile = one windowId
   activeTileIdx
@@ -296,14 +300,28 @@ decision for a window *pinned to all desktops / multiple activities* (force-coll
 the current context vs. exclude) is deferred — sticky-window handling is carried forward
 with the Phase 3 navigation work.
 
-### Phase 3 — Navigation & niri command vocabulary
+### Phase 3 — Navigation & niri command vocabulary — ✅ COMPLETE
 
-- Focus left/right (columns), up/down (tiles).
-- `consume` / `expel` window into/out of column; `move-column`; `move-window-up/down`.
-- **Interactive drag of a tiled window** — untile-on-drag or live column reorder; reuse
-  `kwin-effect/dragtracker.cpp`.
-- View-offset computation: `fit` (minimum scroll) and `centered`.
-- Wire to `ShortcutManager`; pick defaults that do not collide with stock KDE.
+- ✅ **Viewport scrolling** (M1) — the strip scrolls to keep the focused column
+  on-screen. `computeViewportScroll` resolves an absolute scroll position per
+  `ScrollViewportMode`: `Fit` (minimum scroll — leaves an already-visible column
+  untouched) or `Centered`. Fit is the default; the mode becomes a user setting in
+  Phase 5.
+- ✅ **Focus / move / swap navigation** — already routed: the daemon dispatches every
+  navigation shortcut through `ScreenModeRouter::engineFor()` and `ScrollEngine`
+  implements the `IPlacementEngine` contract, so focus left/right/up/down and
+  move-column / move-window work in scroll mode with the existing shortcuts.
+- ✅ **`consume` / `expel`** (M2) — new `Meta+Alt+I` / `Meta+Alt+O` shortcuts pull the
+  next column's window into the focused column / push the focused window out into its
+  own column. The snap/autotile engines inherit the no-op `IPlacementEngine` default,
+  so the shortcuts are harmlessly absorbed on their screens. Settings-UI exposure is
+  Phase 5.
+- ✅ **Interactive drag of a tiled window** (M3) — drag-to-reorder: a dragged window
+  keeps its tile slot during the move and, on release, its column is reordered to the
+  strip slot nearest the drop point, then the strip re-resolves and snaps it in.
+- ✅ **Sticky windows** (M4) — a window pinned to all desktops is never tiled into a
+  strip (it floats); pinning / un-pinning at runtime drops it from / re-adds it to the
+  strip.
 
 ### Phase 4 — Widths/heights & viewport polish
 

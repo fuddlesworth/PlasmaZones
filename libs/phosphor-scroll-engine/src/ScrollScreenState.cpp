@@ -219,6 +219,30 @@ bool ScrollScreenState::moveTile(int delta)
     return column.moveTile(column.activeTileIndex(), target);
 }
 
+bool ScrollScreenState::moveColumnNextTo(const QString& draggedWindowId, const QString& anchorWindowId, bool placeAfter)
+{
+    const int from = locateWindow(draggedWindowId).first;
+    const int anchorColumn = locateWindow(anchorWindowId).first;
+    if (from < 0 || anchorColumn < 0 || from == anchorColumn) {
+        return false;
+    }
+    // Lifting the dragged column out shifts every later index left by one, so
+    // the anchor's index drops by one when it sat to the right of it.
+    const int anchorAfterRemoval = (anchorColumn > from) ? anchorColumn - 1 : anchorColumn;
+    const int target =
+        qBound(0, placeAfter ? anchorAfterRemoval + 1 : anchorAfterRemoval, static_cast<int>(m_columns.size()) - 1);
+    // A drop that lands the column back in its own slot (it was dragged only
+    // just past an adjacent column's centre) is a positional no-op: skip the
+    // reorder. The caller still re-resolves and focuses the window — that
+    // round-trip snaps the dragged window back into its (unchanged) slot.
+    if (target != from) {
+        m_columns.move(from, target);
+    }
+    // The user just dragged this window — focus it (and its column).
+    focusWindow(draggedWindowId);
+    return true;
+}
+
 void ScrollScreenState::setActiveColumnWidth(const ColumnWidth& width, int presetIndex)
 {
     if (m_activeColumnIndex >= 0) {
@@ -325,7 +349,7 @@ QJsonObject ScrollScreenState::toJson() const
     obj.insert(QLatin1String("screenId"), m_screenId);
     obj.insert(QLatin1String("columns"), columns);
     obj.insert(QLatin1String("activeColumnIndex"), m_activeColumnIndex);
-    obj.insert(QLatin1String("viewOffset"), m_viewOffset);
+    obj.insert(QLatin1String("scrollX"), m_scrollX);
     obj.insert(QLatin1String("floating"), floating);
     return obj;
 }
@@ -353,7 +377,7 @@ ScrollScreenState ScrollScreenState::fromJson(const QJsonObject& obj)
             state.m_columns.append(std::move(column));
         }
     }
-    state.m_viewOffset = obj.value(QLatin1String("viewOffset")).toDouble(0.0);
+    state.m_scrollX = obj.value(QLatin1String("scrollX")).toDouble(0.0);
     state.m_activeColumnIndex = obj.value(QLatin1String("activeColumnIndex")).toInt(-1);
     state.clampActiveColumnIndex();
 

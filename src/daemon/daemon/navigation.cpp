@@ -156,6 +156,28 @@ void Daemon::handlePush()
     }
 }
 
+void Daemon::handleConsume()
+{
+    // niri "consume": pull the next column's focused window into the focused
+    // column. Meaningful only in scroll mode — the snap/autotile engines'
+    // IPlacementEngine default is a no-op, so this is harmlessly absorbed on
+    // their screens, mirroring handlePush().
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ConsumeWindow")) {
+        nav->consumeWindowIntoColumn(ctx);
+    }
+}
+
+void Daemon::handleExpel()
+{
+    // niri "expel": push the focused window out into its own new column.
+    // Scroll-mode only; a no-op on snap/autotile screens (see handleConsume).
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ExpelWindow")) {
+        nav->expelWindowFromColumn(ctx);
+    }
+}
+
 void Daemon::handleRestore()
 {
     NavigationContext ctx;

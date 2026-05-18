@@ -1342,6 +1342,18 @@ public:
     {
         return QStringLiteral("Meta+Alt+,");
     }
+    /// Scroll mode: pull the next column's focused window into the current
+    /// column (niri "consume"). "I" for "in".
+    static QString consumeWindowShortcut()
+    {
+        return QStringLiteral("Meta+Alt+I");
+    }
+    /// Scroll mode: push the focused window out into its own new column (niri
+    /// "expel"). "O" for "out".
+    static QString expelWindowShortcut()
+    {
+        return QStringLiteral("Meta+Alt+O");
+    }
     static QString resnapToNewLayoutShortcut()
     {
         return QStringLiteral("Meta+Ctrl+Z");

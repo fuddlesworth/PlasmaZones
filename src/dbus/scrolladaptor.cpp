@@ -93,4 +93,12 @@ void ScrollAdaptor::windowMinimizedChanged(const QString& windowId, bool minimiz
     m_engine->windowMinimizedChanged(windowId, minimized);
 }
 
+void ScrollAdaptor::windowDropped(const QString& draggedWindowId, const QString& anchorWindowId, bool placeAfter)
+{
+    if (!ensureEngine("windowDropped")) {
+        return;
+    }
+    m_engine->windowDropped(draggedWindowId, anchorWindowId, placeAfter);
+}
+
 } // namespace PlasmaZones

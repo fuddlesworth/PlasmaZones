@@ -41,9 +41,18 @@ ScrollHandler::ScrollHandler(PlasmaZonesEffect* effect, QObject* parent)
     connect(m_reassertTimer, &QTimer::timeout, this, &ScrollHandler::flushReasserts);
 }
 
+bool ScrollHandler::isEligibleForScroll(KWin::EffectWindow* w) const
+{
+    // Scroll mode adds one exclusion to the shared tiling predicate: a window
+    // pinned to all desktops (sticky) is never tiled — the strip is
+    // per-desktop, so a sticky window would have to occupy every strip at
+    // once. It is left floating instead.
+    return m_effect->isEligibleForTilingNotify(w) && !m_effect->isWindowSticky(w);
+}
+
 void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w)
 {
-    if (!m_effect->isEligibleForTilingNotify(w)) {
+    if (!isEligibleForScroll(w)) {
         return;
     }
 
@@ -94,7 +103,7 @@ void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
     QStringList batchWindowIds; // for error rollback
 
     for (KWin::EffectWindow* w : windows) {
-        if (!m_effect->isEligibleForTilingNotify(w)) {
+        if (!isEligibleForScroll(w)) {
             continue;
         }
         const QString screenId = m_effect->getWindowScreenId(w);
@@ -162,6 +171,8 @@ void ScrollHandler::onWindowClosed(const QString& windowId, const QString& scree
     m_appliedGeometry.remove(windowId);
     m_reassertPending.remove(windowId);
     m_reasserted.remove(windowId);
+    m_reorderPending.remove(windowId);
+    m_interactiveResize.remove(windowId);
 
     if (m_scrollScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
@@ -197,9 +208,17 @@ void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
     if (minimized) {
         // A minimized window leaves the visible layout — its resolved-geometry
         // reference is stale until the strip re-resolves on restore. Drop it so
-        // onWindowFrameGeometryChanged cannot re-assert against a stale slot.
+        // onWindowFrameGeometryChanged cannot re-assert against a stale slot,
+        // and drop any in-flight drag-reorder bookkeeping: a minimize while a
+        // windowDropped is in flight supersedes it (the daemon re-resolve that
+        // would have cleared m_reorderPending now excludes the minimized
+        // window, so it must be cleared here). Any interactive move/resize is
+        // likewise over once the window is minimized — clear all of this
+        // window's transient effect-side state in one place.
         m_appliedGeometry.remove(windowId);
         m_reassertPending.remove(windowId);
+        m_reorderPending.remove(windowId);
+        m_interactiveResize.remove(windowId);
     }
     PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
                                                    QStringLiteral("windowMinimizedChanged"), {windowId, minimized},
@@ -229,14 +248,41 @@ void ScrollHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     notifyWindowAdded(w);
 }
 
+void ScrollHandler::handleWindowStickyChanged(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    if (m_effect->isWindowSticky(w)) {
+        // Pinned to all desktops: drop it from its strip if tracked — scroll
+        // mode does not tile sticky windows. The window stays put and floats.
+        if (m_notifiedWindows.contains(windowId)) {
+            onWindowClosed(windowId, m_notifiedWindowScreens.value(windowId));
+        }
+    } else if (!m_notifiedWindows.contains(windowId)) {
+        // No longer sticky — re-tile it. notifyWindowAdded self-gates on
+        // eligibility, the scroll-screen set and the current desktop.
+        notifyWindowAdded(w);
+    }
+}
+
 void ScrollHandler::recordAppliedGeometry(const QString& windowId, const QRect& geometry)
 {
+    if (!m_notifiedWindows.contains(windowId)) {
+        // Only scroll-tracked windows — keeps m_appliedGeometry a subset of
+        // m_notifiedWindows so the two cannot drift apart (a scroll batch may
+        // momentarily name a window dropped from tracking mid-flight).
+        return;
+    }
     m_appliedGeometry[windowId] = geometry;
     // The window is being moved to match this geometry — drop any stale
     // re-assert queued from an earlier drift, and reset the re-assert budget:
-    // a fresh daemon resolve is a new episode.
+    // a fresh daemon resolve is a new episode. A drag-reorder for this window
+    // is likewise now resolved, so the re-assert suppression can lift.
     m_reassertPending.remove(windowId);
     m_reasserted.remove(windowId);
+    m_reorderPending.remove(windowId);
 }
 
 void ScrollHandler::onWindowFrameGeometryChanged(KWin::EffectWindow* w)
@@ -254,6 +300,13 @@ void ScrollHandler::onWindowFrameGeometryChanged(KWin::EffectWindow* w)
     const QString windowId = m_effect->getWindowId(w);
     if (!m_notifiedWindows.contains(windowId)) {
         return; // not a scroll-tracked window
+    }
+    if (m_reorderPending.contains(windowId)) {
+        // A drag-reorder (windowDropped) is in flight for this window; the
+        // daemon's re-resolve will land via recordAppliedGeometry. Suppressing
+        // the drift re-assert until then avoids snapping the window back to its
+        // pre-drag slot in the gap before the reorder applies.
+        return;
     }
     const auto it = m_appliedGeometry.constFind(windowId);
     if (it == m_appliedGeometry.constEnd()) {
@@ -311,6 +364,103 @@ void ScrollHandler::flushReasserts()
     }
 }
 
+void ScrollHandler::onWindowMoveResizeStarted(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    // isUserResize() is reliable here (the start signal) — an interactive
+    // resize sets it, a plain move leaves it false — but not necessarily at
+    // the finish signal, so the verdict is recorded now for onWindowDragFinished.
+    const QString windowId = m_effect->getWindowId(w);
+    if (w->isUserResize()) {
+        m_interactiveResize.insert(windowId);
+    } else {
+        m_interactiveResize.remove(windowId);
+    }
+}
+
+void ScrollHandler::onWindowDragFinished(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    // A resize is not a drag-to-reorder. The verdict was recorded at the start
+    // signal (isUserResize() is unreliable at finish); consume it either way.
+    if (m_interactiveResize.remove(windowId)) {
+        return;
+    }
+    if (!m_notifiedWindows.contains(windowId)) {
+        return; // not a scroll-tracked window
+    }
+    const QString screenId = m_notifiedWindowScreens.value(windowId);
+    if (!m_scrollScreens.contains(screenId)) {
+        return;
+    }
+    // The dragged window kept its tile slot during the move (the geometry
+    // re-assert is suppressed mid-drag). On release, reorder its column to the
+    // strip slot nearest the drop point.
+    const auto draggedIt = m_appliedGeometry.constFind(windowId);
+    if (draggedIt == m_appliedGeometry.constEnd()) {
+        return; // the daemon has not resolved a slot for this window yet
+    }
+    const QRect draggedRect = draggedIt.value();
+    const int dropX = w->frameGeometry().toRect().center().x();
+    // A drop still within the dragged window's own column is a no-op — the
+    // window was nudged but not carried out of its slot.
+    if (dropX >= draggedRect.left() && dropX <= draggedRect.right()) {
+        return;
+    }
+    // Pick the anchor: among scroll windows on the same screen in a *different*
+    // column (a different resolved x-range than the dragged window's own), the
+    // one whose tile the drop-x is over or nearest. Ties resolve to the
+    // leftmost candidate so the result does not depend on QHash iteration order.
+    QString anchorId;
+    int bestDistance = -1;
+    int bestLeft = 0;
+    bool placeAfter = false;
+    for (auto it = m_appliedGeometry.cbegin(); it != m_appliedGeometry.cend(); ++it) {
+        const QString& otherId = it.key();
+        if (otherId == windowId || m_notifiedWindowScreens.value(otherId) != screenId) {
+            continue;
+        }
+        const QRect& rect = it.value();
+        if (rect.left() == draggedRect.left()) {
+            continue; // a tile of the dragged window's own column
+        }
+        int distance = 0;
+        if (dropX < rect.left()) {
+            distance = rect.left() - dropX;
+        } else if (dropX > rect.right()) {
+            distance = dropX - rect.right();
+        }
+        if (bestDistance < 0 || distance < bestDistance || (distance == bestDistance && rect.left() < bestLeft)) {
+            bestDistance = distance;
+            bestLeft = rect.left();
+            anchorId = otherId;
+            // Distance ranks columns by their edges; the side to land on is
+            // taken from the column centre — for a gap drop these compose
+            // (a drop in the gap left of a column is left of its centre).
+            placeAfter = dropX > rect.center().x();
+        }
+    }
+    if (anchorId.isEmpty()) {
+        return; // no other column on the strip to reorder against
+    }
+    // The reorder supersedes the drift re-assert: drop any pending one and
+    // suppress new ones until the daemon's re-resolve lands. The reorder is a
+    // genuine cross-column move (own-column drops and same-column anchors are
+    // excluded above), so the engine always re-resolves and recordAppliedGeometry
+    // clears m_reorderPending.
+    m_reassertPending.remove(windowId);
+    m_reorderPending.insert(windowId);
+    PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
+                                                   QStringLiteral("windowDropped"), {windowId, anchorId, placeAfter},
+                                                   QStringLiteral("windowDropped"));
+    qCDebug(lcEffect) << "Notified scroll: windowDropped" << windowId << "anchor" << anchorId << "after" << placeAfter;
+}
+
 void ScrollHandler::notifyWindowFocused(const QString& windowId, const QString& screenId)
 {
     if (!m_scrollScreens.contains(screenId)) {
@@ -337,6 +487,8 @@ void ScrollHandler::onDaemonReady()
     m_appliedGeometry.clear();
     m_reassertPending.clear();
     m_reasserted.clear();
+    m_reorderPending.clear();
+    m_interactiveResize.clear();
     m_reassertTimer->stop();
     connectSignals();
     loadSettings();

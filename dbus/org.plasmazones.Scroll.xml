@@ -55,5 +55,15 @@
             <arg name="windowId" type="s" direction="in"/>
             <arg name="minimized" type="b" direction="in"/>
         </method>
+
+        <!-- A scroll-mode window was drag-released (drag-to-reorder). Its
+             column is moved next to the anchor window's column — before it,
+             or after when placeAfter is true. The effect picks the anchor as
+             the on-strip window nearest the drop point. -->
+        <method name="windowDropped">
+            <arg name="draggedWindowId" type="s" direction="in"/>
+            <arg name="anchorWindowId" type="s" direction="in"/>
+            <arg name="placeAfter" type="b" direction="in"/>
+        </method>
     </interface>
 </node>

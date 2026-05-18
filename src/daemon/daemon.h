@@ -258,6 +258,8 @@ private:
     void handleSwap(NavigationDirection direction);
     void handleSnap(int zoneNumber);
     void handleCycle(bool forward);
+    void handleConsume();
+    void handleExpel();
     void handleResnap();
     void handleSnapAll();
     void handleFocusMaster();

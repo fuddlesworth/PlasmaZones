@@ -57,15 +57,17 @@ public:
     const Column* activeColumn() const;
     QString focusedWindowId() const;
 
-    /// Viewport offset relative to the active column (logical pixels).
-    /// Stored intent only; geometry resolution interprets it.
-    qreal viewOffset() const
+    /// Absolute viewport scroll position: the strip-x coordinate that maps to
+    /// the inner-left edge of the working area. Stored intent only — the
+    /// daemon computes it (computeViewportScroll) and geometry resolution
+    /// (resolveScrollLayout) interprets it.
+    qreal scrollX() const
     {
-        return m_viewOffset;
+        return m_scrollX;
     }
-    void setViewOffset(qreal offset)
+    void setScrollX(qreal scrollX)
     {
-        m_viewOffset = offset;
+        m_scrollX = scrollX;
     }
 
     // ── Window placement ────────────────────────────────────────────────
@@ -108,6 +110,14 @@ public:
     bool moveColumn(int delta);
     /// Reorder the focused tile within its column by @p delta; focus follows.
     bool moveTile(int delta);
+    /// Reorder the whole column holding @p draggedWindowId so it sits
+    /// immediately before (or after, when @p placeAfter) the column holding
+    /// @p anchorWindowId, and focus @p draggedWindowId. Drives drag-to-reorder.
+    /// Returns false when either window is not tiled here or both share a
+    /// column (a drop onto the dragged window's own column). A drop that
+    /// resolves to the dragged column's existing slot still returns true (it
+    /// is a valid drop — the column order is simply left unchanged).
+    bool moveColumnNextTo(const QString& draggedWindowId, const QString& anchorWindowId, bool placeAfter);
 
     // ── Width / height intent ───────────────────────────────────────────
     /// Set the focused column's width intent (no-op when the strip is empty).
@@ -151,7 +161,7 @@ private:
     QString m_screenId;
     QVector<Column> m_columns;
     int m_activeColumnIndex = -1;
-    qreal m_viewOffset = 0.0;
+    qreal m_scrollX = 0.0;
     QSet<QString> m_floatingWindows;
 };
 

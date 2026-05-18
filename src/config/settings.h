@@ -433,6 +433,12 @@ public:
     Q_PROPERTY(QString cycleWindowBackwardShortcut READ cycleWindowBackwardShortcut WRITE setCycleWindowBackwardShortcut
                    NOTIFY cycleWindowBackwardShortcutChanged)
 
+    // Scroll-mode consume / expel column (Meta+Alt+I / Meta+Alt+O)
+    Q_PROPERTY(QString consumeWindowShortcut READ consumeWindowShortcut WRITE setConsumeWindowShortcut NOTIFY
+                   consumeWindowShortcutChanged)
+    Q_PROPERTY(QString expelWindowShortcut READ expelWindowShortcut WRITE setExpelWindowShortcut NOTIFY
+                   expelWindowShortcutChanged)
+
     // Resnap to New PhosphorZones::Layout (Meta+Ctrl+Z, easy pinky key)
     Q_PROPERTY(QString resnapToNewLayoutShortcut READ resnapToNewLayoutShortcut WRITE setResnapToNewLayoutShortcut
                    NOTIFY resnapToNewLayoutShortcutChanged)
@@ -986,6 +992,10 @@ public:
     void setCycleWindowForwardShortcut(const QString& shortcut);
     QString cycleWindowBackwardShortcut() const;
     void setCycleWindowBackwardShortcut(const QString& shortcut);
+    QString consumeWindowShortcut() const;
+    void setConsumeWindowShortcut(const QString& shortcut);
+    QString expelWindowShortcut() const;
+    void setExpelWindowShortcut(const QString& shortcut);
     QString resnapToNewLayoutShortcut() const;
     void setResnapToNewLayoutShortcut(const QString& shortcut);
     QString snapAllWindowsShortcut() const;

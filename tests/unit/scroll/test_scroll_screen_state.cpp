@@ -20,6 +20,7 @@ private Q_SLOTS:
     void removeDropsEmptyColumn();
     void consumeAndExpel();
     void minimizeKeepsSlot();
+    void dragReordersColumn();
     void focusAndMoveColumns();
     void tileNavigation();
     void placementAndFloating();
@@ -152,6 +153,57 @@ void TestScrollScreenState::minimizeKeepsSlot()
     QVERIFY(state.isWindowMinimized(state.focusedWindowId())); // ...even though hidden
 }
 
+void TestScrollScreenState::dragReordersColumn()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b"));
+    state.addColumnForWindow(QStringLiteral("c")); // [a][b][c]
+
+    // Drop "a" after "c": column order becomes [b][c][a]; focus follows "a".
+    QVERIFY(state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("c"), /*placeAfter=*/true));
+    QCOMPARE(state.columns().at(0).windowIds().first(), QStringLiteral("b"));
+    QCOMPARE(state.columns().at(1).windowIds().first(), QStringLiteral("c"));
+    QCOMPARE(state.columns().at(2).windowIds().first(), QStringLiteral("a"));
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("a"));
+
+    // Drop "a" before "b": back to [a][b][c].
+    QVERIFY(state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("b"), /*placeAfter=*/false));
+    QCOMPARE(state.columns().at(0).windowIds().first(), QStringLiteral("a"));
+    QCOMPARE(state.columns().at(1).windowIds().first(), QStringLiteral("b"));
+    QCOMPARE(state.columns().at(2).windowIds().first(), QStringLiteral("c"));
+
+    // A drop onto the dragged window's own column, or against an unknown
+    // window, returns false — and leaves the column order untouched.
+    QVERIFY(!state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("a"), true));
+    QVERIFY(!state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("missing"), true));
+    QCOMPARE(state.columns().at(0).windowIds().first(), QStringLiteral("a"));
+    QCOMPARE(state.columns().at(1).windowIds().first(), QStringLiteral("b"));
+    QCOMPARE(state.columns().at(2).windowIds().first(), QStringLiteral("c"));
+
+    // A drop that resolves to the column's own slot ("a" before "b" — where
+    // "a" already sits) is a positional no-op: it still returns true and
+    // focuses the window, but leaves the order untouched.
+    QVERIFY(state.focusWindow(QStringLiteral("c")));
+    QVERIFY(state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("b"), /*placeAfter=*/false));
+    QCOMPARE(state.columns().at(0).windowIds().first(), QStringLiteral("a"));
+    QCOMPARE(state.columns().at(1).windowIds().first(), QStringLiteral("b"));
+    QCOMPARE(state.columns().at(2).windowIds().first(), QStringLiteral("c"));
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("a"));
+
+    // A multi-tile column moves as a whole, carrying both tiles; focus lands
+    // on the dragged window.
+    ScrollScreenState multi;
+    multi.addColumnForWindow(QStringLiteral("x"));
+    multi.addWindowToActiveColumn(QStringLiteral("x2")); // column [x, x2]
+    multi.addColumnForWindow(QStringLiteral("y")); // [x,x2][y]
+    QVERIFY(multi.moveColumnNextTo(QStringLiteral("x"), QStringLiteral("y"), /*placeAfter=*/true));
+    QCOMPARE(multi.columnCount(), 2);
+    QCOMPARE(multi.columns().at(0).windowIds().first(), QStringLiteral("y"));
+    QCOMPARE(multi.columns().at(1).windowIds(), QStringList({QStringLiteral("x"), QStringLiteral("x2")}));
+    QCOMPARE(multi.focusedWindowId(), QStringLiteral("x"));
+}
+
 void TestScrollScreenState::focusAndMoveColumns()
 {
     ScrollScreenState state;
@@ -213,14 +265,14 @@ void TestScrollScreenState::jsonRoundTrip()
     state.addColumnForWindow(QStringLiteral("a"));
     state.addWindowToActiveColumn(QStringLiteral("b"));
     state.addColumnForWindow(QStringLiteral("c"));
-    state.setViewOffset(-128.0);
+    state.setScrollX(-128.0);
     state.markFloating(QStringLiteral("f1"));
 
     const ScrollScreenState restored = ScrollScreenState::fromJson(state.toJson());
     QCOMPARE(restored.screenId(), QStringLiteral("HDMI-1"));
     QCOMPARE(restored.columnCount(), state.columnCount());
     QCOMPARE(restored.activeColumnIndex(), state.activeColumnIndex());
-    QCOMPARE(restored.viewOffset(), -128.0);
+    QCOMPARE(restored.scrollX(), -128.0);
     QCOMPARE(restored.focusedWindowId(), state.focusedWindowId());
     QVERIFY(restored.isFloating(QStringLiteral("f1")));
     QCOMPARE(restored.placementIdForWindow(QStringLiteral("b")), QStringLiteral("0:1"));

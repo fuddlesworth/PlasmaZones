@@ -212,6 +212,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this](KWin::EffectWindow* window) {
         updateWindowStickyState(window);
 
+        // Scroll mode excludes all-desktops (sticky) windows — re-evaluate
+        // this window's strip membership when its desktop pinning changes.
+        m_scrollHandler->handleWindowStickyChanged(window);
+
         // When a window is moved to a different desktop (e.g., "Move to Desktop 2"),
         // treat it as removed from the current desktop's tiling. The normal desktop-
         // switch flow will pick it up when the user switches to the target desktop.
@@ -461,6 +465,14 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // of its tile slot (debounced inside the handler).
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_scrollHandler.get(),
             &ScrollHandler::onWindowFrameGeometryChanged);
+
+    // Scroll: drag-to-reorder — record move-vs-resize at interaction start
+    // (isUserResize() is reliable here), and on finish reorder the dragged
+    // window's column to the drop position (a resize is ignored).
+    connect(w, &KWin::EffectWindow::windowStartUserMovedResized, m_scrollHandler.get(),
+            &ScrollHandler::onWindowMoveResizeStarted);
+    connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, m_scrollHandler.get(),
+            &ScrollHandler::onWindowDragFinished);
 
     // Frame-geometry shadow: push the latest geometry to the daemon so
     // daemon-local shortcut handlers (float toggle, etc.) can read fresh
