@@ -17,6 +17,7 @@
 
 #include <PhosphorZones/LayoutRegistry.h>
 
+#include "layoutregistry_rulehelpers_p.h"
 #include "zoneslogging.h"
 
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -33,165 +34,15 @@
 
 namespace PhosphorZones {
 
-namespace {
-
 namespace PWR = PhosphorWindowRule;
-namespace CRB = PhosphorWindowRule::ContextRuleBridge;
 
-// Build the windowless context query for a (screen, desktop, activity) tuple.
-// No window attributes are set — window-property predicates evaluate false,
-// so only context-only rules contribute. This reproduces the old cascade.
-PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity)
-{
-    PWR::WindowQuery query;
-    query.screenId = screenId;
-    query.virtualDesktop = virtualDesktop;
-    query.activity = activity;
-    return query;
-}
-
-// Human-readable label for a context assignment rule's (screen, desktop,
-// activity) tuple — the single place the " · Desktop N" / " · Activity"
-// suffix shape is constructed (used by upsert + every batch setter).
-QString contextRuleName(const QString& screenId, int virtualDesktop, const QString& activity)
-{
-    return screenId + (virtualDesktop > 0 ? QStringLiteral(" · Desktop ") + QString::number(virtualDesktop) : QString())
-        + (activity.isEmpty() ? QString() : QStringLiteral(" · Activity"));
-}
-
-// Decode a match expression's pinned (screenId, desktop, activity) context
-// tuple via the shared ContextRuleBridge::contextDimsOf — the one classifier
-// for context-rule shape. A non-context / nested-composite match leaves all
-// three at their defaults (empty / 0).
-struct ContextDims
-{
-    QString screenId;
-    int virtualDesktop = 0;
-    QString activity;
-};
-ContextDims decodeDims(const PWR::MatchExpression& match)
-{
-    ContextDims dims;
-    CRB::contextDimsOf(match, dims.screenId, dims.virtualDesktop, dims.activity);
-    return dims;
-}
-
-// True if @p match is exactly the context shape for the pinned dimensions of
-// (screenId, virtualDesktop, activity) — i.e. the match ContextRuleBridge
-// would emit for that tuple. A match pinning more/fewer dimensions, pinning
-// different values, or carrying ANY window-property leaf is NOT an exact
-// match. This is what hasExplicitAssignment relies on to distinguish a stored
-// entry from a wider cascade entry or the synthesized provider default.
-//
-// contextDimsOf ignores window-property leaves, so a flat rule mixing a
-// window predicate with the context leaves (e.g. All{ ScreenId==DP-1,
-// AppId==konsole }) would still decode to the same tuple — the
-// isContextOnly() gate is the discriminator that rejects it, mirroring
-// isContextAssignmentRule's "context-only" contract so upsert / clear never
-// clobber a window-property rule.
-bool matchIsExactContext(const PWR::MatchExpression& match, const QString& screenId, int virtualDesktop,
-                         const QString& activity)
-{
-    if (!match.isContextOnly()) {
-        return false;
-    }
-    const ContextDims dims = decodeDims(match);
-    return dims.screenId == screenId && dims.virtualDesktop == virtualDesktop && dims.activity == activity;
-}
-
-// True if @p rule carries a SetEngineMode action. Both context assignment
-// rules and the provider-default catch-all carry one; callers that must
-// exclude the catch-all do so explicitly (see resolveAssignmentEntry), and
-// the matchIsExactContext* shape filters reject a catch-all anyway.
-bool hasEngineModeAction(const PWR::WindowRule& rule)
-{
-    for (const PWR::RuleAction& action : rule.actions) {
-        if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Forward declarations: the shape predicates are defined just below but
-// isContextAssignmentRule references all three.
-bool matchIsExactContextBase(const PWR::MatchExpression& match);
-bool matchIsExactContextDesktop(const PWR::MatchExpression& match);
-bool matchIsExactContextActivity(const PWR::MatchExpression& match);
-
-// True if @p rule is a pure context-assignment rule for one of the cascade
-// families (per-screen-base / per-desktop / per-activity) — i.e. it carries a
-// SetEngineMode action AND its match is exactly a pinned context shape (not
-// the catch-all, not a window-property rule that happens to carry an
-// engine-mode action). The batch purge / clear loops gate on this so a
-// legitimate window-property rule carrying SetSnappingLayout / SetEngineMode
-// actions is never rebuilt — rebuilding force-injects SetEngineMode and
-// drops every other action, which would clobber a window-property rule.
-bool isContextAssignmentRule(const PWR::WindowRule& rule)
-{
-    if (!hasEngineModeAction(rule) || rule.match.isCatchAll()) {
-        return false;
-    }
-    return matchIsExactContextBase(rule.match) || matchIsExactContextDesktop(rule.match)
-        || matchIsExactContextActivity(rule.match);
-}
-
-// Shape predicates for the per-screen-base / per-desktop / per-activity
-// context rule families — used by the batch setters to drop one family
-// before writing the new entries, and by the introspection helpers to keep
-// their family filter identical to the batch setters'. Each gates on
-// MatchExpression::isContextOnly() before decoding (see matchIsExactContext
-// for why a window-property leaf must never classify as a context family
-// member), then decomposes via the shared decodeDims (contextDimsOf).
-bool matchIsExactContextBase(const PWR::MatchExpression& match)
-{
-    if (!match.isContextOnly()) {
-        return false;
-    }
-    const ContextDims dims = decodeDims(match);
-    return !dims.screenId.isEmpty() && dims.virtualDesktop == 0 && dims.activity.isEmpty();
-}
-bool matchIsExactContextDesktop(const PWR::MatchExpression& match)
-{
-    if (!match.isContextOnly()) {
-        return false;
-    }
-    const ContextDims dims = decodeDims(match);
-    return !dims.screenId.isEmpty() && dims.virtualDesktop > 0 && dims.activity.isEmpty();
-}
-bool matchIsExactContextActivity(const PWR::MatchExpression& match)
-{
-    if (!match.isContextOnly()) {
-        return false;
-    }
-    const ContextDims dims = decodeDims(match);
-    return !dims.screenId.isEmpty() && !dims.activity.isEmpty();
-}
-
-// Build the AssignmentEntry encoded directly by a rule's action list (no
-// evaluation — used by introspection helpers like desktopAssignments()).
-AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
-{
-    AssignmentEntry entry;
-    // A rule with no SetEngineMode action leaves the mode at the Snapping
-    // default — make that explicit rather than relying on AssignmentEntry's
-    // default member initializer.
-    entry.mode = AssignmentEntry::Snapping;
-    for (const PWR::RuleAction& action : rule.actions) {
-        if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)) {
-            entry.mode = action.params.value(QLatin1String("mode")).toString() == QLatin1String("autotile")
-                ? AssignmentEntry::Autotile
-                : AssignmentEntry::Snapping;
-        } else if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)) {
-            entry.snappingLayout = action.params.value(QLatin1String("layoutId")).toString();
-        } else if (action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
-            entry.tilingAlgorithm = action.params.value(QLatin1String("algorithm")).toString();
-        }
-    }
-    return entry;
-}
-
-} // anonymous namespace
+// The rule-shape classification / context helpers (contextRuleName,
+// decodeDims, the matchIsExactContext* family, hasEngineModeAction,
+// isContextAssignmentRule, entryFromRuleMatchActions, makeContextQuery)
+// are pure functions with no LayoutRegistry-member dependency and live in
+// layoutregistry_rulehelpers.cpp / _p.h — pulled in here so this TU stays
+// under the project's 800-line ceiling.
+using namespace RuleHelpers;
 
 // ── Rule-backed cascade resolution ──────────────────────────────────────────
 
