@@ -101,8 +101,13 @@ inline QString normalizeAppId(const QString& desktopFileName, const QString& win
 {
     QString appId = desktopFileName.trimmed();
     if (appId.isEmpty()) {
-        const int sep = windowClass.lastIndexOf(QLatin1Char(' '));
-        appId = (sep >= 0 ? windowClass.mid(sep + 1) : windowClass).trimmed();
+        // Trim the whole class BEFORE the split: a class with trailing
+        // whitespace ("resourceName resourceClass ") would otherwise split at
+        // the trailing space, yield an empty token, and drop an otherwise
+        // valid identity.
+        const QString trimmedClass = windowClass.trimmed();
+        const int sep = trimmedClass.lastIndexOf(QLatin1Char(' '));
+        appId = (sep >= 0 ? trimmedClass.mid(sep + 1) : trimmedClass);
     }
     return appId.toLower();
 }

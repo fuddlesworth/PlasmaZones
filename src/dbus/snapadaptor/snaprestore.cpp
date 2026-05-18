@@ -241,6 +241,12 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
         // can cross-screen-migrate (app rule / session restore) onto a screen
         // whose mode differs from the caller's, so the disable list to consult
         // is the one for result.screenId's mode — not a hard-coded Snapping.
+        //
+        // The desktop and activity are the session's CURRENT ones, not the
+        // restore target's — SnapResult carries no destination desktop. The
+        // screen/mode axis is therefore the precise gate; desktop/activity are
+        // best-effort against the active context, so a window restoring onto a
+        // disabled NON-current desktop is not caught here.
         const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter
             ? m_screenModeRouter->modeFor(result.screenId)
             : PhosphorZones::AssignmentEntry::Snapping;

@@ -73,7 +73,7 @@ QString PlasmaZonesEffect::getWindowAppId(KWin::EffectWindow* w) const
     // Canonical appId derivation lives in PhosphorIdentity so the daemon and
     // effect spell it identically. A blank / whitespace-only window class
     // yields an empty appId (never " ") — see normalizeAppId.
-    return PhosphorIdentity::WindowId::normalizeAppId(window->desktopFileName(), w->windowClass());
+    return ::PhosphorIdentity::WindowId::normalizeAppId(window->desktopFileName(), w->windowClass());
 }
 
 void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w)

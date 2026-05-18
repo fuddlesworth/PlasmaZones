@@ -387,6 +387,13 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                 // "ballooning" growth (discussion #461). unmaximizeMonocleWindow
                 // above only restores windows PlasmaZones itself maximized
                 // for monocle; a user-maximized window is never in that set.
+                //
+                // The MaximizeRestore call resizes the window to its pre-
+                // maximize restore geometry before applySnapGeometry below
+                // overwrites it; that intermediate frameGeometryChanged is
+                // intentionally absorbed by the m_inDaemonGeometryApply guard
+                // set at the top of this lambda — a refactor that moves or
+                // narrows that guard reintroduces the ballooning re-entry.
                 if (KWin::Window* kw = snap.window->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
                     ++m_suppressMaximizeChanged;
                     kw->maximize(KWin::MaximizeRestore);

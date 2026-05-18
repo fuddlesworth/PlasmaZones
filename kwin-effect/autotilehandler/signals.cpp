@@ -83,6 +83,30 @@ void AutotileHandler::clearAllPendingMinimizeFloats()
     m_pendingMinimizeFloat.clear();
 }
 
+void AutotileHandler::restoreWindowBorders(KWin::EffectWindow* w, const QString& windowId)
+{
+    // Find every screen whose borderless bucket still tracks this window —
+    // stale entries can span multiple screens if the window transferred
+    // between autotile screens during the session — and clear each. When the
+    // EffectWindow is gone (screen-removal path), drop the per-screen border
+    // state directly since setNoBorder needs a live window.
+    QStringList screensHoldingBorderless;
+    for (auto it = m_border.borderlessWindowsByScreen.constBegin(); it != m_border.borderlessWindowsByScreen.constEnd();
+         ++it) {
+        if (it.value().contains(windowId)) {
+            screensHoldingBorderless.append(it.key());
+        }
+    }
+    for (const QString& sid : std::as_const(screensHoldingBorderless)) {
+        if (w) {
+            setWindowBorderless(w, windowId, false, sid);
+        } else {
+            AutotileStateHelpers::removeBorderlessOnScreen(m_border, sid, windowId);
+        }
+    }
+    AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+}
+
 void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
 {
     // Invalidate in-flight stagger timers from prior autotile/restore operations.
@@ -145,17 +169,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 if (m_notifiedWindows.remove(windowId)) {
                     m_notifiedWindowScreens.remove(windowId);
                 }
-                QStringList screensHoldingBorderless;
-                for (auto it = m_border.borderlessWindowsByScreen.constBegin();
-                     it != m_border.borderlessWindowsByScreen.constEnd(); ++it) {
-                    if (it.value().contains(windowId)) {
-                        screensHoldingBorderless.append(it.key());
-                    }
-                }
-                for (const QString& sid : std::as_const(screensHoldingBorderless)) {
-                    setWindowBorderless(w, windowId, false, sid);
-                }
-                AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+                restoreWindowBorders(w, windowId);
                 unmaximizeMonocleWindow(windowId);
                 // Drop stale zone-centering tracking so a later
                 // frameGeometryChanged does not re-snap the window into an
@@ -179,8 +193,11 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     const QRectF savedGeo = sgIt.value().value(geoKey);
                     if (savedGeo.isValid()) {
                         m_effect->applySnapGeometry(w, savedGeo.toRect());
+                        break;
                     }
-                    break;
+                    // Found-but-invalid entry: keep scanning. A valid rect may
+                    // still be stored under another screen's bucket from a
+                    // mid-session autotile-screen transfer.
                 }
             }
             m_effect->updateAllBorders();
@@ -212,27 +229,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
 
             // Restore title bars and clear tiled tracking for windows on removed screens
             for (const QString& windowId : std::as_const(windowsOnRemovedScreens)) {
-                // Find every screen that currently tracks this window and
-                // remove it from each. We don't know which specific screen
-                // the window "belongs to" in our buckets at this point —
-                // there may be stale entries across multiple screens if the
-                // window ever transferred. Clean them all.
-                QStringList screensHoldingBorderless;
-                for (auto it = m_border.borderlessWindowsByScreen.constBegin();
-                     it != m_border.borderlessWindowsByScreen.constEnd(); ++it) {
-                    if (it.value().contains(windowId)) {
-                        screensHoldingBorderless.append(it.key());
-                    }
-                }
-                KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-                for (const QString& sid : std::as_const(screensHoldingBorderless)) {
-                    if (w) {
-                        setWindowBorderless(w, windowId, false, sid);
-                    } else {
-                        AutotileStateHelpers::removeBorderlessOnScreen(m_border, sid, windowId);
-                    }
-                }
-                AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+                restoreWindowBorders(m_effect->findWindowById(windowId), windowId);
             }
             m_effect->updateAllBorders();
 
