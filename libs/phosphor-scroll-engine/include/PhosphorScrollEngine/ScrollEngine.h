@@ -106,6 +106,7 @@ public:
     void expelWindowFromColumn(const PhosphorEngine::NavigationContext& ctx) override;
     void cyclePresetColumnWidth(const PhosphorEngine::NavigationContext& ctx) override;
     void cyclePresetWindowHeight(const PhosphorEngine::NavigationContext& ctx) override;
+    void toggleColumnFullWidth(const PhosphorEngine::NavigationContext& ctx) override;
 
     // ── Tracking queries ────────────────────────────────────────────────
     bool isWindowTracked(const QString& windowId) const override;

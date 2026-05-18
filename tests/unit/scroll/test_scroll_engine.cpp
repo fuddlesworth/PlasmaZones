@@ -39,6 +39,7 @@ private Q_SLOTS:
     void windowDropped();
     void cyclePresetWidth();
     void cyclePresetHeight();
+    void toggleColumnFullWidth();
     void floatToggle();
     void perDesktopState();
     void serializeRoundTrip();
@@ -230,6 +231,43 @@ void TestScrollEngine::cyclePresetHeight()
 
     engine.cyclePresetWindowHeight(ctx);
     QCOMPARE(state->activeColumn()->activeTile()->height.presetIndex, 1);
+}
+
+void TestScrollEngine::toggleColumnFullWidth()
+{
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    const NavigationContext ctx = contextFor(QStringLiteral("S1"));
+    const ScrollScreenState* state = scrollState(engine, QStringLiteral("S1"));
+    QVERIFY(state && state->activeColumn());
+    QVERIFY(!state->activeColumn()->isFullWidth());
+    QCOMPARE(state->activeColumn()->width().value, 0.5); // default proportion
+
+    // Toggle on: the width intent fills the whole working area.
+    engine.toggleColumnFullWidth(ctx);
+    QVERIFY(state->activeColumn()->isFullWidth());
+    QCOMPARE(state->activeColumn()->width().kind, ColumnWidth::Kind::Proportion);
+    QCOMPARE(state->activeColumn()->width().value, 1.0);
+
+    // Toggle off: the prior width is restored.
+    engine.toggleColumnFullWidth(ctx);
+    QVERIFY(!state->activeColumn()->isFullWidth());
+    QCOMPARE(state->activeColumn()->width().value, 0.5);
+
+    // A preset-width cycle while full-width leaves full-width mode — setWidth()
+    // clears the flag — and supersedes the restore memory.
+    engine.toggleColumnFullWidth(ctx);
+    QVERIFY(state->activeColumn()->isFullWidth());
+    engine.cyclePresetColumnWidth(ctx);
+    QVERIFY(!state->activeColumn()->isFullWidth());
+    QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 1.0 / 3.0)); // preset 0
+
+    // A subsequent toggle remembers that preset width and restores it.
+    engine.toggleColumnFullWidth(ctx);
+    QCOMPARE(state->activeColumn()->width().value, 1.0);
+    engine.toggleColumnFullWidth(ctx);
+    QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 1.0 / 3.0));
+    QCOMPARE(state->activeColumn()->presetWidthIndex(), 0);
 }
 
 void TestScrollEngine::floatToggle()

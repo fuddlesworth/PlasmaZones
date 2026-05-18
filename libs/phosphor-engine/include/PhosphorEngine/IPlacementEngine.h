@@ -577,6 +577,11 @@ public:
     {
         Q_UNUSED(ctx)
     }
+    /// Toggle the focused column between full viewport width and its prior width.
+    virtual void toggleColumnFullWidth(const NavigationContext& ctx)
+    {
+        Q_UNUSED(ctx)
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Engine state serialization

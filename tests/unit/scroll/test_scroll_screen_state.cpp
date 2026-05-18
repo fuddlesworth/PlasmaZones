@@ -267,6 +267,7 @@ void TestScrollScreenState::jsonRoundTrip()
     state.addColumnForWindow(QStringLiteral("c"));
     state.setScrollX(-128.0);
     state.markFloating(QStringLiteral("f1"));
+    state.toggleActiveColumnFullWidth(); // column "c" enters full-width
 
     const ScrollScreenState restored = ScrollScreenState::fromJson(state.toJson());
     QCOMPARE(restored.screenId(), QStringLiteral("HDMI-1"));
@@ -276,6 +277,7 @@ void TestScrollScreenState::jsonRoundTrip()
     QCOMPARE(restored.focusedWindowId(), state.focusedWindowId());
     QVERIFY(restored.isFloating(QStringLiteral("f1")));
     QCOMPARE(restored.placementIdForWindow(QStringLiteral("b")), QStringLiteral("0:1"));
+    QVERIFY(restored.activeColumn() && restored.activeColumn()->isFullWidth()); // survives the round-trip
 }
 
 void TestScrollScreenState::clearFloatingDropsWindow()

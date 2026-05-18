@@ -126,6 +126,9 @@ public:
     void setActiveColumnWidth(const ColumnWidth& width, int presetIndex = -1);
     /// Set the focused tile's height intent (no-op when the strip is empty).
     void setActiveTileHeight(const WindowHeight& height);
+    /// Toggle the focused column's full-width state (no-op when the strip is
+    /// empty). See Column::toggleFullWidth.
+    void toggleActiveColumnFullWidth();
 
     // ── Floating set ────────────────────────────────────────────────────
     /// Mark @p windowId floating — removes it from the strip if tiled.

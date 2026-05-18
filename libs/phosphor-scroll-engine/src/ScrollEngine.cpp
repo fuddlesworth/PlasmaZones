@@ -498,6 +498,19 @@ void ScrollEngine::cyclePresetWindowHeight(const NavigationContext& ctx)
     reportNav(true, QStringLiteral("height"), screenId);
 }
 
+void ScrollEngine::toggleColumnFullWidth(const NavigationContext& ctx)
+{
+    QString screenId;
+    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
+    if (!state || !state->activeColumn()) {
+        reportNav(false, QStringLiteral("fullwidth"), screenId);
+        return;
+    }
+    state->toggleActiveColumnFullWidth();
+    emitChanged(screenId);
+    reportNav(true, QStringLiteral("fullwidth"), screenId);
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Tracking queries
 // ─────────────────────────────────────────────────────────────────────────

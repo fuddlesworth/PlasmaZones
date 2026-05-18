@@ -89,6 +89,7 @@ public:
     void setWidth(ColumnWidth width)
     {
         m_width = width;
+        m_fullWidth = false; // an explicit width change leaves full-width mode
     }
     /// Index into the configured preset-width list, or -1 when the width is
     /// not currently one of the presets.
@@ -100,6 +101,17 @@ public:
     {
         m_presetWidthIndex = index;
     }
+    /// Whether the column is in toggle-induced full-width mode (its width
+    /// intent fills the whole working area). Cleared by any explicit width
+    /// change through setWidth().
+    bool isFullWidth() const
+    {
+        return m_fullWidth;
+    }
+    /// Toggle full-width: when entering, the current width is remembered and
+    /// the width intent becomes the whole working area; when leaving, the
+    /// remembered width is restored.
+    void toggleFullWidth();
 
     // ── Serialization ───────────────────────────────────────────────────
     QJsonObject toJson() const;
@@ -112,6 +124,11 @@ private:
     int m_activeTileIndex = -1;
     ColumnWidth m_width = ColumnWidth::proportion(0.5);
     int m_presetWidthIndex = -1;
+    /// Full-width toggle state: when m_fullWidth is set, m_restoreWidth /
+    /// m_restorePresetWidthIndex hold the width to return to on toggle-off.
+    bool m_fullWidth = false;
+    ColumnWidth m_restoreWidth = ColumnWidth::proportion(0.5);
+    int m_restorePresetWidthIndex = -1;
 };
 
 } // namespace PhosphorScrollEngine
