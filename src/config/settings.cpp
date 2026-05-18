@@ -548,6 +548,10 @@ void Settings::setAudioSpectrumBarCount(int count)
         Q_EMIT settingsChanged();                                                                                      \
     }
 
+// Unlike PZ_STORE_GET (typed read<T>), the list getter goes through
+// readVariant, which is default-eager: a corrupt on-disk list falls back to
+// the schema default rather than an empty list — the right call for a preset
+// list, since an empty list would silently disable the cycle shortcuts.
 #define PZ_STORE_GET_LIST(fn, group, key)                                                                              \
     QVariantList Settings::fn() const                                                                                  \
     {                                                                                                                  \

@@ -89,7 +89,10 @@ SettingsFlickable {
 
                     SettingsSpinBox {
                         from: 0
-                        to: 200
+                        // Matches the Scrolling.Gaps schema clamp
+                        // (ConfigDefaults::scrollInnerGapMax) — a larger value
+                        // would be silently truncated on save.
+                        to: 50
                         value: root.settingValue("InnerGap", appSettings.scrollInnerGap)
                         unitText: i18n("px")
                         onValueModified: function(newValue) {
@@ -110,7 +113,10 @@ SettingsFlickable {
 
                     SettingsSpinBox {
                         from: 0
-                        to: 200
+                        // Matches the Scrolling.Gaps schema clamp
+                        // (ConfigDefaults::scrollOuterGapMax) — a larger value
+                        // would be silently truncated on save.
+                        to: 50
                         value: root.settingValue("OuterGap", appSettings.scrollOuterGap)
                         unitText: i18n("px")
                         onValueModified: function(newValue) {

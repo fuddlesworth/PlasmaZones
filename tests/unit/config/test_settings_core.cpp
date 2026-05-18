@@ -482,6 +482,15 @@ private Q_SLOTS:
         QVERIFY(qFuzzyCompare(clamped.at(0).toDouble(), ConfigDefaults::scrollColumnWidthMin()));
         QVERIFY(qFuzzyCompare(clamped.at(1).toDouble(), 0.5));
         QVERIFY(qFuzzyCompare(clamped.at(2).toDouble(), ConfigDefaults::scrollColumnWidthMax()));
+
+        // Window-height presets run through an independent schema entry with
+        // their own scrollWindowHeightMin/Max bounds — clamp them too.
+        settings.setScrollPresetWindowHeights(QVariantList{0.0, 0.5, 9.0});
+        const QVariantList heights = settings.scrollPresetWindowHeights();
+        QCOMPARE(heights.size(), 3);
+        QVERIFY(qFuzzyCompare(heights.at(0).toDouble(), ConfigDefaults::scrollWindowHeightMin()));
+        QVERIFY(qFuzzyCompare(heights.at(1).toDouble(), 0.5));
+        QVERIFY(qFuzzyCompare(heights.at(2).toDouble(), ConfigDefaults::scrollWindowHeightMax()));
     }
 
     // =========================================================================

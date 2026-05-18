@@ -119,15 +119,20 @@ void TestScrollEngine::perScreenConfig()
     QVariantMap overrides;
     overrides.insert(QStringLiteral("DefaultColumnWidth"), 0.25);
     overrides.insert(QStringLiteral("InnerGap"), 20);
+    overrides.insert(QStringLiteral("OuterGap"), 12);
     overrides.insert(QStringLiteral("CenterFocusedColumn"), true);
     overrides.insert(QStringLiteral("PresetColumnWidths"), QVariantList{0.4, 0.8});
+    overrides.insert(QStringLiteral("PresetWindowHeights"), QVariantList{0.3, 0.6, 0.9});
     engine.applyPerScreenConfig(QStringLiteral("S1"), overrides);
 
     QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S1")), 0.25));
     QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S1")), 20);
+    QCOMPARE(engine.effectiveOuterGap(QStringLiteral("S1")), 12);
     QVERIFY(engine.effectiveViewportMode(QStringLiteral("S1")) == ScrollViewportMode::Centered);
     QCOMPARE(engine.effectivePresetColumnWidths(QStringLiteral("S1")).size(), 2);
     QVERIFY(qFuzzyCompare(engine.effectivePresetColumnWidths(QStringLiteral("S1")).at(1), 0.8));
+    QCOMPARE(engine.effectivePresetWindowHeights(QStringLiteral("S1")).size(), 3);
+    QVERIFY(qFuzzyCompare(engine.effectivePresetWindowHeights(QStringLiteral("S1")).at(2), 0.9));
 
     // A screen with no override still resolves to the globals.
     QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S2")), 0.5));
@@ -155,14 +160,21 @@ void TestScrollEngine::perScreenConfig()
     QVariantMap outOfRange;
     outOfRange.insert(QStringLiteral("DefaultColumnWidth"), 5.0); // above max
     outOfRange.insert(QStringLiteral("InnerGap"), -10); // below min
+    outOfRange.insert(QStringLiteral("OuterGap"), 9999); // above max
     outOfRange.insert(QStringLiteral("PresetColumnWidths"), QVariantList{0.0, 99.0});
+    outOfRange.insert(QStringLiteral("PresetWindowHeights"), QVariantList{-1.0, 0.5});
     engine.applyPerScreenConfig(QStringLiteral("S3"), outOfRange);
     QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S3")), 1.0));
     QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S3")), 0);
+    QCOMPARE(engine.effectiveOuterGap(QStringLiteral("S3")), 50); // clamped to kMaxStripGap
     const QVector<qreal> clampedPresets = engine.effectivePresetColumnWidths(QStringLiteral("S3"));
     QCOMPARE(clampedPresets.size(), 2);
     QVERIFY(qFuzzyCompare(clampedPresets.at(0), 0.1));
     QVERIFY(qFuzzyCompare(clampedPresets.at(1), 1.0));
+    const QVector<qreal> clampedHeights = engine.effectivePresetWindowHeights(QStringLiteral("S3"));
+    QCOMPARE(clampedHeights.size(), 2);
+    QVERIFY(qFuzzyCompare(clampedHeights.at(0), 0.1));
+    QVERIFY(qFuzzyCompare(clampedHeights.at(1), 0.5));
 }
 
 void TestScrollEngine::focusAndMoveNavigation()

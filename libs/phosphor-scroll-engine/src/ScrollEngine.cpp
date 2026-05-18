@@ -478,8 +478,13 @@ void ScrollEngine::cyclePresetColumnWidth(const NavigationContext& ctx)
         reportNav(false, QStringLiteral("width"), screenId);
         return;
     }
-    const int current = state->activeColumn()->presetWidthIndex();
-    const int next = (current + 1) % static_cast<int>(presets.size());
+    const int presetCount = static_cast<int>(presets.size());
+    // A stale index (the preset list shrank since it was set) or the detached
+    // -1 both normalise to -1, so the next press restarts the cycle at the
+    // first preset rather than wrapping from an out-of-range value.
+    const int rawIndex = state->activeColumn()->presetWidthIndex();
+    const int current = (rawIndex >= 0 && rawIndex < presetCount) ? rawIndex : -1;
+    const int next = (current + 1) % presetCount;
     if (next == current) {
         // Single-element preset list, already on it — nothing changes.
         reportNav(false, QStringLiteral("width"), screenId);
@@ -501,8 +506,13 @@ void ScrollEngine::cyclePresetWindowHeight(const NavigationContext& ctx)
         reportNav(false, QStringLiteral("height"), screenId);
         return;
     }
-    const int current = (tile->height.kind == WindowHeight::Kind::Preset) ? tile->height.presetIndex : -1;
-    const int next = (current + 1) % static_cast<int>(presets.size());
+    const int presetCount = static_cast<int>(presets.size());
+    // A stale preset index (the preset list shrank since it was set) or a
+    // non-preset height both normalise to -1, so the next press restarts the
+    // cycle at the first preset rather than wrapping from an out-of-range value.
+    const int rawIndex = (tile->height.kind == WindowHeight::Kind::Preset) ? tile->height.presetIndex : -1;
+    const int current = (rawIndex >= 0 && rawIndex < presetCount) ? rawIndex : -1;
+    const int next = (current + 1) % presetCount;
     if (next == current) {
         // Single-element preset list, already on it — nothing changes.
         reportNav(false, QStringLiteral("height"), screenId);
@@ -721,6 +731,11 @@ void ScrollEngine::loadState()
 {
     // Counterpart to saveState() — restoration runs through
     // deserializeEngineState() under daemon control.
+}
+
+bool ScrollEngine::hasPersistableState() const
+{
+    return !m_states.empty();
 }
 
 QJsonObject ScrollEngine::serializeEngineState() const

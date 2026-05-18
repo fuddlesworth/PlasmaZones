@@ -20,7 +20,6 @@
 
 #include <QFile>
 #include <QHash>
-#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -224,13 +223,13 @@ void Daemon::saveScrollState()
         return;
     }
     const QString path = ConfigDefaults::scrollStateFilePath();
-    const QJsonObject state = scroll->serializeEngineState();
-    if (state.value(QLatin1String("states")).toArray().isEmpty()) {
+    if (!scroll->hasPersistableState()) {
         // No strips to persist — drop any stale file so a later restart does
         // not restore an obsolete layout.
         QFile::remove(path);
         return;
     }
+    const QJsonObject state = scroll->serializeEngineState();
     // QSaveFile commits atomically (write to a temp file, then rename), so a
     // crash mid-write cannot leave a truncated scroll-session.json behind.
     QSaveFile file(path);

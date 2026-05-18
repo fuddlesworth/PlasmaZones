@@ -176,7 +176,8 @@ public:
 
     // ── Per-screen config overrides ─────────────────────────────────────
     /// Apply a per-screen override map (screen-only key, mirroring autotile's
-    /// applyPerScreenConfig). Recognised keys — unrecognised ones are ignored:
+    /// applyPerScreenConfig). Recognised keys (any other key is stored verbatim
+    /// but never consulted by the effective*() resolvers):
     ///   "InnerGap" / "OuterGap"            int, logical px
     ///   "DefaultColumnWidth"               qreal, fraction [0..1]
     ///   "CenterFocusedColumn"              bool (true → Centered viewport)
@@ -205,6 +206,11 @@ public:
     void loadState() override;
     QJsonObject serializeEngineState() const override;
     void deserializeEngineState(const QJsonObject& state) override;
+
+    /// True when the engine holds strip state worth persisting. Lets the
+    /// daemon decide whether to write or drop scroll-session.json without
+    /// re-parsing serializeEngineState()'s own JSON output.
+    bool hasPersistableState() const;
 
     /// Reconcile a freshly restored strip against the live window set.
     ///
