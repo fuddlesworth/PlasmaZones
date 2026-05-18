@@ -259,6 +259,18 @@ public:
     Q_PROPERTY(bool autotileDragInsertToggle READ autotileDragInsertToggle WRITE setAutotileDragInsertToggle NOTIFY
                    autotileDragInsertToggleChanged)
 
+    // Scroll Mode Settings (niri-style scrollable tiling)
+    Q_PROPERTY(int scrollInnerGap READ scrollInnerGap WRITE setScrollInnerGap NOTIFY scrollInnerGapChanged)
+    Q_PROPERTY(int scrollOuterGap READ scrollOuterGap WRITE setScrollOuterGap NOTIFY scrollOuterGapChanged)
+    Q_PROPERTY(double scrollDefaultColumnWidth READ scrollDefaultColumnWidth WRITE setScrollDefaultColumnWidth NOTIFY
+                   scrollDefaultColumnWidthChanged)
+    Q_PROPERTY(bool scrollCenterFocusedColumn READ scrollCenterFocusedColumn WRITE setScrollCenterFocusedColumn NOTIFY
+                   scrollCenterFocusedColumnChanged)
+    Q_PROPERTY(QVariantList scrollPresetColumnWidths READ scrollPresetColumnWidths WRITE setScrollPresetColumnWidths
+                   NOTIFY scrollPresetColumnWidthsChanged)
+    Q_PROPERTY(QVariantList scrollPresetWindowHeights READ scrollPresetWindowHeights WRITE setScrollPresetWindowHeights
+                   NOTIFY scrollPresetWindowHeightsChanged)
+
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
     Q_PROPERTY(int animationDuration READ animationDuration WRITE setAnimationDuration NOTIFY animationDurationChanged)
@@ -722,6 +734,13 @@ public:
     Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenIdOrName) const override;
 
+    // Per-screen scrolling config (override > global fallback)
+    Q_INVOKABLE QVariantMap getPerScreenScrollSettings(const QString& screenIdOrName) const override;
+    Q_INVOKABLE void setPerScreenScrollSetting(const QString& screenIdOrName, const QString& key,
+                                               const QVariant& value) override;
+    Q_INVOKABLE void clearPerScreenScrollSettings(const QString& screenIdOrName) override;
+    Q_INVOKABLE bool hasPerScreenScrollSettings(const QString& screenIdOrName) const override;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (ISettings interface)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -770,6 +789,20 @@ public:
     void setAutotileDragInsertTriggers(const QVariantList& triggers) override;
     bool autotileDragInsertToggle() const override;
     void setAutotileDragInsertToggle(bool enable) override;
+
+    // Scroll Mode Settings — PhosphorConfig::Store-backed.
+    int scrollInnerGap() const override;
+    void setScrollInnerGap(int gap) override;
+    int scrollOuterGap() const override;
+    void setScrollOuterGap(int gap) override;
+    double scrollDefaultColumnWidth() const override;
+    void setScrollDefaultColumnWidth(double fraction) override;
+    bool scrollCenterFocusedColumn() const override;
+    void setScrollCenterFocusedColumn(bool center) override;
+    QVariantList scrollPresetColumnWidths() const override;
+    void setScrollPresetColumnWidths(const QVariantList& fractions) override;
+    QVariantList scrollPresetWindowHeights() const override;
+    void setScrollPresetWindowHeights(const QVariantList& fractions) override;
 
     // Autotile Shortcuts — PhosphorConfig::Store-backed.
     QString autotileToggleShortcut() const;
@@ -1281,6 +1314,9 @@ private:
 
     // Per-screen snapping overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenSnappingSettings;
+
+    // Per-screen scrolling overrides (screenIdOrName -> settings map)
+    QHash<QString, QVariantMap> m_perScreenScrollSettings;
 
     // Autotiling Settings
     // Autotiling stored in m_store.

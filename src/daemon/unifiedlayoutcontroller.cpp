@@ -9,6 +9,7 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include <PhosphorLayoutApi/ILayoutSource.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 
@@ -275,6 +276,26 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
             return true;
         }
         qCWarning(lcDaemon) << "applyEntry: autotile engine not available for" << preview.id;
+        return false;
+    }
+
+    // Handle the synthetic scroll entry: assign the "scroll:" id to the
+    // current screen. Unlike autotile there is no engine call — the
+    // ScrollEngine needs no per-algorithm setup; the daemon's layoutAssigned
+    // handler derives per-screen scroll state from the assignment cascade.
+    if (PhosphorLayout::LayoutId::isScroll(preview.id)) {
+        if (m_layoutManager && !m_currentScreenName.isEmpty()) {
+            // Write to the current context (screen, desktop, activity) —
+            // most specific context wins in the assignment cascade.
+            m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity,
+                                              preview.id);
+            setCurrentLayoutId(preview.id);
+            qCInfo(lcDaemon) << "Applied scroll mode=" << preview.displayName << "screen=" << m_currentScreenName;
+            // No scroll-specific applied signal exists (cf. autotileApplied) —
+            // nothing to emit here.
+            return true;
+        }
+        qCWarning(lcDaemon) << "applyEntry: layout manager or screen unavailable for scroll entry" << preview.id;
         return false;
     }
 

@@ -7,6 +7,8 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 
 #include <QSet>
+#include <QVariantList>
+#include <QVariantMap>
 #include <QtTest>
 
 using namespace PhosphorScrollEngine;
@@ -39,6 +41,8 @@ class TestScrollEngine : public QObject
 
 private Q_SLOTS:
     void windowLifecycle();
+    void defaultColumnWidth();
+    void perScreenConfig();
     void focusAndMoveNavigation();
     void consumeAndExpel();
     void minimizeWindow();
@@ -74,6 +78,77 @@ void TestScrollEngine::windowLifecycle()
     engine.windowClosed(QStringLiteral("b"));
     QVERIFY(!engine.isWindowTracked(QStringLiteral("b")));
     QCOMPARE(state->columnCount(), 2);
+}
+
+void TestScrollEngine::defaultColumnWidth()
+{
+    ScrollEngine engine;
+
+    // Until a default is pushed, a freshly opened column uses niri's middle
+    // preset (one half).
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    const ScrollScreenState* state = scrollState(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QCOMPARE(state->columns().at(0).width().kind, ColumnWidth::Kind::Proportion);
+    QVERIFY(qFuzzyCompare(state->columns().at(0).width().value, 0.5));
+
+    // A pushed default applies to subsequently opened columns; the existing
+    // column keeps its width.
+    engine.setDefaultColumnWidth(0.4);
+    QVERIFY(qFuzzyCompare(engine.defaultColumnWidth(), 0.4));
+    engine.windowOpened(QStringLiteral("b"), QStringLiteral("S1"));
+    QCOMPARE(state->columnCount(), 2);
+    QVERIFY(qFuzzyCompare(state->columns().at(1).width().value, 0.4));
+    QVERIFY(qFuzzyCompare(state->columns().at(0).width().value, 0.5));
+}
+
+void TestScrollEngine::perScreenConfig()
+{
+    ScrollEngine engine;
+    engine.setDefaultColumnWidth(0.5);
+    engine.setInnerGap(8);
+    engine.setOuterGap(8);
+    engine.setPresetColumnWidths({1.0 / 3.0, 0.5, 2.0 / 3.0});
+
+    // No override → effective resolves to the global default.
+    QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S1")), 0.5));
+    QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S1")), 8);
+    QVERIFY(engine.effectiveViewportMode(QStringLiteral("S1")) == ScrollViewportMode::Fit);
+
+    // A per-screen override map shadows the globals for that screen only.
+    QVariantMap overrides;
+    overrides.insert(QStringLiteral("DefaultColumnWidth"), 0.25);
+    overrides.insert(QStringLiteral("InnerGap"), 20);
+    overrides.insert(QStringLiteral("CenterFocusedColumn"), true);
+    overrides.insert(QStringLiteral("PresetColumnWidths"), QVariantList{0.4, 0.8});
+    engine.applyPerScreenConfig(QStringLiteral("S1"), overrides);
+
+    QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S1")), 0.25));
+    QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S1")), 20);
+    QVERIFY(engine.effectiveViewportMode(QStringLiteral("S1")) == ScrollViewportMode::Centered);
+    QCOMPARE(engine.effectivePresetColumnWidths(QStringLiteral("S1")).size(), 2);
+    QVERIFY(qFuzzyCompare(engine.effectivePresetColumnWidths(QStringLiteral("S1")).at(1), 0.8));
+
+    // A screen with no override still resolves to the globals.
+    QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S2")), 0.5));
+    QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S2")), 8);
+
+    // A window opened on S1 takes that screen's overridden default width.
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    const ScrollScreenState* s1 = scrollState(engine, QStringLiteral("S1"));
+    QVERIFY(s1);
+    QVERIFY(qFuzzyCompare(s1->columns().at(0).width().value, 0.25));
+
+    // clearPerScreenConfig reverts the screen to the globals.
+    engine.clearPerScreenConfig(QStringLiteral("S1"));
+    QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S1")), 0.5));
+    QVERIFY(engine.effectiveViewportMode(QStringLiteral("S1")) == ScrollViewportMode::Fit);
+
+    // An empty override map clears the screen too (apply-empty == clear).
+    engine.applyPerScreenConfig(QStringLiteral("S1"), overrides);
+    engine.applyPerScreenConfig(QStringLiteral("S1"), QVariantMap{});
+    QVERIFY(engine.perScreenOverrides(QStringLiteral("S1")).isEmpty());
+    QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S1")), 8);
 }
 
 void TestScrollEngine::focusAndMoveNavigation()

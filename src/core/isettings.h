@@ -163,6 +163,22 @@ public:
     virtual bool autotileDragInsertToggle() const = 0;
     virtual void setAutotileDragInsertToggle(bool enable) = 0;
 
+    // Scroll-mode (niri-style scrollable tiling) settings. The daemon pushes
+    // these to ScrollEngine / the geometry resolver; the standalone settings
+    // app and KCM edit them. Preset lists are QVariantList of doubles.
+    virtual int scrollInnerGap() const = 0;
+    virtual void setScrollInnerGap(int gap) = 0;
+    virtual int scrollOuterGap() const = 0;
+    virtual void setScrollOuterGap(int gap) = 0;
+    virtual double scrollDefaultColumnWidth() const = 0;
+    virtual void setScrollDefaultColumnWidth(double fraction) = 0;
+    virtual bool scrollCenterFocusedColumn() const = 0;
+    virtual void setScrollCenterFocusedColumn(bool center) = 0;
+    virtual QVariantList scrollPresetColumnWidths() const = 0;
+    virtual void setScrollPresetColumnWidths(const QVariantList& fractions) = 0;
+    virtual QVariantList scrollPresetWindowHeights() const = 0;
+    virtual void setScrollPresetWindowHeights(const QVariantList& fractions) = 0;
+
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
@@ -222,6 +238,22 @@ public:
     {
     }
     virtual bool hasPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const
+    {
+        return false;
+    }
+
+    virtual QVariantMap getPerScreenScrollSettings(const QString& /*screenIdOrName*/) const
+    {
+        return {};
+    }
+    virtual void setPerScreenScrollSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
+                                           const QVariant& /*value*/)
+    {
+    }
+    virtual void clearPerScreenScrollSettings(const QString& /*screenIdOrName*/)
+    {
+    }
+    virtual bool hasPerScreenScrollSettings(const QString& /*screenIdOrName*/) const
     {
         return false;
     }
@@ -322,6 +354,7 @@ Q_SIGNALS:
     void perScreenZoneSelectorSettingsChanged();
     void perScreenAutotileSettingsChanged();
     void perScreenSnappingSettingsChanged();
+    void perScreenScrollSettingsChanged();
     // Rendering
     void renderingBackendChanged();
     // Shader effects
@@ -468,6 +501,14 @@ Q_SIGNALS:
     void autotileDecMasterCountShortcutChanged();
     void autotileIncMasterRatioShortcutChanged();
     void autotileDecMasterRatioShortcutChanged();
+
+    // Scroll-mode settings
+    void scrollInnerGapChanged();
+    void scrollOuterGapChanged();
+    void scrollDefaultColumnWidthChanged();
+    void scrollCenterFocusedColumnChanged();
+    void scrollPresetColumnWidthsChanged();
+    void scrollPresetWindowHeightsChanged();
 };
 
 } // namespace PlasmaZones

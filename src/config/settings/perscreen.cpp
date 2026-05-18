@@ -9,6 +9,8 @@
 #include "../../core/utils.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
+#include <QJsonArray>
+
 namespace PlasmaZones {
 
 namespace {
@@ -239,6 +241,60 @@ QVariant readPerScreenZoneSelectorEntry(PhosphorConfig::IGroup& group, const QSt
     return QVariant(group.readInt(key, 0));
 }
 
+const QLatin1String kPerScreenScrollKeys[] = {
+    QLatin1String(PerScreenScrollKey::InnerGap),           QLatin1String(PerScreenScrollKey::OuterGap),
+    QLatin1String(PerScreenScrollKey::DefaultColumnWidth), QLatin1String(PerScreenScrollKey::CenterFocusedColumn),
+    QLatin1String(PerScreenScrollKey::PresetColumnWidths), QLatin1String(PerScreenScrollKey::PresetWindowHeights),
+};
+
+/// Clamp every entry of a fraction list into the scroll column-width range,
+/// dropping non-numeric junk. Mirrors settingsschema.cpp's clampFractionList so
+/// a per-screen preset override is range-checked exactly like the global list.
+QVariantList clampScrollFractionList(const QVariant& value)
+{
+    QVariantList out;
+    const QVariantList raw = value.toList();
+    for (const QVariant& entry : raw) {
+        bool ok = false;
+        const double d = entry.toDouble(&ok);
+        if (ok) {
+            out.append(qBound(ConfigDefaults::scrollColumnWidthMin(), d, ConfigDefaults::scrollColumnWidthMax()));
+        }
+    }
+    return out;
+}
+
+QVariant validatePerScreenScrollValue(const QString& key, const QVariant& value)
+{
+    namespace K = PerScreenScrollKey;
+    if (key == QLatin1String(K::InnerGap))
+        return QVariant(
+            qBound(ConfigDefaults::scrollInnerGapMin(), value.toInt(), ConfigDefaults::scrollInnerGapMax()));
+    if (key == QLatin1String(K::OuterGap))
+        return QVariant(
+            qBound(ConfigDefaults::scrollOuterGapMin(), value.toInt(), ConfigDefaults::scrollOuterGapMax()));
+    if (key == QLatin1String(K::DefaultColumnWidth))
+        return QVariant(
+            qBound(ConfigDefaults::scrollColumnWidthMin(), value.toDouble(), ConfigDefaults::scrollColumnWidthMax()));
+    if (key == QLatin1String(K::CenterFocusedColumn))
+        return QVariant(value.toBool());
+    if (key == QLatin1String(K::PresetColumnWidths) || key == QLatin1String(K::PresetWindowHeights))
+        return QVariant(clampScrollFractionList(value));
+    return QVariant();
+}
+
+QVariant readPerScreenScrollEntry(PhosphorConfig::IGroup& group, const QString& key)
+{
+    namespace K = PerScreenScrollKey;
+    if (key == QLatin1String(K::DefaultColumnWidth))
+        return QVariant(group.readDouble(key, ConfigDefaults::scrollDefaultColumnWidth()));
+    if (key == QLatin1String(K::CenterFocusedColumn))
+        return QVariant(group.readBool(key, ConfigDefaults::scrollCenterFocusedColumn()));
+    if (key == QLatin1String(K::PresetColumnWidths) || key == QLatin1String(K::PresetWindowHeights))
+        return QVariant(group.readJson(key).toArray().toVariantList());
+    return QVariant(group.readInt(key, 0));
+}
+
 void savePerScreenOverrides(PhosphorConfig::IBackend* backend, const QString& prefix,
                             const QHash<QString, QVariantMap>& source)
 {
@@ -265,6 +321,11 @@ void savePerScreenOverrides(PhosphorConfig::IBackend* backend, const QString& pr
             case QMetaType::Double:
             case QMetaType::Float:
                 screenGroup->writeDouble(oit.key(), val.toDouble());
+                break;
+            case QMetaType::QVariantList:
+                // List-valued override (scroll preset lists) — stored as a
+                // native JSON array by JsonBackend, compact-JSON string elsewhere.
+                screenGroup->writeJson(oit.key(), QJsonArray::fromVariantList(val.toList()));
                 break;
             default:
                 screenGroup->writeString(oit.key(), val.toString());
@@ -374,6 +435,9 @@ void Settings::loadPerScreenOverrides(PhosphorConfig::IBackend* backend)
     loadPerScreenGroup(backend, allGroups, ConfigDefaults::snappingScreenGroupPrefix(), kPerScreenSnappingKeys,
                        std::size(kPerScreenSnappingKeys), readPerScreenSnappingEntry, validatePerScreenSnappingValue,
                        m_perScreenSnappingSettings);
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::scrollingScreenGroupPrefix(), kPerScreenScrollKeys,
+                       std::size(kPerScreenScrollKeys), readPerScreenScrollEntry, validatePerScreenScrollValue,
+                       m_perScreenScrollSettings);
 }
 
 /**
@@ -414,6 +478,7 @@ void Settings::saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend)
     savePerScreenOverrides(backend, ConfigDefaults::autotileScreenGroupPrefix(),
                            expandAutotileKeys(m_perScreenAutotileSettings));
     savePerScreenOverrides(backend, ConfigDefaults::snappingScreenGroupPrefix(), m_perScreenSnappingSettings);
+    savePerScreenOverrides(backend, ConfigDefaults::scrollingScreenGroupPrefix(), m_perScreenScrollSettings);
 }
 
 template<typename T>
@@ -626,6 +691,52 @@ void Settings::clearPerScreenSnappingSettings(const QString& screenIdOrName)
 bool Settings::hasPerScreenSnappingSettings(const QString& screenIdOrName) const
 {
     return findPerScreenEntry(m_perScreenSnappingSettings, screenIdOrName) != m_perScreenSnappingSettings.constEnd();
+}
+
+// ── Per-Screen Scrolling Config ──────────────────────────────────────────────
+
+QVariantMap Settings::getPerScreenScrollSettings(const QString& screenIdOrName) const
+{
+    auto it = findPerScreenEntry(m_perScreenScrollSettings, screenIdOrName);
+    return (it != m_perScreenScrollSettings.constEnd()) ? it.value() : QVariantMap();
+}
+
+void Settings::setPerScreenScrollSetting(const QString& screenIdOrName, const QString& key, const QVariant& value)
+{
+    if (screenIdOrName.isEmpty() || key.isEmpty()) {
+        return;
+    }
+
+    QVariant validated = validatePerScreenScrollValue(key, value);
+    if (!validated.isValid()) {
+        qCWarning(lcConfig) << "Rejected per-screen scrolling setting:" << key + QLatin1String("=") << value;
+        return;
+    }
+
+    // Resolve to EDID-based screen ID so the key matches daemon lookups.
+    const QString resolved = Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)
+        ? Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName)
+        : screenIdOrName;
+    QVariantMap& screenSettings = m_perScreenScrollSettings[resolved];
+    if (screenSettings.value(key) == validated) {
+        return;
+    }
+    screenSettings[key] = validated;
+    Q_EMIT perScreenScrollSettingsChanged();
+    Q_EMIT settingsChanged();
+}
+
+void Settings::clearPerScreenScrollSettings(const QString& screenIdOrName)
+{
+    if (removePerScreenEntry(m_perScreenScrollSettings, screenIdOrName)) {
+        Q_EMIT perScreenScrollSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenScrollSettings(const QString& screenIdOrName) const
+{
+    return findPerScreenEntry(m_perScreenScrollSettings, screenIdOrName) != m_perScreenScrollSettings.constEnd();
 }
 
 } // namespace PlasmaZones

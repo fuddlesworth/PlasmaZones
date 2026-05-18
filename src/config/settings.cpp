@@ -231,6 +231,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::generalGroup(), // "General"
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
+        ConfigDefaults::scrollingGroup(), // "Scrolling" — covers Scrolling.Layout + Scrolling.Gaps
         ConfigDefaults::displayGroup(), // "Display" — mode-neutral, holds per-mode disable lists (v3+)
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
@@ -2397,6 +2398,61 @@ PZ_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivati
 PZ_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey,
                   autotileDragInsertToggleChanged)
 
+// ── Scroll Mode Settings (PhosphorConfig::Store-backed) ─────────────────────
+// Scroll.Gaps — reuses innerKey / outerKey; the group context disambiguates.
+PZ_STORE_GET(int, scrollInnerGap, scrollingGapsGroup, innerKey, int)
+PZ_STORE_SET_INT(setScrollInnerGap, scrollingGapsGroup, innerKey, scrollInnerGapChanged)
+PZ_STORE_GET(int, scrollOuterGap, scrollingGapsGroup, outerKey, int)
+PZ_STORE_SET_INT(setScrollOuterGap, scrollingGapsGroup, outerKey, scrollOuterGapChanged)
+// Scroll.Layout
+PZ_STORE_GET(qreal, scrollDefaultColumnWidth, scrollingLayoutGroup, defaultColumnWidthKey, double)
+PZ_STORE_SET_DOUBLE(setScrollDefaultColumnWidth, scrollingLayoutGroup, defaultColumnWidthKey,
+                    scrollDefaultColumnWidthChanged)
+PZ_STORE_GET(bool, scrollCenterFocusedColumn, scrollingLayoutGroup, centerFocusedColumnKey, bool)
+PZ_STORE_SET_BOOL(setScrollCenterFocusedColumn, scrollingLayoutGroup, centerFocusedColumnKey,
+                  scrollCenterFocusedColumnChanged)
+
+QVariantList Settings::scrollPresetColumnWidths() const
+{
+    return m_store->readVariant(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetColumnWidthsKey())
+        .toList();
+}
+void Settings::setScrollPresetColumnWidths(const QVariantList& fractions)
+{
+    // Pre/post round-trip compare — the schema validator may clamp / drop
+    // out-of-range fractions, so two in-memory-distinct lists can persist
+    // identically; emitting then would dirty the page on a no-op.
+    const QVariantList before =
+        m_store->readVariant(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetColumnWidthsKey()).toList();
+    m_store->write(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetColumnWidthsKey(), fractions);
+    const QVariantList after =
+        m_store->readVariant(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetColumnWidthsKey()).toList();
+    if (before == after) {
+        return;
+    }
+    Q_EMIT scrollPresetColumnWidthsChanged();
+    Q_EMIT settingsChanged();
+}
+
+QVariantList Settings::scrollPresetWindowHeights() const
+{
+    return m_store->readVariant(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetWindowHeightsKey())
+        .toList();
+}
+void Settings::setScrollPresetWindowHeights(const QVariantList& fractions)
+{
+    const QVariantList before =
+        m_store->readVariant(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetWindowHeightsKey()).toList();
+    m_store->write(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetWindowHeightsKey(), fractions);
+    const QVariantList after =
+        m_store->readVariant(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetWindowHeightsKey()).toList();
+    if (before == after) {
+        return;
+    }
+    Q_EMIT scrollPresetWindowHeightsChanged();
+    Q_EMIT settingsChanged();
+}
+
 // Tiling.Appearance
 PZ_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)
 PZ_STORE_SET_COLOR(setAutotileBorderColor, tilingAppearanceColorsGroup, activeKey, autotileBorderColorChanged)
@@ -2440,6 +2496,9 @@ void Settings::reset()
     m_configBackend->deleteGroup(ConfigDefaults::tilingQuickLayoutSlotsGroup());
     if (!QFile::remove(ConfigDefaults::sessionFilePath()) && QFile::exists(ConfigDefaults::sessionFilePath())) {
         qCWarning(lcConfig) << "Failed to remove session file:" << ConfigDefaults::sessionFilePath();
+    }
+    if (!QFile::remove(ConfigDefaults::scrollStateFilePath()) && QFile::exists(ConfigDefaults::scrollStateFilePath())) {
+        qCWarning(lcConfig) << "Failed to remove scroll state file:" << ConfigDefaults::scrollStateFilePath();
     }
     deletePerScreenGroups(m_configBackend);
     m_configBackend->sync();

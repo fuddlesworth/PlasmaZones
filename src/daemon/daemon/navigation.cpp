@@ -256,12 +256,15 @@ void Daemon::handleShrinkColumnWidth()
 
 void Daemon::handleToggleCenterFocusedColumn()
 {
-    // Toggle the viewport between fit and centered. Scroll-mode only; skipped
-    // on snap/autotile screens (see handleConsume).
-    NavigationContext ctx;
-    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx,
-                                               "ToggleCenterFocusedColumn")) {
-        nav->toggleCenterFocusedColumn(ctx);
+    // Scroll mode: toggle the persisted viewport-centering setting. Phase 5
+    // makes the centering mode a setting, so the shortcut flips the setting —
+    // the change signal re-pushes it to ScrollEngine and re-resolves every
+    // scroll strip via refreshScrollConfigFromSettings(). Flipped
+    // unconditionally, like a settings-UI edit: the viewport mode is
+    // engine-global, so it must not be gated on the focused screen being a
+    // scroll screen.
+    if (m_settings) {
+        m_settings->setScrollCenterFocusedColumn(!m_settings->scrollCenterFocusedColumn());
     }
 }
 

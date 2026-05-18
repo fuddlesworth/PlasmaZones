@@ -14,6 +14,19 @@ using PhosphorEngine::IPlacementState;
 using PhosphorEngine::NavigationContext;
 using PhosphorEngine::TilingStateKey;
 
+namespace {
+/// Coerce a QVariantList of numbers into the engine's typed fraction vector.
+QVector<qreal> toFractionVector(const QVariantList& list)
+{
+    QVector<qreal> out;
+    out.reserve(list.size());
+    for (const QVariant& v : list) {
+        out.append(v.toReal());
+    }
+    return out;
+}
+} // namespace
+
 ScrollEngine::ScrollEngine(QObject* parent)
     : PhosphorEngine::PlacementEngineBase(parent)
 {
@@ -192,7 +205,8 @@ void ScrollEngine::windowOpened(const QString& windowId, const QString& screenId
         return;
     }
     const TilingStateKey key = keyForScreen(screenId);
-    stateForKey(key, /*create=*/true)->addColumnForWindow(windowId);
+    stateForKey(key, /*create=*/true)
+        ->addColumnForWindow(windowId, ColumnWidth::proportion(effectiveDefaultColumnWidth(screenId)));
     m_windowToKey.insert(windowId, key);
     m_activeScreen = screenId;
     emitChanged(screenId);
@@ -272,7 +286,8 @@ void ScrollEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
         state->markFloating(windowId);
     } else {
         state->clearFloating(windowId);
-        state->addColumnForWindow(windowId); // re-enter the strip
+        // Re-enter the strip as a new column at the configured default width.
+        state->addColumnForWindow(windowId, ColumnWidth::proportion(effectiveDefaultColumnWidth(it.value().screenId)));
     }
     Q_EMIT windowFloatingChanged(windowId, shouldFloat, it.value().screenId);
     emitChanged(it.value().screenId);
@@ -461,18 +476,19 @@ void ScrollEngine::cyclePresetColumnWidth(const NavigationContext& ctx)
 {
     QString screenId;
     ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    if (!state || !state->activeColumn() || m_presetColumnWidths.isEmpty()) {
+    const QVector<qreal> presets = effectivePresetColumnWidths(screenId);
+    if (!state || !state->activeColumn() || presets.isEmpty()) {
         reportNav(false, QStringLiteral("width"), screenId);
         return;
     }
     const int current = state->activeColumn()->presetWidthIndex();
-    const int next = (current + 1) % static_cast<int>(m_presetColumnWidths.size());
+    const int next = (current + 1) % static_cast<int>(presets.size());
     if (next == current) {
         // Single-element preset list, already on it — nothing changes.
         reportNav(false, QStringLiteral("width"), screenId);
         return;
     }
-    state->setActiveColumnWidth(ColumnWidth::proportion(m_presetColumnWidths.at(next)), next);
+    state->setActiveColumnWidth(ColumnWidth::proportion(presets.at(next)), next);
     emitChanged(screenId);
     reportNav(true, QStringLiteral("width"), screenId);
 }
@@ -483,12 +499,13 @@ void ScrollEngine::cyclePresetWindowHeight(const NavigationContext& ctx)
     ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
     const Column* column = state ? state->activeColumn() : nullptr;
     const Tile* tile = column ? column->activeTile() : nullptr;
-    if (!tile || m_presetWindowHeights.isEmpty()) {
+    const QVector<qreal> presets = effectivePresetWindowHeights(screenId);
+    if (!tile || presets.isEmpty()) {
         reportNav(false, QStringLiteral("height"), screenId);
         return;
     }
     const int current = (tile->height.kind == WindowHeight::Kind::Preset) ? tile->height.presetIndex : -1;
-    const int next = (current + 1) % static_cast<int>(m_presetWindowHeights.size());
+    const int next = (current + 1) % static_cast<int>(presets.size());
     if (next == current) {
         // Single-element preset list, already on it — nothing changes.
         reportNav(false, QStringLiteral("height"), screenId);
@@ -609,6 +626,82 @@ void ScrollEngine::setPresetColumnWidths(const QVector<qreal>& fractions)
 void ScrollEngine::setPresetWindowHeights(const QVector<qreal>& fractions)
 {
     m_presetWindowHeights = fractions;
+}
+
+void ScrollEngine::setDefaultColumnWidth(qreal fraction)
+{
+    m_defaultColumnWidth = fraction;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Per-screen config (override → global default)
+// ─────────────────────────────────────────────────────────────────────────
+
+void ScrollEngine::applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
+{
+    if (screenId.isEmpty()) {
+        return;
+    }
+    if (overrides.isEmpty()) {
+        m_perScreenConfig.remove(screenId);
+    } else {
+        m_perScreenConfig.insert(screenId, overrides);
+    }
+}
+
+void ScrollEngine::clearPerScreenConfig(const QString& screenId)
+{
+    m_perScreenConfig.remove(screenId);
+}
+
+QVariantMap ScrollEngine::perScreenOverrides(const QString& screenId) const
+{
+    return m_perScreenConfig.value(screenId);
+}
+
+QVariant ScrollEngine::perScreenValue(const QString& screenId, QLatin1String key) const
+{
+    const auto it = m_perScreenConfig.constFind(screenId);
+    return it == m_perScreenConfig.constEnd() ? QVariant() : it->value(key);
+}
+
+QVector<qreal> ScrollEngine::effectivePresetColumnWidths(const QString& screenId) const
+{
+    const QVariant v = perScreenValue(screenId, QLatin1String("PresetColumnWidths"));
+    return v.isValid() ? toFractionVector(v.toList()) : m_presetColumnWidths;
+}
+
+QVector<qreal> ScrollEngine::effectivePresetWindowHeights(const QString& screenId) const
+{
+    const QVariant v = perScreenValue(screenId, QLatin1String("PresetWindowHeights"));
+    return v.isValid() ? toFractionVector(v.toList()) : m_presetWindowHeights;
+}
+
+qreal ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const
+{
+    const QVariant v = perScreenValue(screenId, QLatin1String("DefaultColumnWidth"));
+    return v.isValid() ? v.toReal() : m_defaultColumnWidth;
+}
+
+ScrollViewportMode ScrollEngine::effectiveViewportMode(const QString& screenId) const
+{
+    const QVariant v = perScreenValue(screenId, QLatin1String("CenterFocusedColumn"));
+    if (v.isValid()) {
+        return v.toBool() ? ScrollViewportMode::Centered : ScrollViewportMode::Fit;
+    }
+    return m_viewportMode;
+}
+
+int ScrollEngine::effectiveInnerGap(const QString& screenId) const
+{
+    const QVariant v = perScreenValue(screenId, QLatin1String("InnerGap"));
+    return v.isValid() ? v.toInt() : m_innerGap;
+}
+
+int ScrollEngine::effectiveOuterGap(const QString& screenId) const
+{
+    const QVariant v = perScreenValue(screenId, QLatin1String("OuterGap"));
+    return v.isValid() ? v.toInt() : m_outerGap;
 }
 
 // ─────────────────────────────────────────────────────────────────────────

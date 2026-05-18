@@ -72,9 +72,11 @@ public:
 
     // ── Window placement ────────────────────────────────────────────────
     /// Open @p windowId as a new column immediately right of the focused
-    /// column, and focus it — niri's default new-window behaviour. No-op if
-    /// the window is already managed.
-    void addColumnForWindow(const QString& windowId);
+    /// column, and focus it — niri's default new-window behaviour. The new
+    /// column is created with width intent @p width (the daemon passes the
+    /// configured default-column-width setting). No-op if the window is
+    /// already managed.
+    void addColumnForWindow(const QString& windowId, const ColumnWidth& width = ColumnWidth::proportion(0.5));
     /// Add @p windowId as a new tile in the focused column, and focus it.
     /// Falls back to addColumnForWindow when the strip is empty.
     void addWindowToActiveColumn(const QString& windowId);

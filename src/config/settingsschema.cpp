@@ -35,6 +35,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendActivationSchema(s);
     appendBehaviorSchema(s);
     appendAutotilingSchema(s);
+    appendScrollingSchema(s);
 
     return s;
 }
@@ -55,6 +56,25 @@ auto clampDouble(double minVal, double maxVal)
 {
     return [minVal, maxVal](const QVariant& v) -> QVariant {
         return qBound(minVal, v.toDouble(), maxVal);
+    };
+}
+
+/// Canonicalize a fraction list: coerce each entry to a double clamped into
+/// [minVal, maxVal], dropping non-numeric entries. Used by the scroll-mode
+/// preset width / height lists — each entry is a fraction of the working area.
+auto clampFractionList(double minVal, double maxVal)
+{
+    return [minVal, maxVal](const QVariant& v) -> QVariant {
+        QVariantList out;
+        const QVariantList raw = v.toList();
+        for (const QVariant& entry : raw) {
+            bool ok = false;
+            const double d = entry.toDouble(&ok);
+            if (ok) {
+                out.append(qBound(minVal, d, maxVal));
+            }
+        }
+        return QVariant(out);
     };
 }
 
@@ -842,6 +862,47 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          {},
          clampInt(CD::autotileOuterGapRightMin(), CD::autotileOuterGapRightMax())},
         {CD::smartGapsKey(), CD::autotileSmartGaps(), QMetaType::Bool},
+    };
+}
+
+// ─── Scrolling mode (niri-style scrollable tiling) ──────────────────────────
+// Scrolling.Gaps reuses innerKey / outerKey (the group disambiguates).
+// Scrolling.Layout holds the default new-column width, the viewport centering
+// toggle, and the two cycle-preset lists — QVariantLists of fractions of the
+// working area.
+
+void appendScrollingSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::scrollingGapsGroup()] = {
+        {CD::innerKey(),
+         CD::scrollInnerGap(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollInnerGapMin(), CD::scrollInnerGapMax())},
+        {CD::outerKey(),
+         CD::scrollOuterGap(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollOuterGapMin(), CD::scrollOuterGapMax())},
+    };
+    schema.groups[CD::scrollingLayoutGroup()] = {
+        {CD::defaultColumnWidthKey(),
+         CD::scrollDefaultColumnWidth(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::scrollColumnWidthMin(), CD::scrollColumnWidthMax())},
+        {CD::centerFocusedColumnKey(), CD::scrollCenterFocusedColumn(), QMetaType::Bool},
+        {CD::presetColumnWidthsKey(),
+         CD::scrollPresetColumnWidths(),
+         QMetaType::QVariantList,
+         {},
+         clampFractionList(CD::scrollColumnWidthMin(), CD::scrollColumnWidthMax())},
+        {CD::presetWindowHeightsKey(),
+         CD::scrollPresetWindowHeights(),
+         QMetaType::QVariantList,
+         {},
+         clampFractionList(CD::scrollColumnWidthMin(), CD::scrollColumnWidthMax())},
     };
 }
 

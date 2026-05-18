@@ -46,6 +46,7 @@ public:
     PZ_CONFIG_GROUP(generalGroup, "General")
     PZ_CONFIG_GROUP(snappingGroup, "Snapping")
     PZ_CONFIG_GROUP(tilingGroup, "Tiling")
+    PZ_CONFIG_GROUP(scrollingGroup, "Scrolling")
     PZ_CONFIG_GROUP(exclusionsGroup, "Exclusions")
     PZ_CONFIG_GROUP(performanceGroup, "Performance")
     PZ_CONFIG_GROUP(renderingGroup, "Rendering")
@@ -88,6 +89,10 @@ public:
     PZ_CONFIG_GROUP(tilingAppearanceDecorationsGroup, "Tiling.Appearance.Decorations")
     PZ_CONFIG_GROUP(tilingAppearanceBordersGroup, "Tiling.Appearance.Borders")
     PZ_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
+
+    // Scrolling sub-groups
+    PZ_CONFIG_GROUP(scrollingLayoutGroup, "Scrolling.Layout")
+    PZ_CONFIG_GROUP(scrollingGapsGroup, "Scrolling.Gaps")
 
     // Parent groups (for purge enumeration — covers all sub-groups)
     PZ_CONFIG_GROUP(shortcutsGroup, "Shortcuts")
@@ -356,6 +361,17 @@ public:
     PZ_CONFIG_KEY(smartGapsKey, "SmartGaps")
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.Layout
+    //
+    // Scrolling.Gaps reuses innerKey / outerKey — the group context disambiguates.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    PZ_CONFIG_KEY(defaultColumnWidthKey, "DefaultColumnWidth")
+    PZ_CONFIG_KEY(centerFocusedColumnKey, "CenterFocusedColumn")
+    PZ_CONFIG_KEY(presetColumnWidthsKey, "PresetColumnWidths")
+    PZ_CONFIG_KEY(presetWindowHeightsKey, "PresetWindowHeights")
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Exclusions
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -548,6 +564,7 @@ public:
     PZ_CONFIG_GROUP(zoneSelectorGroupPrefix, "ZoneSelector:")
     PZ_CONFIG_GROUP(autotileScreenGroupPrefix, "AutotileScreen:")
     PZ_CONFIG_GROUP(snappingScreenGroupPrefix, "SnappingScreen:")
+    PZ_CONFIG_GROUP(scrollingScreenGroupPrefix, "ScrollingScreen:")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Legacy v1 key accessors — used ONLY by migration code.

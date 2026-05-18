@@ -406,6 +406,41 @@ private:
     void onScrollPlacementChanged(const QString& screenId);
 
     /**
+     * @brief Push scroll-mode settings to ScrollEngine and re-resolve every
+     *        active scroll screen.
+     *
+     * Pushes the preset width/height lists, the default-column-width and the
+     * viewport-centering mode from Settings into ScrollEngine, then re-resolves
+     * each active scroll strip so gap / preset / centering changes take effect
+     * immediately. Invoked once at startup and on any scroll settings change.
+     */
+    void refreshScrollConfigFromSettings();
+
+    /**
+     * @brief Push each active scroll screen's per-screen override map into
+     *        ScrollEngine.
+     *
+     * Mirrors updateAutotileScreens()' per-screen autotile push: reads
+     * Settings::getPerScreenScrollSettings() for every active scroll screen
+     * and hands it to ScrollEngine::applyPerScreenConfig (or clears it). The
+     * engine's effective*() accessors then resolve override → global default.
+     */
+    void applyPerScreenScrollOverrides();
+
+    /**
+     * @brief Persist / restore the scroll-mode strip state across a restart.
+     *
+     * ScrollEngine is geometry-agnostic and daemon-orchestrated, so the daemon
+     * owns its disk persistence: saveScrollState() writes serializeEngineState()
+     * to scroll-session.json on shutdown; loadScrollState() feeds it back
+     * through deserializeEngineState() at startup, before the effect re-reports
+     * windows (a still-existing window's windowOpened then no-ops, keeping its
+     * restored column).
+     */
+    void saveScrollState();
+    void loadScrollState();
+
+    /**
      * @brief Respond to a Phosphor::Screens::ScreenManager VS cache change for a physical screen
      *
      * Wired to Phosphor::Screens::ScreenManager::virtualScreensChanged. Performs the post-change

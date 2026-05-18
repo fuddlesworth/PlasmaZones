@@ -640,6 +640,14 @@ public:
     // and PhosphorZones::LayoutRegistry have independent ownership of their files.
     PLASMAZONES_EXPORT static QString assignmentsFilePath();
 
+    // Returns the absolute path to scroll-session.json — the persisted
+    // scroll-mode strip state (columns, widths, heights, focus, scroll offset).
+    // Ephemeral per-session state owned by the daemon; kept in its own file so
+    // a scroll relayout never contends with user-preference or window-tracking
+    // saves. Restored on a daemon restart (window IDs are stable while KWin
+    // keeps running); stale after a full compositor restart.
+    PLASMAZONES_EXPORT static QString scrollStateFilePath();
+
     // Returns the absolute path to the legacy plasmazonesrc file (INI format).
     // Used only by the one-time migration module.
     PLASMAZONES_EXPORT static QString legacyConfigFilePath();
@@ -1055,6 +1063,74 @@ public:
     static QStringList lockedScreens()
     {
         return {};
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling Mode Settings
+    //
+    // Global defaults for the niri-style scrollable-tiling engine; per-screen
+    // overrides layer on top (see PerScreenScrollKey / ScrollingScreen: groups).
+    // The daemon pushes these to ScrollEngine / the geometry resolver on startup
+    // and whenever they change; ScrollEngine's own constructor defaults are a
+    // standalone fallback that intentionally mirror the values below.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static constexpr int scrollInnerGap()
+    {
+        return 8;
+    }
+    static constexpr int scrollInnerGapMin()
+    {
+        return PhosphorTiles::AutotileDefaults::MinGap;
+    }
+    static constexpr int scrollInnerGapMax()
+    {
+        return PhosphorTiles::AutotileDefaults::MaxGap;
+    }
+    static constexpr int scrollOuterGap()
+    {
+        return 8;
+    }
+    static constexpr int scrollOuterGapMin()
+    {
+        return PhosphorTiles::AutotileDefaults::MinGap;
+    }
+    static constexpr int scrollOuterGapMax()
+    {
+        return PhosphorTiles::AutotileDefaults::MaxGap;
+    }
+    /// Width of a freshly-opened column as a fraction [0..1] of the working
+    /// area. niri's middle preset (one half).
+    static constexpr double scrollDefaultColumnWidth()
+    {
+        return 0.5;
+    }
+    static constexpr double scrollColumnWidthMin()
+    {
+        return 0.1;
+    }
+    static constexpr double scrollColumnWidthMax()
+    {
+        return 1.0;
+    }
+    /// When true the viewport keeps the focused column centered; when false it
+    /// scrolls the minimum amount to keep the column on-screen (niri "fit").
+    static constexpr bool scrollCenterFocusedColumn()
+    {
+        return false;
+    }
+    /// Column-width presets the cycle-width shortcut steps through — fractions
+    /// [0..1] of the working area. niri defaults: one third, one half, two
+    /// thirds. Persisted as a QVariantList of doubles.
+    static QVariantList scrollPresetColumnWidths()
+    {
+        return {1.0 / 3.0, 0.5, 2.0 / 3.0};
+    }
+    /// Window-height presets the cycle-height shortcut steps through —
+    /// fractions [0..1] of the column content height.
+    static QVariantList scrollPresetWindowHeights()
+    {
+        return {1.0 / 3.0, 0.5, 2.0 / 3.0};
     }
 
     // ── Virtual Screen Limits ──────────────────────────────────────────

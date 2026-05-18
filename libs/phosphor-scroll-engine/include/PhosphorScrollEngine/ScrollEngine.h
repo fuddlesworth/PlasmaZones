@@ -16,6 +16,8 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
+#include <QVariantMap>
 #include <QVector>
 
 #include <cstddef>
@@ -132,6 +134,16 @@ public:
         return m_presetWindowHeights;
     }
 
+    // ── Default column width ────────────────────────────────────────────
+    /// Width a freshly-opened column is created with — a fraction [0..1] of
+    /// the working area. Pushed from settings by the daemon; defaults to
+    /// niri's middle preset (one half) until then.
+    void setDefaultColumnWidth(qreal fraction);
+    qreal defaultColumnWidth() const
+    {
+        return m_defaultColumnWidth;
+    }
+
     // ── Viewport mode ───────────────────────────────────────────────────
     /// How the viewport scrolls to keep the focused column on-screen. The
     /// daemon reads this when resolving the strip. Engine-global runtime
@@ -144,6 +156,42 @@ public:
     {
         m_viewportMode = mode;
     }
+
+    // ── Global gap config ───────────────────────────────────────────────
+    /// Strip gaps in logical pixels — the daemon pushes these from settings.
+    /// The engine is geometry-agnostic and never uses them itself; it holds
+    /// them only so effectiveInnerGap()/effectiveOuterGap() can resolve a
+    /// per-screen override over the global value for the daemon's resolver.
+    void setInnerGap(int gap)
+    {
+        m_innerGap = gap;
+    }
+    void setOuterGap(int gap)
+    {
+        m_outerGap = gap;
+    }
+
+    // ── Per-screen config overrides ─────────────────────────────────────
+    /// Apply a per-screen override map (screen-only key, mirroring autotile's
+    /// applyPerScreenConfig). Recognised keys — unrecognised ones are ignored:
+    ///   "InnerGap" / "OuterGap"            int, logical px
+    ///   "DefaultColumnWidth"               qreal, fraction [0..1]
+    ///   "CenterFocusedColumn"              bool (true → Centered viewport)
+    ///   "PresetColumnWidths" / "PresetWindowHeights"
+    ///                                      QVariantList of qreal fractions
+    /// An empty @p overrides clears the screen's overrides. The effective*()
+    /// accessors resolve a screen's value as override → global default.
+    void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides);
+    void clearPerScreenConfig(const QString& screenId);
+    QVariantMap perScreenOverrides(const QString& screenId) const;
+
+    // ── Effective config (per-screen override → global default) ─────────
+    QVector<qreal> effectivePresetColumnWidths(const QString& screenId) const;
+    QVector<qreal> effectivePresetWindowHeights(const QString& screenId) const;
+    qreal effectiveDefaultColumnWidth(const QString& screenId) const;
+    ScrollViewportMode effectiveViewportMode(const QString& screenId) const;
+    int effectiveInnerGap(const QString& screenId) const;
+    int effectiveOuterGap(const QString& screenId) const;
 
     // ── State access ────────────────────────────────────────────────────
     PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) override;
@@ -170,6 +218,9 @@ private:
     ScrollScreenState* resolveNavTarget(const PhosphorEngine::NavigationContext& ctx, QString* outScreenId);
     void emitChanged(const QString& screenId);
     void reportNav(bool success, const QString& action, const QString& screenId);
+    /// Per-screen override for @p key, or an invalid QVariant when the screen
+    /// has no override map or the map lacks @p key.
+    QVariant perScreenValue(const QString& screenId, QLatin1String key) const;
 
     std::unordered_map<PhosphorEngine::TilingStateKey, ScrollScreenState, TilingStateKeyHash> m_states;
     QHash<QString, PhosphorEngine::TilingStateKey> m_windowToKey;
@@ -179,7 +230,13 @@ private:
     QString m_activeScreen;
     QVector<qreal> m_presetColumnWidths;
     QVector<qreal> m_presetWindowHeights;
+    qreal m_defaultColumnWidth = 0.5;
+    int m_innerGap = 8;
+    int m_outerGap = 8;
     ScrollViewportMode m_viewportMode = ScrollViewportMode::Fit;
+    /// Per-screen config overrides, keyed by screenId (screen-only, like
+    /// autotile). Resolved over the globals above by the effective*() helpers.
+    QHash<QString, QVariantMap> m_perScreenConfig;
 };
 
 } // namespace PhosphorScrollEngine

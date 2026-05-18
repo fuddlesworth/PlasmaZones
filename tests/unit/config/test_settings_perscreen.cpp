@@ -90,6 +90,55 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // Per-screen scrolling overrides
+    // =========================================================================
+
+    /**
+     * Per-screen scrolling: set scalar + list-valued overrides, verify they
+     * resolve, survive a save/load round-trip, and clear. The PresetColumnWidths
+     * key exercises the QVariantList per-screen storage path (writeJson).
+     */
+    void testPerScreenScroll_setSaveLoadClear()
+    {
+        IsolatedConfigGuard guard;
+
+        const QString screen = QStringLiteral("test-screen-1");
+        {
+            Settings settings;
+            QVERIFY(!settings.hasPerScreenScrollSettings(screen));
+            QSignalSpy spy(&settings, &Settings::perScreenScrollSettingsChanged);
+
+            settings.setPerScreenScrollSetting(screen, QStringLiteral("InnerGap"), 18);
+            settings.setPerScreenScrollSetting(screen, QStringLiteral("CenterFocusedColumn"), true);
+            settings.setPerScreenScrollSetting(screen, QStringLiteral("PresetColumnWidths"), QVariantList{0.25, 0.75});
+            QVERIFY(spy.count() >= 3);
+            QVERIFY(settings.hasPerScreenScrollSettings(screen));
+
+            const QVariantMap overrides = settings.getPerScreenScrollSettings(screen);
+            QCOMPARE(overrides.value(QStringLiteral("InnerGap")).toInt(), 18);
+            QCOMPARE(overrides.value(QStringLiteral("CenterFocusedColumn")).toBool(), true);
+            QCOMPARE(overrides.value(QStringLiteral("PresetColumnWidths")).toList().size(), 2);
+
+            settings.save();
+        }
+
+        // A fresh Settings reloads the per-screen overrides from disk.
+        {
+            Settings reloaded;
+            QVERIFY(reloaded.hasPerScreenScrollSettings(screen));
+            const QVariantMap overrides = reloaded.getPerScreenScrollSettings(screen);
+            QCOMPARE(overrides.value(QStringLiteral("InnerGap")).toInt(), 18);
+            QCOMPARE(overrides.value(QStringLiteral("CenterFocusedColumn")).toBool(), true);
+            const QVariantList widths = overrides.value(QStringLiteral("PresetColumnWidths")).toList();
+            QCOMPARE(widths.size(), 2);
+            QVERIFY(qFuzzyCompare(widths.at(1).toDouble(), 0.75));
+
+            reloaded.clearPerScreenScrollSettings(screen);
+            QVERIFY(!reloaded.hasPerScreenScrollSettings(screen));
+        }
+    }
+
+    // =========================================================================
     // P2: edge cases -- fresh config defaults
     // =========================================================================
 
