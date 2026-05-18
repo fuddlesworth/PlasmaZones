@@ -52,7 +52,7 @@ void main() {
     // ("anchor") own [0,1] space. Fragments outside the window map
     // outside [0,1] and are cropped by boundaryMask below.
     vec2 uv = anchorRemap(vTexCoord);
-    float PI = 3.14159265358;
+    const float PI = 3.14159265358;
 
     float time = p;
     float stime = sin(time * PI / 2.0);

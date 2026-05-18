@@ -20,7 +20,7 @@
 #include <QTest>
 #include <QVector2D>
 
-#include "../../../kwin-effect/plasmazoneseffect/shader_internal.h"
+#include <plasmazoneseffect/shader_internal.h>
 
 using PlasmaZones::ShaderInternal::AnchorUniforms;
 using PlasmaZones::ShaderInternal::computeAnchorUniforms;
@@ -92,6 +92,46 @@ private Q_SLOTS:
         QCOMPARE(u.resolution, QVector2D(2560.0f, 1440.0f));
         QCOMPARE(u.anchorSize, QVector2D(1280.0f, 720.0f));
         QCOMPARE(u.anchorPosInFbo, QVector2D(0.0f, 0.0f));
+    }
+
+    // Surface extent with the window straddling its output's top-left
+    // corner: anchorPosInFbo goes negative. The helper does not clamp;
+    // a surface-extent shader's anchorRemap is expected to cope with a
+    // window that extends past the output edge.
+    void testSurfaceExtentNegativeAnchorOffset()
+    {
+        const AnchorUniforms u =
+            computeAnchorUniforms(QRectF(-30.0, -20.0, 800.0, 600.0), QRectF(0.0, 0.0, 1920.0, 1080.0),
+                                  /*surfaceExtent=*/true);
+        QCOMPARE(u.resolution, QVector2D(1920.0f, 1080.0f));
+        QCOMPARE(u.anchorSize, QVector2D(800.0f, 600.0f));
+        QCOMPARE(u.anchorPosInFbo, QVector2D(-30.0f, -20.0f));
+    }
+
+    // Degenerate zero-size window: the helper passes the geometry through
+    // without clamping. Pins that contract. Callers (beginShaderTransition)
+    // guard against collapsed surfaces upstream, so the helper itself
+    // stays a pure, branch-free transform.
+    void testDegenerateZeroSizeWindow()
+    {
+        const AnchorUniforms u = computeAnchorUniforms(QRectF(100.0, 200.0, 0.0, 0.0), QRectF(0.0, 0.0, 1920.0, 1080.0),
+                                                       /*surfaceExtent=*/true);
+        QCOMPARE(u.resolution, QVector2D(1920.0f, 1080.0f));
+        QCOMPARE(u.anchorSize, QVector2D(0.0f, 0.0f));
+        QCOMPARE(u.anchorPosInFbo, QVector2D(100.0f, 200.0f));
+    }
+
+    // Fractional geometry: fractional-scale outputs hand frameGeometry
+    // sub-pixel coordinates. The float conversions and the offset
+    // subtraction stay exact for representable fractions.
+    void testSurfaceExtentFractionalGeometry()
+    {
+        const AnchorUniforms u =
+            computeAnchorUniforms(QRectF(100.5, 200.25, 800.5, 600.75), QRectF(0.0, 0.0, 1920.0, 1080.0),
+                                  /*surfaceExtent=*/true);
+        QCOMPARE(u.resolution, QVector2D(1920.0f, 1080.0f));
+        QCOMPARE(u.anchorSize, QVector2D(800.5f, 600.75f));
+        QCOMPARE(u.anchorPosInFbo, QVector2D(100.5f, 200.25f));
     }
 };
 
