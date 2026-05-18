@@ -44,6 +44,13 @@ set(plasmazones_settings_SRCS
     tilingappearancecontroller.cpp
     tilingbehaviorcontroller.h
     tilingbehaviorcontroller.cpp
+    # Window Rules page — the unified rule surface. WindowRuleController
+    # owns one WindowRuleModel (QAbstractListModel) and talks to the
+    # daemon's org.plasmazones.WindowRules adaptor.
+    windowrulemodel.h
+    windowrulemodel.cpp
+    windowrulecontroller.h
+    windowrulecontroller.cpp
     # Shared helpers used by multiple sub-controllers.
     triggerutils.h
     triggerutils.cpp
@@ -111,29 +118,32 @@ qt_add_qml_module(plasmazones-settings
         qml/ExclusionsPage.qml
         qml/EditorPage.qml
         qml/LayoutsPage.qml
-        qml/AssignmentsAppRulesPage.qml
-        qml/SnappingAssignmentsPage.qml
         qml/SnappingQuickShortcutsPage.qml
         qml/OrderingPage.qml
         qml/SnappingOrderingPage.qml
-        qml/TilingAssignmentsPage.qml
         qml/TilingQuickShortcutsPage.qml
         qml/TilingOrderingPage.qml
-        qml/SharedBridge.qml
-        qml/SnappingBridge.qml
-        qml/TilingBridge.qml
+        # Window Rules — the unified rule page replacing the five legacy
+        # assignment / app-rule surfaces. Every component (including the
+        # recursively-instantiated MatchExpressionEditor) MUST be listed.
+        qml/WindowRulesPage.qml
+        qml/MonitorOverview.qml
+        qml/MonitorOverviewTile.qml
+        qml/WindowRuleRow.qml
+        qml/RuleEditorSheet.qml
+        qml/AddRuleSheet.qml
+        qml/MatchExpressionEditor.qml
+        qml/MatchLeafEditor.qml
+        qml/ActionListEditor.qml
+        qml/ActionRow.qml
         qml/AboutPage.qml
         qml/WhatsNewPage.qml
         qml/MonitorStatePage.qml
         qml/VirtualScreensPage.qml
         qml/VirtualScreenPreview.qml
         # Sub-components (copied from KCM)
-        qml/MonitorAssignmentsCard.qml
-        qml/ActivityAssignmentsCard.qml
-        qml/AppRulesCard.qml
         qml/QuickLayoutSlotsCard.qml
         qml/WindowPickerDialog.qml
-        qml/AssignmentRow.qml
         qml/LayoutComboBox.qml
         qml/ScreenComboBox.qml
         qml/WideComboBox.qml
@@ -166,7 +176,6 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationEventCard.qml
         qml/AnimationProfileEditor.qml
         qml/AnimationsWindowsPage.qml
-        qml/AnimationsAppRulesPage.qml
         qml/AnimationsEditorPage.qml
         qml/AnimationsOsdsPage.qml
         qml/AnimationsOverlaysPage.qml

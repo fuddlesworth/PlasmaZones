@@ -1,0 +1,135 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
+
+/**
+ * @brief One rule row in the grouped WindowRulesPage list.
+ *
+ * Layout mirrors the SVG mockup: enabled dot · match summary · `→` · action
+ * summary · edit / delete. Composite rules show condition / action-count
+ * badges. The enabled dot is a toggle; edit / delete are buttons.
+ */
+ItemDelegate {
+    id: row
+
+    /// Per-rule fields from WindowRuleModel's roles.
+    required property string ruleId
+    required property string ruleName
+    required property bool enabled
+    required property string matchSummary
+    required property string actionSummary
+    required property int conditionCount
+    required property int actionCount
+    required property bool isComposite
+
+    signal editRequested()
+    signal deleteRequested()
+    signal toggleRequested(bool enabled)
+
+    width: ListView.view ? ListView.view.width : implicitWidth
+    hoverEnabled: true
+
+    contentItem: RowLayout {
+        spacing: Kirigami.Units.largeSpacing
+
+        // Enabled dot — toggles the rule.
+        AbstractButton {
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: Kirigami.Units.iconSizes.small
+            implicitHeight: Kirigami.Units.iconSizes.small
+            Accessible.name: row.enabled ? i18n("Disable rule %1", row.ruleName) : i18n("Enable rule %1", row.ruleName)
+            onClicked: row.toggleRequested(!row.enabled)
+
+            contentItem: Rectangle {
+                radius: width / 2
+                color: row.enabled ? Kirigami.Theme.highlightColor : "transparent"
+                border.width: row.enabled ? 0 : 2
+                border.color: Kirigami.Theme.disabledTextColor
+            }
+
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 0
+
+            Label {
+                Layout.fillWidth: true
+                text: row.ruleName.length > 0 ? row.ruleName : row.matchSummary
+                font.bold: true
+                opacity: row.enabled ? 1 : 0.5
+                elide: Text.ElideRight
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: row.matchSummary
+                opacity: row.enabled ? 0.7 : 0.4
+                elide: Text.ElideRight
+                visible: row.ruleName.length > 0
+            }
+
+        }
+
+        // Condition-count badge for composite rules.
+        Rectangle {
+            visible: row.isComposite
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: condLabel.implicitWidth + Kirigami.Units.largeSpacing
+            implicitHeight: condLabel.implicitHeight + Kirigami.Units.smallSpacing
+            radius: Kirigami.Units.smallSpacing
+            color: Kirigami.Theme.alternateBackgroundColor
+
+            Label {
+                id: condLabel
+
+                anchors.centerIn: parent
+                text: i18np("%1 condition", "%1 conditions", row.conditionCount)
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                opacity: 0.7
+            }
+
+        }
+
+        Kirigami.Icon {
+            source: "arrow-right"
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            Layout.alignment: Qt.AlignVCenter
+            opacity: 0.6
+        }
+
+        Label {
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+            text: row.actionSummary
+            font.bold: true
+            opacity: row.enabled ? 1 : 0.5
+            elide: Text.ElideRight
+            Layout.alignment: Qt.AlignVCenter
+        }
+
+        ToolButton {
+            icon.name: "document-edit"
+            Layout.alignment: Qt.AlignVCenter
+            ToolTip.text: i18n("Edit rule")
+            ToolTip.visible: hovered
+            Accessible.name: i18n("Edit rule %1", row.ruleName)
+            onClicked: row.editRequested()
+        }
+
+        ToolButton {
+            icon.name: "edit-delete"
+            Layout.alignment: Qt.AlignVCenter
+            ToolTip.text: i18n("Delete rule")
+            ToolTip.visible: hovered
+            Accessible.name: i18n("Delete rule %1", row.ruleName)
+            onClicked: row.deleteRequested()
+        }
+
+    }
+
+}

@@ -114,6 +114,27 @@ SettingsFlickable {
         target: page.appSettings
     }
 
+    // Window-filtering picker — relocated here with the Window Filtering
+    // section from the old Animations App Rules page. `true` routes the
+    // next pick to the Excluded Applications list; `false` to the Excluded
+    // Window Classes list. Each ExclusionListCard sets this before opening.
+    WindowPickerDialog {
+        id: filterPickerDialog
+
+        property bool forApps: true
+
+        appSettings: settingsController
+        onPicked: function(value) {
+            if (forApps) {
+                settingsController.settings.addAnimationExcludedApplication(value);
+                filterAppsCard.refreshModel();
+            } else {
+                settingsController.settings.addAnimationExcludedWindowClass(value);
+                filterClassesCard.refreshModel();
+            }
+        }
+    }
+
     ColumnLayout {
         id: content
 
@@ -299,6 +320,160 @@ SettingsFlickable {
 
             }
 
+        }
+
+        // ── Window Filtering ─────────────────────────────────────────
+        // Animation-global gating: which windows are eligible for any
+        // animation at all. Relocated here from the old Animations App
+        // Rules page — these are global config toggles, not per-window
+        // rules, so they belong on the General page. Per-window
+        // overrides now live on the unified Window Rules page.
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Information
+            visible: true
+            text: i18n("Filtered windows are not animated. Use a Window Rule to keep a specific application animated even when a filter would exclude it.")
+        }
+
+        SettingsCard {
+            id: filteringCard
+
+            Layout.fillWidth: true
+            headerText: i18n("Window Filtering")
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Exclude transient windows")
+                    description: i18n("Skip animations for dialogs, popups, tooltips, and dropdown menus")
+
+                    SettingsSwitch {
+                        checked: page.appSettings.animationExcludeTransientWindows
+                        accessibleName: i18n("Exclude transient windows from animations")
+                        onToggled: function(newValue) {
+                            page.appSettings.animationExcludeTransientWindows = newValue;
+                        }
+                    }
+
+                }
+
+                SettingsSeparator {
+                }
+
+                SettingsRow {
+                    title: i18n("Exclude notifications and OSDs")
+                    description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
+
+                    SettingsSwitch {
+                        checked: page.appSettings.animationExcludeNotificationsAndOsd
+                        accessibleName: i18n("Exclude notifications and on-screen displays from animations")
+                        onToggled: function(newValue) {
+                            page.appSettings.animationExcludeNotificationsAndOsd = newValue;
+                        }
+                    }
+
+                }
+
+                SettingsSeparator {
+                }
+
+                SettingsRow {
+                    title: i18n("Minimum window width")
+                    description: page.appSettings.animationMinimumWindowWidth === 0 ? i18n("Disabled. No width threshold.") : i18n("Windows narrower than this will not animate")
+
+                    SettingsSpinBox {
+                        from: 0
+                        to: 1000
+                        stepSize: 10
+                        value: page.appSettings.animationMinimumWindowWidth
+                        unitText: ""
+                        Accessible.name: i18n("Minimum window width for animations")
+                        onValueModified: (value) => {
+                            page.appSettings.animationMinimumWindowWidth = value;
+                        }
+                        textFromValue: function(value) {
+                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
+                        }
+                    }
+
+                }
+
+                SettingsSeparator {
+                }
+
+                SettingsRow {
+                    title: i18n("Minimum window height")
+                    description: page.appSettings.animationMinimumWindowHeight === 0 ? i18n("Disabled. No height threshold.") : i18n("Windows shorter than this will not animate")
+
+                    SettingsSpinBox {
+                        from: 0
+                        to: 1000
+                        stepSize: 10
+                        value: page.appSettings.animationMinimumWindowHeight
+                        unitText: ""
+                        Accessible.name: i18n("Minimum window height for animations")
+                        onValueModified: (value) => {
+                            page.appSettings.animationMinimumWindowHeight = value;
+                        }
+                        textFromValue: function(value) {
+                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
+                        }
+                    }
+
+                }
+
+            }
+
+        }
+
+        ExclusionListCard {
+            id: filterAppsCard
+
+            Layout.fillWidth: true
+            title: i18n("Excluded Applications (Animations)")
+            placeholderText: i18n("Application name (e.g., firefox, konsole)")
+            emptyTitle: i18n("No excluded applications")
+            emptyExplanation: i18n("Add application names above to exclude them from animations")
+            iconSource: "application-x-executable"
+            model: page.appSettings.animationExcludedApplications
+            useMonospaceFont: false
+            showPickButton: true
+            onAddRequested: (text) => {
+                return page.appSettings.addAnimationExcludedApplication(text);
+            }
+            onRemoveRequested: (index) => {
+                return page.appSettings.removeAnimationExcludedApplicationAt(index);
+            }
+            onPickRequested: {
+                filterPickerDialog.forApps = true;
+                filterPickerDialog.openForApps();
+            }
+        }
+
+        ExclusionListCard {
+            id: filterClassesCard
+
+            Layout.fillWidth: true
+            title: i18n("Excluded Window Classes (Animations)")
+            placeholderText: i18n("Window class (e.g., org.kde.dolphin)")
+            emptyTitle: i18n("No excluded window classes")
+            emptyExplanation: i18n("Add window classes above to exclude them from animations")
+            iconSource: "window"
+            model: page.appSettings.animationExcludedWindowClasses
+            useMonospaceFont: true
+            showPickButton: true
+            onAddRequested: (text) => {
+                return page.appSettings.addAnimationExcludedWindowClass(text);
+            }
+            onRemoveRequested: (index) => {
+                return page.appSettings.removeAnimationExcludedWindowClassAt(index);
+            }
+            onPickRequested: {
+                filterPickerDialog.forApps = false;
+                filterPickerDialog.openForClasses();
+            }
         }
 
     }

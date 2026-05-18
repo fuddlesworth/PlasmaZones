@@ -6,10 +6,6 @@ import QtQuick
 OrderingPage {
     id: root
 
-    readonly property var
-    settingsBridge: SnappingBridge {
-    }
-
     function updateCustomOrderState() {
         root.hasCustomOrder = settingsController.hasCustomSnappingOrder();
     }

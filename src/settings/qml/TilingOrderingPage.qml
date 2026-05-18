@@ -6,10 +6,6 @@ import QtQuick
 OrderingPage {
     id: root
 
-    readonly property var
-    settingsBridge: TilingBridge {
-    }
-
     function updateCustomOrderState() {
         root.hasCustomOrder = settingsController.hasCustomTilingOrder();
     }

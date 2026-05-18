@@ -56,6 +56,7 @@ class ShaderRegistry;
 #include "tilingalgorithmcontroller.h"
 #include "tilingappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
+#include "windowrulecontroller.h"
 
 namespace PlasmaZones {
 
@@ -99,6 +100,10 @@ class SettingsController : public QObject
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
     Q_PROPERTY(AnimationsPageController* animationsPage READ animationsPage CONSTANT)
+    // Window Rules page — the unified rule surface. The controller owns one
+    // WindowRuleModel and talks to the daemon's org.plasmazones.WindowRules
+    // adaptor; QML reads `settingsController.windowRulesPage.model`.
+    Q_PROPERTY(WindowRuleController* windowRulesPage READ windowRulesPage CONSTANT)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -411,6 +416,10 @@ public:
     {
         return m_animationsPage;
     }
+    WindowRuleController* windowRulesPage() const
+    {
+        return m_windowRulesPage;
+    }
 
     // ── Running window picker (async flow) ──────────────────────────────────
     //
@@ -626,6 +635,10 @@ private:
     /// outlives the page through child-destruction order.
     PhosphorAnimationShaders::AnimationShaderRegistry* m_animationShaderRegistry = nullptr;
     AnimationsPageController* m_animationsPage = nullptr;
+    /// Window Rules page sub-controller. Parented to `this`; owns its
+    /// WindowRuleModel internally. Constructed after m_animationsPage so its
+    /// dirty-tracking connection is wired in the same ctor block.
+    WindowRuleController* m_windowRulesPage = nullptr;
     /// Settings-side mirror of the daemon's overlay-shader registry —
     /// drives the read-only Snapping → Shaders browser. Same parent /
     /// declaration-order rationale as `m_animationShaderRegistry` above.

@@ -348,6 +348,18 @@ SettingsController::SettingsController(QObject* parent)
             setNeedsSave(true);
     });
 
+    // Window Rules page sub-controller — the unified rule surface. It owns
+    // its own WindowRuleModel and talks to the daemon's
+    // org.plasmazones.WindowRules adaptor. Dirty-tracking mirrors the
+    // animations page: a staged edit flips needsSave; commit/revert run
+    // from this controller's save()/load() so they don't race the
+    // setNeedsSave(false) those methods emit.
+    m_windowRulesPage = new WindowRuleController(this);
+    connect(m_windowRulesPage, &WindowRuleController::dirtyChanged, this, [this]() {
+        if (!m_loading && !m_saving && m_windowRulesPage->isDirty())
+            setNeedsSave(true);
+    });
+
     // Overlay shader registry — settings-side mirror of the daemon's. The
     // PlasmaZones::ShaderRegistry subclass auto-wires the standard system
     // + user search paths (`plasmazones/shaders`), so no extra path
@@ -605,19 +617,17 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kAnimationsLibraryChildren{QStringLiteral("animations-presets"),
                                                           QStringLiteral("animations-motionsets"),
                                                           QStringLiteral("animations-shaders")};
-    static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-general"),
-                                                         QStringLiteral("animations-app-rules")};
+    static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-general")};
     static const QSet<QString> kAnimationsAllLeaves =
         kAnimationsDirectChildren + kAnimationsSurfacesChildren + kAnimationsLibraryChildren;
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"),
          {QStringLiteral("snapping-appearance"), QStringLiteral("snapping-effects"), QStringLiteral("snapping-shaders"),
           QStringLiteral("snapping-behavior"), QStringLiteral("snapping-zoneselector"),
-          QStringLiteral("snapping-assignments"), QStringLiteral("snapping-apprules"),
           QStringLiteral("snapping-ordering"), QStringLiteral("snapping-shortcuts")}},
         {QStringLiteral("tiling"),
          {QStringLiteral("tiling-appearance"), QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm"),
-          QStringLiteral("tiling-assignments"), QStringLiteral("tiling-ordering"), QStringLiteral("tiling-shortcuts")}},
+          QStringLiteral("tiling-ordering"), QStringLiteral("tiling-shortcuts")}},
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
@@ -637,16 +647,14 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-effects"),
         QStringLiteral("snapping-shaders"),
-        QStringLiteral("snapping-assignments"),
         QStringLiteral("snapping-shortcuts"),
         QStringLiteral("tiling-appearance"),
         QStringLiteral("tiling-behavior"),
         QStringLiteral("tiling-algorithm"),
-        QStringLiteral("tiling-assignments"),
         QStringLiteral("tiling-shortcuts"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
-        QStringLiteral("snapping-apprules"),
+        QStringLiteral("window-rules"),
         QStringLiteral("exclusions"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
@@ -654,7 +662,6 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("virtualscreens"),
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),
-        QStringLiteral("animations-app-rules"),
         QStringLiteral("animations-editor"),
         QStringLiteral("animations-osds"),
         QStringLiteral("animations-overlays"),
@@ -698,6 +705,10 @@ void SettingsController::load()
     // Q_PROPERTY re-emit like every other page setting.
     if (m_animationsPage)
         m_animationsPage->revertPending();
+    // Window rules are owned by the daemon (windowrules.json); Discard
+    // re-fetches the daemon's authoritative set, dropping staged edits.
+    if (m_windowRulesPage)
+        m_windowRulesPage->revert();
     m_settings.load();
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
@@ -738,6 +749,12 @@ void SettingsController::save()
     // animation edits made so far.
     if (m_animationsPage)
         m_animationsPage->commitPending();
+
+    // Push the staged window-rule set to the daemon (sole writer of
+    // windowrules.json). Done before notifyReload so the daemon's rule
+    // engine picks up the new set as part of the same save.
+    if (m_windowRulesPage)
+        m_windowRulesPage->commit();
 
     // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen
     // IDs exist when assignments referencing them are processed.

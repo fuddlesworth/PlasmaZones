@@ -588,24 +588,38 @@ target_link_libraries(test_animations_shader_overrides
 )
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
 
-# Companion test executable: app-rule list CRUD end-to-end. Same split
-# rationale as test_animations_shader_overrides - keep each test file
-# under the project's <800-line guideline.
-add_executable(test_animations_app_rules
-    settings/test_animations_app_rules.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+# Window Rules page (Phase 4 of the window-rule refactor): WindowRuleModel
+# derives SectionRole / summaries from a rule's shape; WindowRuleController
+# stages CRUD by UUID and builds the monitor overview. Compiles the model /
+# controller sources directly (they live in the plasmazones-settings
+# executable, not plasmazones_core).
+add_executable(test_window_rule_model
+    settings/test_window_rule_model.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/windowrulemodel.cpp
 )
-target_link_libraries(test_animations_app_rules
+target_link_libraries(test_window_rule_model
     PRIVATE
         Qt6::Test
         Qt6::Core
-        PhosphorAnimation::PhosphorAnimation
+        PhosphorWindowRule::PhosphorWindowRule
         plasmazones_core
 )
-add_test(NAME test_animations_app_rules COMMAND test_animations_app_rules)
+add_test(NAME test_window_rule_model COMMAND test_window_rule_model)
+
+add_executable(test_window_rule_controller
+    settings/test_window_rule_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/windowrulemodel.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller.cpp
+)
+target_link_libraries(test_window_rule_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        PhosphorWindowRule::PhosphorWindowRule
+        plasmazones_core
+)
+add_test(NAME test_window_rule_controller COMMAND test_window_rule_controller)
 
 # Validation methods on D-Bus struct types - pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,

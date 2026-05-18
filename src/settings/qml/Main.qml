@@ -72,6 +72,12 @@ ApplicationWindow {
         "label": i18n("Animations"),
         "iconName": "media-playback-start",
         "hasChildren": true,
+        "hasDividerAfter": false
+    }, {
+        "name": "window-rules",
+        "label": i18n("Window Rules"),
+        "iconName": "view-list-details",
+        "hasChildren": false,
         "hasDividerAfter": true
     }, {
         "name": "exclusions",
@@ -123,14 +129,6 @@ ApplicationWindow {
             "iconName": "view-choose",
             "hasDividerAfter": true
         }, {
-            "name": "snapping-assignments",
-            "label": i18n("Assignments"),
-            "iconName": "view-list-details"
-        }, {
-            "name": "snapping-apprules",
-            "label": i18n("App Rules"),
-            "iconName": "application-x-executable"
-        }, {
             "name": "snapping-ordering",
             "label": i18n("Priority"),
             "iconName": "view-sort"
@@ -154,10 +152,6 @@ ApplicationWindow {
             "iconName": "view-grid",
             "hasDividerAfter": true
         }, {
-            "name": "tiling-assignments",
-            "label": i18n("Assignments"),
-            "iconName": "view-list-details"
-        }, {
             "name": "tiling-ordering",
             "label": i18n("Priority"),
             "iconName": "view-sort"
@@ -169,11 +163,7 @@ ApplicationWindow {
         "animations": [{
             "name": "animations-general",
             "label": i18n("General"),
-            "iconName": "configure"
-        }, {
-            "name": "animations-app-rules",
-            "label": i18n("App Rules"),
-            "iconName": "application-x-executable",
+            "iconName": "configure",
             "hasDividerAfter": true
         }, {
             "name": "animations-surfaces",
@@ -246,20 +236,17 @@ ApplicationWindow {
         "tiling-appearance": "TilingAppearancePage.qml",
         "tiling-behavior": "TilingBehaviorPage.qml",
         "tiling-algorithm": "TilingAlgorithmPage.qml",
-        "snapping-assignments": "SnappingAssignmentsPage.qml",
-        "snapping-apprules": "AssignmentsAppRulesPage.qml",
         "snapping-shortcuts": "SnappingQuickShortcutsPage.qml",
         "snapping-ordering": "SnappingOrderingPage.qml",
-        "tiling-assignments": "TilingAssignmentsPage.qml",
         "tiling-shortcuts": "TilingQuickShortcutsPage.qml",
         "tiling-ordering": "TilingOrderingPage.qml",
+        "window-rules": "WindowRulesPage.qml",
         "exclusions": "ExclusionsPage.qml",
         "editor": "EditorPage.qml",
         "general": "GeneralPage.qml",
         "about": "AboutPage.qml",
         "animations-general": "AnimationsGeneralPage.qml",
         "animations-windows": "AnimationsWindowsPage.qml",
-        "animations-app-rules": "AnimationsAppRulesPage.qml",
         "animations-editor": "AnimationsEditorPage.qml",
         "animations-osds": "AnimationsOsdsPage.qml",
         "animations-overlays": "AnimationsOverlaysPage.qml",
