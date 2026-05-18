@@ -329,12 +329,16 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     }
 
     // Map the daemon's action string to a shader-tree ProfilePath. "resnap" / "retile" are layout
-    // changes (different layout or autotile recompute) — semantically a layout switch. "rotate"
-    // moves windows between existing zones in the same layout — a snap-in. Default to WindowSnapIn
-    // for unknown actions (forward-compat with future daemon-emitted strings).
-    const QString batchProfilePath = (action == QLatin1String("resnap") || action == QLatin1String("retile"))
-        ? PhosphorAnimation::ProfilePaths::WindowLayoutSwitch
-        : PhosphorAnimation::ProfilePaths::WindowSnapIn;
+    // changes (different layout or autotile recompute) — semantically a layout switch. "scroll" is
+    // a niri-style strip translation — its own path so the viewport-pan feel tunes independently.
+    // "rotate" moves windows between existing zones in the same layout — a snap-in. Default to
+    // WindowSnapIn for unknown actions (forward-compat with future daemon-emitted strings).
+    QString batchProfilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn;
+    if (action == QLatin1String("resnap") || action == QLatin1String("retile")) {
+        batchProfilePath = PhosphorAnimation::ProfilePaths::WindowLayoutSwitch;
+    } else if (action == QLatin1String("scroll")) {
+        batchProfilePath = PhosphorAnimation::ProfilePaths::WindowScroll;
+    }
 
     applyStaggeredOrImmediate(
         pending.size(),
