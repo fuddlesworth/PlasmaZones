@@ -260,6 +260,12 @@ private:
     void handleCycle(bool forward);
     void handleConsume();
     void handleExpel();
+    void handleCycleColumnWidth();
+    void handleCycleWindowHeight();
+    void handleToggleColumnFullWidth();
+    void handleGrowColumnWidth();
+    void handleShrinkColumnWidth();
+    void handleToggleCenterFocusedColumn();
     void handleResnap();
     void handleSnapAll();
     void handleFocusMaster();

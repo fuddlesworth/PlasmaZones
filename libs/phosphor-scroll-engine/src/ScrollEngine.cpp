@@ -4,6 +4,7 @@
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
 #include <QJsonArray>
+#include <QSet>
 
 #include <utility>
 
@@ -498,6 +499,72 @@ void ScrollEngine::cyclePresetWindowHeight(const NavigationContext& ctx)
     reportNav(true, QStringLiteral("height"), screenId);
 }
 
+void ScrollEngine::toggleColumnFullWidth(const NavigationContext& ctx)
+{
+    QString screenId;
+    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
+    if (!state || !state->activeColumn()) {
+        reportNav(false, QStringLiteral("fullwidth"), screenId);
+        return;
+    }
+    state->toggleActiveColumnFullWidth();
+    emitChanged(screenId);
+    reportNav(true, QStringLiteral("fullwidth"), screenId);
+}
+
+void ScrollEngine::adjustColumnWidth(qreal deltaFraction, const NavigationContext& ctx)
+{
+    // Smallest proportional column width grow/shrink can settle on, so a
+    // column can never shrink away to nothing.
+    constexpr qreal kMinColumnWidthFraction = 0.1;
+
+    QString screenId;
+    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
+    const Column* column = state ? state->activeColumn() : nullptr;
+    if (!column || column->width().kind != ColumnWidth::Kind::Proportion) {
+        // No focused column, or a fixed-pixel width — the geometry-agnostic
+        // engine cannot resolve a pixel width to a working-area fraction.
+        reportNav(false, QStringLiteral("width"), screenId);
+        return;
+    }
+    // Clamp the starting width into range before applying the delta: a
+    // Proportion width is normally already within [kMinColumnWidthFraction,
+    // 1.0], but clamping here keeps grow/shrink monotonic — without it a
+    // shrink keypress on an out-of-range narrow column would grow it.
+    const qreal current = qBound(kMinColumnWidthFraction, column->width().value, qreal(1.0));
+    const qreal target = qBound(kMinColumnWidthFraction, current + deltaFraction, qreal(1.0));
+    if (qFuzzyCompare(target, current)) {
+        reportNav(false, QStringLiteral("width"), screenId); // already at the limit
+        return;
+    }
+    // The width is no longer one of the presets; -1 detaches it from the cycle.
+    state->setActiveColumnWidth(ColumnWidth::proportion(target), /*presetIndex=*/-1);
+    emitChanged(screenId);
+    reportNav(true, QStringLiteral("width"), screenId);
+}
+
+void ScrollEngine::toggleCenterFocusedColumn(const NavigationContext& ctx)
+{
+    QString screenId;
+    resolveNavTarget(ctx, &screenId); // resolves screenId for the nav feedback
+
+    // The viewport mode is engine-global, so flip it through the setter
+    // unconditionally — even when the focused screen has no strip yet. Gating
+    // on the focused screen's state would let an empty scroll screen swallow
+    // the shortcut while every other scroll screen silently keeps the old mode.
+    setViewportMode(m_viewportMode == ScrollViewportMode::Fit ? ScrollViewportMode::Centered : ScrollViewportMode::Fit);
+    // Re-resolve every scroll screen — all of them resolve against this mode.
+    QSet<QString> notified;
+    for (const auto& entry : m_states) {
+        const QString& sid = entry.first.screenId;
+        if (!sid.isEmpty() && !notified.contains(sid)) {
+            notified.insert(sid);
+            emitChanged(sid);
+        }
+    }
+    reportNav(true, QStringLiteral("viewport"), screenId);
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Tracking queries
 // ─────────────────────────────────────────────────────────────────────────
@@ -577,6 +644,11 @@ void ScrollEngine::loadState()
 
 QJsonObject ScrollEngine::serializeEngineState() const
 {
+    // m_viewportMode is deliberately not serialized: it is runtime-only state
+    // that resets to Fit on restart. Per-column full-width state *is* persisted
+    // (in ScrollScreenState). Both become persisted ConfigDefaults settings in
+    // Phase 5; until then the viewport mode intentionally does not survive a
+    // daemon restart.
     QJsonArray states;
     for (const auto& entry : m_states) {
         QJsonObject obj = entry.second.toJson();

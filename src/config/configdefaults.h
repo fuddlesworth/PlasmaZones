@@ -1354,6 +1354,40 @@ public:
     {
         return QStringLiteral("Meta+Alt+O");
     }
+    /// Scroll mode: cycle the focused column's width through the width presets.
+    /// "R" for "resize".
+    static QString cycleColumnWidthShortcut()
+    {
+        return QStringLiteral("Meta+Alt+R");
+    }
+    /// Scroll mode: cycle the focused window's height through the height
+    /// presets. Shift variant of the column-width cycle ("Shift+R").
+    static QString cycleWindowHeightShortcut()
+    {
+        return QStringLiteral("Meta+Alt+Shift+R");
+    }
+    /// Scroll mode: toggle the focused column between full viewport width and
+    /// its prior width. "F" for "full".
+    static QString toggleColumnFullWidthShortcut()
+    {
+        return QStringLiteral("Meta+Alt+F");
+    }
+    /// Scroll mode: grow the focused column's width by one step.
+    static QString growColumnWidthShortcut()
+    {
+        return QStringLiteral("Meta+Alt+=");
+    }
+    /// Scroll mode: shrink the focused column's width by one step.
+    static QString shrinkColumnWidthShortcut()
+    {
+        return QStringLiteral("Meta+Alt+-");
+    }
+    /// Scroll mode: toggle whether the viewport keeps the focused column
+    /// centred. "C" for "center".
+    static QString toggleCenterFocusedColumnShortcut()
+    {
+        return QStringLiteral("Meta+Alt+C");
+    }
     static QString resnapToNewLayoutShortcut()
     {
         return QStringLiteral("Meta+Ctrl+Z");

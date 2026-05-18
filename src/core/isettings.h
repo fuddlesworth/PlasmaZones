@@ -386,6 +386,14 @@ Q_SIGNALS:
     void consumeWindowShortcutChanged();
     void expelWindowShortcutChanged();
 
+    // Scroll-mode column width / window height Shortcuts
+    void cycleColumnWidthShortcutChanged();
+    void cycleWindowHeightShortcutChanged();
+    void toggleColumnFullWidthShortcutChanged();
+    void growColumnWidthShortcutChanged();
+    void shrinkColumnWidthShortcutChanged();
+    void toggleCenterFocusedColumnShortcutChanged();
+
     // Resnap to New PhosphorZones::Layout Shortcut
     void resnapToNewLayoutShortcutChanged();
 

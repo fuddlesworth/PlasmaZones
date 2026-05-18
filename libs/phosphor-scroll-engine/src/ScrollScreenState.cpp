@@ -258,6 +258,13 @@ void ScrollScreenState::setActiveTileHeight(const WindowHeight& height)
     }
 }
 
+void ScrollScreenState::toggleActiveColumnFullWidth()
+{
+    if (m_activeColumnIndex >= 0) {
+        m_columns[m_activeColumnIndex].toggleFullWidth();
+    }
+}
+
 void ScrollScreenState::markFloating(const QString& windowId)
 {
     if (windowId.isEmpty()) {

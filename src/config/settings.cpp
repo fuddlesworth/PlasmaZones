@@ -2621,6 +2621,24 @@ PZ_STORE_GET(QString, consumeWindowShortcut, shortcutsGlobalGroup, consumeWindow
 PZ_STORE_SET_STRING(setConsumeWindowShortcut, shortcutsGlobalGroup, consumeWindowKey, consumeWindowShortcutChanged)
 PZ_STORE_GET(QString, expelWindowShortcut, shortcutsGlobalGroup, expelWindowKey, QString)
 PZ_STORE_SET_STRING(setExpelWindowShortcut, shortcutsGlobalGroup, expelWindowKey, expelWindowShortcutChanged)
+PZ_STORE_GET(QString, cycleColumnWidthShortcut, shortcutsGlobalGroup, cycleColumnWidthKey, QString)
+PZ_STORE_SET_STRING(setCycleColumnWidthShortcut, shortcutsGlobalGroup, cycleColumnWidthKey,
+                    cycleColumnWidthShortcutChanged)
+PZ_STORE_GET(QString, cycleWindowHeightShortcut, shortcutsGlobalGroup, cycleWindowHeightKey, QString)
+PZ_STORE_SET_STRING(setCycleWindowHeightShortcut, shortcutsGlobalGroup, cycleWindowHeightKey,
+                    cycleWindowHeightShortcutChanged)
+PZ_STORE_GET(QString, toggleColumnFullWidthShortcut, shortcutsGlobalGroup, toggleColumnFullWidthKey, QString)
+PZ_STORE_SET_STRING(setToggleColumnFullWidthShortcut, shortcutsGlobalGroup, toggleColumnFullWidthKey,
+                    toggleColumnFullWidthShortcutChanged)
+PZ_STORE_GET(QString, growColumnWidthShortcut, shortcutsGlobalGroup, growColumnWidthKey, QString)
+PZ_STORE_SET_STRING(setGrowColumnWidthShortcut, shortcutsGlobalGroup, growColumnWidthKey,
+                    growColumnWidthShortcutChanged)
+PZ_STORE_GET(QString, shrinkColumnWidthShortcut, shortcutsGlobalGroup, shrinkColumnWidthKey, QString)
+PZ_STORE_SET_STRING(setShrinkColumnWidthShortcut, shortcutsGlobalGroup, shrinkColumnWidthKey,
+                    shrinkColumnWidthShortcutChanged)
+PZ_STORE_GET(QString, toggleCenterFocusedColumnShortcut, shortcutsGlobalGroup, toggleCenterFocusedColumnKey, QString)
+PZ_STORE_SET_STRING(setToggleCenterFocusedColumnShortcut, shortcutsGlobalGroup, toggleCenterFocusedColumnKey,
+                    toggleCenterFocusedColumnShortcutChanged)
 PZ_STORE_GET(QString, resnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey, QString)
 PZ_STORE_SET_STRING(setResnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey,
                     resnapToNewLayoutShortcutChanged)

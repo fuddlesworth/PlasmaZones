@@ -174,6 +174,25 @@ void Column::setActiveTileHeight(const WindowHeight& height)
     }
 }
 
+void Column::toggleFullWidth()
+{
+    if (m_fullWidth) {
+        // Leaving full-width: restore the width remembered on toggle-on.
+        m_width = m_restoreWidth;
+        m_presetWidthIndex = m_restorePresetWidthIndex;
+        m_fullWidth = false;
+    } else {
+        // Entering full-width: remember the current width, then fill the
+        // working area. m_width is set directly — setWidth() would clear the
+        // flag this method is setting.
+        m_restoreWidth = m_width;
+        m_restorePresetWidthIndex = m_presetWidthIndex;
+        m_width = ColumnWidth::proportion(1.0);
+        m_presetWidthIndex = -1;
+        m_fullWidth = true;
+    }
+}
+
 const Tile* Column::activeTile() const
 {
     if (m_activeTileIndex < 0 || m_activeTileIndex >= m_tiles.size()) {
@@ -207,6 +226,9 @@ QJsonObject Column::toJson() const
     obj.insert(QLatin1String("activeTileIndex"), m_activeTileIndex);
     obj.insert(QLatin1String("width"), columnWidthToJson(m_width));
     obj.insert(QLatin1String("presetWidthIndex"), m_presetWidthIndex);
+    obj.insert(QLatin1String("fullWidth"), m_fullWidth);
+    obj.insert(QLatin1String("restoreWidth"), columnWidthToJson(m_restoreWidth));
+    obj.insert(QLatin1String("restorePresetWidthIndex"), m_restorePresetWidthIndex);
     return obj;
 }
 
@@ -226,6 +248,9 @@ Column Column::fromJson(const QJsonObject& obj)
     }
     column.m_width = columnWidthFromJson(obj.value(QLatin1String("width")).toObject());
     column.m_presetWidthIndex = obj.value(QLatin1String("presetWidthIndex")).toInt(-1);
+    column.m_fullWidth = obj.value(QLatin1String("fullWidth")).toBool(false);
+    column.m_restoreWidth = columnWidthFromJson(obj.value(QLatin1String("restoreWidth")).toObject());
+    column.m_restorePresetWidthIndex = obj.value(QLatin1String("restorePresetWidthIndex")).toInt(-1);
     column.m_activeTileIndex = obj.value(QLatin1String("activeTileIndex")).toInt(-1);
     column.clampActiveTileIndex();
     return column;

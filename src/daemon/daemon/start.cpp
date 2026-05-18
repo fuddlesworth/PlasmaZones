@@ -505,6 +505,24 @@ void Daemon::connectShortcutSignals()
     connect(m_shortcutManager.get(), &ShortcutManager::expelWindowRequested, this, [this]() {
         handleExpel();
     });
+    connect(m_shortcutManager.get(), &ShortcutManager::cycleColumnWidthRequested, this, [this]() {
+        handleCycleColumnWidth();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowHeightRequested, this, [this]() {
+        handleCycleWindowHeight();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::toggleColumnFullWidthRequested, this, [this]() {
+        handleToggleColumnFullWidth();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::growColumnWidthRequested, this, [this]() {
+        handleGrowColumnWidth();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::shrinkColumnWidthRequested, this, [this]() {
+        handleShrinkColumnWidth();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::toggleCenterFocusedColumnRequested, this, [this]() {
+        handleToggleCenterFocusedColumn();
+    });
     connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() {
         handleResnap();
     });

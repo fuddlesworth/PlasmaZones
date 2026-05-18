@@ -439,6 +439,20 @@ public:
     Q_PROPERTY(QString expelWindowShortcut READ expelWindowShortcut WRITE setExpelWindowShortcut NOTIFY
                    expelWindowShortcutChanged)
 
+    // Scroll-mode column width / window height (Meta+Alt+R / Meta+Alt+Shift+R / Meta+Alt+F)
+    Q_PROPERTY(QString cycleColumnWidthShortcut READ cycleColumnWidthShortcut WRITE setCycleColumnWidthShortcut NOTIFY
+                   cycleColumnWidthShortcutChanged)
+    Q_PROPERTY(QString cycleWindowHeightShortcut READ cycleWindowHeightShortcut WRITE setCycleWindowHeightShortcut
+                   NOTIFY cycleWindowHeightShortcutChanged)
+    Q_PROPERTY(QString toggleColumnFullWidthShortcut READ toggleColumnFullWidthShortcut WRITE
+                   setToggleColumnFullWidthShortcut NOTIFY toggleColumnFullWidthShortcutChanged)
+    Q_PROPERTY(QString growColumnWidthShortcut READ growColumnWidthShortcut WRITE setGrowColumnWidthShortcut NOTIFY
+                   growColumnWidthShortcutChanged)
+    Q_PROPERTY(QString shrinkColumnWidthShortcut READ shrinkColumnWidthShortcut WRITE setShrinkColumnWidthShortcut
+                   NOTIFY shrinkColumnWidthShortcutChanged)
+    Q_PROPERTY(QString toggleCenterFocusedColumnShortcut READ toggleCenterFocusedColumnShortcut WRITE
+                   setToggleCenterFocusedColumnShortcut NOTIFY toggleCenterFocusedColumnShortcutChanged)
+
     // Resnap to New PhosphorZones::Layout (Meta+Ctrl+Z, easy pinky key)
     Q_PROPERTY(QString resnapToNewLayoutShortcut READ resnapToNewLayoutShortcut WRITE setResnapToNewLayoutShortcut
                    NOTIFY resnapToNewLayoutShortcutChanged)
@@ -996,6 +1010,18 @@ public:
     void setConsumeWindowShortcut(const QString& shortcut);
     QString expelWindowShortcut() const;
     void setExpelWindowShortcut(const QString& shortcut);
+    QString cycleColumnWidthShortcut() const;
+    void setCycleColumnWidthShortcut(const QString& shortcut);
+    QString cycleWindowHeightShortcut() const;
+    void setCycleWindowHeightShortcut(const QString& shortcut);
+    QString toggleColumnFullWidthShortcut() const;
+    void setToggleColumnFullWidthShortcut(const QString& shortcut);
+    QString growColumnWidthShortcut() const;
+    void setGrowColumnWidthShortcut(const QString& shortcut);
+    QString shrinkColumnWidthShortcut() const;
+    void setShrinkColumnWidthShortcut(const QString& shortcut);
+    QString toggleCenterFocusedColumnShortcut() const;
+    void setToggleCenterFocusedColumnShortcut(const QString& shortcut);
     QString resnapToNewLayoutShortcut() const;
     void setResnapToNewLayoutShortcut(const QString& shortcut);
     QString snapAllWindowsShortcut() const;

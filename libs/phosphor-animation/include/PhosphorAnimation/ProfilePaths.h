@@ -44,6 +44,10 @@ PHOSPHORANIMATION_EXPORT extern const QString WindowSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapOut;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapResize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
+/// Scroll-mode strip translation — the whole viewport pans as the focused
+/// column changes. Distinct from snapIn (a window dropping into a zone) so
+/// the strip-scroll feel can be tuned independently.
+PHOSPHORANIMATION_EXPORT extern const QString WindowScroll;
 
 // editor.* — Layout-editor-only zone manipulation animations
 // (fill-preview, drag-resize-preview). NOT triggered by runtime

@@ -8,6 +8,7 @@
 #include "../unifiedlayoutcontroller.h"
 #include "../../config/settings.h"
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/IScrollNavigation.h>
 #include "../../core/logging.h"
 #include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"
@@ -90,6 +91,18 @@ static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* 
     return router->engineFor(outCtx.screenId);
 }
 
+// Local helper: resolve the shortcut's target engine and narrow it to the
+// IScrollNavigation interface. Returns nullptr when the focused screen is not
+// a scroll screen — the snap and autotile engines do not implement that
+// interface, so the cross-cast fails and the niri-style op is simply skipped.
+static PhosphorEngine::IScrollNavigation* scrollNavigatorForShortcut(ScreenModeRouter* router,
+                                                                     WindowTrackingAdaptor* wta,
+                                                                     PhosphorEngine::NavigationContext& outCtx,
+                                                                     const char* shortcutName)
+{
+    return dynamic_cast<PhosphorEngine::IScrollNavigation*>(navigatorForShortcut(router, wta, outCtx, shortcutName));
+}
+
 void Daemon::handleRotate(bool clockwise)
 {
     if (m_rotateDebounce.isValid() && m_rotateDebounce.elapsed() < kShortcutDebounceMs) {
@@ -159,11 +172,12 @@ void Daemon::handlePush()
 void Daemon::handleConsume()
 {
     // niri "consume": pull the next column's focused window into the focused
-    // column. Meaningful only in scroll mode — the snap/autotile engines'
-    // IPlacementEngine default is a no-op, so this is harmlessly absorbed on
-    // their screens, mirroring handlePush().
+    // column. Meaningful only in scroll mode — scrollNavigatorForShortcut
+    // yields nullptr on snap/autotile screens (they do not implement
+    // IScrollNavigation), so the shortcut is simply skipped there.
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ConsumeWindow")) {
+    if (auto* nav =
+            scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ConsumeWindow")) {
         nav->consumeWindowIntoColumn(ctx);
     }
 }
@@ -171,10 +185,83 @@ void Daemon::handleConsume()
 void Daemon::handleExpel()
 {
     // niri "expel": push the focused window out into its own new column.
-    // Scroll-mode only; a no-op on snap/autotile screens (see handleConsume).
+    // Scroll-mode only; skipped on snap/autotile screens (see handleConsume).
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ExpelWindow")) {
+    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ExpelWindow")) {
         nav->expelWindowFromColumn(ctx);
+    }
+}
+
+void Daemon::handleCycleColumnWidth()
+{
+    // Cycle the focused column through the width presets. Scroll-mode only;
+    // skipped on snap/autotile screens (see handleConsume).
+    NavigationContext ctx;
+    if (auto* nav =
+            scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "CycleColumnWidth")) {
+        nav->cyclePresetColumnWidth(ctx);
+    }
+}
+
+void Daemon::handleCycleWindowHeight()
+{
+    // Cycle the focused window through the height presets. Scroll-mode only;
+    // skipped on snap/autotile screens (see handleConsume).
+    NavigationContext ctx;
+    if (auto* nav =
+            scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "CycleWindowHeight")) {
+        nav->cyclePresetWindowHeight(ctx);
+    }
+}
+
+void Daemon::handleToggleColumnFullWidth()
+{
+    // Toggle the focused column between full viewport width and its prior
+    // width. Scroll-mode only; skipped on snap/autotile screens (see
+    // handleConsume).
+    NavigationContext ctx;
+    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx,
+                                               "ToggleColumnFullWidth")) {
+        nav->toggleColumnFullWidth(ctx);
+    }
+}
+
+namespace {
+/// Fraction of the working-area width a grow/shrink shortcut moves the
+/// focused column.
+constexpr qreal kColumnWidthStep = 0.1;
+} // namespace
+
+void Daemon::handleGrowColumnWidth()
+{
+    // Grow the focused column by one width step. Scroll-mode only; skipped on
+    // snap/autotile screens (see handleConsume).
+    NavigationContext ctx;
+    if (auto* nav =
+            scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "GrowColumnWidth")) {
+        nav->adjustColumnWidth(kColumnWidthStep, ctx);
+    }
+}
+
+void Daemon::handleShrinkColumnWidth()
+{
+    // Shrink the focused column by one width step. Scroll-mode only; skipped
+    // on snap/autotile screens (see handleConsume).
+    NavigationContext ctx;
+    if (auto* nav =
+            scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ShrinkColumnWidth")) {
+        nav->adjustColumnWidth(-kColumnWidthStep, ctx);
+    }
+}
+
+void Daemon::handleToggleCenterFocusedColumn()
+{
+    // Toggle the viewport between fit and centered. Scroll-mode only; skipped
+    // on snap/autotile screens (see handleConsume).
+    NavigationContext ctx;
+    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx,
+                                               "ToggleCenterFocusedColumn")) {
+        nav->toggleCenterFocusedColumn(ctx);
     }
 }
 

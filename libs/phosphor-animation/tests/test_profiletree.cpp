@@ -59,6 +59,7 @@ private Q_SLOTS:
         QVERIFY(paths.contains(PP::WindowSnapOut));
         QVERIFY(paths.contains(PP::WindowSnapResize));
         QVERIFY(paths.contains(PP::WindowLayoutSwitch));
+        QVERIFY(paths.contains(PP::WindowScroll));
         // Widget zone-rect highlight family.
         QVERIFY(paths.contains(PP::WidgetZoneHighlight));
         QVERIFY(paths.contains(PP::WidgetZoneHighlightPop));

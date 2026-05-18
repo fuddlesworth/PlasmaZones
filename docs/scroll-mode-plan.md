@@ -3,13 +3,15 @@
 
 # Scroll mode — niri-style scrollable tiling
 
-Planning document. Status: **Phases 0 ✅, 1 ✅, 2 ✅ and 3 ✅ complete** — the scroll
-engine, geometry resolver, `Mode::Scroll` routing, daemon geometry pipeline, the full
-window lifecycle (open/close/focus, minimize, screen hotplug & geometry change,
-fixed-size windows) and navigation (viewport fit/centered scrolling, consume/expel
-shortcuts, drag-to-reorder, sticky-window exclusion) are implemented, built, and
-tested — the full `ctest` suite is green. Phase 0 detail in
-[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 4.
+Planning document. Status: **Phases 0 ✅, 1 ✅, 2 ✅, 3 ✅ and 4 ✅ complete** — the
+scroll engine, geometry resolver, `Mode::Scroll` routing, daemon geometry pipeline, the
+full window lifecycle (open/close/focus, minimize, screen hotplug & geometry change,
+fixed-size windows), navigation (viewport fit/centered scrolling, consume/expel
+shortcuts, drag-to-reorder, sticky-window exclusion) and the width/height controls and
+animation polish (preset cycling, full-width toggle, grow/shrink, runtime centering,
+dedicated `window.scroll` motion profile) are implemented, built, and covered by the
+unit-test suite. Phase 0 detail in
+[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 5.
 
 ## 1. Goal
 
@@ -107,32 +109,31 @@ takes the `MoveResizeMode::Move` branch — cancels queued configures and applie
 is pure translation (no resize), so the most frequent operation gets the reliable path.
 Column-width changes still resize → async configure, but those are infrequent.
 
-**Hybrid geometry model — viable, but with one UNVERIFIED assumption:**
+**Hybrid geometry model — viable (constraint B was verified in Phase 4):**
 
 - Real geometry for windows in/near the viewport (±1 column).
 - Paint-time `WindowPaintData` translation for fully-off-screen windows.
 - **Hard constraint A — input does NOT follow paint transforms.** `Window::hitTest()`
   uses real geometry only. Paint-transform is safe *only* for fully-off-screen windows
   (un-clickable anyway) — never for a partially-visible one.
-- **Hard constraint B — UNVERIFIED, the biggest open risk.** A KWin effect's
-  `paintWindow()` is only called for windows the scene decides to paint. A window whose
-  real geometry is *fully off-screen* is likely **culled** — `paintWindow()` never
-  fires, so no transform can pull it into view. A paint-transform can move a window
-  *out of* view (it starts on-screen, gets painted) but cannot bring an off-screen
-  window *in*. **Phase 0 must verify whether KWin calls `paintWindow()` for windows
-  with partially- vs. fully-off-screen real geometry.** If fully-off-screen windows are
-  culled, the model below is mandatory.
-- **Animation ordering (corrected for constraint B).** Before a scroll animation, set
-  real geometry to an on-screen position for *every* window that will be visible at any
-  frame of the animation — including incoming windows (commit their final geometry
-  *first*) and outgoing ones. Paint-transforms then only *interpolate* between committed
-  positions. Windows that stay fully off-screen for the entire animation get no
-  transform. After the animation settles, re-park genuinely off-screen windows via
-  `move()`. (Karousel's `commit-at-animation-end` order is wrong for incoming windows;
-  do not copy it.)
+- **Hard constraint B — RESOLVED (Phase 4), the risk did not materialize.** The concern
+  was that a KWin effect's `paintWindow()` might only fire for windows the scene decides
+  to paint, culling fully-off-screen windows. Verified live (Open Question 3): KWin
+  *does* paint windows whose real geometry is fully off-screen — scrolling a window off
+  the edge animates it smoothly out. So no cull-driven model is needed: the scroll
+  geometry batch commits each window's final real geometry and the shared
+  `WindowAnimator` interpolates the visual offset via a paint transform, off-screen
+  windows included. The "commit-on-screen-first / re-park afterwards" ordering below was
+  therefore **not built**.
+- **Animation ordering (was: corrected for constraint B — now moot).** The original
+  plan, written before constraint B was verified, called for setting real geometry to an
+  on-screen position for every window visible at any animation frame and re-parking
+  off-screen windows via `move()` afterwards. Since KWin paints off-screen windows this
+  is unnecessary; kept here only as the rationale trail.
 
-This structurally eliminates the stuck bug: real geometry is never set to an extreme
-off-screen value. The Karousel `place()` poke-hack is **not needed**.
+This structurally eliminates the stuck bug: real geometry is the daemon-resolved strip
+position and the animator only adds a transient paint offset. The Karousel `place()`
+poke-hack is **not needed**.
 
 Off-screen windows are *parked* via `move()` at a valid position just outside the
 nearest output — distinct from the §4.4 "drop into a KWin tile" fallback used on mode
@@ -188,14 +189,17 @@ full-reflow (`calculateZones(windowCount) -> QVector<QRect>`), which is fundamen
 incompatible with niri's "opening a window resizes nothing" and has nowhere to hold
 per-column widths, per-tile heights, view offset, or focused indices.
 
-**`IPlacementEngine` needs six new methods — zero blast radius** (confirmed by Phase 0).
-The six niri operations with no current equivalent — `consume`/`expel` window, set/cycle
-column width, set/cycle window height, scroll-the-viewport, center-column — are added as
-**optional virtuals with no-op defaults**, following the existing autotile-only group
-(`increaseMasterRatio`, `focusMaster`, …). `SnapEngine` and `AutotileEngine` inherit the
-defaults and need no source changes. Basic navigation (focus/move/swap in four
-directions) already maps onto the existing direction-string methods. See the findings
-doc §2.
+**Niri-style ops live on a dedicated `IScrollNavigation` interface — zero blast
+radius.** The column/strip operations with no equivalent on the other engines —
+`consume` / `expel` window, cycle / grow-shrink / full-width column width, cycle window
+height, center-column — have no meaning for `SnapEngine` or `AutotileEngine`. Rather
+than saddle `IPlacementEngine` with no-op virtuals the other two engines would inherit
+as dead weight (an Interface Segregation violation), the seven ops live on a separate
+pure-virtual `PhosphorEngine::IScrollNavigation` interface that only `ScrollEngine`
+implements. The daemon resolves it with `dynamic_cast<IScrollNavigation*>` and skips the
+op on non-scroll screens. `SnapEngine` and `AutotileEngine` need no source changes.
+Basic navigation (focus/move/swap in four directions) already maps onto the existing
+`IPlacementEngine` direction-string methods. See the findings doc §2.
 
 Suggested home: a new `libs/phosphor-scroll-engine` library (LGPL-2.1-or-later, matching
 `phosphor-tile-engine`), holding the pure-logic strip model unit-tested in isolation,
@@ -230,9 +234,9 @@ animated); *applying* real geometry is limited to the visible range ±1 column.
 Static code review **complete** — results in
 [`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Summary:
 
-1. **`IPlacementEngine` contract review — DONE.** Required surface satisfiable; six niri
-   ops added as zero-impact optional virtuals; `IPlacementState` and per-context state
-   already fit.
+1. **`IPlacementEngine` contract review — DONE.** Required surface satisfiable; the
+   scroll-only ops live on a separate `IScrollNavigation` interface (see §5) with zero
+   impact on the other engines; `IPlacementState` and per-context state already fit.
 2. **Self-write disambiguation — DONE.** Already solved in-tree (`m_inDaemonGeometryApply`).
 3. **Focus — DONE.** Path exists; needs a `force` activation parameter on
    `ICompositorBridge`. focus-follows-mouse already handled.
@@ -248,8 +252,8 @@ Static code review **complete** — results in
 - ✅ `libs/phosphor-scroll-engine`: `ScrollScreenState` / `Column` / `Tile` model +
   `resolveScrollLayout()` geometry resolver. Pure logic, no KWin, with a dedicated
   unit-test suite.
-- ✅ `ScrollEngine : IPlacementEngine` (extends `PlacementEngineBase`); the four niri
-  operations added as optional `IPlacementEngine` virtuals.
+- ✅ `ScrollEngine` extends `PlacementEngineBase` and implements `IScrollNavigation` for
+  the niri-style column/strip ops (see §5).
 - ✅ `Mode::Scroll` in `AssignmentEntry`; `LayoutId` `scroll:` helpers; `ScreenModeRouter`
   dispatch to a third engine; per-mode disable-list settings keys.
 - ✅ Daemon integration: the engine factory constructs `ScrollEngine`;
@@ -313,9 +317,8 @@ with the Phase 3 navigation work.
   move-column / move-window work in scroll mode with the existing shortcuts.
 - ✅ **`consume` / `expel`** (M2) — new `Meta+Alt+I` / `Meta+Alt+O` shortcuts pull the
   next column's window into the focused column / push the focused window out into its
-  own column. The snap/autotile engines inherit the no-op `IPlacementEngine` default,
-  so the shortcuts are harmlessly absorbed on their screens. Settings-UI exposure is
-  Phase 5.
+  own column. They are `IScrollNavigation` ops, so the daemon skips them on snap/autotile
+  screens (the `dynamic_cast` yields nullptr). Settings-UI exposure is Phase 5.
 - ✅ **Interactive drag of a tiled window** (M3) — drag-to-reorder: a dragged window
   keeps its tile slot during the move and, on release, its column is reordered to the
   strip slot nearest the drop point, then the strip re-resolves and snaps it in.
@@ -323,13 +326,23 @@ with the Phase 3 navigation work.
   strip (it floats); pinning / un-pinning at runtime drops it from / re-adds it to the
   strip.
 
-### Phase 4 — Widths/heights & viewport polish
+### Phase 4 — Widths/heights & viewport polish — ✅ COMPLETE
 
-- Preset column-width cycling, `set-column-width`, full-width toggle; preset window
-  heights.
-- Smooth scroll animation via paint transforms, using the §4.1 corrected ordering;
-  commit real geometry for visible windows *before* animating, re-park after.
-- `center-focused-column` modes.
+- ✅ **Width / height controls** (M1) — `Meta+Alt+R` / `Meta+Alt+Shift+R` cycle the
+  column-width / window-height presets (the engine ops existed since Phase 3 but had no
+  keymap entry); `Meta+Alt+F` toggles the focused column to full viewport width and
+  back (it remembers the prior width); `Meta+Alt+=` / `Meta+Alt+-` grow / shrink the
+  column width by a fixed step (the daemon passes 10%), clamped by the engine to
+  `[0.1, 1.0]`.
+- ✅ **`center-focused-column`** (M2) — `Meta+Alt+C` toggles the engine-global viewport
+  mode between `Fit` and `Centered` at runtime (`computeViewportScroll` already
+  resolved both). The persisted setting, with per-screen overrides, is Phase 5.
+- ✅ **Scroll animation** (M3) — scroll geometry batches already animate through the
+  shared `WindowAnimator`; M3 gave them a dedicated `window.scroll` motion profile
+  path (distinct from `window.snapIn`) so the viewport-pan feel tunes independently.
+  The §4.1 "corrected ordering / re-park" machinery proved unnecessary — see
+  Open Question 3 below: KWin paints fully-off-screen windows, so the cull-driven
+  constraint never arises.
 
 ### Phase 5 — Settings, UI, persistence
 
@@ -355,10 +368,17 @@ Deferred past v1 to keep it shippable:
 1. Confirm mapping a strip onto each existing KDE virtual desktop (rather than
    replicating niri's dynamic workspaces) is acceptable.
 2. Confirm the new `phosphor-scroll-engine` library + LGPL-2.1-or-later licensing.
-3. Phase 0 item 1: does KWin paint a window whose real geometry is fully off-screen? The
-   §4.1 animation model depends on the answer.
-4. Phase 0 item 4: does `IPlacementEngine` need new virtual methods, and is the impact on
-   the other two engines acceptable (§5)?
+3. ✅ **Resolved (Phase 4).** Does KWin paint a window whose real geometry is fully
+   off-screen? **Yes** — verified live: scrolling a window fully off-screen animates it
+   smoothly off the edge, so `paintWindow()` is called for it. The §4.1 constraint-B
+   cull risk does not arise; the "corrected ordering / re-park off-screen windows"
+   machinery is unnecessary and was not built.
+4. ✅ **Resolved (Phase 4).** Does `IPlacementEngine` need new virtual methods, and is the
+   impact on the other two engines acceptable (§5)? **No** — the niri-style column/strip
+   operations live on a dedicated `PhosphorEngine::IScrollNavigation` interface that only
+   `ScrollEngine` implements. The daemon reaches them via `dynamic_cast`, so the snap and
+   autotile engines carry zero scroll-specific virtuals (Interface Segregation). Generic
+   navigation intents shared by all engines stay on `IPlacementEngine`.
 5. **focus-follows-mouse interaction** — under that focus policy, KWin re-focuses
    whatever window is under the cursor after a scroll, fighting engine-driven focus.
    Decide: warp the cursor with the focused window, temporarily suppress the policy

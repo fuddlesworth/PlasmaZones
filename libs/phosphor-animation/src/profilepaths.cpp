@@ -22,6 +22,7 @@ const QString WindowSnapIn = QStringLiteral("window.snapIn");
 const QString WindowSnapOut = QStringLiteral("window.snapOut");
 const QString WindowSnapResize = QStringLiteral("window.snapResize");
 const QString WindowLayoutSwitch = QStringLiteral("window.layoutSwitch");
+const QString WindowScroll = QStringLiteral("window.scroll");
 
 // editor.* — Layout-editor-only zone manipulation. NOT runtime
 // window snapping (that's KWin's domain).
@@ -113,6 +114,7 @@ QStringList allBuiltInPaths()
         WindowSnapOut,
         WindowSnapResize,
         WindowLayoutSwitch,
+        WindowScroll,
         Editor,
         EditorSnapIn,
         EditorSnapOut,
