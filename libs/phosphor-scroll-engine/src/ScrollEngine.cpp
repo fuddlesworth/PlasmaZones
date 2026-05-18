@@ -4,6 +4,7 @@
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
 #include <QJsonArray>
+#include <QSet>
 
 #include <utility>
 
@@ -546,11 +547,19 @@ void ScrollEngine::toggleCenterFocusedColumn(const NavigationContext& ctx)
         reportNav(false, QStringLiteral("viewport"), screenId);
         return;
     }
-    // The viewport mode is engine-global; flip it and re-resolve the focused
-    // screen now — other scroll screens pick it up on their next relayout.
-    m_viewportMode =
-        (m_viewportMode == ScrollViewportMode::Fit) ? ScrollViewportMode::Centered : ScrollViewportMode::Fit;
-    emitChanged(screenId);
+    // The viewport mode is engine-global: flip it through the setter, then
+    // re-resolve *every* scroll screen. All scroll screens resolve against
+    // this mode, so a toggle on one screen must refresh them all — not just
+    // the focused one.
+    setViewportMode(m_viewportMode == ScrollViewportMode::Fit ? ScrollViewportMode::Centered : ScrollViewportMode::Fit);
+    QSet<QString> notified;
+    for (const auto& entry : m_states) {
+        const QString& sid = entry.first.screenId;
+        if (!sid.isEmpty() && !notified.contains(sid)) {
+            notified.insert(sid);
+            emitChanged(sid);
+        }
+    }
     reportNav(true, QStringLiteral("viewport"), screenId);
 }
 
@@ -633,6 +642,11 @@ void ScrollEngine::loadState()
 
 QJsonObject ScrollEngine::serializeEngineState() const
 {
+    // m_viewportMode is deliberately not serialized: it is runtime-only state
+    // that resets to Fit on restart. Per-column full-width state *is* persisted
+    // (in ScrollScreenState). Both become persisted ConfigDefaults settings in
+    // Phase 5; until then the viewport mode intentionally does not survive a
+    // daemon restart.
     QJsonArray states;
     for (const auto& entry : m_states) {
         QJsonObject obj = entry.second.toJson();

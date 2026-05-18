@@ -110,7 +110,9 @@ public:
     }
     /// Toggle full-width: when entering, the current width is remembered and
     /// the width intent becomes the whole working area; when leaving, the
-    /// remembered width is restored.
+    /// remembered width is restored. Works for any width kind — a Fixed-pixel
+    /// width is remembered and restored verbatim (unlike adjustColumnWidth,
+    /// which no-ops on Fixed widths since it cannot do fraction arithmetic).
     void toggleFullWidth();
 
     // ── Serialization ───────────────────────────────────────────────────

@@ -25,6 +25,11 @@ const ScrollScreenState* scrollState(const ScrollEngine& engine, const QString& 
     return dynamic_cast<const ScrollScreenState*>(engine.stateForScreen(screenId));
 }
 
+ScrollScreenState* scrollStateMut(ScrollEngine& engine, const QString& screenId)
+{
+    return dynamic_cast<ScrollScreenState*>(engine.stateForScreen(screenId));
+}
+
 } // namespace
 
 class TestScrollEngine : public QObject
@@ -270,6 +275,10 @@ void TestScrollEngine::toggleColumnFullWidth()
     engine.toggleColumnFullWidth(ctx);
     QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 1.0 / 3.0));
     QCOMPARE(state->activeColumn()->presetWidthIndex(), 0);
+
+    // A context targeting a screen with no scroll state is a harmless no-op.
+    engine.toggleColumnFullWidth(contextFor(QStringLiteral("S99")));
+    QVERIFY(!state->activeColumn()->isFullWidth());
 }
 
 void TestScrollEngine::adjustColumnWidth()
@@ -304,24 +313,46 @@ void TestScrollEngine::adjustColumnWidth()
     engine.adjustColumnWidth(-0.1, ctx);
     QVERIFY(!state->activeColumn()->isFullWidth());
     QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 0.9));
+
+    // A no-op on a fixed-pixel column — the geometry-agnostic engine cannot
+    // resolve a pixel width to a working-area fraction, so the width is left
+    // untouched.
+    ScrollScreenState* mutState = scrollStateMut(engine, QStringLiteral("S1"));
+    QVERIFY(mutState);
+    mutState->setActiveColumnWidth(ColumnWidth::fixed(400.0));
+    QCOMPARE(state->activeColumn()->width().kind, ColumnWidth::Kind::Fixed);
+    engine.adjustColumnWidth(0.1, ctx);
+    QCOMPARE(state->activeColumn()->width().kind, ColumnWidth::Kind::Fixed);
+    QCOMPARE(state->activeColumn()->width().value, 400.0);
+
+    // A context targeting a screen with no scroll state is a harmless no-op.
+    engine.adjustColumnWidth(0.1, contextFor(QStringLiteral("S99")));
 }
 
 void TestScrollEngine::toggleCenterFocusedColumn()
 {
     ScrollEngine engine;
     engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    engine.windowOpened(QStringLiteral("b"), QStringLiteral("S2"));
     const NavigationContext ctx = contextFor(QStringLiteral("S1"));
     QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
 
-    // The viewport mode starts at Fit and flips on each toggle; every toggle
-    // re-resolves the focused screen.
+    // The viewport mode is engine-global and starts at Fit. A toggle from one
+    // screen flips it and re-resolves *every* scroll screen, not just the
+    // focused one — so both S1 and S2 emit placementChanged on each toggle.
     QCOMPARE(engine.viewportMode(), ScrollViewportMode::Fit);
     engine.toggleCenterFocusedColumn(ctx);
     QCOMPARE(engine.viewportMode(), ScrollViewportMode::Centered);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.count(), 2);
     engine.toggleCenterFocusedColumn(ctx);
     QCOMPARE(engine.viewportMode(), ScrollViewportMode::Fit);
-    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.count(), 4);
+
+    // A toggle targeting a screen with no scroll state is a no-op — the mode
+    // does not flip and nothing re-resolves.
+    engine.toggleCenterFocusedColumn(contextFor(QStringLiteral("S99")));
+    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Fit);
+    QCOMPARE(spy.count(), 4);
 }
 
 void TestScrollEngine::floatToggle()

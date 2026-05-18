@@ -333,12 +333,15 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     // a niri-style strip translation — its own path so the viewport-pan feel tunes independently.
     // "rotate" moves windows between existing zones in the same layout — a snap-in. Default to
     // WindowSnapIn for unknown actions (forward-compat with future daemon-emitted strings).
-    QString batchProfilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn;
-    if (action == QLatin1String("resnap") || action == QLatin1String("retile")) {
-        batchProfilePath = PhosphorAnimation::ProfilePaths::WindowLayoutSwitch;
-    } else if (action == QLatin1String("scroll")) {
-        batchProfilePath = PhosphorAnimation::ProfilePaths::WindowScroll;
-    }
+    const QString batchProfilePath = [&action]() -> QString {
+        if (action == QLatin1String("resnap") || action == QLatin1String("retile")) {
+            return PhosphorAnimation::ProfilePaths::WindowLayoutSwitch;
+        }
+        if (action == QLatin1String("scroll")) {
+            return PhosphorAnimation::ProfilePaths::WindowScroll;
+        }
+        return PhosphorAnimation::ProfilePaths::WindowSnapIn;
+    }();
 
     applyStaggeredOrImmediate(
         pending.size(),
