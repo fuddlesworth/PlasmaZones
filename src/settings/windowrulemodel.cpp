@@ -157,16 +157,12 @@ QHash<int, QByteArray> WindowRuleModel::roleNames() const
         {EnabledRole, "enabled"},
         {PriorityRole, "priority"},
         {SectionRole, "section"},
-        {SectionLabelRole, "sectionLabel"},
         {MatchSummaryRole, "matchSummary"},
         {ActionSummaryRole, "actionSummary"},
         {ConditionCountRole, "conditionCount"},
         {ActionCountRole, "actionCount"},
         {IsCompositeRole, "isComposite"},
         {ScreenIdsRole, "screenIds"},
-        {MatchJsonRole, "matchJson"},
-        {ActionsJsonRole, "actionsJson"},
-        {RuleJsonRole, "ruleJson"},
     };
 }
 
@@ -187,8 +183,6 @@ QVariant WindowRuleModel::data(const QModelIndex& index, int role) const
         return rule.priority;
     case SectionRole:
         return QVariant::fromValue(sectionFor(rule));
-    case SectionLabelRole:
-        return sectionLabel(sectionFor(rule));
     case MatchSummaryRole:
         return matchSummary(rule.match);
     case ActionSummaryRole:
@@ -201,17 +195,6 @@ QVariant WindowRuleModel::data(const QModelIndex& index, int role) const
         return !matchIsSimpleConjunction(rule.match);
     case ScreenIdsRole:
         return screenIdsOf(rule.match);
-    case MatchJsonRole:
-        return rule.match.toJson().toVariantMap();
-    case ActionsJsonRole: {
-        QVariantList list;
-        for (const RuleAction& a : rule.actions) {
-            list.append(a.toJson().toVariantMap());
-        }
-        return list;
-    }
-    case RuleJsonRole:
-        return rule.toJson().toVariantMap();
     default:
         return {};
     }

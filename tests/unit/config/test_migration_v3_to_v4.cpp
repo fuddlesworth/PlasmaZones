@@ -40,6 +40,8 @@
 #include "../helpers/IsolatedConfigGuard.h"
 
 #include <PhosphorWindowRule/ContextRuleBridge.h>
+#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -654,6 +656,70 @@ private Q_SLOTS:
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
         QCOMPARE(secondRun, firstRun);
+    }
+
+    // ─── Data-loss regression: delete-failure must not clobber the store ──
+    //
+    // Simulates the scenario where the assignments.json retire step fails (a
+    // read-only filesystem, a lock, a permissions error) so the legacy file is
+    // still present on the next startup. The conversion is already complete —
+    // windowrules.json exists as a valid v4 WindowRuleSet, and the user has
+    // since authored an extra rule via the rule editor. Re-running
+    // finalizeV4Conversion MUST NOT rebuild-and-overwrite windowrules.json from
+    // the dead assignments.json: the user's rule must survive.
+    //
+    // The fix gates the rebuild on `!windowRulesAlreadyConverted` (probed by
+    // actually loading windowrules.json as a WindowRuleSet), NOT on
+    // assignments.json's absence — so a permanently-undeletable assignments.json
+    // can no longer clobber the rule store on every launch.
+    void testDeleteFailure_doesNotOverwriteUserRules()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+
+        // First run: full conversion produces windowrules.json.
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(QFile::exists(ConfigDefaults::windowRulesFilePath()));
+
+        // The user authors a new rule via the rule editor — load the store,
+        // append a rule, persist it. This rule exists ONLY in windowrules.json;
+        // it has no counterpart in assignments.json.
+        auto setWithUserRule = PhosphorWindowRule::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
+        QVERIFY2(setWithUserRule.has_value(), "windowrules.json must parse as a v4 rule set");
+        const PhosphorWindowRule::WindowRule userRule =
+            CRB::makeDisableRule(QStringLiteral("User-authored · DP-9"), QStringLiteral("DP-9"),
+                                 /*virtualDesktop=*/0, QString(), /*autotileMode=*/false);
+        const QUuid userRuleId = userRule.id;
+        QVERIFY(setWithUserRule->addRule(userRule));
+        QVERIFY(setWithUserRule->saveToFile(ConfigDefaults::windowRulesFilePath()));
+        const int countWithUserRule = setWithUserRule->count();
+        QVERIFY(countWithUserRule > 0);
+
+        // Simulate the retire-step failure: assignments.json is still present
+        // on disk (as if QFile::remove / rename had failed on the first run).
+        // Without the fix, the old idempotency guard — gated on
+        // assignments.json's absence — would NOT short-circuit, so the rebuild
+        // path would re-run and overwrite windowrules.json, destroying the
+        // user's rule.
+        writeJson(assignmentsPath(), makeAssignments());
+        QVERIFY(QFile::exists(assignmentsPath()));
+
+        // Re-run the migration against the already-converted tree.
+        ConfigMigration::resetMigrationGuardForTesting();
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // The user's rule MUST survive — windowrules.json was not rebuilt.
+        auto afterRerun = PhosphorWindowRule::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
+        QVERIFY2(afterRerun.has_value(), "windowrules.json must still parse as a v4 rule set after the re-run");
+        QVERIFY2(afterRerun->ruleById(userRuleId).has_value(),
+                 "the user-authored rule must survive a re-run with assignments.json still present");
+        QCOMPARE(afterRerun->count(), countWithUserRule);
+
+        // The cleanup-only branch still retires the leftover assignments.json
+        // (quarantined to .migrated, or deleted) so it cannot loop forever.
+        QVERIFY2(!QFile::exists(assignmentsPath()),
+                 "the cleanup-only branch must retire the leftover assignments.json");
     }
 };
 

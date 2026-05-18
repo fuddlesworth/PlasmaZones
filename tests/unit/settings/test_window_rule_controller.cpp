@@ -113,10 +113,13 @@ void TestWindowRuleController::dirtyTrackingAndRevert()
     QVERIFY(controller.hasPendingChanges());
     QVERIFY(dirtySpy.count() >= 1);
 
-    // revert() re-fetches from the daemon (absent here ⇒ empty) and clears
-    // the dirty bit.
-    controller.revert();
-    QVERIFY(!controller.isDirty());
+    // revert() re-fetches the daemon's authoritative set and only clears the
+    // dirty bit if the re-fetch succeeded. In this headless run the daemon is
+    // absent, so revert() must fail and KEEP the page dirty rather than
+    // silently dropping the staged edits while reporting success — that silent
+    // failure was the bug this contract guards against.
+    QVERIFY(!controller.revert());
+    QVERIFY(controller.isDirty());
 }
 
 void TestWindowRuleController::monitorOverviewSummarises()

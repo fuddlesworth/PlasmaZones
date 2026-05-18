@@ -94,9 +94,46 @@ private Q_SLOTS:
     void testTerminalFlag()
     {
         const ActionRegistry& reg = ActionRegistry::instance();
+        // Exclude is the only terminal builtin — every other builtin must be
+        // non-terminal, so evaluation continues past a matching rule.
         QVERIFY(reg.isTerminal(makeAction(ActionType::Exclude)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::Float)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetEngineMode)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::SetSnappingLayout)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::SetTilingAlgorithm)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::DisableEngine)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::OverrideAnimationShader)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::OverrideAnimationTiming)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::SetOpacity)));
+    }
+
+    void testValidateAcceptsWellFormedRegisteredAction()
+    {
+        const ActionRegistry& reg = ActionRegistry::instance();
+        // A registered type with a params payload its descriptor accepts.
+        QJsonObject mode;
+        mode.insert(QStringLiteral("mode"), QStringLiteral("autotile"));
+        QVERIFY(reg.validate(makeAction(ActionType::SetEngineMode, mode)));
+
+        QJsonObject opacity;
+        opacity.insert(QStringLiteral("value"), 0.5);
+        QVERIFY(reg.validate(makeAction(ActionType::SetOpacity, opacity)));
+    }
+
+    void testValidateRejectsRegisteredTypeWithBadParams()
+    {
+        const ActionRegistry& reg = ActionRegistry::instance();
+        // Registered type, but the params fail the descriptor's predicate:
+        // setEngineMode requires a non-empty `mode` string.
+        QVERIFY(!reg.validate(makeAction(ActionType::SetEngineMode)));
+        QJsonObject emptyMode;
+        emptyMode.insert(QStringLiteral("mode"), QString());
+        QVERIFY(!reg.validate(makeAction(ActionType::SetEngineMode, emptyMode)));
+
+        // setOpacity requires a numeric `value` in [0, 1] — out of range fails.
+        QJsonObject badOpacity;
+        badOpacity.insert(QStringLiteral("value"), 1.5);
+        QVERIFY(!reg.validate(makeAction(ActionType::SetOpacity, badOpacity)));
     }
 
     void testRegisterCustomAction()

@@ -465,6 +465,7 @@ install(FILES
     dbus/org.plasmazones.SettingsApp.xml
     dbus/org.plasmazones.Shader.xml
     dbus/org.plasmazones.WindowDrag.xml
+    dbus/org.plasmazones.WindowRules.xml
     dbus/org.plasmazones.WindowTracking.xml
     dbus/org.plasmazones.ZoneDetection.xml
     DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR}

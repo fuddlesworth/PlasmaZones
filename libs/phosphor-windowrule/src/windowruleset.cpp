@@ -18,6 +18,11 @@ namespace {
 constexpr QLatin1StringView kKeyVersion{"_version"};
 constexpr QLatin1StringView kKeyRules{"rules"};
 
+/// Upper bound on a rule-store file. A legitimate window-rule store is a few
+/// KB; anything past a few MB is corrupt or hostile and must not be slurped
+/// whole into memory.
+constexpr qint64 kMaxFileBytes = 8 * 1024 * 1024;
+
 } // namespace
 
 std::optional<WindowRule> WindowRuleSet::ruleById(const QUuid& id) const
@@ -165,6 +170,13 @@ std::optional<WindowRuleSet> WindowRuleSet::loadFromFile(const QString& path)
     }
     if (!file.open(QIODevice::ReadOnly)) {
         qCWarning(lcWindowRule) << "WindowRuleSet::loadFromFile: cannot open file:" << path << file.errorString();
+        return std::nullopt;
+    }
+    // Reject an implausibly large file before reading it — a corrupt or
+    // hostile store must not be slurped whole into memory.
+    if (file.size() > kMaxFileBytes) {
+        qCWarning(lcWindowRule) << "WindowRuleSet::loadFromFile: file exceeds the" << kMaxFileBytes
+                                << "byte cap — refusing to load:" << path << "size:" << file.size();
         return std::nullopt;
     }
     const QByteArray data = file.readAll();

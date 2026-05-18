@@ -132,7 +132,7 @@ Kirigami.Dialog {
 
                 return dialog.windowList.filter(function(w) {
                     let primary = dialog.forApps ? (w.appName && w.appName.length > 0 ? w.appName : dialog.deriveAppName(w.windowClass)) : w.windowClass;
-                    return primary.toLowerCase().includes(filter) || w.caption.toLowerCase().includes(filter);
+                    return primary.toLowerCase().includes(filter) || (w.caption || "").toLowerCase().includes(filter);
                 });
             }
 
@@ -150,7 +150,7 @@ Kirigami.Dialog {
 
                 width: ListView.view.width
                 highlighted: ListView.isCurrentItem
-                Accessible.name: primaryText + (modelData.caption.length > 0 ? " — " + modelData.caption : "")
+                Accessible.name: primaryText + ((modelData.caption || "").length > 0 ? " — " + modelData.caption : "")
                 onClicked: {
                     dialog.picked(primaryText);
                     dialog.close();
@@ -177,12 +177,12 @@ Kirigami.Dialog {
                         }
 
                         Label {
-                            text: modelData.caption
+                            text: modelData.caption || ""
                             Layout.fillWidth: true
                             font: Kirigami.Theme.smallFont
                             opacity: 0.7
                             elide: Text.ElideRight
-                            visible: modelData.caption.length > 0
+                            visible: (modelData.caption || "").length > 0
                         }
 
                     }

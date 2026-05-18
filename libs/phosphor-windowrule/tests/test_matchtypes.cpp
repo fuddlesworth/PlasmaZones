@@ -70,22 +70,33 @@ private Q_SLOTS:
         QCOMPARE(operatorFromString(QStringLiteral("REGEX")), Operator::Regex);
     }
 
+    void testFieldClassification_data()
+    {
+        QTest::addColumn<int>("fieldValue");
+        for (int v = 0; v < FieldCount; ++v) {
+            QTest::addRow("field-%d", v) << v;
+        }
+    }
+
     void testFieldClassification()
     {
-        QVERIFY(fieldIsString(Field::AppId));
-        QVERIFY(fieldIsString(Field::Title));
-        QVERIFY(fieldIsString(Field::ScreenId));
-        QVERIFY(!fieldIsString(Field::Pid));
-        QVERIFY(!fieldIsString(Field::WindowType));
-
-        QVERIFY(fieldIsNumeric(Field::Pid));
-        QVERIFY(fieldIsNumeric(Field::VirtualDesktop));
-        QVERIFY(!fieldIsNumeric(Field::AppId));
-
-        QVERIFY(fieldIsBool(Field::IsSticky));
-        QVERIFY(fieldIsBool(Field::IsFullscreen));
-        QVERIFY(fieldIsBool(Field::IsMinimized));
-        QVERIFY(!fieldIsBool(Field::WindowType));
+        // Every Field must fall into EXACTLY ONE of the three value-kind
+        // classifications (string / numeric / bool). WindowType is the one
+        // enum-valued field — it deliberately belongs to none, so the
+        // expected count is one classification per field except WindowType
+        // which has zero. Data-driving over all FieldCount enumerators
+        // catches a new field that forgets a classification, or one that
+        // accidentally lands in two.
+        QFETCH(int, fieldValue);
+        const Field field = static_cast<Field>(fieldValue);
+        const int classifications =
+            (fieldIsString(field) ? 1 : 0) + (fieldIsNumeric(field) ? 1 : 0) + (fieldIsBool(field) ? 1 : 0);
+        if (field == Field::WindowType) {
+            // WindowType is enum-valued — none of the three value kinds.
+            QCOMPARE(classifications, 0);
+        } else {
+            QCOMPARE(classifications, 1);
+        }
     }
 };
 

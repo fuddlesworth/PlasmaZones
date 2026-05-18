@@ -37,11 +37,9 @@ class TestWindowRuleStore : public QObject
     Q_OBJECT
 
 private:
-    QTemporaryDir m_dir;
-
-    QString storePath() const
+    static QString storePathIn(const QTemporaryDir& dir)
     {
-        return m_dir.path() + QStringLiteral("/windowrules.json");
+        return dir.path() + QStringLiteral("/windowrules.json");
     }
 
     static WindowRule makeRule(const QString& screenId)
@@ -51,9 +49,9 @@ private:
                                                      QString());
     }
 
-    void writeRaw(const QString& json) const
+    static void writeRaw(const QTemporaryDir& dir, const QString& json)
     {
-        QFile f(storePath());
+        QFile f(storePathIn(dir));
         QVERIFY(f.open(QIODevice::WriteOnly));
         f.write(json.toUtf8());
     }
@@ -76,31 +74,38 @@ private:
 
 private Q_SLOTS:
 
-    void init()
-    {
-        QFile::remove(storePath());
-    }
+    // Each test owns a local QTemporaryDir — the store's own file plus any
+    // QSaveFile scratch artifact a save-failure test leaks are all confined
+    // to that dir and discarded when it goes out of scope, so the
+    // directory-content assertion in testAtomicSave_roundTrips is not
+    // order-dependent on prior slots.
 
     // ─── Load robustness ──────────────────────────────────────────────────
 
     void testMissingFile_loadsEmpty()
     {
-        WindowRuleStore store(storePath());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        WindowRuleStore store(storePathIn(dir));
         QCOMPARE(store.count(), 0);
         QVERIFY(store.ruleSet().isEmpty());
     }
 
     void testMalformedFile_loadsEmpty()
     {
-        writeRaw(QStringLiteral("{ not valid json"));
-        WindowRuleStore store(storePath());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        writeRaw(dir, QStringLiteral("{ not valid json"));
+        WindowRuleStore store(storePathIn(dir));
         QCOMPARE(store.count(), 0);
     }
 
     void testWrongVersion_loadsEmpty()
     {
-        writeRaw(QStringLiteral("{\"_version\":1,\"rules\":[]}"));
-        WindowRuleStore store(storePath());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        writeRaw(dir, QStringLiteral("{\"_version\":1,\"rules\":[]}"));
+        WindowRuleStore store(storePathIn(dir));
         QCOMPARE(store.count(), 0);
     }
 
@@ -108,19 +113,21 @@ private Q_SLOTS:
 
     void testAtomicSave_roundTrips()
     {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
         const WindowRule a = makeRule(QStringLiteral("DP-1"));
         {
-            WindowRuleStore store(storePath());
+            WindowRuleStore store(storePathIn(dir));
             QVERIFY(store.addRule(a));
         }
         // A fresh store reading the same file sees the rule intact.
-        WindowRuleStore reloaded(storePath());
+        WindowRuleStore reloaded(storePathIn(dir));
         QCOMPARE(reloaded.count(), 1);
         QVERIFY(reloaded.contains(a.id));
 
         // Atomicity check: a successful QSaveFile commit leaves no temporary
         // scratch file behind in the directory — only the final store file.
-        const QStringList entries = QDir(m_dir.path()).entryList(QDir::Files | QDir::Hidden | QDir::System, QDir::Name);
+        const QStringList entries = QDir(dir.path()).entryList(QDir::Files | QDir::Hidden | QDir::System, QDir::Name);
         QCOMPARE(entries, QStringList{QStringLiteral("windowrules.json")});
     }
 
@@ -128,7 +135,9 @@ private Q_SLOTS:
 
     void testRevision_monotonicAcrossMutations()
     {
-        WindowRuleStore store(storePath());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        WindowRuleStore store(storePathIn(dir));
         const quint64 r0 = store.ruleSet().revision();
 
         const WindowRule a = makeRule(QStringLiteral("DP-1"));
@@ -146,7 +155,9 @@ private Q_SLOTS:
 
     void testRevision_noOpMutatorDoesNotBump()
     {
-        WindowRuleStore store(storePath());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        WindowRuleStore store(storePathIn(dir));
         WindowRule a = makeRule(QStringLiteral("DP-1"));
         a.enabled = true;
         QVERIFY(store.addRule(a));
@@ -165,7 +176,9 @@ private Q_SLOTS:
 
     void testSetAllRules_noOpDoesNotEmit()
     {
-        WindowRuleStore store(storePath());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        WindowRuleStore store(storePathIn(dir));
         const WindowRule a = makeRule(QStringLiteral("DP-1"));
         QVERIFY(store.addRule(a));
 
@@ -183,15 +196,17 @@ private Q_SLOTS:
 
     void testSetAllRules_noOpLeavesFileUntouched()
     {
-        WindowRuleStore store(storePath());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        WindowRuleStore store(storePathIn(dir));
         const WindowRule a = makeRule(QStringLiteral("DP-1"));
         QVERIFY(store.addRule(a));
 
         // Snapshot the persisted bytes. mtime equality is unreliable at
         // coarse filesystem timestamp resolution, so assert the file content
         // is byte-identical instead — a no-op setAllRules must not rewrite it.
-        auto readFile = [this]() -> QByteArray {
-            QFile f(storePath());
+        auto readFile = [&dir]() -> QByteArray {
+            QFile f(storePathIn(dir));
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         };
         const QByteArray before = readFile();
@@ -213,24 +228,26 @@ private Q_SLOTS:
         if (::geteuid() == 0) {
             QSKIP("save-failure test requires a non-root uid");
         }
-        WindowRuleStore store(storePath());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        WindowRuleStore store(storePathIn(dir));
         // Make the store directory read-only so the QSaveFile temp-write +
         // rename inside save() fails. The in-memory mutation still succeeds,
         // so addRule must return false to signal the file is now stale.
-        QVERIFY(QFile::setPermissions(m_dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        QVERIFY(QFile::setPermissions(dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
         // Some CI filesystems ignore POSIX mode bits — verify the directory
         // actually became read-only, else the test would silently mislead.
-        if (directoryIsWritable(m_dir.path())) {
-            QFile::setPermissions(m_dir.path(),
-                                  QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        if (directoryIsWritable(dir.path())) {
+            QFile::setPermissions(dir.path(), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
             QSKIP("filesystem ignores read-only directory permissions");
         }
 
         const WindowRule a = makeRule(QStringLiteral("DP-1"));
         const bool ok = store.addRule(a);
 
-        // Restore permissions before any assertion can abort the test.
-        QVERIFY(QFile::setPermissions(m_dir.path(),
+        // Restore permissions before any assertion can abort the test — also
+        // required so the QTemporaryDir can clean itself up on destruction.
+        QVERIFY(QFile::setPermissions(dir.path(),
                                       QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
 
         QVERIFY2(!ok, "addRule must return false when the persist fails");
@@ -246,19 +263,21 @@ private Q_SLOTS:
         if (::geteuid() == 0) {
             QSKIP("save-failure test requires a non-root uid");
         }
-        WindowRuleStore store(storePath());
-        QVERIFY(QFile::setPermissions(m_dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        WindowRuleStore store(storePathIn(dir));
+        QVERIFY(QFile::setPermissions(dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
         // Some CI filesystems ignore POSIX mode bits — see
         // testAddRule_propagatesSaveFailure.
-        if (directoryIsWritable(m_dir.path())) {
-            QFile::setPermissions(m_dir.path(),
-                                  QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        if (directoryIsWritable(dir.path())) {
+            QFile::setPermissions(dir.path(), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
             QSKIP("filesystem ignores read-only directory permissions");
         }
 
         const bool ok = store.setAllRules(QList<WindowRule>{makeRule(QStringLiteral("DP-1"))});
 
-        QVERIFY(QFile::setPermissions(m_dir.path(),
+        // Restore permissions — also required for QTemporaryDir cleanup.
+        QVERIFY(QFile::setPermissions(dir.path(),
                                       QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
 
         QVERIFY2(!ok, "setAllRules must return false when the persist fails");

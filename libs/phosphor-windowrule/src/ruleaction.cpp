@@ -35,7 +35,12 @@ bool hasNonEmptyString(const QJsonObject& params, QLatin1StringView key)
 
 QJsonObject RuleAction::toJson() const
 {
-    // `params` are written inline alongside `type` — `type` is reserved.
+    // `params` are written inline alongside `type`, so `"type"` is a RESERVED
+    // param key: a `params` entry keyed `"type"` is overwritten by `insert`
+    // here (and `fromJson` strips it back out on load). A free-form
+    // `acceptAny` action must never carry a user `"type"` param — it would be
+    // silently clobbered. The strict-key check rejects it for any descriptor
+    // with a non-empty `allowedKeys`, but free-form descriptors opt out.
     QJsonObject o = params;
     o.insert(kKeyType, type);
     return o;
@@ -180,11 +185,19 @@ void ActionRegistry::registerBuiltins()
                                     false, QStringList{QStringLiteral("algorithm")}});
 
     // ── engine-enable slot ──
+    // `mode` records which engine the rule disables. It must be one of the two
+    // known engine tokens — ContextRuleBridge::makeDisableRule writes exactly
+    // these and disableRuleAutotileMode reads them, so anything else is a
+    // malformed payload, not a future-extension placeholder.
     registerAction(ActionDescriptor{QString(ActionType::DisableEngine),
                                     [](const QJsonObject&) {
                                         return QString(ActionSlot::EngineEnable);
                                     },
-                                    &acceptAny, false, QStringList{QStringLiteral("mode")}});
+                                    [](const QJsonObject& p) {
+                                        const QString mode = p.value(QLatin1StringView("mode")).toString();
+                                        return mode == QLatin1String("snapping") || mode == QLatin1String("autotile");
+                                    },
+                                    false, QStringList{QStringLiteral("mode")}});
 
     // ── manage slot — terminal. Exclude is intentionally free-form: an empty
     //    `allowedKeys` opts out of the strict-key check so a future Exclude

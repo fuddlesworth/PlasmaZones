@@ -29,9 +29,17 @@ namespace PhosphorWindowRule {
  * MatchExpression is a copyable value type — it lives inside `QList<WindowRule>`.
  * The compiled regex for a `Regex` leaf is built **eagerly** at construction
  * time (in `makeLeaf` / `fromJson`) and stored in a `shared_ptr` so
- * value-copies share the compiled program. `evaluate()` performs no lazy
- * mutation — it only reads the already-compiled program — so a `const`
- * MatchExpression is safe to evaluate from multiple threads concurrently.
+ * value-copies share the *same* compiled program rather than recompiling.
+ *
+ * **Thread-safety.** `evaluate()` performs no lazy mutation of the
+ * MatchExpression itself — it only reads the already-compiled program. It is
+ * therefore *reentrant*. It is **NOT**, however, safe to call concurrently on
+ * two MatchExpression copies that share a `Regex` leaf: the shared
+ * `shared_ptr<QRegularExpression>` means both copies dispatch through one
+ * `QRegularExpression` instance, and `QRegularExpression::match()` mutates that
+ * instance's internal state (it is not thread-safe for concurrent `match()`
+ * calls on the same object). Callers that evaluate copies of a regex-bearing
+ * expression from multiple threads must serialize those calls themselves.
  *
  * An empty `All{}` is the **always-true catch-all** — the migrated provider
  * default. An empty `Any{}` / `None{}` are always-false / always-true
@@ -113,6 +121,10 @@ public:
      *
      * A leaf predicate over an absent window field evaluates `false`.
      * Composites fold per their kind. The empty `All{}` returns `true`.
+     *
+     * Reentrant, but **not** safe to call concurrently on copies that share a
+     * `Regex` leaf — see the class-level thread-safety note. Callers must
+     * serialize concurrent evaluation of regex-bearing expressions.
      */
     bool evaluate(const WindowQuery& query) const;
 

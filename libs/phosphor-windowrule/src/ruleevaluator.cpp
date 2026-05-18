@@ -4,6 +4,7 @@
 #include <PhosphorWindowRule/RuleEvaluator.h>
 
 #include <algorithm>
+#include <vector>
 
 #include "windowrulelogging.h"
 
@@ -161,14 +162,33 @@ void RuleEvaluator::evictCache(quint64 currentRevision) const
     // evict oldest-inserted first until it fits. This bounds the cache even
     // when the revision never changes but new window ids keep arriving (the
     // evaluator never sees window-close events).
-    while (m_cache.size() > kMaxCacheEntries) {
-        auto oldest = m_cache.begin();
-        for (auto it = m_cache.begin(); it != m_cache.end(); ++it) {
-            if (it->insertSeq < oldest->insertSeq) {
-                oldest = it;
-            }
+    //
+    // A repeated "linear-scan for the single oldest, erase, repeat" loop is
+    // O(n²) when many entries must drop at once. Instead find the insertSeq
+    // cutoff once with nth_element (O(n) average), then erase every entry at
+    // or below it in a single sweep (O(n)).
+    const int overflow = m_cache.size() - kMaxCacheEntries;
+    if (overflow <= 0) {
+        return;
+    }
+    std::vector<quint64> seqs;
+    seqs.reserve(m_cache.size());
+    for (auto it = m_cache.cbegin(); it != m_cache.cend(); ++it) {
+        seqs.push_back(it->insertSeq);
+    }
+    // The element at index (overflow - 1) is the largest insertSeq among the
+    // `overflow` oldest entries — every entry with insertSeq <= cutoff must go.
+    std::nth_element(seqs.begin(), seqs.begin() + (overflow - 1), seqs.end());
+    const quint64 cutoff = seqs[overflow - 1];
+
+    // insertSeq is monotonically unique, so `<= cutoff` selects exactly the
+    // `overflow` oldest entries — no tie can over- or under-evict.
+    for (auto it = m_cache.begin(); it != m_cache.end();) {
+        if (it->insertSeq <= cutoff) {
+            it = m_cache.erase(it);
+        } else {
+            ++it;
         }
-        m_cache.erase(oldest);
     }
 }
 

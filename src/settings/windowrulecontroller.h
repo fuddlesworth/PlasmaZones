@@ -32,7 +32,9 @@ namespace PlasmaZones {
  *   2. Every QML CRUD call mutates the in-memory model and flips the dirty bit.
  *   3. On `commit()` the staged rule set is pushed back to the daemon via
  *      `setAllRules` — the daemon stays the sole writer of `windowrules.json`.
- *   4. On `revert()` the staged set is discarded and re-fetched from the daemon.
+ *   4. On `revert()` the staged set is re-fetched from the daemon and the
+ *      staged edits discarded — but only if the daemon is reachable; a failed
+ *      re-fetch leaves the page dirty rather than silently dropping the edits.
  *
  * Dirty-tracking + revert/commit mirror `AnimationsPageController`'s
  * pending-changes contract: `SettingsController` connects `dirtyChanged` to
@@ -51,8 +53,10 @@ class WindowRuleController : public QObject
     /// True when a daemon `rulesChanged` broadcast arrived while the page had
     /// unsaved staged edits — `reload()` skipped the refresh to avoid stomping
     /// them, so the staged set is now divergent from the daemon's. The page
-    /// surfaces a "rules changed on disk — review before saving" notice;
-    /// `commit()` would otherwise silently overwrite the daemon's newer rules.
+    /// surfaces a "rules changed on disk — review before saving" notice. While
+    /// this flag is set, `commit(false)` refuses the push (returns false) so it
+    /// cannot silently overwrite the daemon's newer rules — the user must
+    /// review/revert or call `commit(true)` to force the overwrite.
     Q_PROPERTY(bool daemonChangedWhileDirty READ daemonChangedWhileDirty NOTIFY daemonChangedWhileDirtyChanged)
 
 public:
@@ -90,11 +94,24 @@ public:
     /// successful write. Called by `SettingsController::save()`. Returns false
     /// if the push failed (daemon down, or the daemon rejected/partially
     /// dropped rules) — the caller must keep the page dirty in that case.
-    bool commit();
+    ///
+    /// Refuses (returns false, leaves the page dirty) when
+    /// `daemonChangedWhileDirty` is set and @p force is false: the daemon's
+    /// rules changed under the staged edits, so an unconditional push would be
+    /// a silent lost update. The page surfaces the refusal and the user must
+    /// explicitly review (revert) or force the overwrite. Pass @p force true
+    /// once the user has chosen "overwrite anyway".
+    bool commit(bool force = false);
 
-    /// Discard staged edits and re-fetch from the daemon. Clears the dirty
-    /// bit. Called by `SettingsController::load()` (Discard).
-    void revert();
+    /// Discard staged edits and re-fetch from the daemon. Clears the dirty bit
+    /// only if the re-fetch actually succeeded. Called by
+    /// `SettingsController::load()` (Discard). If the daemon is unreachable the
+    /// staged edits cannot be safely discarded (there is nothing authoritative
+    /// to reload), so the page stays dirty and `daemonReachable` stays false —
+    /// the revert is reported as having failed rather than silently dropping
+    /// the dirty bit while the stale edits survive. Returns true only if the
+    /// staged set was actually replaced with the daemon's authoritative set.
+    bool revert();
 
     /// True iff there are unsaved staged edits. Mirror of `isDirty()` for the
     /// `SettingsController` pending-changes gate.
@@ -118,7 +135,9 @@ public:
     Q_INVOKABLE QString addRuleFromJson(const QVariantMap& ruleJson);
 
     /// Replace the rule with the matching id from its JSON map. Returns false
-    /// on a malformed map or an unknown id.
+    /// on a malformed map or an unknown id. An in-place edit never reorders the
+    /// list, so priorities are NOT renormalized — an explicit `priority` edit
+    /// in the Advanced editor is honoured verbatim.
     Q_INVOKABLE bool updateRuleFromJson(const QVariantMap& ruleJson);
 
     /// Remove the rule with @p ruleId (a UUID string). Returns false if absent.
@@ -192,17 +211,19 @@ Q_SIGNALS:
     void daemonChangedWhileDirtyChanged();
 
 private:
-    /// Flip the dirty bit to true and emit `dirtyChanged()`.
-    void markDirty();
     void setDirty(bool dirty);
     void setDaemonReachable(bool reachable);
     void setDaemonChangedWhileDirty(bool changed);
 
-    /// Re-fetch the rule set from the daemon and load it into the model,
-    /// unconditionally clearing the dirty bit. The public `reload()` slot
-    /// guards on the dirty bit so a daemon broadcast can't stomp staged
-    /// edits; `revert()`/`commit()` call this directly to bypass that guard.
-    void fetchAndLoad();
+    /// Re-fetch the rule set from the daemon and load it into the model.
+    /// Returns true and clears the dirty + `daemonChangedWhileDirty` bits only
+    /// if the daemon was reachable and the model was actually replaced with the
+    /// authoritative set. Returns false (model and dirty bit left untouched)
+    /// when the daemon is unreachable — the caller must not pretend a reload
+    /// happened. The public `reload()` slot guards on the dirty bit so a daemon
+    /// broadcast can't stomp staged edits; `revert()` calls this directly to
+    /// bypass that guard.
+    bool fetchAndLoad();
 
     /// Fetch the rule set JSON from the daemon. Returns nullopt on any D-Bus
     /// failure (daemon down, timeout). Updates `daemonReachable`.

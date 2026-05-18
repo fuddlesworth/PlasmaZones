@@ -113,9 +113,14 @@ private:
  * lifetime and must outlive the evaluator.
  *
  * Thread-safety: `hasAnyMatch()` reads the bound rule set in list order and
- * touches no internal cache or index — it is safe to call concurrently with
- * *other* `hasAnyMatch()` calls, and only so long as the bound `WindowRuleSet`
- * is not concurrently mutated. `resolve()`, `resolveCached()` and
+ * touches no internal `RuleEvaluator` cache or index. It is *only* safe to
+ * call concurrently with *other* `hasAnyMatch()` calls when **(a)** the bound
+ * `WindowRuleSet` is not concurrently mutated **and (b)** no rule in the set
+ * carries a `Regex` leaf — `MatchExpression::evaluate()` dispatches a regex
+ * leaf through a shared `QRegularExpression` whose `match()` is not
+ * thread-safe for concurrent calls (see the `MatchExpression` thread-safety
+ * note). A rule set containing any `Regex` predicate must have all
+ * `hasAnyMatch()` calls serialized. `resolve()`, `resolveCached()` and
  * `highestPriorityMatch()` mutate the lazily-built `mutable` priority-order
  * index (and, for `resolveCached()`, the `mutable` match cache);
  * `clearCache()` mutates only the match cache. All of these latter calls must
@@ -141,6 +146,9 @@ public:
     /// only need a yes/no ("does any rule re-enable this class"). Iterates in
     /// rule-set list order, **not** priority order: priority is irrelevant to
     /// a pure existence check, so no sort is performed.
+    ///
+    /// Not concurrency-safe against a rule set containing a `Regex` predicate
+    /// — see the class-level thread-safety note.
     bool hasAnyMatch(const WindowQuery& query) const;
 
     /// The single highest-priority **enabled** rule that matches @p query and

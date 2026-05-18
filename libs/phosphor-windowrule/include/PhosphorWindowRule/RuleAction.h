@@ -31,6 +31,11 @@ namespace PhosphorWindowRule {
 struct PHOSPHORWINDOWRULE_EXPORT RuleAction
 {
     QString type; ///< registered action type id (e.g. "setEngineMode")
+    /// Action-specific payload. NOTE: `"type"` is a **reserved param key** —
+    /// `toJson()` writes `type` inline alongside `params`, so a `params`
+    /// entry keyed `"type"` is clobbered on serialization (and stripped on
+    /// load). A free-form `acceptAny` action must not use `"type"` as a
+    /// payload key.
     QJsonObject params; ///< action-specific payload
 
     bool operator==(const RuleAction& other) const

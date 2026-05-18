@@ -79,8 +79,10 @@ MatchExpression MatchExpression::makeLeaf(const Predicate& predicate)
     MatchExpression expr;
     expr.m_kind = Kind::Leaf;
     expr.m_predicate = predicate;
-    // Compile the regex eagerly so evaluate() never mutates — a validated
-    // expression is then safe to evaluate from any thread.
+    // Compile the regex eagerly so evaluate() never mutates the expression
+    // itself — evaluate() is then reentrant. Note this does NOT make copies
+    // sharing the regex leaf concurrently evaluable: QRegularExpression::match()
+    // mutates the shared instance. See the MatchExpression class doc.
     expr.ensureRegex();
     return expr;
 }
@@ -248,6 +250,25 @@ bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
 
     // ── Set membership ──
     if (op == Operator::In) {
+        // isValid() accepts either a QVariantList (the canonical wire shape)
+        // or a QStringList (a programmatically built leaf). QVariant::toList()
+        // does NOT convert a QStringList-typed QVariant — it returns an empty
+        // list — so a QStringList leaf must be iterated through toStringList()
+        // to evaluate correctly. Keep both branches so isValid()/evaluate()
+        // agree on what an `In` leaf can carry.
+        if (value.metaType().id() == QMetaType::QStringList) {
+            const QString subjectStr = subject.toString();
+            for (const QString& candidate : value.toStringList()) {
+                if (fieldIsString(m_predicate.field)) {
+                    if (subjectStr.compare(candidate, Qt::CaseInsensitive) == 0) {
+                        return true;
+                    }
+                } else if (subject.toInt() == candidate.toInt()) {
+                    return true;
+                }
+            }
+            return false;
+        }
         const QVariantList set = value.toList();
         for (const QVariant& candidate : set) {
             if (fieldIsString(m_predicate.field)) {
@@ -301,6 +322,11 @@ bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
         // A leaf that reaches evaluate() has passed isValid(), so the program
         // is present and valid; the guard only defends a hand-built leaf that
         // skipped validation.
+        //
+        // `match()` mutates m_compiledRegex's internal state, and that
+        // instance is shared across value-copies of this expression — so this
+        // branch is reentrant but NOT safe to run concurrently against a copy
+        // sharing this leaf. Callers must serialize. See the class doc.
         if (!m_compiledRegex || !m_compiledRegex->isValid()) {
             return false;
         }

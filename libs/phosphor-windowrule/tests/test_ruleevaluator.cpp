@@ -216,13 +216,16 @@ private Q_SLOTS:
         RuleEvaluator eval(set);
         const ResolvedActions result = eval.resolve(konsoleQuery());
         // Both event-scoped slots are filled — and each carries its own
-        // effectId, proving the two events resolve into independent slots
-        // rather than one clobbering the other.
+        // effectId AND its own event param, proving the two events resolve
+        // into independent slots with the correct action in each (rather than
+        // one clobbering the other or an action landing in the wrong slot).
         const auto open = result.slot(QStringLiteral("anim-shader:window.open"));
         const auto close = result.slot(QStringLiteral("anim-shader:window.close"));
         QVERIFY(open.has_value());
         QVERIFY(close.has_value());
+        QCOMPARE(open->params.value(QStringLiteral("event")).toString(), QStringLiteral("window.open"));
         QCOMPARE(open->params.value(QStringLiteral("effectId")).toString(), QStringLiteral("dissolve"));
+        QCOMPARE(close->params.value(QStringLiteral("event")).toString(), QStringLiteral("window.close"));
         QCOMPARE(close->params.value(QStringLiteral("effectId")).toString(), QStringLiteral("popout"));
     }
 

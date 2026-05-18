@@ -51,12 +51,40 @@ namespace PhosphorWindowRule {
 
 namespace ExclusionListBridge {
 
+namespace detail {
+
+/// Fixed v5-UUID namespace for exclusion-rule identities. Deriving each rule's
+/// id deterministically from its source identity (field + operator + pattern)
+/// makes the conversion idempotent: converting the same exclusion lists twice
+/// yields rule sets that compare equal, so `WindowRuleStore::setAllRules`
+/// keeps its no-op fast path.
+inline const QUuid& namespaceUuid()
+{
+    static const QUuid ns(QStringLiteral("{d5f4e3c2-9b60-7182-0abe-2f3a4b5c6d7e}"));
+    return ns;
+}
+
+/// Stable per-rule key. @p field and @p op disambiguate the rule families:
+/// the same pattern can produce a `DesktopFile Contains` rule, a
+/// `WindowClass Contains` rule (toRuleSet) and an `AppId AppIdMatches` rule
+/// (toDaemonRuleSet) — all three must carry distinct ids.
+inline QString exclusionIdentityKey(Field field, Operator op, const QString& pattern)
+{
+    return QString::number(static_cast<int>(field)) + QLatin1Char('|') + QString::number(static_cast<int>(op))
+        + QLatin1Char('|') + pattern;
+}
+
+} // namespace detail
+
 /// Builds one `Exclude` rule for a single @p field / @p pattern pair. The
 /// caller guarantees @p pattern is non-empty.
 inline WindowRule makeExclusionRule(Field field, const QString& pattern)
 {
     WindowRule rule;
-    rule.id = QUuid::createUuid();
+    // Deterministic id — identical (field, pattern) inputs yield identical
+    // rules, keeping the conversion idempotent.
+    rule.id =
+        QUuid::createUuidV5(detail::namespaceUuid(), detail::exclusionIdentityKey(field, Operator::Contains, pattern));
     rule.enabled = true;
     rule.priority = 0;
     rule.match = MatchExpression::makeLeaf(field, Operator::Contains, pattern);
@@ -138,7 +166,10 @@ inline WindowRuleSet toDaemonRuleSet(const QStringList& excludedApplications, co
                 continue;
             }
             WindowRule rule;
-            rule.id = QUuid::createUuid();
+            // Deterministic id — identical patterns yield identical rules,
+            // keeping the conversion idempotent.
+            rule.id = QUuid::createUuidV5(detail::namespaceUuid(),
+                                          detail::exclusionIdentityKey(Field::AppId, Operator::AppIdMatches, pattern));
             rule.enabled = true;
             rule.priority = 0;
             rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern);

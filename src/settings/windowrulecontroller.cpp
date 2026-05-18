@@ -5,6 +5,7 @@
 
 #include "dbusutils.h"
 
+#include "../core/logging.h"
 #include "../pz_i18n.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -15,9 +16,11 @@
 
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QTimer>
 
 namespace PlasmaZones {
 
@@ -181,7 +184,11 @@ WindowRuleController::WindowRuleController(QObject* parent)
                                           QString(PhosphorProtocol::Service::ObjectPath),
                                           QString(PhosphorProtocol::Service::Interface::WindowRules),
                                           QStringLiteral("rulesChanged"), this, SLOT(reload()));
-    reload();
+    // Defer the initial fetch to the next event-loop tick. fetchFromDaemon()
+    // issues a synchronous blocking QDBusConnection::call() (up to ~500 ms on
+    // a timeout); running it inline in the constructor would stall settings-app
+    // startup whenever the daemon is slow or absent.
+    QTimer::singleShot(0, this, &WindowRuleController::reload);
 }
 
 WindowRuleController::~WindowRuleController() = default;
@@ -193,12 +200,6 @@ void WindowRuleController::setDirty(bool dirty)
     }
     m_dirty = dirty;
     Q_EMIT dirtyChanged();
-}
-
-void WindowRuleController::markDirty()
-{
-    // Flip the dirty bit to true (and emit dirtyChanged on a transition).
-    setDirty(true);
 }
 
 void WindowRuleController::setDaemonReachable(bool reachable)
@@ -262,25 +263,28 @@ bool WindowRuleController::pushToDaemon(const QList<WindowRule>& rules)
     return daemonAccepted && accepted == rules.size();
 }
 
-void WindowRuleController::fetchAndLoad()
+bool WindowRuleController::fetchAndLoad()
 {
     const auto fetched = fetchFromDaemon();
-    if (fetched) {
-        m_model.setRules(fetched->rules());
-    } else if (m_model.rowCount() == 0) {
-        // Daemon down and nothing loaded — leave the model empty.
-        m_model.setRules({});
+    if (!fetched) {
+        // Daemon unreachable — there is nothing authoritative to load. Leave
+        // the model and the dirty bit untouched and report failure so the
+        // caller does not pretend a reload happened. fetchFromDaemon() has
+        // already cleared `daemonReachable`.
+        return false;
     }
+    m_model.setRules(fetched->rules());
     setDirty(false);
     setDaemonChangedWhileDirty(false);
+    return true;
 }
 
 void WindowRuleController::reload()
 {
     // A daemon `rulesChanged` broadcast routes here. If the user has unsaved
     // staged edits, re-fetching would stomp them — skip the refresh and keep
-    // the staged set. The explicit revert()/commit() paths call fetchAndLoad()
-    // directly so they bypass this guard.
+    // the staged set. The explicit revert() path calls fetchAndLoad()
+    // directly so it bypasses this guard.
     if (m_dirty) {
         // The staged set is now divergent from the daemon's newer rules. Flag
         // it so the page can warn the user before a commit() silently
@@ -291,10 +295,19 @@ void WindowRuleController::reload()
     fetchAndLoad();
 }
 
-bool WindowRuleController::commit()
+bool WindowRuleController::commit(bool force)
 {
     if (!m_dirty) {
         return true;
+    }
+    if (m_daemonChangedWhileDirty && !force) {
+        // The daemon's rules changed under the staged edits. Pushing now would
+        // silently overwrite the daemon's newer set (lost update). Refuse and
+        // keep the page dirty — the page surfaces `daemonChangedWhileDirty` so
+        // the user can review/revert or force the overwrite via commit(true).
+        qCWarning(lcConfig) << "WindowRuleController::commit: refusing to push — daemon rules changed while the page "
+                               "had staged edits; review or force-overwrite required";
+        return false;
     }
     if (!pushToDaemon(m_model.rules())) {
         // The push failed (daemon down or a partial drop). Keep the dirty bit
@@ -307,10 +320,14 @@ bool WindowRuleController::commit()
     return true;
 }
 
-void WindowRuleController::revert()
+bool WindowRuleController::revert()
 {
-    // Discard staged edits unconditionally — bypass reload()'s dirty guard.
-    fetchAndLoad();
+    // Discard staged edits by re-fetching the daemon's authoritative set —
+    // bypass reload()'s dirty guard. fetchAndLoad() only clears the dirty bit
+    // if the daemon was reachable; a failed re-fetch keeps the page dirty
+    // (and `daemonReachable` false) rather than silently dropping the staged
+    // edits while telling the user the revert succeeded.
+    return fetchAndLoad();
 }
 
 void WindowRuleController::renormalizePriorities()
@@ -319,6 +336,14 @@ void WindowRuleController::renormalizePriorities()
     // monotonically onto evaluation order. Higher list index ⇒ lower
     // priority within the rule's band; the bands keep the section ordering
     // (Advanced > Monitor > Application > Animation) stable.
+    //
+    // This is invoked ONLY when list order changes — on a drag-reorder
+    // (moveRule) and when a new rule is appended (addRuleFromJson). An in-place
+    // edit (updateRuleFromJson) never reorders the list, so it does not call
+    // this: the Advanced editor exposes `priority` directly, and an explicit
+    // priority edit there is honoured verbatim rather than being overwritten by
+    // the band-derived value. A non-priority in-place edit likewise leaves
+    // priority untouched, so list order and PriorityRole stay consistent.
     //
     // Only the priority changes — push the new values through setPriorities()
     // so the model emits a single dataChanged(PriorityRole) instead of a full
@@ -390,14 +415,20 @@ QString WindowRuleController::addRuleFromJson(const QVariantMap& ruleJson)
         obj.insert(QLatin1String("id"), QUuid::createUuid().toString());
     }
     const auto parsed = WindowRule::fromJson(obj);
-    if (!parsed || !parsed->isValid() || !m_model.addRule(*parsed)) {
+    if (!parsed || !parsed->isValid()) {
+        qCWarning(lcConfig) << "WindowRuleController::addRuleFromJson: rejecting malformed rule payload";
+        return QString();
+    }
+    if (!m_model.addRule(*parsed)) {
+        qCWarning(lcConfig) << "WindowRuleController::addRuleFromJson: model rejected rule" << parsed->id.toString()
+                            << "(id collision or invalid)";
         return QString();
     }
     // Re-stamp priorities so two rules added back-to-back in the same band do
     // not collide on the band-base priority — list order maps onto evaluation
     // order exactly as it does after a drag-reorder.
     renormalizePriorities();
-    markDirty();
+    setDirty(true);
     return parsed->id.toString();
 }
 
@@ -405,18 +436,22 @@ bool WindowRuleController::updateRuleFromJson(const QVariantMap& ruleJson)
 {
     const WindowRule rule = ruleFromVariant(ruleJson);
     if (rule.id.isNull()) {
+        // ruleFromVariant() yields a null-id rule when WindowRule::fromJson
+        // rejects the payload (malformed map, missing/invalid id).
+        qCWarning(lcConfig) << "WindowRuleController::updateRuleFromJson: rejecting malformed rule payload";
         return false;
     }
     const WindowRuleModel::UpdateResult result = m_model.updateRule(rule);
     switch (result) {
     case WindowRuleModel::UpdateResult::NotFound:
+        qCWarning(lcConfig) << "WindowRuleController::updateRuleFromJson: no rule with id" << rule.id.toString();
         return false;
     case WindowRuleModel::UpdateResult::Unchanged:
         // A genuine no-op save — the rule is unchanged, so do not dirty the
         // page. Still report success: the caller's "save" intent succeeded.
         return true;
     case WindowRuleModel::UpdateResult::Applied:
-        markDirty();
+        setDirty(true);
         return true;
     }
     return false;
@@ -427,7 +462,7 @@ bool WindowRuleController::removeRule(const QString& ruleId)
     if (!m_model.removeRule(QUuid::fromString(ruleId))) {
         return false;
     }
-    markDirty();
+    setDirty(true);
     return true;
 }
 
@@ -443,7 +478,7 @@ bool WindowRuleController::setRuleEnabled(const QString& ruleId, bool enabled)
     if (m_model.updateRule(rule) != WindowRuleModel::UpdateResult::Applied) {
         return false;
     }
-    markDirty();
+    setDirty(true);
     return true;
 }
 
@@ -453,7 +488,7 @@ bool WindowRuleController::moveRule(const QString& ruleId, const QString& before
         return false;
     }
     renormalizePriorities();
-    markDirty();
+    setDirty(true);
     return true;
 }
 
@@ -511,6 +546,44 @@ QVariantList WindowRuleController::rulesSnapshot() const
 
 QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) const
 {
+    // Per-screen accumulator — built in a single pass over the rule set so the
+    // total cost is O(rules × actions + screens) rather than O(screens × rules
+    // × actions). A screen with no pinned rule simply never gets an entry and
+    // falls through to the default "not assigned" tile below.
+    struct Summary
+    {
+        int ruleCount = 0;
+        bool tilingEnabled = true;
+        QString layoutName;
+    };
+    QHash<QString, Summary> byScreen;
+
+    for (const WindowRule& rule : m_model.rules()) {
+        // Only context-only rules that pin a monitor count toward a tile.
+        if (!rule.match.isContextOnly()) {
+            continue;
+        }
+        const QStringList screenIds = WindowRuleModel::screenIdsOf(rule.match);
+        if (screenIds.isEmpty()) {
+            continue;
+        }
+        for (const QString& screenId : screenIds) {
+            Summary& s = byScreen[screenId];
+            ++s.ruleCount;
+            for (const RuleAction& a : rule.actions) {
+                if (a.type == ActionType::DisableEngine) {
+                    s.tilingEnabled = false;
+                }
+                if (a.type == ActionType::SetSnappingLayout && s.layoutName.isEmpty()) {
+                    s.layoutName = a.params.value(QLatin1String("layoutId")).toString();
+                }
+                if (a.type == ActionType::SetTilingAlgorithm && s.layoutName.isEmpty()) {
+                    s.layoutName = a.params.value(QLatin1String("algorithm")).toString();
+                }
+            }
+        }
+    }
+
     QVariantList out;
     for (const QVariant& sv : screens) {
         const QVariantMap screen = sv.toMap();
@@ -524,41 +597,15 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
             continue;
         }
 
-        int ruleCount = 0;
-        bool tilingEnabled = true;
-        bool assigned = false;
-        QString layoutName;
-
-        for (const WindowRule& rule : m_model.rules()) {
-            // Only context-only rules that pin this exact monitor count
-            // toward the overview tile.
-            if (!rule.match.isContextOnly()) {
-                continue;
-            }
-            // Walk the (flat or nested) match for a ScreenId == screenId leaf.
-            if (!WindowRuleModel::screenIdsOf(rule.match).contains(screenId)) {
-                continue;
-            }
-            ++ruleCount;
-            assigned = true;
-            for (const RuleAction& a : rule.actions) {
-                if (a.type == ActionType::DisableEngine) {
-                    tilingEnabled = false;
-                }
-                if (a.type == ActionType::SetSnappingLayout && layoutName.isEmpty()) {
-                    layoutName = a.params.value(QLatin1String("layoutId")).toString();
-                }
-                if (a.type == ActionType::SetTilingAlgorithm && layoutName.isEmpty()) {
-                    layoutName = a.params.value(QLatin1String("algorithm")).toString();
-                }
-            }
-        }
+        const auto it = byScreen.constFind(screenId);
+        const bool assigned = it != byScreen.constEnd();
+        const Summary summary = assigned ? *it : Summary{};
 
         QVariantMap tile;
         tile[QStringLiteral("screenId")] = screenId;
-        tile[QStringLiteral("layoutName")] = layoutName;
-        tile[QStringLiteral("tilingEnabled")] = tilingEnabled;
-        tile[QStringLiteral("ruleCount")] = ruleCount;
+        tile[QStringLiteral("layoutName")] = summary.layoutName;
+        tile[QStringLiteral("tilingEnabled")] = summary.tilingEnabled;
+        tile[QStringLiteral("ruleCount")] = summary.ruleCount;
         tile[QStringLiteral("assigned")] = assigned;
         out.append(tile);
     }

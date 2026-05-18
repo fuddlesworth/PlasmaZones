@@ -77,14 +77,23 @@ bool WindowRuleAdaptor::setAllRules(const QString& rulesJson)
         qCWarning(lcDbus) << "WindowRuleAdaptor::setAllRules: payload has no `rules` array";
         return false;
     }
+    const QJsonArray rulesArray = rulesValue.toArray();
     QList<PhosphorWindowRule::WindowRule> rules;
-    for (const QJsonValue& v : rulesValue.toArray()) {
+    for (const QJsonValue& v : rulesArray) {
         if (!v.isObject()) {
             continue;
         }
         if (const auto rule = PhosphorWindowRule::WindowRule::fromJson(v.toObject())) {
             rules.append(*rule);
         }
+    }
+    // Drop-and-continue is intentional, but a silent drop hides a settings-app
+    // ↔ daemon schema skew — warn with the counts so it is diagnosable.
+    const int total = static_cast<int>(rulesArray.size());
+    const int accepted = static_cast<int>(rules.size());
+    if (accepted != total) {
+        qCWarning(lcDbus) << "WindowRuleAdaptor::setAllRules: dropped" << (total - accepted) << "malformed rule(s) —"
+                          << accepted << "accepted of" << total << "— possible settings-app/daemon schema skew";
     }
     // Propagate a persist failure to the D-Bus caller — a false return means
     // the in-memory set changed but the file write failed.
@@ -130,7 +139,12 @@ bool WindowRuleAdaptor::removeRule(const QString& ruleId)
     if (!m_store) {
         return false;
     }
-    return m_store->removeRule(QUuid::fromString(ruleId));
+    const QUuid id = QUuid::fromString(ruleId);
+    if (id.isNull()) {
+        qCWarning(lcDbus) << "WindowRuleAdaptor::removeRule: malformed rule id —" << ruleId;
+        return false;
+    }
+    return m_store->removeRule(id);
 }
 
 bool WindowRuleAdaptor::setRuleEnabled(const QString& ruleId, bool enabled)
@@ -138,7 +152,12 @@ bool WindowRuleAdaptor::setRuleEnabled(const QString& ruleId, bool enabled)
     if (!m_store) {
         return false;
     }
-    return m_store->setRuleEnabled(QUuid::fromString(ruleId), enabled);
+    const QUuid id = QUuid::fromString(ruleId);
+    if (id.isNull()) {
+        qCWarning(lcDbus) << "WindowRuleAdaptor::setRuleEnabled: malformed rule id —" << ruleId;
+        return false;
+    }
+    return m_store->setRuleEnabled(id, enabled);
 }
 
 bool WindowRuleAdaptor::setRulePriority(const QString& ruleId, int priority)
@@ -146,7 +165,12 @@ bool WindowRuleAdaptor::setRulePriority(const QString& ruleId, int priority)
     if (!m_store) {
         return false;
     }
-    return m_store->setRulePriority(QUuid::fromString(ruleId), priority);
+    const QUuid id = QUuid::fromString(ruleId);
+    if (id.isNull()) {
+        qCWarning(lcDbus) << "WindowRuleAdaptor::setRulePriority: malformed rule id —" << ruleId;
+        return false;
+    }
+    return m_store->setRulePriority(id, priority);
 }
 
 } // namespace PlasmaZones

@@ -331,6 +331,18 @@ ApplicationWindow {
         return segments;
     }
 
+    /// Resolve the page QML source for @p pageName. An unmapped page name is
+    /// a navigation bug — surface it with a console.warn rather than silently
+    /// falling back, mirroring the sidebar's "show the gap visibly" stance.
+    function _resolvePageSource(pageName) {
+        var file = window._pageComponents[pageName];
+        if (file === undefined) {
+            console.warn("Main.qml: no page component mapped for activePage '" + pageName + "' — falling back to LayoutsPage.qml");
+            file = "LayoutsPage.qml";
+        }
+        return Qt.resolvedUrl(file);
+    }
+
     // Walk @p parentName's descendants and return every leaf whose label
     // matches @p searchText. Nested labels are prefixed with their
     // immediate parent ("Surfaces / Windows") so a search hit is
@@ -783,7 +795,19 @@ ApplicationWindow {
             if (!item)
                 return true;
 
-            return !(item instanceof TextInput) && !(item instanceof TextEdit);
+            // A focused QtQuick.Controls TextField/TextArea reports the
+            // control (not its internal TextInput/TextEdit) as the
+            // activeFocusItem, so the instanceof checks alone miss it.
+            // Also treat any item with an editable-text accessible role as
+            // a text input so typing `?` into a field never toggles help.
+            if (item instanceof TextInput || item instanceof TextEdit)
+                return false;
+
+            var role = item.Accessible.role;
+            if (role === Accessible.EditableText || role === Accessible.PasswordText)
+                return false;
+
+            return true;
         }
         onActivated: window._showShortcuts = !window._showShortcuts
     }
@@ -1507,7 +1531,7 @@ ApplicationWindow {
 
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.largeSpacing
-                    source: Qt.resolvedUrl(window._pageComponents[settingsController.activePage] || "LayoutsPage.qml")
+                    source: window._resolvePageSource(settingsController.activePage)
                     asynchronous: false
                     // Fade in on page change
                     onLoaded: {

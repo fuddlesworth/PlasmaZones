@@ -68,6 +68,30 @@ inline constexpr int kScreenWeight = 10;
 /// pinned context rule.
 inline constexpr int kProviderDefaultPriority = 0;
 
+namespace detail {
+
+/// Fixed v5-UUID namespace for context-rule identities. Deriving each rule's
+/// id deterministically from its source identity makes the migration
+/// idempotent: converting the same context input twice yields rule sets that
+/// compare equal, so `WindowRuleStore::setAllRules` keeps its no-op fast path.
+inline const QUuid& namespaceUuid()
+{
+    static const QUuid ns(QStringLiteral("{c4e3d2b1-8a5f-6071-9cad-1e2f3a4b5c6d}"));
+    return ns;
+}
+
+/// Stable per-rule key for the v5-UUID derivation. @p family distinguishes the
+/// rule kinds that share a (screen, desktop, activity) tuple — an assignment
+/// rule and a disable rule for the same context must not collide on id.
+inline QString contextIdentityKey(QLatin1StringView family, const QString& screenId, int virtualDesktop,
+                                  const QString& activity)
+{
+    return QString(family) + QLatin1Char('|') + screenId + QLatin1Char('|') + QString::number(virtualDesktop)
+        + QLatin1Char('|') + activity;
+}
+
+} // namespace detail
+
 /**
  * @brief Compute the cascade priority for a context rule.
  *
@@ -173,7 +197,11 @@ inline WindowRule makeAssignmentRule(const QString& name, const QString& screenI
                                      const QString& tilingAlgorithm)
 {
     WindowRule rule;
-    rule.id = QUuid::createUuid();
+    // Deterministic id derived from the source context identity — identical
+    // assignments yield identical rules, keeping the migration idempotent.
+    rule.id = QUuid::createUuidV5(
+        detail::namespaceUuid(),
+        detail::contextIdentityKey(QLatin1StringView("assignment"), screenId, virtualDesktop, activity));
     rule.name = name;
     rule.enabled = true;
     rule.priority = contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
@@ -193,7 +221,11 @@ inline WindowRule makeProviderDefaultRule(const QString& name, bool autotileMode
                                           const QString& tilingAlgorithm)
 {
     WindowRule rule;
-    rule.id = QUuid::createUuid();
+    // The provider default is the single catch-all assignment — its identity
+    // is fixed (no pinned dimensions), so the v5 key carries only the family.
+    rule.id =
+        QUuid::createUuidV5(detail::namespaceUuid(),
+                            detail::contextIdentityKey(QLatin1StringView("provider-default"), QString(), 0, QString()));
     rule.name = name;
     rule.enabled = true;
     rule.priority = kProviderDefaultPriority;
@@ -219,7 +251,13 @@ inline WindowRule makeDisableRule(const QString& name, const QString& screenId, 
                                   const QString& activity, bool autotileMode)
 {
     WindowRule rule;
-    rule.id = QUuid::createUuid();
+    // Deterministic id — a disable rule's identity is its context tuple plus
+    // which engine it disables (snapping/autotile disables for the same
+    // context are distinct rules and must not collide).
+    rule.id = QUuid::createUuidV5(detail::namespaceUuid(),
+                                  detail::contextIdentityKey(autotileMode ? QLatin1StringView("disable-autotile")
+                                                                          : QLatin1StringView("disable-snapping"),
+                                                             screenId, virtualDesktop, activity));
     rule.name = name;
     rule.enabled = true;
     rule.priority = contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());

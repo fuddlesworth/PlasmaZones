@@ -71,6 +71,26 @@ inline constexpr QLatin1StringView kKeyEffectId{"effectId"};
 inline constexpr QLatin1StringView kKeyParams{"params"};
 inline constexpr QLatin1StringView kKeyCurve{"curve"};
 inline constexpr QLatin1StringView kKeyDurationMs{"durationMs"};
+
+/// Fixed v5-UUID namespace for animation App-Rule identities. Deriving each
+/// rule's id deterministically from its source identity (classPattern,
+/// eventPath, kind) makes the conversion idempotent: converting the same
+/// `AnimationAppRuleList` twice yields rule sets that compare equal, so
+/// `WindowRuleStore::setAllRules` can keep its no-op fast path.
+inline const QUuid& namespaceUuid()
+{
+    static const QUuid ns(QStringLiteral("{b3f2c1a0-7d4e-5f6a-8b9c-0d1e2f3a4b5c}"));
+    return ns;
+}
+
+/// Stable per-rule key for the v5-UUID derivation.
+inline QString ruleIdentityKey(const PhosphorAnimationShaders::AnimationAppRule& source)
+{
+    const QString kind = source.kind == PhosphorAnimationShaders::AnimationAppRule::Kind::Shader
+        ? QStringLiteral("shader")
+        : QStringLiteral("timing");
+    return source.classPattern + QLatin1Char('|') + source.eventPath + QLatin1Char('|') + kind;
+}
 } // namespace detail
 
 /**
@@ -131,7 +151,9 @@ inline WindowRuleSet toRuleSet(const PhosphorAnimationShaders::AnimationAppRuleL
         }
 
         WindowRule rule;
-        rule.id = QUuid::createUuid();
+        // Deterministic id — identical source entries yield identical rules,
+        // keeping the conversion idempotent at the rule-identity level.
+        rule.id = QUuid::createUuidV5(detail::namespaceUuid(), detail::ruleIdentityKey(source));
         rule.enabled = true;
         // First entry → highest priority. Descending integers preserve the
         // list order across the evaluator's priority sort; the stable sort

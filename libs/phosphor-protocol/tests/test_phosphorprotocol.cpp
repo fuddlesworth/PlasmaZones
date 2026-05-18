@@ -10,6 +10,7 @@
 #include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
 
+#include <QSet>
 #include <QTest>
 
 using namespace PhosphorProtocol;
@@ -121,8 +122,13 @@ private Q_SLOTS:
         QVERIFY(r.validationError().isEmpty());
     }
 
-    void testBridgeRegistrationRejected()
+    void testBridgeRegistrationRejectedSentinelIsNotAValidationError()
     {
+        // "REJECTED" is the documented version-mismatch sentinel for
+        // `sessionId`, not an invariant violation: `validationError()` must
+        // stay empty so the sentinel survives the validity gate. Callers
+        // detect the rejection by checking the sessionId value separately —
+        // see BridgeRegistrationResult::validationError() docs.
         BridgeRegistrationResult r;
         r.sessionId = QStringLiteral("REJECTED");
         QVERIFY(r.validationError().isEmpty());
@@ -145,12 +151,19 @@ private Q_SLOTS:
 
     void testWindowTypeStringRoundTrip()
     {
+        QSet<QString> tokens;
         for (int v = windowTypeMinValue; v <= windowTypeMaxValue; ++v) {
             const auto type = static_cast<WindowType>(v);
-            const auto parsed = windowTypeFromString(windowTypeToString(type));
+            const QString token = windowTypeToString(type);
+            const auto parsed = windowTypeFromString(token);
             QVERIFY(parsed.has_value());
             QVERIFY(*parsed == type);
+            tokens.insert(token);
         }
+        // Every enum value must map to a DISTINCT wire token — a copy-paste
+        // bug returning the same token for two values would round-trip one of
+        // them to the wrong enum. The set size equals the enum value count.
+        QCOMPARE(tokens.size(), windowTypeMaxValue - windowTypeMinValue + 1);
     }
 
     void testWindowTypeFromStringCaseInsensitive()

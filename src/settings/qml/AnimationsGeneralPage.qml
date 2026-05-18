@@ -270,7 +270,7 @@ SettingsFlickable {
                         model: [i18n("All at once"), i18n("One by one")]
                         currentIndex: page.appSettings.animationSequenceMode
                         onActivated: (index) => {
-                            return page.appSettings.animationSequenceMode = index;
+                            page.appSettings.animationSequenceMode = index;
                         }
                     }
 
@@ -291,7 +291,7 @@ SettingsFlickable {
                         valueSuffix: " ms"
                         labelWidth: Kirigami.Units.gridUnit * 4
                         onMoved: (value) => {
-                            return page.appSettings.animationStaggerInterval = Math.round(value);
+                            page.appSettings.animationStaggerInterval = Math.round(value);
                         }
                     }
 
@@ -312,7 +312,7 @@ SettingsFlickable {
                         stepSize: 5
                         value: page.appSettings.animationMinDistance
                         onValueModified: (value) => {
-                            return page.appSettings.animationMinDistance = value;
+                            page.appSettings.animationMinDistance = value;
                         }
                     }
 
@@ -411,7 +411,6 @@ SettingsFlickable {
                         to: 1000
                         stepSize: 10
                         value: page.appSettings.animationMinimumWindowHeight
-                        unitText: ""
                         Accessible.name: i18n("Minimum window height for animations")
                         onValueModified: (value) => {
                             page.appSettings.animationMinimumWindowHeight = value;

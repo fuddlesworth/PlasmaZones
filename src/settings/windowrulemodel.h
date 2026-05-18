@@ -69,18 +69,14 @@ public:
         IdRole = Qt::UserRole + 1, ///< QUuid string (with braces)
         NameRole, ///< human-readable rule name
         EnabledRole, ///< bool
-        PriorityRole, ///< int
+        PriorityRole, ///< int — also the role of setPriorities()'s dataChanged
         SectionRole, ///< Section enum value (derived)
-        SectionLabelRole, ///< localized section header label
         MatchSummaryRole, ///< one-line human match summary
         ActionSummaryRole, ///< one-line human action summary
         ConditionCountRole, ///< number of leaf predicates in the match tree
         ActionCountRole, ///< number of actions
         IsCompositeRole, ///< true if the match is a non-trivial composite
         ScreenIdsRole, ///< QStringList of ScreenId leaf values in the match
-        MatchJsonRole, ///< the match expression as a JSON object
-        ActionsJsonRole, ///< the actions as a JSON array
-        RuleJsonRole, ///< the whole rule as a JSON object
     };
 
     explicit WindowRuleModel(QObject* parent = nullptr);

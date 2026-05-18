@@ -30,7 +30,9 @@ ItemDelegate {
     signal deleteRequested()
     signal toggleRequested(bool enabled)
 
-    width: ListView.view ? ListView.view.width : implicitWidth
+    // Instantiated inside a Repeater/ColumnLayout — `Layout.fillWidth: true`
+    // (set by the delegate's parent) drives the width; there is no enclosing
+    // ListView, so no `ListView.view` branch.
     hoverEnabled: true
 
     contentItem: RowLayout {

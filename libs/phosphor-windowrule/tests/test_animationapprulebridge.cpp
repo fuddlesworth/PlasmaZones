@@ -102,6 +102,9 @@ private Q_SLOTS:
         QCOMPARE(rule.actions.first().params.value(QLatin1String("curve")).toString(),
                  QStringLiteral("0.25,0.1,0.25,1"));
         QCOMPARE(rule.actions.first().params.value(QLatin1String("durationMs")).toInt(), 320);
+        // A Timing action must not carry the Shader-only `effectId` field —
+        // the two axes have disjoint param sets.
+        QVERIFY(!rule.actions.first().params.contains(QLatin1String("effectId")));
     }
 
     void testTimingRule_zeroDurationOmitsKey()
@@ -133,18 +136,33 @@ private Q_SLOTS:
 
     // ── Empty pattern / event are dropped ──
 
-    void testEmptyClassPatternDropped()
+    // The bridge's `toRuleSet` iterates `AnimationAppRuleList::entries()`, and
+    // every public path that populates that list — `append`, `setEntries`,
+    // `fromJson` — gates out empty `classPattern` / `eventPath` entries. The
+    // bridge therefore can never observe such an entry through the supported
+    // API; its own `continue` guard is defence-in-depth only. The reachable
+    // contract these tests can pin is the LIST gate that makes an
+    // empty-pattern (or empty-event) entry impossible to feed to the bridge in
+    // the first place — pin it directly so a regression in that gate (which
+    // would let "match every window" rules through) is caught here.
+    void testEmptyPatternRejectedByListGate()
     {
         AnimationAppRuleList list;
-        // AnimationAppRuleList::append gates empty pattern/event, so build the
-        // entry directly and convert it.
-        AnimationAppRule r = shaderRule(QString(), QStringLiteral("window.open"), QStringLiteral("pop"));
-        const WindowRuleSet set = AnimationAppRuleBridge::toRuleSet([&] {
-            AnimationAppRuleList l;
-            l.append(r); // rejected by the gate — list stays empty
-            return l;
-        }());
-        QVERIFY(set.isEmpty());
+        // append() returns false and leaves the list empty for an empty
+        // classPattern — this is the gate the bridge relies on.
+        QVERIFY(!list.append(shaderRule(QString(), QStringLiteral("window.open"), QStringLiteral("pop"))));
+        QVERIFY(list.isEmpty());
+        QVERIFY(AnimationAppRuleBridge::toRuleSet(list).isEmpty());
+    }
+
+    void testEmptyEventRejectedByListGate()
+    {
+        AnimationAppRuleList list;
+        // The event gate is the other half: an empty eventPath maps to no
+        // action slot, so the list rejects it before the bridge ever sees it.
+        QVERIFY(!list.append(shaderRule(QStringLiteral("firefox"), QString(), QStringLiteral("pop"))));
+        QVERIFY(list.isEmpty());
+        QVERIFY(AnimationAppRuleBridge::toRuleSet(list).isEmpty());
     }
 
     // ── Event-scoped slots stay independent ──

@@ -27,6 +27,10 @@ ColumnLayout {
     required property var node
     /// The WindowRuleController, threaded down for leaf field/operator lists.
     required property var controller
+    /// Cached `controller.matchFields()` from RuleEditorSheet — the Q_INVOKABLE
+    /// allocates a fresh list per call, so it is cached once at the root and
+    /// threaded down rather than re-invoked here.
+    required property var matchFieldOptions
     /// Recursion depth — drives the indentation guide.
     property int depth: 0
     /// True when this node may be removed (the root cannot).
@@ -70,9 +74,9 @@ ColumnLayout {
 
     function _addLeafChild() {
         // Derive the starting leaf from the controller's authoring metadata so
-        // QML never reconstructs the field/operator wire table itself.
-        var fields = matchEditor.controller.matchFields();
-        var firstField = fields[0];
+        // QML never reconstructs the field/operator wire table itself. The
+        // "Add condition" button is gated on a non-empty list, so [0] is safe.
+        var firstField = matchEditor.matchFieldOptions[0];
         var operators = matchEditor.controller.operatorsForField(firstField.value);
         var children = matchEditor._children.slice();
         children.push({
@@ -107,6 +111,7 @@ ColumnLayout {
         sourceComponent: MatchLeafEditor {
             node: matchEditor.node
             controller: matchEditor.controller
+            fieldOptions: matchEditor.matchFieldOptions
             onLeafChanged: function(updated) {
                 matchEditor.nodeChanged(updated);
             }
@@ -187,6 +192,7 @@ ColumnLayout {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     node: matchEditor._children[index]
                     controller: matchEditor.controller
+                    matchFieldOptions: matchEditor.matchFieldOptions
                     depth: matchEditor.depth + 1
                     removable: true
                     onNodeChanged: function(updated) {
@@ -205,6 +211,9 @@ ColumnLayout {
                     text: i18n("Add condition")
                     icon.name: "list-add"
                     flat: true
+                    // No registered match fields ⇒ nothing to seed a leaf
+                    // from; disable rather than dereferencing an empty list.
+                    enabled: matchEditor.matchFieldOptions.length > 0
                     Accessible.name: i18n("Add a condition to this group")
                     onClicked: matchEditor._addLeafChild()
                 }

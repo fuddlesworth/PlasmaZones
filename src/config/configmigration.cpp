@@ -95,6 +95,35 @@ QString legacyAssignmentsFilePath()
 {
     return QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
 }
+
+/// Retire the superseded assignments.json once windowrules.json holds every
+/// datum it carried. Prefer a rename to `assignments.json.migrated` over an
+/// outright delete: a rename is the same directory-entry operation as a remove
+/// but leaves an inert quarantined copy, and — critically — if it ever fails it
+/// fails the SAME way every run, so a delete-failure cannot drive an
+/// overwrite loop. A plain delete is the fallback when the quarantine slot is
+/// itself unavailable. Either way the result is non-fatal: a stray
+/// assignments.json is inert (nothing reads it) and the conversion's
+/// idempotency no longer depends on its absence.
+void retireLegacyAssignmentsFile(const QString& assignmentsPath)
+{
+    if (!QFile::exists(assignmentsPath)) {
+        return;
+    }
+    const QString quarantinePath = assignmentsPath + QStringLiteral(".migrated");
+    QFile::remove(quarantinePath); // clear any stale quarantine from a prior run
+    if (QFile::rename(assignmentsPath, quarantinePath)) {
+        qInfo("ConfigMigration: quarantined superseded %s to %s", qPrintable(assignmentsPath),
+              qPrintable(quarantinePath));
+        return;
+    }
+    if (QFile::remove(assignmentsPath)) {
+        qInfo("ConfigMigration: deleted superseded %s", qPrintable(assignmentsPath));
+        return;
+    }
+    qWarning("ConfigMigration: failed to retire superseded %s — left in place (inert; ignored next run)",
+             qPrintable(assignmentsPath));
+}
 } // namespace
 
 bool ConfigMigration::ensureJsonConfig()
@@ -1189,7 +1218,13 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // finalizeV4Conversion consumes the stash and writes the rules.
     QJsonObject stash;
     const auto moveDisableKey = [&display, &stash](const QString& configKey, const QString& stashKey) {
-        stash.insert(stashKey, display.value(configKey).toString());
+        // Only stash a value when the v3 key actually carried one — an absent
+        // or empty disable list contributes no rules, so a stash entry for it
+        // would just be inert noise finalizeV4Conversion has to skip.
+        const QString value = display.value(configKey).toString();
+        if (!value.isEmpty()) {
+            stash.insert(stashKey, value);
+        }
         display.remove(configKey);
     };
     moveDisableKey(ConfigKeys::snappingDisabledMonitorsKey(), QStringLiteral("snappingMonitors"));
@@ -1351,47 +1386,69 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     const QString windowRulesPath = ConfigDefaults::windowRulesFilePath();
     const QString assignmentsPath = legacyAssignmentsFilePath();
 
-    // ── Idempotency guard ──────────────────────────────────────────────────
-    // The conversion is multi-step: write windowrules.json → relocate
-    // QuickLayouts → strip config.json's `_v4DisableStash` → delete
-    // assignments.json. A crash partway through must be recoverable, so the
-    // early-return is gated on FULL completion, not just windowrules.json
-    // existing. The conversion is "done" only when ALL of the following hold:
-    //   1. windowrules.json exists at _version >= 4
-    //   2. assignments.json is absent (the irreversible final commit)
-    //   3. config.json no longer carries the `_v4DisableStash` scratch key
-    // If any tail step is incomplete, fall through and re-run — every step
-    // below is idempotent (atomic rewrites, "write if non-empty/missing",
-    // remove-if-exists), so a partial run resumes cleanly.
-    bool windowRulesComplete = false;
-    if (QFile::exists(windowRulesPath)) {
-        QFile wf(windowRulesPath);
-        if (wf.open(QIODevice::ReadOnly)) {
-            QJsonParseError err;
-            const QJsonDocument doc = QJsonDocument::fromJson(wf.readAll(), &err);
-            if (err.error == QJsonParseError::NoError && doc.isObject()
-                && doc.object().value(ConfigKeys::versionKey()).toInt(0) >= 4) {
-                windowRulesComplete = true;
-            }
-        }
-    }
-    if (windowRulesComplete && !QFile::exists(assignmentsPath)) {
-        bool stashCleared = true;
+    // ── Conversion-done vs cleanup-done — two SEPARATE concerns ─────────────
+    // The conversion is multi-step: write windowrules.json (the irreversible
+    // commit) → relocate QuickLayouts → strip config.json's `_v4DisableStash`
+    // → delete assignments.json. These split into two questions that MUST NOT
+    // be conflated:
+    //
+    //   "Is the v3→v4 conversion done?"  ⇒ does windowrules.json exist as a
+    //       valid v4 WindowRuleSet? If so the conversion IS done — the rule
+    //       store is authoritative and may have since been edited by the user
+    //       (rule editor) or Settings (disable lists). It must NEVER be
+    //       rebuilt-and-overwritten from the dead assignments.json again.
+    //
+    //   "Is post-conversion cleanup done?" ⇒ assignments.json removed AND
+    //       `_v4DisableStash` stripped from config.json. These tail steps are
+    //       safe and idempotent; if they failed (read-only fs, lock) they are
+    //       retried on the next run — but the rebuild is NOT.
+    //
+    // Probe "conversion done" by actually loading windowrules.json as a
+    // WindowRuleSet (named SchemaVersion check, not a bare `_version >= 4` on
+    // an unrelated version namespace) — a file that parses as a v4 rule set is
+    // by definition the completed conversion output.
+    const bool windowRulesAlreadyConverted =
+        QFile::exists(windowRulesPath) && PhosphorWindowRule::WindowRuleSet::loadFromFile(windowRulesPath).has_value();
+
+    if (windowRulesAlreadyConverted) {
+        // The conversion is complete. NEVER rebuild + overwrite windowrules.json
+        // — doing so would silently destroy every user-authored rule and every
+        // disable-list edit made since the first conversion. Only retry the
+        // still-pending, idempotent cleanup steps.
+        bool ok = true;
+
+        // Strip the `_v4DisableStash` scratch key from config.json if present.
         if (QFile::exists(jsonPath)) {
             QFile cf(jsonPath);
             if (cf.open(QIODevice::ReadOnly)) {
                 QJsonParseError err;
                 const QJsonDocument doc = QJsonDocument::fromJson(cf.readAll(), &err);
+                cf.close();
                 if (err.error == QJsonParseError::NoError && doc.isObject()
                     && doc.object().contains(kV4DisableStashKey)) {
-                    stashCleared = false;
+                    QJsonObject configRoot = doc.object();
+                    configRoot.remove(kV4DisableStashKey);
+                    if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
+                        qWarning("ConfigMigration: failed to strip _v4DisableStash from %s during cleanup retry",
+                                 qPrintable(jsonPath));
+                        ok = false;
+                    }
                 }
             }
         }
-        if (stashCleared) {
-            return true;
-        }
+
+        // Re-attempt the assignments.json cleanup. Quarantine to
+        // `assignments.json.migrated` instead of deleting: a rename succeeds
+        // on filesystems where remove may not (and the renamed file is inert —
+        // nothing reads it), so a delete-failure can never loop forever.
+        retireLegacyAssignmentsFile(assignmentsPath);
+
+        return ok;
     }
+
+    // From here down: windowrules.json does NOT yet exist as a valid v4 rule
+    // set — a genuine first run, or a crash before windowrules.json was
+    // written. Only this path rebuilds and writes the rule store.
 
     // ── Read config.json + extract the disable stash ───────────────────────
     QJsonObject configRoot;
@@ -1438,10 +1495,10 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // ── Assignment rules ───────────────────────────────────────────────────
     QJsonObject quickLayoutsToRelocate;
     if (haveAssignments) {
-        const QString prefix = ConfigKeys::assignmentGroupPrefix();
+        const QString prefix = ConfigDefaults::assignmentGroupPrefix();
         for (auto it = assignmentsRoot.constBegin(); it != assignmentsRoot.constEnd(); ++it) {
             const QString& groupName = it.key();
-            if (groupName == ConfigKeys::quickLayoutsGroup()) {
+            if (groupName == ConfigDefaults::quickLayoutsGroup()) {
                 // QuickLayouts slots are NOT rules — relocate them to the
                 // quicklayouts.json sidecar.
                 quickLayoutsToRelocate = it.value().toObject();
@@ -1611,24 +1668,15 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         }
     }
 
-    // ── Delete assignments.json — the irreversible commit ──────────────────
+    // ── Retire assignments.json — the post-conversion cleanup tail ─────────
     // windowrules.json (and quicklayouts.json) now durably hold every datum
     // assignments.json carried; the runtime LayoutRegistry reads the rule
-    // store exclusively. Deleting the legacy file LAST makes the conversion
-    // atomic from a crash-recovery view: a crash before this point leaves
-    // assignments.json behind and the idempotency guard re-runs cleanly; a
-    // crash after it is simply the completed state.
-    if (QFile::exists(assignmentsPath)) {
-        if (!QFile::remove(assignmentsPath)) {
-            qWarning("ConfigMigration: failed to delete superseded %s", qPrintable(assignmentsPath));
-            // Non-fatal: windowrules.json is written and at _version 4, so the
-            // idempotency guard will short-circuit next run. A stray
-            // assignments.json is inert (nothing reads it) — do not fail the
-            // conversion over it.
-        } else {
-            qInfo("ConfigMigration: deleted superseded %s", qPrintable(assignmentsPath));
-        }
-    }
+    // store exclusively. Retiring the legacy file LAST keeps the conversion
+    // crash-recoverable. This step is non-fatal and idempotent: if it fails,
+    // the next run sees windowrules.json already at the v4 WindowRuleSet
+    // schema, takes the cleanup-only branch, and retries the retire — it does
+    // NOT rebuild-and-overwrite the (possibly user-edited) rule store.
+    retireLegacyAssignmentsFile(assignmentsPath);
 
     return true;
 }

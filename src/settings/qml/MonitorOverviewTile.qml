@@ -57,6 +57,9 @@ Rectangle {
                 source: tile._assigned ? (tile.tileData.tilingEnabled ? "view-grid" : "dialog-cancel") : "edit-none"
                 Layout.preferredWidth: Kirigami.Units.iconSizes.small
                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                // Match the labels' selected-state treatment so the icon
+                // keeps contrast against the highlight fill.
+                color: tile.selected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
             }
 
             Label {

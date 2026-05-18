@@ -87,7 +87,7 @@ SettingsFlickable {
                             unitText: ""
                             Accessible.name: i18n("Minimum window width")
                             onValueModified: (value) => {
-                                return appSettings.minimumWindowWidth = value;
+                                appSettings.minimumWindowWidth = value;
                             }
                             textFromValue: function(value) {
                                 return value === 0 ? i18n("Off") : value + " px";
@@ -111,7 +111,7 @@ SettingsFlickable {
                             unitText: ""
                             Accessible.name: i18n("Minimum window height")
                             onValueModified: (value) => {
-                                return appSettings.minimumWindowHeight = value;
+                                appSettings.minimumWindowHeight = value;
                             }
                             textFromValue: function(value) {
                                 return value === 0 ? i18n("Off") : value + " px";

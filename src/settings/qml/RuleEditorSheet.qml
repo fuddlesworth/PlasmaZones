@@ -33,6 +33,13 @@ Kirigami.OverlaySheet {
     readonly property var _emptyMatch: ({
         "all": []
     })
+    /// The controller's authoring metadata, cached once. `actionTypes()` and
+    /// `matchFields()` are Q_INVOKABLEs that allocate a fresh QVariantList on
+    /// every call — binding them directly would re-invoke (and churn the
+    /// dependent Repeaters) on every unrelated `_workingRule` patch. Cache
+    /// here and thread the cached lists down to the child editors.
+    readonly property var _actionTypeOptions: sheet.controller.actionTypes()
+    readonly property var _matchFieldOptions: sheet.controller.matchFields()
     /// Save is allowed only when the rule has at least one action and every
     /// match leaf has a non-empty value.
     readonly property bool _canSave: sheet._workingRule.actions !== undefined && sheet._workingRule.actions.length > 0 && sheet._matchHasFilledLeaves(sheet._workingRule.match)
@@ -130,6 +137,7 @@ Kirigami.OverlaySheet {
             Layout.fillWidth: true
             node: sheet._workingRule.match || sheet._emptyMatch
             controller: sheet.controller
+            matchFieldOptions: sheet._matchFieldOptions
             depth: 0
             removable: false
             onNodeChanged: function(updated) {
@@ -145,7 +153,7 @@ Kirigami.OverlaySheet {
         ActionListEditor {
             Layout.fillWidth: true
             actions: sheet._workingRule.actions || []
-            actionTypeOptions: sheet.controller.actionTypes()
+            actionTypeOptions: sheet._actionTypeOptions
             onActionsChanged: function(updated) {
                 sheet._patch("actions", updated);
             }
