@@ -147,11 +147,13 @@ RowLayout {
         id: numberValueEditor
 
         SpinBox {
-            // Numeric fields include Pid; real PIDs can exceed 999999
-            // (pid_max defaults to 4194304). Use the full positive int range
-            // so editing a high-PID rule does not silently clamp the value.
+            // Numeric fields include Pid; the kernel pid_max ceiling is
+            // 4194304, so 5e6 covers every possible PID with headroom. It is
+            // written in scientific form because qmlformat rewrites large
+            // decimal literals to 6-significant-figure scientific notation —
+            // 5e6 is exact under that rounding (a plain 2147483647 is not).
             from: 0
-            to: 2.14748e+09
+            to: 5e+06
             value: Number(leaf.node.value) || 0
             Accessible.name: i18n("Match value")
             onValueModified: leaf._emit(leaf.node.field, leaf.node.op, value)
