@@ -238,6 +238,10 @@ private:
     /// Per-screen override for @p key, or an invalid QVariant when the screen
     /// has no override map or the map lacks @p key.
     QVariant perScreenValue(const QString& screenId, QLatin1String key) const;
+    /// toFractionVector() with each entry clamped into [kMinSizeFraction,
+    /// kMaxSizeFraction]; used by the effectivePreset*() resolvers to
+    /// range-check a per-screen override list.
+    static QVector<qreal> clampedFractionVector(const QVariantList& list);
 
     std::unordered_map<PhosphorEngine::TilingStateKey, ScrollScreenState, TilingStateKeyHash> m_states;
     QHash<QString, PhosphorEngine::TilingStateKey> m_windowToKey;

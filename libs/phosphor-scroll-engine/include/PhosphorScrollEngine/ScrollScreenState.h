@@ -24,6 +24,18 @@ namespace PhosphorScrollEngine {
 /// addColumn*/addWindow* default arguments all reference it.
 inline constexpr qreal kDefaultColumnWidthFraction = 0.5;
 
+/// Inclusive clamp bounds for a column-width / window-height fraction and for
+/// a strip gap (logical px). ScrollEngine's effective*() resolvers clamp every
+/// per-screen override to these ranges — defence-in-depth mirroring
+/// AutotileEngine's PerScreenConfigResolver, which likewise range-checks every
+/// per-screen override on read. The strip-gap ceiling is generous (the precise
+/// per-mode range is enforced at the Settings boundary); the engine is
+/// geometry-agnostic and only needs to reject corrupt values.
+inline constexpr qreal kMinSizeFraction = 0.1;
+inline constexpr qreal kMaxSizeFraction = 1.0;
+inline constexpr int kMinStripGap = 0;
+inline constexpr int kMaxStripGap = 200;
+
 /// Per-screen (per desktop/activity) scrollable-tiling state: the niri-style
 /// horizontal strip of columns, the focused column/tile, and the viewport
 /// offset.

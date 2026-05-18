@@ -528,10 +528,6 @@ void ScrollEngine::toggleColumnFullWidth(const NavigationContext& ctx)
 
 void ScrollEngine::adjustColumnWidth(qreal deltaFraction, const NavigationContext& ctx)
 {
-    // Smallest proportional column width grow/shrink can settle on, so a
-    // column can never shrink away to nothing.
-    constexpr qreal kMinColumnWidthFraction = 0.1;
-
     QString screenId;
     ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
     const Column* column = state ? state->activeColumn() : nullptr;
@@ -542,11 +538,13 @@ void ScrollEngine::adjustColumnWidth(qreal deltaFraction, const NavigationContex
         return;
     }
     // Clamp the starting width into range before applying the delta: a
-    // Proportion width is normally already within [kMinColumnWidthFraction,
-    // 1.0], but clamping here keeps grow/shrink monotonic — without it a
-    // shrink keypress on an out-of-range narrow column would grow it.
-    const qreal current = qBound(kMinColumnWidthFraction, column->width().value, qreal(1.0));
-    const qreal target = qBound(kMinColumnWidthFraction, current + deltaFraction, qreal(1.0));
+    // Proportion width is normally already within [kMinSizeFraction,
+    // kMaxSizeFraction], but clamping here keeps grow/shrink monotonic —
+    // without it a shrink keypress on an out-of-range narrow column would
+    // grow it. kMinSizeFraction is also the smallest width a column can
+    // settle on, so it can never shrink away to nothing.
+    const qreal current = qBound(kMinSizeFraction, column->width().value, kMaxSizeFraction);
+    const qreal target = qBound(kMinSizeFraction, current + deltaFraction, kMaxSizeFraction);
     if (qFuzzyCompare(target, current)) {
         reportNav(false, QStringLiteral("width"), screenId); // already at the limit
         return;
@@ -640,22 +638,37 @@ QVariant ScrollEngine::perScreenValue(const QString& screenId, QLatin1String key
     return it == m_perScreenConfig.constEnd() ? QVariant() : it->value(key);
 }
 
+QVector<qreal> ScrollEngine::clampedFractionVector(const QVariantList& list)
+{
+    QVector<qreal> out = toFractionVector(list);
+    for (qreal& fraction : out) {
+        fraction = qBound(kMinSizeFraction, fraction, kMaxSizeFraction);
+    }
+    return out;
+}
+
+// The effective*() resolvers clamp every per-screen override on read — the
+// daemon already passes Settings-validated values, but clamping here too is
+// the defence-in-depth pattern AutotileEngine's PerScreenConfigResolver uses,
+// and it keeps a malformed override (e.g. a non-numeric DefaultColumnWidth
+// coerced to 0.0) from yielding a degenerate column instead of a sane bound.
+
 QVector<qreal> ScrollEngine::effectivePresetColumnWidths(const QString& screenId) const
 {
     const QVariant v = perScreenValue(screenId, QLatin1String("PresetColumnWidths"));
-    return v.isValid() ? toFractionVector(v.toList()) : m_presetColumnWidths;
+    return v.isValid() ? clampedFractionVector(v.toList()) : m_presetColumnWidths;
 }
 
 QVector<qreal> ScrollEngine::effectivePresetWindowHeights(const QString& screenId) const
 {
     const QVariant v = perScreenValue(screenId, QLatin1String("PresetWindowHeights"));
-    return v.isValid() ? toFractionVector(v.toList()) : m_presetWindowHeights;
+    return v.isValid() ? clampedFractionVector(v.toList()) : m_presetWindowHeights;
 }
 
 qreal ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const
 {
     const QVariant v = perScreenValue(screenId, QLatin1String("DefaultColumnWidth"));
-    return v.isValid() ? v.toReal() : m_defaultColumnWidth;
+    return v.isValid() ? qBound(kMinSizeFraction, v.toReal(), kMaxSizeFraction) : m_defaultColumnWidth;
 }
 
 ScrollViewportMode ScrollEngine::effectiveViewportMode(const QString& screenId) const
@@ -670,13 +683,13 @@ ScrollViewportMode ScrollEngine::effectiveViewportMode(const QString& screenId) 
 int ScrollEngine::effectiveInnerGap(const QString& screenId) const
 {
     const QVariant v = perScreenValue(screenId, QLatin1String("InnerGap"));
-    return v.isValid() ? v.toInt() : m_innerGap;
+    return v.isValid() ? qBound(kMinStripGap, v.toInt(), kMaxStripGap) : m_innerGap;
 }
 
 int ScrollEngine::effectiveOuterGap(const QString& screenId) const
 {
     const QVariant v = perScreenValue(screenId, QLatin1String("OuterGap"));
-    return v.isValid() ? v.toInt() : m_outerGap;
+    return v.isValid() ? qBound(kMinStripGap, v.toInt(), kMaxStripGap) : m_outerGap;
 }
 
 // ─────────────────────────────────────────────────────────────────────────

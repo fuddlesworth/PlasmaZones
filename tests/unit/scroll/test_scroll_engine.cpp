@@ -149,6 +149,20 @@ void TestScrollEngine::perScreenConfig()
     engine.applyPerScreenConfig(QStringLiteral("S1"), QVariantMap{});
     QVERIFY(engine.perScreenOverrides(QStringLiteral("S1")).isEmpty());
     QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S1")), 8);
+
+    // Out-of-range per-screen override values are clamped on read by the
+    // effective*() resolvers — defence-in-depth over the Settings boundary.
+    QVariantMap outOfRange;
+    outOfRange.insert(QStringLiteral("DefaultColumnWidth"), 5.0); // above max
+    outOfRange.insert(QStringLiteral("InnerGap"), -10); // below min
+    outOfRange.insert(QStringLiteral("PresetColumnWidths"), QVariantList{0.0, 99.0});
+    engine.applyPerScreenConfig(QStringLiteral("S3"), outOfRange);
+    QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S3")), 1.0));
+    QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S3")), 0);
+    const QVector<qreal> clampedPresets = engine.effectivePresetColumnWidths(QStringLiteral("S3"));
+    QCOMPARE(clampedPresets.size(), 2);
+    QVERIFY(qFuzzyCompare(clampedPresets.at(0), 0.1));
+    QVERIFY(qFuzzyCompare(clampedPresets.at(1), 1.0));
 }
 
 void TestScrollEngine::focusAndMoveNavigation()
