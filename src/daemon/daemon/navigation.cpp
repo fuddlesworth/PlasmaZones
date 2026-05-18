@@ -185,6 +185,15 @@ void Daemon::handleSnap(int zoneNumber)
 {
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "SnapToZone")) {
+        // Honor the per-context disable lists. engineFor() routes purely on
+        // mode and never consults them, so a keyboard snap-to-zone would
+        // otherwise place a window on a monitor / desktop / activity the user
+        // disabled (discussion #461). Gate against the routed engine's mode.
+        const auto mode = nav->engineId() == QLatin1String("autotile") ? PhosphorZones::AssignmentEntry::Autotile
+                                                                       : PhosphorZones::AssignmentEntry::Snapping;
+        if (isContextDisabled(m_settings.get(), mode, ctx.screenId, currentDesktop(), currentActivity())) {
+            return;
+        }
         nav->moveFocusedToPosition(zoneNumber, ctx);
     }
 }

@@ -210,4 +210,14 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     return SnapResult::noSnap();
 }
 
+int SnapEngine::currentVirtualDesktop() const
+{
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+}
+
+QString SnapEngine::currentActivity() const
+{
+    return m_layoutManager ? m_layoutManager->currentActivity() : QString();
+}
+
 } // namespace PhosphorSnapEngine
