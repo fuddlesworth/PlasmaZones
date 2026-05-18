@@ -9,8 +9,8 @@ full window lifecycle (open/close/focus, minimize, screen hotplug & geometry cha
 fixed-size windows), navigation (viewport fit/centered scrolling, consume/expel
 shortcuts, drag-to-reorder, sticky-window exclusion) and the width/height controls and
 animation polish (preset cycling, full-width toggle, grow/shrink, runtime centering,
-dedicated `window.scroll` motion profile) are implemented, built, and tested — the full
-`ctest` suite is green. Phase 0 detail in
+dedicated `window.scroll` motion profile) are implemented, built, and covered by the
+unit-test suite. Phase 0 detail in
 [`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 5.
 
 ## 1. Goal
@@ -109,7 +109,7 @@ takes the `MoveResizeMode::Move` branch — cancels queued configures and applie
 is pure translation (no resize), so the most frequent operation gets the reliable path.
 Column-width changes still resize → async configure, but those are infrequent.
 
-**Hybrid geometry model — viable, but with one UNVERIFIED assumption:**
+**Hybrid geometry model — viable (constraint B was verified in Phase 4):**
 
 - Real geometry for windows in/near the viewport (±1 column).
 - Paint-time `WindowPaintData` translation for fully-off-screen windows.
@@ -189,14 +189,17 @@ full-reflow (`calculateZones(windowCount) -> QVector<QRect>`), which is fundamen
 incompatible with niri's "opening a window resizes nothing" and has nowhere to hold
 per-column widths, per-tile heights, view offset, or focused indices.
 
-**`IPlacementEngine` needs six new methods — zero blast radius** (confirmed by Phase 0).
-The six niri operations with no current equivalent — `consume`/`expel` window, set/cycle
-column width, set/cycle window height, scroll-the-viewport, center-column — are added as
-**optional virtuals with no-op defaults**, following the existing autotile-only group
-(`increaseMasterRatio`, `focusMaster`, …). `SnapEngine` and `AutotileEngine` inherit the
-defaults and need no source changes. Basic navigation (focus/move/swap in four
-directions) already maps onto the existing direction-string methods. See the findings
-doc §2.
+**Niri-style ops live on a dedicated `IScrollNavigation` interface — zero blast
+radius.** The column/strip operations with no equivalent on the other engines —
+`consume` / `expel` window, cycle / grow-shrink / full-width column width, cycle window
+height, center-column — have no meaning for `SnapEngine` or `AutotileEngine`. Rather
+than saddle `IPlacementEngine` with no-op virtuals the other two engines would inherit
+as dead weight (an Interface Segregation violation), the seven ops live on a separate
+pure-virtual `PhosphorEngine::IScrollNavigation` interface that only `ScrollEngine`
+implements. The daemon resolves it with `dynamic_cast<IScrollNavigation*>` and skips the
+op on non-scroll screens. `SnapEngine` and `AutotileEngine` need no source changes.
+Basic navigation (focus/move/swap in four directions) already maps onto the existing
+`IPlacementEngine` direction-string methods. See the findings doc §2.
 
 Suggested home: a new `libs/phosphor-scroll-engine` library (LGPL-2.1-or-later, matching
 `phosphor-tile-engine`), holding the pure-logic strip model unit-tested in isolation,
@@ -231,9 +234,9 @@ animated); *applying* real geometry is limited to the visible range ±1 column.
 Static code review **complete** — results in
 [`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Summary:
 
-1. **`IPlacementEngine` contract review — DONE.** Required surface satisfiable; six niri
-   ops added as zero-impact optional virtuals; `IPlacementState` and per-context state
-   already fit.
+1. **`IPlacementEngine` contract review — DONE.** Required surface satisfiable; the
+   scroll-only ops live on a separate `IScrollNavigation` interface (see §5) with zero
+   impact on the other engines; `IPlacementState` and per-context state already fit.
 2. **Self-write disambiguation — DONE.** Already solved in-tree (`m_inDaemonGeometryApply`).
 3. **Focus — DONE.** Path exists; needs a `force` activation parameter on
    `ICompositorBridge`. focus-follows-mouse already handled.
@@ -249,8 +252,8 @@ Static code review **complete** — results in
 - ✅ `libs/phosphor-scroll-engine`: `ScrollScreenState` / `Column` / `Tile` model +
   `resolveScrollLayout()` geometry resolver. Pure logic, no KWin, with a dedicated
   unit-test suite.
-- ✅ `ScrollEngine : IPlacementEngine` (extends `PlacementEngineBase`); the four niri
-  operations added as optional `IPlacementEngine` virtuals.
+- ✅ `ScrollEngine` extends `PlacementEngineBase` and implements `IScrollNavigation` for
+  the niri-style column/strip ops (see §5).
 - ✅ `Mode::Scroll` in `AssignmentEntry`; `LayoutId` `scroll:` helpers; `ScreenModeRouter`
   dispatch to a third engine; per-mode disable-list settings keys.
 - ✅ Daemon integration: the engine factory constructs `ScrollEngine`;
@@ -314,9 +317,8 @@ with the Phase 3 navigation work.
   move-column / move-window work in scroll mode with the existing shortcuts.
 - ✅ **`consume` / `expel`** (M2) — new `Meta+Alt+I` / `Meta+Alt+O` shortcuts pull the
   next column's window into the focused column / push the focused window out into its
-  own column. The snap/autotile engines inherit the no-op `IPlacementEngine` default,
-  so the shortcuts are harmlessly absorbed on their screens. Settings-UI exposure is
-  Phase 5.
+  own column. They are `IScrollNavigation` ops, so the daemon skips them on snap/autotile
+  screens (the `dynamic_cast` yields nullptr). Settings-UI exposure is Phase 5.
 - ✅ **Interactive drag of a tiled window** (M3) — drag-to-reorder: a dragged window
   keeps its tile slot during the move and, on release, its column is reordered to the
   strip slot nearest the drop point, then the strip re-resolves and snaps it in.
@@ -330,7 +332,8 @@ with the Phase 3 navigation work.
   column-width / window-height presets (the engine ops existed since Phase 3 but had no
   keymap entry); `Meta+Alt+F` toggles the focused column to full viewport width and
   back (it remembers the prior width); `Meta+Alt+=` / `Meta+Alt+-` grow / shrink the
-  column width by a 10% step, clamped to `[0.1, 1.0]`.
+  column width by a fixed step (the daemon passes 10%), clamped by the engine to
+  `[0.1, 1.0]`.
 - ✅ **`center-focused-column`** (M2) — `Meta+Alt+C` toggles the engine-global viewport
   mode between `Fit` and `Centered` at runtime (`computeViewportScroll` already
   resolved both). The persisted setting, with per-screen overrides, is Phase 5.

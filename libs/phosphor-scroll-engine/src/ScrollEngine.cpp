@@ -527,7 +527,11 @@ void ScrollEngine::adjustColumnWidth(qreal deltaFraction, const NavigationContex
         reportNav(false, QStringLiteral("width"), screenId);
         return;
     }
-    const qreal current = column->width().value;
+    // Clamp the starting width into range before applying the delta: a
+    // Proportion width is normally already within [kMinColumnWidthFraction,
+    // 1.0], but clamping here keeps grow/shrink monotonic — without it a
+    // shrink keypress on an out-of-range narrow column would grow it.
+    const qreal current = qBound(kMinColumnWidthFraction, column->width().value, qreal(1.0));
     const qreal target = qBound(kMinColumnWidthFraction, current + deltaFraction, qreal(1.0));
     if (qFuzzyCompare(target, current)) {
         reportNav(false, QStringLiteral("width"), screenId); // already at the limit
@@ -542,16 +546,14 @@ void ScrollEngine::adjustColumnWidth(qreal deltaFraction, const NavigationContex
 void ScrollEngine::toggleCenterFocusedColumn(const NavigationContext& ctx)
 {
     QString screenId;
-    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    if (!state) {
-        reportNav(false, QStringLiteral("viewport"), screenId);
-        return;
-    }
-    // The viewport mode is engine-global: flip it through the setter, then
-    // re-resolve *every* scroll screen. All scroll screens resolve against
-    // this mode, so a toggle on one screen must refresh them all — not just
-    // the focused one.
+    resolveNavTarget(ctx, &screenId); // resolves screenId for the nav feedback
+
+    // The viewport mode is engine-global, so flip it through the setter
+    // unconditionally — even when the focused screen has no strip yet. Gating
+    // on the focused screen's state would let an empty scroll screen swallow
+    // the shortcut while every other scroll screen silently keeps the old mode.
     setViewportMode(m_viewportMode == ScrollViewportMode::Fit ? ScrollViewportMode::Centered : ScrollViewportMode::Fit);
+    // Re-resolve every scroll screen — all of them resolve against this mode.
     QSet<QString> notified;
     for (const auto& entry : m_states) {
         const QString& sid = entry.first.screenId;

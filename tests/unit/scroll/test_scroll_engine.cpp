@@ -6,6 +6,7 @@
 
 #include <PhosphorEngine/PlacementEngineBase.h>
 
+#include <QSet>
 #include <QtTest>
 
 using namespace PhosphorScrollEngine;
@@ -276,9 +277,20 @@ void TestScrollEngine::toggleColumnFullWidth()
     QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 1.0 / 3.0));
     QCOMPARE(state->activeColumn()->presetWidthIndex(), 0);
 
-    // A context targeting a screen with no scroll state is a harmless no-op.
+    // A context targeting a screen with no scroll state is a harmless no-op:
+    // S1's column is untouched and no S99 state is created.
+    const qreal widthBeforeS99 = state->activeColumn()->width().value;
     engine.toggleColumnFullWidth(contextFor(QStringLiteral("S99")));
+    QVERIFY(scrollState(engine, QStringLiteral("S99")) == nullptr);
+    QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, widthBeforeS99));
     QVERIFY(!state->activeColumn()->isFullWidth());
+
+    // Empty strip (state exists but has no columns): the no-active-column
+    // guard — no crash, nothing to toggle.
+    engine.windowClosed(QStringLiteral("a"));
+    QVERIFY(state->activeColumn() == nullptr);
+    engine.toggleColumnFullWidth(ctx);
+    QVERIFY(state->activeColumn() == nullptr);
 }
 
 void TestScrollEngine::adjustColumnWidth()
@@ -316,7 +328,8 @@ void TestScrollEngine::adjustColumnWidth()
 
     // A no-op on a fixed-pixel column — the geometry-agnostic engine cannot
     // resolve a pixel width to a working-area fraction, so the width is left
-    // untouched.
+    // untouched. No engine navigation op produces a Fixed width, so the test
+    // installs one directly through the mutable screen state.
     ScrollScreenState* mutState = scrollStateMut(engine, QStringLiteral("S1"));
     QVERIFY(mutState);
     mutState->setActiveColumnWidth(ColumnWidth::fixed(400.0));
@@ -325,8 +338,17 @@ void TestScrollEngine::adjustColumnWidth()
     QCOMPARE(state->activeColumn()->width().kind, ColumnWidth::Kind::Fixed);
     QCOMPARE(state->activeColumn()->width().value, 400.0);
 
-    // A context targeting a screen with no scroll state is a harmless no-op.
+    // A context targeting a screen with no scroll state is a harmless no-op —
+    // no S99 state is created.
     engine.adjustColumnWidth(0.1, contextFor(QStringLiteral("S99")));
+    QVERIFY(scrollState(engine, QStringLiteral("S99")) == nullptr);
+
+    // Empty strip (state exists but has no columns): the no-active-column
+    // guard — no crash, nothing to adjust.
+    engine.windowClosed(QStringLiteral("a"));
+    QVERIFY(state->activeColumn() == nullptr);
+    engine.adjustColumnWidth(0.1, ctx);
+    QVERIFY(state->activeColumn() == nullptr);
 }
 
 void TestScrollEngine::toggleCenterFocusedColumn()
@@ -344,15 +366,24 @@ void TestScrollEngine::toggleCenterFocusedColumn()
     engine.toggleCenterFocusedColumn(ctx);
     QCOMPARE(engine.viewportMode(), ScrollViewportMode::Centered);
     QCOMPARE(spy.count(), 2);
+
+    // Both physical screens are re-resolved — not one screen twice.
+    QSet<QString> notified;
+    for (const auto& emission : spy) {
+        notified.insert(emission.at(0).toString());
+    }
+    QCOMPARE(notified, QSet<QString>({QStringLiteral("S1"), QStringLiteral("S2")}));
+
     engine.toggleCenterFocusedColumn(ctx);
     QCOMPARE(engine.viewportMode(), ScrollViewportMode::Fit);
     QCOMPARE(spy.count(), 4);
 
-    // A toggle targeting a screen with no scroll state is a no-op — the mode
-    // does not flip and nothing re-resolves.
+    // The mode is engine-global, so a toggle still flips it when the focused
+    // screen has no strip of its own (S99 was never opened) — and it still
+    // re-resolves the scroll screens that do exist.
     engine.toggleCenterFocusedColumn(contextFor(QStringLiteral("S99")));
-    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Fit);
-    QCOMPARE(spy.count(), 4);
+    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Centered);
+    QCOMPARE(spy.count(), 6);
 }
 
 void TestScrollEngine::floatToggle()

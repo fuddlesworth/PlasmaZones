@@ -228,7 +228,7 @@ void Daemon::handleToggleColumnFullWidth()
 
 namespace {
 /// Fraction of the working-area width a grow/shrink shortcut moves the
-/// focused column. A user setting in Phase 5.
+/// focused column.
 constexpr qreal kColumnWidthStep = 0.1;
 } // namespace
 

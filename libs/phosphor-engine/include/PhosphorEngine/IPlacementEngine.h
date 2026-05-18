@@ -549,16 +549,12 @@ public:
     {
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Scrollable-tiling operations
-    //
-    // niri-style column/strip operations live on the companion interface
-    // PhosphorEngine::IScrollNavigation — not here. They have no meaning for
-    // the snap or autotile engines, so the scroll engine implements that
-    // second interface and callers reach it via dynamic_cast. Keeping them
-    // off IPlacementEngine avoids saddling the other two engines with no-op
-    // virtuals (Interface Segregation).
-    // ═══════════════════════════════════════════════════════════════════════════
+    // Note: niri-style scrollable-tiling column/strip operations are NOT on
+    // this interface. They live on the companion interface
+    // PhosphorEngine::IScrollNavigation, which only ScrollEngine implements;
+    // callers reach them via dynamic_cast. They have no meaning for the snap
+    // or autotile engines, and keeping them off IPlacementEngine avoids
+    // saddling those two with no-op virtuals (Interface Segregation).
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Engine state serialization

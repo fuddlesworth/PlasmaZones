@@ -134,8 +134,8 @@ public:
 
     // ── Viewport mode ───────────────────────────────────────────────────
     /// How the viewport scrolls to keep the focused column on-screen. The
-    /// daemon reads this when resolving the strip; the mode becomes a user
-    /// setting in Phase 5.
+    /// daemon reads this when resolving the strip. Engine-global runtime
+    /// state — not serialized; see serializeEngineState().
     ScrollViewportMode viewportMode() const
     {
         return m_viewportMode;

@@ -109,7 +109,7 @@ void Daemon::onScrollPlacementChanged(const QString& screenId)
     config.innerGap = SCROLL_INNER_GAP;
     config.presetWindowHeights = scroll->presetWindowHeights();
     // Viewport mode is engine-global, toggled at runtime by the center-column
-    // shortcut; it becomes a persisted user setting in Phase 5.
+    // shortcut.
     config.viewportMode = scroll->viewportMode();
 
     // Column metrics are scroll-independent — resolve them once and feed the

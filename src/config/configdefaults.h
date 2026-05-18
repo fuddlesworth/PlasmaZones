@@ -1360,7 +1360,8 @@ public:
     {
         return QStringLiteral("Meta+Alt+R");
     }
-    /// Scroll mode: cycle the focused window's height through the height presets.
+    /// Scroll mode: cycle the focused window's height through the height
+    /// presets. Shift variant of the column-width cycle ("Shift+R").
     static QString cycleWindowHeightShortcut()
     {
         return QStringLiteral("Meta+Alt+Shift+R");

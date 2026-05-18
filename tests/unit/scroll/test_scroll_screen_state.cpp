@@ -41,6 +41,12 @@ void TestScrollScreenState::emptyState()
     QVERIFY(state.focusedWindowId().isEmpty());
     QCOMPARE(state.windowCount(), 0);
     QVERIFY(state.activeColumn() == nullptr);
+
+    // Full-width toggle on an empty strip is a harmless no-op: no active column
+    // to toggle, and the strip stays empty.
+    state.toggleActiveColumnFullWidth();
+    QCOMPARE(state.columnCount(), 0);
+    QCOMPARE(state.activeColumnIndex(), -1);
 }
 
 void TestScrollScreenState::openWindowsAsColumns()
@@ -269,7 +275,7 @@ void TestScrollScreenState::jsonRoundTrip()
     state.markFloating(QStringLiteral("f1"));
     state.toggleActiveColumnFullWidth(); // column "c" enters full-width
 
-    const ScrollScreenState restored = ScrollScreenState::fromJson(state.toJson());
+    ScrollScreenState restored = ScrollScreenState::fromJson(state.toJson());
     QCOMPARE(restored.screenId(), QStringLiteral("HDMI-1"));
     QCOMPARE(restored.columnCount(), state.columnCount());
     QCOMPARE(restored.activeColumnIndex(), state.activeColumnIndex());
@@ -278,6 +284,12 @@ void TestScrollScreenState::jsonRoundTrip()
     QVERIFY(restored.isFloating(QStringLiteral("f1")));
     QCOMPARE(restored.placementIdForWindow(QStringLiteral("b")), QStringLiteral("0:1"));
     QVERIFY(restored.activeColumn() && restored.activeColumn()->isFullWidth()); // survives the round-trip
+
+    // The remembered restore-width survives too: toggling full-width off on the
+    // restored state returns the column to its pre-toggle width (default 0.5).
+    restored.toggleActiveColumnFullWidth();
+    QVERIFY(restored.activeColumn() && !restored.activeColumn()->isFullWidth());
+    QVERIFY(qFuzzyCompare(restored.activeColumn()->width().value, 0.5));
 }
 
 void TestScrollScreenState::clearFloatingDropsWindow()
