@@ -10,16 +10,29 @@
     let
       supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+
+      # Build PlasmaZones against a *caller-supplied* nixpkgs instance.
+      #
+      # The KWin effect plugin's IID embeds KWin's exact upstream version
+      # string; KWin refuses to load any effect whose IID does not match the
+      # running KWin — even across patch releases (6.6.4 -> 6.6.5). So the
+      # package MUST be compiled against the very same `kwin` the user runs.
+      #
+      # For module/overlay consumers that means the *consumer's* `pkgs`, never
+      # this flake's pinned `nixpkgs` input — otherwise a rolling system whose
+      # KWin has moved past flake.lock gets a silently non-loading effect
+      # (see discussion #481).
+      mkPlasmaZones = pkgs: pkgs.callPackage ./packaging/nix/package.nix {
+        src = self;
+      };
     in
     {
       packages = forAllSystems (system:
-        let
-          pkgs = nixpkgs.legacyPackages.${system};
-        in
         {
-          default = pkgs.callPackage ./packaging/nix/package.nix {
-            src = self;
-          };
+          # Built against this flake's pinned nixpkgs — fine for `nix build`
+          # and CI checks, but NOT a reliable install path for the KWin effect
+          # on a rolling system. Prefer the nixosModule / overlay below.
+          default = mkPlasmaZones nixpkgs.legacyPackages.${system};
           plasmazones = self.packages.${system}.default;
         }
       );
@@ -39,10 +52,14 @@
             enable = lib.mkEnableOption "PlasmaZones window tiling for KDE Plasma 6.6+";
             package = lib.mkOption {
               type = lib.types.package;
-              default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+              default = mkPlasmaZones pkgs;
               defaultText = lib.literalExpression
-                "inputs.plasmazones.packages.\${pkgs.stdenv.hostPlatform.system}.default";
-              description = "The PlasmaZones package to use.";
+                "pkgs.callPackage \"\${plasmazones}/packaging/nix/package.nix\" { src = plasmazones; }";
+              description = ''
+                The PlasmaZones package to use. Built against the host's
+                nixpkgs so the KWin effect plugin's IID matches the running
+                KWin (see discussion #481).
+              '';
             };
           };
 
@@ -64,10 +81,14 @@
             enable = lib.mkEnableOption "PlasmaZones window tiling for KDE Plasma 6.6+";
             package = lib.mkOption {
               type = lib.types.package;
-              default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+              default = mkPlasmaZones pkgs;
               defaultText = lib.literalExpression
-                "inputs.plasmazones.packages.\${pkgs.stdenv.hostPlatform.system}.default";
-              description = "The PlasmaZones package to use.";
+                "pkgs.callPackage \"\${plasmazones}/packaging/nix/package.nix\" { src = plasmazones; }";
+              description = ''
+                The PlasmaZones package to use. Built against the host's
+                nixpkgs so the KWin effect plugin's IID matches the running
+                KWin (see discussion #481).
+              '';
             };
           };
 
@@ -90,7 +111,9 @@
         };
 
       overlays.default = final: prev: {
-        plasmazones = self.packages.${prev.system}.default;
+        # Build against the consumer's pkgs (`final`) so the KWin effect is
+        # compiled against their KWin — see mkPlasmaZones above.
+        plasmazones = mkPlasmaZones final;
       };
 
       devShells = forAllSystems (system:
