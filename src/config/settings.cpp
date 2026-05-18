@@ -2845,9 +2845,11 @@ void Settings::applyAutotileBorderSystemColor()
 }
 
 #undef PZ_STORE_GET
+#undef PZ_STORE_GET_LIST
 #undef PZ_STORE_SET_BOOL
 #undef PZ_STORE_SET_INT
 #undef PZ_STORE_SET_DOUBLE
+#undef PZ_STORE_SET_LIST
 #undef PZ_STORE_SET_COLOR
 #undef PZ_STORE_SET_STRING
 

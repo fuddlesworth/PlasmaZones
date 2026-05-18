@@ -495,18 +495,22 @@ void TestScrollEngine::restoreReconciliation()
     // be pruned; a and c keep their restored columns.
     ScrollEngine restored;
     restored.deserializeEngineState(saved);
-    QCOMPARE(scrollState(restored, QStringLiteral("S1"))->columnCount(), 3);
+    // The screen state pointer is stable across reconciliation (windowClosed
+    // prunes columns but never erases the state), so bind and guard it once.
+    const ScrollScreenState* restoredState = scrollState(restored, QStringLiteral("S1"));
+    QVERIFY(restoredState);
+    QCOMPARE(restoredState->columnCount(), 3);
     restored.reconcileRestoredWindows(QSet<QString>{QStringLiteral("a"), QStringLiteral("c")});
     QVERIFY(restored.isWindowTracked(QStringLiteral("a")));
     QVERIFY(!restored.isWindowTracked(QStringLiteral("b")));
     QVERIFY(restored.isWindowTracked(QStringLiteral("c")));
-    QCOMPARE(scrollState(restored, QStringLiteral("S1"))->columnCount(), 2);
+    QCOMPARE(restoredState->columnCount(), 2);
 
     // Reconciliation is one-shot: a later batch (e.g. a screen entering scroll
     // mode at runtime) must not prune the now-authoritative live strip.
     restored.reconcileRestoredWindows(QSet<QString>{QStringLiteral("a")});
     QVERIFY(restored.isWindowTracked(QStringLiteral("c")));
-    QCOMPARE(scrollState(restored, QStringLiteral("S1"))->columnCount(), 2);
+    QCOMPARE(restoredState->columnCount(), 2);
 
     // Zero live windows after a restart — the effect sends an empty batch and
     // every restored column is reconciled away. The screen state survives as

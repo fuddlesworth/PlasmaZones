@@ -417,6 +417,10 @@ private:
      * viewport-centering mode from Settings into ScrollEngine, then re-resolves
      * each active scroll strip so gap / preset / centering changes take effect
      * immediately. Invoked once at startup and on any scroll settings change.
+     *
+     * At the startup invocation no scroll screen is active yet, so only the
+     * engine-global config is seeded; the per-screen-override push and the
+     * strip re-resolve are picked up by the first updateScrollScreens().
      */
     void refreshScrollConfigFromSettings();
 

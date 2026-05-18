@@ -11,6 +11,7 @@
 #include <PhosphorEngine/IScrollNavigation.h>
 #include "../../core/logging.h"
 #include "../../core/screenmoderouter.h"
+#include "../../core/settings_interfaces.h"
 #include "../../core/utils.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
