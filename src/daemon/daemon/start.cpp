@@ -514,6 +514,12 @@ void Daemon::connectShortcutSignals()
     connect(m_shortcutManager.get(), &ShortcutManager::toggleColumnFullWidthRequested, this, [this]() {
         handleToggleColumnFullWidth();
     });
+    connect(m_shortcutManager.get(), &ShortcutManager::growColumnWidthRequested, this, [this]() {
+        handleGrowColumnWidth();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::shrinkColumnWidthRequested, this, [this]() {
+        handleShrinkColumnWidth();
+    });
     connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() {
         handleResnap();
     });

@@ -511,6 +511,33 @@ void ScrollEngine::toggleColumnFullWidth(const NavigationContext& ctx)
     reportNav(true, QStringLiteral("fullwidth"), screenId);
 }
 
+void ScrollEngine::adjustColumnWidth(qreal deltaFraction, const NavigationContext& ctx)
+{
+    // Smallest proportional column width grow/shrink can settle on, so a
+    // column can never shrink away to nothing.
+    constexpr qreal kMinColumnWidthFraction = 0.1;
+
+    QString screenId;
+    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
+    const Column* column = state ? state->activeColumn() : nullptr;
+    if (!column || column->width().kind != ColumnWidth::Kind::Proportion) {
+        // No focused column, or a fixed-pixel width — the geometry-agnostic
+        // engine cannot resolve a pixel width to a working-area fraction.
+        reportNav(false, QStringLiteral("width"), screenId);
+        return;
+    }
+    const qreal current = column->width().value;
+    const qreal target = qBound(kMinColumnWidthFraction, current + deltaFraction, qreal(1.0));
+    if (qFuzzyCompare(target, current)) {
+        reportNav(false, QStringLiteral("width"), screenId); // already at the limit
+        return;
+    }
+    // The width is no longer one of the presets; -1 detaches it from the cycle.
+    state->setActiveColumnWidth(ColumnWidth::proportion(target), /*presetIndex=*/-1);
+    emitChanged(screenId);
+    reportNav(true, QStringLiteral("width"), screenId);
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Tracking queries
 // ─────────────────────────────────────────────────────────────────────────

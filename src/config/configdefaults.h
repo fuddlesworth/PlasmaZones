@@ -1371,6 +1371,16 @@ public:
     {
         return QStringLiteral("Meta+Alt+F");
     }
+    /// Scroll mode: grow the focused column's width by one step.
+    static QString growColumnWidthShortcut()
+    {
+        return QStringLiteral("Meta+Alt+=");
+    }
+    /// Scroll mode: shrink the focused column's width by one step.
+    static QString shrinkColumnWidthShortcut()
+    {
+        return QStringLiteral("Meta+Alt+-");
+    }
     static QString resnapToNewLayoutShortcut()
     {
         return QStringLiteral("Meta+Ctrl+Z");

@@ -56,6 +56,8 @@ constexpr auto kIdExpelWindow = "expel_window";
 constexpr auto kIdCycleColumnWidth = "cycle_column_width";
 constexpr auto kIdCycleWindowHeight = "cycle_window_height";
 constexpr auto kIdToggleColumnFullWidth = "toggle_column_full_width";
+constexpr auto kIdGrowColumnWidth = "grow_column_width";
+constexpr auto kIdShrinkColumnWidth = "shrink_column_width";
 constexpr auto kIdResnapToNewLayout = "resnap_to_new_layout";
 constexpr auto kIdSnapAllWindows = "snap_all_windows";
 constexpr auto kIdLayoutPicker = "layout_picker";
@@ -273,6 +275,16 @@ const StaticEntry kStaticEntries[] = {
      "Toggle Column Full Width",
      [](ShortcutManager* sm) {
          Q_EMIT sm->toggleColumnFullWidthRequested();
+     }},
+    {kIdGrowColumnWidth, &ConfigDefaults::growColumnWidthShortcut, &Settings::growColumnWidthShortcut,
+     "Grow Column Width",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->growColumnWidthRequested();
+     }},
+    {kIdShrinkColumnWidth, &ConfigDefaults::shrinkColumnWidthShortcut, &Settings::shrinkColumnWidthShortcut,
+     "Shrink Column Width",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->shrinkColumnWidthRequested();
      }},
 
     // ─── Misc layout ops ───────────────────────────────────────────────────

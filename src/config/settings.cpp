@@ -2630,6 +2630,12 @@ PZ_STORE_SET_STRING(setCycleWindowHeightShortcut, shortcutsGlobalGroup, cycleWin
 PZ_STORE_GET(QString, toggleColumnFullWidthShortcut, shortcutsGlobalGroup, toggleColumnFullWidthKey, QString)
 PZ_STORE_SET_STRING(setToggleColumnFullWidthShortcut, shortcutsGlobalGroup, toggleColumnFullWidthKey,
                     toggleColumnFullWidthShortcutChanged)
+PZ_STORE_GET(QString, growColumnWidthShortcut, shortcutsGlobalGroup, growColumnWidthKey, QString)
+PZ_STORE_SET_STRING(setGrowColumnWidthShortcut, shortcutsGlobalGroup, growColumnWidthKey,
+                    growColumnWidthShortcutChanged)
+PZ_STORE_GET(QString, shrinkColumnWidthShortcut, shortcutsGlobalGroup, shrinkColumnWidthKey, QString)
+PZ_STORE_SET_STRING(setShrinkColumnWidthShortcut, shortcutsGlobalGroup, shrinkColumnWidthKey,
+                    shrinkColumnWidthShortcutChanged)
 PZ_STORE_GET(QString, resnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey, QString)
 PZ_STORE_SET_STRING(setResnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey,
                     resnapToNewLayoutShortcutChanged)

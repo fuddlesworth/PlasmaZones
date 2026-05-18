@@ -107,6 +107,7 @@ public:
     void cyclePresetColumnWidth(const PhosphorEngine::NavigationContext& ctx) override;
     void cyclePresetWindowHeight(const PhosphorEngine::NavigationContext& ctx) override;
     void toggleColumnFullWidth(const PhosphorEngine::NavigationContext& ctx) override;
+    void adjustColumnWidth(qreal deltaFraction, const PhosphorEngine::NavigationContext& ctx) override;
 
     // ── Tracking queries ────────────────────────────────────────────────
     bool isWindowTracked(const QString& windowId) const override;

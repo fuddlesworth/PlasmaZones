@@ -582,6 +582,13 @@ public:
     {
         Q_UNUSED(ctx)
     }
+    /// Adjust the focused column's width by @p deltaFraction of the working
+    /// area (positive grows the column, negative shrinks it).
+    virtual void adjustColumnWidth(qreal deltaFraction, const NavigationContext& ctx)
+    {
+        Q_UNUSED(deltaFraction)
+        Q_UNUSED(ctx)
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Engine state serialization

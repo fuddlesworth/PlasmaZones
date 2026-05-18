@@ -40,6 +40,7 @@ private Q_SLOTS:
     void cyclePresetWidth();
     void cyclePresetHeight();
     void toggleColumnFullWidth();
+    void adjustColumnWidth();
     void floatToggle();
     void perDesktopState();
     void serializeRoundTrip();
@@ -268,6 +269,40 @@ void TestScrollEngine::toggleColumnFullWidth()
     engine.toggleColumnFullWidth(ctx);
     QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 1.0 / 3.0));
     QCOMPARE(state->activeColumn()->presetWidthIndex(), 0);
+}
+
+void TestScrollEngine::adjustColumnWidth()
+{
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    const NavigationContext ctx = contextFor(QStringLiteral("S1"));
+    const ScrollScreenState* state = scrollState(engine, QStringLiteral("S1"));
+    QVERIFY(state && state->activeColumn());
+    QCOMPARE(state->activeColumn()->width().value, 0.5); // default proportion
+
+    // Grow by 0.2 -> 0.7; the width detaches from the preset cycle.
+    engine.adjustColumnWidth(0.2, ctx);
+    QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 0.7));
+    QCOMPARE(state->activeColumn()->presetWidthIndex(), -1);
+
+    // Shrink by 0.5 -> 0.2.
+    engine.adjustColumnWidth(-0.5, ctx);
+    QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 0.2));
+
+    // Shrinking past the floor clamps to the 0.1 minimum.
+    engine.adjustColumnWidth(-0.5, ctx);
+    QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 0.1));
+
+    // Growing past 1.0 clamps to full viewport width.
+    engine.adjustColumnWidth(2.0, ctx);
+    QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 1.0));
+
+    // Adjusting a full-width column leaves full-width mode.
+    engine.toggleColumnFullWidth(ctx);
+    QVERIFY(state->activeColumn()->isFullWidth());
+    engine.adjustColumnWidth(-0.1, ctx);
+    QVERIFY(!state->activeColumn()->isFullWidth());
+    QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 0.9));
 }
 
 void TestScrollEngine::floatToggle()

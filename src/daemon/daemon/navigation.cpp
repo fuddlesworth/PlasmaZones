@@ -211,6 +211,32 @@ void Daemon::handleToggleColumnFullWidth()
     }
 }
 
+namespace {
+/// Fraction of the working-area width a grow/shrink shortcut moves the
+/// focused column. A user setting in Phase 5.
+constexpr qreal kColumnWidthStep = 0.1;
+} // namespace
+
+void Daemon::handleGrowColumnWidth()
+{
+    // Grow the focused column by one width step. Scroll-mode only; a no-op on
+    // snap/autotile screens (see handleConsume).
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "GrowColumnWidth")) {
+        nav->adjustColumnWidth(kColumnWidthStep, ctx);
+    }
+}
+
+void Daemon::handleShrinkColumnWidth()
+{
+    // Shrink the focused column by one width step. Scroll-mode only; a no-op
+    // on snap/autotile screens (see handleConsume).
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ShrinkColumnWidth")) {
+        nav->adjustColumnWidth(-kColumnWidthStep, ctx);
+    }
+}
+
 void Daemon::handleRestore()
 {
     NavigationContext ctx;

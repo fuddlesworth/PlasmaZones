@@ -446,6 +446,10 @@ public:
                    NOTIFY cycleWindowHeightShortcutChanged)
     Q_PROPERTY(QString toggleColumnFullWidthShortcut READ toggleColumnFullWidthShortcut WRITE
                    setToggleColumnFullWidthShortcut NOTIFY toggleColumnFullWidthShortcutChanged)
+    Q_PROPERTY(QString growColumnWidthShortcut READ growColumnWidthShortcut WRITE setGrowColumnWidthShortcut NOTIFY
+                   growColumnWidthShortcutChanged)
+    Q_PROPERTY(QString shrinkColumnWidthShortcut READ shrinkColumnWidthShortcut WRITE setShrinkColumnWidthShortcut
+                   NOTIFY shrinkColumnWidthShortcutChanged)
 
     // Resnap to New PhosphorZones::Layout (Meta+Ctrl+Z, easy pinky key)
     Q_PROPERTY(QString resnapToNewLayoutShortcut READ resnapToNewLayoutShortcut WRITE setResnapToNewLayoutShortcut
@@ -1010,6 +1014,10 @@ public:
     void setCycleWindowHeightShortcut(const QString& shortcut);
     QString toggleColumnFullWidthShortcut() const;
     void setToggleColumnFullWidthShortcut(const QString& shortcut);
+    QString growColumnWidthShortcut() const;
+    void setGrowColumnWidthShortcut(const QString& shortcut);
+    QString shrinkColumnWidthShortcut() const;
+    void setShrinkColumnWidthShortcut(const QString& shortcut);
     QString resnapToNewLayoutShortcut() const;
     void setResnapToNewLayoutShortcut(const QString& shortcut);
     QString snapAllWindowsShortcut() const;

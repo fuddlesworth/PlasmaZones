@@ -263,6 +263,8 @@ private:
     void handleCycleColumnWidth();
     void handleCycleWindowHeight();
     void handleToggleColumnFullWidth();
+    void handleGrowColumnWidth();
+    void handleShrinkColumnWidth();
     void handleResnap();
     void handleSnapAll();
     void handleFocusMaster();

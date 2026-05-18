@@ -819,6 +819,8 @@ void SettingsAdaptor::initializeRegistry()
         REGISTER_CONCRETE_STRING("cycleWindowHeightShortcut", cycleWindowHeightShortcut, setCycleWindowHeightShortcut)
         REGISTER_CONCRETE_STRING("toggleColumnFullWidthShortcut", toggleColumnFullWidthShortcut,
                                  setToggleColumnFullWidthShortcut)
+        REGISTER_CONCRETE_STRING("growColumnWidthShortcut", growColumnWidthShortcut, setGrowColumnWidthShortcut)
+        REGISTER_CONCRETE_STRING("shrinkColumnWidthShortcut", shrinkColumnWidthShortcut, setShrinkColumnWidthShortcut)
         REGISTER_CONCRETE_STRING("resnapToNewLayoutShortcut", resnapToNewLayoutShortcut, setResnapToNewLayoutShortcut)
         REGISTER_CONCRETE_STRING("snapAllWindowsShortcut", snapAllWindowsShortcut, setSnapAllWindowsShortcut)
         REGISTER_CONCRETE_STRING("layoutPickerShortcut", layoutPickerShortcut, setLayoutPickerShortcut)
