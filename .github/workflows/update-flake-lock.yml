@@ -31,9 +31,9 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update flake.lock
-        # DeterminateSystems/update-flake-lock v24 — pinned by SHA, same
+        # DeterminateSystems/update-flake-lock v28 — pinned by SHA, same
         # rationale. Bump when verifying a newer commit on the action.
-        uses: DeterminateSystems/update-flake-lock@a2e3e8e30c66d57e6f64ef9aa6f3a35bb20ddf91
+        uses: DeterminateSystems/update-flake-lock@834c491b2ece4de0bbd00d85214bb5e83b4da5c6
         with:
           pr-title: "chore(nix): update flake.lock"
           pr-labels: dependencies,nix
