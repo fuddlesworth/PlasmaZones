@@ -19,6 +19,7 @@
 #include "../../config/configkeys.h"
 #include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorIdentity/WindowId.h>
 
 namespace PlasmaZones {
 using namespace WindowTrackingInternal;
@@ -433,6 +434,15 @@ void WindowTrackingAdaptor::loadState()
             QJsonObject obj = doc.object();
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 if (!it.value().isArray()) {
+                    continue;
+                }
+                // Drop entries under a corrupt key — blank " " keys and the
+                // pre-3.0 "resourceName resourceClass" composites that survive
+                // an upgrade (session state outlives a ~/.config wipe).
+                // Loading them verbatim lets them be consumed by unrelated
+                // windows on reopen. See WindowId::isValidAppId.
+                if (!PhosphorIdentity::WindowId::isValidAppId(it.key())) {
+                    qCInfo(lcDbusWindow) << "Dropping pending-restore entries under corrupt appId key:" << it.key();
                     continue;
                 }
                 for (const QJsonValue& entryVal : it.value().toArray()) {

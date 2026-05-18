@@ -37,12 +37,82 @@ using PhosphorIdentity::WindowId::buildCompositeId;
 using PhosphorIdentity::WindowId::deriveShortName;
 using PhosphorIdentity::WindowId::extractAppId;
 using PhosphorIdentity::WindowId::extractInstanceId;
+using PhosphorIdentity::WindowId::isValidAppId;
+using PhosphorIdentity::WindowId::normalizeAppId;
 
 class TestWindowIdentity : public QObject
 {
     Q_OBJECT
 
 private Q_SLOTS:
+    // =====================================================================
+    // normalizeAppId() — canonical appId derivation (krakerz #2 regression)
+    // =====================================================================
+
+    void testNormalizeAppId_prefersDesktopFileName()
+    {
+        QCOMPARE(normalizeAppId(QStringLiteral("org.kde.Konsole"), QStringLiteral("konsole konsole")),
+                 QStringLiteral("org.kde.konsole"));
+    }
+
+    void testNormalizeAppId_fallsBackToWindowClassLastToken()
+    {
+        // X11 class is "resourceName resourceClass" — keep the resourceClass.
+        QCOMPARE(normalizeAppId(QString(), QStringLiteral("konsole org.kde.konsole")),
+                 QStringLiteral("org.kde.konsole"));
+    }
+
+    void testNormalizeAppId_lastSpaceWinsForMultiTokenClass()
+    {
+        // resourceName may itself contain spaces — split on the LAST one so
+        // the resourceClass token is recovered intact.
+        QCOMPARE(normalizeAppId(QString(), QStringLiteral("Google Chrome google-chrome")),
+                 QStringLiteral("google-chrome"));
+    }
+
+    void testNormalizeAppId_waylandSingleTokenClass()
+    {
+        QCOMPARE(normalizeAppId(QString(), QStringLiteral("Alacritty")), QStringLiteral("alacritty"));
+    }
+
+    void testNormalizeAppId_blankClassYieldsEmpty()
+    {
+        // The krakerz #2 regression: a bare " " class must NOT become a " "
+        // appId — it must collapse to empty so isValidAppId rejects it and no
+        // space-keyed snap-restore entry is ever created.
+        QVERIFY(normalizeAppId(QString(), QStringLiteral(" ")).isEmpty());
+        QVERIFY(normalizeAppId(QString(), QString()).isEmpty());
+        QVERIFY(normalizeAppId(QStringLiteral("  "), QStringLiteral("   ")).isEmpty());
+    }
+
+    // =====================================================================
+    // isValidAppId() — appId-key gate (krakerz #2 regression)
+    // =====================================================================
+
+    void testIsValidAppId_acceptsCanonicalTokens()
+    {
+        QVERIFY(isValidAppId(QStringLiteral("org.kde.konsole")));
+        QVERIFY(isValidAppId(QStringLiteral("alacritty")));
+        QVERIFY(isValidAppId(QStringLiteral("com.vysp3r.protonplus")));
+    }
+
+    void testIsValidAppId_rejectsEmptyAndWhitespace()
+    {
+        QVERIFY(!isValidAppId(QString()));
+        QVERIFY(!isValidAppId(QStringLiteral(" ")));
+        QVERIFY(!isValidAppId(QStringLiteral("\t")));
+    }
+
+    void testIsValidAppId_rejectsWhitespaceBearingLegacyKeys()
+    {
+        // Pre-3.0 PendingRestoreQueues keys used the raw "resourceName
+        // resourceClass" class, sometimes doubled. They contain spaces and
+        // must be rejected so a stale key can't be loaded as a live appId.
+        QVERIFY(!isValidAppId(QStringLiteral("opera Opera:opera Opera")));
+        QVERIFY(!isValidAppId(QStringLiteral("konsole org.kde.konsole")));
+        QVERIFY(!isValidAppId(QStringLiteral(" : ")));
+    }
+
     // =====================================================================
     // Basic extractAppId() tests
     // =====================================================================
