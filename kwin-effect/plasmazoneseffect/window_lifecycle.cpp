@@ -466,8 +466,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_scrollHandler.get(),
             &ScrollHandler::onWindowFrameGeometryChanged);
 
-    // Scroll: drag-to-reorder — when an interactive move of a tiled scroll
-    // window finishes, reorder its column to the drop position.
+    // Scroll: drag-to-reorder — record move-vs-resize at interaction start
+    // (isUserResize() is reliable here), and on finish reorder the dragged
+    // window's column to the drop position (a resize is ignored).
+    connect(w, &KWin::EffectWindow::windowStartUserMovedResized, m_scrollHandler.get(),
+            &ScrollHandler::onWindowMoveResizeStarted);
     connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, m_scrollHandler.get(),
             &ScrollHandler::onWindowDragFinished);
 

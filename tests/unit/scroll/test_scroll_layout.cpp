@@ -45,6 +45,8 @@ private Q_SLOTS:
     void viewportFitScrollsLeftToColumn();
     void viewportCenteredCentersColumn();
     void viewportCollapsedFocusedColumnAnchorsVisible();
+    void viewportCollapsedMidColumnAnchorsForward();
+    void viewportAllMinimizedKeepsScroll();
     void viewportWideColumnPinsLeft();
 };
 
@@ -248,11 +250,18 @@ void TestScrollLayout::viewportFitScrollsLeftToColumn()
     ScrollScreenState state;
     state.addColumnForWindow(QStringLiteral("a"));
     state.addColumnForWindow(QStringLiteral("b"));
+    state.addColumnForWindow(QStringLiteral("c"));
     QVERIFY(state.focusWindow(QStringLiteral("a"))); // strip-x 0
 
     // Viewport scrolled right past "a"; fit scrolls left exactly to its edge.
     state.setScrollX(300.0);
     QCOMPARE(computeViewportScroll(state, kWorkArea, standardConfig()), 0.0);
+
+    // A mid-strip column off the left edge scrolls left to its non-zero
+    // strip-x: "b" sits at strip-x 500.
+    QVERIFY(state.focusWindow(QStringLiteral("b")));
+    state.setScrollX(900.0);
+    QCOMPARE(computeViewportScroll(state, kWorkArea, standardConfig()), 500.0);
 }
 
 void TestScrollLayout::viewportCenteredCentersColumn()
@@ -286,6 +295,37 @@ void TestScrollLayout::viewportCollapsedFocusedColumnAnchorsVisible()
     ScrollLayoutConfig centered = standardConfig();
     centered.viewportMode = ScrollViewportMode::Centered;
     QCOMPARE(computeViewportScroll(state, kWorkArea, centered), -245.0);
+}
+
+void TestScrollLayout::viewportCollapsedMidColumnAnchorsForward()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b"));
+    state.addColumnForWindow(QStringLiteral("c")); // [a][b][c]
+
+    // Collapse the middle column and focus it. viewportAnchorColumn searches
+    // forward first, so the viewport anchors on "c" (strip-x 500 — the
+    // collapsed column shares it), not the visible column to the left. "c"
+    // spans [500, 990]; fit scrolls right to 990 - 980 = 10. (A backward
+    // anchor on the already-visible "a" would have left scrollX at 0.)
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true));
+    QVERIFY(state.focusWindow(QStringLiteral("b")));
+    QCOMPARE(computeViewportScroll(state, kWorkArea, standardConfig()), 10.0);
+}
+
+void TestScrollLayout::viewportAllMinimizedKeepsScroll()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b"));
+    QVERIFY(state.setWindowMinimized(QStringLiteral("a"), true));
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true));
+
+    // Every column collapsed: nothing anchors the viewport, so
+    // computeViewportScroll leaves the stored scroll position untouched.
+    state.setScrollX(700.0);
+    QCOMPARE(computeViewportScroll(state, kWorkArea, standardConfig()), 700.0);
 }
 
 void TestScrollLayout::viewportWideColumnPinsLeft()

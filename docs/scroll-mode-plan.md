@@ -42,9 +42,11 @@ Key rules, all carried over verbatim:
 - **Intent vs. resolved geometry are separate.** Store column *width* and tile *height*
   as intent enums (`Proportion(f)` / `Fixed(px)` / `Preset(idx)`); recompute pixel rects
   on relayout. Never store pixels as the source of truth.
-- **The view offset is relative to the focused column**, not an absolute strip
-  coordinate. This is what stops the focused window drifting when columns to its left
-  are added/removed/resized.
+- **The viewport scroll position (`scrollX`) is an absolute strip coordinate** — the
+  strip-x that maps to the working area's inner-left edge. The daemon recomputes it on
+  every relayout (`computeViewportScroll`, `fit` or `centered`) so the focused column
+  stays on-screen; `fit` leaves an already-visible column untouched, which is what stops
+  the focused window jumping when columns to its left are added/removed/resized.
 - **Fullscreen / maximize / tabbed are column states**, not separate modes — they stay
   first-class participants in the strip.
 
@@ -205,7 +207,7 @@ Persistent per-context (screen / desktop / activity) state:
 ScrollScreenState
   columns: QVector<Column>
   activeColumnIdx
-  viewOffset            // relative to active column — NOT absolute
+  scrollX               // absolute strip-x at the viewport's inner-left edge
 Column
   tiles: QVector<Tile>  // each tile = one windowId
   activeTileIdx

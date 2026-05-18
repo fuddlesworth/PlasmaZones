@@ -80,10 +80,16 @@ public:
     /// scroll-window geometry.
     void onWindowFrameGeometryChanged(KWin::EffectWindow* w);
 
+    /// React to a window's interactive move/resize starting. Records whether
+    /// the interaction is a resize — `isUserResize()` is reliable at the start
+    /// signal but not necessarily at finish — so onWindowDragFinished can tell
+    /// a drag-to-reorder from a resize.
+    void onWindowMoveResizeStarted(KWin::EffectWindow* w);
+
     /// React to a scroll window's interactive move/resize finishing. A drag
     /// that released over another column's span reorders the dragged window's
     /// column to the drop position (drag-to-reorder); the strip then re-resolves
-    /// and snaps the window into its new slot.
+    /// and snaps the window into its new slot. A resize is ignored.
     void onWindowDragFinished(KWin::EffectWindow* w);
 
     /// Report a focus change to the scroll engine. No-op off scroll screens.
@@ -136,6 +142,15 @@ private:
     /// point for detecting app-initiated resizes.
     QHash<QString, QRect> m_appliedGeometry;
     QSet<QString> m_reassertPending; ///< Windows awaiting a debounced re-assert.
+    /// Windows currently in an interactive *resize* (recorded at the start
+    /// signal). onWindowDragFinished consults this to skip resizes — only a
+    /// move is a drag-to-reorder.
+    QSet<QString> m_interactiveResize;
+    /// Windows with a drag-reorder (windowDropped) in flight to the daemon.
+    /// Drift re-asserts are suppressed for them until the daemon's re-resolve
+    /// lands (recordAppliedGeometry clears the flag), so a stale re-assert
+    /// cannot snap the window back to its pre-drag slot mid-reorder.
+    QSet<QString> m_reorderPending;
     /// Windows already re-asserted since the daemon last resolved them — caps
     /// re-assertion at one attempt per resolve episode so a window that cannot
     /// hit the exact tile rect (X11 size increments) does not loop.

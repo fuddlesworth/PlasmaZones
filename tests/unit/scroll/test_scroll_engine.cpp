@@ -155,6 +155,7 @@ void TestScrollEngine::windowDropped()
     engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
     engine.windowOpened(QStringLiteral("b"), QStringLiteral("S1"));
     engine.windowOpened(QStringLiteral("c"), QStringLiteral("S1")); // [a][b][c]
+    engine.windowOpened(QStringLiteral("z"), QStringLiteral("S2")); // a separate strip
     QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
 
     // Drag-to-reorder: drop "a" after "c" -> [b][c][a], focus follows "a".
@@ -165,10 +166,12 @@ void TestScrollEngine::windowDropped()
     QCOMPARE(state->columns().at(2).windowIds().first(), QStringLiteral("a"));
     QCOMPARE(state->focusedWindowId(), QStringLiteral("a"));
 
-    // A drop onto the dragged window's own column, or against an unknown
-    // window, changes nothing and emits no signal.
+    // A drop onto the dragged window's own column, against an unknown window,
+    // or against an anchor on a different screen, changes nothing and emits no
+    // signal (moveColumnNextTo resolves both windows within one strip).
     engine.windowDropped(QStringLiteral("a"), QStringLiteral("a"), true);
     engine.windowDropped(QStringLiteral("missing"), QStringLiteral("b"), true);
+    engine.windowDropped(QStringLiteral("a"), QStringLiteral("z"), true);
     QCOMPARE(spy.count(), 1);
 }
 
