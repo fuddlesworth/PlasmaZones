@@ -115,13 +115,12 @@ SettingsFlickable {
     }
 
     // Window-filtering picker — relocated here with the Window Filtering
-    // section from the old Animations App Rules page. `true` routes the
-    // next pick to the Excluded Applications list; `false` to the Excluded
-    // Window Classes list. Each ExclusionListCard sets this before opening.
+    // section from the old Animations App Rules page. Each ExclusionListCard
+    // calls openForApps()/openForClasses(), which sets the dialog's own
+    // forApps flag routing the pick to the Excluded Applications list (true)
+    // or the Excluded Window Classes list (false).
     WindowPickerDialog {
         id: filterPickerDialog
-
-        property bool forApps: true
 
         controller: settingsController
         onPicked: function(value) {
@@ -445,7 +444,6 @@ SettingsFlickable {
                 return page.appSettings.removeAnimationExcludedApplicationAt(index);
             }
             onPickRequested: {
-                filterPickerDialog.forApps = true;
                 filterPickerDialog.openForApps();
             }
         }
@@ -469,7 +467,6 @@ SettingsFlickable {
                 return page.appSettings.removeAnimationExcludedWindowClassAt(index);
             }
             onPickRequested: {
-                filterPickerDialog.forApps = false;
                 filterPickerDialog.openForClasses();
             }
         }
