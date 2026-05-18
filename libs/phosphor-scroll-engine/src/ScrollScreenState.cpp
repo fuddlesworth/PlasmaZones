@@ -219,6 +219,25 @@ bool ScrollScreenState::moveTile(int delta)
     return column.moveTile(column.activeTileIndex(), target);
 }
 
+bool ScrollScreenState::moveColumnNextTo(const QString& draggedWindowId, const QString& anchorWindowId, bool placeAfter)
+{
+    const int from = locateWindow(draggedWindowId).first;
+    const int anchorColumn = locateWindow(anchorWindowId).first;
+    if (from < 0 || anchorColumn < 0 || from == anchorColumn) {
+        return false;
+    }
+    const Column column = m_columns.takeAt(from);
+    // Removing the dragged column shifts every later index left by one, so the
+    // anchor's index moves too when it sat to the right of the removed column.
+    const int anchorAfterRemoval = (anchorColumn > from) ? anchorColumn - 1 : anchorColumn;
+    const int target =
+        qBound(0, placeAfter ? anchorAfterRemoval + 1 : anchorAfterRemoval, static_cast<int>(m_columns.size()));
+    m_columns.insert(target, column);
+    // The user just dragged this window — focus it (and its column).
+    focusWindow(draggedWindowId);
+    return true;
+}
+
 void ScrollScreenState::setActiveColumnWidth(const ColumnWidth& width, int presetIndex)
 {
     if (m_activeColumnIndex >= 0) {

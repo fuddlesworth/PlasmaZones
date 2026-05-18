@@ -20,6 +20,7 @@ private Q_SLOTS:
     void removeDropsEmptyColumn();
     void consumeAndExpel();
     void minimizeKeepsSlot();
+    void dragReordersColumn();
     void focusAndMoveColumns();
     void tileNavigation();
     void placementAndFloating();
@@ -150,6 +151,32 @@ void TestScrollScreenState::minimizeKeepsSlot()
     QCOMPARE(state.columnCount(), 3); // every slot kept
     QCOMPARE(state.focusedWindowId(), QStringLiteral("b")); // retained, not cleared
     QVERIFY(state.isWindowMinimized(state.focusedWindowId())); // ...even though hidden
+}
+
+void TestScrollScreenState::dragReordersColumn()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b"));
+    state.addColumnForWindow(QStringLiteral("c")); // [a][b][c]
+
+    // Drop "a" after "c": column order becomes [b][c][a]; focus follows "a".
+    QVERIFY(state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("c"), /*placeAfter=*/true));
+    QCOMPARE(state.columns().at(0).windowIds().first(), QStringLiteral("b"));
+    QCOMPARE(state.columns().at(1).windowIds().first(), QStringLiteral("c"));
+    QCOMPARE(state.columns().at(2).windowIds().first(), QStringLiteral("a"));
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("a"));
+
+    // Drop "a" before "b": back to [a][b][c].
+    QVERIFY(state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("b"), /*placeAfter=*/false));
+    QCOMPARE(state.columns().at(0).windowIds().first(), QStringLiteral("a"));
+    QCOMPARE(state.columns().at(1).windowIds().first(), QStringLiteral("b"));
+    QCOMPARE(state.columns().at(2).windowIds().first(), QStringLiteral("c"));
+
+    // A drop onto the dragged window's own column, or against an unknown
+    // window, is a no-op.
+    QVERIFY(!state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("a"), true));
+    QVERIFY(!state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("missing"), true));
 }
 
 void TestScrollScreenState::focusAndMoveColumns()

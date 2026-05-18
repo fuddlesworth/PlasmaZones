@@ -36,6 +36,7 @@ private Q_SLOTS:
     void focusAndMoveNavigation();
     void consumeAndExpel();
     void minimizeWindow();
+    void windowDropped();
     void cyclePresetWidth();
     void cyclePresetHeight();
     void floatToggle();
@@ -146,6 +147,29 @@ void TestScrollEngine::minimizeWindow()
     QVERIFY(state->isWindowMinimized(QStringLiteral("b")));
     QCOMPARE(state->focusedWindowId(), QStringLiteral("b")); // retained, not cleared
     QCOMPARE(state->columnCount(), 2); // both slots kept
+}
+
+void TestScrollEngine::windowDropped()
+{
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    engine.windowOpened(QStringLiteral("b"), QStringLiteral("S1"));
+    engine.windowOpened(QStringLiteral("c"), QStringLiteral("S1")); // [a][b][c]
+    QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+
+    // Drag-to-reorder: drop "a" after "c" -> [b][c][a], focus follows "a".
+    engine.windowDropped(QStringLiteral("a"), QStringLiteral("c"), /*placeAfter=*/true);
+    QCOMPARE(spy.count(), 1);
+    const ScrollScreenState* state = scrollState(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QCOMPARE(state->columns().at(2).windowIds().first(), QStringLiteral("a"));
+    QCOMPARE(state->focusedWindowId(), QStringLiteral("a"));
+
+    // A drop onto the dragged window's own column, or against an unknown
+    // window, changes nothing and emits no signal.
+    engine.windowDropped(QStringLiteral("a"), QStringLiteral("a"), true);
+    engine.windowDropped(QStringLiteral("missing"), QStringLiteral("b"), true);
+    QCOMPARE(spy.count(), 1);
 }
 
 void TestScrollEngine::cyclePresetWidth()

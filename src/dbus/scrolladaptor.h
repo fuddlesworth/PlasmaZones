@@ -64,6 +64,7 @@ public Q_SLOTS:
     void windowClosed(const QString& windowId);
     void notifyWindowFocused(const QString& windowId, const QString& screenId);
     void windowMinimizedChanged(const QString& windowId, bool minimized);
+    void windowDropped(const QString& draggedWindowId, const QString& anchorWindowId, bool placeAfter);
 
 Q_SIGNALS:
     /// Emitted when the set of scroll-mode screens changes; the KWin effect

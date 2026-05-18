@@ -311,6 +311,59 @@ void ScrollHandler::flushReasserts()
     }
 }
 
+void ScrollHandler::onWindowDragFinished(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    if (!m_notifiedWindows.contains(windowId)) {
+        return; // not a scroll-tracked window
+    }
+    const QString screenId = m_notifiedWindowScreens.value(windowId);
+    if (!m_scrollScreens.contains(screenId)) {
+        return;
+    }
+    // The dragged window kept its tile slot during the move (the geometry
+    // re-assert is suppressed mid-drag). On release, reorder its column to the
+    // strip slot nearest the drop point: find the scroll window on the same
+    // screen whose resolved tile the drop-x is over or closest to — the
+    // anchor — and the engine moves the dragged column next to it.
+    const QRect frame = w->frameGeometry().toRect();
+    const int dropX = frame.center().x();
+    QString anchorId;
+    int bestDistance = -1;
+    bool placeAfter = false;
+    for (auto it = m_appliedGeometry.cbegin(); it != m_appliedGeometry.cend(); ++it) {
+        const QString& otherId = it.key();
+        if (otherId == windowId || m_notifiedWindowScreens.value(otherId) != screenId) {
+            continue;
+        }
+        const QRect& rect = it.value();
+        int distance = 0;
+        if (dropX < rect.left()) {
+            distance = rect.left() - dropX;
+        } else if (dropX > rect.right()) {
+            distance = dropX - rect.right();
+        }
+        if (bestDistance < 0 || distance < bestDistance) {
+            bestDistance = distance;
+            anchorId = otherId;
+            placeAfter = dropX > rect.center().x();
+        }
+    }
+    if (anchorId.isEmpty()) {
+        return; // nothing else on the strip to reorder against
+    }
+    // The reorder supersedes any drift re-assert queued for this window by
+    // onWindowFrameGeometryChanged when the interactive move ended.
+    m_reassertPending.remove(windowId);
+    PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
+                                                   QStringLiteral("windowDropped"), {windowId, anchorId, placeAfter},
+                                                   QStringLiteral("windowDropped"));
+    qCDebug(lcEffect) << "Notified scroll: windowDropped" << windowId << "anchor" << anchorId << "after" << placeAfter;
+}
+
 void ScrollHandler::notifyWindowFocused(const QString& windowId, const QString& screenId)
 {
     if (!m_scrollScreens.contains(screenId)) {

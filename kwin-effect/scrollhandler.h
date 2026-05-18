@@ -73,6 +73,12 @@ public:
     /// scroll-window geometry.
     void onWindowFrameGeometryChanged(KWin::EffectWindow* w);
 
+    /// React to a scroll window's interactive move/resize finishing. A drag
+    /// that released over another column's span reorders the dragged window's
+    /// column to the drop position (drag-to-reorder); the strip then re-resolves
+    /// and snaps the window into its new slot.
+    void onWindowDragFinished(KWin::EffectWindow* w);
+
     /// Report a focus change to the scroll engine. No-op off scroll screens.
     void notifyWindowFocused(const QString& windowId, const QString& screenId);
 

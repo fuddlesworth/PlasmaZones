@@ -78,6 +78,11 @@ public:
     /// layout (Karousel's TiledMinimized). Scroll-specific — minimize has no
     /// IPlacementEngine equivalent (autotile routes minimize through float).
     void windowMinimizedChanged(const QString& windowId, bool minimized);
+    /// Reorder the column holding @p draggedWindowId next to the column
+    /// holding @p anchorWindowId (before it, or after when @p placeAfter) and
+    /// focus the dragged window. Drives drag-to-reorder ("reorder on drop");
+    /// scroll-specific — has no IPlacementEngine equivalent.
+    void windowDropped(const QString& draggedWindowId, const QString& anchorWindowId, bool placeAfter);
 
     // ── Float ───────────────────────────────────────────────────────────
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;

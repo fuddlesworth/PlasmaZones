@@ -110,6 +110,12 @@ public:
     bool moveColumn(int delta);
     /// Reorder the focused tile within its column by @p delta; focus follows.
     bool moveTile(int delta);
+    /// Reorder the whole column holding @p draggedWindowId so it sits
+    /// immediately before (or after, when @p placeAfter) the column holding
+    /// @p anchorWindowId, and focus @p draggedWindowId. Drives drag-to-reorder.
+    /// Returns false when either window is not tiled here or both share a
+    /// column (a drop onto the dragged window's own column is a no-op).
+    bool moveColumnNextTo(const QString& draggedWindowId, const QString& anchorWindowId, bool placeAfter);
 
     // ── Width / height intent ───────────────────────────────────────────
     /// Set the focused column's width intent (no-op when the strip is empty).

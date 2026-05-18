@@ -462,6 +462,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_scrollHandler.get(),
             &ScrollHandler::onWindowFrameGeometryChanged);
 
+    // Scroll: drag-to-reorder — when an interactive move of a tiled scroll
+    // window finishes, reorder its column to the drop position.
+    connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, m_scrollHandler.get(),
+            &ScrollHandler::onWindowDragFinished);
+
     // Frame-geometry shadow: push the latest geometry to the daemon so
     // daemon-local shortcut handlers (float toggle, etc.) can read fresh
     // geometry without round-tripping. Debounced at ~50ms per window via
