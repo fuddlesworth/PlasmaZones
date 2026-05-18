@@ -635,16 +635,17 @@ public:
     // and high-frequency session state saves.
     PLASMAZONES_EXPORT static QString sessionFilePath();
 
-    // Returns the absolute path to assignments.json (layout assignments and
-    // quick layout shortcuts).  Separate from config.json so that Settings
-    // and PhosphorZones::LayoutRegistry have independent ownership of their files.
-    PLASMAZONES_EXPORT static QString assignmentsFilePath();
-
     // Returns the absolute path to windowrules.json (the unified WindowRule
     // store — schema v4). Separate from config.json so frequent daemon-driven
     // rule writes do not churn the cold user-settings blob. The daemon is the
     // sole writer; see docs/window-rule-refactor-design.md §5.
     PLASMAZONES_EXPORT static QString windowRulesFilePath();
+
+    // Returns the absolute path to quicklayouts.json (the numbered quick-layout
+    // shortcut slots 1..9). Quick-layout slots are NOT window rules, so they
+    // sit in a sibling sidecar next to windowrules.json rather than in the
+    // rule store. LayoutRegistry reads/writes this file directly.
+    PLASMAZONES_EXPORT static QString quickLayoutsFilePath();
 
     // Returns the absolute path to the legacy plasmazonesrc file (INI format).
     // Used only by the one-time migration module.

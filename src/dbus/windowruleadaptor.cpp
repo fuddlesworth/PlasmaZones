@@ -4,10 +4,10 @@
 #include "windowruleadaptor.h"
 
 #include "core/logging.h"
-#include "core/windowrulestore.h"
 
 #include <PhosphorWindowRule/WindowRule.h>
 #include <PhosphorWindowRule/WindowRuleSet.h>
+#include <PhosphorWindowRule/WindowRuleStore.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -33,12 +33,12 @@ std::optional<QJsonObject> parseObject(const QString& json)
 
 } // namespace
 
-WindowRuleAdaptor::WindowRuleAdaptor(WindowRuleStore* store, QObject* parent)
+WindowRuleAdaptor::WindowRuleAdaptor(PhosphorWindowRule::WindowRuleStore* store, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_store(store)
 {
     if (m_store) {
-        connect(m_store, &WindowRuleStore::rulesChanged, this, &WindowRuleAdaptor::rulesChanged);
+        connect(m_store, &PhosphorWindowRule::WindowRuleStore::rulesChanged, this, &WindowRuleAdaptor::rulesChanged);
     }
 }
 

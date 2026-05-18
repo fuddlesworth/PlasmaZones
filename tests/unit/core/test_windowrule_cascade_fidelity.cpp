@@ -20,11 +20,13 @@
  * windowless context query to the same engine-mode / layout the legacy
  * cascade produced.
  *
- * SCOPE NOTE — the byte-identical re-implementation of LayoutRegistry on top
- * of RuleEvaluator is deferred (see the Phase 3 report). This suite proves
- * the rule MODEL is cascade-faithful, which is the prerequisite for that
- * re-implementation; the connector-name / virtual-screen fallback is a
- * query-side retry loop and is out of this model's scope by design.
+ * SCOPE — this suite proves the rule MODEL is cascade-faithful: it exercises
+ * the RuleEvaluator + ContextRuleBridge directly. LayoutRegistry's own
+ * byte-identical re-implementation on this model is verified separately by
+ * tests/unit/core/test_layoutmanager_assignment.cpp (the 42-assertion oracle,
+ * which runs against the rule-backed registry). The connector-name /
+ * virtual-screen fallback is a query-side retry loop in LayoutRegistry and is
+ * out of this model-level suite's scope by design.
  */
 
 #include <QString>

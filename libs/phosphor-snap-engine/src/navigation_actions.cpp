@@ -28,13 +28,17 @@
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorZones/Layout.h>
+
+#include <PhosphorWindowRule/ExclusionListBridge.h>
+#include <PhosphorWindowRule/RuleEvaluator.h>
+#include <PhosphorWindowRule/WindowQuery.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "snapenginelogging.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
-#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorSnapEngine {
@@ -116,28 +120,35 @@ QString effectiveScreenId(const NavigationContext& ctx, INavigationStateProvider
 
 } // namespace
 
-bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId)
+bool SnapEngine::isAppIdExcluded(const QString& appId) const
 {
     auto* s = snapSettings();
-    if (!s || !m_windowTracker) {
+    if (!s) {
+        return false;
+    }
+    // Build the daemon-flavour exclusion rule set (AppId AppIdMatches Exclude
+    // rules) from the two settings lists and resolve appId through the unified
+    // evaluator — the single match model the effect and daemon now share.
+    const PhosphorWindowRule::WindowRuleSet ruleSet =
+        PhosphorWindowRule::ExclusionListBridge::toDaemonRuleSet(s->excludedApplications(), s->excludedWindowClasses());
+    if (ruleSet.isEmpty()) {
+        return false; // no-exclusions fast path
+    }
+    PhosphorWindowRule::WindowQuery query;
+    query.appId = appId;
+    return PhosphorWindowRule::RuleEvaluator(ruleSet).resolve(query).isExcluded();
+}
+
+bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId)
+{
+    if (!m_windowTracker) {
         return false;
     }
     const QString appId = m_windowTracker->currentAppIdFor(windowId);
-    for (const QString& excluded : s->excludedApplications()) {
-        if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
-            qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                << action << ":" << windowId << "excluded by app rule:" << excluded;
-            Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(), screenId);
-            return true;
-        }
-    }
-    for (const QString& excluded : s->excludedWindowClasses()) {
-        if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
-            qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                << action << ":" << windowId << "excluded by class rule:" << excluded;
-            Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(), screenId);
-            return true;
-        }
+    if (isAppIdExcluded(appId)) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine) << action << ":" << windowId << "excluded by rule, appId:" << appId;
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(), screenId);
+        return true;
     }
     return false;
 }

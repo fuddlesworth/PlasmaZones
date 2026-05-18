@@ -16,6 +16,7 @@
 #include "configbackends.h"
 
 #include <PhosphorConfig/Store.h>
+#include <PhosphorWindowRule/WindowRuleStore.h>
 
 #include <memory>
 #include <QFont>
@@ -1118,22 +1119,22 @@ private:
     /// that flipped so listeners only react to their own axis.
     using DisableModeSignalFn = void (Settings::*)(PhosphorZones::AssignmentEntry::Mode);
 
-    /// Shared comma-list setter used by @ref setDisabledMonitors,
-    /// @ref setDisabledDesktops, and @ref setDisabledActivities. Reads under
-    /// @c displayGroup, writes the joined list, post-write compares against
-    /// the canonicalised form (the @c canonicalCommaList validator
-    /// trims/de-dupes/normalises whitespace), and only fires
-    /// @p signalFn + @c settingsChanged on a real change.
-    void writeDisableList(const QString& key, const QStringList& entries, PhosphorZones::AssignmentEntry::Mode mode,
-                          DisableModeSignalFn signalFn);
+    /// Shared writer for the three per-mode disable lists. Replaces the whole
+    /// `DisableEngine` context-rule family for (@p mode, @p axisInt) in the
+    /// WindowRule store — @p axisInt is a `DisableAxis` value (file-local enum
+    /// in settings.cpp; passed as an int so the header stays decoupled). Drops
+    /// malformed composite entries, fires @p signalFn + @c settingsChanged
+    /// only on a real (canonical-set) change.
+    void writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, int axisInt, const QStringList& entries,
+                             DisableModeSignalFn signalFn);
 
-    /// Shared getter for the three per-mode disable lists. Reads under
-    /// @c displayGroup and parses the comma-joined value into a list. The
-    /// monitor variant additionally resolves connector names to canonical
-    /// screen ids — that step lives in @ref disabledMonitors itself, not
-    /// here, because composite-keyed lists (desktop/activity) embed the
-    /// screen id and would need parsing the composite to canonicalise.
-    QStringList readDisableList(const QString& key) const;
+    /// Shared reader for the three per-mode disable lists. Enumerates the
+    /// `DisableEngine` context rules in the WindowRule store scoped to
+    /// @p mode and @p axisInt (a `DisableAxis` value), projecting each rule's
+    /// pinned context dimensions back to its list-entry string form. The
+    /// monitor variant's connector-name → canonical-id resolution lives in
+    /// @ref disabledMonitors itself, not here.
+    QStringList disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mode, int axisInt) const;
 
     // ─── load() / save() helpers ────────────────────────────────────────
     // Only non-Store groups need dedicated helpers now. Store-backed groups
@@ -1198,6 +1199,13 @@ private:
     // settingsschema.cpp for the current list of migrated groups.
     std::unique_ptr<PhosphorConfig::Store> m_store;
     static QString normalizeUuidString(const QString& uuidStr);
+
+    // Per-mode disable lists are stored as `DisableEngine` context rules in
+    // the unified WindowRule store (windowrules.json), NOT in config.json.
+    // The store is owned here, keyed off ConfigDefaults::windowRulesFilePath().
+    // load() reloads it from disk so cross-process deltas surface; the
+    // disabled*/setDisabled*/is*Disabled accessors read/write through it.
+    std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_windowRuleStore;
 
     // Activation
     // Activation is stored in m_store.

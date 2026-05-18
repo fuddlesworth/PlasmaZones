@@ -83,6 +83,16 @@ bool ConfigMigration::runMigrationChain(const QString& jsonPath)
 // see the same atomic.
 namespace {
 std::atomic<bool> s_migrated{false};
+
+/// The legacy assignments.json path. windowrules.json supersedes it in v4 —
+/// migrateV1ToV2 still writes it (a v2 artifact) and finalizeV4Conversion
+/// reads then deletes it; no live runtime code touches it, so the path lives
+/// here rather than on the public ConfigDefaults surface. It sits beside
+/// windowrules.json (the same plasmazones config directory).
+QString legacyAssignmentsFilePath()
+{
+    return QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
+}
 } // namespace
 
 bool ConfigMigration::ensureJsonConfig()
@@ -983,7 +993,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 
         bool assignmentsWritten = true;
         if (!assignRoot.isEmpty()) {
-            const QString assignPath = ConfigDefaults::assignmentsFilePath();
+            const QString assignPath = legacyAssignmentsFilePath();
             if (!PhosphorConfig::JsonBackend::writeJsonAtomically(assignPath, assignRoot)) {
                 qWarning(
                     "ConfigMigration: failed to write assignments to %s — "
@@ -1144,25 +1154,16 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 //
 // The v4 conversion produces the new windowrules.json store: every zone
 // Assignment and per-mode disable entry becomes a context-only WindowRule.
-//
-// SCOPE NOTE — additive conversion. The full Phase 3 design has windowrules.json
-// SUPERSEDE assignments.json and remove the Display.*Disabled* keys, which is
-// only safe once LayoutRegistry and Settings have been re-implemented to read
-// the rule store. That re-implementation is deferred (see the Phase 3 report);
-// until it lands, the running daemon's LayoutRegistry still reads
-// assignments.json and Settings still reads the Display.*Disabled* keys.
-//
-// So this migration is ADDITIVE: it builds windowrules.json from the v3 data
-// but LEAVES assignments.json and the config.json disable keys in place. The
-// schema bumps to 4 (windowrules.json is the canonical v4 artifact); the v3
-// inputs survive as the runtime source until the LayoutRegistry/Settings
-// re-implementation removes them in a follow-up.
+// windowrules.json SUPERSEDES assignments.json and the config.json
+// Display.*Disabled* keys — the runtime LayoutRegistry and Settings now read
+// the rule store exclusively, so the v3 inputs are removed once converted.
 //
 // A MigrationStep is `void(QJsonObject&)` — it can only touch config.json.
-// This step copies (does not remove) the disable-list values into a
-// `_v4DisableStash` root key for finalizeV4Conversion to consume, and stamps
-// `_version = 4`. finalizeV4Conversion (a post-chain step) reads that stash +
-// assignments.json and writes windowrules.json.
+// This step REMOVES the six Display.*Disabled* keys (their values are stashed
+// into a temporary `_v4DisableStash` root key for finalizeV4Conversion to
+// consume) and stamps `_version = 4`. finalizeV4Conversion (a post-chain step)
+// reads that stash + assignments.json, writes windowrules.json, then deletes
+// assignments.json as the irreversible commit.
 
 namespace {
 // The temporary root key migrateV3ToV4 writes and finalizeV4Conversion
@@ -1178,24 +1179,31 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
         return;
     }
 
-    const QJsonObject display = root.value(ConfigKeys::displayGroup()).toObject();
+    QJsonObject display = root.value(ConfigKeys::displayGroup()).toObject();
 
-    // Copy (do NOT remove) the disable-list values — see the SCOPE NOTE above.
-    // The runtime Settings layer still reads these keys; they are duplicated
-    // into windowrules.json as DisableEngine rules for the future unified UI.
+    // Move the disable-list values out of config.json: stash the value, then
+    // REMOVE the key. windowrules.json supersedes them — the runtime Settings
+    // layer reads DisableEngine rules from the store now, never these keys.
+    // finalizeV4Conversion consumes the stash and writes the rules.
     QJsonObject stash;
-    stash.insert(QLatin1String("snappingMonitors"),
-                 display.value(ConfigKeys::snappingDisabledMonitorsKey()).toString());
-    stash.insert(QLatin1String("autotileMonitors"),
-                 display.value(ConfigKeys::autotileDisabledMonitorsKey()).toString());
-    stash.insert(QLatin1String("snappingDesktops"),
-                 display.value(ConfigKeys::snappingDisabledDesktopsKey()).toString());
-    stash.insert(QLatin1String("autotileDesktops"),
-                 display.value(ConfigKeys::autotileDisabledDesktopsKey()).toString());
-    stash.insert(QLatin1String("snappingActivities"),
-                 display.value(ConfigKeys::snappingDisabledActivitiesKey()).toString());
-    stash.insert(QLatin1String("autotileActivities"),
-                 display.value(ConfigKeys::autotileDisabledActivitiesKey()).toString());
+    const auto moveDisableKey = [&display, &stash](const QString& configKey, const QString& stashKey) {
+        stash.insert(stashKey, display.value(configKey).toString());
+        display.remove(configKey);
+    };
+    moveDisableKey(ConfigKeys::snappingDisabledMonitorsKey(), QStringLiteral("snappingMonitors"));
+    moveDisableKey(ConfigKeys::autotileDisabledMonitorsKey(), QStringLiteral("autotileMonitors"));
+    moveDisableKey(ConfigKeys::snappingDisabledDesktopsKey(), QStringLiteral("snappingDesktops"));
+    moveDisableKey(ConfigKeys::autotileDisabledDesktopsKey(), QStringLiteral("autotileDesktops"));
+    moveDisableKey(ConfigKeys::snappingDisabledActivitiesKey(), QStringLiteral("snappingActivities"));
+    moveDisableKey(ConfigKeys::autotileDisabledActivitiesKey(), QStringLiteral("autotileActivities"));
+
+    // Write the stripped Display group back; drop it entirely if now empty so
+    // no husk object lingers.
+    if (display.isEmpty()) {
+        root.remove(ConfigKeys::displayGroup());
+    } else {
+        root[ConfigKeys::displayGroup()] = display;
+    }
 
     root[kV4DisableStashKey] = stash;
 
@@ -1314,7 +1322,7 @@ QString assignmentRuleName(const QString& screenId, int desktop, const QString& 
 bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 {
     const QString windowRulesPath = ConfigDefaults::windowRulesFilePath();
-    const QString assignmentsPath = ConfigDefaults::assignmentsFilePath();
+    const QString assignmentsPath = legacyAssignmentsFilePath();
 
     // ── Idempotency guard ──────────────────────────────────────────────────
     // The conversion is one-shot. Once windowrules.json exists at _version>=4
@@ -1467,12 +1475,28 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     }
     qInfo("ConfigMigration: wrote %d window rules to %s", ruleSet.count(), qPrintable(windowRulesPath));
 
+    // ── Relocate QuickLayouts to the quicklayouts.json sidecar ─────────────
+    // Quick-layout slots are NOT window rules — they belong in the sibling
+    // sidecar LayoutRegistry reads (next to windowrules.json), not in the rule
+    // store and not in config.json. Write it before deleting assignments.json
+    // so the slot data is durably relocated first. The group's shape (slot
+    // number → layout id) already matches the sidecar format verbatim.
+    if (!quickLayoutsToRelocate.isEmpty()) {
+        const QString quickLayoutsPath = ConfigDefaults::quickLayoutsFilePath();
+        if (!QFile::exists(quickLayoutsPath)) {
+            QDir().mkpath(QFileInfo(quickLayoutsPath).absolutePath());
+            if (!PhosphorConfig::JsonBackend::writeJsonAtomically(quickLayoutsPath, quickLayoutsToRelocate)) {
+                qWarning("ConfigMigration: failed to write %s — aborting v4 conversion", qPrintable(quickLayoutsPath));
+                return false;
+            }
+            qInfo("ConfigMigration: relocated %d quick-layout slots to %s", quickLayoutsToRelocate.size(),
+                  qPrintable(quickLayoutsPath));
+        }
+    }
+
     // ── Rewrite config.json: strip the temporary stash key ─────────────────
-    // Only the `_v4DisableStash` scratch key is removed — the real
-    // Display.*Disabled* keys and the QuickLayouts data stay in place (see the
-    // SCOPE NOTE on migrateV3ToV4: the runtime still reads them). When the
-    // LayoutRegistry/Settings re-implementation lands, a follow-up will strip
-    // the disable keys and relocate QuickLayouts here.
+    // The real Display.*Disabled* keys were already removed by migrateV3ToV4;
+    // only the `_v4DisableStash` scratch key remains to be cleaned up here.
     if (haveConfig && configRoot.contains(kV4DisableStashKey)) {
         configRoot.remove(kV4DisableStashKey);
         if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
@@ -1480,12 +1504,25 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             return false;
         }
     }
-    Q_UNUSED(quickLayoutsToRelocate);
 
-    // NOTE: assignments.json is intentionally NOT deleted — the running
-    // daemon's LayoutRegistry still reads it. windowrules.json is the
-    // forward-looking v4 artifact; the supersede-and-delete happens once the
-    // LayoutRegistry re-implementation consumes the rule store.
+    // ── Delete assignments.json — the irreversible commit ──────────────────
+    // windowrules.json (and quicklayouts.json) now durably hold every datum
+    // assignments.json carried; the runtime LayoutRegistry reads the rule
+    // store exclusively. Deleting the legacy file LAST makes the conversion
+    // atomic from a crash-recovery view: a crash before this point leaves
+    // assignments.json behind and the idempotency guard re-runs cleanly; a
+    // crash after it is simply the completed state.
+    if (QFile::exists(assignmentsPath)) {
+        if (!QFile::remove(assignmentsPath)) {
+            qWarning("ConfigMigration: failed to delete superseded %s", qPrintable(assignmentsPath));
+            // Non-fatal: windowrules.json is written and at _version 4, so the
+            // idempotency guard will short-circuit next run. A stray
+            // assignments.json is inert (nothing reads it) — do not fail the
+            // conversion over it.
+        } else {
+            qInfo("ConfigMigration: deleted superseded %s", qPrintable(assignmentsPath));
+        }
+    }
 
     return true;
 }

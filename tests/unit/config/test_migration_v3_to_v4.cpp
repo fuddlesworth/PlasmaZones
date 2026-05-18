@@ -18,12 +18,11 @@
  *   - config.json is stamped `_version == 4`,
  *   - the conversion is idempotent (running twice is a no-op).
  *
- * SCOPE NOTE — the v4 migration is additive (see configmigration.cpp): it
- * builds windowrules.json but leaves assignments.json + the config.json
- * Display.*Disabled* keys in place, because the running daemon's
- * LayoutRegistry / Settings still read them until their rule-store
- * re-implementation lands. This test therefore asserts windowrules.json is
- * CREATED and assignments.json is RETAINED — not deleted.
+ * windowrules.json SUPERSEDES the v3 inputs: the migration deletes
+ * assignments.json after windowrules.json is durably written, removes the
+ * config.json Display.*Disabled* keys, and relocates the QuickLayouts slots
+ * to the quicklayouts.json sidecar. These superseding behaviours are
+ * asserted alongside the conversion fidelity.
  */
 
 #include <QDir>
@@ -64,6 +63,14 @@ private:
             return {};
         }
         return QJsonDocument::fromJson(f.readAll()).object();
+    }
+
+    /// The legacy assignments.json path. ConfigDefaults no longer exposes it
+    /// (windowrules.json supersedes it in v4) — it sits beside windowrules.json
+    /// in the same plasmazones config directory.
+    static QString assignmentsPath()
+    {
+        return QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
     }
 
     /// A v3 config.json carrying per-mode disable lists + a global default
@@ -186,7 +193,7 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(ConfigDefaults::assignmentsFilePath(), makeAssignments());
+        writeJson(assignmentsPath(), makeAssignments());
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -209,7 +216,7 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(ConfigDefaults::assignmentsFilePath(), makeAssignments());
+        writeJson(assignmentsPath(), makeAssignments());
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonArray rules = rulesFromWindowRules();
@@ -242,7 +249,7 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(ConfigDefaults::assignmentsFilePath(), makeAssignments());
+        writeJson(assignmentsPath(), makeAssignments());
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonArray rules = rulesFromWindowRules();
@@ -275,7 +282,7 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(ConfigDefaults::assignmentsFilePath(), makeAssignments());
+        writeJson(assignmentsPath(), makeAssignments());
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonArray rules = rulesFromWindowRules();
@@ -299,7 +306,7 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(ConfigDefaults::assignmentsFilePath(), makeAssignments());
+        writeJson(assignmentsPath(), makeAssignments());
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonArray rules = rulesFromWindowRules();
@@ -326,7 +333,7 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(ConfigDefaults::assignmentsFilePath(), makeAssignments());
+        writeJson(assignmentsPath(), makeAssignments());
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
         const QByteArray firstRun = [&] {
@@ -372,6 +379,106 @@ private Q_SLOTS:
         // Exactly one rule: the provider-default catch-all.
         QCOMPARE(rules.size(), 1);
         QCOMPARE(rules.first().toObject().value(QStringLiteral("priority")).toInt(), 0);
+    }
+
+    // ─── Superseding: assignments.json deleted ────────────────────────────
+
+    /// windowrules.json supersedes assignments.json — once the rule store is
+    /// durably written, the legacy file is deleted (the irreversible commit).
+    void testSupersede_assignmentsJsonDeleted()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+        QVERIFY(QFile::exists(assignmentsPath()));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // windowrules.json written; assignments.json gone.
+        QVERIFY(QFile::exists(ConfigDefaults::windowRulesFilePath()));
+        QVERIFY2(!QFile::exists(assignmentsPath()),
+                 "assignments.json must be deleted once windowrules.json supersedes it");
+    }
+
+    // ─── Superseding: Display.*Disabled* keys removed ─────────────────────
+
+    /// migrateV3ToV4 removes the six config.json Display.*Disabled* keys for
+    /// real — windowrules.json now carries them as DisableEngine rules, so a
+    /// stale duplicate in config.json would be a split source of truth.
+    void testSupersede_displayDisabledKeysRemoved()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
+        const QJsonObject display = cfg.value(QStringLiteral("Display")).toObject();
+        // The four disable keys the v3 fixture set must all be gone.
+        QVERIFY2(!display.contains(QStringLiteral("SnappingDisabledMonitors")),
+                 "SnappingDisabledMonitors must be removed by the v4 migration");
+        QVERIFY(!display.contains(QStringLiteral("AutotileDisabledMonitors")));
+        QVERIFY(!display.contains(QStringLiteral("SnappingDisabledDesktops")));
+        QVERIFY(!display.contains(QStringLiteral("AutotileDisabledActivities")));
+        // The migration drops the Display group entirely once it is empty.
+        QVERIFY(!cfg.contains(QStringLiteral("Display")));
+    }
+
+    // ─── Superseding: QuickLayouts relocated to sidecar ───────────────────
+
+    /// QuickLayouts slots are not window rules — the migration relocates them
+    /// to the quicklayouts.json sidecar (the file LayoutRegistry reads), with
+    /// the slot-number → layout-id shape preserved verbatim.
+    void testSupersede_quickLayoutsRelocatedToSidecar()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QString sidecar = ConfigDefaults::quickLayoutsFilePath();
+        QVERIFY2(QFile::exists(sidecar), "QuickLayouts must be relocated to quicklayouts.json");
+        const QJsonObject slots = readJson(sidecar);
+        QCOMPARE(slots.value(QStringLiteral("3")).toString(), QStringLiteral("{quick-layout-id}"));
+
+        // The QuickLayouts data must not have leaked into windowrules.json as
+        // a rule — it is not a rule.
+        const QJsonArray rules = rulesFromWindowRules();
+        for (const QJsonValue& v : rules) {
+            QVERIFY(!actionTypes(v.toObject()).contains(QStringLiteral("quickLayout")));
+        }
+    }
+
+    // ─── Idempotency of the superseding behaviour ─────────────────────────
+
+    /// Running the migration a second time after assignments.json is already
+    /// deleted is a clean no-op: the idempotency guard short-circuits on the
+    /// existing v4 windowrules.json, nothing is re-created or re-deleted.
+    void testSupersede_idempotentAfterAssignmentsDeleted()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(!QFile::exists(assignmentsPath()));
+        const QByteArray firstRun = [&] {
+            QFile f(ConfigDefaults::windowRulesFilePath());
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        }();
+        QVERIFY(!firstRun.isEmpty());
+
+        // Second run against the already-converted, assignments-less tree.
+        ConfigMigration::resetMigrationGuardForTesting();
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // assignments.json is not re-created; windowrules.json is byte-identical.
+        QVERIFY(!QFile::exists(assignmentsPath()));
+        const QByteArray secondRun = [&] {
+            QFile f(ConfigDefaults::windowRulesFilePath());
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        }();
+        QCOMPARE(secondRun, firstRun);
     }
 };
 

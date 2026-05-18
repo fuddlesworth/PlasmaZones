@@ -1,21 +1,22 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "windowrulestore.h"
+#include <PhosphorWindowRule/WindowRuleStore.h>
 
-#include "config/configdefaults.h"
-#include "logging.h"
+#include "windowrulelogging.h"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 
-namespace PlasmaZones {
+namespace PhosphorWindowRule {
 
 WindowRuleStore::WindowRuleStore(const QString& filePath, QObject* parent)
     : QObject(parent)
-    , m_filePath(filePath.isEmpty() ? ConfigDefaults::windowRulesFilePath() : filePath)
+    , m_filePath(filePath)
 {
+    Q_ASSERT_X(!m_filePath.isEmpty(), "WindowRuleStore",
+               "filePath is required — the library never derives config locations");
     load();
 }
 
@@ -24,25 +25,25 @@ void WindowRuleStore::load()
     if (!QFile::exists(m_filePath)) {
         // A missing store is the fresh-install / never-had-rules case — not
         // an error. The set stays empty.
-        m_ruleSet = PhosphorWindowRule::WindowRuleSet();
-        qCInfo(lcDaemon) << "WindowRuleStore: no" << m_filePath << "— starting with an empty rule set";
+        m_ruleSet = WindowRuleSet();
+        qCInfo(lcWindowRule) << "WindowRuleStore: no" << m_filePath << "— starting with an empty rule set";
         Q_EMIT rulesChanged();
         return;
     }
 
-    auto loaded = PhosphorWindowRule::WindowRuleSet::loadFromFile(m_filePath);
+    auto loaded = WindowRuleSet::loadFromFile(m_filePath);
     if (!loaded) {
         // Malformed file / version mismatch — WindowRuleSet already logged
         // the diagnostic. Fall back to an empty set rather than crashing the
         // daemon; the user can re-author rules from the settings UI.
-        qCWarning(lcDaemon) << "WindowRuleStore: failed to load" << m_filePath << "— using an empty rule set";
-        m_ruleSet = PhosphorWindowRule::WindowRuleSet();
+        qCWarning(lcWindowRule) << "WindowRuleStore: failed to load" << m_filePath << "— using an empty rule set";
+        m_ruleSet = WindowRuleSet();
         Q_EMIT rulesChanged();
         return;
     }
 
     m_ruleSet = std::move(*loaded);
-    qCInfo(lcDaemon) << "WindowRuleStore: loaded" << m_ruleSet.count() << "rules from" << m_filePath;
+    qCInfo(lcWindowRule) << "WindowRuleStore: loaded" << m_ruleSet.count() << "rules from" << m_filePath;
     Q_EMIT rulesChanged();
 }
 
@@ -52,21 +53,21 @@ bool WindowRuleStore::save()
     // to exist.
     QDir().mkpath(QFileInfo(m_filePath).absolutePath());
     if (!m_ruleSet.saveToFile(m_filePath)) {
-        qCWarning(lcDaemon) << "WindowRuleStore: failed to save" << m_filePath;
+        qCWarning(lcWindowRule) << "WindowRuleStore: failed to save" << m_filePath;
         return false;
     }
-    qCDebug(lcDaemon) << "WindowRuleStore: saved" << m_ruleSet.count() << "rules to" << m_filePath;
+    qCDebug(lcWindowRule) << "WindowRuleStore: saved" << m_ruleSet.count() << "rules to" << m_filePath;
     return true;
 }
 
-void WindowRuleStore::setAllRules(const QList<PhosphorWindowRule::WindowRule>& rules)
+void WindowRuleStore::setAllRules(const QList<WindowRule>& rules)
 {
     m_ruleSet.setRules(rules);
     save();
     Q_EMIT rulesChanged();
 }
 
-bool WindowRuleStore::addRule(const PhosphorWindowRule::WindowRule& rule)
+bool WindowRuleStore::addRule(const WindowRule& rule)
 {
     if (!m_ruleSet.addRule(rule)) {
         return false;
@@ -76,7 +77,7 @@ bool WindowRuleStore::addRule(const PhosphorWindowRule::WindowRule& rule)
     return true;
 }
 
-bool WindowRuleStore::updateRule(const PhosphorWindowRule::WindowRule& rule)
+bool WindowRuleStore::updateRule(const WindowRule& rule)
 {
     if (!m_ruleSet.updateRule(rule)) {
         return false;
@@ -106,7 +107,7 @@ bool WindowRuleStore::setRuleEnabled(const QUuid& id, bool enabled)
         // No-op — do not persist or emit on an unchanged value.
         return true;
     }
-    PhosphorWindowRule::WindowRule updated = *existing;
+    WindowRule updated = *existing;
     updated.enabled = enabled;
     if (!m_ruleSet.updateRule(updated)) {
         return false;
@@ -125,7 +126,7 @@ bool WindowRuleStore::setRulePriority(const QUuid& id, int priority)
     if (existing->priority == priority) {
         return true;
     }
-    PhosphorWindowRule::WindowRule updated = *existing;
+    WindowRule updated = *existing;
     updated.priority = priority;
     if (!m_ruleSet.updateRule(updated)) {
         return false;
@@ -135,4 +136,4 @@ bool WindowRuleStore::setRulePriority(const QUuid& id, int priority)
     return true;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorWindowRule

@@ -5,7 +5,6 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
-#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "snapenginelogging.h"
 
@@ -119,24 +118,13 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // has already updated (Electron/CEF apps renaming themselves) matches
     // against its CURRENT class, not a stale first-seen one. m_windowTracker
     // is non-null at runtime; production code never reaches this with a null
-    // tracker.
+    // tracker. isAppIdExcluded resolves through the unified RuleEvaluator
+    // (daemon-flavour AppIdMatches Exclude rules) — the same match model the
+    // effect uses, replacing the hand-rolled appIdMatches loops.
     auto* s = snapSettings();
-    if (s && m_windowTracker) {
-        const QString appId = m_windowTracker->currentAppIdFor(windowId);
-        for (const QString& excluded : s->excludedApplications()) {
-            if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
-                qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                    << "resolveWindowRestore:" << windowId << "excluded by application rule:" << excluded;
-                return SnapResult::noSnap();
-            }
-        }
-        for (const QString& excluded : s->excludedWindowClasses()) {
-            if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
-                qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                    << "resolveWindowRestore:" << windowId << "excluded by window class rule:" << excluded;
-                return SnapResult::noSnap();
-            }
-        }
+    if (m_windowTracker && isAppIdExcluded(m_windowTracker->currentAppIdFor(windowId))) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "excluded by rule";
+        return SnapResult::noSnap();
     }
 
     // 0. Floating windows should not be auto-snapped — emit OSD feedback

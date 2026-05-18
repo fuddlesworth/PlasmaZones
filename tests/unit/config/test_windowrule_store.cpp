@@ -3,7 +3,7 @@
 
 /**
  * @file test_windowrule_store.cpp
- * @brief Unit tests for PlasmaZones::WindowRuleStore — the daemon-side
+ * @brief Unit tests for WindowRuleStore — the daemon-side
  *        windowrules.json store.
  *
  * Covers: round-trip persistence, malformed-rule drop on load, the
@@ -20,13 +20,13 @@
 #include <QTest>
 #include <QUuid>
 
-#include "../../../src/core/windowrulestore.h"
+#include <PhosphorWindowRule/WindowRuleStore.h>
 
 #include <PhosphorWindowRule/ContextRuleBridge.h>
 #include <PhosphorWindowRule/WindowRule.h>
 #include <PhosphorWindowRule/WindowRuleSet.h>
 
-using namespace PlasmaZones;
+using namespace PhosphorWindowRule;
 namespace PWR = PhosphorWindowRule;
 
 class TestWindowRuleStore : public QObject

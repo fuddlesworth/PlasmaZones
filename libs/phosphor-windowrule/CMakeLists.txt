@@ -65,6 +65,7 @@ set(phosphorwindowrule_public_HDRS
     include/PhosphorWindowRule/WindowRule.h
     include/PhosphorWindowRule/WindowRuleSet.h
     include/PhosphorWindowRule/RuleEvaluator.h
+    include/PhosphorWindowRule/WindowRuleStore.h
 )
 
 set(phosphorwindowrule_SRCS
@@ -75,6 +76,7 @@ set(phosphorwindowrule_SRCS
     src/windowrule.cpp
     src/windowruleset.cpp
     src/ruleevaluator.cpp
+    src/windowrulestore.cpp
 )
 
 add_library(PhosphorWindowRule SHARED

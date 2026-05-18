@@ -517,6 +517,14 @@ private:
     /// true when excluded so callers can early-return. False otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
 
+    /// True if @p appId matches any excluded-applications / excluded-window-
+    /// classes pattern. Resolution runs through the unified RuleEvaluator: the
+    /// two settings lists are converted to a daemon-flavour `Exclude` rule set
+    /// (`AppId AppIdMatches` leaves — the segment-aware reverse-DNS match) and
+    /// the @p appId is resolved against it. Returns false when settings are
+    /// unavailable or no pattern matches.
+    bool isAppIdExcluded(const QString& appId) const;
+
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;
     std::function<void()> m_loadFn;

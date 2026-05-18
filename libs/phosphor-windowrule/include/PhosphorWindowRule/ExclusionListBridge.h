@@ -101,6 +101,55 @@ inline WindowRuleSet toRuleSet(const QStringList& excludedApplications, const QS
     return set;
 }
 
+/**
+ * @brief Convert the daemon's exclusion lists into a `WindowRuleSet`.
+ *
+ * The daemon's own exclusion enforcement (`SnapEngine`'s navigation gates and
+ * the auto-snap lifecycle path) historically matched **both** the excluded-
+ * applications and the excluded-window-classes list against the window's
+ * resolved `appId` using the segment-aware reverse-DNS `appIdMatches()` —
+ * unlike the effect's substring `Contains` semantics (@ref toRuleSet).
+ *
+ * This builder reproduces the daemon flavour: every surviving pattern becomes
+ * one terminal `Exclude` rule with an `AppId AppIdMatches <pattern>` leaf, so
+ * the same `RuleEvaluator` pipeline replaces the hand-rolled `appIdMatches`
+ * loops. Both input lists feed `AppId` rules because both were always matched
+ * against `appId` — the app/class split was a UI grouping, not a match-field
+ * distinction.
+ *
+ * Empty / whitespace-only patterns are dropped. An all-empty input yields an
+ * empty set so callers keep a `!ruleSet.isEmpty()` fast path.
+ */
+inline WindowRuleSet toDaemonRuleSet(const QStringList& excludedApplications, const QStringList& excludedWindowClasses)
+{
+    QList<WindowRule> rules;
+    rules.reserve(excludedApplications.size() + excludedWindowClasses.size());
+
+    const auto append = [&rules](const QStringList& patterns) {
+        for (const QString& raw : patterns) {
+            const QString pattern = raw.trimmed();
+            if (pattern.isEmpty()) {
+                continue;
+            }
+            WindowRule rule;
+            rule.id = QUuid::createUuid();
+            rule.enabled = true;
+            rule.priority = 0;
+            rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern);
+            RuleAction action;
+            action.type = QString(ActionType::Exclude);
+            rule.actions.append(action);
+            rules.append(rule);
+        }
+    };
+    append(excludedApplications);
+    append(excludedWindowClasses);
+
+    WindowRuleSet set;
+    set.setRules(rules);
+    return set;
+}
+
 } // namespace ExclusionListBridge
 
 } // namespace PhosphorWindowRule

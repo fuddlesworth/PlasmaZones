@@ -16,16 +16,20 @@
 
 namespace PhosphorZones {
 
-LayoutRegistry::LayoutRegistry(std::unique_ptr<PhosphorConfig::IBackend> backend, QString layoutSubdirectory,
+LayoutRegistry::LayoutRegistry(PhosphorWindowRule::WindowRuleStore* ruleStore, QString layoutSubdirectory,
                                QObject* parent)
     : IZoneLayoutRegistry(parent)
-    , m_ownedBackend(std::move(backend))
-    , m_configBackend(m_ownedBackend.get())
+    , m_ruleStore(ruleStore)
     , m_layoutSubdirectory(std::move(layoutSubdirectory))
 {
-    Q_ASSERT_X(m_configBackend != nullptr, "LayoutRegistry",
-               "backend is required — every persistence method dereferences it");
+    Q_ASSERT_X(m_ruleStore != nullptr, "LayoutRegistry",
+               "ruleStore is required — assignment resolution dereferences it");
     Q_ASSERT_X(!m_layoutSubdirectory.isEmpty(), "LayoutRegistry", "layoutSubdirectory is required");
+    initCommon();
+}
+
+void LayoutRegistry::initCommon()
+{
     // The subdirectory is appended to XDG data roots, so it must be a
     // relative path without traversal segments. An absolute path would
     // ignore the XDG root entirely; ".." would escape the user-writable
@@ -39,6 +43,10 @@ LayoutRegistry::LayoutRegistry(std::unique_ptr<PhosphorConfig::IBackend> backend
     m_layoutDirectory =
         QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + m_layoutSubdirectory;
     ensureLayoutDirectory();
+
+    // One evaluation model — bound to the store's live rule set. The store
+    // owns the set's lifetime; the evaluator holds a reference to it.
+    m_evaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_ruleStore->ruleSet());
 
     // Forward the detailed layoutsChanged signal into the unified
     // ILayoutSourceRegistry::contentsChanged notifier so any subscribed
@@ -377,21 +385,41 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
             setActiveLayout(restored);
         }
     } else {
-        // Truly deleted — clean up assignments and shortcuts referencing this layout
-        for (auto it = m_assignments.begin(); it != m_assignments.end();) {
-            if (it.value().snappingLayout == layoutIdStr || it.value().activeLayoutId() == layoutIdStr) {
-                it = m_assignments.erase(it);
+        // Truly deleted — clean up rules and shortcuts referencing this layout.
+        // A context rule references the layout iff its SetSnappingLayout action
+        // carries this layout's UUID string.
+        QList<PhosphorWindowRule::WindowRule> kept;
+        bool ruleRemoved = false;
+        for (const PhosphorWindowRule::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
+            bool referencesLayout = false;
+            for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
+                if (action.type == QString(PhosphorWindowRule::ActionType::SetSnappingLayout)
+                    && action.params.value(QLatin1String("layoutId")).toString() == layoutIdStr) {
+                    referencesLayout = true;
+                    break;
+                }
+            }
+            if (referencesLayout) {
+                ruleRemoved = true;
+            } else {
+                kept.append(rule);
+            }
+        }
+        if (ruleRemoved) {
+            m_ruleStore->setAllRules(kept);
+        }
+
+        bool shortcutRemoved = false;
+        for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {
+            if (it.value() == layoutIdStr) {
+                it = m_quickLayoutShortcuts.erase(it);
+                shortcutRemoved = true;
             } else {
                 ++it;
             }
         }
-
-        for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {
-            if (it.value() == layoutIdStr) {
-                it = m_quickLayoutShortcuts.erase(it);
-            } else {
-                ++it;
-            }
+        if (shortcutRemoved) {
+            writeQuickLayouts();
         }
 
         if (wasActive) {
@@ -400,7 +428,6 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
     }
 
     Q_EMIT layoutsChanged();
-    saveAssignments();
 }
 
 void LayoutRegistry::removeLayoutById(const QUuid& id)
@@ -513,7 +540,7 @@ void LayoutRegistry::setQuickLayoutSlot(int number, const QString& layoutId)
     }
 
     // Save changes
-    saveAssignments();
+    writeQuickLayouts();
 }
 
 void LayoutRegistry::setAllQuickLayoutSlots(const QHash<int, QString>& slots)
@@ -556,7 +583,7 @@ void LayoutRegistry::setAllQuickLayoutSlots(const QHash<int, QString>& slots)
     }
 
     // Save once at the end
-    saveAssignments();
+    writeQuickLayouts();
     qCInfo(lcZonesLib) << "Batch set" << m_quickLayoutShortcuts.size() << "quick layout slots";
 }
 

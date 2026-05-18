@@ -25,6 +25,7 @@
 #include "core/constants.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -46,8 +47,7 @@ private:
     PhosphorZones::LayoutRegistry* createManager(QObject* parent = nullptr)
     {
         m_guards.emplace_back(std::make_unique<IsolatedConfigGuard>());
-        auto* mgr = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                      QStringLiteral("plasmazones/layouts"), parent);
+        auto* mgr = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), parent);
         QString layoutDir = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts");
         QDir().mkpath(layoutDir);
         mgr->setLayoutDirectory(layoutDir);
@@ -449,8 +449,8 @@ private Q_SLOTS:
         mgr->saveAssignments();
 
         // Create a new manager and load — same config file sees the data
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr2(new PhosphorZones::LayoutRegistry(
-            PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts")));
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr2(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
         mgr2->addLayout(createTestLayout(QStringLiteral("LayoutA")));
         mgr2->addLayout(createTestLayout(QStringLiteral("LayoutB")));
         QString layoutDir2 = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts2");

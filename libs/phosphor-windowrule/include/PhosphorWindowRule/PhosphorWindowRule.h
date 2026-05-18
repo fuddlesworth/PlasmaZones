@@ -18,8 +18,10 @@
  *   - WindowRule      — { id, name, enabled, priority, match, actions }
  *   - WindowRuleSet   — ordered collection; revision counter; (de)serialization
  *   - RuleEvaluator   — descending-priority resolution + match cache
+ *   - WindowRuleStore — QObject persistent store over windowrules.json
  *
- * No QObjects, no QML, no D-Bus — those belong to higher-level GPL targets.
+ * The only QObject is WindowRuleStore (Qt6::Core only). No QML, no D-Bus —
+ * those belong to higher-level GPL targets.
  */
 
 #include "MatchExpression.h"
@@ -29,3 +31,4 @@
 #include "WindowQuery.h"
 #include "WindowRule.h"
 #include "WindowRuleSet.h"
+#include "WindowRuleStore.h"

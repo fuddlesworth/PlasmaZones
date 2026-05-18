@@ -55,11 +55,10 @@ set(plasmazones_core_SRCS
     # zone, layout, layoututils, zonedetector, zonehighlighter, LayoutRegistry,
     # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ -
     # consumers include <PhosphorZones/...> directly and construct the registry
-    # with createAssignmentsBackend() + the "plasmazones/layouts" subdir inline.
+    # with a borrowed PhosphorWindowRule::WindowRuleStore* + the
+    # "plasmazones/layouts" subdir inline.
     core/unifiedlayoutlist.cpp
     core/unifiedlayoutlist.h
-    core/windowrulestore.cpp
-    core/windowrulestore.h
     common/layoutpreviewserialize.cpp
     common/layoutpreviewserialize.h
     common/screenidresolver.cpp
@@ -204,7 +203,8 @@ target_link_libraries(plasmazones_core
         PhosphorTiles::PhosphorTiles
         PhosphorZones::PhosphorZones
         # PhosphorWindowRule: the unified LGPL rule engine. PUBLIC since
-        # Phase 3 — core/windowrulestore.h surfaces WindowRuleSet, and
+        # Phase 3 — config/settings.h owns a WindowRuleStore for the per-mode
+        # disable lists, the WindowRuleAdaptor exposes the store on D-Bus, and
         # config/configmigration.cpp builds rules during the v3→v4 conversion,
         # so consumers of plasmazones_core need the include path + link edge.
         PhosphorWindowRule::PhosphorWindowRule

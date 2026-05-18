@@ -80,7 +80,7 @@
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "../dbus/windowruleadaptor.h"
-#include "../core/windowrulestore.h"
+#include <PhosphorWindowRule/WindowRuleStore.h>
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
@@ -111,11 +111,12 @@ Daemon::Daemon(QObject* parent)
     // Don't pass 'this' as parent for unique_ptr-managed objects.
     // unique_ptr owns lifetime; a Qt parent would double-free.
     , m_configBackend(createDefaultConfigBackend())
-    , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
-                                                                      QStringLiteral("plasmazones/layouts")))
     // Unified WindowRule store — loads windowrules.json (written by the v3→v4
     // migration). Daemon is the sole writer; the WindowRuleAdaptor exposes it.
-    , m_windowRuleStore(std::make_unique<WindowRuleStore>())
+    // Declared/constructed before m_layoutManager so the registry can borrow it.
+    , m_windowRuleStore(std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
+    , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_windowRuleStore.get(),
+                                                                      QStringLiteral("plasmazones/layouts")))
     , m_layoutComputeService(std::make_unique<PhosphorZones::LayoutComputeService>(nullptr))
     // m_curveRegistry / m_profileRegistry are default-constructed (no
     // init-list entries) — daemon.h declares them between m_layoutComputeService

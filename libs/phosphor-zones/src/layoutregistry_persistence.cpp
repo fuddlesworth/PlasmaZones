@@ -10,22 +10,13 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QStandardPaths>
 #include <algorithm>
 
 namespace PhosphorZones {
-
-namespace {
-
-// Wire-format constants for the config backend group/key names.
-// Owned by this lib because they ARE the LayoutRegistry's serialization
-// format — any consumer of the lib shares them automatically.
-constexpr QLatin1String AssignmentGroupPrefix{"Assignment:"};
-constexpr QLatin1String QuickLayoutsGroup{"QuickLayouts"};
-
-} // namespace
 
 void LayoutRegistry::loadLayouts()
 {
@@ -83,7 +74,8 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
     const auto entries = dir.entryList({QStringLiteral("*.json")}, QDir::Files);
 
     for (const auto& entry : entries) {
-        if (entry == QStringLiteral("assignments.json") || entry == QStringLiteral("autotile-overrides.json")) {
+        if (entry == QStringLiteral("assignments.json") || entry == QStringLiteral("autotile-overrides.json")
+            || entry == QStringLiteral("windowrules.json") || entry == QStringLiteral("quicklayouts.json")) {
             continue; // Skip non-layout files
         }
 
@@ -234,104 +226,69 @@ void LayoutRegistry::saveLayouts()
     Q_EMIT layoutsSaved();
 }
 
-void LayoutRegistry::readAssignmentGroups(PhosphorConfig::IBackend* backend)
+QString LayoutRegistry::quickLayoutsFilePath() const
 {
-    const QStringList allGroups = backend->groupList();
-    const QString& assignmentPrefix = AssignmentGroupPrefix;
+    // Quick-layout slots are NOT window rules — they persist to a sibling
+    // JSON file next to the WindowRuleStore file (so the location is stable
+    // and independent of any later setLayoutDirectory() call).
+    return QFileInfo(m_ruleStore->filePath()).absolutePath() + QStringLiteral("/quicklayouts.json");
+}
 
-    for (const QString& groupName : allGroups) {
-        if (!groupName.startsWith(assignmentPrefix))
-            continue;
-
-        const auto key = LayoutAssignmentKey::fromGroupName(groupName, assignmentPrefix);
-        if (key.screenId.isEmpty())
-            continue;
-
-        auto grp = backend->group(groupName);
-        AssignmentEntry entry;
-        int modeInt = grp->readInt(QLatin1String("Mode"), 0);
-        entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile : AssignmentEntry::Snapping;
-        entry.snappingLayout = grp->readString(QLatin1String("SnappingLayout"));
-        entry.tilingAlgorithm = grp->readString(QLatin1String("TilingAlgorithm"));
-
-        m_assignments[key] = entry;
+void LayoutRegistry::readQuickLayouts()
+{
+    m_quickLayoutShortcuts.clear();
+    QFile file(quickLayoutsFilePath());
+    if (!file.open(QIODevice::ReadOnly)) {
+        return; // a missing file is not an error
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    if (!doc.isObject()) {
+        return;
+    }
+    const QJsonObject obj = doc.object();
+    for (int i = 1; i <= 9; ++i) {
+        const QString key = QString::number(i);
+        if (obj.contains(key)) {
+            const QString layoutId = obj.value(key).toString();
+            if (!layoutId.isEmpty()) {
+                m_quickLayoutShortcuts[i] = layoutId;
+            }
+        }
     }
 }
 
-void LayoutRegistry::readQuickLayouts(PhosphorConfig::IBackend* backend)
+void LayoutRegistry::writeQuickLayouts()
 {
-    auto quickGroup = backend->group(QuickLayoutsGroup);
-    for (int i = 1; i <= 9; ++i) {
-        QString key = QString::number(i);
-        if (quickGroup->hasKey(key)) {
-            QString layoutId = quickGroup->readString(key);
-            if (!layoutId.isEmpty())
-                m_quickLayoutShortcuts[i] = layoutId;
-        }
+    QDir().mkpath(QFileInfo(quickLayoutsFilePath()).absolutePath());
+    QJsonObject obj;
+    for (auto it = m_quickLayoutShortcuts.constBegin(); it != m_quickLayoutShortcuts.constEnd(); ++it) {
+        obj.insert(QString::number(it.key()), it.value());
     }
+    QFile file(quickLayoutsFilePath());
+    if (!file.open(QIODevice::WriteOnly)) {
+        qCWarning(lcZonesLib) << "Failed to save quick layouts:" << file.errorString();
+        return;
+    }
+    file.write(QJsonDocument(obj).toJson());
+    qCInfo(lcZonesLib) << "Saved quickShortcuts=" << m_quickLayoutShortcuts.size();
 }
 
 void LayoutRegistry::loadAssignments()
 {
-    m_configBackend->reparseConfiguration();
-    readAssignmentGroups(m_configBackend);
-    readQuickLayouts(m_configBackend);
+    // Assignments live in the unified WindowRuleStore — (re)load it from disk
+    // so cross-process deltas surface, then read the quick-layout sidecar.
+    m_ruleStore->load();
+    readQuickLayouts();
 
-    qCInfo(lcZonesLib) << "Loaded assignments=" << m_assignments.size()
+    qCInfo(lcZonesLib) << "Loaded windowRules=" << m_ruleStore->count()
                        << "quickShortcuts=" << m_quickLayoutShortcuts.size();
-    for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
-        const AssignmentEntry& entry = it.value();
-        qCDebug(lcZonesLib) << "Assignment screenId=" << it.key().screenId << "desktop=" << it.key().virtualDesktop
-                            << "activity="
-                            << (it.key().activity.isEmpty() ? QStringLiteral("(all)") : it.key().activity)
-                            << "mode=" << static_cast<int>(entry.mode) << "snapping=" << entry.snappingLayout
-                            << "tiling=" << entry.tilingAlgorithm;
-    }
 }
 
 void LayoutRegistry::saveAssignments()
 {
-    // Delete old <prefix>* groups
-    const QStringList allGroups = m_configBackend->groupList();
-    const QString& prefix = AssignmentGroupPrefix;
-    for (const QString& groupName : allGroups) {
-        if (groupName.startsWith(prefix)) {
-            m_configBackend->deleteGroup(groupName);
-        }
-    }
-
-    // Write [<prefix>*] groups
-    for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
-        const LayoutAssignmentKey& key = it.key();
-        const AssignmentEntry& entry = it.value();
-
-        // Build group name: <prefix>screenId[:Desktop:N][:Activity:id]
-        QString groupName = prefix + key.screenId;
-        if (key.virtualDesktop > 0) {
-            groupName += QStringLiteral(":Desktop:") + QString::number(key.virtualDesktop);
-        }
-        if (!key.activity.isEmpty()) {
-            groupName += QStringLiteral(":Activity:") + key.activity;
-        }
-
-        auto group = m_configBackend->group(groupName);
-        group->writeInt(QLatin1String("Mode"), static_cast<int>(entry.mode));
-        group->writeString(QLatin1String("SnappingLayout"), entry.snappingLayout);
-        group->writeString(QLatin1String("TilingAlgorithm"), entry.tilingAlgorithm);
-    }
-
-    // Write [QuickLayouts] group
-    {
-        m_configBackend->deleteGroup(QuickLayoutsGroup);
-        auto quickGroup = m_configBackend->group(QuickLayoutsGroup);
-        for (auto it = m_quickLayoutShortcuts.constBegin(); it != m_quickLayoutShortcuts.constEnd(); ++it) {
-            quickGroup->writeString(QString::number(it.key()), it.value());
-        }
-    }
-
-    m_configBackend->sync();
-    qCInfo(lcZonesLib) << "Saved assignments=" << m_assignments.size()
-                       << "quickShortcuts=" << m_quickLayoutShortcuts.size();
+    // The WindowRuleStore persists on every mutation — no separate flush is
+    // needed for the rule set. Only the quick-layout sidecar is written here.
+    writeQuickLayouts();
 }
 
 void LayoutRegistry::importLayout(const QString& filePath)

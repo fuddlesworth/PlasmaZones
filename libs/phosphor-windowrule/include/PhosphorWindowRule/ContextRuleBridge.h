@@ -8,6 +8,8 @@
 #include <QString>
 #include <QUuid>
 
+#include <optional>
+
 #include "MatchExpression.h"
 #include "MatchTypes.h"
 #include "RuleAction.h"
@@ -228,6 +230,66 @@ inline WindowRule makeDisableRule(const QString& name, const QString& screenId, 
     action.params.insert(QLatin1String("mode"), autotileMode ? QLatin1String("autotile") : QLatin1String("snapping"));
     rule.actions.append(action);
     return rule;
+}
+
+// ── Readback: context rule → (screen, desktop, activity) ───────────────────
+//
+// The inverse of @ref makeContextMatch — decompose a context rule's match
+// expression back into the (screenId, virtualDesktop, activity) tuple it
+// pins. Used by consumers that need to enumerate stored context rules
+// (the per-mode disable lists in Settings, the assignment introspection
+// helpers in LayoutRegistry).
+
+/// True if @p expr is an exact `Field == value` equality leaf for @p field.
+inline bool isContextEqualsLeaf(const MatchExpression& expr, Field field)
+{
+    return expr.isLeaf() && expr.predicate().field == field && expr.predicate().op == Operator::Equals;
+}
+
+/**
+ * @brief Decompose a context rule's match into its pinned dimensions.
+ *
+ * @p screenId / @p virtualDesktop / @p activity are reset, then filled from
+ * whichever `ScreenId` / `VirtualDesktop` / `Activity` equality leaves the
+ * match carries. An empty catch-all leaves all three at their defaults.
+ * Window-property leaves (AppId etc.) are ignored — only context fields are
+ * read, so a mixed rule still yields its context projection.
+ */
+inline void contextDimsOf(const MatchExpression& match, QString& screenId, int& virtualDesktop, QString& activity)
+{
+    screenId.clear();
+    virtualDesktop = 0;
+    activity.clear();
+    if (match.isCatchAll()) {
+        return;
+    }
+    const QList<MatchExpression> leaves = match.isLeaf() ? QList<MatchExpression>{match} : match.children();
+    for (const MatchExpression& leaf : leaves) {
+        if (isContextEqualsLeaf(leaf, Field::ScreenId)) {
+            screenId = leaf.predicate().value.toString();
+        } else if (isContextEqualsLeaf(leaf, Field::VirtualDesktop)) {
+            virtualDesktop = leaf.predicate().value.toInt();
+        } else if (isContextEqualsLeaf(leaf, Field::Activity)) {
+            activity = leaf.predicate().value.toString();
+        }
+    }
+}
+
+/**
+ * @brief If @p rule carries a single `DisableEngine` action, return the mode
+ *        token ("snapping" / "autotile") it disables; otherwise nullopt.
+ *
+ * A rule is a per-mode disable rule iff exactly one of its actions is a
+ * `DisableEngine` action; the `mode` param scopes which engine it gates.
+ */
+inline std::optional<bool> disableRuleAutotileMode(const WindowRule& rule)
+{
+    for (const RuleAction& action : rule.actions) {
+        if (action.type == QString(ActionType::DisableEngine)) {
+            return action.params.value(QLatin1String("mode")).toString() == QLatin1String("autotile");
+        }
+    }
+    return std::nullopt;
 }
 
 } // namespace ContextRuleBridge

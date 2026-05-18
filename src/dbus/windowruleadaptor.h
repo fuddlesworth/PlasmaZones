@@ -9,9 +9,11 @@
 #include <QObject>
 #include <QString>
 
-namespace PlasmaZones {
-
+namespace PhosphorWindowRule {
 class WindowRuleStore;
+}
+
+namespace PlasmaZones {
 
 /**
  * @brief D-Bus adaptor for the unified WindowRule store.
@@ -34,7 +36,7 @@ class PLASMAZONES_EXPORT WindowRuleAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.WindowRules")
 
 public:
-    explicit WindowRuleAdaptor(WindowRuleStore* store, QObject* parent = nullptr);
+    explicit WindowRuleAdaptor(PhosphorWindowRule::WindowRuleStore* store, QObject* parent = nullptr);
     ~WindowRuleAdaptor() override = default;
 
     /// Null the borrowed store pointer and sever the rulesChanged wiring.
@@ -76,7 +78,7 @@ Q_SIGNALS:
     void rulesChanged();
 
 private:
-    WindowRuleStore* m_store;
+    PhosphorWindowRule::WindowRuleStore* m_store;
 };
 
 } // namespace PlasmaZones
