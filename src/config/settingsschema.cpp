@@ -419,6 +419,8 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::rotateWindowsCounterclockwiseKey(), CD::rotateWindowsCounterclockwiseShortcut());
     addShortcut(globals, CD::cycleWindowForwardKey(), CD::cycleWindowForwardShortcut());
     addShortcut(globals, CD::cycleWindowBackwardKey(), CD::cycleWindowBackwardShortcut());
+    addShortcut(globals, CD::consumeWindowKey(), CD::consumeWindowShortcut());
+    addShortcut(globals, CD::expelWindowKey(), CD::expelWindowShortcut());
     addShortcut(globals, CD::resnapToNewLayoutKey(), CD::resnapToNewLayoutShortcut());
     addShortcut(globals, CD::snapAllWindowsKey(), CD::snapAllWindowsShortcut());
     addShortcut(globals, CD::layoutPickerKey(), CD::layoutPickerShortcut());

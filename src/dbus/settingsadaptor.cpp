@@ -813,6 +813,8 @@ void SettingsAdaptor::initializeRegistry()
                                  setCycleWindowForwardShortcut)
         REGISTER_CONCRETE_STRING("cycleWindowBackwardShortcut", cycleWindowBackwardShortcut,
                                  setCycleWindowBackwardShortcut)
+        REGISTER_CONCRETE_STRING("consumeWindowShortcut", consumeWindowShortcut, setConsumeWindowShortcut)
+        REGISTER_CONCRETE_STRING("expelWindowShortcut", expelWindowShortcut, setExpelWindowShortcut)
         REGISTER_CONCRETE_STRING("resnapToNewLayoutShortcut", resnapToNewLayoutShortcut, setResnapToNewLayoutShortcut)
         REGISTER_CONCRETE_STRING("snapAllWindowsShortcut", snapAllWindowsShortcut, setSnapAllWindowsShortcut)
         REGISTER_CONCRETE_STRING("layoutPickerShortcut", layoutPickerShortcut, setLayoutPickerShortcut)

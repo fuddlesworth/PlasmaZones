@@ -364,18 +364,22 @@ void TestScrollLayout::sharedMetricsMatchInternalResolve()
     QVERIFY(state.focusWindow(QStringLiteral("c")));
     state.setScrollX(300.0);
 
+    // One config drives the metrics resolve and every consuming call, so the
+    // parity check below cannot be skewed by a config field the metrics path
+    // happens to ignore.
+    const ScrollLayoutConfig config = standardConfig();
+
     // resolveColumnMetrics resolves widths + strip-x: "a" and "c" are 490 wide,
     // the collapsed "b" is zero-width and shares "c"'s strip-x (500).
-    const ScrollColumnMetrics metrics = resolveColumnMetrics(state, kWorkArea, standardConfig());
+    const ScrollColumnMetrics metrics = resolveColumnMetrics(state, kWorkArea, config);
     QCOMPARE(metrics.widths, (QVector<qreal>{490.0, 0.0, 490.0}));
     QCOMPARE(metrics.stripX, (QVector<qreal>{0.0, 500.0, 500.0}));
 
     // Passing pre-resolved metrics must yield byte-identical results to the
     // internal (nullptr) resolve — the shared-metrics fast path is pure reuse.
-    QCOMPARE(computeViewportScroll(state, kWorkArea, standardConfig(), &metrics),
-             computeViewportScroll(state, kWorkArea, standardConfig()));
-    QCOMPARE(resolveScrollLayout(state, kWorkArea, standardConfig(), &metrics),
-             resolveScrollLayout(state, kWorkArea, standardConfig()));
+    QCOMPARE(computeViewportScroll(state, kWorkArea, config, &metrics),
+             computeViewportScroll(state, kWorkArea, config));
+    QCOMPARE(resolveScrollLayout(state, kWorkArea, config, &metrics), resolveScrollLayout(state, kWorkArea, config));
 }
 
 QTEST_GUILESS_MAIN(TestScrollLayout)

@@ -166,13 +166,37 @@ void TestScrollEngine::windowDropped()
     QCOMPARE(state->columns().at(2).windowIds().first(), QStringLiteral("a"));
     QCOMPARE(state->focusedWindowId(), QStringLiteral("a"));
 
-    // A drop onto the dragged window's own column, against an unknown window,
-    // or against an anchor on a different screen, changes nothing and emits no
-    // signal (moveColumnNextTo resolves both windows within one strip).
+    // Each of these drops hits a distinct rejection path and must emit no
+    // signal — asserted per call so a regression on one path cannot hide
+    // behind another: the dragged window's own column, an unknown dragged
+    // window, and an anchor on a different screen's strip.
     engine.windowDropped(QStringLiteral("a"), QStringLiteral("a"), true);
+    QCOMPARE(spy.count(), 1);
     engine.windowDropped(QStringLiteral("missing"), QStringLiteral("b"), true);
+    QCOMPARE(spy.count(), 1);
     engine.windowDropped(QStringLiteral("a"), QStringLiteral("z"), true);
     QCOMPARE(spy.count(), 1);
+    // ...and the column order is genuinely untouched, not merely signal-free.
+    QCOMPARE(state->columns().at(0).windowIds().first(), QStringLiteral("b"));
+    QCOMPARE(state->columns().at(1).windowIds().first(), QStringLiteral("c"));
+    QCOMPARE(state->columns().at(2).windowIds().first(), QStringLiteral("a"));
+
+    // placeAfter=false: drop "a" before "b" -> [a][b][c].
+    engine.windowDropped(QStringLiteral("a"), QStringLiteral("b"), /*placeAfter=*/false);
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(state->columns().at(0).windowIds().first(), QStringLiteral("a"));
+    QCOMPARE(state->columns().at(1).windowIds().first(), QStringLiteral("b"));
+    QCOMPARE(state->columns().at(2).windowIds().first(), QStringLiteral("c"));
+
+    // A positional no-op — dropping "a" before "b" again, where it already
+    // sits — emits without reordering: moveColumnNextTo skips the column move
+    // but still returns true, so the daemon re-resolves and snaps the dragged
+    // window back into its unchanged slot.
+    engine.windowDropped(QStringLiteral("a"), QStringLiteral("b"), /*placeAfter=*/false);
+    QCOMPARE(spy.count(), 3);
+    QCOMPARE(state->columns().at(0).windowIds().first(), QStringLiteral("a"));
+    QCOMPARE(state->columns().at(1).windowIds().first(), QStringLiteral("b"));
+    QCOMPARE(state->columns().at(2).windowIds().first(), QStringLiteral("c"));
 }
 
 void TestScrollEngine::cyclePresetWidth()

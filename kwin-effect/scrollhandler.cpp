@@ -212,10 +212,13 @@ void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
         // and drop any in-flight drag-reorder bookkeeping: a minimize while a
         // windowDropped is in flight supersedes it (the daemon re-resolve that
         // would have cleared m_reorderPending now excludes the minimized
-        // window, so it must be cleared here).
+        // window, so it must be cleared here). Any interactive move/resize is
+        // likewise over once the window is minimized — clear all of this
+        // window's transient effect-side state in one place.
         m_appliedGeometry.remove(windowId);
         m_reassertPending.remove(windowId);
         m_reorderPending.remove(windowId);
+        m_interactiveResize.remove(windowId);
     }
     PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
                                                    QStringLiteral("windowMinimizedChanged"), {windowId, minimized},
