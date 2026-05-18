@@ -8,6 +8,7 @@
 #include <phosphorscrollengine_export.h>
 
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorEngine/IScrollNavigation.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 
 #include <QHash>
@@ -41,7 +42,8 @@ struct TilingStateKeyHash
 /// `placementChanged` — resolving the strip to pixel geometry (via
 /// resolveScrollLayout) and applying it is the daemon's job, since only the
 /// daemon knows each screen's working area.
-class PHOSPHORSCROLLENGINE_EXPORT ScrollEngine final : public PhosphorEngine::PlacementEngineBase
+class PHOSPHORSCROLLENGINE_EXPORT ScrollEngine final : public PhosphorEngine::PlacementEngineBase,
+                                                       public PhosphorEngine::IScrollNavigation
 {
     Q_OBJECT
 

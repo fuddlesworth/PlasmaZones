@@ -370,8 +370,12 @@ Deferred past v1 to keep it shippable:
    smoothly off the edge, so `paintWindow()` is called for it. The §4.1 constraint-B
    cull risk does not arise; the "corrected ordering / re-park off-screen windows"
    machinery is unnecessary and was not built.
-4. Phase 0 item 4: does `IPlacementEngine` need new virtual methods, and is the impact on
-   the other two engines acceptable (§5)?
+4. ✅ **Resolved (Phase 4).** Does `IPlacementEngine` need new virtual methods, and is the
+   impact on the other two engines acceptable (§5)? **No** — the niri-style column/strip
+   operations live on a dedicated `PhosphorEngine::IScrollNavigation` interface that only
+   `ScrollEngine` implements. The daemon reaches them via `dynamic_cast`, so the snap and
+   autotile engines carry zero scroll-specific virtuals (Interface Segregation). Generic
+   navigation intents shared by all engines stay on `IPlacementEngine`.
 5. **focus-follows-mouse interaction** — under that focus policy, KWin re-focuses
    whatever window is under the cursor after a scroll, fighting engine-driven focus.
    Decide: warp the cursor with the focused window, temporarily suppress the policy
