@@ -41,9 +41,18 @@ ScrollHandler::ScrollHandler(PlasmaZonesEffect* effect, QObject* parent)
     connect(m_reassertTimer, &QTimer::timeout, this, &ScrollHandler::flushReasserts);
 }
 
+bool ScrollHandler::isEligibleForScroll(KWin::EffectWindow* w) const
+{
+    // Scroll mode adds one exclusion to the shared tiling predicate: a window
+    // pinned to all desktops (sticky) is never tiled — the strip is
+    // per-desktop, so a sticky window would have to occupy every strip at
+    // once. It is left floating instead.
+    return m_effect->isEligibleForTilingNotify(w) && !m_effect->isWindowSticky(w);
+}
+
 void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w)
 {
-    if (!m_effect->isEligibleForTilingNotify(w)) {
+    if (!isEligibleForScroll(w)) {
         return;
     }
 
@@ -94,7 +103,7 @@ void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
     QStringList batchWindowIds; // for error rollback
 
     for (KWin::EffectWindow* w : windows) {
-        if (!m_effect->isEligibleForTilingNotify(w)) {
+        if (!isEligibleForScroll(w)) {
             continue;
         }
         const QString screenId = m_effect->getWindowScreenId(w);
@@ -227,6 +236,25 @@ void ScrollHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // Arrived somewhere new — notifyWindowAdded re-adds it iff the new screen
     // is a scroll-mode screen and the window is eligible.
     notifyWindowAdded(w);
+}
+
+void ScrollHandler::handleWindowStickyChanged(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    if (m_effect->isWindowSticky(w)) {
+        // Pinned to all desktops: drop it from its strip if tracked — scroll
+        // mode does not tile sticky windows. The window stays put and floats.
+        if (m_notifiedWindows.contains(windowId)) {
+            onWindowClosed(windowId, m_notifiedWindowScreens.value(windowId));
+        }
+    } else if (!m_notifiedWindows.contains(windowId)) {
+        // No longer sticky — re-tile it. notifyWindowAdded self-gates on
+        // eligibility, the scroll-screen set and the current desktop.
+        notifyWindowAdded(w);
+    }
 }
 
 void ScrollHandler::recordAppliedGeometry(const QString& windowId, const QRect& geometry)

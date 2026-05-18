@@ -212,6 +212,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this](KWin::EffectWindow* window) {
         updateWindowStickyState(window);
 
+        // Scroll mode excludes all-desktops (sticky) windows — re-evaluate
+        // this window's strip membership when its desktop pinning changes.
+        m_scrollHandler->handleWindowStickyChanged(window);
+
         // When a window is moved to a different desktop (e.g., "Move to Desktop 2"),
         // treat it as removed from the current desktop's tiling. The normal desktop-
         // switch flow will pick it up when the user switches to the target desktop.

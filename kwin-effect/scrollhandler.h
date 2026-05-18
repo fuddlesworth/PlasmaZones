@@ -64,6 +64,13 @@ public:
     /// and adds it to the new one when either is scroll mode.
     void handleWindowOutputChanged(KWin::EffectWindow* w);
 
+    /// React to a window's all-desktops (sticky) state changing. Scroll mode
+    /// never tiles a sticky window — it cannot occupy every per-desktop strip
+    /// at once — so a window pinned to all desktops is dropped from its strip,
+    /// and one that is un-pinned is re-tiled if it now belongs on a scroll
+    /// screen.
+    void handleWindowStickyChanged(KWin::EffectWindow* w);
+
     /// Record the geometry the daemon last resolved for a scroll window, so
     /// an app-initiated resize away from it can be detected and corrected.
     void recordAppliedGeometry(const QString& windowId, const QRect& geometry);
@@ -106,6 +113,10 @@ private:
      * @param windows Candidate windows to process.
      */
     void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows);
+
+    /// Whether @p w should be tiled by scroll mode: the mode-generic tiling
+    /// predicate, plus scroll's exclusion of all-desktops (sticky) windows.
+    bool isEligibleForScroll(KWin::EffectWindow* w) const;
 
     /// Tracked windows currently reported as being on @p screenId.
     QStringList trackedWindowsOnScreen(const QString& screenId) const;
