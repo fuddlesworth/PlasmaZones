@@ -50,7 +50,16 @@ yay -S plasmazones-bin                                                # Arch (AU
 sudo dnf copr enable fuddlesworth/PlasmaZones && sudo dnf install plasmazones   # Fedora (COPR)
 ```
 
-**NixOS:** install via the flake's `nixosModules.default` (or `homeManagerModules.default`), which builds PlasmaZones against your system's nixpkgs. Avoid `nix profile install` — it compiles the KWin effect against the flake's pinned KWin, and KWin silently refuses to load an effect whose version does not match the running compositor.
+**NixOS:** add the flake to your system config and use `nixosModules.default` — it builds PlasmaZones against *your* nixpkgs, so the KWin effect always matches your running KWin:
+
+```nix
+# flake.nix
+inputs.plasmazones.url = "github:fuddlesworth/PlasmaZones";
+# …then in your nixosSystem modules list:
+modules = [ plasmazones.nixosModules.default { programs.plasmazones.enable = true; } ];
+```
+
+Do **not** install via `nix profile install` / `packages.default`: that compiles the KWin effect against the flake's *pinned* KWin, and KWin silently refuses to load an effect whose version does not match the running compositor (the effect just goes missing from Desktop Effects). `homeManagerModules.default` and `overlays.default` build correctly the same way the module does.
 
 openSUSE Tumbleweed, a portable tarball for Fedora Atomic / no-root setups, and source-build instructions (including the `-DUSE_KDE_FRAMEWORKS=OFF` portable build): **[Install page →](https://phosphor-works.github.io/plasmazones/#install)**.
 

@@ -753,6 +753,12 @@ private:
     // registers. Single-shot.
     QTimer m_bridgeWatchdogTimer;
     void warnCompositorBridgeMissing();
+
+    // Log a "compositor bridge missing" warning and raise a desktop
+    // notification. `diagnosis` carries a specific root cause (e.g. an effect
+    // plugin built against a different KWin version) when one was identified;
+    // an empty string falls back to the generic enable-the-effect guidance.
+    void emitBridgeMissingWarning(const QString& diagnosis);
 };
 
 } // namespace PlasmaZones
