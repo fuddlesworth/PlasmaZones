@@ -23,6 +23,7 @@
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QScopeGuard>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -192,16 +193,29 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     }
                     const QRectF savedGeo = sgIt.value().value(geoKey);
                     if (savedGeo.isValid()) {
-                        // applySnapGeometry's moveResize emits
-                        // windowFrameGeometryChanged synchronously; suppress the
-                        // VS-crossing detectors (autotile slotWindowFrameGeometryChanged
-                        // and the snapping windowFrameGeometryChanged handler) so
-                        // this same-screen restore is not mistaken for a
-                        // virtual-screen crossing — the genuine retile path
-                        // guards the same way (tiling.cpp).
+                        // applySnapGeometry's moveResize, and the maximize-state
+                        // clear below, emit windowFrameGeometryChanged
+                        // synchronously; suppress the VS-crossing detectors
+                        // (autotile slotWindowFrameGeometryChanged and the
+                        // snapping windowFrameGeometryChanged handler) so this
+                        // same-screen restore is not mistaken for a virtual-
+                        // screen crossing — the genuine retile path guards the
+                        // same way (tiling.cpp).
                         m_effect->m_inDaemonGeometryApply = true;
+                        const auto geomGuard = qScopeGuard([this] {
+                            m_effect->m_inDaemonGeometryApply = false;
+                        });
+                        // Clear any lingering KWin maximize flag before restoring
+                        // the pre-autotile geometry: a still-maximized window
+                        // makes KWin re-assert the maximize-area rect and defeat
+                        // the restore — the tile-request path clears it for the
+                        // same reason (discussion #461).
+                        if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                            ++m_suppressMaximizeChanged;
+                            kw->maximize(KWin::MaximizeRestore);
+                            --m_suppressMaximizeChanged;
+                        }
                         m_effect->applySnapGeometry(w, savedGeo.toRect());
-                        m_effect->m_inDaemonGeometryApply = false;
                         break;
                     }
                     // Found-but-invalid entry: keep scanning. A valid rect may
