@@ -385,27 +385,6 @@ SettingsController::SettingsController(QObject* parent)
         setNeedsSave(true);
     });
 
-    // Forward the per-mode disable signals from the underlying Settings up
-    // through the controller so QML bridges react regardless of write origin:
-    //   - in-process toggle in this UI (controller invokables → Settings setters)
-    //   - cross-process external write reflected via load() (daemon shortcut,
-    //     D-Bus call to SettingsAdaptor) — see Settings::load() for the
-    //     post-reparse emission of these signals
-    //   - ScreenHelper-mediated monitor toggle (the helper writes through to
-    //     Settings, which fires the underlying signal)
-    // Single forwarding point keeps the three modes' write paths symmetrical
-    // and avoids per-callsite Q_EMIT bookkeeping.
-    connect(&m_settings, &ISettings::disabledMonitorsChanged, this, [this](PhosphorZones::AssignmentEntry::Mode mode) {
-        Q_EMIT disabledMonitorsChanged(static_cast<int>(mode));
-    });
-    connect(&m_settings, &ISettings::disabledDesktopsChanged, this, [this](PhosphorZones::AssignmentEntry::Mode mode) {
-        Q_EMIT disabledDesktopsChanged(static_cast<int>(mode));
-    });
-    connect(&m_settings, &ISettings::disabledActivitiesChanged, this,
-            [this](PhosphorZones::AssignmentEntry::Mode mode) {
-                Q_EMIT disabledActivitiesChanged(static_cast<int>(mode));
-            });
-
     // PhosphorZones::Layout load timer (debounce)
     m_layoutLoadTimer.setSingleShot(true);
     m_layoutLoadTimer.setInterval(50);
@@ -475,8 +454,6 @@ SettingsController::SettingsController(QObject* parent)
     // (Editor NOTIFY signals are forwarded to QML by EditorPageController
     // itself — see its constructor — so no SettingsController-side plumbing
     // is needed here.)
-    // Forward lock state changes (from Settings::load() after external D-Bus settingsChanged)
-    connect(&m_settings, &Settings::lockedScreensChanged, this, &SettingsController::lockedScreensChanged);
 
     // Load dismissed update version from app-local settings
     {
@@ -1225,7 +1202,7 @@ void SettingsController::setLayoutAspectRatio(const QString& layoutId, int aspec
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Assignment helpers (D-Bus to daemon PhosphorZones::LayoutRegistry)
+// Font helpers (for FontPickerDialog)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QStringList SettingsController::fontStylesForFamily(const QString& family) const
@@ -1244,85 +1221,10 @@ bool SettingsController::fontStyleItalic(const QString& family, const QString& s
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Assignment staging / mutations — QML-callable methods forward to StagingService
-// and flip the dirty flag; all state + flush logic lives in the service.
+// Assignment staging — the QML-callable atomic mode+layout staging entry point
+// forwards to StagingService and flips the dirty flag; all state + flush logic
+// lives in the service.
 // ═══════════════════════════════════════════════════════════════════════════════
-
-void SettingsController::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
-{
-    m_staging.stageSnapping(screenName, 0, QString(), layoutId);
-    setNeedsSave(true);
-}
-
-void SettingsController::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
-                                                     const QString& layoutId)
-{
-    m_staging.stageSnapping(screenName, virtualDesktop, QString(), layoutId);
-    setNeedsSave(true);
-}
-
-void SettingsController::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                      const QString& layoutId)
-{
-    m_staging.stageSnapping(screenName, 0, activityId, layoutId);
-    setNeedsSave(true);
-}
-
-void SettingsController::assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId)
-{
-    m_staging.stageTiling(screenName, 0, QString(), layoutId);
-    setNeedsSave(true);
-}
-
-void SettingsController::assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
-                                                           const QString& layoutId)
-{
-    m_staging.stageTiling(screenName, virtualDesktop, QString(), layoutId);
-    setNeedsSave(true);
-}
-
-void SettingsController::assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                            const QString& layoutId)
-{
-    m_staging.stageTiling(screenName, 0, activityId, layoutId);
-    setNeedsSave(true);
-}
-
-void SettingsController::clearScreenAssignment(const QString& screenName)
-{
-    m_staging.stageFullClear(screenName, 0, QString());
-    setNeedsSave(true);
-}
-
-void SettingsController::clearTilingScreenAssignment(const QString& screenName)
-{
-    m_staging.stageTilingClear(screenName, 0, QString());
-    setNeedsSave(true);
-}
-
-void SettingsController::clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
-{
-    m_staging.stageFullClear(screenName, virtualDesktop, QString());
-    setNeedsSave(true);
-}
-
-void SettingsController::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
-{
-    m_staging.stageFullClear(screenName, 0, activityId);
-    setNeedsSave(true);
-}
-
-void SettingsController::clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
-{
-    m_staging.stageTilingClear(screenName, virtualDesktop, QString());
-    setNeedsSave(true);
-}
-
-void SettingsController::clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId)
-{
-    m_staging.stageTilingClear(screenName, 0, activityId);
-    setNeedsSave(true);
-}
 
 void SettingsController::stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
                                               int mode, const QString& snappingLayoutId,
@@ -1330,182 +1232,6 @@ void SettingsController::stageAssignmentEntry(const QString& screenName, int vir
 {
     m_staging.stageAssignmentEntry(screenName, virtualDesktop, activityId, mode, snappingLayoutId, tilingAlgorithmId);
     setNeedsSave(true);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Assignment query helpers (check staged state, then fall back to D-Bus)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-QString SettingsController::getLayoutForScreen(const QString& screenName) const
-{
-    QString staged;
-    if (m_staging.stagedSnappingLayout(screenName, 0, QString(), staged))
-        return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayoutForScreen"), {screenName});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
-}
-
-QString SettingsController::getTilingLayoutForScreen(const QString& screenName) const
-{
-    QString staged;
-    if (m_staging.stagedTilingLayout(screenName, 0, QString(), staged))
-        return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, 0});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
-}
-
-QString SettingsController::getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
-{
-    QString staged;
-    if (m_staging.stagedSnappingLayout(screenName, virtualDesktop, QString(), staged))
-        return staged;
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getLayoutForScreenDesktop"), {screenName, virtualDesktop});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
-}
-
-QString SettingsController::getSnappingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
-{
-    QString staged;
-    if (m_staging.stagedSnappingLayout(screenName, virtualDesktop, QString(), staged))
-        return staged;
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getSnappingLayoutForScreenDesktop"), {screenName, virtualDesktop});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
-}
-
-bool SettingsController::hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
-{
-    QString snap, tile;
-    bool hasSnap = m_staging.stagedSnappingLayout(screenName, virtualDesktop, QString(), snap);
-    bool hasTile = m_staging.stagedTilingLayout(screenName, virtualDesktop, QString(), tile);
-    if (hasSnap || hasTile) {
-        // If either staged field is non-empty, we definitely have an assignment
-        if (!snap.isEmpty() || !tile.isEmpty())
-            return true;
-        // Only short-circuit to false when BOTH fields are staged and empty;
-        // otherwise fall through to D-Bus so the daemon's other field is checked.
-        if (hasSnap && hasTile)
-            return false;
-    }
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("hasExplicitAssignmentForScreenDesktop"), {screenName, virtualDesktop});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toBool();
-    return false;
-}
-
-QString SettingsController::getTilingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
-{
-    QString staged;
-    if (m_staging.stagedTilingLayout(screenName, virtualDesktop, QString(), staged))
-        return staged;
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, virtualDesktop});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString algo = reply.arguments().first().toString();
-        if (!algo.isEmpty())
-            return PhosphorLayout::LayoutId::makeAutotileId(algo);
-    }
-    return {};
-}
-
-bool SettingsController::hasExplicitTilingAssignmentForScreenDesktop(const QString& screenName,
-                                                                     int virtualDesktop) const
-{
-    QString staged;
-    if (m_staging.stagedTilingLayout(screenName, virtualDesktop, QString(), staged))
-        return !staged.isEmpty();
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, virtualDesktop});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return !reply.arguments().first().toString().isEmpty();
-    return false;
-}
-
-QString SettingsController::getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
-{
-    QString staged;
-    if (m_staging.stagedSnappingLayout(screenName, 0, activityId, staged))
-        return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
-}
-
-QString SettingsController::getSnappingLayoutForScreenActivity(const QString& screenName,
-                                                               const QString& activityId) const
-{
-    QString staged;
-    if (m_staging.stagedSnappingLayout(screenName, 0, activityId, staged))
-        return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString layoutId = reply.arguments().first().toString();
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId))
-            return layoutId;
-    }
-    return {};
-}
-
-bool SettingsController::hasExplicitAssignmentForScreenActivity(const QString& screenName,
-                                                                const QString& activityId) const
-{
-    QString snap, tile;
-    bool hasSnap = m_staging.stagedSnappingLayout(screenName, 0, activityId, snap);
-    bool hasTile = m_staging.stagedTilingLayout(screenName, 0, activityId, tile);
-    if (hasSnap || hasTile) {
-        if (!snap.isEmpty() || !tile.isEmpty())
-            return true;
-        if (hasSnap && hasTile)
-            return false;
-    }
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("hasExplicitAssignmentForScreenActivity"), {screenName, activityId});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toBool();
-    return false;
-}
-
-QString SettingsController::getTilingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
-{
-    QString staged;
-    if (m_staging.stagedTilingLayout(screenName, 0, activityId, staged))
-        return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString layoutId = reply.arguments().first().toString();
-        if (PhosphorLayout::LayoutId::isAutotile(layoutId))
-            return layoutId;
-    }
-    return {};
-}
-
-bool SettingsController::hasExplicitTilingAssignmentForScreenActivity(const QString& screenName,
-                                                                      const QString& activityId) const
-{
-    QString tiling = getTilingLayoutForScreenActivity(screenName, activityId);
-    return !tiling.isEmpty();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1559,207 +1285,6 @@ void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString&
         return;
     m_staging.stageTilingQuickSlot(slotNumber, layoutId);
     setNeedsSave(true);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// App-to-zone rules (D-Bus to daemon, reading from layout JSON)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-QVariantList SettingsController::getAppRulesForLayout(const QString& layoutId) const
-{
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayout"), {layoutId});
-    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
-        return {};
-
-    QString json = reply.arguments().first().toString();
-    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-    if (doc.isNull() || !doc.isObject())
-        return {};
-
-    QJsonArray rulesArray = doc.object()[QLatin1String("appRules")].toArray();
-    QVariantList result;
-    for (const auto& ruleVal : rulesArray) {
-        QJsonObject ruleObj = ruleVal.toObject();
-        QVariantMap rule;
-        rule[QStringLiteral("pattern")] = ruleObj[QLatin1String("pattern")].toString();
-        rule[QStringLiteral("zoneNumber")] = ruleObj[QLatin1String("zoneNumber")].toInt();
-        if (ruleObj.contains(QLatin1String("targetScreen")))
-            rule[QStringLiteral("targetScreen")] = ruleObj[QLatin1String("targetScreen")].toString();
-        result.append(rule);
-    }
-    return result;
-}
-
-void SettingsController::addAppRuleToLayout(const QString& layoutId, const QString& pattern, int zoneNumber,
-                                            const QString& targetScreen)
-{
-    QString trimmed = pattern.trimmed();
-    if (trimmed.isEmpty() || zoneNumber < 1)
-        return;
-
-    QVariantList rules = getAppRulesForLayout(layoutId);
-
-    // Check for duplicates
-    for (const auto& ruleVar : rules) {
-        QVariantMap existing = ruleVar.toMap();
-        if (existing[QStringLiteral("pattern")].toString().compare(trimmed, Qt::CaseInsensitive) == 0
-            && existing[QStringLiteral("targetScreen")].toString() == targetScreen) {
-            return;
-        }
-    }
-
-    QVariantMap newRule;
-    newRule[QStringLiteral("pattern")] = trimmed;
-    newRule[QStringLiteral("zoneNumber")] = zoneNumber;
-    if (!targetScreen.isEmpty())
-        newRule[QStringLiteral("targetScreen")] = targetScreen;
-    rules.append(newRule);
-
-    // Save via updateLayout D-Bus
-    saveAppRulesToDaemon(layoutId, rules);
-}
-
-void SettingsController::removeAppRuleFromLayout(const QString& layoutId, int index)
-{
-    QVariantList rules = getAppRulesForLayout(layoutId);
-    if (index < 0 || index >= rules.size())
-        return;
-    rules.removeAt(index);
-    saveAppRulesToDaemon(layoutId, rules);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Assignment lock helpers
-// ═══════════════════════════════════════════════════════════════════════════════
-
-static QString lockKey(const QString& screenName, int mode)
-{
-    // Resolve connector names (e.g., "DP-3") to EDID-based screen IDs
-    // to match the daemon's lock key format
-    QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenName);
-    return QString::number(mode) + QStringLiteral(":") + resolved;
-}
-
-bool SettingsController::isScreenLocked(const QString& screenName, int mode) const
-{
-    return m_settings.isScreenLocked(lockKey(screenName, mode));
-}
-
-void SettingsController::toggleScreenLock(const QString& screenName, int mode)
-{
-    const QString key = lockKey(screenName, mode);
-    m_settings.setScreenLocked(key, !m_settings.isScreenLocked(key));
-    Q_EMIT lockedScreensChanged();
-    setNeedsSave(true);
-}
-
-bool SettingsController::isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity,
-                                         int mode) const
-{
-    return m_settings.isContextLocked(lockKey(screenName, mode), virtualDesktop, activity);
-}
-
-void SettingsController::toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity,
-                                           int mode)
-{
-    const QString key = lockKey(screenName, mode);
-    bool locked = m_settings.isContextLocked(key, virtualDesktop, activity);
-    m_settings.setContextLocked(key, virtualDesktop, activity, !locked);
-    Q_EMIT lockedScreensChanged();
-    setNeedsSave(true);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Screen helpers
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Convert the QML-side `viewMode` int to PhosphorZones::AssignmentEntry::Mode.
-// The numeric values match by design (0 = Snapping, 1 = Autotile) but routing
-// every call through the helper keeps the cast explicit and gives us a single
-// place to add range-clamping if a future mode is introduced.
-//
-// SharedBridge.qml sets `assignmentViewMode: -1` as a sentinel that the
-// SnappingBridge / TilingBridge subclass MUST override. If a future bridge
-// subclass forgets the override, every disable read/write would silently
-// land on the snapping list — exactly the mode confusion this whole
-// machinery is meant to eliminate. Warn loudly so the bug shows up in logs.
-//
-// The previous implementation triggered Q_ASSERT(false) on the unexpected
-// path, but QML binding evaluation order during component construction can
-// run a `function on*Changed: isMonitorDisabled(name)` handler before the
-// SnappingBridge/TilingBridge subclass override of `assignmentViewMode`
-// takes effect, hard-crashing dev builds on what is otherwise transient
-// state. The warning is enough — the fallback to Snapping is the safest
-// choice (defaults to the more permissive of the two lists for reads,
-// avoids accidental writes to a list the user didn't intend).
-static PhosphorZones::AssignmentEntry::Mode modeFromViewMode(int viewMode)
-{
-    if (viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Snapping)
-        && viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)) {
-        qCWarning(PlasmaZones::lcCore)
-            << "modeFromViewMode: unexpected viewMode" << viewMode
-            << "— defaulting to Snapping. A bridge subclass likely forgot to set assignmentViewMode.";
-    }
-    return viewMode == static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)
-        ? PhosphorZones::AssignmentEntry::Autotile
-        : PhosphorZones::AssignmentEntry::Snapping;
-}
-
-bool SettingsController::isMonitorDisabled(int viewMode, const QString& screenName) const
-{
-    return m_screenHelper.isMonitorDisabled(modeFromViewMode(viewMode), screenName);
-}
-
-void SettingsController::setMonitorDisabled(int viewMode, const QString& screenName, bool disabled)
-{
-    m_screenHelper.setMonitorDisabled(modeFromViewMode(viewMode), screenName, disabled);
-}
-
-bool SettingsController::isDesktopDisabled(int viewMode, const QString& screenName, int desktop) const
-{
-    return m_settings.isDesktopDisabled(modeFromViewMode(viewMode), screenName, desktop);
-}
-
-void SettingsController::setDesktopDisabled(int viewMode, const QString& screenName, int desktop, bool disabled)
-{
-    // The disabledDesktopsChanged(viewMode) signal is fired by the
-    // m_settings → controller forward in the constructor — no manual emit
-    // needed here.
-    const auto mode = modeFromViewMode(viewMode);
-    QString key = screenName + QLatin1Char('/') + QString::number(desktop);
-    QStringList entries = m_settings.disabledDesktops(mode);
-    if (disabled && !entries.contains(key)) {
-        entries.append(key);
-        m_settings.setDisabledDesktops(mode, entries);
-        setNeedsSave(true);
-    } else if (!disabled && entries.removeAll(key) > 0) {
-        m_settings.setDisabledDesktops(mode, entries);
-        setNeedsSave(true);
-    }
-}
-
-bool SettingsController::isActivityDisabled(int viewMode, const QString& screenName, const QString& activityId) const
-{
-    return m_settings.isActivityDisabled(modeFromViewMode(viewMode), screenName, activityId);
-}
-
-void SettingsController::setActivityDisabled(int viewMode, const QString& screenName, const QString& activityId,
-                                             bool disabled)
-{
-    // See setDesktopDisabled — the per-mode signal is forwarded from
-    // m_settings via the connect set up in the constructor.
-    const auto mode = modeFromViewMode(viewMode);
-    QString key = screenName + QLatin1Char('/') + activityId;
-    QStringList entries = m_settings.disabledActivities(mode);
-    if (disabled && !entries.contains(key)) {
-        entries.append(key);
-        m_settings.setDisabledActivities(mode, entries);
-        setNeedsSave(true);
-    } else if (!disabled && entries.removeAll(key) > 0) {
-        m_settings.setDisabledActivities(mode, entries);
-        setNeedsSave(true);
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2072,12 +1597,6 @@ QVariantList SettingsController::getScreenStates() const
     return result;
 }
 
-bool SettingsController::hasStagedAssignment(const QString& screenName, int virtualDesktop,
-                                             const QString& activityId) const
-{
-    return m_staging.stagedAssignmentFor(screenName, virtualDesktop, activityId) != nullptr;
-}
-
 QVariantMap SettingsController::getStagedAssignment(const QString& screenName, int virtualDesktop,
                                                     const QString& activityId) const
 {
@@ -2256,37 +1775,6 @@ void SettingsController::clearPerScreenZoneSelectorSettings(const QString& scree
 bool SettingsController::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 {
     return m_settings.hasPerScreenZoneSelectorSettings(screenName);
-}
-
-void SettingsController::saveAppRulesToDaemon(const QString& layoutId, const QVariantList& rules)
-{
-    // Get the current layout JSON, update the appRules field, and send back via updateLayout
-    QDBusMessage getReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                   QStringLiteral("getLayout"), {layoutId});
-    if (getReply.type() != QDBusMessage::ReplyMessage || getReply.arguments().isEmpty())
-        return;
-
-    QJsonDocument doc = QJsonDocument::fromJson(getReply.arguments().first().toString().toUtf8());
-    if (doc.isNull() || !doc.isObject())
-        return;
-
-    QJsonObject obj = doc.object();
-    QJsonArray rulesArray;
-    for (const auto& ruleVar : rules) {
-        QVariantMap ruleMap = ruleVar.toMap();
-        QJsonObject ruleObj;
-        ruleObj[QLatin1String("pattern")] = ruleMap[QStringLiteral("pattern")].toString();
-        ruleObj[QLatin1String("zoneNumber")] = ruleMap[QStringLiteral("zoneNumber")].toInt();
-        if (ruleMap.contains(QStringLiteral("targetScreen")))
-            ruleObj[QLatin1String("targetScreen")] = ruleMap[QStringLiteral("targetScreen")].toString();
-        rulesArray.append(ruleObj);
-    }
-    obj[QLatin1String("appRules")] = rulesArray;
-
-    QString updatedJson = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                           QStringLiteral("updateLayout"), {updatedJson});
-    scheduleLayoutLoad();
 }
 
 QVariantMap SettingsController::loadWindowGeometry() const

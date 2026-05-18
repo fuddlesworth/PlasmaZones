@@ -293,62 +293,10 @@ public:
     Q_INVOKABLE void setLayoutAutoAssign(const QString& layoutId, bool enabled);
     Q_INVOKABLE void setLayoutAspectRatio(const QString& layoutId, int aspectRatioClass);
 
-    // Screen helpers — `viewMode` selects the mode whose disable list to read/write
-    // (0 = snapping, 1 = autotile; matches PhosphorZones::AssignmentEntry::Mode).
-    // Disabling a monitor in one mode leaves the gate untouched in the other.
-    Q_INVOKABLE bool isMonitorDisabled(int viewMode, const QString& screenName) const;
-    Q_INVOKABLE void setMonitorDisabled(int viewMode, const QString& screenName, bool disabled);
-    Q_INVOKABLE bool isDesktopDisabled(int viewMode, const QString& screenName, int desktop) const;
-    Q_INVOKABLE void setDesktopDisabled(int viewMode, const QString& screenName, int desktop, bool disabled);
-    Q_INVOKABLE bool isActivityDisabled(int viewMode, const QString& screenName, const QString& activityId) const;
-    Q_INVOKABLE void setActivityDisabled(int viewMode, const QString& screenName, const QString& activityId,
-                                         bool disabled);
-
     // Font helpers (for FontPickerDialog)
     Q_INVOKABLE QStringList fontStylesForFamily(const QString& family) const;
     Q_INVOKABLE int fontStyleWeight(const QString& family, const QString& style) const;
     Q_INVOKABLE bool fontStyleItalic(const QString& family, const QString& style) const;
-
-    // Assignment helpers (D-Bus to daemon)
-    Q_INVOKABLE void assignLayoutToScreen(const QString& screenName, const QString& layoutId);
-    Q_INVOKABLE void clearScreenAssignment(const QString& screenName);
-    Q_INVOKABLE void assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId);
-    Q_INVOKABLE void clearTilingScreenAssignment(const QString& screenName);
-
-    // Assignment query helpers (D-Bus to daemon)
-    Q_INVOKABLE QString getLayoutForScreen(const QString& screenName) const;
-    Q_INVOKABLE QString getTilingLayoutForScreen(const QString& screenName) const;
-
-    // Per-desktop assignments (D-Bus to daemon)
-    Q_INVOKABLE QString getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const;
-    Q_INVOKABLE void assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
-                                                 const QString& layoutId);
-    Q_INVOKABLE void clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop);
-    Q_INVOKABLE QString getSnappingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const;
-    Q_INVOKABLE bool hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const;
-
-    // Tiling per-desktop assignments (D-Bus to daemon)
-    Q_INVOKABLE void assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
-                                                       const QString& layoutId);
-    Q_INVOKABLE void clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop);
-    Q_INVOKABLE QString getTilingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const;
-    Q_INVOKABLE bool hasExplicitTilingAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const;
-
-    // Per-activity assignments (D-Bus to daemon)
-    Q_INVOKABLE QString getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
-    Q_INVOKABLE void assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                  const QString& layoutId);
-    Q_INVOKABLE void clearScreenActivityAssignment(const QString& screenName, const QString& activityId);
-    Q_INVOKABLE QString getSnappingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
-    Q_INVOKABLE bool hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const;
-
-    // Tiling per-activity assignments (D-Bus to daemon)
-    Q_INVOKABLE void assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                        const QString& layoutId);
-    Q_INVOKABLE void clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId);
-    Q_INVOKABLE QString getTilingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
-    Q_INVOKABLE bool hasExplicitTilingAssignmentForScreenActivity(const QString& screenName,
-                                                                  const QString& activityId) const;
 
     // Quick layout slots (D-Bus to daemon)
     Q_INVOKABLE QString getQuickLayoutSlot(int slotNumber) const;
@@ -356,20 +304,6 @@ public:
     Q_INVOKABLE QString getQuickLayoutShortcut(int slotNumber) const;
     Q_INVOKABLE QString getTilingQuickLayoutSlot(int slotNumber) const;
     Q_INVOKABLE void setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId);
-
-    // App-to-zone rules (D-Bus to daemon)
-    Q_INVOKABLE QVariantList getAppRulesForLayout(const QString& layoutId) const;
-    Q_INVOKABLE void addAppRuleToLayout(const QString& layoutId, const QString& pattern, int zoneNumber,
-                                        const QString& targetScreen = QString());
-    Q_INVOKABLE void removeAppRuleFromLayout(const QString& layoutId, int index);
-
-    // Assignment lock helpers
-    Q_INVOKABLE bool isScreenLocked(const QString& screenName, int mode) const;
-    Q_INVOKABLE void toggleScreenLock(const QString& screenName, int mode);
-    Q_INVOKABLE bool isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity,
-                                     int mode) const;
-    Q_INVOKABLE void toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity,
-                                       int mode);
 
     // ── Page sub-controllers ─────────────────────────────────────────────
     EditorPageController* editorPage() const
@@ -450,8 +384,6 @@ public:
 
     // ── Screen state query ─────────────────────────────────────────────────
     Q_INVOKABLE QVariantList getScreenStates() const;
-    Q_INVOKABLE bool hasStagedAssignment(const QString& screenName, int virtualDesktop = 0,
-                                         const QString& activityId = QString()) const;
     Q_INVOKABLE QVariantMap getStagedAssignment(const QString& screenName, int virtualDesktop = 0,
                                                 const QString& activityId = QString()) const;
 
@@ -570,13 +502,6 @@ Q_SIGNALS:
 
     // KZones import signals
     void kzonesImportFinished(int count, const QString& message);
-    void lockedScreensChanged();
-    // Per-mode disable signals carry the mode that flipped (0 = snapping, 1 =
-    // autotile; matches PhosphorZones::AssignmentEntry::Mode). QML consumers
-    // can ignore the argument if they only render one page at a time.
-    void disabledMonitorsChanged(int viewMode);
-    void disabledDesktopsChanged(int viewMode);
-    void disabledActivitiesChanged(int viewMode);
 
     // Ordering staged signals
     void stagedSnappingOrderChanged();
@@ -609,8 +534,6 @@ private:
     void setNeedsSave(bool needs);
     void refreshVirtualDesktops();
     void refreshActivities();
-
-    void saveAppRulesToDaemon(const QString& layoutId, const QVariantList& rules);
 
     Settings m_settings;
     /// Per-page sub-controllers: expose the Q_PROPERTY surface for a single
