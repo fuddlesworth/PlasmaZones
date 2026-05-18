@@ -104,6 +104,35 @@ constexpr int GEOMETRY_UPDATE_DEBOUNCE_MS = 400;
 // even when the daemon starts before KWin during login — so a timeout means
 // a genuine failure, not a race.
 constexpr int BRIDGE_WATCHDOG_TIMEOUT_MS = 20000;
+
+// Locate the installed PlasmaZones KWin effect plugin and read the KWin
+// version embedded in its plugin interface ID. The KWin effect is a compiled
+// C++ plugin; KWin bakes its exact version into the IID it accepts
+// (EffectPluginFactory_iid = "org.kde.kwin.EffectPluginFactory" + the KWin
+// version string), and silently rejects any plugin built against a different
+// KWin. metaData() reads only the static metadata section — no dlopen — so it
+// works even on the version-mismatched plugin KWin itself refuses to load.
+// `installed` is set to whether the plugin file was found at all. Returns the
+// KWin version the effect was built against, or empty when the plugin is
+// missing or its IID is not a recognizable KWin effect IID.
+QString probeEffectKWinVersion(bool& installed)
+{
+    static const QLatin1String iidPrefix("org.kde.kwin.EffectPluginFactory");
+    const QString effectRelPath = QStringLiteral("kwin/effects/plugins/kwin_effect_plasmazones.so");
+
+    installed = false;
+    const QStringList libraryPaths = QCoreApplication::libraryPaths();
+    for (const QString& base : libraryPaths) {
+        const QString candidate = base + QLatin1Char('/') + effectRelPath;
+        if (!QFile::exists(candidate)) {
+            continue;
+        }
+        installed = true;
+        const QString iid = QPluginLoader(candidate).metaData().value(QLatin1String("IID")).toString();
+        return iid.startsWith(iidPrefix) ? iid.mid(iidPrefix.size()) : QString();
+    }
+    return QString();
+}
 } // anonymous namespace
 
 Daemon::Daemon(QObject* parent)
@@ -1319,67 +1348,6 @@ void Daemon::start()
     }
 }
 
-QString Daemon::diagnoseEffectLoadFailure() const
-{
-    // The KWin effect is a compiled C++ plugin. KWin embeds its exact version
-    // into the plugin interface ID it will accept — EffectPluginFactory_iid is
-    // "org.kde.kwin.EffectPluginFactory" concatenated with KWin's version
-    // string. An effect built against a different KWin (even one patch release
-    // apart) carries a non-matching IID, and KWin's effect loader silently
-    // refuses to instantiate it: no error, the effect simply never registers.
-    // This diagnoses that case so the watchdog notification can name the real
-    // cause (a stale effect build) instead of a generic "not running".
-    static const QLatin1String iidPrefix("org.kde.kwin.EffectPluginFactory");
-    static const QLatin1String effectRelPath("kwin/effects/plugins/kwin_effect_plasmazones.so");
-
-    // Locate the installed effect plugin under Qt's plugin search paths.
-    QString effectPath;
-    const QStringList libraryPaths = QCoreApplication::libraryPaths();
-    for (const QString& base : libraryPaths) {
-        const QString candidate = base + QLatin1Char('/') + effectRelPath;
-        if (QFile::exists(candidate)) {
-            effectPath = candidate;
-            break;
-        }
-    }
-    if (effectPath.isEmpty()) {
-        return PzI18n::tr(
-            "The PlasmaZones KWin effect plugin is not installed where KWin can find it. "
-            "Reinstall PlasmaZones.");
-    }
-
-    // Read the plugin's embedded interface ID without loading it: metaData()
-    // parses only the static metadata section, so it works even for the
-    // version-mismatched plugin KWin itself refuses to load.
-    const QString effectIid = QPluginLoader(effectPath).metaData().value(QLatin1String("IID")).toString();
-    if (!effectIid.startsWith(iidPrefix)) {
-        return QString();
-    }
-    const QString effectKWinVersion = effectIid.mid(iidPrefix.size());
-
-    // Ask the running KWin for its version. supportInformation() is the only
-    // reliable D-Bus source; a short timeout keeps this already-degraded
-    // startup path from stalling if KWin is unresponsive.
-    QDBusMessage req =
-        QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
-                                       QStringLiteral("org.kde.KWin"), QStringLiteral("supportInformation"));
-    const QDBusMessage reply = QDBusConnection::sessionBus().call(req, QDBus::Block, 3000);
-    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-        return QString();
-    }
-    const QRegularExpressionMatch match =
-        QRegularExpression(QStringLiteral("KWin version:\\s*(\\S+)")).match(reply.arguments().constFirst().toString());
-    if (!match.hasMatch() || match.captured(1) == effectKWinVersion) {
-        return QString();
-    }
-
-    return PzI18n::tr(
-               "The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin "
-               "will not load it. Rebuild and reinstall PlasmaZones against the running KWin. On "
-               "NixOS, install via the flake's nixosModules or overlay (not packages.default).")
-        .arg(effectKWinVersion, match.captured(1));
-}
-
 void Daemon::warnCompositorBridgeMissing()
 {
     // Stay silent during shutdown. The watchdog may still be armed when the
@@ -1396,12 +1364,70 @@ void Daemon::warnCompositorBridgeMissing()
         return;
     }
 
-    // Try to pin down why the effect never registered (most often a stale
-    // effect build whose IID no longer matches the running KWin). A specific
-    // diagnosis replaces the generic remediation guidance in both the log and
-    // the notification; otherwise fall back to the enable-the-effect advice.
-    const QString diagnosis = diagnoseEffectLoadFailure();
+    // Inspect the installed effect plugin (synchronous, cheap). The most common
+    // silent failure is a stale effect build whose IID no longer matches the
+    // running KWin, so KWin's effect loader rejects it without surfacing an
+    // error and the effect never registers.
+    bool effectInstalled = false;
+    const QString effectKWinVersion = probeEffectKWinVersion(effectInstalled);
 
+    if (!effectInstalled) {
+        emitBridgeMissingWarning(
+            PzI18n::tr("The PlasmaZones KWin effect plugin is not installed where KWin can find it. "
+                       "Reinstall PlasmaZones."));
+        return;
+    }
+    if (effectKWinVersion.isEmpty()) {
+        // Plugin present but its IID is not a recognizable KWin effect IID —
+        // nothing specific to report, fall back to the generic guidance.
+        emitBridgeMissingWarning(QString());
+        return;
+    }
+
+    // Compare the effect's build-time KWin version against the running KWin.
+    // supportInformation() is the only reliable D-Bus source for KWin's
+    // version; query it asynchronously so this degraded startup path never
+    // blocks the daemon's event loop (mirrors the fire-and-forget notification
+    // call in emitBridgeMissingWarning).
+    QDBusMessage req =
+        QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
+                                       QStringLiteral("org.kde.KWin"), QStringLiteral("supportInformation"));
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(req, 3000), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, effectKWinVersion](QDBusPendingCallWatcher* call) {
+                call->deleteLater();
+
+                // The 3s round-trip widens the window in which a late effect
+                // registration can land; stay silent if shutdown began or the
+                // bridge registered after all.
+                if (m_shuttingDown || (m_compositorBridge && m_compositorBridge->isBridgeRegistered())) {
+                    return;
+                }
+
+                QString diagnosis;
+                const QDBusPendingReply<QString> reply = *call;
+                if (!reply.isError()) {
+                    const QRegularExpressionMatch match =
+                        QRegularExpression(QStringLiteral("KWin version:\\s*(\\S+)")).match(reply.value());
+                    if (match.hasMatch()) {
+                        const QString runningKWinVersion = match.captured(1);
+                        if (runningKWinVersion != effectKWinVersion) {
+                            diagnosis = PzI18n::tr(
+                                            "The PlasmaZones KWin effect was built for KWin %1 but "
+                                            "KWin %2 is running, so KWin will not load it. Rebuild and "
+                                            "reinstall PlasmaZones against the running KWin. On NixOS, "
+                                            "install via the flake's nixosModules or overlay (not "
+                                            "packages.default).")
+                                            .arg(effectKWinVersion, runningKWinVersion);
+                        }
+                    }
+                }
+                emitBridgeMissingWarning(diagnosis);
+            });
+}
+
+void Daemon::emitBridgeMissingWarning(const QString& diagnosis)
+{
     if (diagnosis.isEmpty()) {
         qCWarning(lcDaemon) << "Compositor bridge did not register within" << (BRIDGE_WATCHDOG_TIMEOUT_MS / 1000)
                             << "s of startup — the PlasmaZones KWin effect is not running or"
