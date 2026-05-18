@@ -354,6 +354,20 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                 }
             } else {
                 unmaximizeMonocleWindow(snap.windowId);
+                // Clear any KWin maximize state before tiling. A user-
+                // maximized window keeps its MaximizeFull flag through
+                // moveResize; KWin then re-asserts the maximize-area
+                // geometry and the reactive centering in
+                // slotWindowFrameGeometryChanged re-applies — the two
+                // authorities never converge and compound into the
+                // "ballooning" growth (discussion #461). unmaximizeMonocleWindow
+                // above only restores windows PlasmaZones itself maximized
+                // for monocle; a user-maximized window is never in that set.
+                if (KWin::Window* kw = snap.window->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                    ++m_suppressMaximizeChanged;
+                    kw->maximize(KWin::MaximizeRestore);
+                    --m_suppressMaximizeChanged;
+                }
                 QRect geo = snap.geometry;
 
                 // For Wayland windows being retiled to the same zone, skip the
