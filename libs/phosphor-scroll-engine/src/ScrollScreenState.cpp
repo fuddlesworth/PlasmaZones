@@ -325,7 +325,7 @@ QJsonObject ScrollScreenState::toJson() const
     obj.insert(QLatin1String("screenId"), m_screenId);
     obj.insert(QLatin1String("columns"), columns);
     obj.insert(QLatin1String("activeColumnIndex"), m_activeColumnIndex);
-    obj.insert(QLatin1String("viewOffset"), m_viewOffset);
+    obj.insert(QLatin1String("scrollX"), m_scrollX);
     obj.insert(QLatin1String("floating"), floating);
     return obj;
 }
@@ -353,7 +353,7 @@ ScrollScreenState ScrollScreenState::fromJson(const QJsonObject& obj)
             state.m_columns.append(std::move(column));
         }
     }
-    state.m_viewOffset = obj.value(QLatin1String("viewOffset")).toDouble(0.0);
+    state.m_scrollX = obj.value(QLatin1String("scrollX")).toDouble(0.0);
     state.m_activeColumnIndex = obj.value(QLatin1String("activeColumnIndex")).toInt(-1);
     state.clampActiveColumnIndex();
 

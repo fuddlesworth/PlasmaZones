@@ -57,15 +57,17 @@ public:
     const Column* activeColumn() const;
     QString focusedWindowId() const;
 
-    /// Viewport offset relative to the active column (logical pixels).
-    /// Stored intent only; geometry resolution interprets it.
-    qreal viewOffset() const
+    /// Absolute viewport scroll position: the strip-x coordinate that maps to
+    /// the inner-left edge of the working area. Stored intent only — the
+    /// daemon computes it (computeViewportScroll) and geometry resolution
+    /// (resolveScrollLayout) interprets it.
+    qreal scrollX() const
     {
-        return m_viewOffset;
+        return m_scrollX;
     }
-    void setViewOffset(qreal offset)
+    void setScrollX(qreal scrollX)
     {
-        m_viewOffset = offset;
+        m_scrollX = scrollX;
     }
 
     // ── Window placement ────────────────────────────────────────────────
@@ -151,7 +153,7 @@ private:
     QString m_screenId;
     QVector<Column> m_columns;
     int m_activeColumnIndex = -1;
-    qreal m_viewOffset = 0.0;
+    qreal m_scrollX = 0.0;
     QSet<QString> m_floatingWindows;
 };
 

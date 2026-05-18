@@ -213,14 +213,14 @@ void TestScrollScreenState::jsonRoundTrip()
     state.addColumnForWindow(QStringLiteral("a"));
     state.addWindowToActiveColumn(QStringLiteral("b"));
     state.addColumnForWindow(QStringLiteral("c"));
-    state.setViewOffset(-128.0);
+    state.setScrollX(-128.0);
     state.markFloating(QStringLiteral("f1"));
 
     const ScrollScreenState restored = ScrollScreenState::fromJson(state.toJson());
     QCOMPARE(restored.screenId(), QStringLiteral("HDMI-1"));
     QCOMPARE(restored.columnCount(), state.columnCount());
     QCOMPARE(restored.activeColumnIndex(), state.activeColumnIndex());
-    QCOMPARE(restored.viewOffset(), -128.0);
+    QCOMPARE(restored.scrollX(), -128.0);
     QCOMPARE(restored.focusedWindowId(), state.focusedWindowId());
     QVERIFY(restored.isFloating(QStringLiteral("f1")));
     QCOMPARE(restored.placementIdForWindow(QStringLiteral("b")), QStringLiteral("0:1"));
