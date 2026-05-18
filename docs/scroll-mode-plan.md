@@ -3,15 +3,18 @@
 
 # Scroll mode — niri-style scrollable tiling
 
-Planning document. Status: **Phases 0 ✅, 1 ✅, 2 ✅, 3 ✅ and 4 ✅ complete** — the
-scroll engine, geometry resolver, `Mode::Scroll` routing, daemon geometry pipeline, the
-full window lifecycle (open/close/focus, minimize, screen hotplug & geometry change,
-fixed-size windows), navigation (viewport fit/centered scrolling, consume/expel
-shortcuts, drag-to-reorder, sticky-window exclusion) and the width/height controls and
-animation polish (preset cycling, full-width toggle, grow/shrink, runtime centering,
-dedicated `window.scroll` motion profile) are implemented, built, and covered by the
-unit-test suite. Phase 0 detail in
-[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 5.
+Planning document. Status: **Phases 0–5 ✅ complete** — the scroll engine, geometry
+resolver, `Mode::Scroll` routing, daemon geometry pipeline, the full window lifecycle
+(open/close/focus, minimize, screen hotplug & geometry change, fixed-size windows),
+navigation (viewport fit/centered scrolling, consume/expel shortcuts, drag-to-reorder,
+sticky-window exclusion), the width/height controls and animation polish (preset
+cycling, full-width toggle, grow/shrink, runtime centering, dedicated `window.scroll`
+motion profile), and the settings/UI/persistence layer (config-backed tuning with
+per-screen overrides, the "Scrolling" settings page, the "Scrolling" layout-picker
+entry, strip-order persistence across a daemon restart) are implemented, built, and
+covered by the unit-test suite.
+Phase 0 detail in [`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md).
+Scroll mode is feature-complete for v1 — remaining items are the §7 MVP scope cuts.
 
 ## 1. Goal
 
@@ -344,12 +347,49 @@ with the Phase 3 navigation work.
   Open Question 3 below: KWin paints fully-off-screen windows, so the cull-driven
   constraint never arises.
 
-### Phase 5 — Settings, UI, persistence
+### Phase 5 — Settings, UI, persistence — ✅ COMPLETE
 
-- `ConfigDefaults` keys: default/preset column widths, preset heights, gaps, centering
-  mode, animation. Per-screen overrides reuse the existing mechanism.
-- Settings UI + layout-picker entry ("Scrollable").
-- Persist strip order across daemon restart (reuse the `m_lastAutotileOrders` pattern).
+- ✅ **`ConfigDefaults` keys** — `Scrolling.Gaps` (inner/outer) and `Scrolling.Layout`
+  (default new-column width, the `CenterFocusedColumn` viewport toggle, and the two
+  cycle-preset lists for column widths and window heights) are full `PhosphorConfig::
+  Store`-backed settings: `ConfigKeys`/`ConfigDefaults` accessors, `ISettings` virtuals
+  + signals, `Settings` `Q_PROPERTY`s, a `settingsschema.cpp` group with clamp
+  validators (`clampFractionList` for the preset arrays), and `SettingsAdaptor` D-Bus
+  registration. The mode group/UI verbiage is **"Scrolling"** (mirroring "Snapping" /
+  "Tiling"); the C++ accessor/property prefix stays `scroll*` (mirroring `autotile*` —
+  the bare mode noun). "Centering mode" landed as the boolean `scrollCenterFocusedColumn`
+  setting (the `Meta+Alt+C` shortcut flips it, so the choice persists). No separate
+  "animation" key was added — the Phase 4 `window.scroll` motion profile already is the
+  animation config, user-tunable through the Animations settings.
+- ✅ **Per-screen overrides** — scrolling mode has the identical per-screen-override
+  stack as autotile and snapping: `ScrollingScreen:<id>` config groups, a
+  `PerScreenPathResolver` category, `ISettings::getPerScreenScrollSettings` /
+  `setPerScreenScrollSetting` / `clearPerScreenScrollSettings` / `hasPerScreenScrollSettings`
+  virtuals (+ `perScreenScrollSettingsChanged`), `Settings` storage in
+  `perscreen.cpp`, and `SettingsAdaptor`'s `"scrolling"` category. `ScrollEngine` holds
+  per-screen overrides (`applyPerScreenConfig` / `clearPerScreenConfig` /
+  `perScreenOverrides`, mirroring `AutotileEngine`) and resolves every config value as
+  override → global via its `effective*()` accessors; the daemon's
+  `applyPerScreenScrollOverrides()` pushes the per-screen maps. The mode *disable* lists
+  (`ScrollDisabledMonitors` etc.) remain the per-context gate, as before.
+- ✅ **Settings UI + layout-picker entry** — a dedicated "Scrolling" page
+  (`ScrollingModePage.qml`, with the reusable `ScrollingPresetListCard.qml` preset-list
+  editor and a `MonitorSelectorSection` for per-monitor overrides) sits beside Snapping
+  and Tiling in the standalone settings app. The layout picker gains one synthetic
+  **"Scrolling"** entry (`scroll:` id) injected by `buildUnifiedLayoutList`; selecting it
+  routes through `UnifiedLayoutController::applyEntry` to assign `Mode::Scroll` to the
+  current screen/desktop/activity.
+- ✅ **Persistence** — `ScrollEngine::serializeEngineState()` /
+  `deserializeEngineState()` are orchestrated by the daemon: `saveScrollState()` writes
+  `scroll-session.json` on shutdown, `loadScrollState()` restores it at startup before
+  the effect re-reports windows (a still-existing window's `windowOpened` then no-ops,
+  keeping its restored column). The restored strip is structural, so
+  `ScrollEngine::reconcileRestoredWindows()` prunes it against the live window set from
+  the effect's first `windowsOpenedBatch`: a window closed while the daemon was down
+  leaves no phantom column, and after a full compositor restart (every window ID is
+  new) the strip reconciles away cleanly. Restore stays exact-ID — no appId-keyed
+  reconciliation across sessions (out of scope for v1) — so the persisted strip is a
+  hint over the live set, mirroring how autotile reconciles its restored window order.
 
 ## 7. MVP scope cuts
 

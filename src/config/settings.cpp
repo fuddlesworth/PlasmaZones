@@ -231,6 +231,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::generalGroup(), // "General"
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
+        ConfigDefaults::scrollingGroup(), // "Scrolling" — covers Scrolling.Layout + Scrolling.Gaps
         ConfigDefaults::displayGroup(), // "Display" — mode-neutral, holds per-mode disable lists (v3+)
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
@@ -541,6 +542,32 @@ void Settings::setAudioSpectrumBarCount(int count)
         m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
         const qreal after = m_store->read<double>(ConfigDefaults::group(), ConfigDefaults::key());                     \
         if (qFuzzyCompare(1.0 + before, 1.0 + after)) {                                                                \
+            return;                                                                                                    \
+        }                                                                                                              \
+        Q_EMIT signal();                                                                                               \
+        Q_EMIT settingsChanged();                                                                                      \
+    }
+
+// Unlike PZ_STORE_GET (typed read<T>), the list getter goes through
+// readVariant, which is default-eager: a corrupt on-disk list falls back to
+// the schema default rather than an empty list — the right call for a preset
+// list, since an empty list would silently disable the cycle shortcuts.
+#define PZ_STORE_GET_LIST(fn, group, key)                                                                              \
+    QVariantList Settings::fn() const                                                                                  \
+    {                                                                                                                  \
+        return m_store->readVariant(ConfigDefaults::group(), ConfigDefaults::key()).toList();                          \
+    }
+
+// Pre/post round-trip compare — the schema validator may clamp / drop
+// out-of-range entries, so two in-memory-distinct lists can persist
+// identically; emitting then would dirty the settings page on a no-op.
+#define PZ_STORE_SET_LIST(fn, group, key, signal)                                                                      \
+    void Settings::fn(const QVariantList& value)                                                                       \
+    {                                                                                                                  \
+        const QVariantList before = m_store->readVariant(ConfigDefaults::group(), ConfigDefaults::key()).toList();     \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        const QVariantList after = m_store->readVariant(ConfigDefaults::group(), ConfigDefaults::key()).toList();      \
+        if (before == after) {                                                                                         \
             return;                                                                                                    \
         }                                                                                                              \
         Q_EMIT signal();                                                                                               \
@@ -2397,6 +2424,27 @@ PZ_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivati
 PZ_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey,
                   autotileDragInsertToggleChanged)
 
+// ── Scroll Mode Settings (PhosphorConfig::Store-backed) ─────────────────────
+// Scrolling.Gaps — reuses innerKey / outerKey; the group context disambiguates.
+PZ_STORE_GET(int, scrollInnerGap, scrollingGapsGroup, innerKey, int)
+PZ_STORE_SET_INT(setScrollInnerGap, scrollingGapsGroup, innerKey, scrollInnerGapChanged)
+PZ_STORE_GET(int, scrollOuterGap, scrollingGapsGroup, outerKey, int)
+PZ_STORE_SET_INT(setScrollOuterGap, scrollingGapsGroup, outerKey, scrollOuterGapChanged)
+// Scrolling.Layout
+PZ_STORE_GET(qreal, scrollDefaultColumnWidth, scrollingLayoutGroup, defaultColumnWidthKey, double)
+PZ_STORE_SET_DOUBLE(setScrollDefaultColumnWidth, scrollingLayoutGroup, defaultColumnWidthKey,
+                    scrollDefaultColumnWidthChanged)
+PZ_STORE_GET(bool, scrollCenterFocusedColumn, scrollingLayoutGroup, centerFocusedColumnKey, bool)
+PZ_STORE_SET_BOOL(setScrollCenterFocusedColumn, scrollingLayoutGroup, centerFocusedColumnKey,
+                  scrollCenterFocusedColumnChanged)
+// Scrolling.Layout preset lists — QVariantLists of fractions of the working area.
+PZ_STORE_GET_LIST(scrollPresetColumnWidths, scrollingLayoutGroup, presetColumnWidthsKey)
+PZ_STORE_SET_LIST(setScrollPresetColumnWidths, scrollingLayoutGroup, presetColumnWidthsKey,
+                  scrollPresetColumnWidthsChanged)
+PZ_STORE_GET_LIST(scrollPresetWindowHeights, scrollingLayoutGroup, presetWindowHeightsKey)
+PZ_STORE_SET_LIST(setScrollPresetWindowHeights, scrollingLayoutGroup, presetWindowHeightsKey,
+                  scrollPresetWindowHeightsChanged)
+
 // Tiling.Appearance
 PZ_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)
 PZ_STORE_SET_COLOR(setAutotileBorderColor, tilingAppearanceColorsGroup, activeKey, autotileBorderColorChanged)
@@ -2440,6 +2488,9 @@ void Settings::reset()
     m_configBackend->deleteGroup(ConfigDefaults::tilingQuickLayoutSlotsGroup());
     if (!QFile::remove(ConfigDefaults::sessionFilePath()) && QFile::exists(ConfigDefaults::sessionFilePath())) {
         qCWarning(lcConfig) << "Failed to remove session file:" << ConfigDefaults::sessionFilePath();
+    }
+    if (!QFile::remove(ConfigDefaults::scrollStateFilePath()) && QFile::exists(ConfigDefaults::scrollStateFilePath())) {
+        qCWarning(lcConfig) << "Failed to remove scroll state file:" << ConfigDefaults::scrollStateFilePath();
     }
     deletePerScreenGroups(m_configBackend);
     m_configBackend->sync();
@@ -2798,9 +2849,11 @@ void Settings::applyAutotileBorderSystemColor()
 }
 
 #undef PZ_STORE_GET
+#undef PZ_STORE_GET_LIST
 #undef PZ_STORE_SET_BOOL
 #undef PZ_STORE_SET_INT
 #undef PZ_STORE_SET_DOUBLE
+#undef PZ_STORE_SET_LIST
 #undef PZ_STORE_SET_COLOR
 #undef PZ_STORE_SET_STRING
 

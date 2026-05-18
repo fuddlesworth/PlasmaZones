@@ -19,6 +19,7 @@ constexpr PerScreenMapping kPerScreenMappings[] = {
     {"ZoneSelector", "ZoneSelector"},
     {"AutotileScreen", "Autotile"},
     {"SnappingScreen", "Snapping"},
+    {"ScrollingScreen", "Scrolling"},
 };
 } // namespace
 

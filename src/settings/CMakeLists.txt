@@ -108,6 +108,8 @@ qt_add_qml_module(plasmazones-settings
         qml/TilingAppearancePage.qml
         qml/TilingBehaviorPage.qml
         qml/TilingAlgorithmPage.qml
+        qml/ScrollingModePage.qml
+        qml/ScrollingPresetListCard.qml
         qml/ExclusionsPage.qml
         qml/EditorPage.qml
         qml/LayoutsPage.qml

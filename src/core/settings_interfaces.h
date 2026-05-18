@@ -105,6 +105,24 @@ inline constexpr QLatin1String ZoneSelectorPreviewWidth{"ZoneSelectorPreviewWidt
 inline constexpr QLatin1String ZoneSelectorPreviewHeight{"ZoneSelectorPreviewHeight"};
 } // namespace PerScreenSnappingKey
 
+/**
+ * Per-screen scrolling-mode override key constants.
+ *
+ * Used in config group keys ([ScrollingScreen:ScreenId]), QVariantMap override
+ * storage, and QML writeSetting() calls. Short keys with no mode prefix — the
+ * ScrollingScreen: group already scopes them (mirrors ZoneSelectorConfigKey,
+ * unlike the prefixed PerScreenAutotileKey). The preset keys carry QVariantList
+ * values; the rest are scalars.
+ */
+namespace PerScreenScrollKey {
+inline constexpr const char InnerGap[] = "InnerGap";
+inline constexpr const char OuterGap[] = "OuterGap";
+inline constexpr const char DefaultColumnWidth[] = "DefaultColumnWidth";
+inline constexpr const char CenterFocusedColumn[] = "CenterFocusedColumn";
+inline constexpr const char PresetColumnWidths[] = "PresetColumnWidths";
+inline constexpr const char PresetWindowHeights[] = "PresetWindowHeights";
+} // namespace PerScreenScrollKey
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Interfaces
 // ═══════════════════════════════════════════════════════════════════════════════

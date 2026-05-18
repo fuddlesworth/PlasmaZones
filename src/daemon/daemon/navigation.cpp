@@ -11,6 +11,7 @@
 #include <PhosphorEngine/IScrollNavigation.h>
 #include "../../core/logging.h"
 #include "../../core/screenmoderouter.h"
+#include "../../core/settings_interfaces.h"
 #include "../../core/utils.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
@@ -256,13 +257,30 @@ void Daemon::handleShrinkColumnWidth()
 
 void Daemon::handleToggleCenterFocusedColumn()
 {
-    // Toggle the viewport between fit and centered. Scroll-mode only; skipped
-    // on snap/autotile screens (see handleConsume).
-    NavigationContext ctx;
-    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx,
-                                               "ToggleCenterFocusedColumn")) {
-        nav->toggleCenterFocusedColumn(ctx);
+    // Scroll mode: toggle the persisted viewport-centering setting. Phase 5
+    // makes the centering mode a setting, so the shortcut flips it — the
+    // change signal re-pushes it to ScrollEngine and re-resolves every scroll
+    // strip via refreshScrollConfigFromSettings().
+    //
+    // The focused screen may carry a per-screen CenterFocusedColumn override,
+    // which shadows the global value (ScrollEngine::effectiveViewportMode).
+    // Flipping the global on such a screen would be a silent no-op, so the
+    // shortcut targets whichever level is actually in effect for that screen:
+    // the per-screen override when one exists, the global setting otherwise.
+    if (!m_settings) {
+        return;
     }
+    const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+    if (!screenId.isEmpty()) {
+        const QVariantMap overrides = m_settings->getPerScreenScrollSettings(screenId);
+        const auto it = overrides.constFind(QLatin1String(PerScreenScrollKey::CenterFocusedColumn));
+        if (it != overrides.constEnd()) {
+            m_settings->setPerScreenScrollSetting(screenId, QLatin1String(PerScreenScrollKey::CenterFocusedColumn),
+                                                  !it.value().toBool());
+            return;
+        }
+    }
+    m_settings->setScrollCenterFocusedColumn(!m_settings->scrollCenterFocusedColumn());
 }
 
 void Daemon::handleRestore()

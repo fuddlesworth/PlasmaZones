@@ -422,6 +422,77 @@ private Q_SLOTS:
         QVariantMap first = triggers.first().toMap();
         QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
     }
+    /**
+     * Scroll-mode settings (Phase 5) must survive a save/load round-trip:
+     * gaps, the default column width, the viewport-centering toggle, and the
+     * two preset lists. The preset lists are QVariantLists of fractions.
+     */
+    void testScrollSettings_roundtrip()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            Settings settings;
+            settings.setScrollInnerGap(14);
+            settings.setScrollOuterGap(22);
+            settings.setScrollDefaultColumnWidth(0.42);
+            settings.setScrollCenterFocusedColumn(true);
+            settings.setScrollPresetColumnWidths(QVariantList{0.25, 0.5, 0.75});
+            settings.setScrollPresetWindowHeights(QVariantList{0.3, 0.6});
+            settings.save();
+        }
+
+        Settings reloaded;
+        QCOMPARE(reloaded.scrollInnerGap(), 14);
+        QCOMPARE(reloaded.scrollOuterGap(), 22);
+        QVERIFY(qFuzzyCompare(reloaded.scrollDefaultColumnWidth(), 0.42));
+        QCOMPARE(reloaded.scrollCenterFocusedColumn(), true);
+
+        const QVariantList widths = reloaded.scrollPresetColumnWidths();
+        QCOMPARE(widths.size(), 3);
+        QVERIFY(qFuzzyCompare(widths.at(0).toDouble(), 0.25));
+        QVERIFY(qFuzzyCompare(widths.at(1).toDouble(), 0.5));
+        QVERIFY(qFuzzyCompare(widths.at(2).toDouble(), 0.75));
+
+        const QVariantList heights = reloaded.scrollPresetWindowHeights();
+        QCOMPARE(heights.size(), 2);
+        QVERIFY(qFuzzyCompare(heights.at(0).toDouble(), 0.3));
+        QVERIFY(qFuzzyCompare(heights.at(1).toDouble(), 0.6));
+    }
+
+    /**
+     * The preset-list schema validator clamps each fraction into the valid
+     * range and drops non-numeric junk, so a hand-edited config can never
+     * feed the engine an out-of-range column width.
+     */
+    void testScrollPresets_clampOutOfRange()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        // 0.0 is below the minimum, 5.0 above the maximum, and the string is
+        // non-numeric junk that must be dropped entirely.
+        settings.setScrollPresetColumnWidths(QVariantList{0.0, 0.5, 5.0, QStringLiteral("junk")});
+
+        const QVariantList clamped = settings.scrollPresetColumnWidths();
+        // The non-numeric entry is dropped; the three numeric entries survive.
+        QCOMPARE(clamped.size(), 3);
+        // Out-of-range fractions are clamped to the exact range bounds; the
+        // in-range value is left untouched.
+        QVERIFY(qFuzzyCompare(clamped.at(0).toDouble(), ConfigDefaults::scrollColumnWidthMin()));
+        QVERIFY(qFuzzyCompare(clamped.at(1).toDouble(), 0.5));
+        QVERIFY(qFuzzyCompare(clamped.at(2).toDouble(), ConfigDefaults::scrollColumnWidthMax()));
+
+        // Window-height presets run through an independent schema entry with
+        // their own scrollWindowHeightMin/Max bounds — clamp them too.
+        settings.setScrollPresetWindowHeights(QVariantList{0.0, 0.5, 9.0});
+        const QVariantList heights = settings.scrollPresetWindowHeights();
+        QCOMPARE(heights.size(), 3);
+        QVERIFY(qFuzzyCompare(heights.at(0).toDouble(), ConfigDefaults::scrollWindowHeightMin()));
+        QVERIFY(qFuzzyCompare(heights.at(1).toDouble(), 0.5));
+        QVERIFY(qFuzzyCompare(heights.at(2).toDouble(), ConfigDefaults::scrollWindowHeightMax()));
+    }
+
     // =========================================================================
     // Stale key purging
     // =========================================================================

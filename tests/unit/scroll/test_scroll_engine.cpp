@@ -7,6 +7,8 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 
 #include <QSet>
+#include <QVariantList>
+#include <QVariantMap>
 #include <QtTest>
 
 using namespace PhosphorScrollEngine;
@@ -39,6 +41,8 @@ class TestScrollEngine : public QObject
 
 private Q_SLOTS:
     void windowLifecycle();
+    void defaultColumnWidth();
+    void perScreenConfig();
     void focusAndMoveNavigation();
     void consumeAndExpel();
     void minimizeWindow();
@@ -47,10 +51,10 @@ private Q_SLOTS:
     void cyclePresetHeight();
     void toggleColumnFullWidth();
     void adjustColumnWidth();
-    void toggleCenterFocusedColumn();
     void floatToggle();
     void perDesktopState();
     void serializeRoundTrip();
+    void restoreReconciliation();
 };
 
 void TestScrollEngine::windowLifecycle()
@@ -74,6 +78,103 @@ void TestScrollEngine::windowLifecycle()
     engine.windowClosed(QStringLiteral("b"));
     QVERIFY(!engine.isWindowTracked(QStringLiteral("b")));
     QCOMPARE(state->columnCount(), 2);
+}
+
+void TestScrollEngine::defaultColumnWidth()
+{
+    ScrollEngine engine;
+
+    // Until a default is pushed, a freshly opened column uses niri's middle
+    // preset (one half).
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    const ScrollScreenState* state = scrollState(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QCOMPARE(state->columns().at(0).width().kind, ColumnWidth::Kind::Proportion);
+    QVERIFY(qFuzzyCompare(state->columns().at(0).width().value, 0.5));
+
+    // A pushed default applies to subsequently opened columns; the existing
+    // column keeps its width.
+    engine.setDefaultColumnWidth(0.4);
+    QVERIFY(qFuzzyCompare(engine.defaultColumnWidth(), 0.4));
+    engine.windowOpened(QStringLiteral("b"), QStringLiteral("S1"));
+    QCOMPARE(state->columnCount(), 2);
+    QVERIFY(qFuzzyCompare(state->columns().at(1).width().value, 0.4));
+    QVERIFY(qFuzzyCompare(state->columns().at(0).width().value, 0.5));
+}
+
+void TestScrollEngine::perScreenConfig()
+{
+    ScrollEngine engine;
+    engine.setDefaultColumnWidth(0.5);
+    engine.setInnerGap(8);
+    engine.setOuterGap(8);
+    engine.setPresetColumnWidths({1.0 / 3.0, 0.5, 2.0 / 3.0});
+
+    // No override → effective resolves to the global default.
+    QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S1")), 0.5));
+    QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S1")), 8);
+    QVERIFY(engine.effectiveViewportMode(QStringLiteral("S1")) == ScrollViewportMode::Fit);
+
+    // A per-screen override map shadows the globals for that screen only.
+    QVariantMap overrides;
+    overrides.insert(QStringLiteral("DefaultColumnWidth"), 0.25);
+    overrides.insert(QStringLiteral("InnerGap"), 20);
+    overrides.insert(QStringLiteral("OuterGap"), 12);
+    overrides.insert(QStringLiteral("CenterFocusedColumn"), true);
+    overrides.insert(QStringLiteral("PresetColumnWidths"), QVariantList{0.4, 0.8});
+    overrides.insert(QStringLiteral("PresetWindowHeights"), QVariantList{0.3, 0.6, 0.9});
+    engine.applyPerScreenConfig(QStringLiteral("S1"), overrides);
+
+    QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S1")), 0.25));
+    QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S1")), 20);
+    QCOMPARE(engine.effectiveOuterGap(QStringLiteral("S1")), 12);
+    QVERIFY(engine.effectiveViewportMode(QStringLiteral("S1")) == ScrollViewportMode::Centered);
+    QCOMPARE(engine.effectivePresetColumnWidths(QStringLiteral("S1")).size(), 2);
+    QVERIFY(qFuzzyCompare(engine.effectivePresetColumnWidths(QStringLiteral("S1")).at(1), 0.8));
+    QCOMPARE(engine.effectivePresetWindowHeights(QStringLiteral("S1")).size(), 3);
+    QVERIFY(qFuzzyCompare(engine.effectivePresetWindowHeights(QStringLiteral("S1")).at(2), 0.9));
+
+    // A screen with no override still resolves to the globals.
+    QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S2")), 0.5));
+    QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S2")), 8);
+
+    // A window opened on S1 takes that screen's overridden default width.
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    const ScrollScreenState* s1 = scrollState(engine, QStringLiteral("S1"));
+    QVERIFY(s1);
+    QVERIFY(qFuzzyCompare(s1->columns().at(0).width().value, 0.25));
+
+    // clearPerScreenConfig reverts the screen to the globals.
+    engine.clearPerScreenConfig(QStringLiteral("S1"));
+    QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S1")), 0.5));
+    QVERIFY(engine.effectiveViewportMode(QStringLiteral("S1")) == ScrollViewportMode::Fit);
+
+    // An empty override map clears the screen too (apply-empty == clear).
+    engine.applyPerScreenConfig(QStringLiteral("S1"), overrides);
+    engine.applyPerScreenConfig(QStringLiteral("S1"), QVariantMap{});
+    QVERIFY(engine.perScreenOverrides(QStringLiteral("S1")).isEmpty());
+    QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S1")), 8);
+
+    // Out-of-range per-screen override values are clamped on read by the
+    // effective*() resolvers — defence-in-depth over the Settings boundary.
+    QVariantMap outOfRange;
+    outOfRange.insert(QStringLiteral("DefaultColumnWidth"), 5.0); // above max
+    outOfRange.insert(QStringLiteral("InnerGap"), -10); // below min
+    outOfRange.insert(QStringLiteral("OuterGap"), 9999); // above max
+    outOfRange.insert(QStringLiteral("PresetColumnWidths"), QVariantList{0.0, 99.0});
+    outOfRange.insert(QStringLiteral("PresetWindowHeights"), QVariantList{-1.0, 0.5});
+    engine.applyPerScreenConfig(QStringLiteral("S3"), outOfRange);
+    QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S3")), 1.0));
+    QCOMPARE(engine.effectiveInnerGap(QStringLiteral("S3")), 0);
+    QCOMPARE(engine.effectiveOuterGap(QStringLiteral("S3")), 50); // clamped to kMaxStripGap
+    const QVector<qreal> clampedPresets = engine.effectivePresetColumnWidths(QStringLiteral("S3"));
+    QCOMPARE(clampedPresets.size(), 2);
+    QVERIFY(qFuzzyCompare(clampedPresets.at(0), 0.1));
+    QVERIFY(qFuzzyCompare(clampedPresets.at(1), 1.0));
+    const QVector<qreal> clampedHeights = engine.effectivePresetWindowHeights(QStringLiteral("S3"));
+    QCOMPARE(clampedHeights.size(), 2);
+    QVERIFY(qFuzzyCompare(clampedHeights.at(0), 0.1));
+    QVERIFY(qFuzzyCompare(clampedHeights.at(1), 0.5));
 }
 
 void TestScrollEngine::focusAndMoveNavigation()
@@ -351,41 +452,6 @@ void TestScrollEngine::adjustColumnWidth()
     QVERIFY(state->activeColumn() == nullptr);
 }
 
-void TestScrollEngine::toggleCenterFocusedColumn()
-{
-    ScrollEngine engine;
-    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
-    engine.windowOpened(QStringLiteral("b"), QStringLiteral("S2"));
-    const NavigationContext ctx = contextFor(QStringLiteral("S1"));
-    QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
-
-    // The viewport mode is engine-global and starts at Fit. A toggle from one
-    // screen flips it and re-resolves *every* scroll screen, not just the
-    // focused one — so both S1 and S2 emit placementChanged on each toggle.
-    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Fit);
-    engine.toggleCenterFocusedColumn(ctx);
-    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Centered);
-    QCOMPARE(spy.count(), 2);
-
-    // Both physical screens are re-resolved — not one screen twice.
-    QSet<QString> notified;
-    for (const auto& emission : spy) {
-        notified.insert(emission.at(0).toString());
-    }
-    QCOMPARE(notified, QSet<QString>({QStringLiteral("S1"), QStringLiteral("S2")}));
-
-    engine.toggleCenterFocusedColumn(ctx);
-    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Fit);
-    QCOMPARE(spy.count(), 4);
-
-    // The mode is engine-global, so a toggle still flips it when the focused
-    // screen has no strip of its own (S99 was never opened) — and it still
-    // re-resolves the scroll screens that do exist.
-    engine.toggleCenterFocusedColumn(contextFor(QStringLiteral("S99")));
-    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Centered);
-    QCOMPARE(spy.count(), 6);
-}
-
 void TestScrollEngine::floatToggle()
 {
     ScrollEngine engine;
@@ -439,6 +505,56 @@ void TestScrollEngine::serializeRoundTrip()
     const ScrollScreenState* state = scrollState(restored, QStringLiteral("S1"));
     QVERIFY(state);
     QCOMPARE(state->columnCount(), 2);
+}
+
+void TestScrollEngine::restoreReconciliation()
+{
+    // Build a three-column strip and persist it.
+    ScrollEngine source;
+    source.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    source.windowOpened(QStringLiteral("b"), QStringLiteral("S1"));
+    source.windowOpened(QStringLiteral("c"), QStringLiteral("S1"));
+    const QJsonObject saved = source.serializeEngineState();
+
+    // Restore it, then reconcile: the effect's first batch reports only a and
+    // c live — b was closed while the daemon was down. b's phantom column must
+    // be pruned; a and c keep their restored columns.
+    ScrollEngine restored;
+    restored.deserializeEngineState(saved);
+    // The screen state pointer is stable across reconciliation (windowClosed
+    // prunes columns but never erases the state), so bind and guard it once.
+    const ScrollScreenState* restoredState = scrollState(restored, QStringLiteral("S1"));
+    QVERIFY(restoredState);
+    QCOMPARE(restoredState->columnCount(), 3);
+    restored.reconcileRestoredWindows(QSet<QString>{QStringLiteral("a"), QStringLiteral("c")});
+    QVERIFY(restored.isWindowTracked(QStringLiteral("a")));
+    QVERIFY(!restored.isWindowTracked(QStringLiteral("b")));
+    QVERIFY(restored.isWindowTracked(QStringLiteral("c")));
+    QCOMPARE(restoredState->columnCount(), 2);
+
+    // Reconciliation is one-shot: a later batch (e.g. a screen entering scroll
+    // mode at runtime) must not prune the now-authoritative live strip.
+    restored.reconcileRestoredWindows(QSet<QString>{QStringLiteral("a")});
+    QVERIFY(restored.isWindowTracked(QStringLiteral("c")));
+    QCOMPARE(restoredState->columnCount(), 2);
+
+    // Zero live windows after a restart — the effect sends an empty batch and
+    // every restored column is reconciled away. The screen state survives as
+    // an empty strip (windowClosed drops emptied columns, not the state).
+    ScrollEngine emptied;
+    emptied.deserializeEngineState(saved);
+    emptied.reconcileRestoredWindows(QSet<QString>{});
+    QVERIFY(!emptied.isWindowTracked(QStringLiteral("a")));
+    const ScrollScreenState* emptiedState = scrollState(emptied, QStringLiteral("S1"));
+    QVERIFY(emptiedState);
+    QCOMPARE(emptiedState->columnCount(), 0);
+
+    // An engine with no pending restore ignores reconciliation entirely — a
+    // live-opened window is never pruned by a stray batch.
+    ScrollEngine fresh;
+    fresh.windowOpened(QStringLiteral("x"), QStringLiteral("S1"));
+    fresh.reconcileRestoredWindows(QSet<QString>{});
+    QVERIFY(fresh.isWindowTracked(QStringLiteral("x")));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngine)

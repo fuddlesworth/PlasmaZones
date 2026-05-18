@@ -66,6 +66,12 @@ ApplicationWindow {
         "label": i18n("Tiling"),
         "iconName": "window-duplicate",
         "hasChildren": true,
+        "hasDividerAfter": false
+    }, {
+        "name": "scrolling",
+        "label": i18n("Scrolling"),
+        "iconName": "transform-move-horizontal",
+        "hasChildren": false,
         "hasDividerAfter": true
     }, {
         "name": "animations",
@@ -246,6 +252,7 @@ ApplicationWindow {
         "tiling-appearance": "TilingAppearancePage.qml",
         "tiling-behavior": "TilingBehaviorPage.qml",
         "tiling-algorithm": "TilingAlgorithmPage.qml",
+        "scrolling": "ScrollingModePage.qml",
         "snapping-assignments": "SnappingAssignmentsPage.qml",
         "snapping-apprules": "AssignmentsAppRulesPage.qml",
         "snapping-shortcuts": "SnappingQuickShortcutsPage.qml",

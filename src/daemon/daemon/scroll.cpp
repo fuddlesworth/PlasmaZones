@@ -6,7 +6,8 @@
 #include "../../core/logging.h"
 #include "../../dbus/scrolladaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
-#include "../config/settings.h"
+#include "../../config/configdefaults.h"
+#include "../../config/settings.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/WindowTypes.h>
@@ -17,23 +18,29 @@
 #include <PhosphorScrollEngine/ScrollScreenState.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
+#include <QFile>
 #include <QHash>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QRect>
 #include <QRectF>
+#include <QSaveFile>
 #include <QScreen>
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
+#include <QVariantList>
+#include <QVariantMap>
+#include <QVector>
 
 namespace PlasmaZones {
 
-namespace {
-// Scroll-mode layout gaps in logical pixels. The outer gap insets the strip
-// from the working-area edges; the inner gap separates adjacent columns and
-// the tiles within a column.
-constexpr qreal SCROLL_OUTER_GAP = 8.0;
-constexpr qreal SCROLL_INNER_GAP = 8.0;
-} // anonymous namespace
+PhosphorScrollEngine::ScrollEngine* Daemon::scrollEngine() const
+{
+    return dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+}
 
 void Daemon::updateScrollScreens()
 {
@@ -64,14 +71,27 @@ void Daemon::updateScrollScreens()
 
     const bool screensChanged = (m_scrollEngine->activeScreens() != scrollScreens);
     m_scrollEngine->setActiveScreens(scrollScreens);
-    if (screensChanged && m_scrollAdaptor) {
-        // Tell the KWin effect which screens are scroll-mode so it reports
-        // their windows to the org.plasmazones.Scroll interface. The payload
-        // is sourced from ScrollAdaptor::scrollScreens() — the same accessor
-        // that backs the scrollScreens property — so the signal and a
-        // subsequent property read cannot disagree. It is sorted there, since
-        // QSet iteration order is unspecified.
-        Q_EMIT m_scrollAdaptor->scrollScreensChanged(m_scrollAdaptor->scrollScreens());
+    // A screen entering scroll mode needs its per-screen overrides in the
+    // engine before its windows resolve geometry.
+    applyPerScreenScrollOverrides();
+    if (screensChanged) {
+        // Resolve every active scroll strip now. setActiveScreens() emits no
+        // placementChanged, and a restored window's windowOpened no-ops
+        // (already tracked), so a strip restored from scroll-session.json — or
+        // a screen newly entering scroll mode — would otherwise never be
+        // pushed to the effect. onScrollPlacementChanged no-ops for a screen
+        // with no strip yet.
+        for (const QString& screenId : scrollScreens) {
+            onScrollPlacementChanged(screenId);
+        }
+        if (m_scrollAdaptor) {
+            // Tell the KWin effect which screens are scroll-mode so it reports
+            // their windows to the org.plasmazones.Scroll interface. The
+            // payload is sourced from ScrollAdaptor::scrollScreens() — the same
+            // accessor that backs the scrollScreens property — so the signal
+            // and a subsequent property read cannot disagree.
+            Q_EMIT m_scrollAdaptor->scrollScreensChanged(m_scrollAdaptor->scrollScreens());
+        }
     }
     qCDebug(lcDaemon) << "Updated scroll screens=" << scrollScreens;
 }
@@ -83,7 +103,7 @@ void Daemon::onScrollPlacementChanged(const QString& screenId)
     }
     // ScrollEngine is geometry-agnostic — it stores the strip; the daemon
     // resolves it to pixels because only the daemon knows the working area.
-    auto* scroll = dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    auto* scroll = scrollEngine();
     if (!scroll) {
         return;
     }
@@ -105,12 +125,14 @@ void Daemon::onScrollPlacementChanged(const QString& screenId)
     }
 
     PhosphorScrollEngine::ScrollLayoutConfig config;
-    config.outerGap = SCROLL_OUTER_GAP;
-    config.innerGap = SCROLL_INNER_GAP;
-    config.presetWindowHeights = scroll->presetWindowHeights();
-    // Viewport mode is engine-global, toggled at runtime by the center-column
-    // shortcut.
-    config.viewportMode = scroll->viewportMode();
+    // Gaps (logical px): the outer gap insets the strip from the working-area
+    // edges; the inner gap separates adjacent columns and the tiles within a
+    // column. The engine resolves each value as a per-screen override over the
+    // global default — see ScrollEngine::effective*().
+    config.outerGap = scroll->effectiveOuterGap(screenId);
+    config.innerGap = scroll->effectiveInnerGap(screenId);
+    config.presetWindowHeights = scroll->effectivePresetWindowHeights(screenId);
+    config.viewportMode = scroll->effectiveViewportMode(screenId);
 
     // Column metrics are scroll-independent — resolve them once and feed the
     // same value to both the viewport computation and the geometry resolve.
@@ -134,6 +156,113 @@ void Daemon::onScrollPlacementChanged(const QString& screenId)
         batch.append(PhosphorProtocol::WindowGeometryEntry::fromRect(it.key(), it.value().toRect(), screenId));
     }
     Q_EMIT m_windowTrackingAdaptor->applyGeometriesBatch(batch, QStringLiteral("scroll"));
+}
+
+void Daemon::refreshScrollConfigFromSettings()
+{
+    if (!m_scrollEngine || !m_settings) {
+        return;
+    }
+    auto* scroll = scrollEngine();
+    if (!scroll) {
+        return;
+    }
+
+    // Global defaults. Per-screen overrides layer on top via the engine's
+    // effective*() accessors — see applyPerScreenScrollOverrides() below.
+    // ScrollEngine::toFractionVector coerces the persisted QVariantList into
+    // the engine's typed QVector<qreal>; non-numeric junk is already dropped by
+    // the schema's clampFractionList validator.
+    using PhosphorScrollEngine::ScrollEngine;
+    scroll->setPresetColumnWidths(ScrollEngine::toFractionVector(m_settings->scrollPresetColumnWidths()));
+    scroll->setPresetWindowHeights(ScrollEngine::toFractionVector(m_settings->scrollPresetWindowHeights()));
+    scroll->setDefaultColumnWidth(m_settings->scrollDefaultColumnWidth());
+    scroll->setInnerGap(m_settings->scrollInnerGap());
+    scroll->setOuterGap(m_settings->scrollOuterGap());
+    scroll->setViewportMode(m_settings->scrollCenterFocusedColumn() ? PhosphorScrollEngine::ScrollViewportMode::Centered
+                                                                    : PhosphorScrollEngine::ScrollViewportMode::Fit);
+
+    applyPerScreenScrollOverrides();
+
+    // Re-resolve every active scroll strip so a gap / preset / centering change
+    // surfaces immediately. onScrollPlacementChanged reads the just-updated
+    // engine config (global + per-screen) when it builds the layout config.
+    const QSet<QString> screens = m_scrollEngine->activeScreens();
+    for (const QString& screenId : screens) {
+        onScrollPlacementChanged(screenId);
+    }
+}
+
+void Daemon::applyPerScreenScrollOverrides()
+{
+    if (!m_scrollEngine || !m_settings) {
+        return;
+    }
+    auto* scroll = scrollEngine();
+    if (!scroll) {
+        return;
+    }
+    // Push each active scroll screen's per-screen override map into the engine
+    // (mirrors updateAutotileScreens' per-screen autotile push). The engine's
+    // effective*() accessors then resolve override → global per screen.
+    const QSet<QString> screens = m_scrollEngine->activeScreens();
+    for (const QString& screenId : screens) {
+        const QVariantMap overrides = m_settings->getPerScreenScrollSettings(screenId);
+        if (overrides.isEmpty()) {
+            scroll->clearPerScreenConfig(screenId);
+        } else {
+            scroll->applyPerScreenConfig(screenId, overrides);
+        }
+    }
+}
+
+void Daemon::saveScrollState()
+{
+    auto* scroll = scrollEngine();
+    if (!scroll) {
+        return;
+    }
+    const QString path = ConfigDefaults::scrollStateFilePath();
+    if (!scroll->hasPersistableState()) {
+        // No strips to persist — drop any stale file so a later restart does
+        // not restore an obsolete layout.
+        QFile::remove(path);
+        return;
+    }
+    const QJsonObject state = scroll->serializeEngineState();
+    // QSaveFile commits atomically (write to a temp file, then rename), so a
+    // crash mid-write cannot leave a truncated scroll-session.json behind.
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qCWarning(lcDaemon) << "Failed to write scroll state to" << path;
+        return;
+    }
+    file.write(QJsonDocument(state).toJson(QJsonDocument::Compact));
+    if (!file.commit()) {
+        qCWarning(lcDaemon) << "Failed to commit scroll state to" << path;
+        return;
+    }
+    qCDebug(lcDaemon) << "Saved scroll state to" << path;
+}
+
+void Daemon::loadScrollState()
+{
+    auto* scroll = scrollEngine();
+    if (!scroll) {
+        return;
+    }
+    QFile file(ConfigDefaults::scrollStateFilePath());
+    if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    QJsonParseError err{};
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        qCWarning(lcDaemon) << "Ignoring malformed scroll state:" << err.errorString();
+        return;
+    }
+    scroll->deserializeEngineState(doc.object());
+    qCDebug(lcDaemon) << "Restored scroll state from" << file.fileName();
 }
 
 } // namespace PlasmaZones

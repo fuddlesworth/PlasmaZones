@@ -44,6 +44,10 @@ namespace PhosphorEngine {
 class WindowRegistry;
 }
 
+namespace PhosphorScrollEngine {
+class ScrollEngine;
+}
+
 namespace PhosphorWorkspaces {
 class ActivityManager;
 class VirtualDesktopManager;
@@ -404,6 +408,57 @@ private:
      * result through WindowTrackingAdaptor::applyGeometriesBatch.
      */
     void onScrollPlacementChanged(const QString& screenId);
+
+    /**
+     * @brief Push scroll-mode settings to ScrollEngine and re-resolve every
+     *        active scroll screen.
+     *
+     * Pushes the preset width/height lists, the default-column-width and the
+     * viewport-centering mode from Settings into ScrollEngine, then re-resolves
+     * each active scroll strip so gap / preset / centering changes take effect
+     * immediately. Invoked once at startup and on any scroll settings change.
+     *
+     * At the startup invocation no scroll screen is active yet, so only the
+     * engine-global config is seeded; the per-screen-override push and the
+     * strip re-resolve are picked up by the first updateScrollScreens().
+     */
+    void refreshScrollConfigFromSettings();
+
+    /**
+     * @brief Push each active scroll screen's per-screen override map into
+     *        ScrollEngine.
+     *
+     * Mirrors updateAutotileScreens()' per-screen autotile push: reads
+     * Settings::getPerScreenScrollSettings() for every active scroll screen
+     * and hands it to ScrollEngine::applyPerScreenConfig (or clears it). The
+     * engine's effective*() accessors then resolve override → global default.
+     */
+    void applyPerScreenScrollOverrides();
+
+    /**
+     * @brief Persist / restore the scroll-mode strip state across a restart.
+     *
+     * ScrollEngine is geometry-agnostic and daemon-orchestrated, so the daemon
+     * owns its disk persistence: saveScrollState() writes serializeEngineState()
+     * to scroll-session.json on shutdown; loadScrollState() feeds it back
+     * through deserializeEngineState() at startup, before the effect re-reports
+     * windows (a still-existing window's windowOpened then no-ops, keeping its
+     * restored column). A restored window that did not survive the restart is
+     * pruned by ScrollEngine::reconcileRestoredWindows() when the effect's first
+     * windowsOpenedBatch arrives, so no phantom column lingers.
+     */
+    void saveScrollState();
+    void loadScrollState();
+
+    /**
+     * @brief The scroll placement engine narrowed to its concrete type.
+     *
+     * m_scrollEngine is held as the base PlacementEngineBase pointer, but the
+     * scroll-specific config / persistence / reconciliation API lives on
+     * ScrollEngine. Centralises the down-cast the scroll handlers all need;
+     * returns nullptr when no scroll engine is active.
+     */
+    PhosphorScrollEngine::ScrollEngine* scrollEngine() const;
 
     /**
      * @brief Respond to a Phosphor::Screens::ScreenManager VS cache change for a physical screen

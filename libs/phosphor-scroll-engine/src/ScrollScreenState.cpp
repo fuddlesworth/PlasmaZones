@@ -32,25 +32,26 @@ QString ScrollScreenState::focusedWindowId() const
     return tile ? tile->windowId : QString();
 }
 
-void ScrollScreenState::addColumnForWindow(const QString& windowId)
+void ScrollScreenState::addColumnForWindow(const QString& windowId, const ColumnWidth& width)
 {
     if (windowId.isEmpty() || containsWindow(windowId)) {
         return;
     }
     Column column;
+    column.setWidth(width);
     column.appendTile(Tile{windowId, WindowHeight::automatic()});
     const int insertAt = (m_activeColumnIndex < 0) ? 0 : m_activeColumnIndex + 1;
     m_columns.insert(insertAt, std::move(column));
     m_activeColumnIndex = insertAt;
 }
 
-void ScrollScreenState::addWindowToActiveColumn(const QString& windowId)
+void ScrollScreenState::addWindowToActiveColumn(const QString& windowId, const ColumnWidth& width)
 {
     if (windowId.isEmpty() || containsWindow(windowId)) {
         return;
     }
     if (m_activeColumnIndex < 0) {
-        addColumnForWindow(windowId);
+        addColumnForWindow(windowId, width);
         return;
     }
     Column& column = m_columns[m_activeColumnIndex];

@@ -990,6 +990,22 @@ bool Daemon::init()
 
     autotileEngine->refreshConfigFromSettings();
 
+    // Restore the persisted scroll strip before pushing config, so a restored
+    // strip is resolved against the current scroll settings.
+    loadScrollState();
+
+    // Push scroll-mode settings into ScrollEngine, and keep them in sync: each
+    // scroll setting has its own change signal, so connecting them individually
+    // (rather than the catch-all settingsChanged) keeps the strip re-resolve
+    // off the hot path of unrelated settings edits.
+    refreshScrollConfigFromSettings();
+    for (const auto signal : {&ISettings::scrollInnerGapChanged, &ISettings::scrollOuterGapChanged,
+                              &ISettings::scrollDefaultColumnWidthChanged, &ISettings::scrollCenterFocusedColumnChanged,
+                              &ISettings::scrollPresetColumnWidthsChanged, &ISettings::scrollPresetWindowHeightsChanged,
+                              &ISettings::perScreenScrollSettingsChanged}) {
+        connect(m_settings.get(), signal, this, &Daemon::refreshScrollConfigFromSettings);
+    }
+
     // Give the window drag adaptor access to the autotile engine for per-screen
     // autotile checks (overlay suppression and snap rejection on autotile screens).
     // Uses the base-class pointer — WDA only needs isActiveOnScreen().
@@ -1483,6 +1499,8 @@ void Daemon::stop()
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->saveStateOnShutdown();
     }
+    // Persist the scroll strip before the engines are destroyed below.
+    saveScrollState();
 
     // ModeTracker delegates to LayoutManager's KConfig — no separate save needed
 

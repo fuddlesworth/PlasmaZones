@@ -325,6 +325,30 @@ void SettingsAdaptor::initializeRegistry()
     m_schemas[QStringLiteral("autotileDragInsertTriggers")] = QStringLiteral("stringlist");
 
     REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
+
+    // Scroll-mode (niri-style scrollable tiling) settings — interface-backed.
+    REGISTER_INT_SETTING("scrollInnerGap", scrollInnerGap, setScrollInnerGap)
+    REGISTER_INT_SETTING("scrollOuterGap", scrollOuterGap, setScrollOuterGap)
+    REGISTER_DOUBLE_SETTING("scrollDefaultColumnWidth", scrollDefaultColumnWidth, setScrollDefaultColumnWidth)
+    REGISTER_BOOL_SETTING("scrollCenterFocusedColumn", scrollCenterFocusedColumn, setScrollCenterFocusedColumn)
+    // Preset lists (multi-bind) — QVariantLists of width / height fractions.
+    m_getters[QStringLiteral("scrollPresetColumnWidths")] = [this]() {
+        return QVariant::fromValue(m_settings->scrollPresetColumnWidths());
+    };
+    m_setters[QStringLiteral("scrollPresetColumnWidths")] = [this](const QVariant& v) {
+        m_settings->setScrollPresetColumnWidths(v.toList());
+        return true;
+    };
+    m_schemas[QStringLiteral("scrollPresetColumnWidths")] = QStringLiteral("stringlist");
+    m_getters[QStringLiteral("scrollPresetWindowHeights")] = [this]() {
+        return QVariant::fromValue(m_settings->scrollPresetWindowHeights());
+    };
+    m_setters[QStringLiteral("scrollPresetWindowHeights")] = [this](const QVariant& v) {
+        m_settings->setScrollPresetWindowHeights(v.toList());
+        return true;
+    };
+    m_schemas[QStringLiteral("scrollPresetWindowHeights")] = QStringLiteral("stringlist");
+
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
 
@@ -1140,6 +1164,19 @@ std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString&
             },
             [settings](const QString& id) {
                 settings->clearPerScreenZoneSelectorSettings(id);
+            },
+        };
+    }
+    if (category == QLatin1String("scrolling")) {
+        return PerScreenDispatch{
+            [settings](const QString& id) {
+                return settings->getPerScreenScrollSettings(id);
+            },
+            [settings](const QString& id, const QString& k, const QVariant& v) {
+                settings->setPerScreenScrollSetting(id, k, v);
+            },
+            [settings](const QString& id) {
+                settings->clearPerScreenScrollSettings(id);
             },
         };
     }

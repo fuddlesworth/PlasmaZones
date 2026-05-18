@@ -99,6 +99,10 @@ void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w)
 
 void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows)
 {
+    // Callers MUST pass the full window list (KWin::effects->stackingOrder()):
+    // the daemon treats the first windowsOpenedBatch after a (re)connect as the
+    // complete live scroll-window set and reconciles a restored strip against
+    // it. A partial list would make the daemon prune live windows.
     PhosphorProtocol::WindowOpenedList batchEntries;
     QStringList batchWindowIds; // for error rollback
 
@@ -131,9 +135,12 @@ void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         batchWindowIds.append(windowId);
     }
 
-    if (batchEntries.isEmpty()) {
-        return;
-    }
+    // An empty batch is still sent: org.plasmazones.Scroll.windowsOpenedBatch
+    // doubles as the daemon's post-restore reconcile signal. The daemon must
+    // receive one batch even when no scroll window currently exists — otherwise
+    // a restored strip whose windows all closed while the daemon was down would
+    // never be pruned. The daemon treats a zero-entry batch as "no live
+    // windows" and reconciles the restored strip away.
 
     auto* watcher =
         new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
@@ -540,16 +547,20 @@ void ScrollHandler::loadSettings()
                     m_scrollScreens = QSet<QString>(screens.cbegin(), screens.cend());
                     qCInfo(lcEffect) << "Loaded scroll screens:" << m_scrollScreens;
 
-                    if (!m_scrollScreens.isEmpty()) {
-                        // Batch-notify all existing windows on scroll screens in one
-                        // D-Bus call instead of per-window windowOpened round-trips.
-                        // loadSettings() runs only at construction or right after
-                        // onDaemonReady() — both leave m_notifiedWindows empty — so no
-                        // explicit reset is needed: every window is reported afresh,
-                        // and a window already added individually in the async gap is
-                        // correctly skipped (no duplicate windowOpened).
-                        notifyWindowsAddedBatch(KWin::effects->stackingOrder());
-                    }
+                    // Batch-notify all existing windows on scroll screens in one
+                    // D-Bus call instead of per-window windowOpened round-trips.
+                    // loadSettings() runs only at construction or right after
+                    // onDaemonReady() — both leave m_notifiedWindows empty — so no
+                    // explicit reset is needed: every window is reported afresh,
+                    // and a window already added individually in the async gap is
+                    // correctly skipped (no duplicate windowOpened).
+                    //
+                    // Sent unconditionally — even when m_scrollScreens is empty,
+                    // which yields an empty batch. The batch doubles as the
+                    // daemon's post-restore reconcile signal, so a strip restored
+                    // from scroll-session.json is reconciled (and pruned) even
+                    // when no screen is currently in scroll mode.
+                    notifyWindowsAddedBatch(KWin::effects->stackingOrder());
                 } else {
                     qCDebug(lcEffect) << "Scroll screens: query failed, daemon may not be running";
                 }

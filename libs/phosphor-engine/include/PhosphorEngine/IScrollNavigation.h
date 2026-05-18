@@ -43,8 +43,6 @@ public:
     /// Adjust the focused column's width by @p deltaFraction of the working
     /// area (positive grows the column, negative shrinks it).
     virtual void adjustColumnWidth(qreal deltaFraction, const NavigationContext& ctx) = 0;
-    /// Toggle whether the viewport keeps the focused column centred.
-    virtual void toggleCenterFocusedColumn(const NavigationContext& ctx) = 0;
 };
 
 } // namespace PhosphorEngine

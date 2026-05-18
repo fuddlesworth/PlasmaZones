@@ -18,6 +18,25 @@
 
 namespace PhosphorScrollEngine {
 
+/// Width a freshly-opened column is created with when no configured default
+/// has been pushed yet — niri's middle preset (one half). The single source
+/// for this fallback: ScrollEngine::m_defaultColumnWidth and the
+/// addColumn*/addWindow* default arguments all reference it.
+inline constexpr qreal kDefaultColumnWidthFraction = 0.5;
+
+/// Inclusive clamp bounds for a column-width / window-height fraction and for
+/// a strip gap (logical px). ScrollEngine's effective*() resolvers clamp every
+/// per-screen override to these ranges — defence-in-depth mirroring
+/// AutotileEngine's PerScreenConfigResolver, which likewise range-checks every
+/// per-screen override on read. The strip-gap range mirrors the Settings
+/// schema's scroll-gap clamp (ConfigDefaults::scrollInnerGapMin/Max, i.e.
+/// the shared autotile MinGap/MaxGap); kept in sync so the engine guard never
+/// disagrees with the boundary the schema and the settings UI enforce.
+inline constexpr qreal kMinSizeFraction = 0.1;
+inline constexpr qreal kMaxSizeFraction = 1.0;
+inline constexpr int kMinStripGap = 0;
+inline constexpr int kMaxStripGap = 50;
+
 /// Per-screen (per desktop/activity) scrollable-tiling state: the niri-style
 /// horizontal strip of columns, the focused column/tile, and the viewport
 /// offset.
@@ -72,12 +91,18 @@ public:
 
     // ── Window placement ────────────────────────────────────────────────
     /// Open @p windowId as a new column immediately right of the focused
-    /// column, and focus it — niri's default new-window behaviour. No-op if
-    /// the window is already managed.
-    void addColumnForWindow(const QString& windowId);
+    /// column, and focus it — niri's default new-window behaviour. The new
+    /// column is created with width intent @p width (the daemon passes the
+    /// configured default-column-width setting). No-op if the window is
+    /// already managed.
+    void addColumnForWindow(const QString& windowId,
+                            const ColumnWidth& width = ColumnWidth::proportion(kDefaultColumnWidthFraction));
     /// Add @p windowId as a new tile in the focused column, and focus it.
-    /// Falls back to addColumnForWindow when the strip is empty.
-    void addWindowToActiveColumn(const QString& windowId);
+    /// Falls back to addColumnForWindow when the strip is empty — that new
+    /// column then takes width intent @p width (the daemon passes the
+    /// configured default-column-width setting).
+    void addWindowToActiveColumn(const QString& windowId,
+                                 const ColumnWidth& width = ColumnWidth::proportion(kDefaultColumnWidthFraction));
     /// Remove @p windowId from the strip or the floating set. Drops the
     /// column if it becomes empty. Returns true if the window was found.
     bool removeWindow(const QString& windowId);

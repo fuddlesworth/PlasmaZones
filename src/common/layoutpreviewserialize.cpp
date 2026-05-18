@@ -5,6 +5,7 @@
 
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
 #include <PhosphorLayoutApi/AspectRatioClass.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
 #include <QJsonArray>
@@ -25,11 +26,12 @@ constexpr QLatin1String Description{"description"};
 constexpr QLatin1String ZoneCount{"zoneCount"};
 constexpr QLatin1String Zones{"zones"};
 constexpr QLatin1String IsAutotile{"isAutotile"};
-// PhosphorZones::LayoutCategory mirror — `isAutotile` is the canonical
-// boolean, but QML consumers (LayoutCard, CategoryBadge) read a numeric
-// `category` field (0 = Manual, 1 = Autotile) to match the
-// LayoutCategory enum used elsewhere. Emit both so QML doesn't need to
-// translate, and the C++ `isAutotile` consumer keeps its name.
+// `isAutotile` is the canonical boolean, but QML consumers (LayoutCard,
+// CategoryBadge) read a numeric `category` field: 0 = Manual, 1 = Autotile
+// (both mirroring PhosphorZones::LayoutCategory), plus 2 = Scroll — a
+// QML-only value with no LayoutCategory enumerator (scroll mode has no
+// C++ category counterpart). Emit both so QML doesn't need to translate,
+// and the C++ `isAutotile` consumer keeps its name.
 constexpr QLatin1String Category{"category"};
 constexpr QLatin1String IsSystem{"isSystem"};
 // Back-compat alias for isSystem. Older consumers historically read
@@ -109,6 +111,17 @@ QString aspectRatioClassTag(PhosphorLayout::AspectRatioClass cls)
     return PhosphorLayout::ScreenClassification::toString(cls);
 }
 
+/// Numeric `category` field for QML consumers: 0 = Manual, 1 = Autotile
+/// (mirroring PhosphorZones::LayoutCategory), 2 = Scroll (QML-only — scroll
+/// mode has no LayoutCategory enumerator).
+int categoryFor(const PhosphorLayout::LayoutPreview& preview)
+{
+    if (PhosphorLayout::LayoutId::isScroll(preview.id)) {
+        return 2;
+    }
+    return preview.isAutotile() ? 1 : 0;
+}
+
 } // namespace
 
 QJsonObject toJson(const PhosphorLayout::LayoutPreview& preview)
@@ -121,7 +134,7 @@ QJsonObject toJson(const PhosphorLayout::LayoutPreview& preview)
     }
     json[K::ZoneCount] = preview.zoneCount;
     json[K::IsAutotile] = preview.isAutotile();
-    json[K::Category] = preview.isAutotile() ? 1 : 0;
+    json[K::Category] = categoryFor(preview);
     json[K::IsSystem] = preview.isSystem;
     // Back-compat alias: emit alongside `isSystem` for one release cycle.
     json[K::IsSystemEntry] = preview.isSystem;
@@ -176,7 +189,7 @@ QVariantMap toVariantMap(const PhosphorLayout::LayoutPreview& preview)
     }
     map[K::ZoneCount] = preview.zoneCount;
     map[K::IsAutotile] = preview.isAutotile();
-    map[K::Category] = preview.isAutotile() ? 1 : 0;
+    map[K::Category] = categoryFor(preview);
     map[K::IsSystem] = preview.isSystem;
     // Back-compat alias: emit alongside `isSystem` for one release cycle.
     map[K::IsSystemEntry] = preview.isSystem;

@@ -10,6 +10,7 @@
 
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/ILayoutSource.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
@@ -146,6 +147,31 @@ void appendAutotilePreviews(QVector<LayoutPreview>& list, PhosphorTiles::ITileAl
     }
 }
 
+/// Build the single synthetic "Scrolling" entry that lets the picker assign
+/// niri-style scrolling mode to a screen. There is exactly one such entry (the
+/// ScrollEngine needs no per-algorithm setup), so it is appended
+/// unconditionally — analogous to there always being at least one autotile
+/// algorithm. The bare `"scroll:"` id round-trips through
+/// AssignmentEntry::fromLayoutId() to Mode::Scroll.
+LayoutPreview makeScrollPreview()
+{
+    LayoutPreview preview;
+    preview.id = PhosphorLayout::LayoutId::makeScrollId(QString());
+    preview.displayName = PzI18n::tr("Scrolling");
+    preview.description = PzI18n::tr("niri-style scrollable tiling — an unbounded horizontal strip of columns");
+    preview.isSystem = true;
+    preview.zoneCount = LayoutPreview::UnlimitedZoneCount;
+    // Three side-by-side column rects in 0..1 space suggesting a horizontal
+    // strip. zoneNumbers left empty (the strip is unbounded — no fixed count).
+    preview.zones = {
+        QRectF(0.04, 0.08, 0.28, 0.84),
+        QRectF(0.36, 0.08, 0.28, 0.84),
+        QRectF(0.68, 0.08, 0.28, 0.84),
+    };
+    // algorithm left unset so isAutotile() stays false.
+    return preview;
+}
+
 bool defaultPreviewLessThan(const LayoutPreview& a, const LayoutPreview& b)
 {
     if (a.recommended != b.recommended) {
@@ -216,6 +242,9 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
     if (includeAutotile) {
         appendAutotilePreviews(list, algorithmRegistry, autotileSource, autotilePreviewCanvas);
     }
+
+    // Synthetic scroll-mode entry — always present, like autotile.
+    list.append(makeScrollPreview());
 
     sortPreviews(list, customOrder);
 
@@ -297,6 +326,9 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
     if (includeAutotile) {
         appendAutotilePreviews(list, algorithmRegistry, autotileSource, autotilePreviewCanvas);
     }
+
+    // Synthetic scroll-mode entry — always present, like autotile.
+    list.append(makeScrollPreview());
 
     sortPreviews(list, customOrder);
 

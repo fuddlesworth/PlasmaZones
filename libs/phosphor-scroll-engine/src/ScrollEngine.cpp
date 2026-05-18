@@ -14,6 +14,16 @@ using PhosphorEngine::IPlacementState;
 using PhosphorEngine::NavigationContext;
 using PhosphorEngine::TilingStateKey;
 
+QVector<qreal> ScrollEngine::toFractionVector(const QVariantList& list)
+{
+    QVector<qreal> out;
+    out.reserve(list.size());
+    for (const QVariant& v : list) {
+        out.append(v.toReal());
+    }
+    return out;
+}
+
 ScrollEngine::ScrollEngine(QObject* parent)
     : PhosphorEngine::PlacementEngineBase(parent)
 {
@@ -192,7 +202,8 @@ void ScrollEngine::windowOpened(const QString& windowId, const QString& screenId
         return;
     }
     const TilingStateKey key = keyForScreen(screenId);
-    stateForKey(key, /*create=*/true)->addColumnForWindow(windowId);
+    stateForKey(key, /*create=*/true)
+        ->addColumnForWindow(windowId, ColumnWidth::proportion(effectiveDefaultColumnWidth(screenId)));
     m_windowToKey.insert(windowId, key);
     m_activeScreen = screenId;
     emitChanged(screenId);
@@ -272,7 +283,8 @@ void ScrollEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
         state->markFloating(windowId);
     } else {
         state->clearFloating(windowId);
-        state->addColumnForWindow(windowId); // re-enter the strip
+        // Re-enter the strip as a new column at the configured default width.
+        state->addColumnForWindow(windowId, ColumnWidth::proportion(effectiveDefaultColumnWidth(it.value().screenId)));
     }
     Q_EMIT windowFloatingChanged(windowId, shouldFloat, it.value().screenId);
     emitChanged(it.value().screenId);
@@ -461,18 +473,24 @@ void ScrollEngine::cyclePresetColumnWidth(const NavigationContext& ctx)
 {
     QString screenId;
     ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    if (!state || !state->activeColumn() || m_presetColumnWidths.isEmpty()) {
+    const QVector<qreal> presets = effectivePresetColumnWidths(screenId);
+    if (!state || !state->activeColumn() || presets.isEmpty()) {
         reportNav(false, QStringLiteral("width"), screenId);
         return;
     }
-    const int current = state->activeColumn()->presetWidthIndex();
-    const int next = (current + 1) % static_cast<int>(m_presetColumnWidths.size());
+    const int presetCount = static_cast<int>(presets.size());
+    // A stale index (the preset list shrank since it was set) or the detached
+    // -1 both normalise to -1, so the next press restarts the cycle at the
+    // first preset rather than wrapping from an out-of-range value.
+    const int rawIndex = state->activeColumn()->presetWidthIndex();
+    const int current = (rawIndex >= 0 && rawIndex < presetCount) ? rawIndex : -1;
+    const int next = (current + 1) % presetCount;
     if (next == current) {
         // Single-element preset list, already on it — nothing changes.
         reportNav(false, QStringLiteral("width"), screenId);
         return;
     }
-    state->setActiveColumnWidth(ColumnWidth::proportion(m_presetColumnWidths.at(next)), next);
+    state->setActiveColumnWidth(ColumnWidth::proportion(presets.at(next)), next);
     emitChanged(screenId);
     reportNav(true, QStringLiteral("width"), screenId);
 }
@@ -483,12 +501,18 @@ void ScrollEngine::cyclePresetWindowHeight(const NavigationContext& ctx)
     ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
     const Column* column = state ? state->activeColumn() : nullptr;
     const Tile* tile = column ? column->activeTile() : nullptr;
-    if (!tile || m_presetWindowHeights.isEmpty()) {
+    const QVector<qreal> presets = effectivePresetWindowHeights(screenId);
+    if (!tile || presets.isEmpty()) {
         reportNav(false, QStringLiteral("height"), screenId);
         return;
     }
-    const int current = (tile->height.kind == WindowHeight::Kind::Preset) ? tile->height.presetIndex : -1;
-    const int next = (current + 1) % static_cast<int>(m_presetWindowHeights.size());
+    const int presetCount = static_cast<int>(presets.size());
+    // A stale preset index (the preset list shrank since it was set) or a
+    // non-preset height both normalise to -1, so the next press restarts the
+    // cycle at the first preset rather than wrapping from an out-of-range value.
+    const int rawIndex = (tile->height.kind == WindowHeight::Kind::Preset) ? tile->height.presetIndex : -1;
+    const int current = (rawIndex >= 0 && rawIndex < presetCount) ? rawIndex : -1;
+    const int next = (current + 1) % presetCount;
     if (next == current) {
         // Single-element preset list, already on it — nothing changes.
         reportNav(false, QStringLiteral("height"), screenId);
@@ -514,10 +538,6 @@ void ScrollEngine::toggleColumnFullWidth(const NavigationContext& ctx)
 
 void ScrollEngine::adjustColumnWidth(qreal deltaFraction, const NavigationContext& ctx)
 {
-    // Smallest proportional column width grow/shrink can settle on, so a
-    // column can never shrink away to nothing.
-    constexpr qreal kMinColumnWidthFraction = 0.1;
-
     QString screenId;
     ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
     const Column* column = state ? state->activeColumn() : nullptr;
@@ -528,11 +548,13 @@ void ScrollEngine::adjustColumnWidth(qreal deltaFraction, const NavigationContex
         return;
     }
     // Clamp the starting width into range before applying the delta: a
-    // Proportion width is normally already within [kMinColumnWidthFraction,
-    // 1.0], but clamping here keeps grow/shrink monotonic — without it a
-    // shrink keypress on an out-of-range narrow column would grow it.
-    const qreal current = qBound(kMinColumnWidthFraction, column->width().value, qreal(1.0));
-    const qreal target = qBound(kMinColumnWidthFraction, current + deltaFraction, qreal(1.0));
+    // Proportion width is normally already within [kMinSizeFraction,
+    // kMaxSizeFraction], but clamping here keeps grow/shrink monotonic —
+    // without it a shrink keypress on an out-of-range narrow column would
+    // grow it. kMinSizeFraction is also the smallest width a column can
+    // settle on, so it can never shrink away to nothing.
+    const qreal current = qBound(kMinSizeFraction, column->width().value, kMaxSizeFraction);
+    const qreal target = qBound(kMinSizeFraction, current + deltaFraction, kMaxSizeFraction);
     if (qFuzzyCompare(target, current)) {
         reportNav(false, QStringLiteral("width"), screenId); // already at the limit
         return;
@@ -541,28 +563,6 @@ void ScrollEngine::adjustColumnWidth(qreal deltaFraction, const NavigationContex
     state->setActiveColumnWidth(ColumnWidth::proportion(target), /*presetIndex=*/-1);
     emitChanged(screenId);
     reportNav(true, QStringLiteral("width"), screenId);
-}
-
-void ScrollEngine::toggleCenterFocusedColumn(const NavigationContext& ctx)
-{
-    QString screenId;
-    resolveNavTarget(ctx, &screenId); // resolves screenId for the nav feedback
-
-    // The viewport mode is engine-global, so flip it through the setter
-    // unconditionally — even when the focused screen has no strip yet. Gating
-    // on the focused screen's state would let an empty scroll screen swallow
-    // the shortcut while every other scroll screen silently keeps the old mode.
-    setViewportMode(m_viewportMode == ScrollViewportMode::Fit ? ScrollViewportMode::Centered : ScrollViewportMode::Fit);
-    // Re-resolve every scroll screen — all of them resolve against this mode.
-    QSet<QString> notified;
-    for (const auto& entry : m_states) {
-        const QString& sid = entry.first.screenId;
-        if (!sid.isEmpty() && !notified.contains(sid)) {
-            notified.insert(sid);
-            emitChanged(sid);
-        }
-    }
-    reportNav(true, QStringLiteral("viewport"), screenId);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -611,6 +611,97 @@ void ScrollEngine::setPresetWindowHeights(const QVector<qreal>& fractions)
     m_presetWindowHeights = fractions;
 }
 
+void ScrollEngine::setDefaultColumnWidth(qreal fraction)
+{
+    m_defaultColumnWidth = fraction;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Per-screen config (override → global default)
+// ─────────────────────────────────────────────────────────────────────────
+
+void ScrollEngine::applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
+{
+    if (screenId.isEmpty()) {
+        return;
+    }
+    if (overrides.isEmpty()) {
+        m_perScreenConfig.remove(screenId);
+    } else {
+        m_perScreenConfig.insert(screenId, overrides);
+    }
+}
+
+void ScrollEngine::clearPerScreenConfig(const QString& screenId)
+{
+    m_perScreenConfig.remove(screenId);
+}
+
+QVariantMap ScrollEngine::perScreenOverrides(const QString& screenId) const
+{
+    return m_perScreenConfig.value(screenId);
+}
+
+QVariant ScrollEngine::perScreenValue(const QString& screenId, QLatin1String key) const
+{
+    const auto it = m_perScreenConfig.constFind(screenId);
+    return it == m_perScreenConfig.constEnd() ? QVariant() : it->value(key);
+}
+
+QVector<qreal> ScrollEngine::clampedFractionVector(const QVariantList& list)
+{
+    QVector<qreal> out = toFractionVector(list);
+    for (qreal& fraction : out) {
+        fraction = qBound(kMinSizeFraction, fraction, kMaxSizeFraction);
+    }
+    return out;
+}
+
+// The effective*() resolvers clamp every per-screen override on read — the
+// daemon already passes Settings-validated values, but clamping here too is
+// the defence-in-depth pattern AutotileEngine's PerScreenConfigResolver uses,
+// and it keeps a malformed override (e.g. a non-numeric DefaultColumnWidth
+// coerced to 0.0) from yielding a degenerate column instead of a sane bound.
+
+QVector<qreal> ScrollEngine::effectivePresetColumnWidths(const QString& screenId) const
+{
+    const QVariant v = perScreenValue(screenId, QLatin1String("PresetColumnWidths"));
+    return v.isValid() ? clampedFractionVector(v.toList()) : m_presetColumnWidths;
+}
+
+QVector<qreal> ScrollEngine::effectivePresetWindowHeights(const QString& screenId) const
+{
+    const QVariant v = perScreenValue(screenId, QLatin1String("PresetWindowHeights"));
+    return v.isValid() ? clampedFractionVector(v.toList()) : m_presetWindowHeights;
+}
+
+qreal ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const
+{
+    const QVariant v = perScreenValue(screenId, QLatin1String("DefaultColumnWidth"));
+    return v.isValid() ? qBound(kMinSizeFraction, v.toReal(), kMaxSizeFraction) : m_defaultColumnWidth;
+}
+
+ScrollViewportMode ScrollEngine::effectiveViewportMode(const QString& screenId) const
+{
+    const QVariant v = perScreenValue(screenId, QLatin1String("CenterFocusedColumn"));
+    if (v.isValid()) {
+        return v.toBool() ? ScrollViewportMode::Centered : ScrollViewportMode::Fit;
+    }
+    return m_viewportMode;
+}
+
+int ScrollEngine::effectiveInnerGap(const QString& screenId) const
+{
+    const QVariant v = perScreenValue(screenId, QLatin1String("InnerGap"));
+    return v.isValid() ? qBound(kMinStripGap, v.toInt(), kMaxStripGap) : m_innerGap;
+}
+
+int ScrollEngine::effectiveOuterGap(const QString& screenId) const
+{
+    const QVariant v = perScreenValue(screenId, QLatin1String("OuterGap"));
+    return v.isValid() ? qBound(kMinStripGap, v.toInt(), kMaxStripGap) : m_outerGap;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // State access
 // ─────────────────────────────────────────────────────────────────────────
@@ -642,13 +733,18 @@ void ScrollEngine::loadState()
     // deserializeEngineState() under daemon control.
 }
 
+bool ScrollEngine::hasPersistableState() const
+{
+    return !m_states.empty();
+}
+
 QJsonObject ScrollEngine::serializeEngineState() const
 {
-    // m_viewportMode is deliberately not serialized: it is runtime-only state
-    // that resets to Fit on restart. Per-column full-width state *is* persisted
-    // (in ScrollScreenState). Both become persisted ConfigDefaults settings in
-    // Phase 5; until then the viewport mode intentionally does not survive a
-    // daemon restart.
+    // m_viewportMode is deliberately not serialized: the daemon re-pushes it
+    // from the scrollCenterFocusedColumn setting (global or per-screen) on
+    // every startup, so persisting it would only risk a stale value shadowing
+    // the configured one. Per-column full-width state *is* persisted (in
+    // ScrollScreenState).
     QJsonArray states;
     for (const auto& entry : m_states) {
         QJsonObject obj = entry.second.toJson();
@@ -680,6 +776,30 @@ void ScrollEngine::deserializeEngineState(const QJsonObject& state)
         for (const QString& windowId : windows) {
             m_windowToKey.insert(windowId, key);
         }
+    }
+    // A restored strip is structural — it must be reconciled against the live
+    // window set once the effect reports it; see reconcileRestoredWindows().
+    m_pendingRestoreReconcile = !m_states.empty();
+}
+
+void ScrollEngine::reconcileRestoredWindows(const QSet<QString>& liveWindowIds)
+{
+    if (!m_pendingRestoreReconcile) {
+        return;
+    }
+    m_pendingRestoreReconcile = false; // one-shot — only the first batch reconciles
+
+    // Any restored window the live set did not confirm was closed while the
+    // daemon was down: drop it so its column does not linger as a phantom.
+    // Collected first, then removed, so m_windowToKey is not mutated mid-scan.
+    QStringList stale;
+    for (auto it = m_windowToKey.constBegin(); it != m_windowToKey.constEnd(); ++it) {
+        if (!liveWindowIds.contains(it.key())) {
+            stale.append(it.key());
+        }
+    }
+    for (const QString& windowId : stale) {
+        windowClosed(windowId);
     }
 }
 
