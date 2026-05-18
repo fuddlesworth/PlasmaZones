@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorScrollEngine/ScrollLayout.h>
 #include <PhosphorScrollEngine/ScrollScreenState.h>
 #include <phosphorscrollengine_export.h>
 
@@ -108,6 +109,7 @@ public:
     void cyclePresetWindowHeight(const PhosphorEngine::NavigationContext& ctx) override;
     void toggleColumnFullWidth(const PhosphorEngine::NavigationContext& ctx) override;
     void adjustColumnWidth(qreal deltaFraction, const PhosphorEngine::NavigationContext& ctx) override;
+    void toggleCenterFocusedColumn(const PhosphorEngine::NavigationContext& ctx) override;
 
     // ── Tracking queries ────────────────────────────────────────────────
     bool isWindowTracked(const QString& windowId) const override;
@@ -126,6 +128,19 @@ public:
     QVector<qreal> presetWindowHeights() const
     {
         return m_presetWindowHeights;
+    }
+
+    // ── Viewport mode ───────────────────────────────────────────────────
+    /// How the viewport scrolls to keep the focused column on-screen. The
+    /// daemon reads this when resolving the strip; the mode becomes a user
+    /// setting in Phase 5.
+    ScrollViewportMode viewportMode() const
+    {
+        return m_viewportMode;
+    }
+    void setViewportMode(ScrollViewportMode mode)
+    {
+        m_viewportMode = mode;
     }
 
     // ── State access ────────────────────────────────────────────────────
@@ -162,6 +177,7 @@ private:
     QString m_activeScreen;
     QVector<qreal> m_presetColumnWidths;
     QVector<qreal> m_presetWindowHeights;
+    ScrollViewportMode m_viewportMode = ScrollViewportMode::Fit;
 };
 
 } // namespace PhosphorScrollEngine

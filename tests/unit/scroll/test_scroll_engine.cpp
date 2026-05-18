@@ -41,6 +41,7 @@ private Q_SLOTS:
     void cyclePresetHeight();
     void toggleColumnFullWidth();
     void adjustColumnWidth();
+    void toggleCenterFocusedColumn();
     void floatToggle();
     void perDesktopState();
     void serializeRoundTrip();
@@ -303,6 +304,24 @@ void TestScrollEngine::adjustColumnWidth()
     engine.adjustColumnWidth(-0.1, ctx);
     QVERIFY(!state->activeColumn()->isFullWidth());
     QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 0.9));
+}
+
+void TestScrollEngine::toggleCenterFocusedColumn()
+{
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    const NavigationContext ctx = contextFor(QStringLiteral("S1"));
+    QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+
+    // The viewport mode starts at Fit and flips on each toggle; every toggle
+    // re-resolves the focused screen.
+    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Fit);
+    engine.toggleCenterFocusedColumn(ctx);
+    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Centered);
+    QCOMPARE(spy.count(), 1);
+    engine.toggleCenterFocusedColumn(ctx);
+    QCOMPARE(engine.viewportMode(), ScrollViewportMode::Fit);
+    QCOMPARE(spy.count(), 2);
 }
 
 void TestScrollEngine::floatToggle()

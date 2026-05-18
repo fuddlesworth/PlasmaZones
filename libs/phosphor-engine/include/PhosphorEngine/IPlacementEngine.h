@@ -589,6 +589,11 @@ public:
         Q_UNUSED(deltaFraction)
         Q_UNUSED(ctx)
     }
+    /// Toggle whether the viewport keeps the focused column centred.
+    virtual void toggleCenterFocusedColumn(const NavigationContext& ctx)
+    {
+        Q_UNUSED(ctx)
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Engine state serialization

@@ -265,6 +265,7 @@ private:
     void handleToggleColumnFullWidth();
     void handleGrowColumnWidth();
     void handleShrinkColumnWidth();
+    void handleToggleCenterFocusedColumn();
     void handleResnap();
     void handleSnapAll();
     void handleFocusMaster();

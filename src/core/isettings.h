@@ -392,6 +392,7 @@ Q_SIGNALS:
     void toggleColumnFullWidthShortcutChanged();
     void growColumnWidthShortcutChanged();
     void shrinkColumnWidthShortcutChanged();
+    void toggleCenterFocusedColumnShortcutChanged();
 
     // Resnap to New PhosphorZones::Layout Shortcut
     void resnapToNewLayoutShortcutChanged();

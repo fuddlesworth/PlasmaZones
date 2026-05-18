@@ -426,6 +426,7 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::toggleColumnFullWidthKey(), CD::toggleColumnFullWidthShortcut());
     addShortcut(globals, CD::growColumnWidthKey(), CD::growColumnWidthShortcut());
     addShortcut(globals, CD::shrinkColumnWidthKey(), CD::shrinkColumnWidthShortcut());
+    addShortcut(globals, CD::toggleCenterFocusedColumnKey(), CD::toggleCenterFocusedColumnShortcut());
     addShortcut(globals, CD::resnapToNewLayoutKey(), CD::resnapToNewLayoutShortcut());
     addShortcut(globals, CD::snapAllWindowsKey(), CD::snapAllWindowsShortcut());
     addShortcut(globals, CD::layoutPickerKey(), CD::layoutPickerShortcut());

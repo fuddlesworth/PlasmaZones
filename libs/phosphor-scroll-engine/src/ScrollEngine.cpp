@@ -538,6 +538,22 @@ void ScrollEngine::adjustColumnWidth(qreal deltaFraction, const NavigationContex
     reportNav(true, QStringLiteral("width"), screenId);
 }
 
+void ScrollEngine::toggleCenterFocusedColumn(const NavigationContext& ctx)
+{
+    QString screenId;
+    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
+    if (!state) {
+        reportNav(false, QStringLiteral("viewport"), screenId);
+        return;
+    }
+    // The viewport mode is engine-global; flip it and re-resolve the focused
+    // screen now — other scroll screens pick it up on their next relayout.
+    m_viewportMode =
+        (m_viewportMode == ScrollViewportMode::Fit) ? ScrollViewportMode::Centered : ScrollViewportMode::Fit;
+    emitChanged(screenId);
+    reportNav(true, QStringLiteral("viewport"), screenId);
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Tracking queries
 // ─────────────────────────────────────────────────────────────────────────

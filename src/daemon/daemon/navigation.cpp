@@ -237,6 +237,17 @@ void Daemon::handleShrinkColumnWidth()
     }
 }
 
+void Daemon::handleToggleCenterFocusedColumn()
+{
+    // Toggle the viewport between fit and centered. Scroll-mode only; a no-op
+    // on snap/autotile screens (see handleConsume).
+    NavigationContext ctx;
+    if (auto* nav =
+            navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ToggleCenterFocusedColumn")) {
+        nav->toggleCenterFocusedColumn(ctx);
+    }
+}
+
 void Daemon::handleRestore()
 {
     NavigationContext ctx;

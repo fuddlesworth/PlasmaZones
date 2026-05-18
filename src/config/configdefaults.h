@@ -1381,6 +1381,12 @@ public:
     {
         return QStringLiteral("Meta+Alt+-");
     }
+    /// Scroll mode: toggle whether the viewport keeps the focused column
+    /// centred. "C" for "center".
+    static QString toggleCenterFocusedColumnShortcut()
+    {
+        return QStringLiteral("Meta+Alt+C");
+    }
     static QString resnapToNewLayoutShortcut()
     {
         return QStringLiteral("Meta+Ctrl+Z");

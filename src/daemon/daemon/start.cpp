@@ -520,6 +520,9 @@ void Daemon::connectShortcutSignals()
     connect(m_shortcutManager.get(), &ShortcutManager::shrinkColumnWidthRequested, this, [this]() {
         handleShrinkColumnWidth();
     });
+    connect(m_shortcutManager.get(), &ShortcutManager::toggleCenterFocusedColumnRequested, this, [this]() {
+        handleToggleCenterFocusedColumn();
+    });
     connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() {
         handleResnap();
     });

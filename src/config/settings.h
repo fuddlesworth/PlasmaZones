@@ -450,6 +450,8 @@ public:
                    growColumnWidthShortcutChanged)
     Q_PROPERTY(QString shrinkColumnWidthShortcut READ shrinkColumnWidthShortcut WRITE setShrinkColumnWidthShortcut
                    NOTIFY shrinkColumnWidthShortcutChanged)
+    Q_PROPERTY(QString toggleCenterFocusedColumnShortcut READ toggleCenterFocusedColumnShortcut WRITE
+                   setToggleCenterFocusedColumnShortcut NOTIFY toggleCenterFocusedColumnShortcutChanged)
 
     // Resnap to New PhosphorZones::Layout (Meta+Ctrl+Z, easy pinky key)
     Q_PROPERTY(QString resnapToNewLayoutShortcut READ resnapToNewLayoutShortcut WRITE setResnapToNewLayoutShortcut
@@ -1018,6 +1020,8 @@ public:
     void setGrowColumnWidthShortcut(const QString& shortcut);
     QString shrinkColumnWidthShortcut() const;
     void setShrinkColumnWidthShortcut(const QString& shortcut);
+    QString toggleCenterFocusedColumnShortcut() const;
+    void setToggleCenterFocusedColumnShortcut(const QString& shortcut);
     QString resnapToNewLayoutShortcut() const;
     void setResnapToNewLayoutShortcut(const QString& shortcut);
     QString snapAllWindowsShortcut() const;

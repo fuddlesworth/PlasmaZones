@@ -97,6 +97,7 @@ Q_SIGNALS:
     void toggleColumnFullWidthRequested();
     void growColumnWidthRequested();
     void shrinkColumnWidthRequested();
+    void toggleCenterFocusedColumnRequested();
     void resnapToNewLayoutRequested();
     void snapAllWindowsRequested();
     void layoutPickerRequested();

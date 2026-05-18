@@ -58,6 +58,7 @@ constexpr auto kIdCycleWindowHeight = "cycle_window_height";
 constexpr auto kIdToggleColumnFullWidth = "toggle_column_full_width";
 constexpr auto kIdGrowColumnWidth = "grow_column_width";
 constexpr auto kIdShrinkColumnWidth = "shrink_column_width";
+constexpr auto kIdToggleCenterFocusedColumn = "toggle_center_focused_column";
 constexpr auto kIdResnapToNewLayout = "resnap_to_new_layout";
 constexpr auto kIdSnapAllWindows = "snap_all_windows";
 constexpr auto kIdLayoutPicker = "layout_picker";
@@ -285,6 +286,11 @@ const StaticEntry kStaticEntries[] = {
      "Shrink Column Width",
      [](ShortcutManager* sm) {
          Q_EMIT sm->shrinkColumnWidthRequested();
+     }},
+    {kIdToggleCenterFocusedColumn, &ConfigDefaults::toggleCenterFocusedColumnShortcut,
+     &Settings::toggleCenterFocusedColumnShortcut, "Toggle Center Focused Column",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->toggleCenterFocusedColumnRequested();
      }},
 
     // ─── Misc layout ops ───────────────────────────────────────────────────

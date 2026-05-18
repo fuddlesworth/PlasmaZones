@@ -466,6 +466,7 @@ public:
     PZ_CONFIG_KEY(toggleColumnFullWidthKey, "ToggleColumnFullWidth")
     PZ_CONFIG_KEY(growColumnWidthKey, "GrowColumnWidth")
     PZ_CONFIG_KEY(shrinkColumnWidthKey, "ShrinkColumnWidth")
+    PZ_CONFIG_KEY(toggleCenterFocusedColumnKey, "ToggleCenterFocusedColumn")
     PZ_CONFIG_KEY(resnapToNewLayoutKey, "ResnapToNewLayout")
     PZ_CONFIG_KEY(snapAllWindowsKey, "SnapAllWindows")
     PZ_CONFIG_KEY(layoutPickerKey, "LayoutPicker")
