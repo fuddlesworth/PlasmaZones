@@ -57,10 +57,11 @@ public:
                         QObject* parent = nullptr);
     ~SnapEngine() override;
 
-    /// Current virtual desktop (1-based) and activity, forwarded from the
-    /// injected managers. Exposed so daemon adaptors that gate on disabled
-    /// context (see isContextDisabled) can read the same values the engine's
-    /// own restore logic uses, without each adaptor wiring its own managers.
+    /// Current virtual desktop (1-based; 0 when no virtual-desktop manager is
+    /// wired) and activity, forwarded from the injected managers. Exposed so
+    /// daemon adaptors that gate on disabled context (see isContextDisabled)
+    /// can read the same values the engine's own restore logic uses, without
+    /// each adaptor wiring its own managers.
     int currentVirtualDesktop() const;
     QString currentActivity() const;
 
