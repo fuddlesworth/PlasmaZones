@@ -18,6 +18,8 @@
 #include <QDBusError>
 #include <QDir>
 #include <QFile>
+#include <QPluginLoader>
+#include <QRegularExpression>
 #include <QSet>
 #include <QThread>
 
@@ -1317,6 +1319,67 @@ void Daemon::start()
     }
 }
 
+QString Daemon::diagnoseEffectLoadFailure() const
+{
+    // The KWin effect is a compiled C++ plugin. KWin embeds its exact version
+    // into the plugin interface ID it will accept — EffectPluginFactory_iid is
+    // "org.kde.kwin.EffectPluginFactory" concatenated with KWin's version
+    // string. An effect built against a different KWin (even one patch release
+    // apart) carries a non-matching IID, and KWin's effect loader silently
+    // refuses to instantiate it: no error, the effect simply never registers.
+    // This diagnoses that case so the watchdog notification can name the real
+    // cause (a stale effect build) instead of a generic "not running".
+    static const QLatin1String iidPrefix("org.kde.kwin.EffectPluginFactory");
+    static const QLatin1String effectRelPath("kwin/effects/plugins/kwin_effect_plasmazones.so");
+
+    // Locate the installed effect plugin under Qt's plugin search paths.
+    QString effectPath;
+    const QStringList libraryPaths = QCoreApplication::libraryPaths();
+    for (const QString& base : libraryPaths) {
+        const QString candidate = base + QLatin1Char('/') + effectRelPath;
+        if (QFile::exists(candidate)) {
+            effectPath = candidate;
+            break;
+        }
+    }
+    if (effectPath.isEmpty()) {
+        return PzI18n::tr(
+            "The PlasmaZones KWin effect plugin is not installed where KWin can find it. "
+            "Reinstall PlasmaZones.");
+    }
+
+    // Read the plugin's embedded interface ID without loading it: metaData()
+    // parses only the static metadata section, so it works even for the
+    // version-mismatched plugin KWin itself refuses to load.
+    const QString effectIid = QPluginLoader(effectPath).metaData().value(QLatin1String("IID")).toString();
+    if (!effectIid.startsWith(iidPrefix)) {
+        return QString();
+    }
+    const QString effectKWinVersion = effectIid.mid(iidPrefix.size());
+
+    // Ask the running KWin for its version. supportInformation() is the only
+    // reliable D-Bus source; a short timeout keeps this already-degraded
+    // startup path from stalling if KWin is unresponsive.
+    QDBusMessage req =
+        QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
+                                       QStringLiteral("org.kde.KWin"), QStringLiteral("supportInformation"));
+    const QDBusMessage reply = QDBusConnection::sessionBus().call(req, QDBus::Block, 3000);
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        return QString();
+    }
+    const QRegularExpressionMatch match =
+        QRegularExpression(QStringLiteral("KWin version:\\s*(\\S+)")).match(reply.arguments().constFirst().toString());
+    if (!match.hasMatch() || match.captured(1) == effectKWinVersion) {
+        return QString();
+    }
+
+    return PzI18n::tr(
+               "The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin "
+               "will not load it. Rebuild and reinstall PlasmaZones against the running KWin. On "
+               "NixOS, install via the flake's nixosModules or overlay (not packages.default).")
+        .arg(effectKWinVersion, match.captured(1));
+}
+
 void Daemon::warnCompositorBridgeMissing()
 {
     // Stay silent during shutdown. The watchdog may still be armed when the
@@ -1333,12 +1396,30 @@ void Daemon::warnCompositorBridgeMissing()
         return;
     }
 
-    qCWarning(lcDaemon) << "Compositor bridge did not register within" << (BRIDGE_WATCHDOG_TIMEOUT_MS / 1000)
-                        << "s of startup — the PlasmaZones KWin effect is not running or"
-                        << "failed to register. Window dragging, keyboard shortcuts, and"
-                        << "snapping will not work. Enable the PlasmaZones effect in System"
-                        << "Settings > Desktop Effects, then restart the Plasma session so"
-                        << "KWin loads it.";
+    // Try to pin down why the effect never registered (most often a stale
+    // effect build whose IID no longer matches the running KWin). A specific
+    // diagnosis replaces the generic remediation guidance in both the log and
+    // the notification; otherwise fall back to the enable-the-effect advice.
+    const QString diagnosis = diagnoseEffectLoadFailure();
+
+    if (diagnosis.isEmpty()) {
+        qCWarning(lcDaemon) << "Compositor bridge did not register within" << (BRIDGE_WATCHDOG_TIMEOUT_MS / 1000)
+                            << "s of startup — the PlasmaZones KWin effect is not running or"
+                            << "failed to register. Window dragging, keyboard shortcuts, and"
+                            << "snapping will not work. Enable the PlasmaZones effect in System"
+                            << "Settings > Desktop Effects, then restart the Plasma session so"
+                            << "KWin loads it.";
+    } else {
+        qCWarning(lcDaemon) << "Compositor bridge did not register within" << (BRIDGE_WATCHDOG_TIMEOUT_MS / 1000)
+                            << "s of startup — window control is dead." << diagnosis;
+    }
+
+    const QString body = diagnosis.isEmpty()
+        ? PzI18n::tr(
+              "The PlasmaZones KWin effect has not registered with the daemon, so window "
+              "dragging and shortcuts will not work. Make sure it is enabled in System "
+              "Settings > Desktop Effects, then restart the Plasma session.")
+        : diagnosis;
 
     // Raise a desktop notification via the freedesktop spec so the user sees
     // the problem without having to read the journal. A direct method call
@@ -1354,10 +1435,7 @@ void Daemon::warnCompositorBridgeMissing()
            << 0u // replaces_id
            << QStringLiteral("plasmazones") // app_icon
            << PzI18n::tr("PlasmaZones: window manager integration inactive") // summary
-           << PzI18n::tr(
-                  "The PlasmaZones KWin effect has not registered with the daemon, so window "
-                  "dragging and shortcuts will not work. Make sure it is enabled in System "
-                  "Settings > Desktop Effects, then restart the Plasma session.") // body
+           << body // body
            << QStringList() // actions
            << QVariantMap() // hints
            << -1; // timeout (server default)

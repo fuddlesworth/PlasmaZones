@@ -753,6 +753,14 @@ private:
     // registers. Single-shot.
     QTimer m_bridgeWatchdogTimer;
     void warnCompositorBridgeMissing();
+
+    // Best-effort root-cause check for a KWin effect that never registered.
+    // Detects the common silent failure: the installed effect plugin's IID
+    // embeds a different KWin version than the running KWin, so KWin's effect
+    // loader rejects the plugin without surfacing an error. Returns a
+    // user-facing remediation message, or an empty string when no specific
+    // cause is found (the caller falls back to the generic warning).
+    QString diagnoseEffectLoadFailure() const;
 };
 
 } // namespace PlasmaZones
