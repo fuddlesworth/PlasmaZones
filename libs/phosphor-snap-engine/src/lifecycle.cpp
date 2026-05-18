@@ -178,8 +178,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // on an autotile screen must not be auto-assigned, autotile owns
     // placement there.
     if (m_layoutManager) {
-        int dt = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-        if (m_layoutManager->modeForScreen(screenId, dt, m_layoutManager->currentActivity())
+        const int dt = currentVirtualDesktop();
+        if (m_layoutManager->modeForScreen(screenId, dt, currentActivity())
             != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "caller screen"
                                                       << screenId << "is autotile — skipping empty/last zone fallbacks";
@@ -208,6 +208,16 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     }
 
     return SnapResult::noSnap();
+}
+
+int SnapEngine::currentVirtualDesktop() const
+{
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+}
+
+QString SnapEngine::currentActivity() const
+{
+    return m_layoutManager ? m_layoutManager->currentActivity() : QString();
 }
 
 } // namespace PhosphorSnapEngine
