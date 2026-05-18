@@ -268,6 +268,14 @@ public:
 
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString());
+    /// True iff a context-assignment rule whose match is exactly this
+    /// (screen, desktop, activity) tuple's shape exists in the rule set —
+    /// regardless of the rule's @c enabled state. A DISABLED explicit
+    /// assignment is still an explicit assignment: this reports stored
+    /// intent, not the effective cascade result. It therefore intentionally
+    /// diverges from @ref assignmentEntryForScreen / the resolvers, which
+    /// skip disabled rules and would synthesize the provider default for a
+    /// context whose only rule is disabled.
     Q_INVOKABLE bool hasExplicitAssignment(const QString& screenId, int virtualDesktop = 0,
                                            const QString& activity = QString()) const;
 
@@ -429,8 +437,9 @@ private:
                                                           const QString& activity) const;
 
     /// True if a rule whose match is exactly the context shape
-    /// (All{ScreenId==,VirtualDesktop==,Activity==} for the pinned dims)
-    /// exists in the rule set and carries an engine-mode action.
+    /// (context-only All{ScreenId==,VirtualDesktop==,Activity==} for the
+    /// pinned dims) exists in the rule set and carries an engine-mode action.
+    /// A disabled rule still counts — see @ref findExactContextRule.
     bool hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const;
 
     /// Find the exact-shape context rule for a (screen, desktop, activity)
@@ -440,6 +449,10 @@ private:
     /// @ref hasExactContextRule are thin wrappers, and the assignment mutators
     /// read the winning rule's actions through it directly (so a wider cascade
     /// entry never bleeds its tilingAlgorithm into a new narrower rule).
+    /// The scan ignores the rule's @c enabled state (so an upsert updates a
+    /// disabled rule in place rather than appending a duplicate) but rejects
+    /// any match carrying a window-property leaf — only a pure context-only
+    /// match is an exact context rule.
     const PhosphorWindowRule::WindowRule* findExactContextRule(const QString& screenId, int virtualDesktop,
                                                                const QString& activity) const;
 
@@ -455,6 +468,20 @@ private:
     /// Remove the exact-shape context assignment rule for a tuple, if any.
     /// Returns true if a rule was removed.
     bool removeAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity);
+
+    /// Shared driver behind the three @c setAll*Assignments batch setters:
+    /// snapshot existing exact-context entries, drop the addressed rule
+    /// family, rebuild it from @p assignments, commit once, and emit one
+    /// @c layoutAssigned per stored screen. @p decode maps a hash key to its
+    /// cascade context, @p valid rejects an ill-formed context for the
+    /// family, @p familyMatches selects which existing rules to drop,
+    /// @p emitDesktop / @p emitActivity are the context the closing
+    /// @c layoutAssigned signal is computed under, and @p label names the
+    /// family in log output. Only ever instantiated from
+    /// layoutregistry_assignments.cpp, where it is defined.
+    template<typename KeyT, typename DecodeFn, typename ValidFn, typename FamilyFn>
+    void applyBatchAssignments(const QHash<KeyT, QString>& assignments, DecodeFn decode, ValidFn valid,
+                               FamilyFn familyMatches, int emitDesktop, const QString& emitActivity, const char* label);
 
     /// Drop @p layoutId from every assignment rule's @c SetSnappingLayout
     /// action when a snap layout is deleted. A rule that still carries

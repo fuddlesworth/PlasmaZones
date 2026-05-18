@@ -58,6 +58,22 @@ private:
         f.write(json.toUtf8());
     }
 
+    /// True if a sentinel file can be created in @p dirPath — i.e. the
+    /// directory is still writable. Some CI filesystems ignore POSIX mode
+    /// bits, so a `setPermissions` read-only request can silently no-op;
+    /// the save-failure tests probe with this to skip rather than mislead.
+    static bool directoryIsWritable(const QString& dirPath)
+    {
+        const QString sentinel = dirPath + QStringLiteral("/.writability-probe");
+        QFile probe(sentinel);
+        if (!probe.open(QIODevice::WriteOnly)) {
+            return false;
+        }
+        probe.close();
+        QFile::remove(sentinel);
+        return true;
+    }
+
 private Q_SLOTS:
 
     void init()
@@ -171,13 +187,19 @@ private Q_SLOTS:
         const WindowRule a = makeRule(QStringLiteral("DP-1"));
         QVERIFY(store.addRule(a));
 
-        const QFileInfo before(storePath());
-        const QDateTime beforeMtime = before.lastModified();
+        // Snapshot the persisted bytes. mtime equality is unreliable at
+        // coarse filesystem timestamp resolution, so assert the file content
+        // is byte-identical instead — a no-op setAllRules must not rewrite it.
+        auto readFile = [this]() -> QByteArray {
+            QFile f(storePath());
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        };
+        const QByteArray before = readFile();
+        QVERIFY(!before.isEmpty());
 
         // A no-op setAllRules must not rewrite the file.
         QVERIFY(store.setAllRules(QList<WindowRule>{a}));
-        QFileInfo after(storePath());
-        QCOMPARE(after.lastModified(), beforeMtime);
+        QCOMPARE(readFile(), before);
     }
 
     // ─── Save-failure propagation ─────────────────────────────────────────
@@ -196,6 +218,13 @@ private Q_SLOTS:
         // rename inside save() fails. The in-memory mutation still succeeds,
         // so addRule must return false to signal the file is now stale.
         QVERIFY(QFile::setPermissions(m_dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        // Some CI filesystems ignore POSIX mode bits — verify the directory
+        // actually became read-only, else the test would silently mislead.
+        if (directoryIsWritable(m_dir.path())) {
+            QFile::setPermissions(m_dir.path(),
+                                  QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+            QSKIP("filesystem ignores read-only directory permissions");
+        }
 
         const WindowRule a = makeRule(QStringLiteral("DP-1"));
         const bool ok = store.addRule(a);
@@ -219,6 +248,13 @@ private Q_SLOTS:
         }
         WindowRuleStore store(storePath());
         QVERIFY(QFile::setPermissions(m_dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        // Some CI filesystems ignore POSIX mode bits — see
+        // testAddRule_propagatesSaveFailure.
+        if (directoryIsWritable(m_dir.path())) {
+            QFile::setPermissions(m_dir.path(),
+                                  QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+            QSKIP("filesystem ignores read-only directory permissions");
+        }
 
         const bool ok = store.setAllRules(QList<WindowRule>{makeRule(QStringLiteral("DP-1"))});
 

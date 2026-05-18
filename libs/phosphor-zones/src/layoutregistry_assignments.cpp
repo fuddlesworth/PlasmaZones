@@ -78,29 +78,31 @@ ContextDims decodeDims(const PWR::MatchExpression& match)
 
 // True if @p match is exactly the context shape for the pinned dimensions of
 // (screenId, virtualDesktop, activity) — i.e. the match ContextRuleBridge
-// would emit for that tuple. A match pinning more or fewer dimensions, or
-// pinning different values, is NOT an exact match. This is what
-// hasExplicitAssignment relies on to distinguish a stored entry from a wider
-// cascade entry or the synthesized provider default.
+// would emit for that tuple. A match pinning more/fewer dimensions, pinning
+// different values, or carrying ANY window-property leaf is NOT an exact
+// match. This is what hasExplicitAssignment relies on to distinguish a stored
+// entry from a wider cascade entry or the synthesized provider default.
 //
-// Built on contextDimsOf so context-shape classification has a single path:
-// the decoded tuple must equal the requested tuple exactly. contextDimsOf
-// ignores window-property leaves, so an extra context-equality leaf would
-// surface as a different decoded value and a flat rule mixing a window
-// predicate with the context leaves would still decode to the same tuple —
-// the exact-equality test below is the discriminator.
+// contextDimsOf ignores window-property leaves, so a flat rule mixing a
+// window predicate with the context leaves (e.g. All{ ScreenId==DP-1,
+// AppId==konsole }) would still decode to the same tuple — the
+// isContextOnly() gate is the discriminator that rejects it, mirroring
+// isContextAssignmentRule's "context-only" contract so upsert / clear never
+// clobber a window-property rule.
 bool matchIsExactContext(const PWR::MatchExpression& match, const QString& screenId, int virtualDesktop,
                          const QString& activity)
 {
+    if (!match.isContextOnly()) {
+        return false;
+    }
     const ContextDims dims = decodeDims(match);
     return dims.screenId == screenId && dims.virtualDesktop == virtualDesktop && dims.activity == activity;
 }
 
-// True if @p rule carries a SetEngineMode action. A context assignment rule
-// always carries one; so does the provider-default catch-all. Callers that
-// must exclude the catch-all do so explicitly (see resolveAssignmentEntry) —
-// the introspection / batch helpers below already filter by context shape
-// (matchIsExactContext*), and a catch-all fails every one of those.
+// True if @p rule carries a SetEngineMode action. Both context assignment
+// rules and the provider-default catch-all carry one; callers that must
+// exclude the catch-all do so explicitly (see resolveAssignmentEntry), and
+// the matchIsExactContext* shape filters reject a catch-all anyway.
 bool hasEngineModeAction(const PWR::WindowRule& rule)
 {
     for (const PWR::RuleAction& action : rule.actions) {
@@ -137,21 +139,31 @@ bool isContextAssignmentRule(const PWR::WindowRule& rule)
 // Shape predicates for the per-screen-base / per-desktop / per-activity
 // context rule families — used by the batch setters to drop one family
 // before writing the new entries, and by the introspection helpers to keep
-// their family filter identical to the batch setters'. The (screen, desktop,
-// activity) decomposition is the shared decodeDims (ContextRuleBridge::
-// contextDimsOf) — one classification path.
+// their family filter identical to the batch setters'. Each gates on
+// MatchExpression::isContextOnly() before decoding (see matchIsExactContext
+// for why a window-property leaf must never classify as a context family
+// member), then decomposes via the shared decodeDims (contextDimsOf).
 bool matchIsExactContextBase(const PWR::MatchExpression& match)
 {
+    if (!match.isContextOnly()) {
+        return false;
+    }
     const ContextDims dims = decodeDims(match);
     return !dims.screenId.isEmpty() && dims.virtualDesktop == 0 && dims.activity.isEmpty();
 }
 bool matchIsExactContextDesktop(const PWR::MatchExpression& match)
 {
+    if (!match.isContextOnly()) {
+        return false;
+    }
     const ContextDims dims = decodeDims(match);
     return !dims.screenId.isEmpty() && dims.virtualDesktop > 0 && dims.activity.isEmpty();
 }
 bool matchIsExactContextActivity(const PWR::MatchExpression& match)
 {
+    if (!match.isContextOnly()) {
+        return false;
+    }
     const ContextDims dims = decodeDims(match);
     return !dims.screenId.isEmpty() && !dims.activity.isEmpty();
 }
@@ -242,11 +254,15 @@ void LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
         contextRuleName(screenId, virtualDesktop, activity), screenId, virtualDesktop, activity, autotile,
         entry.snappingLayout, entry.tilingAlgorithm);
 
-    const QUuid existing = exactContextRuleId(screenId, virtualDesktop, activity);
-    if (existing.isNull()) {
+    const PWR::WindowRule* existing = findExactContextRule(screenId, virtualDesktop, activity);
+    if (existing == nullptr) {
         m_ruleStore->addRule(rule);
     } else {
-        rule.id = existing; // preserve the rule's identity across the update
+        rule.id = existing->id; // preserve the rule's identity across the update
+        // makeAssignmentRule always stamps enabled = true; an upsert must not
+        // silently re-enable a rule the user disabled. A disabled context
+        // assignment is still an explicit assignment — preserve the flag.
+        rule.enabled = existing->enabled;
         m_ruleStore->updateRule(rule);
     }
 }
@@ -486,6 +502,14 @@ bool LayoutRegistry::hasExplicitAssignment(const QString& screenId, int virtualD
     // Exact-shape store lookup — NEVER a resolve() (which always returns the
     // catch-all). True iff a rule whose match is exactly this tuple's shape
     // exists in the rule set.
+    //
+    // A DISABLED exact-context rule still counts as an explicit assignment:
+    // "explicit" means the user stored an entry for this tuple, not that the
+    // entry is currently active. resolveAssignmentEntry() (via the evaluator)
+    // skips disabled rules, so the two introspection APIs intentionally
+    // diverge — hasExplicitAssignment reports stored intent, the resolvers
+    // report the effective cascade result. The KCM relies on this so a
+    // disabled assignment is not lost from the UI.
     return hasExactContextRule(screenId, virtualDesktop, activity);
 }
 
@@ -636,158 +660,121 @@ void LayoutRegistry::clearAutotileAssignments()
 
 // ── Batch setters ───────────────────────────────────────────────────────────
 
-void LayoutRegistry::setAllScreenAssignments(const QHash<QString, QString>& assignments)
+namespace {
+
+// The decoded (screen, desktop, activity) cascade context a single
+// batch-assignment hash key pins — each batch setter supplies a key→context
+// decoder, the shared driver below works in terms of this tuple.
+struct BatchContext
 {
-    // Snapshot the existing per-screen base entries so the "other" mode field
-    // is preserved (batch-setting a snapping layout keeps the tilingAlgorithm).
-    QHash<QString, AssignmentEntry> oldBase;
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenId = it.key();
-        if (const PWR::WindowRule* existing = findExactContextRule(screenId, 0, QString())) {
-            oldBase.insert(screenId, entryFromRuleMatchActions(*existing));
+    QString screenId;
+    int virtualDesktop = 0;
+    QString activity;
+};
+
+} // anonymous namespace
+
+// Shared driver for the three per-family batch setters — the numbered steps
+// below replace the ~150 near-identical lines the setters used to inline.
+// @p decode maps a hash key to its cascade context; @p valid rejects an
+// ill-formed context (a desktop entry must pin desktop > 0, an activity
+// entry a non-empty activity, else a wrong-family base rule is built);
+// @p familyMatches selects which existing rules to drop; @p emitDesktop /
+// @p emitActivity are the context the closing layoutAssigned is computed
+// under; @p label names the family in log output.
+template<typename KeyT, typename DecodeFn, typename ValidFn, typename FamilyFn>
+void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignments, DecodeFn decode, ValidFn valid,
+                                           FamilyFn familyMatches, int emitDesktop, const QString& emitActivity,
+                                           const char* label)
+{
+    // Step 1 — snapshot existing exact-context entries for every incoming key.
+    QHash<KeyT, AssignmentEntry> oldEntries;
+    for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
+        const BatchContext ctx = decode(it.key());
+        if (const PWR::WindowRule* existing = findExactContextRule(ctx.screenId, ctx.virtualDesktop, ctx.activity)) {
+            oldEntries.insert(it.key(), entryFromRuleMatchActions(*existing));
         }
     }
 
-    // Remove every per-screen base assignment rule, then write the new ones.
+    // Step 2 — drop every rule belonging to this family; keep the rest.
     QList<PWR::WindowRule> kept;
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (hasEngineModeAction(rule) && matchIsExactContextBase(rule.match)) {
-            continue; // drop — a per-screen base rule
+        if (hasEngineModeAction(rule) && familyMatches(rule.match)) {
+            continue;
         }
         kept.append(rule);
     }
 
+    // Step 3 — rebuild the family from the incoming assignments.
     int count = 0;
     QSet<QString> storedScreens;
-    QList<PWR::WindowRule> additions;
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenId = it.key();
+    for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
+        const BatchContext ctx = decode(it.key());
         const QString& layoutId = it.value();
-        if (screenId.isEmpty()) {
-            qCWarning(lcZonesLib) << "Skipping assignment with empty screen ID";
+        if (!valid(ctx)) {
+            qCWarning(lcZonesLib) << "Skipping invalid" << label << "assignment:" << ctx.screenId << ctx.virtualDesktop
+                                  << ctx.activity;
             continue;
         }
-        if (shouldSkipLayoutAssignment(layoutId, QStringLiteral("screen ") + screenId)) {
+        const QString logContext = contextRuleName(ctx.screenId, ctx.virtualDesktop, ctx.activity);
+        if (shouldSkipLayoutAssignment(layoutId, logContext)) {
             continue;
         }
-        const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldBase.value(screenId));
-        additions.append(PWR::ContextRuleBridge::makeAssignmentRule(
-            contextRuleName(screenId, 0, QString()), screenId, 0, QString(), entry.mode == AssignmentEntry::Autotile,
-            entry.snappingLayout, entry.tilingAlgorithm));
-        storedScreens.insert(screenId);
+        const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldEntries.value(it.key()));
+        kept.append(PWR::ContextRuleBridge::makeAssignmentRule(logContext, ctx.screenId, ctx.virtualDesktop,
+                                                               ctx.activity, entry.mode == AssignmentEntry::Autotile,
+                                                               entry.snappingLayout, entry.tilingAlgorithm));
+        storedScreens.insert(ctx.screenId);
         ++count;
-        qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to screen" << screenId;
+        qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << logContext;
     }
-    kept.append(additions);
-    m_ruleStore->setAllRules(kept);
 
+    // Step 4 — one commit, then signal per stored screen.
+    m_ruleStore->setAllRules(kept);
     for (const QString& screenId : storedScreens) {
-        emitLayoutAssigned(screenId, 0, assignmentIdForScreen(screenId, 0, QString()));
+        emitLayoutAssigned(screenId, emitDesktop, assignmentIdForScreen(screenId, emitDesktop, emitActivity));
     }
-    qCInfo(lcZonesLib) << "Batch set" << count << "screen assignments";
+    qCInfo(lcZonesLib) << "Batch set" << count << label << "assignments";
+}
+
+void LayoutRegistry::setAllScreenAssignments(const QHash<QString, QString>& assignments)
+{
+    applyBatchAssignments(
+        assignments,
+        [](const QString& screenId) {
+            return BatchContext{screenId, 0, QString()};
+        },
+        [](const BatchContext& ctx) {
+            return !ctx.screenId.isEmpty();
+        },
+        matchIsExactContextBase,
+        /*emitDesktop=*/0, /*emitActivity=*/QString(), "screen");
 }
 
 void LayoutRegistry::setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments)
 {
-    QHash<QPair<QString, int>, AssignmentEntry> oldDesktop;
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenId = it.key().first;
-        const int desktop = it.key().second;
-        if (const PWR::WindowRule* existing = findExactContextRule(screenId, desktop, QString())) {
-            oldDesktop.insert(it.key(), entryFromRuleMatchActions(*existing));
-        }
-    }
-
-    QList<PWR::WindowRule> kept;
-    for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (hasEngineModeAction(rule) && matchIsExactContextDesktop(rule.match)) {
-            continue; // drop — a per-desktop rule
-        }
-        kept.append(rule);
-    }
-
-    int count = 0;
-    QSet<QString> storedScreens;
-    QList<PWR::WindowRule> additions;
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenId = it.key().first;
-        const int virtualDesktop = it.key().second;
-        const QString& layoutId = it.value();
-        if (screenId.isEmpty() || virtualDesktop < 1) {
-            qCWarning(lcZonesLib) << "Skipping invalid desktop assignment:" << screenId << virtualDesktop;
-            continue;
-        }
-        const QString context = QStringLiteral("%1 desktop %2").arg(screenId).arg(virtualDesktop);
-        if (shouldSkipLayoutAssignment(layoutId, context)) {
-            continue;
-        }
-        const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldDesktop.value(it.key()));
-        additions.append(PWR::ContextRuleBridge::makeAssignmentRule(
-            contextRuleName(screenId, virtualDesktop, QString()), screenId, virtualDesktop, QString(),
-            entry.mode == AssignmentEntry::Autotile, entry.snappingLayout, entry.tilingAlgorithm));
-        storedScreens.insert(screenId);
-        ++count;
-        qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << screenId << "desktop" << virtualDesktop;
-    }
-    kept.append(additions);
-    m_ruleStore->setAllRules(kept);
-
-    for (const QString& screenId : storedScreens) {
-        emitLayoutAssigned(screenId, m_currentVirtualDesktop,
-                           assignmentIdForScreen(screenId, m_currentVirtualDesktop, m_currentActivity));
-    }
-    qCInfo(lcZonesLib) << "Batch set" << count << "desktop assignments";
+    applyBatchAssignments(
+        assignments,
+        [](const QPair<QString, int>& key) {
+            return BatchContext{key.first, key.second, QString()};
+        },
+        [](const BatchContext& ctx) {
+            return !ctx.screenId.isEmpty() && ctx.virtualDesktop >= 1;
+        },
+        matchIsExactContextDesktop, m_currentVirtualDesktop, m_currentActivity, "desktop");
 }
 
 void LayoutRegistry::setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments)
 {
-    QHash<QPair<QString, QString>, AssignmentEntry> oldActivity;
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenId = it.key().first;
-        const QString& activityId = it.key().second;
-        if (const PWR::WindowRule* existing = findExactContextRule(screenId, 0, activityId)) {
-            oldActivity.insert(it.key(), entryFromRuleMatchActions(*existing));
-        }
-    }
-
-    QList<PWR::WindowRule> kept;
-    for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (hasEngineModeAction(rule) && matchIsExactContextActivity(rule.match)) {
-            continue; // drop — a per-activity rule
-        }
-        kept.append(rule);
-    }
-
-    int count = 0;
-    QSet<QString> storedScreens;
-    QList<PWR::WindowRule> additions;
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenId = it.key().first;
-        const QString& activityId = it.key().second;
-        const QString& layoutId = it.value();
-        if (screenId.isEmpty() || activityId.isEmpty()) {
-            qCWarning(lcZonesLib) << "Skipping invalid activity assignment:" << screenId << activityId;
-            continue;
-        }
-        const QString context = QStringLiteral("%1 activity %2").arg(screenId, activityId);
-        if (shouldSkipLayoutAssignment(layoutId, context)) {
-            continue;
-        }
-        const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldActivity.value(it.key()));
-        additions.append(PWR::ContextRuleBridge::makeAssignmentRule(
-            contextRuleName(screenId, 0, activityId), screenId, 0, activityId, entry.mode == AssignmentEntry::Autotile,
-            entry.snappingLayout, entry.tilingAlgorithm));
-        storedScreens.insert(screenId);
-        ++count;
-        qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << screenId << "activity" << activityId;
-    }
-    kept.append(additions);
-    m_ruleStore->setAllRules(kept);
-
-    for (const QString& screenId : storedScreens) {
-        emitLayoutAssigned(screenId, 0, assignmentIdForScreen(screenId, 0, QString()));
-    }
-    qCInfo(lcZonesLib) << "Batch set" << count << "activity assignments";
+    applyBatchAssignments(
+        assignments,
+        [](const QPair<QString, QString>& key) {
+            return BatchContext{key.first, 0, key.second};
+        },
+        [](const BatchContext& ctx) {
+            return !ctx.screenId.isEmpty() && !ctx.activity.isEmpty();
+        },
+        matchIsExactContextActivity, /*emitDesktop=*/0, /*emitActivity=*/QString(), "activity");
 }
 
 QHash<QPair<QString, int>, QString> LayoutRegistry::desktopAssignments() const
