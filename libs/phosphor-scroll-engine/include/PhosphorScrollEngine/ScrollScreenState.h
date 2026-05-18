@@ -18,6 +18,12 @@
 
 namespace PhosphorScrollEngine {
 
+/// Width a freshly-opened column is created with when no configured default
+/// has been pushed yet — niri's middle preset (one half). The single source
+/// for this fallback: ScrollEngine::m_defaultColumnWidth and the
+/// addColumn*/addWindow* default arguments all reference it.
+inline constexpr qreal kDefaultColumnWidthFraction = 0.5;
+
 /// Per-screen (per desktop/activity) scrollable-tiling state: the niri-style
 /// horizontal strip of columns, the focused column/tile, and the viewport
 /// offset.
@@ -76,12 +82,14 @@ public:
     /// column is created with width intent @p width (the daemon passes the
     /// configured default-column-width setting). No-op if the window is
     /// already managed.
-    void addColumnForWindow(const QString& windowId, const ColumnWidth& width = ColumnWidth::proportion(0.5));
+    void addColumnForWindow(const QString& windowId,
+                            const ColumnWidth& width = ColumnWidth::proportion(kDefaultColumnWidthFraction));
     /// Add @p windowId as a new tile in the focused column, and focus it.
     /// Falls back to addColumnForWindow when the strip is empty — that new
     /// column then takes width intent @p width (the daemon passes the
     /// configured default-column-width setting).
-    void addWindowToActiveColumn(const QString& windowId, const ColumnWidth& width = ColumnWidth::proportion(0.5));
+    void addWindowToActiveColumn(const QString& windowId,
+                                 const ColumnWidth& width = ColumnWidth::proportion(kDefaultColumnWidthFraction));
     /// Remove @p windowId from the strip or the floating set. Drops the
     /// column if it becomes empty. Returns true if the window was found.
     bool removeWindow(const QString& windowId);

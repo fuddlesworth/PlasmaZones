@@ -548,6 +548,28 @@ void Settings::setAudioSpectrumBarCount(int count)
         Q_EMIT settingsChanged();                                                                                      \
     }
 
+#define PZ_STORE_GET_LIST(fn, group, key)                                                                              \
+    QVariantList Settings::fn() const                                                                                  \
+    {                                                                                                                  \
+        return m_store->readVariant(ConfigDefaults::group(), ConfigDefaults::key()).toList();                          \
+    }
+
+// Pre/post round-trip compare — the schema validator may clamp / drop
+// out-of-range entries, so two in-memory-distinct lists can persist
+// identically; emitting then would dirty the settings page on a no-op.
+#define PZ_STORE_SET_LIST(fn, group, key, signal)                                                                      \
+    void Settings::fn(const QVariantList& value)                                                                       \
+    {                                                                                                                  \
+        const QVariantList before = m_store->readVariant(ConfigDefaults::group(), ConfigDefaults::key()).toList();     \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        const QVariantList after = m_store->readVariant(ConfigDefaults::group(), ConfigDefaults::key()).toList();      \
+        if (before == after) {                                                                                         \
+            return;                                                                                                    \
+        }                                                                                                              \
+        Q_EMIT signal();                                                                                               \
+        Q_EMIT settingsChanged();                                                                                      \
+    }
+
 #define PZ_STORE_SET_COLOR(fn, group, key, signal)                                                                     \
     void Settings::fn(const QColor& value)                                                                             \
     {                                                                                                                  \
@@ -2399,59 +2421,25 @@ PZ_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActiva
                   autotileDragInsertToggleChanged)
 
 // ── Scroll Mode Settings (PhosphorConfig::Store-backed) ─────────────────────
-// Scroll.Gaps — reuses innerKey / outerKey; the group context disambiguates.
+// Scrolling.Gaps — reuses innerKey / outerKey; the group context disambiguates.
 PZ_STORE_GET(int, scrollInnerGap, scrollingGapsGroup, innerKey, int)
 PZ_STORE_SET_INT(setScrollInnerGap, scrollingGapsGroup, innerKey, scrollInnerGapChanged)
 PZ_STORE_GET(int, scrollOuterGap, scrollingGapsGroup, outerKey, int)
 PZ_STORE_SET_INT(setScrollOuterGap, scrollingGapsGroup, outerKey, scrollOuterGapChanged)
-// Scroll.Layout
+// Scrolling.Layout
 PZ_STORE_GET(qreal, scrollDefaultColumnWidth, scrollingLayoutGroup, defaultColumnWidthKey, double)
 PZ_STORE_SET_DOUBLE(setScrollDefaultColumnWidth, scrollingLayoutGroup, defaultColumnWidthKey,
                     scrollDefaultColumnWidthChanged)
 PZ_STORE_GET(bool, scrollCenterFocusedColumn, scrollingLayoutGroup, centerFocusedColumnKey, bool)
 PZ_STORE_SET_BOOL(setScrollCenterFocusedColumn, scrollingLayoutGroup, centerFocusedColumnKey,
                   scrollCenterFocusedColumnChanged)
-
-QVariantList Settings::scrollPresetColumnWidths() const
-{
-    return m_store->readVariant(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetColumnWidthsKey())
-        .toList();
-}
-void Settings::setScrollPresetColumnWidths(const QVariantList& fractions)
-{
-    // Pre/post round-trip compare — the schema validator may clamp / drop
-    // out-of-range fractions, so two in-memory-distinct lists can persist
-    // identically; emitting then would dirty the page on a no-op.
-    const QVariantList before =
-        m_store->readVariant(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetColumnWidthsKey()).toList();
-    m_store->write(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetColumnWidthsKey(), fractions);
-    const QVariantList after =
-        m_store->readVariant(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetColumnWidthsKey()).toList();
-    if (before == after) {
-        return;
-    }
-    Q_EMIT scrollPresetColumnWidthsChanged();
-    Q_EMIT settingsChanged();
-}
-
-QVariantList Settings::scrollPresetWindowHeights() const
-{
-    return m_store->readVariant(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetWindowHeightsKey())
-        .toList();
-}
-void Settings::setScrollPresetWindowHeights(const QVariantList& fractions)
-{
-    const QVariantList before =
-        m_store->readVariant(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetWindowHeightsKey()).toList();
-    m_store->write(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetWindowHeightsKey(), fractions);
-    const QVariantList after =
-        m_store->readVariant(ConfigDefaults::scrollingLayoutGroup(), ConfigDefaults::presetWindowHeightsKey()).toList();
-    if (before == after) {
-        return;
-    }
-    Q_EMIT scrollPresetWindowHeightsChanged();
-    Q_EMIT settingsChanged();
-}
+// Scrolling.Layout preset lists — QVariantLists of fractions of the working area.
+PZ_STORE_GET_LIST(scrollPresetColumnWidths, scrollingLayoutGroup, presetColumnWidthsKey)
+PZ_STORE_SET_LIST(setScrollPresetColumnWidths, scrollingLayoutGroup, presetColumnWidthsKey,
+                  scrollPresetColumnWidthsChanged)
+PZ_STORE_GET_LIST(scrollPresetWindowHeights, scrollingLayoutGroup, presetWindowHeightsKey)
+PZ_STORE_SET_LIST(setScrollPresetWindowHeights, scrollingLayoutGroup, presetWindowHeightsKey,
+                  scrollPresetWindowHeightsChanged)
 
 // Tiling.Appearance
 PZ_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)

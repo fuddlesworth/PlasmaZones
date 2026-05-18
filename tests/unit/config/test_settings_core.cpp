@@ -450,8 +450,14 @@ private Q_SLOTS:
 
         const QVariantList widths = reloaded.scrollPresetColumnWidths();
         QCOMPARE(widths.size(), 3);
+        QVERIFY(qFuzzyCompare(widths.at(0).toDouble(), 0.25));
         QVERIFY(qFuzzyCompare(widths.at(1).toDouble(), 0.5));
-        QCOMPARE(reloaded.scrollPresetWindowHeights().size(), 2);
+        QVERIFY(qFuzzyCompare(widths.at(2).toDouble(), 0.75));
+
+        const QVariantList heights = reloaded.scrollPresetWindowHeights();
+        QCOMPARE(heights.size(), 2);
+        QVERIFY(qFuzzyCompare(heights.at(0).toDouble(), 0.3));
+        QVERIFY(qFuzzyCompare(heights.at(1).toDouble(), 0.6));
     }
 
     /**
@@ -464,13 +470,18 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
-        // 0.0 is below the minimum, 5.0 above the maximum.
-        settings.setScrollPresetColumnWidths(QVariantList{0.0, 0.5, 5.0});
+        // 0.0 is below the minimum, 5.0 above the maximum, and the string is
+        // non-numeric junk that must be dropped entirely.
+        settings.setScrollPresetColumnWidths(QVariantList{0.0, 0.5, 5.0, QStringLiteral("junk")});
 
         const QVariantList clamped = settings.scrollPresetColumnWidths();
+        // The non-numeric entry is dropped; the three numeric entries survive.
         QCOMPARE(clamped.size(), 3);
-        QVERIFY(clamped.at(0).toDouble() >= ConfigDefaults::scrollColumnWidthMin());
-        QVERIFY(clamped.at(2).toDouble() <= ConfigDefaults::scrollColumnWidthMax());
+        // Out-of-range fractions are clamped to the exact range bounds; the
+        // in-range value is left untouched.
+        QVERIFY(qFuzzyCompare(clamped.at(0).toDouble(), ConfigDefaults::scrollColumnWidthMin()));
+        QVERIFY(qFuzzyCompare(clamped.at(1).toDouble(), 0.5));
+        QVERIFY(qFuzzyCompare(clamped.at(2).toDouble(), ConfigDefaults::scrollColumnWidthMax()));
     }
 
     // =========================================================================

@@ -39,7 +39,10 @@ SettingsCard {
         if (presetModel.count === v.length) {
             let identical = true;
             for (let i = 0; i < v.length; ++i) {
-                if (presetModel.get(i).fraction !== v[i]) {
+                // Epsilon compare — fractions are doubles; an exact !== would
+                // rebuild every delegate (losing spin-box focus) on any
+                // sub-ulp drift a future round-trip might introduce.
+                if (Math.abs(presetModel.get(i).fraction - v[i]) > 1e-09) {
                     identical = false;
                     break;
                 }
@@ -105,7 +108,7 @@ SettingsCard {
                 SpinBox {
                     from: 10
                     to: 100
-                    stepSize: 5
+                    stepSize: 1
                     value: Math.round(presetRow.fraction * 100)
                     Accessible.name: i18n("Preset %1 size in percent", presetRow.index + 1)
                     textFromValue: function(value, locale) {

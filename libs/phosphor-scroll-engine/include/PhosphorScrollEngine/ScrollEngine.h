@@ -247,7 +247,7 @@ private:
     QString m_activeScreen;
     QVector<qreal> m_presetColumnWidths;
     QVector<qreal> m_presetWindowHeights;
-    qreal m_defaultColumnWidth = 0.5;
+    qreal m_defaultColumnWidth = kDefaultColumnWidthFraction;
     int m_innerGap = 8;
     int m_outerGap = 8;
     ScrollViewportMode m_viewportMode = ScrollViewportMode::Fit;

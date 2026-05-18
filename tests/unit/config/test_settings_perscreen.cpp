@@ -111,7 +111,8 @@ private Q_SLOTS:
             settings.setPerScreenScrollSetting(screen, QStringLiteral("InnerGap"), 18);
             settings.setPerScreenScrollSetting(screen, QStringLiteral("CenterFocusedColumn"), true);
             settings.setPerScreenScrollSetting(screen, QStringLiteral("PresetColumnWidths"), QVariantList{0.25, 0.75});
-            QVERIFY(spy.count() >= 3);
+            // Three distinct keys, each a genuine change — exactly three emissions.
+            QCOMPARE(spy.count(), 3);
             QVERIFY(settings.hasPerScreenScrollSettings(screen));
 
             const QVariantMap overrides = settings.getPerScreenScrollSettings(screen);

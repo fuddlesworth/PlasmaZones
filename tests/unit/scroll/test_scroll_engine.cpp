@@ -509,13 +509,15 @@ void TestScrollEngine::restoreReconciliation()
     QCOMPARE(scrollState(restored, QStringLiteral("S1"))->columnCount(), 2);
 
     // Zero live windows after a restart — the effect sends an empty batch and
-    // every restored column is reconciled away.
+    // every restored column is reconciled away. The screen state survives as
+    // an empty strip (windowClosed drops emptied columns, not the state).
     ScrollEngine emptied;
     emptied.deserializeEngineState(saved);
     emptied.reconcileRestoredWindows(QSet<QString>{});
     QVERIFY(!emptied.isWindowTracked(QStringLiteral("a")));
     const ScrollScreenState* emptiedState = scrollState(emptied, QStringLiteral("S1"));
-    QVERIFY(emptiedState == nullptr || emptiedState->columnCount() == 0);
+    QVERIFY(emptiedState);
+    QCOMPARE(emptiedState->columnCount(), 0);
 
     // An engine with no pending restore ignores reconciliation entirely — a
     // live-opened window is never pruned by a stray batch.

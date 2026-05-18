@@ -712,11 +712,11 @@ void ScrollEngine::loadState()
 
 QJsonObject ScrollEngine::serializeEngineState() const
 {
-    // m_viewportMode is deliberately not serialized: it is runtime-only state
-    // that resets to Fit on restart. Per-column full-width state *is* persisted
-    // (in ScrollScreenState). Both become persisted ConfigDefaults settings in
-    // Phase 5; until then the viewport mode intentionally does not survive a
-    // daemon restart.
+    // m_viewportMode is deliberately not serialized: the daemon re-pushes it
+    // from the scrollCenterFocusedColumn setting (global or per-screen) on
+    // every startup, so persisting it would only risk a stale value shadowing
+    // the configured one. Per-column full-width state *is* persisted (in
+    // ScrollScreenState).
     QJsonArray states;
     for (const auto& entry : m_states) {
         QJsonObject obj = entry.second.toJson();

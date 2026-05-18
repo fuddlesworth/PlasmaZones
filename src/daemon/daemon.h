@@ -44,6 +44,10 @@ namespace PhosphorEngine {
 class WindowRegistry;
 }
 
+namespace PhosphorScrollEngine {
+class ScrollEngine;
+}
+
 namespace PhosphorWorkspaces {
 class ActivityManager;
 class VirtualDesktopManager;
@@ -441,6 +445,16 @@ private:
      */
     void saveScrollState();
     void loadScrollState();
+
+    /**
+     * @brief The scroll placement engine narrowed to its concrete type.
+     *
+     * m_scrollEngine is held as the base PlacementEngineBase pointer, but the
+     * scroll-specific config / persistence / reconciliation API lives on
+     * ScrollEngine. Centralises the down-cast the scroll handlers all need;
+     * returns nullptr when no scroll engine is active.
+     */
+    PhosphorScrollEngine::ScrollEngine* scrollEngine() const;
 
     /**
      * @brief Respond to a Phosphor::Screens::ScreenManager VS cache change for a physical screen

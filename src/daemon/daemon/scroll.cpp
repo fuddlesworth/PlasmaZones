@@ -6,8 +6,8 @@
 #include "../../core/logging.h"
 #include "../../dbus/scrolladaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
-#include "../config/configdefaults.h"
-#include "../config/settings.h"
+#include "../../config/configdefaults.h"
+#include "../../config/settings.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/WindowTypes.h>
@@ -37,6 +37,11 @@
 #include <QVector>
 
 namespace PlasmaZones {
+
+PhosphorScrollEngine::ScrollEngine* Daemon::scrollEngine() const
+{
+    return dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+}
 
 void Daemon::updateScrollScreens()
 {
@@ -70,14 +75,24 @@ void Daemon::updateScrollScreens()
     // A screen entering scroll mode needs its per-screen overrides in the
     // engine before its windows resolve geometry.
     applyPerScreenScrollOverrides();
-    if (screensChanged && m_scrollAdaptor) {
-        // Tell the KWin effect which screens are scroll-mode so it reports
-        // their windows to the org.plasmazones.Scroll interface. The payload
-        // is sourced from ScrollAdaptor::scrollScreens() — the same accessor
-        // that backs the scrollScreens property — so the signal and a
-        // subsequent property read cannot disagree. It is sorted there, since
-        // QSet iteration order is unspecified.
-        Q_EMIT m_scrollAdaptor->scrollScreensChanged(m_scrollAdaptor->scrollScreens());
+    if (screensChanged) {
+        // Resolve every active scroll strip now. setActiveScreens() emits no
+        // placementChanged, and a restored window's windowOpened no-ops
+        // (already tracked), so a strip restored from scroll-session.json — or
+        // a screen newly entering scroll mode — would otherwise never be
+        // pushed to the effect. onScrollPlacementChanged no-ops for a screen
+        // with no strip yet.
+        for (const QString& screenId : scrollScreens) {
+            onScrollPlacementChanged(screenId);
+        }
+        if (m_scrollAdaptor) {
+            // Tell the KWin effect which screens are scroll-mode so it reports
+            // their windows to the org.plasmazones.Scroll interface. The
+            // payload is sourced from ScrollAdaptor::scrollScreens() — the same
+            // accessor that backs the scrollScreens property — so the signal
+            // and a subsequent property read cannot disagree.
+            Q_EMIT m_scrollAdaptor->scrollScreensChanged(m_scrollAdaptor->scrollScreens());
+        }
     }
     qCDebug(lcDaemon) << "Updated scroll screens=" << scrollScreens;
 }
@@ -89,7 +104,7 @@ void Daemon::onScrollPlacementChanged(const QString& screenId)
     }
     // ScrollEngine is geometry-agnostic — it stores the strip; the daemon
     // resolves it to pixels because only the daemon knows the working area.
-    auto* scroll = dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    auto* scroll = scrollEngine();
     if (!scroll) {
         return;
     }
@@ -149,7 +164,7 @@ void Daemon::refreshScrollConfigFromSettings()
     if (!m_scrollEngine || !m_settings) {
         return;
     }
-    auto* scroll = dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    auto* scroll = scrollEngine();
     if (!scroll) {
         return;
     }
@@ -184,7 +199,7 @@ void Daemon::applyPerScreenScrollOverrides()
     if (!m_scrollEngine || !m_settings) {
         return;
     }
-    auto* scroll = dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    auto* scroll = scrollEngine();
     if (!scroll) {
         return;
     }
@@ -204,7 +219,7 @@ void Daemon::applyPerScreenScrollOverrides()
 
 void Daemon::saveScrollState()
 {
-    auto* scroll = dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    auto* scroll = scrollEngine();
     if (!scroll) {
         return;
     }
@@ -233,7 +248,7 @@ void Daemon::saveScrollState()
 
 void Daemon::loadScrollState()
 {
-    auto* scroll = dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    auto* scroll = scrollEngine();
     if (!scroll) {
         return;
     }
