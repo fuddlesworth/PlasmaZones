@@ -3,13 +3,15 @@
 
 # Scroll mode — niri-style scrollable tiling
 
-Planning document. Status: **Phases 0 ✅, 1 ✅, 2 ✅ and 3 ✅ complete** — the scroll
-engine, geometry resolver, `Mode::Scroll` routing, daemon geometry pipeline, the full
-window lifecycle (open/close/focus, minimize, screen hotplug & geometry change,
-fixed-size windows) and navigation (viewport fit/centered scrolling, consume/expel
-shortcuts, drag-to-reorder, sticky-window exclusion) are implemented, built, and
-tested — the full `ctest` suite is green. Phase 0 detail in
-[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 4.
+Planning document. Status: **Phases 0 ✅, 1 ✅, 2 ✅, 3 ✅ and 4 ✅ complete** — the
+scroll engine, geometry resolver, `Mode::Scroll` routing, daemon geometry pipeline, the
+full window lifecycle (open/close/focus, minimize, screen hotplug & geometry change,
+fixed-size windows), navigation (viewport fit/centered scrolling, consume/expel
+shortcuts, drag-to-reorder, sticky-window exclusion) and the width/height controls and
+animation polish (preset cycling, full-width toggle, grow/shrink, runtime centering,
+dedicated `window.scroll` motion profile) are implemented, built, and tested — the full
+`ctest` suite is green. Phase 0 detail in
+[`scroll-mode-phase0-findings.md`](scroll-mode-phase0-findings.md). Next: Phase 5.
 
 ## 1. Goal
 
@@ -114,25 +116,24 @@ Column-width changes still resize → async configure, but those are infrequent.
 - **Hard constraint A — input does NOT follow paint transforms.** `Window::hitTest()`
   uses real geometry only. Paint-transform is safe *only* for fully-off-screen windows
   (un-clickable anyway) — never for a partially-visible one.
-- **Hard constraint B — UNVERIFIED, the biggest open risk.** A KWin effect's
-  `paintWindow()` is only called for windows the scene decides to paint. A window whose
-  real geometry is *fully off-screen* is likely **culled** — `paintWindow()` never
-  fires, so no transform can pull it into view. A paint-transform can move a window
-  *out of* view (it starts on-screen, gets painted) but cannot bring an off-screen
-  window *in*. **Phase 0 must verify whether KWin calls `paintWindow()` for windows
-  with partially- vs. fully-off-screen real geometry.** If fully-off-screen windows are
-  culled, the model below is mandatory.
-- **Animation ordering (corrected for constraint B).** Before a scroll animation, set
-  real geometry to an on-screen position for *every* window that will be visible at any
-  frame of the animation — including incoming windows (commit their final geometry
-  *first*) and outgoing ones. Paint-transforms then only *interpolate* between committed
-  positions. Windows that stay fully off-screen for the entire animation get no
-  transform. After the animation settles, re-park genuinely off-screen windows via
-  `move()`. (Karousel's `commit-at-animation-end` order is wrong for incoming windows;
-  do not copy it.)
+- **Hard constraint B — RESOLVED (Phase 4), the risk did not materialize.** The concern
+  was that a KWin effect's `paintWindow()` might only fire for windows the scene decides
+  to paint, culling fully-off-screen windows. Verified live (Open Question 3): KWin
+  *does* paint windows whose real geometry is fully off-screen — scrolling a window off
+  the edge animates it smoothly out. So no cull-driven model is needed: the scroll
+  geometry batch commits each window's final real geometry and the shared
+  `WindowAnimator` interpolates the visual offset via a paint transform, off-screen
+  windows included. The "commit-on-screen-first / re-park afterwards" ordering below was
+  therefore **not built**.
+- **Animation ordering (was: corrected for constraint B — now moot).** The original
+  plan, written before constraint B was verified, called for setting real geometry to an
+  on-screen position for every window visible at any animation frame and re-parking
+  off-screen windows via `move()` afterwards. Since KWin paints off-screen windows this
+  is unnecessary; kept here only as the rationale trail.
 
-This structurally eliminates the stuck bug: real geometry is never set to an extreme
-off-screen value. The Karousel `place()` poke-hack is **not needed**.
+This structurally eliminates the stuck bug: real geometry is the daemon-resolved strip
+position and the animator only adds a transient paint offset. The Karousel `place()`
+poke-hack is **not needed**.
 
 Off-screen windows are *parked* via `move()` at a valid position just outside the
 nearest output — distinct from the §4.4 "drop into a KWin tile" fallback used on mode
@@ -323,13 +324,22 @@ with the Phase 3 navigation work.
   strip (it floats); pinning / un-pinning at runtime drops it from / re-adds it to the
   strip.
 
-### Phase 4 — Widths/heights & viewport polish
+### Phase 4 — Widths/heights & viewport polish — ✅ COMPLETE
 
-- Preset column-width cycling, `set-column-width`, full-width toggle; preset window
-  heights.
-- Smooth scroll animation via paint transforms, using the §4.1 corrected ordering;
-  commit real geometry for visible windows *before* animating, re-park after.
-- `center-focused-column` modes.
+- ✅ **Width / height controls** (M1) — `Meta+Alt+R` / `Meta+Alt+Shift+R` cycle the
+  column-width / window-height presets (the engine ops existed since Phase 3 but had no
+  keymap entry); `Meta+Alt+F` toggles the focused column to full viewport width and
+  back (it remembers the prior width); `Meta+Alt+=` / `Meta+Alt+-` grow / shrink the
+  column width by a 10% step, clamped to `[0.1, 1.0]`.
+- ✅ **`center-focused-column`** (M2) — `Meta+Alt+C` toggles the engine-global viewport
+  mode between `Fit` and `Centered` at runtime (`computeViewportScroll` already
+  resolved both). The persisted setting, with per-screen overrides, is Phase 5.
+- ✅ **Scroll animation** (M3) — scroll geometry batches already animate through the
+  shared `WindowAnimator`; M3 gave them a dedicated `window.scroll` motion profile
+  path (distinct from `window.snapIn`) so the viewport-pan feel tunes independently.
+  The §4.1 "corrected ordering / re-park" machinery proved unnecessary — see
+  Open Question 3 below: KWin paints fully-off-screen windows, so the cull-driven
+  constraint never arises.
 
 ### Phase 5 — Settings, UI, persistence
 
@@ -355,8 +365,11 @@ Deferred past v1 to keep it shippable:
 1. Confirm mapping a strip onto each existing KDE virtual desktop (rather than
    replicating niri's dynamic workspaces) is acceptable.
 2. Confirm the new `phosphor-scroll-engine` library + LGPL-2.1-or-later licensing.
-3. Phase 0 item 1: does KWin paint a window whose real geometry is fully off-screen? The
-   §4.1 animation model depends on the answer.
+3. ✅ **Resolved (Phase 4).** Does KWin paint a window whose real geometry is fully
+   off-screen? **Yes** — verified live: scrolling a window fully off-screen animates it
+   smoothly off the edge, so `paintWindow()` is called for it. The §4.1 constraint-B
+   cull risk does not arise; the "corrected ordering / re-park off-screen windows"
+   machinery is unnecessary and was not built.
 4. Phase 0 item 4: does `IPlacementEngine` need new virtual methods, and is the impact on
    the other two engines acceptable (§5)?
 5. **focus-follows-mouse interaction** — under that focus policy, KWin re-focuses
