@@ -208,9 +208,14 @@ void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
     if (minimized) {
         // A minimized window leaves the visible layout — its resolved-geometry
         // reference is stale until the strip re-resolves on restore. Drop it so
-        // onWindowFrameGeometryChanged cannot re-assert against a stale slot.
+        // onWindowFrameGeometryChanged cannot re-assert against a stale slot,
+        // and drop any in-flight drag-reorder bookkeeping: a minimize while a
+        // windowDropped is in flight supersedes it (the daemon re-resolve that
+        // would have cleared m_reorderPending now excludes the minimized
+        // window, so it must be cleared here).
         m_appliedGeometry.remove(windowId);
         m_reassertPending.remove(windowId);
+        m_reorderPending.remove(windowId);
     }
     PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
                                                    QStringLiteral("windowMinimizedChanged"), {windowId, minimized},
