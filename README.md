@@ -48,8 +48,9 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 ```bash
 yay -S plasmazones-bin                                                # Arch (AUR, prebuilt)
 sudo dnf copr enable fuddlesworth/PlasmaZones && sudo dnf install plasmazones   # Fedora (COPR)
-nix profile install github:fuddlesworth/PlasmaZones                   # Nix
 ```
+
+**NixOS:** install via the flake's `nixosModules.default` (or `homeManagerModules.default`), which builds PlasmaZones against your system's nixpkgs. Avoid `nix profile install` — it compiles the KWin effect against the flake's pinned KWin, and KWin silently refuses to load an effect whose version does not match the running compositor.
 
 openSUSE Tumbleweed, a portable tarball for Fedora Atomic / no-root setups, and source-build instructions (including the `-DUSE_KDE_FRAMEWORKS=OFF` portable build): **[Install page →](https://phosphor-works.github.io/plasmazones/#install)**.
 

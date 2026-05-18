@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **KWin effect missing on NixOS** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481)): the KWin effect plugin's IID embeds KWin's exact upstream version, and KWin refuses to load an effect whose IID does not match the running compositor — even across patch releases. The flake's `nixosModules`, `homeManagerModules`, and `overlay` built PlasmaZones against the flake's own pinned `nixpkgs`, so on a rolling NixOS system whose KWin had moved past `flake.lock` the effect's IID no longer matched and KWin silently dropped it, leaving PlasmaZones absent from System Settings → Desktop Effects. The module and overlay now build against the consumer's nixpkgs, so the effect is always compiled against the KWin the user actually runs — matching the exact-version pinning the RPM, Debian, and Arch packages already do.
+- **Support report crashed on Qt 6.11+** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481)): qttools' `qdbus`/`qdbus6` segfaults at process exit on Qt 6.11+ (a static-destruction-order crash in `registerComplexDBusType`'s `QMetaType` cleanup) when introspecting an object that exposes complex D-Bus types, which `/PlasmaZones` does. The crash could discard the buffered support report before it was printed. `plasmazones-report` now prefers `busctl` — unaffected, and present on every systemd distro — over `qdbus`, and the bug-report template recommends the `busctl` invocation instead of `qdbus6`.
+
 ## [3.0.3] - 2026-05-17
 
 ### Fixed
