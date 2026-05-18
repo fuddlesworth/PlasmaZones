@@ -111,13 +111,18 @@ void Daemon::onScrollPlacementChanged(const QString& screenId)
     // config.viewportMode stays at its Fit default — the Phase 3 default;
     // it becomes a user setting in Phase 5.
 
+    // Column metrics are scroll-independent — resolve them once and feed the
+    // same value to both the viewport computation and the geometry resolve.
+    const PhosphorScrollEngine::ScrollColumnMetrics metrics =
+        PhosphorScrollEngine::resolveColumnMetrics(*state, QRectF(workArea), config);
+
     // Scroll the strip so the focused column is on-screen, then resolve. The
     // viewport is geometry-dependent (it needs the working area), so the
     // daemon owns its computation; the engine only stores the result.
-    state->setScrollX(PhosphorScrollEngine::computeViewportScroll(*state, QRectF(workArea), config));
+    state->setScrollX(PhosphorScrollEngine::computeViewportScroll(*state, QRectF(workArea), config, &metrics));
 
     const QHash<QString, QRectF> geometries =
-        PhosphorScrollEngine::resolveScrollLayout(*state, QRectF(workArea), config);
+        PhosphorScrollEngine::resolveScrollLayout(*state, QRectF(workArea), config, &metrics);
     if (geometries.isEmpty()) {
         return;
     }

@@ -226,13 +226,18 @@ bool ScrollScreenState::moveColumnNextTo(const QString& draggedWindowId, const Q
     if (from < 0 || anchorColumn < 0 || from == anchorColumn) {
         return false;
     }
-    const Column column = m_columns.takeAt(from);
-    // Removing the dragged column shifts every later index left by one, so the
-    // anchor's index moves too when it sat to the right of the removed column.
+    // Lifting the dragged column out shifts every later index left by one, so
+    // the anchor's index drops by one when it sat to the right of it.
     const int anchorAfterRemoval = (anchorColumn > from) ? anchorColumn - 1 : anchorColumn;
     const int target =
-        qBound(0, placeAfter ? anchorAfterRemoval + 1 : anchorAfterRemoval, static_cast<int>(m_columns.size()));
-    m_columns.insert(target, column);
+        qBound(0, placeAfter ? anchorAfterRemoval + 1 : anchorAfterRemoval, static_cast<int>(m_columns.size()) - 1);
+    // A drop that lands the column back in its own slot (it was dragged only
+    // just past an adjacent column's centre) is a positional no-op: skip the
+    // reorder. The caller still re-resolves and focuses the window — that
+    // round-trip snaps the dragged window back into its (unchanged) slot.
+    if (target != from) {
+        m_columns.move(from, target);
+    }
     // The user just dragged this window — focus it (and its column).
     focusWindow(draggedWindowId);
     return true;

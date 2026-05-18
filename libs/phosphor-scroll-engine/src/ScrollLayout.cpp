@@ -13,28 +13,6 @@ qreal resolveColumnWidth(const ColumnWidth& width, qreal usableWidth)
     return qMax(resolved, qreal(1.0));
 }
 
-/// Resolve per-column widths and strip-space X positions. Columns pack left
-/// to right from strip-x 0, separated by the inner gap; a column whose every
-/// tile is minimized collapses — zero width, no gap, the cursor does not
-/// advance — so it keeps its slot in the column order without leaving a gap.
-/// A collapsed column's stripX therefore coincides with the next column's.
-void resolveColumnMetrics(const QVector<Column>& columns, qreal usableW, qreal inner, QVector<qreal>& widths,
-                          QVector<qreal>& stripX)
-{
-    widths = QVector<qreal>(columns.size(), 0.0);
-    stripX = QVector<qreal>(columns.size(), 0.0);
-    qreal cursor = 0.0;
-    for (int ci = 0; ci < columns.size(); ++ci) {
-        stripX[ci] = cursor;
-        if (!columns.at(ci).hasVisibleTiles()) {
-            continue; // collapsed column — keeps its slot, takes no strip space
-        }
-        const qreal width = resolveColumnWidth(columns.at(ci).width(), usableW);
-        widths[ci] = width;
-        cursor += width + inner;
-    }
-}
-
 /// Index of the column that anchors the viewport: the focused column when it
 /// is visible, otherwise the nearest visible column (searching right first,
 /// since a mid-strip collapsed column shares the next column's stripX, then
@@ -79,8 +57,37 @@ qreal resolveConcreteTileHeight(const WindowHeight& height, qreal columnHeight, 
 
 } // namespace
 
+ScrollColumnMetrics resolveColumnMetrics(const ScrollScreenState& state, const QRectF& workArea,
+                                         const ScrollLayoutConfig& config)
+{
+    // Columns pack left to right from strip-x 0, separated by the inner gap;
+    // a column whose every tile is minimized collapses — zero width, no gap,
+    // the cursor does not advance — so it keeps its slot in the column order
+    // without leaving a gap. A collapsed column's stripX therefore coincides
+    // with the next column's.
+    const QVector<Column>& columns = state.columns();
+    const qreal outer = qMax(config.outerGap, qreal(0.0));
+    const qreal inner = qMax(config.innerGap, qreal(0.0));
+    const qreal usableW = qMax(workArea.width() - 2.0 * outer, qreal(0.0));
+
+    ScrollColumnMetrics metrics;
+    metrics.widths = QVector<qreal>(columns.size(), 0.0);
+    metrics.stripX = QVector<qreal>(columns.size(), 0.0);
+    qreal cursor = 0.0;
+    for (int ci = 0; ci < columns.size(); ++ci) {
+        metrics.stripX[ci] = cursor;
+        if (!columns.at(ci).hasVisibleTiles()) {
+            continue; // collapsed column — keeps its slot, takes no strip space
+        }
+        const qreal width = resolveColumnWidth(columns.at(ci).width(), usableW);
+        metrics.widths[ci] = width;
+        cursor += width + inner;
+    }
+    return metrics;
+}
+
 QHash<QString, QRectF> resolveScrollLayout(const ScrollScreenState& state, const QRectF& workArea,
-                                           const ScrollLayoutConfig& config)
+                                           const ScrollLayoutConfig& config, const ScrollColumnMetrics* metrics)
 {
     QHash<QString, QRectF> geometries;
     const QVector<Column>& columns = state.columns();
@@ -92,12 +99,18 @@ QHash<QString, QRectF> resolveScrollLayout(const ScrollScreenState& state, const
     const qreal inner = qMax(config.innerGap, qreal(0.0));
     const qreal usableX = workArea.x() + outer;
     const qreal usableY = workArea.y() + outer;
-    const qreal usableW = qMax(workArea.width() - 2.0 * outer, qreal(0.0));
     const qreal usableH = qMax(workArea.height() - 2.0 * outer, qreal(0.0));
 
-    QVector<qreal> widths;
-    QVector<qreal> stripX;
-    resolveColumnMetrics(columns, usableW, inner, widths, stripX);
+    // Column metrics are scroll-independent; reuse the caller's when supplied
+    // (one relayout resolves them once for both viewport + geometry), else
+    // resolve them here.
+    ScrollColumnMetrics ownMetrics;
+    if (!metrics) {
+        ownMetrics = resolveColumnMetrics(state, workArea, config);
+        metrics = &ownMetrics;
+    }
+    const QVector<qreal>& widths = metrics->widths;
+    const QVector<qreal>& stripX = metrics->stripX;
 
     // The viewport's inner-left edge maps to this strip-x coordinate. It is
     // computed by computeViewportScroll() and stored on the state by the
@@ -163,7 +176,8 @@ QHash<QString, QRectF> resolveScrollLayout(const ScrollScreenState& state, const
     return geometries;
 }
 
-qreal computeViewportScroll(const ScrollScreenState& state, const QRectF& workArea, const ScrollLayoutConfig& config)
+qreal computeViewportScroll(const ScrollScreenState& state, const QRectF& workArea, const ScrollLayoutConfig& config,
+                            const ScrollColumnMetrics* metrics)
 {
     const QVector<Column>& columns = state.columns();
     const int activeIndex = state.activeColumnIndex();
@@ -172,20 +186,23 @@ qreal computeViewportScroll(const ScrollScreenState& state, const QRectF& workAr
     }
 
     const qreal outer = qMax(config.outerGap, qreal(0.0));
-    const qreal inner = qMax(config.innerGap, qreal(0.0));
     const qreal usableW = qMax(workArea.width() - 2.0 * outer, qreal(0.0));
 
-    QVector<qreal> widths;
-    QVector<qreal> stripX;
-    resolveColumnMetrics(columns, usableW, inner, widths, stripX);
+    // Column metrics are scroll-independent; reuse the caller's when supplied,
+    // else resolve them here (see resolveScrollLayout).
+    ScrollColumnMetrics ownMetrics;
+    if (!metrics) {
+        ownMetrics = resolveColumnMetrics(state, workArea, config);
+        metrics = &ownMetrics;
+    }
 
-    const int anchor = viewportAnchorColumn(widths, activeIndex);
+    const int anchor = viewportAnchorColumn(metrics->widths, activeIndex);
     if (anchor < 0) {
         return state.scrollX(); // every column collapsed — leave the viewport put
     }
 
-    const qreal colLeft = stripX.at(anchor);
-    const qreal colWidth = widths.at(anchor);
+    const qreal colLeft = metrics->stripX.at(anchor);
+    const qreal colWidth = metrics->widths.at(anchor);
 
     if (config.viewportMode == ScrollViewportMode::Centered) {
         // Center the anchor column in the working area.
@@ -196,7 +213,11 @@ qreal computeViewportScroll(const ScrollScreenState& state, const QRectF& workAr
     // on-screen, and not at all when it already is.
     const qreal current = state.scrollX();
     if (colWidth >= usableW) {
-        return colLeft; // wider than the viewport — pin its left edge
+        // Wider than the viewport — it cannot fit. Keep the current scroll
+        // when the column already fills the viewport edge to edge, otherwise
+        // scroll the minimum to close the dead space: clamp to the range that
+        // keeps the viewport entirely within the column.
+        return qBound(colLeft, current, colLeft + colWidth - usableW);
     }
     if (colLeft < current) {
         return colLeft; // off the left edge — scroll left just enough

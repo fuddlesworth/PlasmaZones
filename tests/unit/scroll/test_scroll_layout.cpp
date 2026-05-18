@@ -47,7 +47,8 @@ private Q_SLOTS:
     void viewportCollapsedFocusedColumnAnchorsVisible();
     void viewportCollapsedMidColumnAnchorsForward();
     void viewportAllMinimizedKeepsScroll();
-    void viewportWideColumnPinsLeft();
+    void viewportWideColumnClampsToColumn();
+    void sharedMetricsMatchInternalResolve();
 };
 
 void TestScrollLayout::emptyStrip()
@@ -328,16 +329,53 @@ void TestScrollLayout::viewportAllMinimizedKeepsScroll()
     QCOMPARE(computeViewportScroll(state, kWorkArea, standardConfig()), 700.0);
 }
 
-void TestScrollLayout::viewportWideColumnPinsLeft()
+void TestScrollLayout::viewportWideColumnClampsToColumn()
 {
     ScrollScreenState state;
     state.addColumnForWindow(QStringLiteral("a"));
     state.addColumnForWindow(QStringLiteral("b")); // focus "b"
-    // Make the focused column wider than the working area; fit cannot fit it,
-    // so it pins the column's left edge (strip-x 490 + 10 = 500).
+    // Make the focused column wider than the working area; fit cannot fit it.
+    // "b" spans strip-x [500, 1700]; usableW is 980, so the viewport stays
+    // entirely within the column for scrollX in [500, 720].
     state.setActiveColumnWidth(ColumnWidth::fixed(1200.0));
+
+    // Dead space on the left (scrollX < colLeft): scroll right to the column's
+    // left edge — the minimum move.
     state.setScrollX(50.0);
     QCOMPARE(computeViewportScroll(state, kWorkArea, standardConfig()), 500.0);
+
+    // Already edge-to-edge inside the column: fit leaves the scroll untouched.
+    state.setScrollX(600.0);
+    QCOMPARE(computeViewportScroll(state, kWorkArea, standardConfig()), 600.0);
+
+    // Dead space on the right (scrollX past the column's far extent): scroll
+    // left just enough to keep the viewport filled — 1700 - 980 = 720.
+    state.setScrollX(900.0);
+    QCOMPARE(computeViewportScroll(state, kWorkArea, standardConfig()), 720.0);
+}
+
+void TestScrollLayout::sharedMetricsMatchInternalResolve()
+{
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b"));
+    state.addColumnForWindow(QStringLiteral("c"));
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true)); // a collapsed column
+    QVERIFY(state.focusWindow(QStringLiteral("c")));
+    state.setScrollX(300.0);
+
+    // resolveColumnMetrics resolves widths + strip-x: "a" and "c" are 490 wide,
+    // the collapsed "b" is zero-width and shares "c"'s strip-x (500).
+    const ScrollColumnMetrics metrics = resolveColumnMetrics(state, kWorkArea, standardConfig());
+    QCOMPARE(metrics.widths, (QVector<qreal>{490.0, 0.0, 490.0}));
+    QCOMPARE(metrics.stripX, (QVector<qreal>{0.0, 500.0, 500.0}));
+
+    // Passing pre-resolved metrics must yield byte-identical results to the
+    // internal (nullptr) resolve — the shared-metrics fast path is pure reuse.
+    QCOMPARE(computeViewportScroll(state, kWorkArea, standardConfig(), &metrics),
+             computeViewportScroll(state, kWorkArea, standardConfig()));
+    QCOMPARE(resolveScrollLayout(state, kWorkArea, standardConfig(), &metrics),
+             resolveScrollLayout(state, kWorkArea, standardConfig()));
 }
 
 QTEST_GUILESS_MAIN(TestScrollLayout)

@@ -174,12 +174,22 @@ void TestScrollScreenState::dragReordersColumn()
     QCOMPARE(state.columns().at(2).windowIds().first(), QStringLiteral("c"));
 
     // A drop onto the dragged window's own column, or against an unknown
-    // window, is a no-op — and leaves the column order untouched.
+    // window, returns false — and leaves the column order untouched.
     QVERIFY(!state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("a"), true));
     QVERIFY(!state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("missing"), true));
     QCOMPARE(state.columns().at(0).windowIds().first(), QStringLiteral("a"));
     QCOMPARE(state.columns().at(1).windowIds().first(), QStringLiteral("b"));
     QCOMPARE(state.columns().at(2).windowIds().first(), QStringLiteral("c"));
+
+    // A drop that resolves to the column's own slot ("a" before "b" — where
+    // "a" already sits) is a positional no-op: it still returns true and
+    // focuses the window, but leaves the order untouched.
+    QVERIFY(state.focusWindow(QStringLiteral("c")));
+    QVERIFY(state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("b"), /*placeAfter=*/false));
+    QCOMPARE(state.columns().at(0).windowIds().first(), QStringLiteral("a"));
+    QCOMPARE(state.columns().at(1).windowIds().first(), QStringLiteral("b"));
+    QCOMPARE(state.columns().at(2).windowIds().first(), QStringLiteral("c"));
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("a"));
 
     // A multi-tile column moves as a whole, carrying both tiles; focus lands
     // on the dragged window.
