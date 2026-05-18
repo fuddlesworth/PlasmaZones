@@ -10,16 +10,23 @@ import org.kde.kirigami as Kirigami
  * @brief One editable action row inside ActionListEditor.
  *
  * An action is a `{ type, ...params }` JSON object. The row exposes a type
- * dropdown and a single value field whose shape depends on the type. Two-way:
- * edits emit `actionChanged(updatedAction)`; the parent owns the list.
+ * dropdown and one editor per parameter, both driven entirely by the
+ * `actionTypeOptions` metadata from `WindowRuleController.actionTypes()` —
+ * there is no per-type `if (t === "...")` ladder here. Two-way: edits emit
+ * `actionChanged(updatedAction)`; the parent owns the list.
  */
 RowLayout {
     id: row
 
     /// The action JSON object being edited — `{ type, ...params }`.
     required property var action
-    /// Registered action types from `WindowRuleController.actionTypes()`.
+    /// Registered action types from `WindowRuleController.actionTypes()` —
+    /// each entry: `{ value, label, params: [{ key, kind, label, ... }] }`.
     required property var actionTypeOptions
+    /// The descriptor for the current action's type, or undefined if unknown.
+    readonly property var _typeEntry: row._entryForType(row.action.type)
+    /// Parameter descriptors for the current type (empty when none / unknown).
+    readonly property var _params: row._typeEntry !== undefined ? row._typeEntry.params : []
 
     signal actionChanged(var updatedAction)
     signal removeRequested()
@@ -34,13 +41,25 @@ RowLayout {
         return next;
     }
 
+    /// The actionTypeOptions descriptor whose `value` equals @p type.
+    function _entryForType(type) {
+        for (var i = 0; i < row.actionTypeOptions.length; ++i) {
+            if (row.actionTypeOptions[i].value === type)
+                return row.actionTypeOptions[i];
+
+        }
+        return undefined;
+    }
+
+    /// The index of the current action's type — -1 for an unknown / legacy
+    /// type so the combo shows no selection rather than coercing to index 0.
     function _typeIndex() {
         for (var i = 0; i < row.actionTypeOptions.length; ++i) {
             if (row.actionTypeOptions[i].value === row.action.type)
                 return i;
 
         }
-        return 0;
+        return -1;
     }
 
     spacing: Kirigami.Units.smallSpacing
@@ -70,30 +89,27 @@ RowLayout {
         }
     }
 
-    // Value editor — shape depends on the action type.
-    Loader {
-        Layout.fillWidth: true
-        Layout.alignment: Qt.AlignVCenter
-        sourceComponent: {
-            var t = row.action.type;
-            if (t === "setEngineMode")
-                return engineModeEditor;
+    // One editor per parameter — the shape comes from the param `kind`, never
+    // an action-type ladder.
+    Repeater {
+        model: row._params
 
-            if (t === "setSnappingLayout")
-                return layoutIdEditor;
+        delegate: Loader {
+            required property var modelData
 
-            if (t === "setTilingAlgorithm")
-                return algorithmEditor;
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            sourceComponent: {
+                if (modelData.kind === "enum")
+                    return enumParamEditor;
 
-            if (t === "setOpacity")
-                return opacityEditor;
+                if (modelData.kind === "number" || modelData.kind === "percent")
+                    return numberParamEditor;
 
-            if (t === "overrideAnimationShader" || t === "overrideAnimationTiming")
-                return animationEventEditor;
-
-            // float / disableEngine / exclude carry no params.
-            return null;
+                return stringParamEditor;
+            }
         }
+
     }
 
     ToolButton {
@@ -106,62 +122,49 @@ RowLayout {
     }
 
     Component {
-        id: engineModeEditor
-
-        ComboBox {
-            model: ["snapping", "autotile"]
-            currentIndex: Math.max(0, model.indexOf(row.action.mode || "snapping"))
-            Accessible.name: i18n("Engine mode")
-            onActivated: row.actionChanged(row._withParam("mode", currentText))
-        }
-
-    }
-
-    Component {
-        id: layoutIdEditor
+        id: stringParamEditor
 
         TextField {
-            text: row.action.layoutId || ""
-            placeholderText: i18n("Snapping layout id")
-            Accessible.name: i18n("Snapping layout id")
-            onEditingFinished: row.actionChanged(row._withParam("layoutId", text))
+            required property var modelData
+
+            text: row.action[modelData.key] !== undefined ? String(row.action[modelData.key]) : ""
+            placeholderText: modelData.label
+            Accessible.name: modelData.label
+            onEditingFinished: row.actionChanged(row._withParam(modelData.key, text))
         }
 
     }
 
     Component {
-        id: algorithmEditor
-
-        TextField {
-            text: row.action.algorithm || ""
-            placeholderText: i18n("Tiling algorithm id")
-            Accessible.name: i18n("Tiling algorithm id")
-            onEditingFinished: row.actionChanged(row._withParam("algorithm", text))
-        }
-
-    }
-
-    Component {
-        id: opacityEditor
+        id: numberParamEditor
 
         SpinBox {
-            from: 0
-            to: 100
-            value: Math.round((row.action.value !== undefined ? row.action.value : 1) * 100)
-            Accessible.name: i18n("Opacity percentage")
-            onValueModified: row.actionChanged(row._withParam("value", value / 100))
+            required property var modelData
+            // "percent" stores `display * scale`; "number" stores the raw value.
+            readonly property real _scale: modelData.scale !== undefined ? modelData.scale : 1
+            readonly property real _stored: row.action[modelData.key] !== undefined ? row.action[modelData.key] : 0
+
+            from: modelData.min !== undefined ? modelData.min : 0
+            to: modelData.max !== undefined ? modelData.max : 999999
+            value: Math.round(_stored / _scale)
+            Accessible.name: modelData.label
+            onValueModified: row.actionChanged(row._withParam(modelData.key, value * _scale))
         }
 
     }
 
     Component {
-        id: animationEventEditor
+        id: enumParamEditor
 
-        TextField {
-            text: row.action.event || ""
-            placeholderText: i18n("Event path, e.g. window.open")
-            Accessible.name: i18n("Animation event path")
-            onEditingFinished: row.actionChanged(row._withParam("event", text))
+        ComboBox {
+            required property var modelData
+
+            model: modelData.options
+            // -1 for an unknown stored value so it is not coerced to the
+            // first option and committed over the user's data.
+            currentIndex: modelData.options.indexOf(row.action[modelData.key])
+            Accessible.name: modelData.label
+            onActivated: row.actionChanged(row._withParam(modelData.key, currentText))
         }
 
     }

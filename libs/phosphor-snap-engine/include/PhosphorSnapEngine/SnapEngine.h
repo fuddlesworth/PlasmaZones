@@ -25,6 +25,11 @@ class IZoneDetector;
 class LayoutRegistry;
 }
 
+namespace PhosphorWindowRule {
+class RuleEvaluator;
+class WindowRuleSet;
+}
+
 namespace PhosphorSnapEngine {
 
 class INavigationStateProvider;
@@ -523,7 +528,26 @@ private:
     /// (`AppId AppIdMatches` leaves — the segment-aware reverse-DNS match) and
     /// the @p appId is resolved against it. Returns false when settings are
     /// unavailable or no pattern matches.
+    ///
+    /// The derived rule set and its evaluator are memoized: rebuilding the
+    /// WindowRuleSet and constructing a fresh RuleEvaluator on every call
+    /// (per window-open, per navigation keystroke) was wasteful. The cache is
+    /// rebuilt only when the excludedApplications / excludedWindowClasses
+    /// lists actually change — ISnapSettings exposes no change signal, so the
+    /// cache is keyed by the two lists' contents.
     bool isAppIdExcluded(const QString& appId) const;
+
+    /// Cached exclusion rule set + evaluator. Rebuilt by ensureExclusionCache()
+    /// only when the underlying settings lists differ from m_exclusionCacheKey.
+    /// The RuleEvaluator holds a reference to the WindowRuleSet, so the set is
+    /// heap-allocated (a stable address) and the evaluator is rebuilt in
+    /// lockstep with it.
+    void ensureExclusionCache() const;
+    mutable std::unique_ptr<PhosphorWindowRule::WindowRuleSet> m_exclusionRuleSet;
+    mutable std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_exclusionEvaluator;
+    mutable QStringList m_exclusionCacheAppsKey;
+    mutable QStringList m_exclusionCacheClassesKey;
+    mutable bool m_exclusionCacheValid = false;
 
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;

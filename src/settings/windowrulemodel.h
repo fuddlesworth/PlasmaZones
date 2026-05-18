@@ -122,6 +122,13 @@ public:
     /// drag-to-reorder. Returns false on an unknown id.
     bool moveRule(const QUuid& id, const QUuid& beforeId);
 
+    /// Re-stamp every rule's priority from @p priorities (parallel to the
+    /// current list order). Mutates in place and emits a single
+    /// `dataChanged(PriorityRole)` over the whole list — no model reset, so
+    /// QML delegates are not torn down and rebuilt. @p priorities must have
+    /// `rowCount()` entries; a size mismatch is a no-op.
+    void setPriorities(const QList<int>& priorities);
+
     // ── Section helpers (also used by the model's own data()) ──
 
     /// The section a rule falls into — pure function of the rule's shape.
@@ -130,11 +137,16 @@ public:
     /// Localized header label for @p section.
     static QString sectionLabel(Section section);
 
+    /// Localized human label for a match Field. Shared with
+    /// `WindowRuleController` so the 14-case table lives in exactly one place.
+    static QString fieldLabel(PhosphorWindowRule::Field field);
+
 Q_SIGNALS:
     void countChanged();
-    /// Emitted on any structural change (add / remove / update / move /
-    /// setRules) so the controller can re-flag the dirty bit.
-    void rulesMutated();
+    /// Emitted when an `updateRule()` moved a rule into a different section
+    /// (its `sectionFor()` changed). A plain `dataChanged` does not prompt the
+    /// QML section view to re-bucket the rule, so the page listens for this.
+    void ruleSectionChanged();
 
 private:
     /// Index of the rule with @p id, or -1.

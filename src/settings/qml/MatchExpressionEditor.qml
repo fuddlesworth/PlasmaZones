@@ -111,98 +111,110 @@ ColumnLayout {
     }
 
     // ── Composite node ──
-    RowLayout {
+    // Wrapped in a Loader so a leaf node never instantiates the (hidden)
+    // composite kind selector, child Repeater and add-buttons subtree.
+    Loader {
         Layout.fillWidth: true
-        visible: !matchEditor._isLeaf
-        spacing: Kirigami.Units.smallSpacing
+        active: !matchEditor._isLeaf
+        visible: active
 
-        // Indentation guide proportional to depth.
-        Rectangle {
-            Layout.preferredWidth: matchEditor.depth * Kirigami.Units.largeSpacing
-            Layout.fillHeight: true
-            color: "transparent"
-        }
+        sourceComponent: ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing
 
-        ComboBox {
-            id: kindCombo
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
 
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 7
-            model: [{
-                "value": "all",
-                "label": i18nc("match composite — every child must match", "ALL of")
-            }, {
-                "value": "any",
-                "label": i18nc("match composite — at least one child must match", "ANY of")
-            }, {
-                "value": "none",
-                "label": i18nc("match composite — no child may match", "NONE of")
-            }]
-            textRole: "label"
-            valueRole: "value"
-            currentIndex: ["all", "any", "none"].indexOf(matchEditor._compositeKind)
-            Accessible.name: i18n("Condition group type")
-            onActivated: function(index) {
-                if (currentValue !== matchEditor._compositeKind)
-                    matchEditor._changeKind(currentValue);
+                // Indentation guide proportional to depth.
+                Rectangle {
+                    Layout.preferredWidth: matchEditor.depth * Kirigami.Units.largeSpacing
+                    Layout.fillHeight: true
+                    color: "transparent"
+                }
+
+                ComboBox {
+                    id: kindCombo
+
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 7
+                    model: [{
+                        "value": "all",
+                        "label": i18nc("match composite — every child must match", "ALL of")
+                    }, {
+                        "value": "any",
+                        "label": i18nc("match composite — at least one child must match", "ANY of")
+                    }, {
+                        "value": "none",
+                        "label": i18nc("match composite — no child may match", "NONE of")
+                    }]
+                    textRole: "label"
+                    valueRole: "value"
+                    currentIndex: ["all", "any", "none"].indexOf(matchEditor._compositeKind)
+                    Accessible.name: i18n("Condition group type")
+                    onActivated: function(index) {
+                        if (currentValue !== matchEditor._compositeKind)
+                            matchEditor._changeKind(currentValue);
+
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                ToolButton {
+                    visible: matchEditor.removable
+                    icon.name: "edit-delete"
+                    ToolTip.text: i18n("Remove group")
+                    ToolTip.visible: hovered
+                    Accessible.name: i18n("Remove this condition group")
+                    onClicked: matchEditor.removeRequested()
+                }
 
             }
-        }
 
-        Item {
-            Layout.fillWidth: true
-        }
+            // Children — each recursively a MatchExpressionEditor.
+            Repeater {
+                model: matchEditor._children.length
 
-        ToolButton {
-            visible: matchEditor.removable
-            icon.name: "edit-delete"
-            ToolTip.text: i18n("Remove group")
-            ToolTip.visible: hovered
-            Accessible.name: i18n("Remove this condition group")
-            onClicked: matchEditor.removeRequested()
-        }
+                MatchExpressionEditor {
+                    required property int index
 
-    }
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    node: matchEditor._children[index]
+                    controller: matchEditor.controller
+                    depth: matchEditor.depth + 1
+                    removable: true
+                    onNodeChanged: function(updated) {
+                        matchEditor._replaceChild(index, updated);
+                    }
+                    onRemoveRequested: matchEditor._removeChild(index)
+                }
 
-    // Children — each recursively a MatchExpressionEditor.
-    Repeater {
-        model: matchEditor._isLeaf ? 0 : matchEditor._children.length
-
-        MatchExpressionEditor {
-            required property int index
-
-            Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            node: matchEditor._children[index]
-            controller: matchEditor.controller
-            depth: matchEditor.depth + 1
-            removable: true
-            onNodeChanged: function(updated) {
-                matchEditor._replaceChild(index, updated);
             }
-            onRemoveRequested: matchEditor._removeChild(index)
-        }
 
-    }
+            RowLayout {
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                spacing: Kirigami.Units.smallSpacing
 
-    RowLayout {
-        visible: !matchEditor._isLeaf
-        Layout.leftMargin: Kirigami.Units.largeSpacing
-        spacing: Kirigami.Units.smallSpacing
+                Button {
+                    text: i18n("Add condition")
+                    icon.name: "list-add"
+                    flat: true
+                    Accessible.name: i18n("Add a condition to this group")
+                    onClicked: matchEditor._addLeafChild()
+                }
 
-        Button {
-            text: i18n("Add condition")
-            icon.name: "list-add"
-            flat: true
-            Accessible.name: i18n("Add a condition to this group")
-            onClicked: matchEditor._addLeafChild()
-        }
+                Button {
+                    text: i18n("Add group")
+                    icon.name: "list-add"
+                    flat: true
+                    Accessible.name: i18n("Add a nested condition group")
+                    onClicked: matchEditor._addGroupChild()
+                }
 
-        Button {
-            text: i18n("Add group")
-            icon.name: "list-add"
-            flat: true
-            Accessible.name: i18n("Add a nested condition group")
-            onClicked: matchEditor._addGroupChild()
+            }
+
         }
 
     }

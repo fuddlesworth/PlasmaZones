@@ -20,65 +20,38 @@ RowLayout {
     required property var node
     /// The WindowRuleController (for matchFields / operatorsForField).
     required property var controller
+    // Each entry carries `{ value, wire, label, valueKind }` — the controller
+    // owns the enum↔wire-string table; this component never reconstructs it.
     readonly property var _fieldOptions: controller.matchFields()
+    // The current field's descriptor (by wire string), or undefined if the
+    // stored field is unknown / legacy.
+    readonly property var _fieldEntry: leaf._entryForWire(leaf._fieldOptions, leaf.node.field)
     // Operator options depend on the current field's enum value.
-    readonly property int _fieldEnum: leaf._enumForFieldName(leaf.node.field)
-    readonly property var _operatorOptions: controller.operatorsForField(leaf._fieldEnum)
-    readonly property string _valueKind: leaf._valueKindForField(leaf.node.field)
-    // Wire-string ↔ Field-enum table. Mirrors PhosphorWindowRule::Field.
-    readonly property var _fieldNames: ["appId", "windowClass", "desktopFile", "windowRole", "pid", "title", "windowType", "isSticky", "isFullscreen", "isMinimized", "screenId", "virtualDesktop", "activity"]
-    // Wire-string ↔ Operator-enum table. Mirrors PhosphorWindowRule::Operator.
-    readonly property var _operatorNames: ["equals", "contains", "startsWith", "endsWith", "regex", "appIdMatches", "in", "greaterThan", "lessThan"]
+    readonly property var _operatorOptions: leaf._fieldEntry !== undefined ? controller.operatorsForField(leaf._fieldEntry.value) : []
+    readonly property string _valueKind: leaf._fieldEntry !== undefined ? leaf._fieldEntry.valueKind : "string"
 
     signal leafChanged(var updatedLeaf)
     signal removeRequested()
 
-    function _enumForFieldName(name) {
-        for (var i = 0; i < leaf._fieldOptions.length; ++i) {
-            // matchFields() carries the wire string under no key — match the
-            // controller's enum by recomputing from the Field order. We map
-            // via the label-independent index: WindowRuleController emits
-            // entries in Field enum order, so value === enum int.
-            if (leaf._fieldNameForEnum(leaf._fieldOptions[i].value) === name)
-                return leaf._fieldOptions[i].value;
+    /// The descriptor in @p options whose `wire` equals @p wire, or undefined.
+    function _entryForWire(options, wire) {
+        for (var i = 0; i < options.length; ++i) {
+            if (options[i].wire === wire)
+                return options[i];
 
         }
-        return leaf._fieldOptions.length > 0 ? leaf._fieldOptions[0].value : 0;
+        return undefined;
     }
 
-    function _fieldNameForEnum(e) {
-        return (e >= 0 && e < leaf._fieldNames.length) ? leaf._fieldNames[e] : "appId";
-    }
-
-    function _valueKindForField(name) {
-        for (var i = 0; i < leaf._fieldOptions.length; ++i) {
-            if (leaf._fieldNameForEnum(leaf._fieldOptions[i].value) === name)
-                return leaf._fieldOptions[i].valueKind;
-
-        }
-        return "string";
-    }
-
-    function _operatorNameForEnum(e) {
-        return (e >= 0 && e < leaf._operatorNames.length) ? leaf._operatorNames[e] : "equals";
-    }
-
-    function _fieldIndex() {
-        for (var i = 0; i < leaf._fieldOptions.length; ++i) {
-            if (leaf._fieldNameForEnum(leaf._fieldOptions[i].value) === leaf.node.field)
+    /// The index of @p wire in @p options, or -1 when unknown — an unknown
+    /// (legacy) value must surface as no selection, never coerce to index 0.
+    function _indexForWire(options, wire) {
+        for (var i = 0; i < options.length; ++i) {
+            if (options[i].wire === wire)
                 return i;
 
         }
-        return 0;
-    }
-
-    function _operatorIndex() {
-        for (var i = 0; i < leaf._operatorOptions.length; ++i) {
-            if (leaf._operatorNameForEnum(leaf._operatorOptions[i].value) === leaf.node.op)
-                return i;
-
-        }
-        return 0;
+        return -1;
     }
 
     function _emit(field, op, value) {
@@ -104,14 +77,15 @@ RowLayout {
 
         Layout.preferredWidth: Kirigami.Units.gridUnit * 9
         textRole: "label"
-        valueRole: "value"
+        valueRole: "wire"
         model: leaf._fieldOptions
-        currentIndex: leaf._fieldIndex()
+        // -1 for an unknown / legacy field — show no selection rather than
+        // silently coercing it to the first field.
+        currentIndex: leaf._indexForWire(leaf._fieldOptions, leaf.node.field)
         Accessible.name: i18n("Match field")
         onActivated: function(index) {
-            var name = leaf._fieldNameForEnum(currentValue);
-            if (name !== leaf.node.field)
-                leaf._emit(name, leaf.node.op, leaf.node.value);
+            if (currentValue !== leaf.node.field)
+                leaf._emit(currentValue, leaf.node.op, leaf.node.value);
 
         }
     }
@@ -121,14 +95,13 @@ RowLayout {
 
         Layout.preferredWidth: Kirigami.Units.gridUnit * 9
         textRole: "label"
-        valueRole: "value"
+        valueRole: "wire"
         model: leaf._operatorOptions
-        currentIndex: leaf._operatorIndex()
+        currentIndex: leaf._indexForWire(leaf._operatorOptions, leaf.node.op)
         Accessible.name: i18n("Match operator")
         onActivated: function(index) {
-            var name = leaf._operatorNameForEnum(currentValue);
-            if (name !== leaf.node.op)
-                leaf._emit(leaf.node.field, name, leaf.node.value);
+            if (currentValue !== leaf.node.op)
+                leaf._emit(leaf.node.field, currentValue, leaf.node.value);
 
         }
     }

@@ -76,8 +76,10 @@ public:
     Q_INVOKABLE void reload();
 
     /// Push the staged rule set back to the daemon. Clears the dirty bit on a
-    /// successful write. Called by `SettingsController::save()`.
-    void commit();
+    /// successful write. Called by `SettingsController::save()`. Returns false
+    /// if the push failed (daemon down, or the daemon rejected/partially
+    /// dropped rules) — the caller must keep the page dirty in that case.
+    bool commit();
 
     /// Discard staged edits and re-fetch from the daemon. Clears the dirty
     /// bit. Called by `SettingsController::load()` (Discard).
@@ -114,9 +116,6 @@ public:
     /// Toggle the enabled flag of the rule with @p ruleId.
     Q_INVOKABLE bool setRuleEnabled(const QString& ruleId, bool enabled);
 
-    /// Set the priority of the rule with @p ruleId (Advanced editor only).
-    Q_INVOKABLE bool setRulePriority(const QString& ruleId, int priority);
-
     /// Reorder: move @p ruleId to sit just before @p beforeRuleId (empty =
     /// move to the end). Drives the Animations drag-to-reorder. After a move
     /// the affected rules' priorities are renormalized so list order and
@@ -125,6 +124,20 @@ public:
 
     /// The rule with @p ruleId as a JSON map, or an empty map if absent.
     Q_INVOKABLE QVariantMap ruleJson(const QString& ruleId) const;
+
+    // ── List / section metadata for the page ──────────────────────────────
+
+    /// The ordered section descriptors for the grouped list and chip filter.
+    /// Each entry: `{ value: int (Section enum), label }`. The order is the
+    /// canonical display order; QML must not hardcode the enum values.
+    Q_INVOKABLE QVariantList sections() const;
+
+    /// A snapshot of every rule as a map keyed by the model's role names
+    /// (`ruleId`, `name`, `enabled`, `section`, `matchSummary`,
+    /// `actionSummary`, `conditionCount`, `actionCount`, `isComposite`,
+    /// `screenIds`). Lets the page bucket / filter rules without ever
+    /// referencing raw `Qt.UserRole + N` integers.
+    Q_INVOKABLE QVariantList rulesSnapshot() const;
 
     // ── Monitor overview strip ────────────────────────────────────────────
 
@@ -135,35 +148,58 @@ public:
     /// monitor — including ones with no rule at all (the "Not assigned" tile).
     Q_INVOKABLE QVariantList monitorOverview(const QVariantList& screens) const;
 
+    /// The screen-ids a rule pins, or an empty list if it is not a
+    /// monitor-scoped rule. Lets QML filter the list by the rule's actual
+    /// ScreenId predicate(s) rather than substring-scanning the localized
+    /// match summary.
+    Q_INVOKABLE QStringList ruleScreenIds(const QString& ruleId) const;
+
     // ── Authoring metadata for the QML editors ────────────────────────────
 
     /// Match fields suitable for the leaf-editor field dropdown. Each entry:
-    /// `{ value: int (Field enum), label, valueKind: "string"|"number"|"bool" }`.
+    /// `{ value: int (Field enum), wire: QString (JSON wire string),
+    ///    label, valueKind: "string"|"number"|"bool" }`. QML keys off `wire`
+    /// so it never has to reconstruct the enum↔wire-string table.
     Q_INVOKABLE QVariantList matchFields() const;
 
     /// Operators valid for @p fieldValue (a `Field` enum int). Each entry:
-    /// `{ value: int (Operator enum), label }`.
+    /// `{ value: int (Operator enum), wire: QString (JSON wire string), label }`.
     Q_INVOKABLE QVariantList operatorsForField(int fieldValue) const;
 
     /// Registered action types for the action-editor dropdown. Each entry:
-    /// `{ value: QString (action type id), label }`.
+    /// `{ value: QString (action type id), label, params: [ ... ] }` where
+    /// each param descriptor is
+    /// `{ key, kind: "string"|"number"|"enum"|"percent", label }` plus, for
+    /// `kind == "enum"`, an `options` string list, and for `kind == "number"`
+    /// /`"percent"`, `min`/`max`/`scale` (the value stored is `display * scale`).
+    /// QML drives the per-type editor entirely from this descriptor.
     Q_INVOKABLE QVariantList actionTypes() const;
 
 Q_SIGNALS:
     void dirtyChanged();
     void daemonReachableChanged();
+    /// Emitted when a `commit()` push to the daemon fails or partially drops
+    /// rules — `SettingsController` keeps the window-rules page dirty.
+    void commitFailed();
 
 private:
-    /// Apply a staged mutation result: flip the dirty bit + emit.
+    /// Flip the dirty bit to true and emit `dirtyChanged()`.
     void markDirty();
     void setDirty(bool dirty);
     void setDaemonReachable(bool reachable);
+
+    /// Re-fetch the rule set from the daemon and load it into the model,
+    /// unconditionally clearing the dirty bit. The public `reload()` slot
+    /// guards on the dirty bit so a daemon broadcast can't stomp staged
+    /// edits; `revert()`/`commit()` call this directly to bypass that guard.
+    void fetchAndLoad();
 
     /// Fetch the rule set JSON from the daemon. Returns nullopt on any D-Bus
     /// failure (daemon down, timeout). Updates `daemonReachable`.
     std::optional<PhosphorWindowRule::WindowRuleSet> fetchFromDaemon();
 
-    /// Push @p rules to the daemon via `setAllRules`. Returns true on success.
+    /// Push @p rules to the daemon via `setAllRules`. Returns true only if the
+    /// daemon accepted every rule (no partial drop).
     bool pushToDaemon(const QList<PhosphorWindowRule::WindowRule>& rules);
 
     /// Renormalize every rule's priority so descending list order ⇒

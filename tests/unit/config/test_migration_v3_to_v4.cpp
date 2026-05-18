@@ -33,6 +33,8 @@
 #include <QJsonObject>
 #include <QTest>
 
+#include <algorithm>
+
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/config/configmigration.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -185,6 +187,61 @@ private:
         return types;
     }
 
+    /// Flatten a rule's match expression to its leaf objects. A bare leaf
+    /// match yields a one-element list; an All{} match yields its children.
+    QList<QJsonObject> matchLeaves(const QJsonObject& rule)
+    {
+        const QJsonObject match = rule.value(QStringLiteral("match")).toObject();
+        QList<QJsonObject> leaves;
+        if (match.contains(QStringLiteral("field"))) {
+            leaves.append(match); // a bare equality leaf
+        } else if (match.contains(QStringLiteral("all"))) {
+            for (const QJsonValue& v : match.value(QStringLiteral("all")).toArray()) {
+                leaves.append(v.toObject());
+            }
+        }
+        return leaves;
+    }
+
+    /// The string value of the `field == equals` leaf for @p field, or empty
+    /// if the rule's match carries no such leaf.
+    QString matchLeafValue(const QJsonObject& rule, const QString& field)
+    {
+        for (const QJsonObject& leaf : matchLeaves(rule)) {
+            if (leaf.value(QStringLiteral("field")).toString() == field
+                && leaf.value(QStringLiteral("op")).toString() == QLatin1String("equals")) {
+                return leaf.value(QStringLiteral("value")).toVariant().toString();
+            }
+        }
+        return QString();
+    }
+
+    /// The `mode` token of a rule's single `disableEngine` action, or empty
+    /// if the rule carries no disable action.
+    QString disableActionMode(const QJsonObject& rule)
+    {
+        for (const QJsonValue& v : rule.value(QStringLiteral("actions")).toArray()) {
+            const QJsonObject a = v.toObject();
+            if (a.value(QStringLiteral("type")).toString() == QLatin1String("disableEngine")) {
+                return a.value(QStringLiteral("mode")).toString();
+            }
+        }
+        return QString();
+    }
+
+    /// All rules carrying a `disableEngine` action.
+    QList<QJsonObject> disableRules(const QJsonArray& rules)
+    {
+        QList<QJsonObject> out;
+        for (const QJsonValue& v : rules) {
+            const QJsonObject r = v.toObject();
+            if (!disableActionMode(r).isEmpty()) {
+                out.append(r);
+            }
+        }
+        return out;
+    }
+
 private Q_SLOTS:
 
     // ─── Full conversion ──────────────────────────────────────────────────
@@ -221,26 +278,18 @@ private Q_SLOTS:
 
         const QJsonArray rules = rulesFromWindowRules();
 
+        // Each fixture Assignment migrated to a rule at the cascade priority
+        // its pinned dimensions dictate. The four pinned levels must all be
+        // present in the migrated rule set.
+
         // Exact (screen+desktop+activity) → 610.
-        QVERIFY(!findRuleByPriority(
-                     rules, CRB::kBasePriority + CRB::kActivityWeight + CRB::kDesktopWeight + CRB::kScreenWeight)
-                     .isEmpty());
-        QCOMPARE(CRB::kBasePriority + CRB::kActivityWeight + CRB::kDesktopWeight + CRB::kScreenWeight, 610);
-
+        QVERIFY(!findRuleByPriority(rules, 610).isEmpty());
         // Screen + activity → 510 (activity weight beats desktop).
-        QCOMPARE(CRB::kBasePriority + CRB::kActivityWeight + CRB::kScreenWeight, 510);
         QVERIFY(!findRuleByPriority(rules, 510).isEmpty());
-
         // Screen + desktop → 410.
-        QCOMPARE(CRB::kBasePriority + CRB::kDesktopWeight + CRB::kScreenWeight, 410);
         QVERIFY(!findRuleByPriority(rules, 410).isEmpty());
-
         // Screen only → 310.
-        QCOMPARE(CRB::kBasePriority + CRB::kScreenWeight, 310);
         QVERIFY(!findRuleByPriority(rules, 310).isEmpty());
-
-        // Activity-pinned (510) outranks desktop-pinned (410) — structural.
-        QVERIFY(510 > 410);
     }
 
     // ─── Lossless three-action assignment rules ──────────────────────────
@@ -309,22 +358,123 @@ private Q_SLOTS:
         writeJson(assignmentsPath(), makeAssignments());
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QJsonArray rules = rulesFromWindowRules();
+        const QList<QJsonObject> disabled = disableRules(rulesFromWindowRules());
 
         // Count DisableEngine rules. Fixture: snapping monitor (DP-3) = 1,
         // autotile monitors (DP-3, HDMI-2) = 2, snapping desktop (DP-1/4) = 1,
         // autotile activity (DP-1/act-uuid-7) = 1 → 5 disable rules.
-        int disableRules = 0;
-        for (const QJsonValue& v : rules) {
-            const QJsonObject r = v.toObject();
-            for (const QJsonValue& av : r.value(QStringLiteral("actions")).toArray()) {
-                if (av.toObject().value(QStringLiteral("type")).toString() == QLatin1String("disableEngine")) {
-                    ++disableRules;
-                    break;
-                }
-            }
-        }
-        QCOMPARE(disableRules, 5);
+        QCOMPARE(disabled.size(), 5);
+
+        // Count alone is not enough — a migration that swapped screen ids or
+        // modes still hits 5. Assert each fixture entry produced a disable
+        // rule with the correct pinned dimensions AND the correct mode token.
+
+        // SnappingDisabledMonitors = "DP-3" → snapping monitor disable on DP-3.
+        const auto isSnapMonitorDp3 = [&](const QJsonObject& r) {
+            return disableActionMode(r) == QLatin1String("snapping")
+                && matchLeafValue(r, QStringLiteral("screenId")) == QLatin1String("DP-3")
+                && matchLeafValue(r, QStringLiteral("virtualDesktop")).isEmpty()
+                && matchLeafValue(r, QStringLiteral("activity")).isEmpty();
+        };
+        QCOMPARE(std::count_if(disabled.cbegin(), disabled.cend(), isSnapMonitorDp3), 1);
+
+        // AutotileDisabledMonitors = "DP-3,HDMI-2" → autotile monitor disables
+        // on BOTH DP-3 and HDMI-2.
+        const auto isAutotileMonitor = [&](const QJsonObject& r, const QString& screen) {
+            return disableActionMode(r) == QLatin1String("autotile")
+                && matchLeafValue(r, QStringLiteral("screenId")) == screen
+                && matchLeafValue(r, QStringLiteral("virtualDesktop")).isEmpty()
+                && matchLeafValue(r, QStringLiteral("activity")).isEmpty();
+        };
+        QCOMPARE(std::count_if(disabled.cbegin(), disabled.cend(),
+                               [&](const QJsonObject& r) {
+                                   return isAutotileMonitor(r, QStringLiteral("DP-3"));
+                               }),
+                 1);
+        QCOMPARE(std::count_if(disabled.cbegin(), disabled.cend(),
+                               [&](const QJsonObject& r) {
+                                   return isAutotileMonitor(r, QStringLiteral("HDMI-2"));
+                               }),
+                 1);
+
+        // SnappingDisabledDesktops = "DP-1/4" → snapping desktop disable
+        // pinning ScreenId == DP-1 AND VirtualDesktop == 4.
+        const auto isSnapDesktop = [&](const QJsonObject& r) {
+            return disableActionMode(r) == QLatin1String("snapping")
+                && matchLeafValue(r, QStringLiteral("screenId")) == QLatin1String("DP-1")
+                && matchLeafValue(r, QStringLiteral("virtualDesktop")) == QLatin1String("4")
+                && matchLeafValue(r, QStringLiteral("activity")).isEmpty();
+        };
+        QCOMPARE(std::count_if(disabled.cbegin(), disabled.cend(), isSnapDesktop), 1);
+
+        // AutotileDisabledActivities = "DP-1/act-uuid-7" → autotile activity
+        // disable pinning ScreenId == DP-1 AND Activity == act-uuid-7.
+        const auto isAutotileActivity = [&](const QJsonObject& r) {
+            return disableActionMode(r) == QLatin1String("autotile")
+                && matchLeafValue(r, QStringLiteral("screenId")) == QLatin1String("DP-1")
+                && matchLeafValue(r, QStringLiteral("activity")) == QLatin1String("act-uuid-7")
+                && matchLeafValue(r, QStringLiteral("virtualDesktop")).isEmpty();
+        };
+        QCOMPARE(std::count_if(disabled.cbegin(), disabled.cend(), isAutotileActivity), 1);
+    }
+
+    // ─── Multi-dimension disable-rule priority ────────────────────────────
+    // The disable rules share the cascade priority formula with assignment
+    // rules: a screen+desktop disable outranks a screen-only disable, and a
+    // screen+activity disable outranks both. This exercises the formula above
+    // the single-dimension (screen-only, 310) band — a monitor-only fixture
+    // entry alone never reaches the multi-pin priorities.
+
+    void testDisableRulePriority_multiDimension()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QList<QJsonObject> disabled = disableRules(rulesFromWindowRules());
+
+        // The "DP-1/4" SnappingDisabledDesktops entry pins screen + desktop →
+        // priority 410 (kBasePriority + screen + desktop weights).
+        const auto snapDesktop = std::find_if(disabled.cbegin(), disabled.cend(), [&](const QJsonObject& r) {
+            return disableActionMode(r) == QLatin1String("snapping")
+                && matchLeafValue(r, QStringLiteral("virtualDesktop")) == QLatin1String("4");
+        });
+        QVERIFY(snapDesktop != disabled.cend());
+        QCOMPARE(snapDesktop->value(QStringLiteral("priority")).toInt(),
+                 CRB::contextPriority(/*screenPinned=*/true, /*desktopPinned=*/true, /*activityPinned=*/false));
+        QCOMPARE(snapDesktop->value(QStringLiteral("priority")).toInt(), 410);
+
+        // The "DP-1/act-uuid-7" AutotileDisabledActivities entry pins screen +
+        // activity → priority 510 (activity weight beats desktop).
+        const auto autotileActivity = std::find_if(disabled.cbegin(), disabled.cend(), [&](const QJsonObject& r) {
+            return disableActionMode(r) == QLatin1String("autotile")
+                && matchLeafValue(r, QStringLiteral("activity")) == QLatin1String("act-uuid-7");
+        });
+        QVERIFY(autotileActivity != disabled.cend());
+        QCOMPARE(autotileActivity->value(QStringLiteral("priority")).toInt(),
+                 CRB::contextPriority(/*screenPinned=*/true, /*desktopPinned=*/false, /*activityPinned=*/true));
+        QCOMPARE(autotileActivity->value(QStringLiteral("priority")).toInt(), 510);
+
+        // A screen-only monitor disable sits at the single-dimension band (310).
+        const auto snapMonitor = std::find_if(disabled.cbegin(), disabled.cend(), [&](const QJsonObject& r) {
+            return disableActionMode(r) == QLatin1String("snapping")
+                && matchLeafValue(r, QStringLiteral("screenId")) == QLatin1String("DP-3");
+        });
+        QVERIFY(snapMonitor != disabled.cend());
+        QCOMPARE(snapMonitor->value(QStringLiteral("priority")).toInt(),
+                 CRB::contextPriority(/*screenPinned=*/true, /*desktopPinned=*/false, /*activityPinned=*/false));
+
+        // makeDisableRule's priority must agree with the migration output for
+        // a multi-dimension entry — a screen+desktop disable rule pins 410.
+        const PhosphorWindowRule::WindowRule directDesktop = CRB::makeDisableRule(
+            QStringLiteral("d"), QStringLiteral("DP-1"), /*virtualDesktop=*/4, QString(), /*autotileMode=*/false);
+        QCOMPARE(directDesktop.priority, 410);
+        // A screen+activity disable rule pins 510 — activity outranks desktop.
+        const PhosphorWindowRule::WindowRule directActivity = CRB::makeDisableRule(
+            QStringLiteral("a"), QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"), /*autotileMode=*/true);
+        QCOMPARE(directActivity.priority, 510);
+        QVERIFY(directActivity.priority > directDesktop.priority);
     }
 
     // ─── Idempotency ──────────────────────────────────────────────────────
@@ -378,7 +528,18 @@ private Q_SLOTS:
         const QJsonArray rules = rulesFromWindowRules();
         // Exactly one rule: the provider-default catch-all.
         QCOMPARE(rules.size(), 1);
-        QCOMPARE(rules.first().toObject().value(QStringLiteral("priority")).toInt(), 0);
+        const QJsonObject def = rules.first().toObject();
+        QCOMPARE(def.value(QStringLiteral("priority")).toInt(), 0);
+
+        // With no DefaultLayoutId and no Tiling default algorithm, the
+        // provider default is the bare snapping placeholder: a single
+        // SetEngineMode action (mode = "snapping"), no layout action — there
+        // is no layout to carry, so SetSnappingLayout / SetTilingAlgorithm are
+        // both absent.
+        QCOMPARE(actionTypes(def), (QStringList{QStringLiteral("setEngineMode")}));
+        const QJsonArray actions = def.value(QStringLiteral("actions")).toArray();
+        QCOMPARE(actions.size(), 1);
+        QCOMPARE(actions.first().toObject().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
     }
 
     // ─── Superseding: assignments.json deleted ────────────────────────────

@@ -27,8 +27,11 @@ namespace PhosphorWindowRule {
  *     a list of child expressions.
  *
  * MatchExpression is a copyable value type — it lives inside `QList<WindowRule>`.
- * The compiled regex for a `Regex` leaf is lazily built and cached in a
- * `mutable shared_ptr` so copies share the compiled program.
+ * The compiled regex for a `Regex` leaf is built **eagerly** at construction
+ * time (in `makeLeaf` / `fromJson`) and stored in a `shared_ptr` so
+ * value-copies share the compiled program. `evaluate()` performs no lazy
+ * mutation — it only reads the already-compiled program — so a `const`
+ * MatchExpression is safe to evaluate from multiple threads concurrently.
  *
  * An empty `All{}` is the **always-true catch-all** — the migrated provider
  * default. An empty `Any{}` / `None{}` are always-false / always-true
@@ -134,13 +137,18 @@ private:
     Predicate m_predicate;
     QList<MatchExpression> m_children;
 
-    // Lazily compiled & cached regex for a `Regex` leaf. `shared_ptr` so
-    // value-copies of the expression share the compiled program rather than
-    // recompiling. `mutable` because `evaluate()` is logically const.
-    mutable std::shared_ptr<QRegularExpression> m_compiledRegex;
+    // Eagerly compiled regex for a `Regex` leaf — built once by ensureRegex()
+    // at construction / load time, never mutated by evaluate(). `shared_ptr`
+    // so value-copies of the expression share the compiled program rather
+    // than recompiling.
+    std::shared_ptr<QRegularExpression> m_compiledRegex;
 
     bool evaluateLeaf(const WindowQuery& query) const;
-    const QRegularExpression& compiledRegex() const;
+
+    // Compiles the `Regex` leaf's pattern into m_compiledRegex if this is a
+    // Regex leaf and the program is not yet built. Idempotent; called from
+    // every construction path so evaluate() never has to compile.
+    void ensureRegex();
 };
 
 } // namespace PhosphorWindowRule

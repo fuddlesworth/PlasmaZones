@@ -520,8 +520,20 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
     meta.desktopFile = desktopFile;
     meta.title = title;
     meta.windowRole = windowRole;
-    meta.pid = pid;
-    meta.virtualDesktop = virtualDesktop;
+    // pid / virtualDesktop crossed D-Bus as plain ints. The contract is
+    // "0 = unknown" — negative values are malformed input (version skew,
+    // a buggy caller) that would otherwise propagate into WindowMetadata
+    // and WindowQuery. Clamp them to 0 at the boundary.
+    if (pid < 0) {
+        qCWarning(lcDbusWindow) << "setWindowMetadata: negative pid" << pid << "for instance" << instanceId
+                                << "— treating as 0 (unknown)";
+    }
+    if (virtualDesktop < 0) {
+        qCWarning(lcDbusWindow) << "setWindowMetadata: negative virtualDesktop" << virtualDesktop << "for instance"
+                                << instanceId << "— treating as 0 (unknown)";
+    }
+    meta.pid = pid < 0 ? 0 : pid;
+    meta.virtualDesktop = virtualDesktop < 0 ? 0 : virtualDesktop;
     meta.activity = activity;
     // windowType crossed D-Bus as a plain int — clamp out-of-range values
     // (version skew, a malformed caller) to Unknown rather than casting blind.

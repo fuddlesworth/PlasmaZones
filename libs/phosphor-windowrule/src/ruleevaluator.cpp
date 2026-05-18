@@ -39,18 +39,18 @@ RuleEvaluator::RuleEvaluator(const WindowRuleSet& ruleSet)
 {
 }
 
-ResolvedActions RuleEvaluator::resolve(const WindowQuery& query) const
+const QList<int>& RuleEvaluator::priorityOrder() const
 {
-    ResolvedActions result;
-
-    const QList<WindowRule>& rules = m_ruleSet.rules();
-    if (rules.isEmpty()) {
-        return result;
+    const quint64 revision = m_ruleSet.revision();
+    if (m_priorityOrderValid && m_priorityOrderRevision == revision) {
+        return m_priorityOrder;
     }
 
     // Walk in descending priority; ties break by original list order. A
     // stable sort over an index vector preserves that tie-break without
-    // copying the rules.
+    // copying the rules. The result is cached per revision — the sort runs
+    // once per rule-set edit, not once per resolve().
+    const QList<WindowRule>& rules = m_ruleSet.rules();
     QList<int> order;
     order.reserve(rules.size());
     for (int i = 0; i < rules.size(); ++i) {
@@ -60,6 +60,22 @@ ResolvedActions RuleEvaluator::resolve(const WindowQuery& query) const
         return rules.at(a).priority > rules.at(b).priority;
     });
 
+    m_priorityOrder = std::move(order);
+    m_priorityOrderRevision = revision;
+    m_priorityOrderValid = true;
+    return m_priorityOrder;
+}
+
+ResolvedActions RuleEvaluator::resolve(const WindowQuery& query) const
+{
+    ResolvedActions result;
+
+    const QList<WindowRule>& rules = m_ruleSet.rules();
+    if (rules.isEmpty()) {
+        return result;
+    }
+
+    const QList<int>& order = priorityOrder();
     const ActionRegistry& registry = ActionRegistry::instance();
 
     for (int index : order) {
@@ -105,6 +121,57 @@ bool RuleEvaluator::hasAnyMatch(const WindowQuery& query) const
     return false;
 }
 
+const WindowRule* RuleEvaluator::highestPriorityMatch(const WindowQuery& query,
+                                                      const std::function<bool(const WindowRule&)>& filter) const
+{
+    // Descending priority; ties broken by original list order (first wins).
+    // The cached priority order encodes exactly that — walk it and return the
+    // first qualifying rule so the tie-break matches resolve()'s walk.
+    const QList<WindowRule>& rules = m_ruleSet.rules();
+    for (int index : priorityOrder()) {
+        const WindowRule& rule = rules.at(index);
+        if (!rule.enabled) {
+            continue;
+        }
+        if (filter && !filter(rule)) {
+            continue;
+        }
+        if (!rule.match.evaluate(query)) {
+            continue;
+        }
+        return &rule;
+    }
+    return nullptr;
+}
+
+void RuleEvaluator::evictCache(quint64 currentRevision) const
+{
+    // Pass 1 — drop every stale-revision entry. A rule-set edit retires the
+    // entire previous generation, so this alone reclaims most of the cache
+    // whenever rules change.
+    for (auto it = m_cache.begin(); it != m_cache.end();) {
+        if (it->revision != currentRevision) {
+            it = m_cache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Pass 2 — if the live (current-revision) set still exceeds the cap,
+    // evict oldest-inserted first until it fits. This bounds the cache even
+    // when the revision never changes but new window ids keep arriving (the
+    // evaluator never sees window-close events).
+    while (m_cache.size() > kMaxCacheEntries) {
+        auto oldest = m_cache.begin();
+        for (auto it = m_cache.begin(); it != m_cache.end(); ++it) {
+            if (it->insertSeq < oldest->insertSeq) {
+                oldest = it;
+            }
+        }
+        m_cache.erase(oldest);
+    }
+}
+
 ResolvedActions RuleEvaluator::resolveCached(const QString& windowId, const WindowQuery& query) const
 {
     const quint64 revision = m_ruleSet.revision();
@@ -115,7 +182,8 @@ ResolvedActions RuleEvaluator::resolveCached(const QString& windowId, const Wind
     }
 
     ResolvedActions result = resolve(query);
-    m_cache.insert(windowId, CacheEntry{revision, result});
+    m_cache.insert(windowId, CacheEntry{revision, m_cacheInsertSeq++, result});
+    evictCache(revision);
     return result;
 }
 

@@ -15,11 +15,10 @@ SettingsFlickable {
     WindowPickerDialog {
         id: windowPickerDialog
 
-        appSettings: settingsController
+        controller: settingsController
         onPicked: (value) => {
-            // Use settingsController.settings (the Settings object) because
-            // windowPickerDialog.appSettings shadows the context property and
-            // points to SettingsController, which lacks add/remove methods.
+            // Add/remove methods live on settingsController.settings (the
+            // Settings object), not on the controller itself.
             if (forApps) {
                 settingsController.settings.addExcludedApplication(value);
                 appsCard.refreshModel();

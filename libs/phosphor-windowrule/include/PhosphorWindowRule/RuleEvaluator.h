@@ -4,8 +4,10 @@
 #pragma once
 
 #include <QHash>
+#include <QList>
 #include <QString>
 
+#include <functional>
 #include <optional>
 
 #include "RuleAction.h"
@@ -91,12 +93,21 @@ private:
  * `resolve()` walks the rule set in **descending priority** (ties broken by
  * list order via a stable sort), accumulating the first action that fills
  * each slot. A matching rule with a terminal `Exclude` action stops the walk
- * and the result is marked excluded.
+ * and the result is marked excluded. The descending-priority index is
+ * computed once per rule-set revision and reused, so back-to-back resolves
+ * against an unchanged set do not re-sort.
  *
  * `resolveCached()` adds a match cache keyed `(windowId, ruleSetRevision)`.
  * The cache is automatically bypassed/invalidated when the bound rule set's
  * revision changes; `clearCache()` forces invalidation for metadata-driven
  * changes that the revision does not capture (a window changing screen).
+ *
+ * The cache is **bounded**: at most @ref kMaxCacheEntries live entries. Two
+ * eviction passes keep it from growing without limit even though the
+ * evaluator never observes window-close events — every `resolveCached` call
+ * first drops every entry whose revision is stale (a rule-set edit retires
+ * the whole previous generation), and if the live set still exceeds the cap
+ * the oldest-inserted entries are evicted until it fits.
  *
  * The evaluator holds a reference to the rule set — the caller owns the set's
  * lifetime and must outlive the evaluator.
@@ -111,13 +122,30 @@ public:
 
     /// Resolve with a `(windowId, revision)` cache. @p windowId is the
     /// caller's stable per-window key (the `appId|instanceId` composite id).
-    /// A cache entry from a stale revision is discarded on access.
+    /// A cache entry from a stale revision is discarded on access. The cache
+    /// is bounded — see the class doc for the eviction policy.
     ResolvedActions resolveCached(const QString& windowId, const WindowQuery& query) const;
 
-    /// True if at least one enabled rule matches @p query — an event-agnostic
-    /// query that does not allocate a ResolvedActions. Used by hot paths
-    /// that only need a yes/no ("does any rule re-enable this class").
+    /// True if at least one enabled rule matches @p query — an existence
+    /// test that does not allocate a ResolvedActions. Used by hot paths that
+    /// only need a yes/no ("does any rule re-enable this class"). Iterates in
+    /// rule-set list order, **not** priority order: priority is irrelevant to
+    /// a pure existence check, so no sort is performed.
     bool hasAnyMatch(const WindowQuery& query) const;
+
+    /// The single highest-priority **enabled** rule that matches @p query and
+    /// passes the optional @p filter, or nullptr if none qualifies.
+    ///
+    /// This is the same descending-priority, tie-break-by-list-order walk
+    /// @ref resolve performs, exposed as a whole-rule lookup. Callers that
+    /// need the winning rule itself — not its accumulated action slots —
+    /// use this so the priority-cascade semantics live in exactly one place.
+    /// @p filter, when set, narrows the candidate set (e.g. "only context
+    /// assignment rules"); an empty @p filter considers every enabled rule.
+    /// The returned pointer aliases into the bound rule set and is valid only
+    /// until the next rule-set mutation.
+    const WindowRule* highestPriorityMatch(const WindowQuery& query,
+                                           const std::function<bool(const WindowRule&)>& filter = {}) const;
 
     /// Drop the entire match cache. Call on a window-metadata change that the
     /// rule-set revision does not reflect.
@@ -134,15 +162,36 @@ public:
         return m_ruleSet;
     }
 
+    /// Upper bound on live `resolveCached` entries. Past this, the
+    /// oldest-inserted entries are evicted. Sized generously — far more than
+    /// any realistic concurrent window count — so the cap is a safety net,
+    /// not a routine hot-path constraint.
+    static constexpr int kMaxCacheEntries = 4096;
+
 private:
     const WindowRuleSet& m_ruleSet;
 
     struct CacheEntry
     {
         quint64 revision = 0;
+        quint64 insertSeq = 0; ///< monotonic insert order — drives oldest-first eviction
         ResolvedActions actions;
     };
     mutable QHash<QString, CacheEntry> m_cache;
+    mutable quint64 m_cacheInsertSeq = 0; ///< next insertSeq to hand out
+
+    /// Drops every cache entry whose revision != @p currentRevision, then —
+    /// if the survivors still exceed @ref kMaxCacheEntries — evicts the
+    /// oldest-inserted entries until the cap is met.
+    void evictCache(quint64 currentRevision) const;
+
+    /// The rule indices in descending-priority / list-order tie-break order,
+    /// computed once per rule-set revision and reused. Rebuilt lazily when
+    /// the bound set's revision moves.
+    mutable QList<int> m_priorityOrder;
+    mutable quint64 m_priorityOrderRevision = 0;
+    mutable bool m_priorityOrderValid = false;
+    const QList<int>& priorityOrder() const;
 };
 
 } // namespace PhosphorWindowRule

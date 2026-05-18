@@ -86,8 +86,9 @@ bool WindowRuleAdaptor::setAllRules(const QString& rulesJson)
             rules.append(*rule);
         }
     }
-    m_store->setAllRules(rules);
-    return true;
+    // Propagate a persist failure to the D-Bus caller — a false return means
+    // the in-memory set changed but the file write failed.
+    return m_store->setAllRules(rules);
 }
 
 bool WindowRuleAdaptor::addRule(const QString& ruleJson)

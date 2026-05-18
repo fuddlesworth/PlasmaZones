@@ -12,6 +12,14 @@ include(CMakeFindDependencyMacro)
 find_dependency(Qt6 6.6 COMPONENTS Core)
 find_dependency(PhosphorProtocol)
 
+# AnimationAppRuleBridge.h is a public header that includes
+# <PhosphorAnimation/AnimationAppRule.h>. It is header-only — there is no link
+# edge on PhosphorAnimation — but an installed-package consumer that includes
+# the bridge still needs the PhosphorAnimation headers and CMake target on its
+# include path. Declaring the dependency here makes find_package(PhosphorWindowRule)
+# transitively resolve it for those consumers.
+find_dependency(PhosphorAnimation)
+
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorWindowRuleTargets.cmake")
 
 check_required_components(PhosphorWindowRule)

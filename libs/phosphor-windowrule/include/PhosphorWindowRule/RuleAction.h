@@ -57,6 +57,8 @@ struct PHOSPHORWINDOWRULE_EXPORT RuleAction
  *   - the `slotFor` resolver (a function so animation actions can scope their
  *     slot by an `event` param),
  *   - a `validate` predicate run on load,
+ *   - the set of param keys the action accepts (`allowedKeys`) — the strict
+ *     loader rejects any action carrying a key not in this set,
  *   - whether the action is **terminal** (an `Exclude` action stops evaluation).
  */
 struct PHOSPHORWINDOWRULE_EXPORT ActionDescriptor
@@ -69,6 +71,12 @@ struct PHOSPHORWINDOWRULE_EXPORT ActionDescriptor
     std::function<bool(const QJsonObject& params)> validate;
     /// Terminal actions (Exclude) stop evaluation once their rule matches.
     bool terminal = false;
+    /// The complete set of param keys this action type accepts. The strict
+    /// loader (`RuleAction::fromJson`) rejects an action whose `params`
+    /// carries any key outside this set. An **empty** set disables the
+    /// strict-key check — used for free-form / future-extensible action
+    /// types whose params payload is deliberately open.
+    QStringList allowedKeys;
 };
 
 /**

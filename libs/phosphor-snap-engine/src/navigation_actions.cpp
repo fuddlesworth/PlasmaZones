@@ -120,23 +120,45 @@ QString effectiveScreenId(const NavigationContext& ctx, INavigationStateProvider
 
 } // namespace
 
-bool SnapEngine::isAppIdExcluded(const QString& appId) const
+void SnapEngine::ensureExclusionCache() const
 {
     auto* s = snapSettings();
     if (!s) {
-        return false;
+        // No settings — drop any stale cache so a later wiring rebuilds it.
+        m_exclusionRuleSet.reset();
+        m_exclusionEvaluator.reset();
+        m_exclusionCacheAppsKey.clear();
+        m_exclusionCacheClassesKey.clear();
+        m_exclusionCacheValid = false;
+        return;
     }
-    // Build the daemon-flavour exclusion rule set (AppId AppIdMatches Exclude
-    // rules) from the two settings lists and resolve appId through the unified
-    // evaluator — the single match model the effect and daemon now share.
-    const PhosphorWindowRule::WindowRuleSet ruleSet =
-        PhosphorWindowRule::ExclusionListBridge::toDaemonRuleSet(s->excludedApplications(), s->excludedWindowClasses());
-    if (ruleSet.isEmpty()) {
-        return false; // no-exclusions fast path
+    const QStringList apps = s->excludedApplications();
+    const QStringList classes = s->excludedWindowClasses();
+    if (m_exclusionCacheValid && apps == m_exclusionCacheAppsKey && classes == m_exclusionCacheClassesKey) {
+        return; // lists unchanged — cached set/evaluator still valid
+    }
+
+    // Rebuild: the daemon-flavour exclusion rule set (AppId AppIdMatches
+    // Exclude rules) and its evaluator. The RuleEvaluator binds a reference
+    // to the WindowRuleSet, so the set is heap-allocated for a stable address
+    // and both are replaced together.
+    m_exclusionRuleSet = std::make_unique<PhosphorWindowRule::WindowRuleSet>(
+        PhosphorWindowRule::ExclusionListBridge::toDaemonRuleSet(apps, classes));
+    m_exclusionEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(*m_exclusionRuleSet);
+    m_exclusionCacheAppsKey = apps;
+    m_exclusionCacheClassesKey = classes;
+    m_exclusionCacheValid = true;
+}
+
+bool SnapEngine::isAppIdExcluded(const QString& appId) const
+{
+    ensureExclusionCache();
+    if (!m_exclusionEvaluator || m_exclusionRuleSet->isEmpty()) {
+        return false; // no settings, or no-exclusions fast path
     }
     PhosphorWindowRule::WindowQuery query;
     query.appId = appId;
-    return PhosphorWindowRule::RuleEvaluator(ruleSet).resolve(query).isExcluded();
+    return m_exclusionEvaluator->resolve(query).isExcluded();
 }
 
 bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId)

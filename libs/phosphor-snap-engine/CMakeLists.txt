@@ -67,6 +67,7 @@ target_link_libraries(PhosphorSnapEngine
     PRIVATE
         PhosphorScreens::Core
         PhosphorIdentity::PhosphorIdentity
+        PhosphorWindowRule::PhosphorWindowRule
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -57,13 +57,6 @@ void collectFields(const MatchExpression& match, QList<Field>& out)
     }
 }
 
-/// True if @p match references only context fields (ScreenId / VirtualDesktop
-/// / Activity) — i.e. it is a windowless context rule.
-bool matchIsContextOnly(const MatchExpression& match)
-{
-    return match.isContextOnly();
-}
-
 /// True if @p match is a flat AND of leaf predicates (or a bare leaf, or the
 /// empty catch-all). A specialized section can edit exactly this shape;
 /// anything deeper graduates to Advanced.
@@ -83,44 +76,10 @@ bool matchIsSimpleConjunction(const MatchExpression& match)
     return true;
 }
 
-/// Human label for a match Field.
-QString fieldLabel(Field field)
-{
-    switch (field) {
-    case Field::AppId:
-        return PzI18n::tr("Application");
-    case Field::WindowClass:
-        return PzI18n::tr("Window class");
-    case Field::DesktopFile:
-        return PzI18n::tr("Desktop file");
-    case Field::WindowRole:
-        return PzI18n::tr("Window role");
-    case Field::Pid:
-        return PzI18n::tr("Process ID");
-    case Field::Title:
-        return PzI18n::tr("Title");
-    case Field::WindowType:
-        return PzI18n::tr("Window type");
-    case Field::IsSticky:
-        return PzI18n::tr("Sticky");
-    case Field::IsFullscreen:
-        return PzI18n::tr("Fullscreen");
-    case Field::IsMinimized:
-        return PzI18n::tr("Minimized");
-    case Field::ScreenId:
-        return PzI18n::tr("Monitor");
-    case Field::VirtualDesktop:
-        return PzI18n::tr("Desktop");
-    case Field::Activity:
-        return PzI18n::tr("Activity");
-    }
-    return QString();
-}
-
 /// Human label for a single leaf predicate ("Monitor: DP-2").
 QString leafLabel(const MatchExpression::Predicate& predicate)
 {
-    return PzI18n::tr("%1: %2").arg(fieldLabel(predicate.field), predicate.value.toString());
+    return PzI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field), predicate.value.toString());
 }
 
 /// Human label for one action ("Snapping", "Float", "Excluded").
@@ -244,7 +203,6 @@ void WindowRuleModel::setRules(const QList<WindowRule>& rules)
     m_rules = rules;
     endResetModel();
     Q_EMIT countChanged();
-    Q_EMIT rulesMutated();
 }
 
 WindowRule WindowRuleModel::ruleById(const QUuid& id) const
@@ -278,7 +236,6 @@ bool WindowRuleModel::addRule(const WindowRule& rule)
     m_rules.append(rule);
     endInsertRows();
     Q_EMIT countChanged();
-    Q_EMIT rulesMutated();
     return true;
 }
 
@@ -291,10 +248,16 @@ bool WindowRuleModel::updateRule(const WindowRule& rule)
     if (m_rules.at(row) == rule) {
         return true; // no-op — do not churn the dirty bit
     }
+    // An edit can move a rule into a different section (e.g. adding an
+    // animation action). A plain dataChanged does not prompt the QML section
+    // view to re-bucket it, so detect the shift and fire a structural signal.
+    const Section before = sectionFor(m_rules.at(row));
     m_rules[row] = rule;
     const QModelIndex idx = index(row, 0);
     Q_EMIT dataChanged(idx, idx);
-    Q_EMIT rulesMutated();
+    if (sectionFor(rule) != before) {
+        Q_EMIT ruleSectionChanged();
+    }
     return true;
 }
 
@@ -308,7 +271,6 @@ bool WindowRuleModel::removeRule(const QUuid& id)
     m_rules.removeAt(row);
     endRemoveRows();
     Q_EMIT countChanged();
-    Q_EMIT rulesMutated();
     return true;
 }
 
@@ -336,8 +298,25 @@ bool WindowRuleModel::moveRule(const QUuid& id, const QUuid& beforeId)
     const int insertAt = dest > from ? dest - 1 : dest;
     m_rules.insert(insertAt, moved);
     endMoveRows();
-    Q_EMIT rulesMutated();
     return true;
+}
+
+void WindowRuleModel::setPriorities(const QList<int>& priorities)
+{
+    if (priorities.size() != m_rules.size() || m_rules.isEmpty()) {
+        return;
+    }
+    bool anyChanged = false;
+    for (int i = 0; i < m_rules.size(); ++i) {
+        if (m_rules[i].priority != priorities.at(i)) {
+            m_rules[i].priority = priorities.at(i);
+            anyChanged = true;
+        }
+    }
+    if (!anyChanged) {
+        return;
+    }
+    Q_EMIT dataChanged(index(0, 0), index(m_rules.size() - 1, 0), {PriorityRole});
 }
 
 WindowRuleModel::Section WindowRuleModel::sectionFor(const WindowRule& rule)
@@ -354,7 +333,7 @@ WindowRuleModel::Section WindowRuleModel::sectionFor(const WindowRule& rule)
         return Section::Advanced; // composite — only Advanced can edit it
     }
 
-    if (matchIsContextOnly(rule.match)) {
+    if (rule.match.isContextOnly()) {
         // Context-only rule. If it pins an Activity, the chip filter wants
         // it under Activity; otherwise it is a Monitor & Layout rule.
         if (!hasContextAction(rule.actions)) {
@@ -386,6 +365,39 @@ QString WindowRuleModel::sectionLabel(Section section)
         return PzI18n::tr("Animations");
     case Section::Advanced:
         return PzI18n::tr("Advanced / Custom");
+    }
+    return QString();
+}
+
+QString WindowRuleModel::fieldLabel(Field field)
+{
+    switch (field) {
+    case Field::AppId:
+        return PzI18n::tr("Application");
+    case Field::WindowClass:
+        return PzI18n::tr("Window class");
+    case Field::DesktopFile:
+        return PzI18n::tr("Desktop file");
+    case Field::WindowRole:
+        return PzI18n::tr("Window role");
+    case Field::Pid:
+        return PzI18n::tr("Process ID");
+    case Field::Title:
+        return PzI18n::tr("Title");
+    case Field::WindowType:
+        return PzI18n::tr("Window type");
+    case Field::IsSticky:
+        return PzI18n::tr("Sticky");
+    case Field::IsFullscreen:
+        return PzI18n::tr("Fullscreen");
+    case Field::IsMinimized:
+        return PzI18n::tr("Minimized");
+    case Field::ScreenId:
+        return PzI18n::tr("Monitor");
+    case Field::VirtualDesktop:
+        return PzI18n::tr("Desktop");
+    case Field::Activity:
+        return PzI18n::tr("Activity");
     }
     return QString();
 }

@@ -83,13 +83,19 @@ inline WindowRuleSet toRuleSet(const QStringList& excludedApplications, const QS
     QList<WindowRule> rules;
     rules.reserve(excludedApplications.size() + excludedWindowClasses.size());
 
-    for (const QString& pattern : excludedApplications) {
+    // Whitespace-only patterns are dropped (not just exact-empty ones) — the
+    // doc and the sibling toDaemonRuleSet() promise this, and a " " pattern
+    // would otherwise become a substring rule that matches almost nothing
+    // while still bloating the canonical rule count.
+    for (const QString& raw : excludedApplications) {
+        const QString pattern = raw.trimmed();
         if (pattern.isEmpty()) {
             continue;
         }
         rules.append(makeExclusionRule(Field::DesktopFile, pattern));
     }
-    for (const QString& pattern : excludedWindowClasses) {
+    for (const QString& raw : excludedWindowClasses) {
+        const QString pattern = raw.trimmed();
         if (pattern.isEmpty()) {
             continue;
         }

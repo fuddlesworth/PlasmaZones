@@ -85,6 +85,11 @@ int WindowRuleSet::setRules(const QList<WindowRule>& rules)
         }
         validated.append(rule);
     }
+    // An identical list is not a mutation — skip the revision bump so the
+    // RuleEvaluator's (windowId, revision) cache survives a no-op rewrite.
+    if (validated == m_rules) {
+        return m_rules.size();
+    }
     m_rules = std::move(validated);
     ++m_revision;
     return m_rules.size();
@@ -92,9 +97,12 @@ int WindowRuleSet::setRules(const QList<WindowRule>& rules)
 
 void WindowRuleSet::clear()
 {
-    if (!m_rules.isEmpty()) {
-        m_rules.clear();
+    // Clearing an already-empty set is not a mutation — do not bump the
+    // revision (a bump would needlessly invalidate the evaluator's cache).
+    if (m_rules.isEmpty()) {
+        return;
     }
+    m_rules.clear();
     ++m_revision;
 }
 
@@ -116,8 +124,8 @@ std::optional<WindowRuleSet> WindowRuleSet::fromJson(const QJsonObject& obj)
     // config layer's job, never the library's.
     const QJsonValue versionValue = obj.value(kKeyVersion);
     if (!versionValue.isDouble() || versionValue.toInt() != SchemaVersion) {
-        qCWarning(lcWindowRule) << "WindowRuleSet::fromJson refusing a non-v" << SchemaVersion
-                                << "document. _version:" << versionValue;
+        qCWarning(lcWindowRule).nospace()
+            << "WindowRuleSet::fromJson refusing a non-v" << SchemaVersion << " document. _version: " << versionValue;
         return std::nullopt;
     }
 
@@ -182,7 +190,10 @@ bool WindowRuleSet::saveToFile(const QString& path) const
         return false;
     }
     const QJsonDocument doc(toJson());
-    if (file.write(doc.toJson(QJsonDocument::Indented)) < 0) {
+    const QByteArray payload = doc.toJson(QJsonDocument::Indented);
+    // A short write (fewer bytes than the payload) is as much a failure as a
+    // negative return — a disk-full condition truncates without erroring.
+    if (file.write(payload) != payload.size()) {
         qCWarning(lcWindowRule) << "WindowRuleSet::saveToFile: write failed:" << path << file.errorString();
         file.cancelWriting();
         return false;

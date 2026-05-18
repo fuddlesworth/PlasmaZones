@@ -95,6 +95,26 @@ ItemDelegate {
 
         }
 
+        // Action-count badge — shown for rules carrying more than one action.
+        Rectangle {
+            visible: row.actionCount > 1
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: actionLabel.implicitWidth + Kirigami.Units.largeSpacing
+            implicitHeight: actionLabel.implicitHeight + Kirigami.Units.smallSpacing
+            radius: Kirigami.Units.smallSpacing
+            color: Kirigami.Theme.alternateBackgroundColor
+
+            Label {
+                id: actionLabel
+
+                anchors.centerIn: parent
+                text: i18np("%1 action", "%1 actions", row.actionCount)
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                opacity: 0.7
+            }
+
+        }
+
         Kirigami.Icon {
             source: "arrow-right"
             Layout.preferredWidth: Kirigami.Units.iconSizes.small

@@ -304,7 +304,7 @@ introduce `windowrules.json` + its D-Bus adaptor; ship `migrateV3ToV4`.
    on the rule store — `isContextDisabled`/`contextDisabledReason` bodies unchanged (18 call sites untouched).
 7. Migrate the daemon's own exclusion enforcement (`navigation_actions.cpp`, `lifecycle.cpp`).
 8. `WindowRuleAdaptor` D-Bus object (`org.plasmazones.WindowRules`) + register in the daemon.
-9. Relocate `QuickLayouts` slots into `config.json`; remove `assignments.json` after conversion.
+9. Relocate `QuickLayouts` slots into the `quicklayouts.json` sidecar; remove `assignments.json` after conversion.
 10. Tests (cascade-fidelity, migration, store).
 11. Cleanup: delete `createAssignmentsBackend()`, `assignmentsFilePath()`, `Assignment:`/`QuickLayouts` group I/O.
 
@@ -357,7 +357,8 @@ a query-side retry loop inside the reimplemented `layoutForScreen`.
   invariant.
 - `hasExplicitAssignment` becomes an **exact-shape store lookup**, never a
   `RuleEvaluator::resolve` (which always returns the catch-all).
-- `QuickLayouts` slots are *not* rules — relocate them to `config.json`.
+- `QuickLayouts` slots are *not* rules — relocate them to the `quicklayouts.json` sidecar
+  (the file `LayoutRegistry` reads), a sibling of `windowrules.json`.
 - `WindowRuleAdaptor` is hand-written (`Q_CLASSINFO` + public slots), like every other
   adaptor in this codebase — no `.xml` codegen. `LayoutAdaptor`'s assignment methods stay
   (now rule-backed); Phase 4 deletes the legacy D-Bus surface.

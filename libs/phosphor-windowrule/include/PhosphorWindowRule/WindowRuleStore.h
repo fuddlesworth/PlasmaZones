@@ -85,29 +85,38 @@ public:
     bool save();
 
     // ─── Mutation — every mutator persists then emits rulesChanged ────────
+    //
+    // Every mutator keeps the in-memory set and the on-disk file consistent:
+    // the in-memory set is updated first, then persisted. A failed `save()`
+    // makes the mutator return false — the in-memory set still reflects the
+    // requested change, but the caller knows the file is now stale.
 
-    /// Replace the entire rule list. Invalid rules are dropped. Persists +
-    /// emits.
-    void setAllRules(const QList<WindowRule>& rules);
+    /// Replace the entire rule list. Invalid rules are dropped. A no-op
+    /// replacement (the incoming list equals the current set) skips the
+    /// persist and the emit and returns true. Returns false only on an I/O
+    /// failure while persisting an actual change.
+    bool setAllRules(const QList<WindowRule>& rules);
 
-    /// Append a rule. Returns false (no persist, no emit) if the rule is
-    /// invalid or its id collides with an existing rule.
+    /// Append a rule. Returns false if the rule is invalid, its id collides
+    /// with an existing rule (no persist, no emit), or the persist failed.
     bool addRule(const WindowRule& rule);
 
     /// Replace the rule with the same id. Returns false if no such rule
-    /// exists or the replacement is invalid.
+    /// exists, the replacement is invalid, or the persist failed.
     bool updateRule(const WindowRule& rule);
 
-    /// Remove the rule with @p id. Returns false if no such rule exists.
+    /// Remove the rule with @p id. Returns false if no such rule exists or
+    /// the persist failed.
     bool removeRule(const QUuid& id);
 
     /// Set the enabled flag of the rule with @p id. Returns false if no
-    /// such rule exists. A no-op change (already at @p enabled) returns
-    /// true without persisting or emitting.
+    /// such rule exists or the persist failed. A no-op change (already at
+    /// @p enabled) returns true without persisting or emitting.
     bool setRuleEnabled(const QUuid& id, bool enabled);
 
     /// Set the priority of the rule with @p id. Returns false if no such
-    /// rule exists. A no-op change returns true without persisting/emitting.
+    /// rule exists or the persist failed. A no-op change returns true
+    /// without persisting/emitting.
     bool setRulePriority(const QUuid& id, int priority);
 
 Q_SIGNALS:

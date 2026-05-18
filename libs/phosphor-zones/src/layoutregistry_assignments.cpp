@@ -28,8 +28,6 @@
 #include <PhosphorWindowRule/WindowQuery.h>
 #include <PhosphorWindowRule/WindowRule.h>
 
-#include <QFile>
-#include <QJsonDocument>
 #include <optional>
 
 namespace PhosphorZones {
@@ -37,6 +35,7 @@ namespace PhosphorZones {
 namespace {
 
 namespace PWR = PhosphorWindowRule;
+namespace CRB = PhosphorWindowRule::ContextRuleBridge;
 
 // Build the windowless context query for a (screen, desktop, activity) tuple.
 // No window attributes are set — window-property predicates evaluate false,
@@ -50,10 +49,13 @@ PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, c
     return query;
 }
 
-// True if a leaf predicate is an exact `Field == value` equality.
-bool isEqualsLeaf(const PWR::MatchExpression& expr, PWR::Field field)
+// Human-readable label for a context assignment rule's (screen, desktop,
+// activity) tuple — the single place the " · Desktop N" / " · Activity"
+// suffix shape is constructed (used by upsert + every batch setter).
+QString contextRuleName(const QString& screenId, int virtualDesktop, const QString& activity)
 {
-    return expr.isLeaf() && expr.predicate().field == field && expr.predicate().op == PWR::Operator::Equals;
+    return screenId + (virtualDesktop > 0 ? QStringLiteral(" · Desktop ") + QString::number(virtualDesktop) : QString())
+        + (activity.isEmpty() ? QString() : QStringLiteral(" · Activity"));
 }
 
 // True if @p rule's match is exactly the context shape for the pinned
@@ -120,48 +122,31 @@ bool matchIsExactContext(const PWR::MatchExpression& match, const QString& scree
     return sawScreen == wantScreen && sawDesktop == wantDesktop && sawActivity == wantActivity;
 }
 
-// True if @p rule carries an engine-mode action — i.e. it is an assignment
-// rule (as opposed to a pure DisableEngine / Exclude / animation rule).
-bool isAssignmentRule(const PWR::WindowRule& rule)
+// True if @p rule carries a SetEngineMode action. A context assignment rule
+// always carries one; so does the provider-default catch-all. Callers that
+// must exclude the catch-all do so explicitly (see resolveAssignmentEntry) —
+// the introspection / batch helpers below already filter by context shape
+// (matchIsExactContext*), and a catch-all fails every one of those.
+bool hasEngineModeAction(const PWR::WindowRule& rule)
 {
     for (const PWR::RuleAction& action : rule.actions) {
-        if (action.type == QString(PWR::ActionType::SetEngineMode)) {
+        if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)) {
             return true;
         }
     }
     return false;
 }
 
-// Decompose a context rule's match into (screenId, virtualDesktop, activity).
-void contextDimsOf(const PWR::MatchExpression& match, QString& screenId, int& virtualDesktop, QString& activity)
-{
-    screenId.clear();
-    virtualDesktop = 0;
-    activity.clear();
-    if (match.isCatchAll()) {
-        return;
-    }
-    const QList<PWR::MatchExpression> leaves = match.isLeaf() ? QList<PWR::MatchExpression>{match} : match.children();
-    for (const PWR::MatchExpression& leaf : leaves) {
-        if (isEqualsLeaf(leaf, PWR::Field::ScreenId)) {
-            screenId = leaf.predicate().value.toString();
-        } else if (isEqualsLeaf(leaf, PWR::Field::VirtualDesktop)) {
-            virtualDesktop = leaf.predicate().value.toInt();
-        } else if (isEqualsLeaf(leaf, PWR::Field::Activity)) {
-            activity = leaf.predicate().value.toString();
-        }
-    }
-}
-
 // Shape predicates for the per-screen-base / per-desktop / per-activity
 // context rule families — used by the batch setters to drop one family
-// before writing the new entries.
+// before writing the new entries. The (screen, desktop, activity)
+// decomposition is the shared ContextRuleBridge::contextDimsOf.
 bool matchIsExactContextBase(const PWR::MatchExpression& match)
 {
     QString sid;
     int desk = 0;
     QString act;
-    contextDimsOf(match, sid, desk, act);
+    CRB::contextDimsOf(match, sid, desk, act);
     return !sid.isEmpty() && desk == 0 && act.isEmpty();
 }
 bool matchIsExactContextDesktop(const PWR::MatchExpression& match)
@@ -169,7 +154,7 @@ bool matchIsExactContextDesktop(const PWR::MatchExpression& match)
     QString sid;
     int desk = 0;
     QString act;
-    contextDimsOf(match, sid, desk, act);
+    CRB::contextDimsOf(match, sid, desk, act);
     return !sid.isEmpty() && desk > 0 && act.isEmpty();
 }
 bool matchIsExactContextActivity(const PWR::MatchExpression& match)
@@ -177,7 +162,7 @@ bool matchIsExactContextActivity(const PWR::MatchExpression& match)
     QString sid;
     int desk = 0;
     QString act;
-    contextDimsOf(match, sid, desk, act);
+    CRB::contextDimsOf(match, sid, desk, act);
     return !sid.isEmpty() && !act.isEmpty();
 }
 
@@ -186,14 +171,18 @@ bool matchIsExactContextActivity(const PWR::MatchExpression& match)
 AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
 {
     AssignmentEntry entry;
+    // A rule with no SetEngineMode action leaves the mode at the Snapping
+    // default — make that explicit rather than relying on AssignmentEntry's
+    // default member initializer.
+    entry.mode = AssignmentEntry::Snapping;
     for (const PWR::RuleAction& action : rule.actions) {
-        if (action.type == QString(PWR::ActionType::SetEngineMode)) {
+        if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)) {
             entry.mode = action.params.value(QLatin1String("mode")).toString() == QLatin1String("autotile")
                 ? AssignmentEntry::Autotile
                 : AssignmentEntry::Snapping;
-        } else if (action.type == QString(PWR::ActionType::SetSnappingLayout)) {
+        } else if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)) {
             entry.snappingLayout = action.params.value(QLatin1String("layoutId")).toString();
-        } else if (action.type == QString(PWR::ActionType::SetTilingAlgorithm)) {
+        } else if (action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
             entry.tilingAlgorithm = action.params.value(QLatin1String("algorithm")).toString();
         }
     }
@@ -204,25 +193,6 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
 
 // ── Rule-backed cascade resolution ──────────────────────────────────────────
 
-AssignmentEntry LayoutRegistry::entryFromRuleActions(const PWR::ResolvedActions& actions)
-{
-    // Retained for API stability — reads what a ResolvedActions can express.
-    // Note: SetSnappingLayout and SetTilingAlgorithm share the `layout` slot,
-    // so a ResolvedActions can only carry one of the two layout fields. The
-    // cascade resolver (resolveAssignmentEntry) therefore reads the winning
-    // rule's full action list directly to preserve mode-toggle losslessness.
-    AssignmentEntry entry;
-    if (const auto modeSlot = actions.slot(QString(PWR::ActionSlot::EngineMode))) {
-        const QString mode = modeSlot->params.value(QLatin1String("mode")).toString();
-        entry.mode = (mode == QLatin1String("autotile")) ? AssignmentEntry::Autotile : AssignmentEntry::Snapping;
-    }
-    if (const auto layoutSlot = actions.slot(QString(PWR::ActionSlot::Layout))) {
-        entry.snappingLayout = layoutSlot->params.value(QLatin1String("layoutId")).toString();
-        entry.tilingAlgorithm = layoutSlot->params.value(QLatin1String("algorithm")).toString();
-    }
-    return entry;
-}
-
 std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
                                                                       const QString& activity) const
 {
@@ -232,29 +202,18 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     // catch-all rule is excluded here — only PINNED context rules count as a
     // cascade hit.
     //
+    // The descending-priority, tie-break-by-list-order walk is the shared
+    // RuleEvaluator::highestPriorityMatch — the one place that walk lives, so
+    // this resolver can never drift from the evaluator's own ordering. The
+    // candidate filter keeps only pinned context-assignment rules.
     // SetSnappingLayout and SetTilingAlgorithm share the `layout` action slot,
-    // so the winning rule's full action list — not a ResolvedActions — is
-    // read, preserving the mode-toggle losslessness invariant (an entry keeps
-    // BOTH snappingLayout and tilingAlgorithm regardless of active mode).
+    // so the winning rule's full action list is read, preserving the
+    // mode-toggle losslessness invariant (an entry keeps BOTH snappingLayout
+    // and tilingAlgorithm regardless of active mode).
     const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-
-    const PWR::WindowRule* winner = nullptr;
-    int winnerPriority = 0;
-    for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (!rule.enabled || !isAssignmentRule(rule) || rule.match.isCatchAll()) {
-            continue;
-        }
-        if (!rule.match.evaluate(query)) {
-            continue;
-        }
-        // Descending priority; ties broken by list order (first wins). The
-        // rule set preserves insertion order, so the first rule seen at the
-        // highest priority is the tie-break winner.
-        if (winner == nullptr || rule.priority > winnerPriority) {
-            winner = &rule;
-            winnerPriority = rule.priority;
-        }
-    }
+    const PWR::WindowRule* winner = m_evaluator->highestPriorityMatch(query, [](const PWR::WindowRule& rule) {
+        return hasEngineModeAction(rule) && !rule.match.isCatchAll();
+    });
     if (winner == nullptr) {
         return std::nullopt;
     }
@@ -263,20 +222,26 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
 
 bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
-    return !exactContextRuleId(screenId, virtualDesktop, activity).isNull();
+    return findExactContextRule(screenId, virtualDesktop, activity) != nullptr;
+}
+const PhosphorWindowRule::WindowRule* LayoutRegistry::findExactContextRule(const QString& screenId, int virtualDesktop,
+                                                                           const QString& activity) const
+{
+    for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
+        if (!hasEngineModeAction(rule)) {
+            continue;
+        }
+        if (matchIsExactContext(rule.match, screenId, virtualDesktop, activity)) {
+            return &rule;
+        }
+    }
+    return nullptr;
 }
 
 QUuid LayoutRegistry::exactContextRuleId(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
-    for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (!isAssignmentRule(rule)) {
-            continue;
-        }
-        if (matchIsExactContext(rule.match, screenId, virtualDesktop, activity)) {
-            return rule.id;
-        }
-    }
-    return QUuid();
+    const PWR::WindowRule* rule = findExactContextRule(screenId, virtualDesktop, activity);
+    return rule ? rule->id : QUuid();
 }
 
 void LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity,
@@ -284,9 +249,8 @@ void LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
 {
     const bool autotile = (entry.mode == AssignmentEntry::Autotile);
     PWR::WindowRule rule = PWR::ContextRuleBridge::makeAssignmentRule(
-        screenId + (virtualDesktop > 0 ? QStringLiteral(" · Desktop ") + QString::number(virtualDesktop) : QString())
-            + (activity.isEmpty() ? QString() : QStringLiteral(" · Activity")),
-        screenId, virtualDesktop, activity, autotile, entry.snappingLayout, entry.tilingAlgorithm);
+        contextRuleName(screenId, virtualDesktop, activity), screenId, virtualDesktop, activity, autotile,
+        entry.snappingLayout, entry.tilingAlgorithm);
 
     const QUuid existing = exactContextRuleId(screenId, virtualDesktop, activity);
     if (existing.isNull()) {
@@ -306,6 +270,49 @@ bool LayoutRegistry::removeAssignmentRule(const QString& screenId, int virtualDe
     return m_ruleStore->removeRule(existing);
 }
 
+bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
+{
+    // A snap layout was deleted. Every assignment rule whose SetSnappingLayout
+    // action carries this id must lose that reference — but NOT the whole
+    // rule. An Autotile-mode context rule can carry a stale SetSnappingLayout
+    // (the mode-toggle losslessness invariant), so blanket-deleting it would
+    // drop its SetEngineMode + SetTilingAlgorithm autotile intent. Rebuild
+    // each affected rule via ContextRuleBridge::makeAssignmentActions with the
+    // snapping layout cleared but mode + tilingAlgorithm preserved; only drop
+    // a rule that, after the clear, carries nothing but a default (Snapping)
+    // engine-mode — a pure Snapping mode-only context rule encodes no intent
+    // beyond the default, so it is dropped to match the legacy cleanup.
+    QList<PWR::WindowRule> kept;
+    bool changed = false;
+    for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
+        const AssignmentEntry entry = entryFromRuleMatchActions(rule);
+        if (entry.snappingLayout != layoutId) {
+            kept.append(rule);
+            continue;
+        }
+        changed = true;
+
+        // Drop the dead snapping reference; mode + tilingAlgorithm survive.
+        const bool autotile = (entry.mode == AssignmentEntry::Autotile);
+        if (!autotile && entry.tilingAlgorithm.isEmpty()) {
+            // Nothing meaningful remains — a bare Snapping engine-mode is the
+            // default. Drop the whole rule.
+            qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped rule" << rule.id.toString()
+                                << "— only a default Snapping mode remained after clearing the deleted layout";
+            continue;
+        }
+        PWR::WindowRule rebuilt = rule;
+        rebuilt.actions = PWR::ContextRuleBridge::makeAssignmentActions(autotile, QString(), entry.tilingAlgorithm);
+        kept.append(rebuilt);
+        qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: rebuilt rule" << rule.id.toString()
+                            << "— cleared deleted snapping layout, preserved mode/tilingAlgorithm";
+    }
+    if (changed) {
+        m_ruleStore->setAllRules(kept);
+    }
+    return changed;
+}
+
 // ── Mutators ────────────────────────────────────────────────────────────────
 
 void LayoutRegistry::assignLayout(const QString& screenId, int virtualDesktop, const QString& activity,
@@ -313,11 +320,13 @@ void LayoutRegistry::assignLayout(const QString& screenId, int virtualDesktop, c
 {
     if (layout) {
         // Preserve an existing tilingAlgorithm — only mode + snappingLayout
-        // change (the mode-toggle losslessness invariant).
+        // change (the mode-toggle losslessness invariant). One exact-shape
+        // lookup reads the stored rule's actions directly: a wider cascade
+        // entry must NOT bleed its tilingAlgorithm into this narrower rule,
+        // so only the rule pinning exactly this tuple seeds the entry.
         AssignmentEntry entry;
-        if (const auto resolved = resolveAssignmentEntry(screenId, virtualDesktop, activity);
-            resolved && hasExactContextRule(screenId, virtualDesktop, activity)) {
-            entry = *resolved;
+        if (const PWR::WindowRule* existing = findExactContextRule(screenId, virtualDesktop, activity)) {
+            entry = entryFromRuleMatchActions(*existing);
         }
         entry.mode = AssignmentEntry::Snapping;
         entry.snappingLayout = layout->id().toString();
@@ -343,11 +352,11 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
 {
     if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         // Store autotile assignment — set mode to Autotile, preserve the
-        // existing snappingLayout.
+        // existing snappingLayout. One exact-shape lookup (see assignLayout)
+        // — only the rule pinning exactly this tuple seeds the entry.
         AssignmentEntry entry;
-        if (const auto resolved = resolveAssignmentEntry(screenId, virtualDesktop, activity);
-            resolved && hasExactContextRule(screenId, virtualDesktop, activity)) {
-            entry = *resolved;
+        if (const PWR::WindowRule* existing = findExactContextRule(screenId, virtualDesktop, activity)) {
+            entry = entryFromRuleMatchActions(*existing);
         }
         entry.mode = AssignmentEntry::Autotile;
         entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
@@ -383,35 +392,39 @@ PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, 
                                                        const QString& activity) const
 {
     // Connector-name / virtual-screen fallback: a query-side recursive key
-    // rewrite, not a priority band. Resolve with the given screenId; on a
-    // miss, re-resolve with the rewritten id.
+    // rewrite, not a priority band. The retry is gated on "no cascade entry
+    // at all", NOT "no snap Layout*" — the legacy walkCascade terminated at
+    // the first matching entry (including a narrower Autotile entry) and only
+    // then fell through to the global default. Treating an Autotile entry as
+    // a miss would let a connector/VS retry surface a different (snapping)
+    // assignment the legacy walk never reached. So tryResolve returns:
+    //   - nullopt   -> no cascade entry; the caller may retry.
+    //   - {nullptr} -> an entry exists but yields no snap Layout* (Autotile,
+    //                  or a snap entry with empty/unknown layout id) — the
+    //                  cascade is settled, fall through to defaultLayout().
+    //   - {layout}  -> resolved snap layout.
     auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<PhosphorZones::Layout*> {
         const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
         if (!entry) {
-            return std::nullopt;
+            return std::nullopt; // genuine miss — the caller may retry
         }
-        if (entry->mode == AssignmentEntry::Autotile) {
-            // An Autotile entry has no snap Layout* counterpart — the legacy
-            // cascade visitor returned nullopt for it so the lookup fell
-            // through to the global default. Mirror that.
-            return std::nullopt;
+        // An entry exists; the cascade is settled — never retry. An Autotile
+        // entry (or a snap entry with an empty layout id) has no snap Layout*.
+        if (entry->mode == AssignmentEntry::Autotile || entry->snappingLayout.isEmpty()) {
+            return std::optional<PhosphorZones::Layout*>(nullptr);
         }
-        if (entry->snappingLayout.isEmpty()) {
-            return std::nullopt;
-        }
-        PhosphorZones::Layout* layout = layoutById(QUuid::fromString(entry->snappingLayout));
-        return layout ? std::optional<PhosphorZones::Layout*>(layout) : std::nullopt;
+        return std::optional<PhosphorZones::Layout*>(layoutById(QUuid::fromString(entry->snappingLayout)));
     };
 
     if (const auto result = tryResolve(screenId)) {
-        return *result;
+        return *result ? *result : defaultLayout();
     }
     // Connector-name fallback.
     if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)) {
         const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenId);
         if (resolved != screenId) {
             if (const auto result = tryResolve(resolved)) {
-                return *result;
+                return *result ? *result : defaultLayout();
             }
         }
     }
@@ -419,7 +432,7 @@ PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, 
     if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
         if (const auto result = tryResolve(physId)) {
-            return *result;
+            return *result ? *result : defaultLayout();
         }
     }
 
@@ -544,7 +557,7 @@ void LayoutRegistry::clearAutotileAssignments()
     bool changed = false;
 
     for (PWR::WindowRule& rule : updated) {
-        if (!isAssignmentRule(rule)) {
+        if (!hasEngineModeAction(rule)) {
             continue;
         }
         const AssignmentEntry entry = entryFromRuleMatchActions(rule);
@@ -561,7 +574,7 @@ void LayoutRegistry::clearAutotileAssignments()
         QString sid;
         int desk = 0;
         QString act;
-        contextDimsOf(rule.match, sid, desk, act);
+        CRB::contextDimsOf(rule.match, sid, desk, act);
         affected.append(qMakePair(sid, desk));
     }
 
@@ -594,18 +607,17 @@ void LayoutRegistry::setAllScreenAssignments(const QHash<QString, QString>& assi
     // Snapshot the existing per-screen base entries so the "other" mode field
     // is preserved (batch-setting a snapping layout keeps the tilingAlgorithm).
     QHash<QString, AssignmentEntry> oldBase;
-    for (const QString& screenId : assignments.keys()) {
-        if (hasExactContextRule(screenId, 0, QString())) {
-            if (const auto entry = resolveAssignmentEntry(screenId, 0, QString())) {
-                oldBase.insert(screenId, *entry);
-            }
+    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
+        const QString& screenId = it.key();
+        if (const PWR::WindowRule* existing = findExactContextRule(screenId, 0, QString())) {
+            oldBase.insert(screenId, entryFromRuleMatchActions(*existing));
         }
     }
 
     // Remove every per-screen base assignment rule, then write the new ones.
     QList<PWR::WindowRule> kept;
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (isAssignmentRule(rule) && matchIsExactContextBase(rule.match)) {
+        if (hasEngineModeAction(rule) && matchIsExactContextBase(rule.match)) {
             continue; // drop — a per-screen base rule
         }
         kept.append(rule);
@@ -625,9 +637,9 @@ void LayoutRegistry::setAllScreenAssignments(const QHash<QString, QString>& assi
             continue;
         }
         const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldBase.value(screenId));
-        additions.append(PWR::ContextRuleBridge::makeAssignmentRule(screenId, screenId, 0, QString(),
-                                                                    entry.mode == AssignmentEntry::Autotile,
-                                                                    entry.snappingLayout, entry.tilingAlgorithm));
+        additions.append(PWR::ContextRuleBridge::makeAssignmentRule(
+            contextRuleName(screenId, 0, QString()), screenId, 0, QString(), entry.mode == AssignmentEntry::Autotile,
+            entry.snappingLayout, entry.tilingAlgorithm));
         storedScreens.insert(screenId);
         ++count;
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to screen" << screenId;
@@ -647,16 +659,14 @@ void LayoutRegistry::setAllDesktopAssignments(const QHash<QPair<QString, int>, Q
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenId = it.key().first;
         const int desktop = it.key().second;
-        if (hasExactContextRule(screenId, desktop, QString())) {
-            if (const auto entry = resolveAssignmentEntry(screenId, desktop, QString())) {
-                oldDesktop.insert(it.key(), *entry);
-            }
+        if (const PWR::WindowRule* existing = findExactContextRule(screenId, desktop, QString())) {
+            oldDesktop.insert(it.key(), entryFromRuleMatchActions(*existing));
         }
     }
 
     QList<PWR::WindowRule> kept;
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (isAssignmentRule(rule) && matchIsExactContextDesktop(rule.match)) {
+        if (hasEngineModeAction(rule) && matchIsExactContextDesktop(rule.match)) {
             continue; // drop — a per-desktop rule
         }
         kept.append(rule);
@@ -679,8 +689,8 @@ void LayoutRegistry::setAllDesktopAssignments(const QHash<QPair<QString, int>, Q
         }
         const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldDesktop.value(it.key()));
         additions.append(PWR::ContextRuleBridge::makeAssignmentRule(
-            screenId + QStringLiteral(" · Desktop ") + QString::number(virtualDesktop), screenId, virtualDesktop,
-            QString(), entry.mode == AssignmentEntry::Autotile, entry.snappingLayout, entry.tilingAlgorithm));
+            contextRuleName(screenId, virtualDesktop, QString()), screenId, virtualDesktop, QString(),
+            entry.mode == AssignmentEntry::Autotile, entry.snappingLayout, entry.tilingAlgorithm));
         storedScreens.insert(screenId);
         ++count;
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << screenId << "desktop" << virtualDesktop;
@@ -701,16 +711,14 @@ void LayoutRegistry::setAllActivityAssignments(const QHash<QPair<QString, QStrin
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenId = it.key().first;
         const QString& activityId = it.key().second;
-        if (hasExactContextRule(screenId, 0, activityId)) {
-            if (const auto entry = resolveAssignmentEntry(screenId, 0, activityId)) {
-                oldActivity.insert(it.key(), *entry);
-            }
+        if (const PWR::WindowRule* existing = findExactContextRule(screenId, 0, activityId)) {
+            oldActivity.insert(it.key(), entryFromRuleMatchActions(*existing));
         }
     }
 
     QList<PWR::WindowRule> kept;
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (isAssignmentRule(rule) && matchIsExactContextActivity(rule.match)) {
+        if (hasEngineModeAction(rule) && matchIsExactContextActivity(rule.match)) {
             continue; // drop — a per-activity rule
         }
         kept.append(rule);
@@ -733,7 +741,7 @@ void LayoutRegistry::setAllActivityAssignments(const QHash<QPair<QString, QStrin
         }
         const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldActivity.value(it.key()));
         additions.append(PWR::ContextRuleBridge::makeAssignmentRule(
-            screenId + QStringLiteral(" · Activity"), screenId, 0, activityId, entry.mode == AssignmentEntry::Autotile,
+            contextRuleName(screenId, 0, activityId), screenId, 0, activityId, entry.mode == AssignmentEntry::Autotile,
             entry.snappingLayout, entry.tilingAlgorithm));
         storedScreens.insert(screenId);
         ++count;
@@ -752,13 +760,13 @@ QHash<QPair<QString, int>, QString> LayoutRegistry::desktopAssignments() const
 {
     QHash<QPair<QString, int>, QString> result;
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (!isAssignmentRule(rule)) {
+        if (!hasEngineModeAction(rule)) {
             continue;
         }
         QString sid;
         int desk = 0;
         QString activity;
-        contextDimsOf(rule.match, sid, desk, activity);
+        CRB::contextDimsOf(rule.match, sid, desk, activity);
         // Per-desktop: virtualDesktop > 0 and activity empty.
         if (desk > 0 && activity.isEmpty()) {
             result[qMakePair(sid, desk)] = entryFromRuleMatchActions(rule).activeLayoutId();
@@ -771,58 +779,19 @@ QHash<QPair<QString, QString>, QString> LayoutRegistry::activityAssignments() co
 {
     QHash<QPair<QString, QString>, QString> result;
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (!isAssignmentRule(rule)) {
+        if (!hasEngineModeAction(rule)) {
             continue;
         }
         QString sid;
         int desk = 0;
         QString activity;
-        contextDimsOf(rule.match, sid, desk, activity);
+        CRB::contextDimsOf(rule.match, sid, desk, activity);
         // Per-activity: activity non-empty (any desktop value).
         if (!activity.isEmpty()) {
             result[qMakePair(sid, activity)] = entryFromRuleMatchActions(rule).activeLayoutId();
         }
     }
     return result;
-}
-
-// Autotile layout overrides
-
-QJsonObject LayoutRegistry::loadAllAutotileOverrides() const
-{
-    QFile file(m_layoutDirectory + QStringLiteral("/autotile-overrides.json"));
-    if (!file.open(QIODevice::ReadOnly)) {
-        return {};
-    }
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    return doc.isObject() ? doc.object() : QJsonObject();
-}
-
-void LayoutRegistry::saveAllAutotileOverrides(const QJsonObject& all)
-{
-    ensureLayoutDirectory();
-    QFile file(m_layoutDirectory + QStringLiteral("/autotile-overrides.json"));
-    if (!file.open(QIODevice::WriteOnly)) {
-        qCWarning(lcZonesLib) << "Failed to save autotile overrides:" << file.errorString();
-        return;
-    }
-    file.write(QJsonDocument(all).toJson());
-}
-
-QJsonObject LayoutRegistry::loadAutotileOverrides(const QString& algorithmId) const
-{
-    return loadAllAutotileOverrides().value(algorithmId).toObject();
-}
-
-void LayoutRegistry::saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides)
-{
-    QJsonObject all = loadAllAutotileOverrides();
-    if (overrides.isEmpty()) {
-        all.remove(algorithmId);
-    } else {
-        all[algorithmId] = overrides;
-    }
-    saveAllAutotileOverrides(all);
 }
 
 } // namespace PhosphorZones

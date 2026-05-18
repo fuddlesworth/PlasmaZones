@@ -24,42 +24,28 @@ SettingsFlickable {
     readonly property var ruleModel: controller.model
     // ── Filter state ──
     property string searchText: ""
-    // Chip filter: "" = All, else a WindowRuleModel.Section enum value as int
-    // serialized to a string ("0".."4"), or "" for All.
+    // Chip filter: -1 = All, else a WindowRuleModel.Section enum value as int.
     property int chipFilter: -1
     property string monitorFilter: ""
-    // WindowRuleModel.Section enum values (kept in sync with the C++ enum).
-    readonly property int sectionMonitor: 0
-    readonly property int sectionApplication: 1
-    readonly property int sectionActivity: 2
-    readonly property int sectionAnimation: 3
-    readonly property int sectionAdvanced: 4
-    // Section display order — Monitor & Layout first, Advanced last.
-    readonly property var _sectionOrder: [sectionMonitor, sectionApplication, sectionActivity, sectionAnimation, sectionAdvanced]
+    // Ordered section descriptors — `[{ value: int, label }]` straight from
+    // the controller. The C++ Section enum order is never duplicated in QML.
+    readonly property var sectionDescriptors: page.controller.sections()
+    // Bumped whenever the underlying model changes so sectionModel re-evaluates
+    // without QML hardcoding the model's role layout.
+    property int modelRevision: 0
     /// Build a `[ { section, label, rules: [...] } ]` array over the flat
     /// model, applying search / chip / monitor filters. Reactive: depends on
-    /// searchText / chipFilter / monitorFilter and the model's count so an
-    /// add/remove rebuilds it.
+    /// searchText / chipFilter / monitorFilter and `modelRevision`.
     readonly property var sectionModel: {
-        // Touch the count so the binding re-evaluates on structural change.
-        var n = page.ruleModel.count;
+        // Touch the revision so the binding re-evaluates on any model change.
+        var rev = page.modelRevision;
+        var snapshot = page.controller.rulesSnapshot();
         var buckets = {
         };
-        for (var s = 0; s < page._sectionOrder.length; ++s) buckets[page._sectionOrder[s]] = []
+        for (var s = 0; s < page.sectionDescriptors.length; ++s) buckets[page.sectionDescriptors[s].value] = []
         var search = page.searchText.toLowerCase();
-        for (var i = 0; i < n; ++i) {
-            var idx = page.ruleModel.index(i, 0);
-            var entry = {
-                "ruleId": page.ruleModel.data(idx, Qt.UserRole + 1),
-                "name": page.ruleModel.data(idx, Qt.UserRole + 2),
-                "enabled": page.ruleModel.data(idx, Qt.UserRole + 3),
-                "section": page.ruleModel.data(idx, Qt.UserRole + 5),
-                "matchSummary": page.ruleModel.data(idx, Qt.UserRole + 7),
-                "actionSummary": page.ruleModel.data(idx, Qt.UserRole + 8),
-                "conditionCount": page.ruleModel.data(idx, Qt.UserRole + 9),
-                "actionCount": page.ruleModel.data(idx, Qt.UserRole + 10),
-                "isComposite": page.ruleModel.data(idx, Qt.UserRole + 11)
-            };
+        for (var i = 0; i < snapshot.length; ++i) {
+            var entry = snapshot[i];
             // Chip filter.
             if (page.chipFilter >= 0 && entry.section !== page.chipFilter)
                 continue;
@@ -71,48 +57,53 @@ SettingsFlickable {
                     continue;
 
             }
-            // Monitor filter — keep only rules whose match summary names the
-            // monitor (the C++ summary renders `Monitor: <id>`).
+            // Monitor filter — keep only rules whose ScreenId predicate(s)
+            // name the selected monitor (an exact id match, not a substring
+            // scan of the localized summary).
             if (page.monitorFilter.length > 0) {
-                if (entry.matchSummary.indexOf(page.monitorFilter) < 0)
+                if (!entry.screenIds || entry.screenIds.indexOf(page.monitorFilter) < 0)
                     continue;
 
             }
-            buckets[entry.section].push(entry);
+            if (buckets[entry.section] !== undefined)
+                buckets[entry.section].push(entry);
+
         }
         var out = [];
-        for (var so = 0; so < page._sectionOrder.length; ++so) {
-            var sec = page._sectionOrder[so];
-            if (buckets[sec].length === 0)
+        for (var so = 0; so < page.sectionDescriptors.length; ++so) {
+            var sec = page.sectionDescriptors[so];
+            if (buckets[sec.value].length === 0)
                 continue;
 
             out.push({
-                "section": sec,
-                "label": page._sectionLabel(sec),
-                "rules": buckets[sec]
+                "section": sec.value,
+                "label": sec.label,
+                "rules": buckets[sec.value]
             });
         }
         return out;
     }
 
-    function _sectionLabel(section) {
-        switch (section) {
-        case page.sectionMonitor:
-            return i18n("Monitor & Layout");
-        case page.sectionApplication:
-            return i18n("Applications");
-        case page.sectionActivity:
-            return i18n("Activities");
-        case page.sectionAnimation:
-            return i18n("Animations");
-        case page.sectionAdvanced:
-            return i18n("Advanced / Custom");
-        }
-        return "";
-    }
-
     contentHeight: mainCol.implicitHeight
     clip: true
+
+    // Re-derive the section model on every structural or per-rule change so a
+    // rule that changes section is re-bucketed.
+    Connections {
+        function onCountChanged() {
+            page.modelRevision++;
+        }
+
+        function onRuleSectionChanged() {
+            page.modelRevision++;
+        }
+
+        function onDataChanged() {
+            page.modelRevision++;
+        }
+
+        target: page.ruleModel
+    }
 
     AddRuleSheet {
         id: addRuleSheet
@@ -194,25 +185,12 @@ SettingsFlickable {
             }
 
             Repeater {
+                // "All" chip prepended to the controller's section list — the
+                // section labels and order come from C++, not hardcoded here.
                 model: [{
                     "value": -1,
                     "label": i18n("All")
-                }, {
-                    "value": page.sectionMonitor,
-                    "label": i18n("Monitor")
-                }, {
-                    "value": page.sectionApplication,
-                    "label": i18n("Application")
-                }, {
-                    "value": page.sectionActivity,
-                    "label": i18n("Activity")
-                }, {
-                    "value": page.sectionAnimation,
-                    "label": i18n("Animation")
-                }, {
-                    "value": page.sectionAdvanced,
-                    "label": i18n("Advanced")
-                }]
+                }].concat(page.sectionDescriptors)
 
                 delegate: Button {
                     required property var modelData
@@ -234,12 +212,19 @@ SettingsFlickable {
 
         // ── Empty state ──
         Kirigami.PlaceholderMessage {
+            // When the daemon is unreachable the model is empty because it
+            // could not be loaded — not because the user has no rules. Gate
+            // the "No window rules yet" copy on daemonReachable so the inline
+            // warning above is the only thing shown in that case.
+            readonly property bool _daemonDown: !page.controller.daemonReachable
+            readonly property bool _trulyEmpty: page.ruleModel.count === 0 && !_daemonDown
+
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.gridUnit * 2
-            visible: page.sectionModel.length === 0
+            visible: page.sectionModel.length === 0 && !_daemonDown
             icon.name: "view-list-details"
-            text: page.ruleModel.count === 0 ? i18n("No window rules yet") : i18n("No rules match the current filter")
-            explanation: page.ruleModel.count === 0 ? i18n("Add a rule to assign layouts to monitors, float application windows, or override animations.") : i18n("Try a different filter or search term.")
+            text: _trulyEmpty ? i18n("No window rules yet") : i18n("No rules match the current filter")
+            explanation: _trulyEmpty ? i18n("Add a rule to assign layouts to monitors, float application windows, or override animations.") : i18n("Try a different filter or search term.")
         }
 
         // ── Grouped rule list ──

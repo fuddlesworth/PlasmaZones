@@ -74,9 +74,14 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       X-KDE-DBUS-Restricted-Interfaces gate are dropped. Mismatched
 //       peers fail the bridge handshake instead of producing
 //       method-not-found at first thumbnail post.
+//   v4: setWindowMetadata widened from 4 args (instanceId, appId,
+//       desktopFile, title) to 9 (adds windowRole, pid, virtualDesktop,
+//       activity, windowType). A stale effect sending the old 4-arg form
+//       would fail marshalling, so the bridge handshake rejects mismatched
+//       peers up front.
 //
-inline constexpr int ApiVersion = 3;
-inline constexpr int MinPeerApiVersion = 3;
+inline constexpr int ApiVersion = 4;
+inline constexpr int MinPeerApiVersion = 4;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

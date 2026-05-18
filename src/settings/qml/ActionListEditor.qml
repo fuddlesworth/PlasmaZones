@@ -35,10 +35,11 @@ ColumnLayout {
     }
 
     function _append() {
+        // Guarded by the Add-action button's enabled state — there is always
+        // at least one registered type when this runs.
         var next = editor.actions.slice();
-        // Default to the first registered action type.
         next.push({
-            "type": editor.actionTypeOptions.length > 0 ? editor.actionTypeOptions[0].value : "float"
+            "type": editor.actionTypeOptions[0].value
         });
         editor.actionsChanged(next);
     }
@@ -81,6 +82,9 @@ ColumnLayout {
         text: i18n("Add action")
         icon.name: "list-add"
         flat: true
+        // No registered action types ⇒ nothing to add; disable rather than
+        // appending a hardcoded fallback type.
+        enabled: editor.actionTypeOptions.length > 0
         Accessible.name: i18n("Add an action to this rule")
         onClicked: editor._append()
     }

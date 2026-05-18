@@ -27,6 +27,12 @@ Kirigami.OverlaySheet {
     /// Working copy of the rule being edited. Set via `openFor`.
     property var _workingRule: ({
     })
+    /// Stable empty-match fallback — a single allocation, so binding
+    /// MatchExpressionEditor.node to it does not churn the node identity on
+    /// every binding evaluation.
+    readonly property var _emptyMatch: ({
+        "all": []
+    })
 
     signal ruleSaved(var ruleJson)
 
@@ -94,9 +100,7 @@ Kirigami.OverlaySheet {
 
         MatchExpressionEditor {
             Layout.fillWidth: true
-            node: sheet._workingRule.match || ({
-                "all": []
-            })
+            node: sheet._workingRule.match || sheet._emptyMatch
             controller: sheet.controller
             depth: 0
             removable: false
@@ -143,6 +147,8 @@ Kirigami.OverlaySheet {
         Button {
             text: sheet.editing ? i18n("Save") : i18n("Add rule")
             icon.name: "dialog-ok-apply"
+            // A rule with no actions does nothing — block saving it.
+            enabled: sheet._workingRule.actions !== undefined && sheet._workingRule.actions.length > 0
             Accessible.name: sheet.editing ? i18n("Save changes to this rule") : i18n("Add this rule")
             onClicked: {
                 sheet.ruleSaved(sheet._workingRule);

@@ -218,6 +218,11 @@ private Q_SLOTS:
         // ContextRuleBridge::makeAssignmentActions order).
         const PWR::ResolvedActions actions = evaluator.resolve(q);
         QVERIFY(actions.hasSlot(QString(PWR::ActionSlot::Layout)));
+        // Crucially: the slot is won by the SetSnappingLayout action, NOT the
+        // SetTilingAlgorithm. The resolved layout id must be the preserved
+        // snapping layout — if SetTilingAlgorithm wrongly took the slot this
+        // would resolve to "dwindle" instead.
+        QCOMPARE(resolvedLayoutId(evaluator, q), QStringLiteral("{snap-preserved}"));
     }
 
     // ─── Mode-only autotile entry ─────────────────────────────────────────
@@ -309,6 +314,43 @@ private Q_SLOTS:
         // The pinned rule is disabled → the query falls through to the default.
         QCOMPARE(resolvedLayoutId(evaluator, contextQuery(QStringLiteral("DP-1"), 2, QString())),
                  QStringLiteral("{global}"));
+    }
+
+    // ─── Window-property predicates are inert for a windowless query ──────
+    // The file docstring's core invariant: a rule that pins a window-property
+    // field (AppId) cannot match a windowless context query, because the
+    // absent AppId makes that leaf evaluate false — and inside an All{} a
+    // single false child fails the whole rule. Without this the rule would
+    // wrongly shadow the cascade.
+
+    void testWindowPropertyRuleInertForWindowlessQuery()
+    {
+        QList<PWR::WindowRule> rules;
+        // A context+AppId composite rule: ScreenId == DP-1 AND AppId == konsole.
+        PWR::WindowRule composite;
+        composite.id = QUuid::createUuid();
+        composite.name = QStringLiteral("DP-1 konsole");
+        composite.enabled = true;
+        composite.priority = 999; // far above any cascade band — would win if it matched
+        composite.match = PWR::MatchExpression::makeAll(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1")),
+             PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::Equals,
+                                            QStringLiteral("org.kde.konsole"))});
+        composite.actions = CRB::makeAssignmentActions(false, QStringLiteral("{window-rule-layout}"), QString());
+        rules.append(composite);
+        // A plain context rule for the same screen.
+        rules.append(CRB::makeAssignmentRule(QStringLiteral("DP-1"), QStringLiteral("DP-1"), 0, QString(), false,
+                                             QStringLiteral("{context-layout}"), QString()));
+
+        PWR::WindowRuleSet set;
+        set.setRules(rules);
+        PWR::RuleEvaluator evaluator(set);
+
+        // The windowless context query carries no AppId → the composite rule's
+        // AppId leaf evaluates false → the All{} fails → the composite rule
+        // does NOT match. The context-only rule resolves instead.
+        QCOMPARE(resolvedLayoutId(evaluator, contextQuery(QStringLiteral("DP-1"), 1, QString())),
+                 QStringLiteral("{context-layout}"));
     }
 
     // ─── Tie-break is stable list order ───────────────────────────────────

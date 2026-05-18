@@ -137,6 +137,11 @@ inline WindowRuleSet toRuleSet(const PhosphorAnimationShaders::AnimationAppRuleL
         // list order across the evaluator's priority sort; the stable sort
         // would also hold ties, but distinct priorities make the intent
         // explicit and robust against a future non-stable sort.
+        //
+        // `count - i` floors at 1 (the last entry, i == count - 1, gets
+        // priority 1) and never reaches 0 — the value reserved for the
+        // provider-default catch-all. Every animation App Rule therefore
+        // stays strictly above the catch-all band.
         rule.priority = count - i;
         rule.match = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, source.classPattern);
         rule.actions.append(makeAnimationAction(source));

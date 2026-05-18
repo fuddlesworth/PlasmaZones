@@ -132,11 +132,11 @@ private Q_SLOTS:
     {
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
-        // Bumped to 3 alongside setSnapAssistThumbnail's signature change
-        // (s,s data:URL → s,i,i,ay raw ARGB32 → b) so a stale effect can't
-        // silently send the old wire format and crash on marshalling.
-        QCOMPARE(Service::ApiVersion, 3);
-        QCOMPARE(Service::MinPeerApiVersion, 3);
+        // Bumped to 4 alongside setWindowMetadata's signature widening
+        // (4 args → 9 args) so a stale effect can't silently send the old
+        // wire format and crash on marshalling.
+        QCOMPARE(Service::ApiVersion, 4);
+        QCOMPARE(Service::MinPeerApiVersion, 4);
     }
 
     // SnapAssistCandidate round-trip is covered by test_compositor_common.

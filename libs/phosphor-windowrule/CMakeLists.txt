@@ -66,6 +66,12 @@ set(phosphorwindowrule_public_HDRS
     include/PhosphorWindowRule/WindowRuleSet.h
     include/PhosphorWindowRule/RuleEvaluator.h
     include/PhosphorWindowRule/WindowRuleStore.h
+    # Header-only in-memory bridges — public API, installed via the
+    # install(DIRECTORY) glob below. Listed here so the target carries them
+    # as sources (IDE visibility, install-intent parity with the rest).
+    include/PhosphorWindowRule/AnimationAppRuleBridge.h
+    include/PhosphorWindowRule/ContextRuleBridge.h
+    include/PhosphorWindowRule/ExclusionListBridge.h
 )
 
 set(phosphorwindowrule_SRCS

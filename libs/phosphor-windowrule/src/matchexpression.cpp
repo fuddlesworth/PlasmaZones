@@ -79,6 +79,9 @@ MatchExpression MatchExpression::makeLeaf(const Predicate& predicate)
     MatchExpression expr;
     expr.m_kind = Kind::Leaf;
     expr.m_predicate = predicate;
+    // Compile the regex eagerly so evaluate() never mutates — a validated
+    // expression is then safe to evaluate from any thread.
+    expr.ensureRegex();
     return expr;
 }
 
@@ -134,13 +137,13 @@ bool MatchExpression::isContextOnly() const
     return true;
 }
 
-const QRegularExpression& MatchExpression::compiledRegex() const
+void MatchExpression::ensureRegex()
 {
-    if (!m_compiledRegex) {
-        m_compiledRegex = std::make_shared<QRegularExpression>(m_predicate.value.toString(),
-                                                               QRegularExpression::CaseInsensitiveOption);
+    if (m_kind != Kind::Leaf || m_predicate.op != Operator::Regex || m_compiledRegex) {
+        return;
     }
-    return *m_compiledRegex;
+    m_compiledRegex =
+        std::make_shared<QRegularExpression>(m_predicate.value.toString(), QRegularExpression::CaseInsensitiveOption);
 }
 
 // ── Validation ──────────────────────────────────────────────────────────
@@ -171,14 +174,25 @@ bool MatchExpression::isValid() const
     if (operatorIsNumeric(op) && !fieldIsNumeric(field)) {
         return false;
     }
-    // In requires a list value.
-    if (op == Operator::In && m_predicate.value.metaType().id() != QMetaType::QVariantList) {
-        return false;
+    if (op == Operator::In) {
+        // In does not apply to a boolean flag — a bool has only two states,
+        // so a set-membership test is degenerate and almost certainly an
+        // authoring mistake. Reject it explicitly.
+        if (fieldIsBool(field)) {
+            return false;
+        }
+        // In requires a list value. A QVariantList is the canonical wire
+        // shape, but a programmatically built leaf may carry a QStringList —
+        // accept either.
+        const int valueTypeId = m_predicate.value.metaType().id();
+        if (valueTypeId != QMetaType::QVariantList && valueTypeId != QMetaType::QStringList) {
+            return false;
+        }
     }
-    // A Regex pattern must compile.
+    // A Regex pattern must compile. The program was compiled eagerly by
+    // ensureRegex() at construction — reuse it rather than recompiling.
     if (op == Operator::Regex) {
-        const QRegularExpression re(m_predicate.value.toString());
-        if (!re.isValid()) {
+        if (!m_compiledRegex || !m_compiledRegex->isValid()) {
             return false;
         }
     }
@@ -283,11 +297,14 @@ bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
 
     // ── String fields ──
     if (op == Operator::Regex) {
-        const QRegularExpression& re = compiledRegex();
-        if (!re.isValid()) {
+        // The program was compiled eagerly at construction by ensureRegex().
+        // A leaf that reaches evaluate() has passed isValid(), so the program
+        // is present and valid; the guard only defends a hand-built leaf that
+        // skipped validation.
+        if (!m_compiledRegex || !m_compiledRegex->isValid()) {
             return false;
         }
-        return re.match(subject.toString()).hasMatch();
+        return m_compiledRegex->match(subject.toString()).hasMatch();
     }
     return stringMatch(subject.toString(), op, value.toString());
 }
@@ -376,6 +393,15 @@ std::optional<MatchExpression> MatchExpression::fromJson(const QJsonObject& obj)
     if (!field || !op) {
         qCWarning(lcWindowRule) << "Leaf match predicate has an unknown field/operator — dropping expression. field:"
                                 << obj.value(kKeyField).toString() << "op:" << obj.value(kKeyOp).toString();
+        return std::nullopt;
+    }
+    // Every leaf operator compares against a value — a leaf with no `value`
+    // key is structurally incomplete. Drop it rather than silently treating
+    // the absent value as an empty string / zero, which would produce a
+    // surprising "matches everything with an empty attribute" rule.
+    if (!obj.contains(kKeyValue)) {
+        qCWarning(lcWindowRule) << "Leaf match predicate has no `value` key — dropping expression. field:"
+                                << fieldToString(*field) << "op:" << operatorToString(*op);
         return std::nullopt;
     }
     MatchExpression leaf = makeLeaf(*field, *op, obj.value(kKeyValue).toVariant());

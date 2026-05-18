@@ -253,7 +253,16 @@ inline bool isContextEqualsLeaf(const MatchExpression& expr, Field field)
  * whichever `ScreenId` / `VirtualDesktop` / `Activity` equality leaves the
  * match carries. An empty catch-all leaves all three at their defaults.
  * Window-property leaves (AppId etc.) are ignored — only context fields are
- * read, so a mixed rule still yields its context projection.
+ * read, so a mixed *flat* rule still yields its context projection.
+ *
+ * **Contract** — this is strictly the inverse of @ref makeContextMatch, so it
+ * only understands the shapes that helper produces: an empty catch-all, a
+ * single context-equality leaf, or a flat `All{}` whose children are
+ * context-equality leaves. It walks **one level** of children; a nested
+ * composite (`All{ Any{...} }`) is not a context rule this bridge authored
+ * and decomposing it would be silently lossy. Such an input is left as
+ * all-defaults — callers that build their own deeper match expressions must
+ * not route them through this readback.
  */
 inline void contextDimsOf(const MatchExpression& match, QString& screenId, int& virtualDesktop, QString& activity)
 {
@@ -261,6 +270,12 @@ inline void contextDimsOf(const MatchExpression& match, QString& screenId, int& 
     virtualDesktop = 0;
     activity.clear();
     if (match.isCatchAll()) {
+        return;
+    }
+    // Only a leaf or a flat All{} is a context rule this bridge produced. A
+    // composite of any other kind (Any / None) — or an All{} carrying a
+    // nested composite child — is outside the contract; leave the defaults.
+    if (!match.isLeaf() && match.kind() != MatchExpression::Kind::All) {
         return;
     }
     const QList<MatchExpression> leaves = match.isLeaf() ? QList<MatchExpression>{match} : match.children();
@@ -272,23 +287,48 @@ inline void contextDimsOf(const MatchExpression& match, QString& screenId, int& 
         } else if (isContextEqualsLeaf(leaf, Field::Activity)) {
             activity = leaf.predicate().value.toString();
         }
+        // A non-context or non-equality leaf is ignored — a flat mixed rule
+        // still yields its context projection, per the contract above.
     }
 }
 
 /**
- * @brief If @p rule carries a single `DisableEngine` action, return the mode
- *        token ("snapping" / "autotile") it disables; otherwise nullopt.
+ * @brief If @p rule is a per-mode disable rule, return whether it disables
+ *        autotile (`true`) or snapping (`false`); otherwise nullopt.
  *
- * A rule is a per-mode disable rule iff exactly one of its actions is a
- * `DisableEngine` action; the `mode` param scopes which engine it gates.
+ * A rule qualifies iff **exactly one** of its actions is a `DisableEngine`
+ * action *and* that action's `mode` param is a recognised token
+ * ("snapping" / "autotile"). The exactly-one rule is enforced: a second
+ * `DisableEngine` action makes the rule ambiguous — it is not a
+ * bridge-authored disable rule — so the function bails to nullopt. An
+ * unrecognised `mode` token is likewise rejected rather than silently
+ * coerced to "snapping".
  */
 inline std::optional<bool> disableRuleAutotileMode(const WindowRule& rule)
 {
+    const RuleAction* disableAction = nullptr;
     for (const RuleAction& action : rule.actions) {
-        if (action.type == QString(ActionType::DisableEngine)) {
-            return action.params.value(QLatin1String("mode")).toString() == QLatin1String("autotile");
+        if (action.type != QString(ActionType::DisableEngine)) {
+            continue;
         }
+        if (disableAction != nullptr) {
+            // A second DisableEngine action — the rule is ambiguous and was
+            // not produced by makeDisableRule. Not a per-mode disable rule.
+            return std::nullopt;
+        }
+        disableAction = &action;
     }
+    if (disableAction == nullptr) {
+        return std::nullopt;
+    }
+    const QString mode = disableAction->params.value(QLatin1String("mode")).toString();
+    if (mode == QLatin1String("autotile")) {
+        return true;
+    }
+    if (mode == QLatin1String("snapping")) {
+        return false;
+    }
+    // An unrecognised mode token — reject rather than defaulting.
     return std::nullopt;
 }
 

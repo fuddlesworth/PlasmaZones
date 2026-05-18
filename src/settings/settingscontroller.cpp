@@ -356,8 +356,14 @@ SettingsController::SettingsController(QObject* parent)
     // setNeedsSave(false) those methods emit.
     m_windowRulesPage = new WindowRuleController(this);
     connect(m_windowRulesPage, &WindowRuleController::dirtyChanged, this, [this]() {
-        if (!m_loading && !m_saving && m_windowRulesPage->isDirty())
-            setNeedsSave(true);
+        if (m_loading || m_saving || !m_windowRulesPage->isDirty())
+            return;
+        // A window-rule edit can be driven by a background daemon signal, not
+        // just by the user viewing the page — so mark the "window-rules" page
+        // explicitly rather than letting setNeedsSave() target m_activePage.
+        beginExternalEdit(QStringLiteral("window-rules"));
+        setNeedsSave(true);
+        endExternalEdit();
     });
 
     // Overlay shader registry — settings-side mirror of the daemon's. The
@@ -729,9 +735,10 @@ void SettingsController::save()
 
     // Push the staged window-rule set to the daemon (sole writer of
     // windowrules.json). Done before notifyReload so the daemon's rule
-    // engine picks up the new set as part of the same save.
-    if (m_windowRulesPage)
-        m_windowRulesPage->commit();
+    // engine picks up the new set as part of the same save. A failed push
+    // (daemon down, or a partial rule drop) must NOT be reported as saved —
+    // tracked here and re-flagged after the blanket setNeedsSave(false) below.
+    const bool windowRulesCommitOk = !m_windowRulesPage || m_windowRulesPage->commit();
 
     // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen
     // IDs exist when assignments referencing them are processed.
@@ -767,6 +774,15 @@ void SettingsController::save()
     // reset through singleShot(0) drains those queued signals first, so
     // onExternalSettingsChanged() sees m_saving=true and returns early.
     setNeedsSave(false);
+    // If the window-rule push failed, the page still has unsaved staged edits
+    // — re-flag it so the user is not told everything saved. Done after the
+    // blanket clear above (and with m_saving still true, so the dirtyChanged
+    // connect lambda's guard short-circuits and does not double-mark).
+    if (!windowRulesCommitOk) {
+        beginExternalEdit(QStringLiteral("window-rules"));
+        setNeedsSave(true);
+        endExternalEdit();
+    }
     QTimer::singleShot(0, this, [this]() {
         m_saving = false;
     });

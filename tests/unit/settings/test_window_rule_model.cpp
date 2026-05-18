@@ -196,12 +196,13 @@ void TestWindowRuleModel::updateNoOpDoesNotChurn()
     model.setRules({a});
 
     QSignalSpy dataSpy(&model, &QAbstractItemModel::dataChanged);
-    QSignalSpy mutatedSpy(&model, &WindowRuleModel::rulesMutated);
+    QSignalSpy sectionSpy(&model, &WindowRuleModel::ruleSectionChanged);
 
-    // Updating to an identical rule must NOT emit dataChanged / rulesMutated.
+    // Updating to an identical rule must NOT emit dataChanged or
+    // ruleSectionChanged.
     QVERIFY(model.updateRule(a));
     QCOMPARE(dataSpy.count(), 0);
-    QCOMPARE(mutatedSpy.count(), 0);
+    QCOMPARE(sectionSpy.count(), 0);
 }
 
 void TestWindowRuleModel::reorder()

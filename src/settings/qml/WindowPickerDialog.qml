@@ -17,7 +17,10 @@ import org.kde.kirigami as Kirigami
 Kirigami.Dialog {
     id: dialog
 
-    required property var appSettings
+    // The SettingsController — supplies cachedRunningWindows() /
+    // requestRunningWindows(). Named `controller` (not `appSettings`) because
+    // it is the controller, not a Settings object.
+    required property var controller
     property bool forApps: false
     property var windowList: []
     // Set by the Connections block below when the controller signals a
@@ -70,8 +73,8 @@ Kirigami.Dialog {
     function refresh() {
         searchField.text = "";
         requestTimedOut = false;
-        windowList = appSettings.cachedRunningWindows();
-        appSettings.requestRunningWindows();
+        windowList = controller.cachedRunningWindows();
+        controller.requestRunningWindows();
     }
 
     title: forApps ? i18n("Pick Application from Running Windows") : i18n("Pick Window Class from Running Windows")

@@ -190,7 +190,7 @@ PhosphorZones::Layout* LayoutRegistry::defaultLayout() const
     if (m_defaultLayoutIdProvider) {
         const QString configuredId = m_defaultLayoutIdProvider();
         if (!configuredId.isEmpty()) {
-            if (PhosphorZones::Layout* layout = layoutById(QUuid(configuredId))) {
+            if (PhosphorZones::Layout* layout = layoutById(QUuid::fromString(configuredId))) {
                 return layout;
             }
         }
@@ -387,27 +387,14 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
     } else {
         // Truly deleted — clean up rules and shortcuts referencing this layout.
         // A context rule references the layout iff its SetSnappingLayout action
-        // carries this layout's UUID string.
-        QList<PhosphorWindowRule::WindowRule> kept;
-        bool ruleRemoved = false;
-        for (const PhosphorWindowRule::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-            bool referencesLayout = false;
-            for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
-                if (action.type == QString(PhosphorWindowRule::ActionType::SetSnappingLayout)
-                    && action.params.value(QLatin1String("layoutId")).toString() == layoutIdStr) {
-                    referencesLayout = true;
-                    break;
-                }
-            }
-            if (referencesLayout) {
-                ruleRemoved = true;
-            } else {
-                kept.append(rule);
-            }
-        }
-        if (ruleRemoved) {
-            m_ruleStore->setAllRules(kept);
-        }
+        // carries this layout's UUID string. The rule is NOT blanket-deleted:
+        // an Autotile-mode context rule can carry a stale SetSnappingLayout
+        // (the mode-toggle losslessness invariant), so dropping the whole rule
+        // would lose its SetEngineMode + SetTilingAlgorithm autotile intent.
+        // purgeSnappingLayoutFromAssignments rebuilds each affected rule with
+        // only the snapping layout cleared, dropping a rule only when nothing
+        // meaningful remains.
+        purgeSnappingLayoutFromAssignments(layoutIdStr);
 
         bool shortcutRemoved = false;
         for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {

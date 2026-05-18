@@ -100,6 +100,7 @@ set(phosphorzones_SRCS
     src/interfaces.cpp
     src/layoutregistry.cpp
     src/layoutregistry_assignments.cpp
+    src/layoutregistry_overrides.cpp
     src/layoutregistry_persistence.cpp
     src/geometryutils.cpp
     src/layoutfactory.cpp

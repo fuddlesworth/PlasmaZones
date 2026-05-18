@@ -77,6 +77,21 @@ public:
      *                asserted non-empty. Quick-layout slots persist to a
      *                @c quicklayouts.json sibling file in this directory.
      * @param parent Qt parent.
+     *
+     * @note Required post-construction call order. The constructor does NOT
+     *       read the quick-layout sidecar — @ref loadAssignments must be
+     *       called once after construction (and after @ref loadLayouts) for
+     *       the numbered quick-layout slots to be populated; without it,
+     *       @ref layoutForShortcut / @ref applyQuickLayout silently see empty
+     *       slots. The per-context assignment cascade itself needs no such
+     *       call: the injected @c ruleStore loads its rule set in its own
+     *       constructor, so assignment resolution is live immediately.
+     *       @ref loadAssignments additionally re-reads the shared rule store
+     *       from disk, so composition roots also call it to pick up
+     *       cross-process rule edits. The daemon composition root calls
+     *       @ref loadLayouts then @ref loadAssignments; the editor / settings
+     *       roots, which drive quick slots over D-Bus rather than locally,
+     *       deliberately skip it.
      */
     LayoutRegistry(PhosphorWindowRule::WindowRuleStore* ruleStore, QString layoutSubdirectory,
                    QObject* parent = nullptr);
@@ -418,6 +433,16 @@ private:
     /// exists in the rule set and carries an engine-mode action.
     bool hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const;
 
+    /// Find the exact-shape context rule for a (screen, desktop, activity)
+    /// tuple, or nullptr if none exists. The returned pointer aliases into the
+    /// borrowed rule set and is valid only until the next rule-set mutation.
+    /// This is the single exact-shape scan — @ref exactContextRuleId and
+    /// @ref hasExactContextRule are thin wrappers, and the assignment mutators
+    /// read the winning rule's actions through it directly (so a wider cascade
+    /// entry never bleeds its tilingAlgorithm into a new narrower rule).
+    const PhosphorWindowRule::WindowRule* findExactContextRule(const QString& screenId, int virtualDesktop,
+                                                               const QString& activity) const;
+
     /// Find the id of the exact-shape context rule for a (screen, desktop,
     /// activity) tuple, or a null QUuid if none exists.
     QUuid exactContextRuleId(const QString& screenId, int virtualDesktop, const QString& activity) const;
@@ -431,8 +456,14 @@ private:
     /// Returns true if a rule was removed.
     bool removeAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity);
 
-    /// Build the AssignmentEntry encoded by a context rule's action slots.
-    static AssignmentEntry entryFromRuleActions(const PhosphorWindowRule::ResolvedActions& actions);
+    /// Drop @p layoutId from every assignment rule's @c SetSnappingLayout
+    /// action when a snap layout is deleted. A rule that still carries
+    /// meaningful intent (an Autotile engine-mode, or a preserved
+    /// tilingAlgorithm) is rebuilt with only the snapping layout cleared —
+    /// the mode + tiling intent survives, preserving mode-toggle
+    /// losslessness. A rule left with nothing but a default (Snapping)
+    /// engine-mode is dropped entirely. Returns true if the rule set changed.
+    bool purgeSnappingLayoutFromAssignments(const QString& layoutId);
 
     /// Resolve the level-1 global default into an AssignmentEntry on
     /// cascade-miss. Three-tier precedence:

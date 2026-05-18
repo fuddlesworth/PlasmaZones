@@ -123,7 +123,7 @@ SettingsFlickable {
 
         property bool forApps: true
 
-        appSettings: settingsController
+        controller: settingsController
         onPicked: function(value) {
             if (forApps) {
                 settingsController.settings.addAnimationExcludedApplication(value);
@@ -388,7 +388,6 @@ SettingsFlickable {
                         to: 1000
                         stepSize: 10
                         value: page.appSettings.animationMinimumWindowWidth
-                        unitText: ""
                         Accessible.name: i18n("Minimum window width for animations")
                         onValueModified: (value) => {
                             page.appSettings.animationMinimumWindowWidth = value;

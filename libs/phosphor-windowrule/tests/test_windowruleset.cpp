@@ -46,8 +46,17 @@ private Q_SLOTS:
         QVERIFY(set.removeRule(r.id));
         QCOMPARE(set.revision(), quint64(3));
 
+        // The set is already empty after the removeRule above — clear() is a
+        // no-op and must NOT bump the revision (a bump would needlessly
+        // invalidate the RuleEvaluator's match cache).
         set.clear();
+        QCOMPARE(set.revision(), quint64(3));
+
+        // A clear() that actually drops rules does bump.
+        QVERIFY(set.addRule(simpleRule(QStringLiteral("b"))));
         QCOMPARE(set.revision(), quint64(4));
+        set.clear();
+        QCOMPARE(set.revision(), quint64(5));
     }
 
     void testRevisionMonotonicEvenOnFailedAdd()

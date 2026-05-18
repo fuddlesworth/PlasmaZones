@@ -29,8 +29,10 @@ Rectangle {
     implicitHeight: Kirigami.Units.gridUnit * 5
     radius: Kirigami.Units.smallSpacing
     color: tile.selected ? Kirigami.Theme.highlightColor : Kirigami.Theme.alternateBackgroundColor
-    border.width: 1
-    border.color: tile.selected ? Kirigami.Theme.highlightColor : Kirigami.Theme.separatorColor
+    // A selected tile gets a thicker, contrasting border (the focus/text
+    // color) so the outline stays visible against the highlight fill.
+    border.width: tile.selected ? 2 : 1
+    border.color: tile.selected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.separatorColor
     Accessible.role: Accessible.Button
     Accessible.name: i18n("Filter rules to monitor %1", tile.tileData.screenId)
 

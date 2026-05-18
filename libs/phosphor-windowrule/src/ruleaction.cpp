@@ -56,6 +56,23 @@ std::optional<RuleAction> RuleAction::fromJson(const QJsonObject& obj)
     action.type = type;
     action.params = obj;
     action.params.remove(kKeyType);
+
+    // Strict-key discipline — reject an action carrying a param key the
+    // descriptor does not declare. An unknown key is almost always a typo or
+    // a stale-schema payload; silently retaining it would let a misspelled
+    // key sit inertly in the rule store forever. A descriptor with an empty
+    // `allowedKeys` set opts out (free-form params).
+    const auto descriptor = ActionRegistry::instance().descriptor(type);
+    if (descriptor && !descriptor->allowedKeys.isEmpty()) {
+        for (const QString& key : action.params.keys()) {
+            if (!descriptor->allowedKeys.contains(key)) {
+                qCWarning(lcWindowRule) << "Action params carry an unexpected key — dropping action. type:" << type
+                                        << "key:" << key;
+                return std::nullopt;
+            }
+        }
+    }
+
     if (!ActionRegistry::instance().validate(action)) {
         qCWarning(lcWindowRule) << "Action params failed descriptor validation — dropping action. type:" << type;
         return std::nullopt;
@@ -142,7 +159,7 @@ void ActionRegistry::registerBuiltins()
                                     [](const QJsonObject& p) {
                                         return hasNonEmptyString(p, QLatin1StringView("mode"));
                                     },
-                                    false});
+                                    false, QStringList{QStringLiteral("mode")}});
 
     // ── layout slot — both layout-shaping actions share it ──
     registerAction(ActionDescriptor{QString(ActionType::SetSnappingLayout),
@@ -152,7 +169,7 @@ void ActionRegistry::registerBuiltins()
                                     [](const QJsonObject& p) {
                                         return hasNonEmptyString(p, QLatin1StringView("layoutId"));
                                     },
-                                    false});
+                                    false, QStringList{QStringLiteral("layoutId")}});
     registerAction(ActionDescriptor{QString(ActionType::SetTilingAlgorithm),
                                     [](const QJsonObject&) {
                                         return QString(ActionSlot::Layout);
@@ -160,54 +177,59 @@ void ActionRegistry::registerBuiltins()
                                     [](const QJsonObject& p) {
                                         return hasNonEmptyString(p, QLatin1StringView("algorithm"));
                                     },
-                                    false});
+                                    false, QStringList{QStringLiteral("algorithm")}});
 
     // ── engine-enable slot ──
     registerAction(ActionDescriptor{QString(ActionType::DisableEngine),
                                     [](const QJsonObject&) {
                                         return QString(ActionSlot::EngineEnable);
                                     },
-                                    &acceptAny, false});
+                                    &acceptAny, false, QStringList{QStringLiteral("mode")}});
 
-    // ── manage slot — terminal ──
+    // ── manage slot — terminal. Exclude is intentionally free-form: an empty
+    //    `allowedKeys` opts out of the strict-key check so a future Exclude
+    //    reason/scope param can be added without a schema bump. ──
     registerAction(ActionDescriptor{QString(ActionType::Exclude),
                                     [](const QJsonObject&) {
                                         return QString(ActionSlot::Manage);
                                     },
-                                    &acceptAny, true});
+                                    &acceptAny, true, QStringList{}});
 
-    // ── float slot ──
+    // ── float slot — intentionally free-form (future float-geometry hints);
+    //    empty `allowedKeys` opts out of the strict-key check. ──
     registerAction(ActionDescriptor{QString(ActionType::Float),
                                     [](const QJsonObject&) {
                                         return QString(ActionSlot::Float);
                                     },
-                                    &acceptAny, false});
+                                    &acceptAny, false, QStringList{}});
 
     // ── animation slots — event-scoped: "anim-shader:<event>" ──
-    registerAction(ActionDescriptor{QString(ActionType::OverrideAnimationShader),
-                                    [](const QJsonObject& p) -> QString {
-                                        const QString event = p.value(QLatin1StringView("event")).toString();
-                                        if (event.isEmpty()) {
-                                            return QString();
-                                        }
-                                        return QString(ActionSlot::AnimShaderPrefix) + event;
-                                    },
-                                    [](const QJsonObject& p) {
-                                        return hasNonEmptyString(p, QLatin1StringView("event"));
-                                    },
-                                    false});
-    registerAction(ActionDescriptor{QString(ActionType::OverrideAnimationTiming),
-                                    [](const QJsonObject& p) -> QString {
-                                        const QString event = p.value(QLatin1StringView("event")).toString();
-                                        if (event.isEmpty()) {
-                                            return QString();
-                                        }
-                                        return QString(ActionSlot::AnimTimingPrefix) + event;
-                                    },
-                                    [](const QJsonObject& p) {
-                                        return hasNonEmptyString(p, QLatin1StringView("event"));
-                                    },
-                                    false});
+    registerAction(ActionDescriptor{
+        QString(ActionType::OverrideAnimationShader),
+        [](const QJsonObject& p) -> QString {
+            const QString event = p.value(QLatin1StringView("event")).toString();
+            if (event.isEmpty()) {
+                return QString();
+            }
+            return QString(ActionSlot::AnimShaderPrefix) + event;
+        },
+        [](const QJsonObject& p) {
+            return hasNonEmptyString(p, QLatin1StringView("event"));
+        },
+        false, QStringList{QStringLiteral("event"), QStringLiteral("effectId"), QStringLiteral("params")}});
+    registerAction(ActionDescriptor{
+        QString(ActionType::OverrideAnimationTiming),
+        [](const QJsonObject& p) -> QString {
+            const QString event = p.value(QLatin1StringView("event")).toString();
+            if (event.isEmpty()) {
+                return QString();
+            }
+            return QString(ActionSlot::AnimTimingPrefix) + event;
+        },
+        [](const QJsonObject& p) {
+            return hasNonEmptyString(p, QLatin1StringView("event"));
+        },
+        false, QStringList{QStringLiteral("event"), QStringLiteral("curve"), QStringLiteral("durationMs")}});
 
     // ── opacity slot ──
     registerAction(ActionDescriptor{QString(ActionType::SetOpacity),
@@ -218,7 +240,7 @@ void ActionRegistry::registerBuiltins()
                                         const QJsonValue v = p.value(QLatin1StringView("value"));
                                         return v.isDouble() && v.toDouble() >= 0.0 && v.toDouble() <= 1.0;
                                     },
-                                    false});
+                                    false, QStringList{QStringLiteral("value")}});
 }
 
 } // namespace PhosphorWindowRule

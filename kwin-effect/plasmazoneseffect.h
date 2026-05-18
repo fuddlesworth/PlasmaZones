@@ -256,20 +256,6 @@ private:
     bool shouldAnimateWindow(KWin::EffectWindow* w) const;
 
     /**
-     * @brief Substring exclusion-list match helper.
-     *
-     * Returns true when @p appName or @p windowClass matches any
-     * non-empty entry in @p apps or @p classes (case-insensitive
-     * substring). Shared between `shouldHandleWindow` (snapping/
-     * tiling Exclusions) and `shouldAnimateWindow` (animation
-     * filtering) — both filter sets use identical match semantics
-     * but persist their lists independently, so the loops are the
-     * same shape with different inputs.
-     */
-    static bool matchesExclusionLists(const QString& appName, const QString& windowClass, const QStringList& apps,
-                                      const QStringList& classes);
-
-    /**
      * @brief Reject Plasma shell layer-shell surfaces by window class.
      *
      * On Wayland, KDE notification popups, system tray overlays, the emoji

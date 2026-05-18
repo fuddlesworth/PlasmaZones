@@ -176,22 +176,6 @@ void PlasmaZonesEffect::rebuildAnimationExclusionRuleSet()
     m_animationExclusionRuleSet.setRules(rebuilt.rules());
 }
 
-bool PlasmaZonesEffect::matchesExclusionLists(const QString& appName, const QString& windowClass,
-                                              const QStringList& apps, const QStringList& classes)
-{
-    for (const QString& excluded : apps) {
-        if (!excluded.isEmpty() && appName.contains(excluded, Qt::CaseInsensitive)) {
-            return true;
-        }
-    }
-    for (const QString& excluded : classes) {
-        if (!excluded.isEmpty() && windowClass.contains(excluded, Qt::CaseInsensitive)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
 {
     if (!w) {

@@ -17,6 +17,10 @@ WindowRuleStore::WindowRuleStore(const QString& filePath, QObject* parent)
 {
     Q_ASSERT_X(!m_filePath.isEmpty(), "WindowRuleStore",
                "filePath is required — the library never derives config locations");
+    // QSaveFile (inside WindowRuleSet::saveToFile) needs the parent directory
+    // to exist. The path is fixed for the store's lifetime, so create the
+    // directory once here rather than on every mutating save().
+    QDir().mkpath(QFileInfo(m_filePath).absolutePath());
     load();
 }
 
@@ -49,9 +53,8 @@ void WindowRuleStore::load()
 
 bool WindowRuleStore::save()
 {
-    // QSaveFile (inside WindowRuleSet::saveToFile) needs the parent directory
-    // to exist.
-    QDir().mkpath(QFileInfo(m_filePath).absolutePath());
+    // The parent directory is created once in the constructor — the path is
+    // fixed for the store's lifetime.
     if (!m_ruleSet.saveToFile(m_filePath)) {
         qCWarning(lcWindowRule) << "WindowRuleStore: failed to save" << m_filePath;
         return false;
@@ -60,11 +63,20 @@ bool WindowRuleStore::save()
     return true;
 }
 
-void WindowRuleStore::setAllRules(const QList<WindowRule>& rules)
+bool WindowRuleStore::setAllRules(const QList<WindowRule>& rules)
 {
-    m_ruleSet.setRules(rules);
-    save();
+    // Build the candidate set first (setRules drops invalid rules) so a no-op
+    // replacement can be detected against the post-validation shape — this
+    // skips the persist + emit and returns true, per the header contract.
+    WindowRuleSet candidate;
+    candidate.setRules(rules);
+    if (candidate == m_ruleSet) {
+        return true;
+    }
+    m_ruleSet = std::move(candidate);
+    const bool persisted = save();
     Q_EMIT rulesChanged();
+    return persisted;
 }
 
 bool WindowRuleStore::addRule(const WindowRule& rule)
@@ -72,9 +84,9 @@ bool WindowRuleStore::addRule(const WindowRule& rule)
     if (!m_ruleSet.addRule(rule)) {
         return false;
     }
-    save();
+    const bool persisted = save();
     Q_EMIT rulesChanged();
-    return true;
+    return persisted;
 }
 
 bool WindowRuleStore::updateRule(const WindowRule& rule)
@@ -82,9 +94,9 @@ bool WindowRuleStore::updateRule(const WindowRule& rule)
     if (!m_ruleSet.updateRule(rule)) {
         return false;
     }
-    save();
+    const bool persisted = save();
     Q_EMIT rulesChanged();
-    return true;
+    return persisted;
 }
 
 bool WindowRuleStore::removeRule(const QUuid& id)
@@ -92,9 +104,9 @@ bool WindowRuleStore::removeRule(const QUuid& id)
     if (!m_ruleSet.removeRule(id)) {
         return false;
     }
-    save();
+    const bool persisted = save();
     Q_EMIT rulesChanged();
-    return true;
+    return persisted;
 }
 
 bool WindowRuleStore::setRuleEnabled(const QUuid& id, bool enabled)
@@ -112,9 +124,9 @@ bool WindowRuleStore::setRuleEnabled(const QUuid& id, bool enabled)
     if (!m_ruleSet.updateRule(updated)) {
         return false;
     }
-    save();
+    const bool persisted = save();
     Q_EMIT rulesChanged();
-    return true;
+    return persisted;
 }
 
 bool WindowRuleStore::setRulePriority(const QUuid& id, int priority)
@@ -131,9 +143,9 @@ bool WindowRuleStore::setRulePriority(const QUuid& id, int priority)
     if (!m_ruleSet.updateRule(updated)) {
         return false;
     }
-    save();
+    const bool persisted = save();
     Q_EMIT rulesChanged();
-    return true;
+    return persisted;
 }
 
 } // namespace PhosphorWindowRule
