@@ -53,6 +53,9 @@ constexpr auto kIdCycleWindowForward = "cycle_window_forward";
 constexpr auto kIdCycleWindowBackward = "cycle_window_backward";
 constexpr auto kIdConsumeWindow = "consume_window";
 constexpr auto kIdExpelWindow = "expel_window";
+constexpr auto kIdCycleColumnWidth = "cycle_column_width";
+constexpr auto kIdCycleWindowHeight = "cycle_window_height";
+constexpr auto kIdToggleColumnFullWidth = "toggle_column_full_width";
 constexpr auto kIdResnapToNewLayout = "resnap_to_new_layout";
 constexpr auto kIdSnapAllWindows = "snap_all_windows";
 constexpr auto kIdLayoutPicker = "layout_picker";
@@ -253,6 +256,23 @@ const StaticEntry kStaticEntries[] = {
     {kIdExpelWindow, &ConfigDefaults::expelWindowShortcut, &Settings::expelWindowShortcut, "Expel Window From Column",
      [](ShortcutManager* sm) {
          Q_EMIT sm->expelWindowRequested();
+     }},
+
+    // ─── Scroll mode: column width / window height ─────────────────────────
+    {kIdCycleColumnWidth, &ConfigDefaults::cycleColumnWidthShortcut, &Settings::cycleColumnWidthShortcut,
+     "Cycle Column Width Preset",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->cycleColumnWidthRequested();
+     }},
+    {kIdCycleWindowHeight, &ConfigDefaults::cycleWindowHeightShortcut, &Settings::cycleWindowHeightShortcut,
+     "Cycle Window Height Preset",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->cycleWindowHeightRequested();
+     }},
+    {kIdToggleColumnFullWidth, &ConfigDefaults::toggleColumnFullWidthShortcut, &Settings::toggleColumnFullWidthShortcut,
+     "Toggle Column Full Width",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->toggleColumnFullWidthRequested();
      }},
 
     // ─── Misc layout ops ───────────────────────────────────────────────────

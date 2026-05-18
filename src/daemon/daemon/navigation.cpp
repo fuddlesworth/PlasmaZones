@@ -178,6 +178,39 @@ void Daemon::handleExpel()
     }
 }
 
+void Daemon::handleCycleColumnWidth()
+{
+    // Cycle the focused column through the width presets. Scroll-mode only;
+    // the snap/autotile engines' IPlacementEngine default is a no-op, so this
+    // is harmlessly absorbed on their screens (see handleConsume).
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "CycleColumnWidth")) {
+        nav->cyclePresetColumnWidth(ctx);
+    }
+}
+
+void Daemon::handleCycleWindowHeight()
+{
+    // Cycle the focused window through the height presets. Scroll-mode only;
+    // a no-op on snap/autotile screens (see handleConsume).
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "CycleWindowHeight")) {
+        nav->cyclePresetWindowHeight(ctx);
+    }
+}
+
+void Daemon::handleToggleColumnFullWidth()
+{
+    // Toggle the focused column between full viewport width and its prior
+    // width. Scroll-mode only; a no-op on snap/autotile screens (see
+    // handleConsume).
+    NavigationContext ctx;
+    if (auto* nav =
+            navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ToggleColumnFullWidth")) {
+        nav->toggleColumnFullWidth(ctx);
+    }
+}
+
 void Daemon::handleRestore()
 {
     NavigationContext ctx;

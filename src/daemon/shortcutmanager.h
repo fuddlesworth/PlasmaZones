@@ -92,6 +92,9 @@ Q_SIGNALS:
     void cycleWindowsInZoneRequested(bool forward);
     void consumeWindowRequested();
     void expelWindowRequested();
+    void cycleColumnWidthRequested();
+    void cycleWindowHeightRequested();
+    void toggleColumnFullWidthRequested();
     void resnapToNewLayoutRequested();
     void snapAllWindowsRequested();
     void layoutPickerRequested();
