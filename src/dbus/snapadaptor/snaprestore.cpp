@@ -8,6 +8,7 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include "../../core/isettings.h"
+#include "../../core/screenmoderouter.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 
 namespace PlasmaZones {
@@ -70,7 +71,9 @@ void SnapAdaptor::snapToLastZone(const QString& windowId, const QString& windowS
         return;
     }
 
-    applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap);
+    if (!applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap)) {
+        return;
+    }
     qCInfo(lcDbusWindow) << "Snapping new window" << windowId << "to last used zone" << result.zoneId;
 }
 
@@ -101,7 +104,9 @@ void SnapAdaptor::snapToAppRule(const QString& windowId, const QString& windowSc
         return;
     }
 
-    applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap);
+    if (!applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap)) {
+        return;
+    }
     qCInfo(lcDbusWindow) << "App rule snapping window" << windowId << "to zone" << result.zoneId;
 }
 
@@ -134,7 +139,9 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
         return;
     }
 
-    applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap);
+    if (!applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap)) {
+        return;
+    }
     qCInfo(lcDbusWindow) << "Auto-assign snapping window" << windowId << "to empty zone" << result.zoneId;
 }
 
@@ -170,7 +177,9 @@ void SnapAdaptor::restoreToPersistedZone(const QString& windowId, const QString&
         return;
     }
 
-    applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldRestore);
+    if (!applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldRestore)) {
+        return;
+    }
     // Consume the pending assignment so other windows of the same class won't restore to this zone
     m_adaptor->service()->consumePendingAssignment(windowId);
     qCInfo(lcDbusWindow) << "Restoring window" << windowId << "to zone(s)" << result.zoneIds;
@@ -205,20 +214,58 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     }
 
     applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap);
+    // Return value intentionally ignored: applySnapResult has already set
+    // shouldSnap (false on a disabled-context refusal) and there is no
+    // post-snap work in this slot to skip.
 }
 
-void SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY,
+bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY,
                                   int& snapWidth, int& snapHeight, bool& shouldSnap)
 {
+    snapX = snapY = snapWidth = snapHeight = 0;
+    shouldSnap = false;
+
+    if (!m_adaptor || !m_adaptor->service() || !m_engine) {
+        return false;
+    }
+
+    // Disabled-context gate. The interactive drag path (WindowDragAdaptor)
+    // and autotile (Daemon::updateAutotileScreens) already refuse to place
+    // windows on a monitor / desktop / activity the user marked disabled.
+    // The auto-snap-on-open restore path — every snapTo* / resolveWindowRestore
+    // slot funnels through here — did not, so windows still snapped on a
+    // disabled context (discussion #461). Gating here covers all restore
+    // entry points in one place.
+    if (m_settings && !result.screenId.isEmpty()) {
+        // Gate against the DESTINATION screen's actual mode. A restore result
+        // can cross-screen-migrate (app rule / session restore) onto a screen
+        // whose mode differs from the caller's, so the disable list to consult
+        // is the one for result.screenId's mode — not a hard-coded Snapping.
+        //
+        // currentVirtualDesktop()/currentActivity() are the precise destination
+        // context here, not an approximation: a restore only ever targets the
+        // current desktop. Every calculator feeding this path either snaps a
+        // window opening now on the current desktop (calculateSnapToAppRule /
+        // calculateSnapToEmptyZone) or refuses outright when the saved desktop
+        // is not the current one — calculateRestoreFromSession and
+        // calculateSnapToLastZone both return noSnap on a desktop mismatch. A
+        // restored window therefore lands on the current desktop/activity.
+        const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter
+            ? m_screenModeRouter->modeFor(result.screenId)
+            : PhosphorZones::AssignmentEntry::Snapping;
+        if (isContextDisabled(m_settings, mode, result.screenId, m_engine->currentVirtualDesktop(),
+                              m_engine->currentActivity())) {
+            qCInfo(lcDbusWindow) << "applySnapResult: refusing auto-snap of" << windowId
+                                 << "— PlasmaZones is disabled for screen" << result.screenId;
+            return false;
+        }
+    }
+
     snapX = result.geometry.x();
     snapY = result.geometry.y();
     snapWidth = result.geometry.width();
     snapHeight = result.geometry.height();
     shouldSnap = true;
-
-    if (!m_adaptor || !m_adaptor->service() || !m_engine) {
-        return;
-    }
 
     // Mark auto-snapped first so the flag persists through commitSnap
     // (AutoRestored leaves it alone). commitSnap runs the full
@@ -232,6 +279,7 @@ void SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     } else {
         m_engine->commitSnap(windowId, zoneIds.first(), result.screenId, SnapIntent::AutoRestored);
     }
+    return true;
 }
 
 } // namespace PlasmaZones

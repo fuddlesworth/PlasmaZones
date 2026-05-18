@@ -265,6 +265,14 @@ private:
     void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless, const QString& screenId);
     void unmaximizeMonocleWindow(const QString& windowId);
 
+    /// Restore a window's title bar on every screen whose borderless set still
+    /// tracks it, then drop it from all border tracking. @p w may be null (the
+    /// EffectWindow can be gone on a screen-removal path) — when it is, the
+    /// per-screen border state is cleared directly without a setNoBorder call.
+    /// Shared by the desktop-switch Pass 2 and the genuine autotile-disable
+    /// branch of slotScreensChanged.
+    void restoreWindowBorders(KWin::EffectWindow* w, const QString& windowId);
+
     /**
      * @brief Shared float-state cleanup for a window being floated
      *

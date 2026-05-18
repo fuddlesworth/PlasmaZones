@@ -563,7 +563,12 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     // Check floating with full windowId first, fallback to appId
     bool isFloating = isWindowFloating(windowId);
     if (!zoneId.isEmpty() && !zoneId.startsWith(kZoneSelectorIdPrefix) && !isFloating) {
-        if (!appId.isEmpty()) {
+        // A whitespace-only / whitespace-bearing appId is a corrupt window
+        // identity (KWin reported a blank class). Persisting a PendingRestore
+        // under it pollutes the restore queue with a key no real window
+        // matches cleanly — and a blank " " key is then consumed
+        // indiscriminately by every later blank-class window. Drop it.
+        if (PhosphorIdentity::WindowId::isValidAppId(appId)) {
             PendingRestore entry;
             entry.zoneIds = zoneIds;
 

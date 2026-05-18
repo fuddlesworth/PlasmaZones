@@ -11,6 +11,7 @@
 #include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
 
 #include <QDBusArgument>
 #include <QDBusPendingCall>
@@ -43,6 +44,10 @@ ScreenChangeHandler::ScreenChangeHandler(PlasmaZonesEffect* effect, QObject* par
 void ScreenChangeHandler::stop()
 {
     m_screenChangeDebounce.stop();
+    // Suppress any client-area report still queued for a later event-loop
+    // turn — without this guard it would fire a stray D-Bus call between
+    // stop() and this handler's destruction.
+    m_stopped = true;
 }
 
 void ScreenChangeHandler::slotScreenGeometryChanged()
@@ -62,6 +67,11 @@ void ScreenChangeHandler::slotScreenGeometryChanged()
 
     m_pendingScreenChange = true;
     m_screenChangeDebounce.start(); // Restart timer (debounce)
+
+    // A resolution / arrangement change moves panels and resizes the work
+    // area — re-push KWin's clientArea so the daemon's available geometry
+    // tracks the new layout instead of a stale compositor override.
+    scheduleClientAreaReport();
 }
 
 void ScreenChangeHandler::applyScreenGeometryChange()
@@ -219,6 +229,93 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             m_effect->applySnapGeometry(e.window, e.geometry);
         }
     });
+}
+
+void ScreenChangeHandler::trackDockWindow(KWin::EffectWindow* w)
+{
+    if (!w || !w->isDock()) {
+        return;
+    }
+    // A panel mapped (or was already mapped at effect startup). KWin reserves
+    // and adjusts its strut asynchronously, and the panel itself may resize
+    // during its own lifetime (config changes, content-driven thickness).
+    // Hook frame-geometry changes so every strut adjustment re-pushes the
+    // work area. `this` as the connection context auto-disconnects the lambda
+    // when either the dock's EffectWindow or this handler is destroyed.
+    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this]() {
+        scheduleClientAreaReport();
+    });
+    scheduleClientAreaReport();
+}
+
+void ScreenChangeHandler::onWindowClosed(KWin::EffectWindow* w)
+{
+    if (!w || !w->isDock()) {
+        return;
+    }
+    // A panel closed — its strut is freed and KWin grows the work area.
+    scheduleClientAreaReport();
+}
+
+void ScreenChangeHandler::scheduleClientAreaReport()
+{
+    if (m_stopped) {
+        return; // Handler is shutting down — no further reports.
+    }
+    if (m_clientAreaReportQueued) {
+        return; // A report is already queued for this event-loop turn.
+    }
+    m_clientAreaReportQueued = true;
+    // Queued, not timed: every scheduleClientAreaReport() in the current
+    // event-loop turn collapses onto this one continuation, which Qt
+    // dispatches after the turn's synchronous work — including KWin's own
+    // strut recompute for the dock signal that triggered us — has run. No
+    // arbitrary delay, and `this` as the context object means the call is
+    // dropped if the handler is destroyed before it fires.
+    QMetaObject::invokeMethod(
+        this,
+        [this]() {
+            m_clientAreaReportQueued = false;
+            if (m_stopped) {
+                return; // stop() ran after this report was queued.
+            }
+            reportClientArea();
+        },
+        Qt::QueuedConnection);
+}
+
+void ScreenChangeHandler::reportClientArea()
+{
+    if (!m_effect->m_daemonServiceRegistered) {
+        // Bridge not registered yet — continueDaemonReadySetup() re-schedules
+        // a report once it is, so dropping this one loses nothing.
+        return;
+    }
+
+    // clientArea(MaximizeArea) is the exact panel-excluded work area KWin
+    // reserves for maximized windows: correct per-edge strut attribution,
+    // and auto-hide panels (no strut) correctly excluded. The desktop
+    // argument is required by the API — we pass the current desktop, and a
+    // desktopChanged signal re-schedules a report so per-desktop panels stay
+    // tracked.
+    KWin::VirtualDesktop* desktop = KWin::effects->currentDesktop();
+    const auto outputs = KWin::effects->screens();
+    for (KWin::LogicalOutput* output : outputs) {
+        if (!output) {
+            continue;
+        }
+        const QRect work = KWin::effects->clientArea(KWin::MaximizeArea, output, desktop).toRect();
+        // isValid() is the exact negation of isEmpty() for QRect — a degenerate
+        // (zero/negative-size) work area is skipped by this single check.
+        if (!work.isValid()) {
+            continue;
+        }
+        qCDebug(lcScreenChange) << "Reporting KWin work area for" << output->name() << "=" << work;
+        PhosphorProtocol::ClientHelpers::fireAndForget(
+            this, PhosphorProtocol::Service::Interface::Screen, QStringLiteral("setAvailableGeometryFromKWin"),
+            {output->name(), work.x(), work.y(), work.width(), work.height()},
+            QStringLiteral("setAvailableGeometryFromKWin"));
+    }
 }
 
 } // namespace PlasmaZones

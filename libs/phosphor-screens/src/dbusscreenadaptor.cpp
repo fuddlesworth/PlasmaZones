@@ -471,6 +471,17 @@ void DBusScreenAdaptor::setPrimaryScreenFromKWin(const QString& connectorName)
     qCInfo(lcPhosphorScreens) << "Primary screen override set from compositor:" << connectorName;
 }
 
+void DBusScreenAdaptor::setAvailableGeometryFromKWin(const QString& screenName, int x, int y, int width, int height)
+{
+    if (!m_screenManager) {
+        return;
+    }
+    // QRect forwards verbatim — ScreenManager::setCompositorAvailableGeometry
+    // treats a zero-size rect as "clear the override", which is exactly what
+    // a (0,0,0,0) payload from the effect means.
+    m_screenManager->setCompositorAvailableGeometry(screenName, QRect(x, y, width, height));
+}
+
 QString DBusScreenAdaptor::getScreenId(const QString& connectorName)
 {
     if (connectorName.isEmpty()) {

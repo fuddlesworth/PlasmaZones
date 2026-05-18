@@ -1,6 +1,13 @@
 {
     "releases": [
         {
+            "version": "3.0.3",
+            "date": "2026-05-17",
+            "highlights": [
+                "Fixed zones sliding underneath a top panel, with the bottom edge over-reserved — the daemon now uses the compositor's authoritative work area for panel struts (#461, #472)"
+            ]
+        },
+        {
             "version": "3.0.2",
             "date": "2026-05-17",
             "highlights": [

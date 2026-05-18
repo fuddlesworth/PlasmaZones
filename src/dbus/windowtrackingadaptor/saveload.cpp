@@ -19,6 +19,7 @@
 #include "../../config/configkeys.h"
 #include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorIdentity/WindowId.h>
 
 namespace PlasmaZones {
 using namespace WindowTrackingInternal;
@@ -409,6 +410,15 @@ void WindowTrackingAdaptor::loadState()
                 // falls back to string parsing — same behavior as the old code
                 // but consistent with the rest of the codebase.
                 QString appId = m_service->currentAppIdFor(windowId);
+                // Skip a corrupt appId for the same reason the persisted-queue
+                // loop below does: currentAppIdFor falls back to string parsing
+                // here (the registry is empty during load), so a pre-3.0
+                // windowId yields a whitespace-bearing key no live window
+                // matches. Without this gate the merge would reintroduce the
+                // corrupt key the persisted-queue gate set out to drop.
+                if (!PhosphorIdentity::WindowId::isValidAppId(appId)) {
+                    continue;
+                }
                 PendingRestore pending;
                 pending.zoneIds = zoneIds;
                 pending.screenId = screen;
@@ -433,6 +443,15 @@ void WindowTrackingAdaptor::loadState()
             QJsonObject obj = doc.object();
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 if (!it.value().isArray()) {
+                    continue;
+                }
+                // Drop entries under a corrupt key — blank " " keys and the
+                // pre-3.0 "resourceName resourceClass" composites that survive
+                // an upgrade (session state outlives a ~/.config wipe).
+                // Loading them verbatim lets them be consumed by unrelated
+                // windows on reopen. See WindowId::isValidAppId.
+                if (!PhosphorIdentity::WindowId::isValidAppId(it.key())) {
+                    qCInfo(lcDbusWindow) << "Dropping pending-restore entries under corrupt appId key:" << it.key();
                     continue;
                 }
                 for (const QJsonValue& entryVal : it.value().toArray()) {

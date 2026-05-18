@@ -335,12 +335,12 @@ SettingsFlickable {
                     }
 
                     SettingsRow {
-                        title: i18n("New windows to last zone")
-                        description: i18n("Automatically move newly opened windows to the zone they last occupied")
+                        title: i18n("Open new windows in the last-used zone")
+                        description: i18n("Snap every newly opened window into whichever zone you most recently snapped a window into")
 
                         SettingsSwitch {
                             checked: appSettings.moveNewWindowsToLastZone
-                            accessibleName: i18n("Move new windows to last zone")
+                            accessibleName: i18n("Open new windows in the last-used zone")
                             onToggled: function(newValue) {
                                 appSettings.moveNewWindowsToLastZone = newValue;
                             }
@@ -386,12 +386,12 @@ SettingsFlickable {
                     }
 
                     SettingsRow {
-                        title: i18n("Restore zones on login")
-                        description: i18n("Return windows to their previous zone when reopened or after a session restart")
+                        title: i18n("Restore windows to their previous zone")
+                        description: i18n("When an app reopens, during the session or after a logout, return it to the zone it was last snapped in")
 
                         SettingsSwitch {
                             checked: appSettings.restoreWindowsToZonesOnLogin
-                            accessibleName: i18n("Restore zones on login")
+                            accessibleName: i18n("Restore windows to their previous zone")
                             onToggled: function(newValue) {
                                 appSettings.restoreWindowsToZonesOnLogin = newValue;
                             }

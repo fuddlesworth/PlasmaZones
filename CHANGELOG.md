@@ -7,6 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.3] - 2026-05-17
+
+### Fixed
+
+- **Zones sliding under a top panel** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#472](https://github.com/fuddlesworth/PlasmaZones/pull/472)): with a top panel, zones slid *under* the panel and the bottom edge was over-reserved. The available-geometry heuristic could only guess which screen edge a panel's strut belonged to, and guessed wrong when the plasmashell panel query returned no panels. The KWin effect now reports the compositor's authoritative work area (`clientArea`), which carries correct per-edge strut attribution and auto-hide handling; the heuristic remains the fallback for sessions where the effect is not loaded.
+- **openSUSE Build Service packaging**: cleared the remaining issues blocking a clean OBS build — a missing `wayland-scanner` build dependency, missing transitive KWin `find_package` dependencies, unowned directories, development files leaking into the runtime package, actionable rpmlint warnings, and changelog macros expanding inside spec-file comments.
+
 ## [3.0.2] - 2026-05-17
 
 ### Added
@@ -1298,7 +1305,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.2...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.3...HEAD
+[3.0.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.2...v3.0.3
 [3.0.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.7...v3.0.0
