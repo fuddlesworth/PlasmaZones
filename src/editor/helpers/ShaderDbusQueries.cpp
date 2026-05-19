@@ -49,13 +49,18 @@ QVariantList queryAvailableShaders()
 
     QVariantList result;
 
-    // D-Bus returns nested structures (QVariantMap, QVariantList) as QDBusArgument
-    // Use DBusVariantUtils::convertDbusArgument to recursively convert them to proper Qt types
-    const QVariantList payload = reply.arguments().constFirst().toList();
+    // The reply carries a single D-Bus `av` argument (array of variant). Unlike
+    // `a{sv}`, QtDBus does NOT auto-demarshal a bare `av` into a QVariantList —
+    // it hands it back wrapped in a QDBusArgument, so calling `.toList()` on it
+    // directly yields an empty list and every shader is silently dropped. Run
+    // the top-level argument through convertDbusArgument first (which also
+    // recursively converts the nested `a{sv}` entries), exactly as
+    // queryShaderInfo() / queryTranslateShaderParams() already do.
+    const QVariant converted = DBusVariantUtils::convertDbusArgument(reply.arguments().constFirst());
+    const QVariantList payload = converted.toList();
     for (const QVariant& item : payload) {
-        QVariant converted = DBusVariantUtils::convertDbusArgument(item);
-        if (converted.typeId() == QMetaType::QVariantMap) {
-            QVariantMap map = converted.toMap();
+        if (item.typeId() == QMetaType::QVariantMap) {
+            QVariantMap map = item.toMap();
             // Validate that required fields exist
             if (map.contains(QLatin1String("id")) && map.contains(QLatin1String("name"))) {
                 result.append(map);
@@ -63,7 +68,7 @@ QVariantList queryAvailableShaders()
                 qCWarning(lcDbus) << "Shader entry missing required fields (id/name):" << map;
             }
         } else {
-            qCWarning(lcDbus) << "Unexpected shader list item type after conversion:" << converted.typeName();
+            qCWarning(lcDbus) << "Unexpected shader list item type after conversion:" << item.typeName();
         }
     }
 
