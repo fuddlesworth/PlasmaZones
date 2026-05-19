@@ -896,6 +896,55 @@ public:
     void setScrollPresetWindowHeights(const QVariantList&) override
     {
     }
+    bool scrollShowBorder() const override
+    {
+        return ConfigDefaults::scrollShowBorder();
+    }
+    void setScrollShowBorder(bool) override
+    {
+    }
+    int scrollBorderWidth() const override
+    {
+        return ConfigDefaults::scrollBorderWidth();
+    }
+    void setScrollBorderWidth(int) override
+    {
+    }
+    int scrollBorderRadius() const override
+    {
+        return ConfigDefaults::scrollBorderRadius();
+    }
+    void setScrollBorderRadius(int) override
+    {
+    }
+    QColor scrollBorderColor() const override
+    {
+        return ConfigDefaults::scrollBorderColor();
+    }
+    void setScrollBorderColor(const QColor&) override
+    {
+    }
+    QColor scrollInactiveBorderColor() const override
+    {
+        return ConfigDefaults::scrollInactiveBorderColor();
+    }
+    void setScrollInactiveBorderColor(const QColor&) override
+    {
+    }
+    bool scrollUseSystemBorderColors() const override
+    {
+        return ConfigDefaults::scrollUseSystemBorderColors();
+    }
+    void setScrollUseSystemBorderColors(bool) override
+    {
+    }
+    bool scrollHideTitleBars() const override
+    {
+        return ConfigDefaults::scrollHideTitleBars();
+    }
+    void setScrollHideTitleBars(bool) override
+    {
+    }
     QStringList lockedScreens() const override
     {
         return {};

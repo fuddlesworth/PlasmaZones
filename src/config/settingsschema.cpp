@@ -906,6 +906,28 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          {},
          clampFractionList(CD::scrollWindowHeightMin(), CD::scrollWindowHeightMax())},
     };
+    // Scrolling.Appearance — column border decoration (mirrors Tiling.Appearance).
+    schema.groups[CD::scrollingAppearanceColorsGroup()] = {
+        {CD::useSystemKey(), CD::scrollUseSystemBorderColors(), QMetaType::Bool},
+        {CD::activeKey(), CD::scrollBorderColor(), QMetaType::QColor},
+        {CD::inactiveKey(), CD::scrollInactiveBorderColor(), QMetaType::QColor},
+    };
+    schema.groups[CD::scrollingAppearanceDecorationsGroup()] = {
+        {CD::hideTitleBarsKey(), CD::scrollHideTitleBars(), QMetaType::Bool},
+    };
+    schema.groups[CD::scrollingAppearanceBordersGroup()] = {
+        {CD::showBorderKey(), CD::scrollShowBorder(), QMetaType::Bool},
+        {CD::widthKey(),
+         CD::scrollBorderWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollBorderWidthMin(), CD::scrollBorderWidthMax())},
+        {CD::radiusKey(),
+         CD::scrollBorderRadius(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollBorderRadiusMin(), CD::scrollBorderRadiusMax())},
+    };
 }
 
 QVariantList clampFractionListValue(const QVariant& value, double minVal, double maxVal)

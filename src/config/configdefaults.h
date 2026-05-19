@@ -1140,6 +1140,53 @@ public:
     {
         return false;
     }
+
+    // ── Scrolling appearance — column border decoration drawn by the KWin
+    // effect, mirroring the Tiling.Appearance settings. ──────────────────
+    static bool scrollShowBorder()
+    {
+        return true;
+    }
+    static int scrollBorderWidth()
+    {
+        return ::PhosphorZones::ZoneDefaults::BorderWidth;
+    }
+    static constexpr int scrollBorderWidthMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollBorderWidthMax()
+    {
+        return 10;
+    }
+    static int scrollBorderRadius()
+    {
+        return 0;
+    }
+    static constexpr int scrollBorderRadiusMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollBorderRadiusMax()
+    {
+        return 20;
+    }
+    static QColor scrollBorderColor()
+    {
+        return ::PhosphorZones::ZoneDefaults::HighlightColor;
+    }
+    static QColor scrollInactiveBorderColor()
+    {
+        return ::PhosphorZones::ZoneDefaults::InactiveColor;
+    }
+    static bool scrollUseSystemBorderColors()
+    {
+        return true;
+    }
+    static bool scrollHideTitleBars()
+    {
+        return true;
+    }
     /// Column-width presets the cycle-width shortcut steps through — fractions
     /// [0..1] of the working area. niri defaults: one third, one half, two
     /// thirds. Persisted as a QVariantList of doubles.

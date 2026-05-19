@@ -271,6 +271,18 @@ public:
                    NOTIFY scrollPresetColumnWidthsChanged)
     Q_PROPERTY(QVariantList scrollPresetWindowHeights READ scrollPresetWindowHeights WRITE setScrollPresetWindowHeights
                    NOTIFY scrollPresetWindowHeightsChanged)
+    Q_PROPERTY(bool scrollShowBorder READ scrollShowBorder WRITE setScrollShowBorder NOTIFY scrollShowBorderChanged)
+    Q_PROPERTY(int scrollBorderWidth READ scrollBorderWidth WRITE setScrollBorderWidth NOTIFY scrollBorderWidthChanged)
+    Q_PROPERTY(
+        int scrollBorderRadius READ scrollBorderRadius WRITE setScrollBorderRadius NOTIFY scrollBorderRadiusChanged)
+    Q_PROPERTY(
+        QColor scrollBorderColor READ scrollBorderColor WRITE setScrollBorderColor NOTIFY scrollBorderColorChanged)
+    Q_PROPERTY(QColor scrollInactiveBorderColor READ scrollInactiveBorderColor WRITE setScrollInactiveBorderColor NOTIFY
+                   scrollInactiveBorderColorChanged)
+    Q_PROPERTY(bool scrollUseSystemBorderColors READ scrollUseSystemBorderColors WRITE setScrollUseSystemBorderColors
+                   NOTIFY scrollUseSystemBorderColorsChanged)
+    Q_PROPERTY(bool scrollHideTitleBars READ scrollHideTitleBars WRITE setScrollHideTitleBars NOTIFY
+                   scrollHideTitleBarsChanged)
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
@@ -806,6 +818,20 @@ public:
     void setScrollPresetColumnWidths(const QVariantList& fractions) override;
     QVariantList scrollPresetWindowHeights() const override;
     void setScrollPresetWindowHeights(const QVariantList& fractions) override;
+    bool scrollShowBorder() const override;
+    void setScrollShowBorder(bool show) override;
+    int scrollBorderWidth() const override;
+    void setScrollBorderWidth(int width) override;
+    int scrollBorderRadius() const override;
+    void setScrollBorderRadius(int radius) override;
+    QColor scrollBorderColor() const override;
+    void setScrollBorderColor(const QColor& color) override;
+    QColor scrollInactiveBorderColor() const override;
+    void setScrollInactiveBorderColor(const QColor& color) override;
+    bool scrollUseSystemBorderColors() const override;
+    void setScrollUseSystemBorderColors(bool use) override;
+    bool scrollHideTitleBars() const override;
+    void setScrollHideTitleBars(bool hide) override;
 
     // Autotile Shortcuts — PhosphorConfig::Store-backed.
     QString autotileToggleShortcut() const;
