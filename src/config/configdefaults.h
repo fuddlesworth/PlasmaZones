@@ -1075,6 +1075,15 @@ public:
     // standalone fallback that intentionally mirror the values below.
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// Master gate for scrolling mode. Defaults to true: unlike autotile,
+    /// scroll mode only activates on an explicit per-screen "Scrolling" layout
+    /// assignment, so a default-on master toggle never causes unexpected
+    /// activation — it is purely a kill-switch.
+    static constexpr bool scrollingEnabled()
+    {
+        return true;
+    }
+
     static constexpr int scrollInnerGap()
     {
         return 8;

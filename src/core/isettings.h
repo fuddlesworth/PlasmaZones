@@ -166,6 +166,10 @@ public:
     // Scroll-mode (niri-style scrollable tiling) settings. The daemon pushes
     // these to ScrollEngine / the geometry resolver; the standalone settings
     // app and KCM edit them. Preset lists are QVariantList of doubles.
+    // scrollingEnabled is the master gate — when false the daemon resolves no
+    // scroll strips on any screen (mirrors autotileEnabled).
+    virtual bool scrollingEnabled() const = 0;
+    virtual void setScrollingEnabled(bool enabled) = 0;
     virtual int scrollInnerGap() const = 0;
     virtual void setScrollInnerGap(int gap) = 0;
     virtual int scrollOuterGap() const = 0;
@@ -503,6 +507,7 @@ Q_SIGNALS:
     void autotileDecMasterRatioShortcutChanged();
 
     // Scroll-mode settings
+    void scrollingEnabledChanged();
     void scrollInnerGapChanged();
     void scrollOuterGapChanged();
     void scrollDefaultColumnWidthChanged();

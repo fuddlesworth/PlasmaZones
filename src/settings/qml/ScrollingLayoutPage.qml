@@ -7,7 +7,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Settings page for scrolling mode — niri-style scrollable tiling.
+ * @brief Scrolling → Layout sub-page — niri-style scrollable tiling.
  *
  * Edits the scrolling-mode tuning — strip gaps, the width of a freshly opened
  * column, the viewport-centering mode, and the column-width / window-height

@@ -872,6 +872,10 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
 void appendScrollingSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
+    // Master gate — "Scrolling/Enabled" (mirrors snapping/autotile's enabledKey).
+    schema.groups[CD::scrollingGroup()] = {
+        {CD::enabledKey(), CD::scrollingEnabled(), QMetaType::Bool},
+    };
     schema.groups[CD::scrollingGapsGroup()] = {
         {CD::innerKey(),
          CD::scrollInnerGap(),

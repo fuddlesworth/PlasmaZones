@@ -260,6 +260,7 @@ public:
                    autotileDragInsertToggleChanged)
 
     // Scroll Mode Settings (niri-style scrollable tiling)
+    Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
     Q_PROPERTY(int scrollInnerGap READ scrollInnerGap WRITE setScrollInnerGap NOTIFY scrollInnerGapChanged)
     Q_PROPERTY(int scrollOuterGap READ scrollOuterGap WRITE setScrollOuterGap NOTIFY scrollOuterGapChanged)
     Q_PROPERTY(double scrollDefaultColumnWidth READ scrollDefaultColumnWidth WRITE setScrollDefaultColumnWidth NOTIFY
@@ -791,6 +792,8 @@ public:
     void setAutotileDragInsertToggle(bool enable) override;
 
     // Scroll Mode Settings — PhosphorConfig::Store-backed.
+    bool scrollingEnabled() const override;
+    void setScrollingEnabled(bool enabled) override;
     int scrollInnerGap() const override;
     void setScrollInnerGap(int gap) override;
     int scrollOuterGap() const override;
