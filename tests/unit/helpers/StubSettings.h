@@ -755,6 +755,15 @@ public:
         Q_EMIT settingsChanged();
     }
 
+    // Autotile master gate (ISettings)
+    bool autotileEnabled() const override
+    {
+        return ConfigDefaults::autotileEnabled();
+    }
+    void setAutotileEnabled(bool) override
+    {
+    }
+
     // Autotile decoration settings (ISettings)
     bool autotileFocusFollowsMouse() const override
     {

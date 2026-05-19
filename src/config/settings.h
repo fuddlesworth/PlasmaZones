@@ -763,8 +763,10 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Autotiling — PhosphorConfig::Store-backed.
-    bool autotileEnabled() const;
-    void setAutotileEnabled(bool enabled);
+    // autotileEnabled is the master gate (ISettings); the rest of this block
+    // overrides PhosphorEngine::IAutotileSettings.
+    bool autotileEnabled() const override;
+    void setAutotileEnabled(bool enabled) override;
     QString defaultAutotileAlgorithm() const override;
     void setDefaultAutotileAlgorithm(const QString& algorithm) override;
     qreal autotileSplitRatio() const override;

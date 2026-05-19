@@ -132,6 +132,15 @@ public:
     virtual QStringList animationExcludedWindowClasses() const = 0;
     virtual void setAnimationExcludedWindowClasses(const QStringList& classes) = 0;
 
+    // Autotile master gate — when false the daemon resolves no autotile
+    // screens (mirrors scrollingEnabled / snappingEnabled). The autotile
+    // *engine* settings (gaps, algorithm, master count, …) live on
+    // PhosphorEngine::IAutotileSettings so the tile-engine library consumes
+    // them without depending on the app; the master gate is an app/daemon
+    // concern and belongs on ISettings alongside the other two mode gates.
+    virtual bool autotileEnabled() const = 0;
+    virtual void setAutotileEnabled(bool enabled) = 0;
+
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
     virtual void setAutotileFocusFollowsMouse(bool enabled) = 0;
