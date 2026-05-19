@@ -176,6 +176,10 @@ ApplicationWindow {
             "name": "scrolling-layout",
             "label": i18n("Layout"),
             "iconName": "view-grid"
+        }, {
+            "name": "scrolling-assignments",
+            "label": i18n("Assignments"),
+            "iconName": "view-list-details"
         }],
         "animations": [{
             "name": "animations-general",
@@ -258,6 +262,7 @@ ApplicationWindow {
         "tiling-behavior": "TilingBehaviorPage.qml",
         "tiling-algorithm": "TilingAlgorithmPage.qml",
         "scrolling-layout": "ScrollingLayoutPage.qml",
+        "scrolling-assignments": "ScrollingAssignmentsPage.qml",
         "snapping-assignments": "SnappingAssignmentsPage.qml",
         "snapping-apprules": "AssignmentsAppRulesPage.qml",
         "snapping-shortcuts": "SnappingQuickShortcutsPage.qml",

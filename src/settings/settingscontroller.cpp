@@ -618,7 +618,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("tiling"),
          {QStringLiteral("tiling-appearance"), QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm"),
           QStringLiteral("tiling-assignments"), QStringLiteral("tiling-ordering"), QStringLiteral("tiling-shortcuts")}},
-        {QStringLiteral("scrolling"), {QStringLiteral("scrolling-layout")}},
+        {QStringLiteral("scrolling"), {QStringLiteral("scrolling-layout"), QStringLiteral("scrolling-assignments")}},
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
@@ -649,6 +649,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("tiling-ordering"),
         QStringLiteral("snapping-apprules"),
         QStringLiteral("scrolling-layout"),
+        QStringLiteral("scrolling-assignments"),
         QStringLiteral("exclusions"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
@@ -1660,9 +1661,9 @@ void SettingsController::toggleContextLock(const QString& screenName, int virtua
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Convert the QML-side `viewMode` int to PhosphorZones::AssignmentEntry::Mode.
-// The numeric values match by design (0 = Snapping, 1 = Autotile) but routing
-// every call through the helper keeps the cast explicit and gives us a single
-// place to add range-clamping if a future mode is introduced.
+// The numeric values match by design (0 = Snapping, 1 = Autotile, 2 = Scroll)
+// but routing every call through the helper keeps the cast explicit and gives
+// us a single place to add range-clamping if a future mode is introduced.
 //
 // SharedBridge.qml sets `assignmentViewMode: -1` as a sentinel that the
 // SnappingBridge / TilingBridge subclass MUST override. If a future bridge
@@ -1680,15 +1681,19 @@ void SettingsController::toggleContextLock(const QString& screenName, int virtua
 // avoids accidental writes to a list the user didn't intend).
 static PhosphorZones::AssignmentEntry::Mode modeFromViewMode(int viewMode)
 {
-    if (viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Snapping)
-        && viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)) {
+    using Mode = PhosphorZones::AssignmentEntry::Mode;
+    if (viewMode == static_cast<int>(Mode::Autotile)) {
+        return Mode::Autotile;
+    }
+    if (viewMode == static_cast<int>(Mode::Scroll)) {
+        return Mode::Scroll;
+    }
+    if (viewMode != static_cast<int>(Mode::Snapping)) {
         qCWarning(PlasmaZones::lcCore)
             << "modeFromViewMode: unexpected viewMode" << viewMode
             << "— defaulting to Snapping. A bridge subclass likely forgot to set assignmentViewMode.";
     }
-    return viewMode == static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)
-        ? PhosphorZones::AssignmentEntry::Autotile
-        : PhosphorZones::AssignmentEntry::Snapping;
+    return Mode::Snapping;
 }
 
 bool SettingsController::isMonitorDisabled(int viewMode, const QString& screenName) const
