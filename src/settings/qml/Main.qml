@@ -729,6 +729,12 @@ ApplicationWindow {
 
         }
 
+        function onScrollingEnabledChanged() {
+            if (!appSettings.scrollingEnabled && _sidebarMode === "scrolling")
+                _drillOut();
+
+        }
+
         target: appSettings
     }
 
@@ -923,6 +929,9 @@ ApplicationWindow {
                                     return ;
 
                                 if (name === "tiling" && !appSettings.autotileEnabled)
+                                    return ;
+
+                                if (name === "scrolling" && !appSettings.scrollingEnabled)
                                     return ;
 
                                 window._drillIn(name);

@@ -474,6 +474,12 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
+        // Guard against the assertions below going vacuous if the clamp
+        // constants are ever changed: 0.0 must be genuinely below the min and
+        // 5.0 / 9.0 genuinely above the max.
+        QVERIFY2(0.0 < ConfigDefaults::scrollColumnWidthMin(), "test input 0.0 must be below the column-width min");
+        QVERIFY2(5.0 > ConfigDefaults::scrollColumnWidthMax(), "test input 5.0 must be above the column-width max");
+        QVERIFY2(9.0 > ConfigDefaults::scrollWindowHeightMax(), "test input 9.0 must be above the window-height max");
         // 0.0 is below the minimum, 5.0 above the maximum, and the string is
         // non-numeric junk that must be dropped entirely.
         settings.setScrollPresetColumnWidths(QVariantList{0.0, 0.5, 5.0, QStringLiteral("junk")});

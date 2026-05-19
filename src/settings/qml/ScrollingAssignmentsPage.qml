@@ -77,14 +77,16 @@ SettingsFlickable {
                         property bool expanded: false
 
                         width: ListView.view.width
-                        height: monitorCol.implicitHeight
+                        // implicitHeight + both vertical margins — anchors.fill
+                        // insets the content by anchors.margins on every side,
+                        // so the delegate must reserve top + bottom (matches
+                        // the activity delegate below).
+                        height: monitorCol.implicitHeight + Kirigami.Units.smallSpacing * 2
 
                         ColumnLayout {
                             id: monitorCol
 
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
+                            anchors.fill: parent
                             anchors.margins: Kirigami.Units.smallSpacing
                             spacing: Kirigami.Units.smallSpacing
 

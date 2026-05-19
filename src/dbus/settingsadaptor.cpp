@@ -413,6 +413,12 @@ void SettingsAdaptor::initializeRegistry()
                               disabledActivities, setDisabledActivities)
     REGISTER_PER_MODE_DISABLE("autotileDisabledActivities", PhosphorZones::AssignmentEntry::Autotile,
                               disabledActivities, setDisabledActivities)
+    REGISTER_PER_MODE_DISABLE("scrollDisabledMonitors", PhosphorZones::AssignmentEntry::Scroll, disabledMonitors,
+                              setDisabledMonitors)
+    REGISTER_PER_MODE_DISABLE("scrollDisabledDesktops", PhosphorZones::AssignmentEntry::Scroll, disabledDesktops,
+                              setDisabledDesktops)
+    REGISTER_PER_MODE_DISABLE("scrollDisabledActivities", PhosphorZones::AssignmentEntry::Scroll, disabledActivities,
+                              setDisabledActivities)
 #undef REGISTER_PER_MODE_DISABLE
 
     // Appearance settings

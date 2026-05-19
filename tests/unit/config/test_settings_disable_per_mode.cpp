@@ -353,10 +353,19 @@ private Q_SLOTS:
             QVERIFY2(!settings.isMonitorDisabled(Mode::Snapping, screen), "scroll disable leaked into snapping gate");
             QVERIFY2(!settings.isMonitorDisabled(Mode::Autotile, screen), "scroll disable leaked into autotile gate");
 
+            // Re-enabling clears the gate, matching the snapping/autotile path.
+            settings.setDisabledMonitors(Mode::Scroll, {});
+            QVERIFY(!settings.isMonitorDisabled(Mode::Scroll, screen));
+            settings.setDisabledMonitors(Mode::Scroll, {screen});
+
             // The canonicalCommaList validator — only reached once the scroll
-            // key is schema-registered — trims and de-duplicates on write.
-            settings.setDisabledDesktops(
-                Mode::Scroll, {QStringLiteral("DP-3/1"), QStringLiteral(" DP-3/1 "), QStringLiteral("DP-3/2")});
+            // key is schema-registered — trims AND de-duplicates on write. The
+            // input makes both independently load-bearing: the exact-duplicate
+            // "DP-3/1" is only removed by dedup, and " DP-3/2 " collapses onto
+            // "DP-3/2" only because trimming runs before dedup.
+            settings.setDisabledDesktops(Mode::Scroll,
+                                         {QStringLiteral("DP-3/1"), QStringLiteral("DP-3/1"),
+                                          QStringLiteral(" DP-3/2 "), QStringLiteral("DP-3/2")});
             settings.save();
         }
 
@@ -370,18 +379,31 @@ private Q_SLOTS:
         QVERIFY(reloaded.disabledMonitors(Mode::Autotile).isEmpty());
     }
 
-    /// Per-mode disable signals carry Mode::Scroll for scroll-side writes.
+    /// Per-mode disable signals carry Mode::Scroll for scroll-side writes —
+    /// monitors, desktops and activities each.
     void testScrollDisable_signalCarriesMode()
     {
         IsolatedConfigGuard guard;
         Settings settings;
 
         QSignalSpy monitorSpy(&settings, &Settings::disabledMonitorsChanged);
+        QSignalSpy desktopSpy(&settings, &Settings::disabledDesktopsChanged);
+        QSignalSpy activitySpy(&settings, &Settings::disabledActivitiesChanged);
         QVERIFY(monitorSpy.isValid());
+        QVERIFY(desktopSpy.isValid());
+        QVERIFY(activitySpy.isValid());
 
         settings.setDisabledMonitors(Mode::Scroll, {QStringLiteral("DP-3")});
         QCOMPARE(monitorSpy.count(), 1);
         QCOMPARE(monitorSpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Scroll));
+
+        settings.setDisabledDesktops(Mode::Scroll, {QStringLiteral("DP-3/1")});
+        QCOMPARE(desktopSpy.count(), 1);
+        QCOMPARE(desktopSpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Scroll));
+
+        settings.setDisabledActivities(Mode::Scroll, {QStringLiteral("DP-3/uuid-a")});
+        QCOMPARE(activitySpy.count(), 1);
+        QCOMPARE(activitySpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Scroll));
     }
 };
 
