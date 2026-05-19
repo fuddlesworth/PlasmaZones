@@ -145,7 +145,8 @@
         <!-- Shader methods. These are also published on the dedicated
              org.plasmazones.Shader interface (see org.plasmazones.Shader.xml);
              SettingsAdaptor keeps them here for backward compatibility with
-             callers that bind the Settings interface. Keep both XMLs in sync. -->
+             callers that bind the Settings interface. Keep the method set and
+             signatures consistent across both interfaces. -->
         <method name="availableShaders">
             <annotation name="org.gtk.GDBus.DocString" value="Get list of available shader effects with metadata."/>
             <arg name="shaders" type="av" direction="out">
@@ -178,7 +179,7 @@
             <arg name="params" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of param IDs to values (e.g. intensity: 0.5)."/>
             </arg>
-            <arg name="result" type="a{sv}" direction="out">
+            <arg name="uniforms" type="a{sv}" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of uniform names to values (e.g. customParams1_x: 0.5)."/>
             </arg>
         </method>
