@@ -1075,6 +1075,17 @@ public:
     // standalone fallback that intentionally mirror the values below.
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// Master gate for scrolling mode. Defaults to true: unlike autotile,
+    /// scroll mode only activates on an explicit per-screen "Scrolling" layout
+    /// assignment, so a default-on master toggle never causes unexpected
+    /// activation — it is purely a kill-switch.
+    static constexpr bool scrollingEnabled()
+    {
+        return true;
+    }
+
+    // The 8 is niri's default strip gap — intentionally independent of the
+    // snapping/autotile gap defaults, which derive from Defaults:: constants.
     static constexpr int scrollInnerGap()
     {
         return 8;
@@ -1087,6 +1098,8 @@ public:
     {
         return PhosphorTiles::AutotileDefaults::MaxGap;
     }
+    // The 8 is niri's default strip gap — intentionally independent of the
+    // snapping/autotile gap defaults, which derive from Defaults:: constants.
     static constexpr int scrollOuterGap()
     {
         return 8;
@@ -1128,6 +1141,62 @@ public:
     /// When true the viewport keeps the focused column centered; when false it
     /// scrolls the minimum amount to keep the column on-screen (niri "fit").
     static constexpr bool scrollCenterFocusedColumn()
+    {
+        return false;
+    }
+
+    // ── Scrolling appearance — column border decoration drawn by the KWin
+    // effect, mirroring the Tiling.Appearance settings. ──────────────────
+    static bool scrollShowBorder()
+    {
+        return true;
+    }
+    static int scrollBorderWidth()
+    {
+        return ::PhosphorZones::ZoneDefaults::BorderWidth;
+    }
+    static constexpr int scrollBorderWidthMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollBorderWidthMax()
+    {
+        return 10;
+    }
+    static int scrollBorderRadius()
+    {
+        return 0;
+    }
+    static constexpr int scrollBorderRadiusMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollBorderRadiusMax()
+    {
+        return 20;
+    }
+    static QColor scrollBorderColor()
+    {
+        return ::PhosphorZones::ZoneDefaults::HighlightColor;
+    }
+    static QColor scrollInactiveBorderColor()
+    {
+        return ::PhosphorZones::ZoneDefaults::InactiveColor;
+    }
+    static bool scrollUseSystemBorderColors()
+    {
+        return true;
+    }
+    static bool scrollHideTitleBars()
+    {
+        return true;
+    }
+    /// Scroll-mode focus behavior — mirrors the autotile defaults.
+    static bool scrollFocusNewWindows()
+    {
+        return true;
+    }
+    static bool scrollFocusFollowsMouse()
     {
         return false;
     }
@@ -1616,5 +1685,14 @@ static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::anim
 static_assert(ConfigDefaults::animationSequenceMode() >= ConfigDefaults::animationSequenceModeMin()
                   && ConfigDefaults::animationSequenceMode() <= ConfigDefaults::animationSequenceModeMax(),
               "ConfigDefaults::animationSequenceMode() outside declared [min, max] range");
+static_assert(ConfigDefaults::scrollDefaultColumnWidth() >= ConfigDefaults::scrollColumnWidthMin()
+                  && ConfigDefaults::scrollDefaultColumnWidth() <= ConfigDefaults::scrollColumnWidthMax(),
+              "ConfigDefaults::scrollDefaultColumnWidth() outside declared [min, max] range");
+static_assert(ConfigDefaults::scrollInnerGap() >= ConfigDefaults::scrollInnerGapMin()
+                  && ConfigDefaults::scrollInnerGap() <= ConfigDefaults::scrollInnerGapMax(),
+              "ConfigDefaults::scrollInnerGap() outside declared [min, max] range");
+static_assert(ConfigDefaults::scrollOuterGap() >= ConfigDefaults::scrollOuterGapMin()
+                  && ConfigDefaults::scrollOuterGap() <= ConfigDefaults::scrollOuterGapMax(),
+              "ConfigDefaults::scrollOuterGap() outside declared [min, max] range");
 
 } // namespace PlasmaZones

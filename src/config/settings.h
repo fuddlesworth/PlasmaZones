@@ -11,6 +11,7 @@
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
+#include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "configdefaults.h"
 #include "configbackends.h"
@@ -36,10 +37,11 @@ namespace PlasmaZones {
  */
 class PLASMAZONES_EXPORT Settings : public ISettings,
                                     public PhosphorEngine::IAutotileSettings,
-                                    public PhosphorEngine::ISnapSettings
+                                    public PhosphorEngine::ISnapSettings,
+                                    public PhosphorEngine::IScrollSettings
 {
     Q_OBJECT
-    Q_INTERFACES(PhosphorEngine::IAutotileSettings PhosphorEngine::ISnapSettings)
+    Q_INTERFACES(PhosphorEngine::IAutotileSettings PhosphorEngine::ISnapSettings PhosphorEngine::IScrollSettings)
 
 public:
     /** Maximum number of activation triggers per action (drag, multi-zone, zone span).
@@ -260,6 +262,7 @@ public:
                    autotileDragInsertToggleChanged)
 
     // Scroll Mode Settings (niri-style scrollable tiling)
+    Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
     Q_PROPERTY(int scrollInnerGap READ scrollInnerGap WRITE setScrollInnerGap NOTIFY scrollInnerGapChanged)
     Q_PROPERTY(int scrollOuterGap READ scrollOuterGap WRITE setScrollOuterGap NOTIFY scrollOuterGapChanged)
     Q_PROPERTY(double scrollDefaultColumnWidth READ scrollDefaultColumnWidth WRITE setScrollDefaultColumnWidth NOTIFY
@@ -270,6 +273,22 @@ public:
                    NOTIFY scrollPresetColumnWidthsChanged)
     Q_PROPERTY(QVariantList scrollPresetWindowHeights READ scrollPresetWindowHeights WRITE setScrollPresetWindowHeights
                    NOTIFY scrollPresetWindowHeightsChanged)
+    Q_PROPERTY(bool scrollShowBorder READ scrollShowBorder WRITE setScrollShowBorder NOTIFY scrollShowBorderChanged)
+    Q_PROPERTY(int scrollBorderWidth READ scrollBorderWidth WRITE setScrollBorderWidth NOTIFY scrollBorderWidthChanged)
+    Q_PROPERTY(
+        int scrollBorderRadius READ scrollBorderRadius WRITE setScrollBorderRadius NOTIFY scrollBorderRadiusChanged)
+    Q_PROPERTY(
+        QColor scrollBorderColor READ scrollBorderColor WRITE setScrollBorderColor NOTIFY scrollBorderColorChanged)
+    Q_PROPERTY(QColor scrollInactiveBorderColor READ scrollInactiveBorderColor WRITE setScrollInactiveBorderColor NOTIFY
+                   scrollInactiveBorderColorChanged)
+    Q_PROPERTY(bool scrollUseSystemBorderColors READ scrollUseSystemBorderColors WRITE setScrollUseSystemBorderColors
+                   NOTIFY scrollUseSystemBorderColorsChanged)
+    Q_PROPERTY(bool scrollHideTitleBars READ scrollHideTitleBars WRITE setScrollHideTitleBars NOTIFY
+                   scrollHideTitleBarsChanged)
+    Q_PROPERTY(bool scrollFocusNewWindows READ scrollFocusNewWindows WRITE setScrollFocusNewWindows NOTIFY
+                   scrollFocusNewWindowsChanged)
+    Q_PROPERTY(bool scrollFocusFollowsMouse READ scrollFocusFollowsMouse WRITE setScrollFocusFollowsMouse NOTIFY
+                   scrollFocusFollowsMouseChanged)
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
@@ -746,8 +765,10 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Autotiling — PhosphorConfig::Store-backed.
-    bool autotileEnabled() const;
-    void setAutotileEnabled(bool enabled);
+    // autotileEnabled is the master gate (ISettings); the rest of this block
+    // overrides PhosphorEngine::IAutotileSettings.
+    bool autotileEnabled() const override;
+    void setAutotileEnabled(bool enabled) override;
     QString defaultAutotileAlgorithm() const override;
     void setDefaultAutotileAlgorithm(const QString& algorithm) override;
     qreal autotileSplitRatio() const override;
@@ -791,18 +812,43 @@ public:
     void setAutotileDragInsertToggle(bool enable) override;
 
     // Scroll Mode Settings — PhosphorConfig::Store-backed.
+    // The 6 geometry getters (scrollInnerGap … scrollPresetWindowHeights)
+    // override PhosphorEngine::IScrollSettings — the scroll engine pulls them
+    // through that interface. Their setters are plain Settings methods (no
+    // override): they back D-Bus/QML writes only, exactly like the autotile
+    // gap setters which are likewise absent from IAutotileSettings.
+    bool scrollingEnabled() const override;
+    void setScrollingEnabled(bool enabled) override;
     int scrollInnerGap() const override;
-    void setScrollInnerGap(int gap) override;
+    void setScrollInnerGap(int gap);
     int scrollOuterGap() const override;
-    void setScrollOuterGap(int gap) override;
+    void setScrollOuterGap(int gap);
     double scrollDefaultColumnWidth() const override;
-    void setScrollDefaultColumnWidth(double fraction) override;
+    void setScrollDefaultColumnWidth(double fraction);
     bool scrollCenterFocusedColumn() const override;
-    void setScrollCenterFocusedColumn(bool center) override;
+    void setScrollCenterFocusedColumn(bool center);
     QVariantList scrollPresetColumnWidths() const override;
-    void setScrollPresetColumnWidths(const QVariantList& fractions) override;
+    void setScrollPresetColumnWidths(const QVariantList& fractions);
     QVariantList scrollPresetWindowHeights() const override;
-    void setScrollPresetWindowHeights(const QVariantList& fractions) override;
+    void setScrollPresetWindowHeights(const QVariantList& fractions);
+    bool scrollShowBorder() const override;
+    void setScrollShowBorder(bool show) override;
+    int scrollBorderWidth() const override;
+    void setScrollBorderWidth(int width) override;
+    int scrollBorderRadius() const override;
+    void setScrollBorderRadius(int radius) override;
+    QColor scrollBorderColor() const override;
+    void setScrollBorderColor(const QColor& color) override;
+    QColor scrollInactiveBorderColor() const override;
+    void setScrollInactiveBorderColor(const QColor& color) override;
+    bool scrollUseSystemBorderColors() const override;
+    void setScrollUseSystemBorderColors(bool use) override;
+    bool scrollHideTitleBars() const override;
+    void setScrollHideTitleBars(bool hide) override;
+    bool scrollFocusNewWindows() const override;
+    void setScrollFocusNewWindows(bool focus) override;
+    bool scrollFocusFollowsMouse() const override;
+    void setScrollFocusFollowsMouse(bool follow) override;
 
     // Autotile Shortcuts — PhosphorConfig::Store-backed.
     QString autotileToggleShortcut() const;
@@ -1121,6 +1167,7 @@ public:
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath);
     Q_INVOKABLE void applySystemColorScheme();
     void applyAutotileBorderSystemColor();
+    void applyScrollBorderSystemColor();
 
 Q_SIGNALS:
     /// Emitted when the whole animation Profile blob is replaced via

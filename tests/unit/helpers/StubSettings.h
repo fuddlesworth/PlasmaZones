@@ -755,6 +755,15 @@ public:
         Q_EMIT settingsChanged();
     }
 
+    // Autotile master gate (ISettings)
+    bool autotileEnabled() const override
+    {
+        return ConfigDefaults::autotileEnabled();
+    }
+    void setAutotileEnabled(bool) override
+    {
+    }
+
     // Autotile decoration settings (ISettings)
     bool autotileFocusFollowsMouse() const override
     {
@@ -847,46 +856,74 @@ public:
     void setAutotileDragInsertToggle(bool) override
     {
     }
-    int scrollInnerGap() const override
+    bool scrollingEnabled() const override
     {
-        return ConfigDefaults::scrollInnerGap();
+        return ConfigDefaults::scrollingEnabled();
     }
-    void setScrollInnerGap(int) override
-    {
-    }
-    int scrollOuterGap() const override
-    {
-        return ConfigDefaults::scrollOuterGap();
-    }
-    void setScrollOuterGap(int) override
+    void setScrollingEnabled(bool) override
     {
     }
-    double scrollDefaultColumnWidth() const override
+    bool scrollShowBorder() const override
     {
-        return ConfigDefaults::scrollDefaultColumnWidth();
+        return ConfigDefaults::scrollShowBorder();
     }
-    void setScrollDefaultColumnWidth(double) override
-    {
-    }
-    bool scrollCenterFocusedColumn() const override
-    {
-        return ConfigDefaults::scrollCenterFocusedColumn();
-    }
-    void setScrollCenterFocusedColumn(bool) override
+    void setScrollShowBorder(bool) override
     {
     }
-    QVariantList scrollPresetColumnWidths() const override
+    int scrollBorderWidth() const override
     {
-        return ConfigDefaults::scrollPresetColumnWidths();
+        return ConfigDefaults::scrollBorderWidth();
     }
-    void setScrollPresetColumnWidths(const QVariantList&) override
+    void setScrollBorderWidth(int) override
     {
     }
-    QVariantList scrollPresetWindowHeights() const override
+    int scrollBorderRadius() const override
     {
-        return ConfigDefaults::scrollPresetWindowHeights();
+        return ConfigDefaults::scrollBorderRadius();
     }
-    void setScrollPresetWindowHeights(const QVariantList&) override
+    void setScrollBorderRadius(int) override
+    {
+    }
+    QColor scrollBorderColor() const override
+    {
+        return ConfigDefaults::scrollBorderColor();
+    }
+    void setScrollBorderColor(const QColor&) override
+    {
+    }
+    QColor scrollInactiveBorderColor() const override
+    {
+        return ConfigDefaults::scrollInactiveBorderColor();
+    }
+    void setScrollInactiveBorderColor(const QColor&) override
+    {
+    }
+    bool scrollUseSystemBorderColors() const override
+    {
+        return ConfigDefaults::scrollUseSystemBorderColors();
+    }
+    void setScrollUseSystemBorderColors(bool) override
+    {
+    }
+    bool scrollHideTitleBars() const override
+    {
+        return ConfigDefaults::scrollHideTitleBars();
+    }
+    void setScrollHideTitleBars(bool) override
+    {
+    }
+    bool scrollFocusNewWindows() const override
+    {
+        return ConfigDefaults::scrollFocusNewWindows();
+    }
+    void setScrollFocusNewWindows(bool) override
+    {
+    }
+    bool scrollFocusFollowsMouse() const override
+    {
+        return ConfigDefaults::scrollFocusFollowsMouse();
+    }
+    void setScrollFocusFollowsMouse(bool) override
     {
     }
     QStringList lockedScreens() const override

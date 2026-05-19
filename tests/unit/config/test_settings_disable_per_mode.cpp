@@ -265,7 +265,12 @@ private Q_SLOTS:
         QSignalSpy monitorSpy(&settings, &Settings::disabledMonitorsChanged);
         QSignalSpy desktopSpy(&settings, &Settings::disabledDesktopsChanged);
         QSignalSpy activitySpy(&settings, &Settings::disabledActivitiesChanged);
+        // Every spy must be validated — a mistyped signal yields an invalid spy
+        // that silently reports count() == 0, making the assertions below pass
+        // vacuously.
         QVERIFY(monitorSpy.isValid());
+        QVERIFY(desktopSpy.isValid());
+        QVERIFY(activitySpy.isValid());
 
         // Reload without any external mutation — file content matches memory.
         settings.load();
@@ -299,39 +304,140 @@ private Q_SLOTS:
         const QString deskKey = screen + QLatin1Char('/') + QString::number(desktop);
         const QString actKey = screen + QLatin1Char('/') + activity;
 
-        settings.setDisabledMonitors(Mode::Snapping, {screen});
-        settings.setDisabledMonitors(Mode::Autotile, {screen});
-        settings.setDisabledDesktops(Mode::Snapping, {deskKey});
-        settings.setDisabledDesktops(Mode::Autotile, {deskKey});
-        settings.setDisabledActivities(Mode::Snapping, {actKey});
-        settings.setDisabledActivities(Mode::Autotile, {actKey});
+        for (const Mode mode : {Mode::Snapping, Mode::Autotile, Mode::Scroll}) {
+            settings.setDisabledMonitors(mode, {screen});
+            settings.setDisabledDesktops(mode, {deskKey});
+            settings.setDisabledActivities(mode, {actKey});
+        }
         settings.save();
 
         // Sanity check: state was actually persisted.
         QVERIFY(settings.isMonitorDisabled(Mode::Snapping, screen));
         QVERIFY(settings.isMonitorDisabled(Mode::Autotile, screen));
+        QVERIFY(settings.isMonitorDisabled(Mode::Scroll, screen));
         QVERIFY(settings.isDesktopDisabled(Mode::Snapping, screen, desktop));
         QVERIFY(settings.isActivityDisabled(Mode::Autotile, screen, activity));
+        QVERIFY(settings.isActivityDisabled(Mode::Scroll, screen, activity));
 
         settings.reset();
-
-        QVERIFY(settings.disabledMonitors(Mode::Snapping).isEmpty());
-        QVERIFY(settings.disabledMonitors(Mode::Autotile).isEmpty());
-        QVERIFY(settings.disabledDesktops(Mode::Snapping).isEmpty());
-        QVERIFY(settings.disabledDesktops(Mode::Autotile).isEmpty());
-        QVERIFY(settings.disabledActivities(Mode::Snapping).isEmpty());
-        QVERIFY(settings.disabledActivities(Mode::Autotile).isEmpty());
 
         // And — critically — the values must not come back on next construction.
         // (reset() deletes the on-disk group AND syncs; a fresh Settings instance
         // reads from the same persisted file.)
         Settings reloaded;
+        for (const Mode mode : {Mode::Snapping, Mode::Autotile, Mode::Scroll}) {
+            QVERIFY(settings.disabledMonitors(mode).isEmpty());
+            QVERIFY(settings.disabledDesktops(mode).isEmpty());
+            QVERIFY(settings.disabledActivities(mode).isEmpty());
+            QVERIFY(reloaded.disabledMonitors(mode).isEmpty());
+            QVERIFY(reloaded.disabledDesktops(mode).isEmpty());
+            QVERIFY(reloaded.disabledActivities(mode).isEmpty());
+        }
+    }
+
+    // =========================================================================
+    // Scrolling mode: parity with snapping / autotile
+    // =========================================================================
+
+    /// The scrolling-mode disable lists must behave exactly like the snapping
+    /// and autotile lists: independent gates, a save/load round-trip, and the
+    /// canonicalCommaList validator trimming/de-duplicating on write. The
+    /// Scrolling disable keys were absent from the displayGroup schema, so
+    /// Store::write rejected them and these lists silently never persisted.
+    void testScrollDisable_parityWithOtherModes()
+    {
+        IsolatedConfigGuard guard;
+        const QString screen = QStringLiteral("DP-3");
+
+        {
+            Settings settings;
+
+            // A scroll-side disable is independent of the other two modes.
+            settings.setDisabledMonitors(Mode::Scroll, {screen});
+            QVERIFY(settings.isMonitorDisabled(Mode::Scroll, screen));
+            QVERIFY2(!settings.isMonitorDisabled(Mode::Snapping, screen), "scroll disable leaked into snapping gate");
+            QVERIFY2(!settings.isMonitorDisabled(Mode::Autotile, screen), "scroll disable leaked into autotile gate");
+
+            // Re-enabling clears the gate, matching the snapping/autotile path.
+            settings.setDisabledMonitors(Mode::Scroll, {});
+            QVERIFY(!settings.isMonitorDisabled(Mode::Scroll, screen));
+            settings.setDisabledMonitors(Mode::Scroll, {screen});
+
+            // The canonicalCommaList validator — only reached once the scroll
+            // key is schema-registered — trims AND de-duplicates on write. The
+            // input makes both independently load-bearing: the exact-duplicate
+            // "DP-3/1" is only removed by dedup, and " DP-3/2 " collapses onto
+            // "DP-3/2" only because trimming runs before dedup.
+            settings.setDisabledDesktops(Mode::Scroll,
+                                         {QStringLiteral("DP-3/1"), QStringLiteral("DP-3/1"),
+                                          QStringLiteral(" DP-3/2 "), QStringLiteral("DP-3/2")});
+
+            // Desktop gate independence — a scroll desktop-1 disable leaves the
+            // snapping and autotile desktop gates untouched.
+            QVERIFY(settings.isDesktopDisabled(Mode::Scroll, screen, 1));
+            QVERIFY2(!settings.isDesktopDisabled(Mode::Snapping, screen, 1),
+                     "scroll desktop disable leaked into snapping gate");
+            QVERIFY2(!settings.isDesktopDisabled(Mode::Autotile, screen, 1),
+                     "scroll desktop disable leaked into autotile gate");
+
+            // Activity gate independence — likewise for the activity axis.
+            const QString activityId = QStringLiteral("uuid-a");
+            settings.setDisabledActivities(Mode::Scroll, {screen + QLatin1Char('/') + activityId});
+            QVERIFY(settings.isActivityDisabled(Mode::Scroll, screen, activityId));
+            QVERIFY2(!settings.isActivityDisabled(Mode::Snapping, screen, activityId),
+                     "scroll activity disable leaked into snapping gate");
+            QVERIFY2(!settings.isActivityDisabled(Mode::Autotile, screen, activityId),
+                     "scroll activity disable leaked into autotile gate");
+            settings.save();
+        }
+
+        // The lists survive a save/load round-trip — proving Store::write
+        // accepted them (it rejects undeclared keys).
+        Settings reloaded;
+        QCOMPARE(reloaded.disabledMonitors(Mode::Scroll), QStringList{screen});
+        QCOMPARE(reloaded.disabledDesktops(Mode::Scroll),
+                 (QStringList{QStringLiteral("DP-3/1"), QStringLiteral("DP-3/2")}));
+        QCOMPARE(reloaded.disabledActivities(Mode::Scroll), QStringList{QStringLiteral("DP-3/uuid-a")});
         QVERIFY(reloaded.disabledMonitors(Mode::Snapping).isEmpty());
         QVERIFY(reloaded.disabledMonitors(Mode::Autotile).isEmpty());
         QVERIFY(reloaded.disabledDesktops(Mode::Snapping).isEmpty());
         QVERIFY(reloaded.disabledDesktops(Mode::Autotile).isEmpty());
         QVERIFY(reloaded.disabledActivities(Mode::Snapping).isEmpty());
         QVERIFY(reloaded.disabledActivities(Mode::Autotile).isEmpty());
+    }
+
+    /// Per-mode disable signals carry Mode::Scroll for scroll-side writes —
+    /// monitors, desktops and activities each.
+    void testScrollDisable_signalCarriesMode()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+
+        QSignalSpy monitorSpy(&settings, &Settings::disabledMonitorsChanged);
+        QSignalSpy desktopSpy(&settings, &Settings::disabledDesktopsChanged);
+        QSignalSpy activitySpy(&settings, &Settings::disabledActivitiesChanged);
+        QVERIFY(monitorSpy.isValid());
+        QVERIFY(desktopSpy.isValid());
+        QVERIFY(activitySpy.isValid());
+
+        settings.setDisabledMonitors(Mode::Scroll, {QStringLiteral("DP-3")});
+        QCOMPARE(monitorSpy.count(), 1);
+        // A monitor write must fire ONLY the monitor signal.
+        QCOMPARE(desktopSpy.count(), 0);
+        QCOMPARE(activitySpy.count(), 0);
+        QCOMPARE(monitorSpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Scroll));
+
+        settings.setDisabledDesktops(Mode::Scroll, {QStringLiteral("DP-3/1")});
+        QCOMPARE(desktopSpy.count(), 1);
+        QCOMPARE(monitorSpy.count(), 0);
+        QCOMPARE(activitySpy.count(), 0);
+        QCOMPARE(desktopSpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Scroll));
+
+        settings.setDisabledActivities(Mode::Scroll, {QStringLiteral("DP-3/uuid-a")});
+        QCOMPARE(activitySpy.count(), 1);
+        QCOMPARE(monitorSpy.count(), 0);
+        QCOMPARE(desktopSpy.count(), 0);
+        QCOMPARE(activitySpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Scroll));
     }
 };
 

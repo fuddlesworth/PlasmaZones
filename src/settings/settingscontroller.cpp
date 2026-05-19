@@ -572,6 +572,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     static const QHash<QString, QString> redirects{
         {QStringLiteral("snapping"), QStringLiteral("snapping-appearance")},
         {QStringLiteral("tiling"), QStringLiteral("tiling-appearance")},
+        {QStringLiteral("scrolling"), QStringLiteral("scrolling-layout")},
         {QStringLiteral("animations"), QStringLiteral("animations-general")},
         {QStringLiteral("animations-surfaces"), QStringLiteral("animations-windows")},
         {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
@@ -617,6 +618,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("tiling"),
          {QStringLiteral("tiling-appearance"), QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm"),
           QStringLiteral("tiling-assignments"), QStringLiteral("tiling-ordering"), QStringLiteral("tiling-shortcuts")}},
+        {QStringLiteral("scrolling"),
+         {QStringLiteral("scrolling-layout"), QStringLiteral("scrolling-appearance"),
+          QStringLiteral("scrolling-behavior"), QStringLiteral("scrolling-assignments")}},
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
@@ -646,6 +650,10 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
         QStringLiteral("snapping-apprules"),
+        QStringLiteral("scrolling-layout"),
+        QStringLiteral("scrolling-appearance"),
+        QStringLiteral("scrolling-behavior"),
+        QStringLiteral("scrolling-assignments"),
         QStringLiteral("exclusions"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
@@ -1657,35 +1665,39 @@ void SettingsController::toggleContextLock(const QString& screenName, int virtua
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Convert the QML-side `viewMode` int to PhosphorZones::AssignmentEntry::Mode.
-// The numeric values match by design (0 = Snapping, 1 = Autotile) but routing
-// every call through the helper keeps the cast explicit and gives us a single
-// place to add range-clamping if a future mode is introduced.
+// The numeric values match by design (0 = Snapping, 1 = Autotile, 2 = Scroll)
+// but routing every call through the helper keeps the cast explicit and gives
+// us a single place to add range-clamping if a future mode is introduced.
 //
 // SharedBridge.qml sets `assignmentViewMode: -1` as a sentinel that the
-// SnappingBridge / TilingBridge subclass MUST override. If a future bridge
-// subclass forgets the override, every disable read/write would silently
-// land on the snapping list — exactly the mode confusion this whole
+// SnappingBridge / TilingBridge / ScrollingBridge subclass MUST override. If a
+// future bridge subclass forgets the override, every disable read/write would
+// silently land on the snapping list — exactly the mode confusion this whole
 // machinery is meant to eliminate. Warn loudly so the bug shows up in logs.
 //
 // The previous implementation triggered Q_ASSERT(false) on the unexpected
 // path, but QML binding evaluation order during component construction can
 // run a `function on*Changed: isMonitorDisabled(name)` handler before the
-// SnappingBridge/TilingBridge subclass override of `assignmentViewMode`
-// takes effect, hard-crashing dev builds on what is otherwise transient
-// state. The warning is enough — the fallback to Snapping is the safest
-// choice (defaults to the more permissive of the two lists for reads,
-// avoids accidental writes to a list the user didn't intend).
+// bridge subclass override of `assignmentViewMode` takes effect,
+// hard-crashing dev builds on what is otherwise transient state. The warning
+// is enough — the fallback to Snapping is the safest choice (defaults to the
+// most permissive of the three lists for reads, avoids accidental writes to a
+// list the user didn't intend).
 static PhosphorZones::AssignmentEntry::Mode modeFromViewMode(int viewMode)
 {
-    if (viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Snapping)
-        && viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)) {
+    using Mode = PhosphorZones::AssignmentEntry::Mode;
+    if (viewMode == static_cast<int>(Mode::Autotile)) {
+        return Mode::Autotile;
+    }
+    if (viewMode == static_cast<int>(Mode::Scroll)) {
+        return Mode::Scroll;
+    }
+    if (viewMode != static_cast<int>(Mode::Snapping)) {
         qCWarning(PlasmaZones::lcCore)
             << "modeFromViewMode: unexpected viewMode" << viewMode
             << "— defaulting to Snapping. A bridge subclass likely forgot to set assignmentViewMode.";
     }
-    return viewMode == static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)
-        ? PhosphorZones::AssignmentEntry::Autotile
-        : PhosphorZones::AssignmentEntry::Snapping;
+    return Mode::Snapping;
 }
 
 bool SettingsController::isMonitorDisabled(int viewMode, const QString& screenName) const
@@ -2211,6 +2223,32 @@ void SettingsController::clearPerScreenSnappingSettings(const QString& screenNam
 bool SettingsController::hasPerScreenSnappingSettings(const QString& screenName) const
 {
     return m_settings.hasPerScreenSnappingSettings(screenName);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Per-screen scroll overrides
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantMap SettingsController::getPerScreenScrollSettings(const QString& screenName) const
+{
+    return m_settings.getPerScreenScrollSettings(screenName);
+}
+
+void SettingsController::setPerScreenScrollSetting(const QString& screenName, const QString& key, const QVariant& value)
+{
+    m_settings.setPerScreenScrollSetting(screenName, key, value);
+    setNeedsSave(true);
+}
+
+void SettingsController::clearPerScreenScrollSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenScrollSettings(screenName);
+    setNeedsSave(true);
+}
+
+bool SettingsController::hasPerScreenScrollSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenScrollSettings(screenName);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

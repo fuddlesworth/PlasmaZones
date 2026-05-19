@@ -326,28 +326,48 @@ void SettingsAdaptor::initializeRegistry()
 
     REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
 
-    // Scroll-mode (niri-style scrollable tiling) settings — interface-backed.
-    REGISTER_INT_SETTING("scrollInnerGap", scrollInnerGap, setScrollInnerGap)
-    REGISTER_INT_SETTING("scrollOuterGap", scrollOuterGap, setScrollOuterGap)
-    REGISTER_DOUBLE_SETTING("scrollDefaultColumnWidth", scrollDefaultColumnWidth, setScrollDefaultColumnWidth)
-    REGISTER_BOOL_SETTING("scrollCenterFocusedColumn", scrollCenterFocusedColumn, setScrollCenterFocusedColumn)
-    // Preset lists (multi-bind) — QVariantLists of width / height fractions.
-    m_getters[QStringLiteral("scrollPresetColumnWidths")] = [this]() {
-        return QVariant::fromValue(m_settings->scrollPresetColumnWidths());
-    };
-    m_setters[QStringLiteral("scrollPresetColumnWidths")] = [this](const QVariant& v) {
-        m_settings->setScrollPresetColumnWidths(v.toList());
-        return true;
-    };
-    m_schemas[QStringLiteral("scrollPresetColumnWidths")] = QStringLiteral("stringlist");
-    m_getters[QStringLiteral("scrollPresetWindowHeights")] = [this]() {
-        return QVariant::fromValue(m_settings->scrollPresetWindowHeights());
-    };
-    m_setters[QStringLiteral("scrollPresetWindowHeights")] = [this](const QVariant& v) {
-        m_settings->setScrollPresetWindowHeights(v.toList());
-        return true;
-    };
-    m_schemas[QStringLiteral("scrollPresetWindowHeights")] = QStringLiteral("stringlist");
+    // Scroll-mode (niri-style scrollable tiling) settings. scrollingEnabled is
+    // the master gate — still on the ISettings interface.
+    REGISTER_BOOL_SETTING("scrollingEnabled", scrollingEnabled, setScrollingEnabled)
+    // Scroll geometry config (concrete Settings only): the scroll engine pulls
+    // it through PhosphorEngine::IScrollSettings, so its setters are concrete
+    // Settings methods rather than ISettings virtuals — mirrors the autotile
+    // core-settings block above.
+    if (concrete) {
+        REGISTER_CONCRETE_INT("scrollInnerGap", scrollInnerGap, setScrollInnerGap)
+        REGISTER_CONCRETE_INT("scrollOuterGap", scrollOuterGap, setScrollOuterGap)
+        REGISTER_CONCRETE_DOUBLE("scrollDefaultColumnWidth", scrollDefaultColumnWidth, setScrollDefaultColumnWidth)
+        REGISTER_CONCRETE_BOOL("scrollCenterFocusedColumn", scrollCenterFocusedColumn, setScrollCenterFocusedColumn)
+        // Preset lists (multi-bind) — QVariantLists of width / height fractions.
+        m_getters[QStringLiteral("scrollPresetColumnWidths")] = [concrete]() {
+            return QVariant::fromValue(concrete->scrollPresetColumnWidths());
+        };
+        m_setters[QStringLiteral("scrollPresetColumnWidths")] = [concrete](const QVariant& v) {
+            concrete->setScrollPresetColumnWidths(v.toList());
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollPresetColumnWidths")] = QStringLiteral("stringlist");
+        m_getters[QStringLiteral("scrollPresetWindowHeights")] = [concrete]() {
+            return QVariant::fromValue(concrete->scrollPresetWindowHeights());
+        };
+        m_setters[QStringLiteral("scrollPresetWindowHeights")] = [concrete](const QVariant& v) {
+            concrete->setScrollPresetWindowHeights(v.toList());
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollPresetWindowHeights")] = QStringLiteral("stringlist");
+    }
+    // Scrolling appearance — column border decoration.
+    REGISTER_BOOL_SETTING("scrollShowBorder", scrollShowBorder, setScrollShowBorder)
+    REGISTER_INT_SETTING("scrollBorderWidth", scrollBorderWidth, setScrollBorderWidth)
+    REGISTER_INT_SETTING("scrollBorderRadius", scrollBorderRadius, setScrollBorderRadius)
+    REGISTER_COLOR_SETTING("scrollBorderColor", scrollBorderColor, setScrollBorderColor)
+    REGISTER_COLOR_SETTING("scrollInactiveBorderColor", scrollInactiveBorderColor, setScrollInactiveBorderColor)
+    REGISTER_BOOL_SETTING("scrollUseSystemBorderColors", scrollUseSystemBorderColors, setScrollUseSystemBorderColors)
+    REGISTER_BOOL_SETTING("scrollHideTitleBars", scrollHideTitleBars, setScrollHideTitleBars)
+
+    // Scrolling behavior — focus behavior.
+    REGISTER_BOOL_SETTING("scrollFocusNewWindows", scrollFocusNewWindows, setScrollFocusNewWindows)
+    REGISTER_BOOL_SETTING("scrollFocusFollowsMouse", scrollFocusFollowsMouse, setScrollFocusFollowsMouse)
 
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
@@ -385,11 +405,13 @@ void SettingsAdaptor::initializeRegistry()
         return false;
     };
     m_schemas[QStringLiteral("overlayDisplayMode")] = QStringLiteral("int");
-    // Per-mode disable lists. Six entries — one per (context, mode) pair —
-    // because both the read and the write need a Mode argument that the
-    // REGISTER_STRINGLIST_SETTING macro doesn't expose. Pre-v3 these were a
-    // single set of three keys whose values silently gated both modes; the
-    // new wire schema names the mode explicitly so consumers can't conflate.
+    // Per-mode disable lists. Nine entries — one per (context, mode) pair, for
+    // three contexts (monitors, desktops, activities) × three modes (snap,
+    // autotile, scroll) — because both the read and the write need a Mode
+    // argument that the REGISTER_STRINGLIST_SETTING macro doesn't expose.
+    // Pre-v3 these were a single set of three keys whose values silently gated
+    // both modes; the new wire schema names the mode explicitly so consumers
+    // can't conflate.
 #define REGISTER_PER_MODE_DISABLE(keyName, modeEnum, getterFn, setterFn)                                               \
     m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
         return m_settings->getterFn(modeEnum);                                                                         \
@@ -412,6 +434,12 @@ void SettingsAdaptor::initializeRegistry()
                               disabledActivities, setDisabledActivities)
     REGISTER_PER_MODE_DISABLE("autotileDisabledActivities", PhosphorZones::AssignmentEntry::Autotile,
                               disabledActivities, setDisabledActivities)
+    REGISTER_PER_MODE_DISABLE("scrollDisabledMonitors", PhosphorZones::AssignmentEntry::Scroll, disabledMonitors,
+                              setDisabledMonitors)
+    REGISTER_PER_MODE_DISABLE("scrollDisabledDesktops", PhosphorZones::AssignmentEntry::Scroll, disabledDesktops,
+                              setDisabledDesktops)
+    REGISTER_PER_MODE_DISABLE("scrollDisabledActivities", PhosphorZones::AssignmentEntry::Scroll, disabledActivities,
+                              setDisabledActivities)
 #undef REGISTER_PER_MODE_DISABLE
 
     // Appearance settings

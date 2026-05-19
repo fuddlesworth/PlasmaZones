@@ -132,6 +132,15 @@ public:
     virtual QStringList animationExcludedWindowClasses() const = 0;
     virtual void setAnimationExcludedWindowClasses(const QStringList& classes) = 0;
 
+    // Autotile master gate — when false the daemon resolves no autotile
+    // screens (mirrors scrollingEnabled / snappingEnabled). The autotile
+    // *engine* settings (gaps, algorithm, master count, …) live on
+    // PhosphorEngine::IAutotileSettings so the tile-engine library consumes
+    // them without depending on the app; the master gate is an app/daemon
+    // concern and belongs on ISettings alongside the other two mode gates.
+    virtual bool autotileEnabled() const = 0;
+    virtual void setAutotileEnabled(bool enabled) = 0;
+
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
     virtual void setAutotileFocusFollowsMouse(bool enabled) = 0;
@@ -163,21 +172,39 @@ public:
     virtual bool autotileDragInsertToggle() const = 0;
     virtual void setAutotileDragInsertToggle(bool enable) = 0;
 
-    // Scroll-mode (niri-style scrollable tiling) settings. The daemon pushes
-    // these to ScrollEngine / the geometry resolver; the standalone settings
-    // app and KCM edit them. Preset lists are QVariantList of doubles.
-    virtual int scrollInnerGap() const = 0;
-    virtual void setScrollInnerGap(int gap) = 0;
-    virtual int scrollOuterGap() const = 0;
-    virtual void setScrollOuterGap(int gap) = 0;
-    virtual double scrollDefaultColumnWidth() const = 0;
-    virtual void setScrollDefaultColumnWidth(double fraction) = 0;
-    virtual bool scrollCenterFocusedColumn() const = 0;
-    virtual void setScrollCenterFocusedColumn(bool center) = 0;
-    virtual QVariantList scrollPresetColumnWidths() const = 0;
-    virtual void setScrollPresetColumnWidths(const QVariantList& fractions) = 0;
-    virtual QVariantList scrollPresetWindowHeights() const = 0;
-    virtual void setScrollPresetWindowHeights(const QVariantList& fractions) = 0;
+    // Scroll-mode (niri-style scrollable tiling) settings. scrollingEnabled is
+    // the master gate — when false the daemon resolves no scroll strips on any
+    // screen (mirrors autotileEnabled).
+    //
+    // The scroll *geometry* config (inner/outer gap, default column width,
+    // center-focused-column, preset width/height lists) is NOT on ISettings:
+    // the scroll engine pulls it through PhosphorEngine::IScrollSettings, which
+    // Settings also implements — full parity with autotile geometry config on
+    // IAutotileSettings. Their *Changed signals stay here, exactly as autotile
+    // gap signals do, because QObject signals must live on the QObject base.
+    virtual bool scrollingEnabled() const = 0;
+    virtual void setScrollingEnabled(bool enabled) = 0;
+
+    // Scroll-mode appearance — column border decoration drawn by the KWin
+    // effect, mirroring the autotile decoration settings.
+    virtual bool scrollShowBorder() const = 0;
+    virtual void setScrollShowBorder(bool show) = 0;
+    virtual int scrollBorderWidth() const = 0;
+    virtual void setScrollBorderWidth(int width) = 0;
+    virtual int scrollBorderRadius() const = 0;
+    virtual void setScrollBorderRadius(int radius) = 0;
+    virtual QColor scrollBorderColor() const = 0;
+    virtual void setScrollBorderColor(const QColor& color) = 0;
+    virtual QColor scrollInactiveBorderColor() const = 0;
+    virtual void setScrollInactiveBorderColor(const QColor& color) = 0;
+    virtual bool scrollUseSystemBorderColors() const = 0;
+    virtual void setScrollUseSystemBorderColors(bool use) = 0;
+    virtual bool scrollHideTitleBars() const = 0;
+    virtual void setScrollHideTitleBars(bool hide) = 0;
+    virtual bool scrollFocusNewWindows() const = 0;
+    virtual void setScrollFocusNewWindows(bool focus) = 0;
+    virtual bool scrollFocusFollowsMouse() const = 0;
+    virtual void setScrollFocusFollowsMouse(bool follow) = 0;
 
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;
@@ -503,12 +530,22 @@ Q_SIGNALS:
     void autotileDecMasterRatioShortcutChanged();
 
     // Scroll-mode settings
+    void scrollingEnabledChanged();
     void scrollInnerGapChanged();
     void scrollOuterGapChanged();
     void scrollDefaultColumnWidthChanged();
     void scrollCenterFocusedColumnChanged();
     void scrollPresetColumnWidthsChanged();
     void scrollPresetWindowHeightsChanged();
+    void scrollShowBorderChanged();
+    void scrollBorderWidthChanged();
+    void scrollBorderRadiusChanged();
+    void scrollBorderColorChanged();
+    void scrollInactiveBorderColorChanged();
+    void scrollUseSystemBorderColorsChanged();
+    void scrollHideTitleBarsChanged();
+    void scrollFocusNewWindowsChanged();
+    void scrollFocusFollowsMouseChanged();
 };
 
 } // namespace PlasmaZones

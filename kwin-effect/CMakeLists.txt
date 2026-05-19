@@ -45,6 +45,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/window_lifecycle.cpp
     plasmazoneseffect/daemon_bringup.cpp
     plasmazoneseffect/daemon_apply.cpp
+    plasmazoneseffect/settings_load.cpp
     plasmazoneseffect/drag_snap.cpp
     plasmazoneseffect/paint_pipeline.cpp
     plasmazoneseffect/shader_transitions.cpp
@@ -63,6 +64,7 @@ set(plasmazones_effect_SRCS
     screenchangehandler.h
     scrollhandler.cpp
     scrollhandler.h
+    scrollhandler/decoration.cpp
     snapassisthandler.cpp
     snapassisthandler.h
     snapassistthumbnailcapture.cpp

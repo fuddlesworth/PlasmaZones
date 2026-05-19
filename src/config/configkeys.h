@@ -93,6 +93,10 @@ public:
     // Scrolling sub-groups
     PZ_CONFIG_GROUP(scrollingLayoutGroup, "Scrolling.Layout")
     PZ_CONFIG_GROUP(scrollingGapsGroup, "Scrolling.Gaps")
+    PZ_CONFIG_GROUP(scrollingAppearanceColorsGroup, "Scrolling.Appearance.Colors")
+    PZ_CONFIG_GROUP(scrollingAppearanceDecorationsGroup, "Scrolling.Appearance.Decorations")
+    PZ_CONFIG_GROUP(scrollingAppearanceBordersGroup, "Scrolling.Appearance.Borders")
+    PZ_CONFIG_GROUP(scrollingBehaviorGroup, "Scrolling.Behavior")
 
     // Parent groups (for purge enumeration — covers all sub-groups)
     PZ_CONFIG_GROUP(shortcutsGroup, "Shortcuts")
@@ -362,14 +366,18 @@ public:
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Scrolling.Layout
-    //
-    // Scrolling.Gaps reuses innerKey / outerKey — the group context disambiguates.
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(defaultColumnWidthKey, "DefaultColumnWidth")
     PZ_CONFIG_KEY(centerFocusedColumnKey, "CenterFocusedColumn")
     PZ_CONFIG_KEY(presetColumnWidthsKey, "PresetColumnWidths")
     PZ_CONFIG_KEY(presetWindowHeightsKey, "PresetWindowHeights")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.Gaps
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // (uses innerKey, outerKey — the group context disambiguates)
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Exclusions

@@ -40,6 +40,24 @@ PhosphorConfig::Schema buildSettingsSchema()
     return s;
 }
 
+// Shared fraction-list clamp helper (declared in settingsschema.h). Defined
+// here — above the anonymous-namespace clampFractionList() factory that wraps
+// it — so the definition precedes its use rather than relying on the header
+// forward declaration to bridge a definition placed at end of file.
+QVariantList clampFractionListValue(const QVariant& value, double minVal, double maxVal)
+{
+    QVariantList out;
+    const QVariantList raw = value.toList();
+    for (const QVariant& entry : raw) {
+        bool ok = false;
+        const double d = entry.toDouble(&ok);
+        if (ok) {
+            out.append(qBound(minVal, d, maxVal));
+        }
+    }
+    return out;
+}
+
 // ─── Validator helpers ──────────────────────────────────────────────────────
 // Common coercion patterns factored to keep group schemas readable. Return
 // the same function-object type as KeyDef::validator.
@@ -580,16 +598,23 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
         {CD::filterByAspectRatioKey(), CD::filterLayoutsByAspectRatio(), QMetaType::Bool},
     };
 
-    // Mode-neutral Display group: per-mode disable lists. Each pair is independent —
-    // disabling a monitor for snap leaves autotile gates untouched. Connector-name
-    // resolution stays PZ-side (see Settings::disabledMonitors).
+    // Mode-neutral Display group: per-mode disable lists, one key per
+    // (mode × scope). Each is independent — disabling a monitor for snapping
+    // leaves the autotile and scrolling gates untouched. Connector-name
+    // resolution stays PZ-side (see Settings::disabledMonitors). All three
+    // placement modes (snapping, autotile, scrolling) must be registered:
+    // Store::write rejects undeclared keys, so a missing entry silently drops
+    // that mode's disable list.
     schema.groups[CD::displayGroup()] = {
         {CD::snappingDisabledMonitorsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
         {CD::autotileDisabledMonitorsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::scrollDisabledMonitorsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
         {CD::snappingDisabledDesktopsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
         {CD::autotileDisabledDesktopsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::scrollDisabledDesktopsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
         {CD::snappingDisabledActivitiesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
         {CD::autotileDisabledActivitiesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::scrollDisabledActivitiesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
     };
 
     // Full Effects group declared here in one shot. Blur is logically an
@@ -865,6 +890,10 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
 void appendScrollingSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
+    // Master gate — "Scrolling/Enabled" (mirrors snapping/autotile's enabledKey).
+    schema.groups[CD::scrollingGroup()] = {
+        {CD::enabledKey(), CD::scrollingEnabled(), QMetaType::Bool},
+    };
     schema.groups[CD::scrollingGapsGroup()] = {
         {CD::innerKey(),
          CD::scrollInnerGap(),
@@ -895,20 +924,38 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          {},
          clampFractionList(CD::scrollWindowHeightMin(), CD::scrollWindowHeightMax())},
     };
-}
-
-QVariantList clampFractionListValue(const QVariant& value, double minVal, double maxVal)
-{
-    QVariantList out;
-    const QVariantList raw = value.toList();
-    for (const QVariant& entry : raw) {
-        bool ok = false;
-        const double d = entry.toDouble(&ok);
-        if (ok) {
-            out.append(qBound(minVal, d, maxVal));
-        }
-    }
-    return out;
+    // Scrolling.Appearance — column border decoration (mirrors Tiling.Appearance).
+    // Key order mirrors tilingAppearanceColorsGroup for side-by-side readability.
+    schema.groups[CD::scrollingAppearanceColorsGroup()] = {
+        {CD::activeKey(), CD::scrollBorderColor(), QMetaType::QColor, {}, validColorOr(CD::scrollBorderColor())},
+        {CD::inactiveKey(),
+         CD::scrollInactiveBorderColor(),
+         QMetaType::QColor,
+         {},
+         validColorOr(CD::scrollInactiveBorderColor())},
+        {CD::useSystemKey(), CD::scrollUseSystemBorderColors(), QMetaType::Bool},
+    };
+    schema.groups[CD::scrollingAppearanceDecorationsGroup()] = {
+        {CD::hideTitleBarsKey(), CD::scrollHideTitleBars(), QMetaType::Bool},
+    };
+    schema.groups[CD::scrollingAppearanceBordersGroup()] = {
+        {CD::showBorderKey(), CD::scrollShowBorder(), QMetaType::Bool},
+        {CD::widthKey(),
+         CD::scrollBorderWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollBorderWidthMin(), CD::scrollBorderWidthMax())},
+        {CD::radiusKey(),
+         CD::scrollBorderRadius(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollBorderRadiusMin(), CD::scrollBorderRadiusMax())},
+    };
+    // Scrolling.Behavior — focus behavior (mirrors Tiling.Behavior).
+    schema.groups[CD::scrollingBehaviorGroup()] = {
+        {CD::focusNewWindowsKey(), CD::scrollFocusNewWindows(), QMetaType::Bool},
+        {CD::focusFollowsMouseKey(), CD::scrollFocusFollowsMouse(), QMetaType::Bool},
+    };
 }
 
 } // namespace PlasmaZones

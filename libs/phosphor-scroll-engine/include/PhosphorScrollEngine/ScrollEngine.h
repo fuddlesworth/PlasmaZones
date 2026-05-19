@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorScrollEngine/ScrollLayout.h>
 #include <PhosphorScrollEngine/ScrollScreenState.h>
 #include <phosphorscrollengine_export.h>
@@ -121,58 +122,11 @@ public:
     QString screenForTrackedWindow(const QString& windowId) const override;
     QStringList managedWindowOrder(const QString& screenId) const override;
 
-    // ── Preset lists (defaults match niri; settings override later) ─────
-    void setPresetColumnWidths(const QVector<qreal>& fractions);
-    void setPresetWindowHeights(const QVector<qreal>& fractions);
-    /// Coerce a QVariantList of numbers (e.g. a persisted preset list) into the
-    /// engine's typed fraction vector. Shared with the daemon, which pushes the
-    /// settings-backed preset lists through setPreset*().
+    // ── Preset list coercion ────────────────────────────────────────────
+    /// Coerce a QVariantList of numbers (e.g. a persisted preset list, as
+    /// returned by IScrollSettings::scrollPreset*()) into the engine's typed
+    /// fraction vector. Used internally by the effective*() resolvers.
     static QVector<qreal> toFractionVector(const QVariantList& list);
-    QVector<qreal> presetColumnWidths() const
-    {
-        return m_presetColumnWidths;
-    }
-    QVector<qreal> presetWindowHeights() const
-    {
-        return m_presetWindowHeights;
-    }
-
-    // ── Default column width ────────────────────────────────────────────
-    /// Width a freshly-opened column is created with — a fraction [0..1] of
-    /// the working area. Pushed from settings by the daemon; defaults to
-    /// niri's middle preset (one half) until then.
-    void setDefaultColumnWidth(qreal fraction);
-    qreal defaultColumnWidth() const
-    {
-        return m_defaultColumnWidth;
-    }
-
-    // ── Viewport mode ───────────────────────────────────────────────────
-    /// How the viewport scrolls to keep the focused column on-screen. The
-    /// daemon reads this when resolving the strip. Engine-global runtime
-    /// state — not serialized; see serializeEngineState().
-    ScrollViewportMode viewportMode() const
-    {
-        return m_viewportMode;
-    }
-    void setViewportMode(ScrollViewportMode mode)
-    {
-        m_viewportMode = mode;
-    }
-
-    // ── Global gap config ───────────────────────────────────────────────
-    /// Strip gaps in logical pixels — the daemon pushes these from settings.
-    /// The engine is geometry-agnostic and never uses them itself; it holds
-    /// them only so effectiveInnerGap()/effectiveOuterGap() can resolve a
-    /// per-screen override over the global value for the daemon's resolver.
-    void setInnerGap(int gap)
-    {
-        m_innerGap = gap;
-    }
-    void setOuterGap(int gap)
-    {
-        m_outerGap = gap;
-    }
 
     // ── Per-screen config overrides ─────────────────────────────────────
     /// Apply a per-screen override map (screen-only key, mirroring autotile's
@@ -189,7 +143,7 @@ public:
     void clearPerScreenConfig(const QString& screenId) override;
     QVariantMap perScreenOverrides(const QString& screenId) const override;
 
-    // ── Effective config (per-screen override → global default) ─────────
+    // ── Effective config (per-screen override → IScrollSettings global) ──
     QVector<qreal> effectivePresetColumnWidths(const QString& screenId) const;
     QVector<qreal> effectivePresetWindowHeights(const QString& screenId) const;
     qreal effectiveDefaultColumnWidth(const QString& screenId) const;
@@ -233,6 +187,11 @@ protected:
     void onWindowUnfloated(const QString& windowId) override;
 
 private:
+    /// The engine's settings interface, qobject_cast from the QObject* handed
+    /// to setEngineSettings() — null until the daemon wires it (or in unit
+    /// tests with no fake installed). Mirrors AutotileEngine::autotileSettings().
+    PhosphorEngine::IScrollSettings* scrollSettings() const;
+
     PhosphorEngine::TilingStateKey keyForScreen(const QString& screenId) const;
     ScrollScreenState* stateForKey(const PhosphorEngine::TilingStateKey& key, bool create);
     const ScrollScreenState* stateForWindowConst(const QString& windowId) const;
@@ -255,14 +214,9 @@ private:
     int m_currentDesktop = 1;
     QString m_currentActivity;
     QString m_activeScreen;
-    QVector<qreal> m_presetColumnWidths;
-    QVector<qreal> m_presetWindowHeights;
-    qreal m_defaultColumnWidth = kDefaultColumnWidthFraction;
-    int m_innerGap = 8;
-    int m_outerGap = 8;
-    ScrollViewportMode m_viewportMode = ScrollViewportMode::Fit;
     /// Per-screen config overrides, keyed by screenId (screen-only, like
-    /// autotile). Resolved over the globals above by the effective*() helpers.
+    /// autotile). Resolved over the IScrollSettings globals by the
+    /// effective*() helpers.
     QHash<QString, QVariantMap> m_perScreenConfig;
     /// True from a non-empty deserializeEngineState() until the first
     /// reconcileRestoredWindows() prunes the restored strip against the live

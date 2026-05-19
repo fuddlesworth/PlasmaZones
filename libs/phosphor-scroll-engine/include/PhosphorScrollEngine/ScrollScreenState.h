@@ -36,6 +36,9 @@ inline constexpr qreal kMinSizeFraction = 0.1;
 inline constexpr qreal kMaxSizeFraction = 1.0;
 inline constexpr int kMinStripGap = 0;
 inline constexpr int kMaxStripGap = 50;
+/// Strip gap the effective*() resolvers fall back to when no IScrollSettings
+/// is wired — niri's default strip gap in logical pixels.
+inline constexpr int kDefaultStripGap = 8;
 
 /// Per-screen (per desktop/activity) scrollable-tiling state: the niri-style
 /// horizontal strip of columns, the focused column/tile, and the viewport

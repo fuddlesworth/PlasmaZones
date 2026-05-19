@@ -175,6 +175,9 @@ void Settings::load()
     if (autotileUseSystemBorderColors()) {
         applyAutotileBorderSystemColor();
     }
+    if (scrollUseSystemBorderColors()) {
+        applyScrollBorderSystemColor();
+    }
 
     qCInfo(lcConfig) << "Settings loaded";
 
@@ -231,7 +234,8 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::generalGroup(), // "General"
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
-        ConfigDefaults::scrollingGroup(), // "Scrolling" — covers Scrolling.Layout + Scrolling.Gaps
+        ConfigDefaults::scrollingGroup(), // "Scrolling" — covers all Scrolling.* sub-groups (Layout, Gaps,
+                                          // Appearance.*, Behavior)
         ConfigDefaults::displayGroup(), // "Display" — mode-neutral, holds per-mode disable lists (v3+)
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
@@ -2425,6 +2429,9 @@ PZ_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActiva
                   autotileDragInsertToggleChanged)
 
 // ── Scroll Mode Settings (PhosphorConfig::Store-backed) ─────────────────────
+// Master gate — "Scrolling/Enabled", mirroring snapping/autotile's enabledKey.
+PZ_STORE_GET(bool, scrollingEnabled, scrollingGroup, enabledKey, bool)
+PZ_STORE_SET_BOOL(setScrollingEnabled, scrollingGroup, enabledKey, scrollingEnabledChanged)
 // Scrolling.Gaps — reuses innerKey / outerKey; the group context disambiguates.
 PZ_STORE_GET(int, scrollInnerGap, scrollingGapsGroup, innerKey, int)
 PZ_STORE_SET_INT(setScrollInnerGap, scrollingGapsGroup, innerKey, scrollInnerGapChanged)
@@ -2444,6 +2451,41 @@ PZ_STORE_SET_LIST(setScrollPresetColumnWidths, scrollingLayoutGroup, presetColum
 PZ_STORE_GET_LIST(scrollPresetWindowHeights, scrollingLayoutGroup, presetWindowHeightsKey)
 PZ_STORE_SET_LIST(setScrollPresetWindowHeights, scrollingLayoutGroup, presetWindowHeightsKey,
                   scrollPresetWindowHeightsChanged)
+// Scrolling.Appearance — column border decoration (mirrors Tiling.Appearance).
+PZ_STORE_GET(bool, scrollShowBorder, scrollingAppearanceBordersGroup, showBorderKey, bool)
+PZ_STORE_SET_BOOL(setScrollShowBorder, scrollingAppearanceBordersGroup, showBorderKey, scrollShowBorderChanged)
+PZ_STORE_GET(int, scrollBorderWidth, scrollingAppearanceBordersGroup, widthKey, int)
+PZ_STORE_SET_INT(setScrollBorderWidth, scrollingAppearanceBordersGroup, widthKey, scrollBorderWidthChanged)
+PZ_STORE_GET(int, scrollBorderRadius, scrollingAppearanceBordersGroup, radiusKey, int)
+PZ_STORE_SET_INT(setScrollBorderRadius, scrollingAppearanceBordersGroup, radiusKey, scrollBorderRadiusChanged)
+PZ_STORE_GET(QColor, scrollBorderColor, scrollingAppearanceColorsGroup, activeKey, QColor)
+PZ_STORE_SET_COLOR(setScrollBorderColor, scrollingAppearanceColorsGroup, activeKey, scrollBorderColorChanged)
+PZ_STORE_GET(QColor, scrollInactiveBorderColor, scrollingAppearanceColorsGroup, inactiveKey, QColor)
+PZ_STORE_SET_COLOR(setScrollInactiveBorderColor, scrollingAppearanceColorsGroup, inactiveKey,
+                   scrollInactiveBorderColorChanged)
+PZ_STORE_GET(bool, scrollUseSystemBorderColors, scrollingAppearanceColorsGroup, useSystemKey, bool)
+void Settings::setScrollUseSystemBorderColors(bool use)
+{
+    if (scrollUseSystemBorderColors() == use) {
+        return;
+    }
+    m_store->write(ConfigDefaults::scrollingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
+    if (use) {
+        applyScrollBorderSystemColor();
+    }
+    Q_EMIT scrollUseSystemBorderColorsChanged();
+    Q_EMIT settingsChanged();
+}
+PZ_STORE_GET(bool, scrollHideTitleBars, scrollingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
+PZ_STORE_SET_BOOL(setScrollHideTitleBars, scrollingAppearanceDecorationsGroup, hideTitleBarsKey,
+                  scrollHideTitleBarsChanged)
+
+// Scrolling.Behavior — focus behavior.
+PZ_STORE_GET(bool, scrollFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey, bool)
+PZ_STORE_SET_BOOL(setScrollFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey, scrollFocusNewWindowsChanged)
+PZ_STORE_GET(bool, scrollFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey, bool)
+PZ_STORE_SET_BOOL(setScrollFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey,
+                  scrollFocusFollowsMouseChanged)
 
 // Tiling.Appearance
 PZ_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)
@@ -2846,6 +2888,15 @@ void Settings::applyAutotileBorderSystemColor()
     // truth (and the NOTIFY signals fire as a side effect).
     setAutotileBorderColor(highlightColor());
     setAutotileInactiveBorderColor(inactiveColor());
+}
+
+void Settings::applyScrollBorderSystemColor()
+{
+    // Scroll-mode counterpart to applyAutotileBorderSystemColor — adopts the
+    // snapping zone highlight/inactive colors so a scroll column border
+    // matches the rest of the system theme.
+    setScrollBorderColor(highlightColor());
+    setScrollInactiveBorderColor(inactiveColor());
 }
 
 #undef PZ_STORE_GET

@@ -10,6 +10,7 @@
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
+#include <window.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -50,8 +51,11 @@ bool ScrollHandler::isEligibleForScroll(KWin::EffectWindow* w) const
     return m_effect->isEligibleForTilingNotify(w) && !m_effect->isWindowSticky(w);
 }
 
-void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w)
+void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w, bool focusOnAdd)
 {
+    if (!w) {
+        return;
+    }
     if (!isEligibleForScroll(w)) {
         return;
     }
@@ -92,9 +96,36 @@ void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w)
                 if (epoch == m_daemonEpoch) {
                     m_notifiedWindows.remove(windowId);
                     m_notifiedWindowScreens.remove(windowId);
+                    // The window never joined the engine — undo the decoration
+                    // applied synchronously below so a failed open cannot leave
+                    // it chrome-less (title bar hidden, untracked, with nothing
+                    // left to restore it until the next daemon reconnect). The
+                    // focus-new-windows activateWindow() is deliberately NOT
+                    // rolled back: a genuinely-opened window legitimately holds
+                    // focus regardless of whether the scroll engine accepted it.
+                    clearDecoration(windowId, m_effect->findWindowById(windowId));
                 }
             });
     qCDebug(lcEffect) << "Notified scroll: windowOpened" << windowId << "on screen" << screenId;
+
+    // Decorate just this window — hide its title bar (when the setting is on)
+    // and draw its own border. A new column does not change existing windows'
+    // decoration, and their borders track their own geometry, so the per-open
+    // path decorates one window instead of rebuilding the whole strip
+    // (refreshDecorations() — reserved for the batch path). w is non-minimized
+    // here: isEligibleForScroll rejects minimized windows.
+    if (m_border.hideTitleBars) {
+        setWindowBorderless(w, windowId, true);
+    }
+    m_effect->updateWindowBorder(windowId, w);
+
+    // Focus-new-windows: a genuinely-opened window takes focus. Only the
+    // window-open path passes focusOnAdd — re-add callers (screen change,
+    // sticky toggle, un-minimize) and notifyWindowsAddedBatch (startup /
+    // daemon reconnect) deliberately do not steal focus.
+    if (focusOnAdd && m_focusNewWindows) {
+        KWin::effects->activateWindow(w);
+    }
 }
 
 void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows)
@@ -161,9 +192,15 @@ void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
                 for (const QString& wid : batchWindowIds) {
                     m_notifiedWindows.remove(wid);
                     m_notifiedWindowScreens.remove(wid);
+                    // Undo the decoration refreshDecorations() applied below —
+                    // an untracked window must not be left chrome-less.
+                    clearDecoration(wid, m_effect->findWindowById(wid));
                 }
             });
     qCInfo(lcEffect) << "Notified scroll: windowsOpenedBatch with" << batchEntries.size() << "windows";
+
+    // Decorate every window that just joined the tracked set in one pass.
+    refreshDecorations();
 }
 
 void ScrollHandler::onWindowClosed(const QString& windowId, const QString& screenId)
@@ -180,6 +217,9 @@ void ScrollHandler::onWindowClosed(const QString& windowId, const QString& scree
     m_reasserted.remove(windowId);
     m_reorderPending.remove(windowId);
     m_interactiveResize.remove(windowId);
+    if (m_lastFocusFollowsMouseWindowId == windowId) {
+        m_lastFocusFollowsMouseWindowId.clear();
+    }
 
     if (m_scrollScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
@@ -187,6 +227,12 @@ void ScrollHandler::onWindowClosed(const QString& windowId, const QString& scree
                                                        QStringLiteral("windowClosed"));
         qCDebug(lcEffect) << "Notified scroll: windowClosed" << windowId << "on screen" << screenId;
     }
+
+    // The window left scroll management — restore any title bar scroll hid and
+    // drop its border. findWindowById returns null for a genuinely-closed
+    // window (the title-bar restore is then skipped — the window is gone); for
+    // a window that merely left a scroll screen it is still alive and restored.
+    clearDecoration(windowId, m_effect->findWindowById(windowId));
 }
 
 void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
@@ -231,6 +277,20 @@ void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
                                                    QStringLiteral("windowMinimizedChanged"), {windowId, minimized},
                                                    QStringLiteral("windowMinimizedChanged"));
     qCDebug(lcEffect) << "Notified scroll: windowMinimizedChanged" << windowId << minimized;
+
+    // A minimized window leaves the visible layout (updateWindowBorder skips
+    // it); a restored one rejoins it. A minimized window must also not stay
+    // borderless — it would otherwise show chrome-less in the overview / task
+    // switcher — so its title bar is restored on minimize and re-hidden on
+    // restore. refreshDecorations() and updateHideTitleBarsSetting() skip
+    // minimized windows, so this state is not clobbered while it stays minimized.
+    if (m_border.hideTitleBars) {
+        setWindowBorderless(w, windowId, !minimized);
+    }
+    // Only this window's border changed — updateWindowBorder drops it on
+    // minimize (it skips minimized windows) and recreates it on restore. A
+    // full updateAllBorders() rebuild would be redundant work for siblings.
+    m_effect->updateWindowBorder(windowId, w);
 }
 
 void ScrollHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
@@ -462,20 +522,92 @@ void ScrollHandler::onWindowDragFinished(KWin::EffectWindow* w)
     // clears m_reorderPending.
     m_reassertPending.remove(windowId);
     m_reorderPending.insert(windowId);
-    PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
-                                                   QStringLiteral("windowDropped"), {windowId, anchorId, placeAfter},
-                                                   QStringLiteral("windowDropped"));
+    // Tracked async call rather than fire-and-forget: m_reorderPending suppresses
+    // drift re-asserts for this window until the daemon's re-resolve lands. If
+    // the windowDropped call never reaches the daemon, that suppression must be
+    // lifted here — otherwise the window stays permanently uncorrectable for
+    // drift until it closes or the daemon reconnects.
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scroll,
+                                                   QStringLiteral("windowDropped"), {windowId, anchorId, placeAfter}),
+        this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, windowId, epoch = m_daemonEpoch](QDBusPendingCallWatcher* watcher) {
+                watcher->deleteLater();
+                if (!watcher->isError()) {
+                    return; // delivered — the daemon re-resolve will clear m_reorderPending
+                }
+                qCWarning(lcEffect) << "scroll windowDropped D-Bus call failed for" << windowId << ":"
+                                    << watcher->error().message();
+                // Skip if the daemon reconnected meanwhile — onDaemonReady has
+                // already cleared m_reorderPending and rebuilt the tracking sets.
+                if (epoch == m_daemonEpoch) {
+                    m_reorderPending.remove(windowId);
+                    // The post-drag windowFrameGeometryChanged event was already
+                    // suppressed while m_reorderPending held the window, so simply
+                    // clearing the flag re-enables drift correction but nothing
+                    // triggers it — the window would stay where the user dropped
+                    // it. Queue an explicit re-assert so flushReasserts() snaps it
+                    // back to its daemon-resolved slot.
+                    m_reassertPending.insert(windowId);
+                    m_reassertTimer->start();
+                }
+            });
     qCDebug(lcEffect) << "Notified scroll: windowDropped" << windowId << "anchor" << anchorId << "after" << placeAfter;
 }
 
 void ScrollHandler::notifyWindowFocused(const QString& windowId, const QString& screenId)
 {
+    // Keep the focus-follows-mouse dedup key in step with every focus change —
+    // including focus leaving to a non-scroll window or another screen — not
+    // just FFM-originated ones. The key must equal the focused window iff that
+    // window is scroll-managed, else be empty: a stale key left pointing at a
+    // no-longer-focused scroll window would make handleCursorMoved's "already
+    // focused" short-circuit suppress a legitimate re-focus when the cursor
+    // returns to it. Updated before the scroll-screen guard so a focus change
+    // onto a snapping/autotile/unmanaged screen still clears it.
+    m_lastFocusFollowsMouseWindowId = m_notifiedWindows.contains(windowId) ? windowId : QString();
     if (!m_scrollScreens.contains(screenId)) {
         return;
     }
     PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
                                                    QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                    QStringLiteral("notifyWindowFocused"));
+}
+
+void ScrollHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
+{
+    if (!m_focusFollowsMouse || m_scrollScreens.isEmpty()) {
+        return;
+    }
+    // Only act on scroll screens — the caller already resolved screenId.
+    if (screenId.isEmpty() || !m_scrollScreens.contains(screenId)) {
+        return;
+    }
+    // Find the topmost window under the cursor (stacking order, top → bottom).
+    const auto windows = KWin::effects->stackingOrder();
+    for (int i = windows.size() - 1; i >= 0; --i) {
+        KWin::EffectWindow* w = windows[i];
+        if (!w || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+            continue;
+        }
+        if (!w->frameGeometry().contains(pos)) {
+            continue;
+        }
+        const QString windowId = m_effect->getWindowId(w);
+        // The topmost window under the cursor is not scroll-managed (a dialog,
+        // popup, excluded app, floating window). Don't look through it to focus
+        // a scroll window beneath — that would steal focus from the overlay.
+        if (!m_notifiedWindows.contains(windowId)) {
+            return;
+        }
+        if (windowId == m_lastFocusFollowsMouseWindowId) {
+            return; // already focused — no-op
+        }
+        m_lastFocusFollowsMouseWindowId = windowId;
+        KWin::effects->activateWindow(w);
+        return;
+    }
 }
 
 void ScrollHandler::onDaemonReady()
@@ -488,6 +620,17 @@ void ScrollHandler::onDaemonReady()
     // the new session. In particular a pending re-assert must be dropped: it
     // targets geometry the old daemon resolved, which the new one has not.
     // Cleared first so loadSettings()'s async batch reply repopulates cleanly.
+    //
+    // Restore title bars before dropping m_borderlessWindows: a (re)connect
+    // rebuilds the scroll window set from scratch and refreshDecorations()
+    // re-hides them, but a borderless window left untracked here would keep
+    // its hidden title bar with nothing left to restore it. Snapshot first —
+    // setWindowBorderless mutates m_borderlessWindows under the loop.
+    const QStringList borderless(m_borderlessWindows.cbegin(), m_borderlessWindows.cend());
+    for (const QString& windowId : borderless) {
+        setWindowBorderless(m_effect->findWindowById(windowId), windowId, false);
+    }
+    m_borderlessWindows.clear();
     m_notifiedWindows.clear();
     m_notifiedWindowScreens.clear();
     m_pendingCloses.clear();
@@ -496,6 +639,7 @@ void ScrollHandler::onDaemonReady()
     m_reasserted.clear();
     m_reorderPending.clear();
     m_interactiveResize.clear();
+    m_lastFocusFollowsMouseWindowId.clear();
     m_reassertTimer->stop();
     connectSignals();
     loadSettings();

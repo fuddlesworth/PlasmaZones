@@ -994,10 +994,12 @@ bool Daemon::init()
     // strip is resolved against the current scroll settings.
     loadScrollState();
 
-    // Push scroll-mode settings into ScrollEngine, and keep them in sync: each
-    // scroll setting has its own change signal, so connecting them individually
-    // (rather than the catch-all settingsChanged) keeps the strip re-resolve
-    // off the hot path of unrelated settings edits.
+    // The engine pulls scalar scroll geometry config via IScrollSettings
+    // (Settings implements it, wired in at construction); these connections do
+    // not push anything — they only force a strip re-resolve when a scroll
+    // setting changes. Each scroll setting has its own change signal, so
+    // connecting them individually (rather than the catch-all settingsChanged)
+    // keeps the strip re-resolve off the hot path of unrelated settings edits.
     refreshScrollConfigFromSettings();
     for (const auto signal : {&ISettings::scrollInnerGapChanged, &ISettings::scrollOuterGapChanged,
                               &ISettings::scrollDefaultColumnWidthChanged, &ISettings::scrollCenterFocusedColumnChanged,
@@ -1005,6 +1007,9 @@ bool Daemon::init()
                               &ISettings::perScreenScrollSettingsChanged}) {
         connect(m_settings.get(), signal, this, &Daemon::refreshScrollConfigFromSettings);
     }
+    // The master gate changes which screens are scroll-mode, so it re-runs the
+    // active-screen resolve rather than just re-pushing config.
+    connect(m_settings.get(), &ISettings::scrollingEnabledChanged, this, &Daemon::updateScrollScreens);
 
     // Give the window drag adaptor access to the autotile engine for per-screen
     // autotile checks (overlay suppression and snap rejection on autotile screens).
