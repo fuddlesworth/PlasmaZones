@@ -491,6 +491,12 @@ public:
     Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenName) const;
 
+    // ── Per-screen scroll overrides ──────────────────────────────────────────
+    Q_INVOKABLE QVariantMap getPerScreenScrollSettings(const QString& screenName) const;
+    Q_INVOKABLE void setPerScreenScrollSetting(const QString& screenName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void clearPerScreenScrollSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenScrollSettings(const QString& screenName) const;
+
     // ── Virtual screen configuration ──────────────────────────────────────────
     Q_INVOKABLE QStringList getPhysicalScreens() const;
     Q_INVOKABLE QVariantList getVirtualScreenConfig(const QString& physicalScreenId) const;

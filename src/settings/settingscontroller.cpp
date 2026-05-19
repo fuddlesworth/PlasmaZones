@@ -2226,6 +2226,32 @@ bool SettingsController::hasPerScreenSnappingSettings(const QString& screenName)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Per-screen scroll overrides
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantMap SettingsController::getPerScreenScrollSettings(const QString& screenName) const
+{
+    return m_settings.getPerScreenScrollSettings(screenName);
+}
+
+void SettingsController::setPerScreenScrollSetting(const QString& screenName, const QString& key, const QVariant& value)
+{
+    m_settings.setPerScreenScrollSetting(screenName, key, value);
+    setNeedsSave(true);
+}
+
+void SettingsController::clearPerScreenScrollSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenScrollSettings(screenName);
+    setNeedsSave(true);
+}
+
+bool SettingsController::hasPerScreenScrollSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenScrollSettings(screenName);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Per-screen zone selector overrides
 // ═══════════════════════════════════════════════════════════════════════════════
 
