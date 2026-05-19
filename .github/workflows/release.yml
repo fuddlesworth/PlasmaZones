@@ -934,8 +934,11 @@ jobs:
   # Commits the spec + _service to the home:fuddlesworth/plasmazones OBS
   # package; OBS then fetches the release tarball (via the download_files
   # source service) and rebuilds for every enabled repository. Gated on the
-  # openSUSE Tumbleweed RPM build so a spec that fails to build is never
-  # pushed to the repo users have added with `zypper addrepo`.
+  # GitHub release being created, so all distro builds (including the
+  # openSUSE Tumbleweed RPM smoke build) must succeed first — a spec that
+  # fails to build is never pushed to the repo users have added with
+  # `zypper addrepo`, and we don't publish to OBS for a release that never
+  # made it to GitHub. Runs in parallel with publish-aur.
   #
   # Setup (one-time):
   #   1. Sign in at https://build.opensuse.org with an openSUSE account.
@@ -953,7 +956,11 @@ jobs:
   #      users are not split across two repositories.
   publish-obs:
     name: Publish to openSUSE OBS
-    needs: [version, build-rpm-opensuse]
+    # `release` already transitively requires build-rpm-opensuse + every
+    # other distro build, so gating here on `release` keeps the smoke-test
+    # gate while also blocking publish if the GitHub release itself fails.
+    # Same shape as publish-aur so the two run as parallel siblings.
+    needs: [version, release]
     runs-on: ubuntu-latest
     # Skip pre-releases — the home:fuddlesworth repo users add with
     # `zypper addrepo` is a stable channel. Single source of truth: the
