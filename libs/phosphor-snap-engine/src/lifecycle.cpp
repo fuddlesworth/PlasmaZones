@@ -100,6 +100,21 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
+    // Global snapping kill-switch. When the user turns snapping off entirely,
+    // no window may be auto-snapped on open — not via app rules, session
+    // restore, empty-zone auto-assign, or last-used-zone. The screen-mode gate
+    // below only covers autotile-mode screens; a screen still carrying a
+    // Snapping-mode layout assignment would otherwise keep auto-snapping new
+    // windows even with snapping globally disabled (discussion #461 item 2).
+    {
+        auto* s = snapSettings();
+        if (!s || !s->snappingEnabled()) {
+            qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                << "resolveWindowRestore:" << windowId << "snapping globally disabled, skipping";
+            return SnapResult::noSnap();
+        }
+    }
+
     // Pre-check: if this window already has an exact zone assignment (loaded from
     // KConfig with full windowId after daemon-only restart), skip the restore chain.
     // Consume the appId-based pending entry to prevent other instances of the same

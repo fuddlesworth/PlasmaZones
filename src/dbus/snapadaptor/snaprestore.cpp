@@ -229,6 +229,17 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
         return false;
     }
 
+    // Global snapping kill-switch — see discussion #461 item 2. Every snapTo*
+    // / restoreToPersistedZone / resolveWindowRestore D-Bus slot funnels
+    // through here, so a single gate suppresses all auto-snap-on-open paths
+    // when the user has turned snapping off entirely. Mirrors the
+    // engine-internal gate in SnapEngine::resolveWindowRestore.
+    if (m_settings && !m_settings->snappingEnabled()) {
+        qCInfo(lcDbusWindow) << "applySnapResult: refusing auto-snap of" << windowId
+                             << "— snapping is globally disabled";
+        return false;
+    }
+
     // Disabled-context gate. The interactive drag path (WindowDragAdaptor)
     // and autotile (Daemon::updateAutotileScreens) already refuse to place
     // windows on a monitor / desktop / activity the user marked disabled.
