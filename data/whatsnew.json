@@ -1,6 +1,18 @@
 {
     "releases": [
         {
+            "version": "3.0.5",
+            "date": "2026-05-19",
+            "highlights": [
+                "Fixed the shader picker dropdown being disabled in the layout editor after enabling shader effects (#494)",
+                "Fixed newly-opened windows still auto-snapping to zones when snapping was turned off globally (#461)",
+                "Fixed keyboard snap-to-zone shortcuts still firing when snapping was turned off globally — Snapping.Enabled=false is now a total kill-switch at parity with autotiling (#461)",
+                "Fixed Electron/CEF child surfaces (Steam image previews, Discord popups, VS Code dialogs) being snapped to zones (#461)",
+                "KWin effect-load failures now name the exact build-vs-running KWin version and the remediation, instead of a generic 'effect not running' message (#481)",
+                "Nix flake hardened: new overlays.default output, and module/install docs explicitly steer users toward the NixOS/Home Manager modules and away from the unsafe `nix profile install` path (#481)"
+            ]
+        },
+        {
             "version": "3.0.4",
             "date": "2026-05-18",
             "highlights": [
