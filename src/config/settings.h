@@ -1150,6 +1150,7 @@ public:
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath);
     Q_INVOKABLE void applySystemColorScheme();
     void applyAutotileBorderSystemColor();
+    void applyScrollBorderSystemColor();
 
 Q_SIGNALS:
     /// Emitted when the whole animation Profile blob is replaced via

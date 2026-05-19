@@ -9,6 +9,7 @@
 #include <scene/windowitem.h>
 
 #include "../autotilehandler.h"
+#include "../scrollhandler.h"
 
 namespace PlasmaZones {
 
@@ -54,7 +55,12 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // Remove existing border for this window first
     removeWindowBorder(windowId);
 
-    const int bw = m_autotileHandler->borderWidth();
+    // A window is managed by exactly one placement mode — the daemon's scroll
+    // and autotile screen sets are disjoint — so the handler that tracks the
+    // window also owns its border settings (width, colors, radius, visibility).
+    const bool isScroll = m_scrollHandler && m_scrollHandler->isTiledWindow(windowId);
+
+    const int bw = isScroll ? m_scrollHandler->borderWidth() : m_autotileHandler->borderWidth();
     if (bw <= 0) {
         return;
     }
@@ -63,14 +69,18 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         return;
     }
 
-    if (!m_autotileHandler->shouldShowBorderForWindow(windowId)) {
+    const bool showBorder = isScroll ? m_scrollHandler->shouldShowBorderForWindow(windowId)
+                                     : m_autotileHandler->shouldShowBorderForWindow(windowId);
+    if (!showBorder) {
         return;
     }
 
     // Choose color: active for focused window, inactive for others
     KWin::EffectWindow* active = KWin::effects->activeWindow();
     const bool isFocused = (w == active);
-    const QColor bc = isFocused ? m_autotileHandler->borderColor() : m_autotileHandler->inactiveBorderColor();
+    const QColor bc = isScroll
+        ? (isFocused ? m_scrollHandler->borderColor() : m_scrollHandler->inactiveBorderColor())
+        : (isFocused ? m_autotileHandler->borderColor() : m_autotileHandler->inactiveBorderColor());
     if (!bc.isValid() || bc.alpha() == 0) {
         return;
     }
@@ -80,7 +90,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // by borderWidth so the border draws fully inside the frame (no clipping).
     const QRectF frame = w->frameGeometry();
     const KWin::RectF innerRect(bw, bw, frame.width() - 2.0 * bw, frame.height() - 2.0 * bw);
-    const int br = m_autotileHandler->borderRadius();
+    const int br = isScroll ? m_scrollHandler->borderRadius() : m_autotileHandler->borderRadius();
     const KWin::BorderOutline outline(bw, bc, KWin::BorderRadius(br));
 
     KWin::WindowItem* windowItem = w->windowItem();
@@ -161,19 +171,19 @@ void PlasmaZonesEffect::updateAllBorders()
 {
     clearAllBorders();
 
-    const int bw = m_autotileHandler->borderWidth();
-    if (bw <= 0) {
-        return;
-    }
-
-    // Iterate all effect windows and create borders for tiled ones
+    // Iterate all effect windows and create borders for tiled ones. Border
+    // width is no longer mode-uniform (scroll and autotile carry independent
+    // appearance settings), so the per-window bw<=0 short-circuit in
+    // updateWindowBorder() handles the disabled case instead of an early bail.
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
         if (!w || w->isDeleted() || !w->isOnCurrentDesktop()) {
             continue;
         }
         const QString wid = getWindowId(w);
-        if (m_autotileHandler->shouldShowBorderForWindow(wid)) {
+        const bool showBorder = m_autotileHandler->shouldShowBorderForWindow(wid)
+            || (m_scrollHandler && m_scrollHandler->shouldShowBorderForWindow(wid));
+        if (showBorder) {
             updateWindowBorder(wid, w);
         }
     }

@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <PhosphorCompositor/AutotileState.h>
+
+#include <QColor>
 #include <QHash>
 #include <QList>
 #include <QObject>
@@ -102,6 +105,63 @@ public:
     void connectSignals();
     void loadSettings();
 
+    // ── Border decoration ───────────────────────────────────────────────
+    // The KWin effect's generic border machinery (PlasmaZonesEffect::
+    // updateWindowBorder) consults these so a scroll-mode column is decorated
+    // exactly like an autotile window — just from this handler's settings.
+    // Only the scalar fields of BorderState are used; membership is tracked
+    // by m_notifiedWindows, not BorderState's per-screen buckets.
+
+    /// True when scroll mode manages @p windowId — used by the effect to pick
+    /// which handler's border settings apply to a window.
+    bool isTiledWindow(const QString& windowId) const
+    {
+        return m_notifiedWindows.contains(windowId);
+    }
+    /// True when @p windowId is a scroll-managed window AND borders are on.
+    bool shouldShowBorderForWindow(const QString& windowId) const
+    {
+        return m_border.showBorder && m_notifiedWindows.contains(windowId);
+    }
+    int borderWidth() const
+    {
+        return m_border.width;
+    }
+    QColor borderColor() const
+    {
+        return m_border.color;
+    }
+    QColor inactiveBorderColor() const
+    {
+        return m_border.inactiveColor;
+    }
+    int borderRadius() const
+    {
+        return m_border.radius;
+    }
+    void setBorderWidth(int w)
+    {
+        m_border.width = w;
+    }
+    void setBorderColor(const QColor& c)
+    {
+        m_border.color = c;
+    }
+    void setInactiveBorderColor(const QColor& c)
+    {
+        m_border.inactiveColor = c;
+    }
+    void setBorderRadius(int r)
+    {
+        m_border.radius = r;
+    }
+    void updateShowBorderSetting(bool enabled)
+    {
+        m_border.showBorder = enabled;
+    }
+    /// Toggle server-side title-bar hiding across every scroll-managed window.
+    void updateHideTitleBarsSetting(bool enabled);
+
 public Q_SLOTS:
     /// Daemon told us the scroll-mode screen set changed.
     void slotScrollScreensChanged(const QStringList& screenIds);
@@ -129,6 +189,19 @@ private:
     /// Debounced re-assert: snap every drifted window back to the geometry the
     /// daemon resolved for it.
     void flushReasserts();
+
+    /// Hide or restore @p w's server-side title bar, tracking the change in
+    /// m_borderlessWindows so the toggle and a window leaving scroll mode can
+    /// reverse it. CSD windows (no server decoration) are skipped. @p w may be
+    /// null — the tracking entry is still dropped so it cannot leak.
+    void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless);
+    /// Re-apply title-bar hiding to the current scroll window set (when the
+    /// setting is on) and rebuild every border. Called after the tracked-window
+    /// set changes.
+    void refreshDecorations();
+    /// Restore decoration (title bar + border) for a window no longer
+    /// scroll-tracked. @p w may be null when the window has already closed.
+    void clearDecoration(const QString& windowId, KWin::EffectWindow* w);
 
     PlasmaZonesEffect* m_effect;
 
@@ -160,6 +233,18 @@ private:
     /// epoch at call time and skips its rollback if the daemon reconnected
     /// meanwhile — onDaemonReady has already rebuilt the tracking sets.
     int m_daemonEpoch = 0;
+
+    /// Scroll-mode border decoration settings. Only the scalar fields are used
+    /// (showBorder / hideTitleBars / width / radius / color / inactiveColor) —
+    /// the effect's generic border machinery reads them via the accessors
+    /// above; per-window membership is m_notifiedWindows, not BorderState's
+    /// per-screen buckets.
+    PhosphorCompositor::BorderState m_border;
+    /// Scroll windows whose server-side title bar this handler hid
+    /// (setNoBorder(true)) — the subset of m_notifiedWindows decorated while
+    /// hideTitleBars is on. A window is on exactly one screen, so a flat set
+    /// suffices (autotile needs per-screen buckets only for virtual screens).
+    QSet<QString> m_borderlessWindows;
 };
 
 } // namespace PlasmaZones

@@ -175,6 +175,9 @@ void Settings::load()
     if (autotileUseSystemBorderColors()) {
         applyAutotileBorderSystemColor();
     }
+    if (scrollUseSystemBorderColors()) {
+        applyScrollBorderSystemColor();
+    }
 
     qCInfo(lcConfig) << "Settings loaded";
 
@@ -2460,8 +2463,18 @@ PZ_STORE_GET(QColor, scrollInactiveBorderColor, scrollingAppearanceColorsGroup, 
 PZ_STORE_SET_COLOR(setScrollInactiveBorderColor, scrollingAppearanceColorsGroup, inactiveKey,
                    scrollInactiveBorderColorChanged)
 PZ_STORE_GET(bool, scrollUseSystemBorderColors, scrollingAppearanceColorsGroup, useSystemKey, bool)
-PZ_STORE_SET_BOOL(setScrollUseSystemBorderColors, scrollingAppearanceColorsGroup, useSystemKey,
-                  scrollUseSystemBorderColorsChanged)
+void Settings::setScrollUseSystemBorderColors(bool use)
+{
+    if (scrollUseSystemBorderColors() == use) {
+        return;
+    }
+    m_store->write(ConfigDefaults::scrollingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
+    if (use) {
+        applyScrollBorderSystemColor();
+    }
+    Q_EMIT scrollUseSystemBorderColorsChanged();
+    Q_EMIT settingsChanged();
+}
 PZ_STORE_GET(bool, scrollHideTitleBars, scrollingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
 PZ_STORE_SET_BOOL(setScrollHideTitleBars, scrollingAppearanceDecorationsGroup, hideTitleBarsKey,
                   scrollHideTitleBarsChanged)
@@ -2867,6 +2880,15 @@ void Settings::applyAutotileBorderSystemColor()
     // truth (and the NOTIFY signals fire as a side effect).
     setAutotileBorderColor(highlightColor());
     setAutotileInactiveBorderColor(inactiveColor());
+}
+
+void Settings::applyScrollBorderSystemColor()
+{
+    // Scroll-mode counterpart to applyAutotileBorderSystemColor — adopts the
+    // snapping zone highlight/inactive colors so a scroll column border
+    // matches the rest of the system theme.
+    setScrollBorderColor(highlightColor());
+    setScrollInactiveBorderColor(inactiveColor());
 }
 
 #undef PZ_STORE_GET

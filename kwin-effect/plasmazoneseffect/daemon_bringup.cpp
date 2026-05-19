@@ -629,6 +629,47 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_autotileHandler->setFocusFollowsMouse(v.toBool());
     });
 
+    // ── Scroll-mode appearance ───────────────────────────────────────────────
+    // Scroll columns carry their own border/decoration settings, independent
+    // of autotile's. The daemon resolves scrollUseSystemBorderColors into the
+    // scrollBorder*Color values, so the effect just reads the final colors.
+    loadSettingAsync(QStringLiteral("scrollShowBorder"), [this](const QVariant& v) {
+        m_scrollHandler->updateShowBorderSetting(v.toBool());
+        updateAllBorders();
+    });
+
+    loadSettingAsync(QStringLiteral("scrollBorderWidth"), [this](const QVariant& v) {
+        const int bw = qBound(0, v.toInt(), 10);
+        if (m_scrollHandler->borderWidth() != bw) {
+            m_scrollHandler->setBorderWidth(bw);
+            updateAllBorders();
+        }
+    });
+
+    loadSettingAsync(QStringLiteral("scrollBorderRadius"), [this](const QVariant& v) {
+        const int br = qBound(0, v.toInt(), 20);
+        if (m_scrollHandler->borderRadius() != br) {
+            m_scrollHandler->setBorderRadius(br);
+            updateAllBorders();
+        }
+    });
+
+    loadSettingAsync(QStringLiteral("scrollBorderColor"), [this](const QVariant& v) {
+        m_scrollHandler->setBorderColor(QColor(v.toString()));
+        updateAllBorders();
+    });
+
+    loadSettingAsync(QStringLiteral("scrollInactiveBorderColor"), [this](const QVariant& v) {
+        m_scrollHandler->setInactiveBorderColor(QColor(v.toString()));
+        updateAllBorders();
+    });
+
+    // scrollHideTitleBars needs extra logic when toggled off — delegate to handler
+    loadSettingAsync(QStringLiteral("scrollHideTitleBars"), [this](const QVariant& v) {
+        m_scrollHandler->updateHideTitleBarsSetting(v.toBool());
+        updateAllBorders();
+    });
+
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization
     {
         PhosphorProtocol::ClientHelpers::loadSettingAsync(

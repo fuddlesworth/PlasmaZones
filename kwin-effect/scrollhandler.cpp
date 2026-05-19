@@ -10,6 +10,7 @@
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
+#include <window.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -95,6 +96,10 @@ void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w)
                 }
             });
     qCDebug(lcEffect) << "Notified scroll: windowOpened" << windowId << "on screen" << screenId;
+
+    // The window joined the tracked set — hide its title bar (when the setting
+    // is on) and rebuild borders so the new column is decorated immediately.
+    refreshDecorations();
 }
 
 void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows)
@@ -164,6 +169,9 @@ void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
                 }
             });
     qCInfo(lcEffect) << "Notified scroll: windowsOpenedBatch with" << batchEntries.size() << "windows";
+
+    // Decorate every window that just joined the tracked set in one pass.
+    refreshDecorations();
 }
 
 void ScrollHandler::onWindowClosed(const QString& windowId, const QString& screenId)
@@ -187,6 +195,12 @@ void ScrollHandler::onWindowClosed(const QString& windowId, const QString& scree
                                                        QStringLiteral("windowClosed"));
         qCDebug(lcEffect) << "Notified scroll: windowClosed" << windowId << "on screen" << screenId;
     }
+
+    // The window left scroll management — restore any title bar scroll hid and
+    // drop its border. findWindowById returns null for a genuinely-closed
+    // window (the title-bar restore is then skipped — the window is gone); for
+    // a window that merely left a scroll screen it is still alive and restored.
+    clearDecoration(windowId, m_effect->findWindowById(windowId));
 }
 
 void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
@@ -231,6 +245,12 @@ void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
                                                    QStringLiteral("windowMinimizedChanged"), {windowId, minimized},
                                                    QStringLiteral("windowMinimizedChanged"));
     qCDebug(lcEffect) << "Notified scroll: windowMinimizedChanged" << windowId << minimized;
+
+    // A minimized window leaves the visible layout (updateWindowBorder skips
+    // it); a restored one rejoins it. Rebuild borders so the column border
+    // tracks the change. The window stays in m_notifiedWindows either way, so
+    // its title-bar state is left as-is.
+    m_effect->updateAllBorders();
 }
 
 void ScrollHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
@@ -488,6 +508,17 @@ void ScrollHandler::onDaemonReady()
     // the new session. In particular a pending re-assert must be dropped: it
     // targets geometry the old daemon resolved, which the new one has not.
     // Cleared first so loadSettings()'s async batch reply repopulates cleanly.
+    //
+    // Restore title bars before dropping m_borderlessWindows: a (re)connect
+    // rebuilds the scroll window set from scratch and refreshDecorations()
+    // re-hides them, but a borderless window left untracked here would keep
+    // its hidden title bar with nothing left to restore it. Snapshot first —
+    // setWindowBorderless mutates m_borderlessWindows under the loop.
+    const QStringList borderless(m_borderlessWindows.cbegin(), m_borderlessWindows.cend());
+    for (const QString& windowId : borderless) {
+        setWindowBorderless(m_effect->findWindowById(windowId), windowId, false);
+    }
+    m_borderlessWindows.clear();
     m_notifiedWindows.clear();
     m_notifiedWindowScreens.clear();
     m_pendingCloses.clear();
@@ -604,6 +635,92 @@ void ScrollHandler::slotScrollScreensChanged(const QStringList& screenIds)
         notifyWindowsAddedBatch(KWin::effects->stackingOrder());
     }
     qCDebug(lcEffect) << "Scroll screens updated:" << m_scrollScreens;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Border decoration — title-bar hiding + border refresh
+// ═══════════════════════════════════════════════════════════════════════════
+
+void ScrollHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless)
+{
+    if (borderless) {
+        if (!w) {
+            return;
+        }
+        // CSD windows (GTK/Electron) carry no server-side decoration —
+        // hasDecoration() is false — so there is no title bar to hide.
+        if (!w->hasDecoration()) {
+            return;
+        }
+        KWin::Window* kw = w->window();
+        if (!kw) {
+            return;
+        }
+        if (!m_borderlessWindows.contains(windowId)) {
+            m_borderlessWindows.insert(windowId);
+            kw->setNoBorder(true);
+            qCDebug(lcEffect) << "Scroll: hid title bar for" << windowId;
+        }
+    } else {
+        // Drop the tracking entry whether or not the window still exists, so a
+        // closed window cannot leak into m_borderlessWindows. setNoBorder is
+        // restored only when we actually hid this window's title bar.
+        if (!m_borderlessWindows.remove(windowId)) {
+            return;
+        }
+        if (w) {
+            if (KWin::Window* kw = w->window()) {
+                kw->setNoBorder(false);
+                qCDebug(lcEffect) << "Scroll: restored title bar for" << windowId;
+            }
+        }
+    }
+}
+
+void ScrollHandler::refreshDecorations()
+{
+    // Hide title bars for every tracked scroll window when the setting is on.
+    // setWindowBorderless self-gates — already-borderless and CSD windows are
+    // skipped — so this is safe to call after any tracked-set change.
+    if (m_border.hideTitleBars) {
+        for (const QString& windowId : std::as_const(m_notifiedWindows)) {
+            if (KWin::EffectWindow* w = m_effect->findWindowById(windowId)) {
+                setWindowBorderless(w, windowId, true);
+            }
+        }
+    }
+    m_effect->updateAllBorders();
+}
+
+void ScrollHandler::clearDecoration(const QString& windowId, KWin::EffectWindow* w)
+{
+    // The window is no longer scroll-managed — restore any title bar scroll hid
+    // and drop its border. Another placement mode (or none) now owns it.
+    setWindowBorderless(w, windowId, false);
+    m_effect->removeWindowBorder(windowId);
+}
+
+void ScrollHandler::updateHideTitleBarsSetting(bool enabled)
+{
+    if (m_border.hideTitleBars == enabled) {
+        return;
+    }
+    m_border.hideTitleBars = enabled;
+    if (enabled) {
+        // Turning ON — hide the title bar of every tracked scroll window.
+        for (const QString& windowId : std::as_const(m_notifiedWindows)) {
+            if (KWin::EffectWindow* w = m_effect->findWindowById(windowId)) {
+                setWindowBorderless(w, windowId, true);
+            }
+        }
+    } else {
+        // Turning OFF — restore every title bar scroll hid. Snapshot first:
+        // setWindowBorderless mutates m_borderlessWindows under the loop.
+        const QStringList borderless(m_borderlessWindows.cbegin(), m_borderlessWindows.cend());
+        for (const QString& windowId : borderless) {
+            setWindowBorderless(m_effect->findWindowById(windowId), windowId, false);
+        }
+    }
 }
 
 } // namespace PlasmaZones
