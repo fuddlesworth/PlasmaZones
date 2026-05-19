@@ -1084,6 +1084,8 @@ public:
         return true;
     }
 
+    // The 8 is niri's default strip gap — intentionally independent of the
+    // snapping/autotile gap defaults, which derive from Defaults:: constants.
     static constexpr int scrollInnerGap()
     {
         return 8;
@@ -1096,6 +1098,8 @@ public:
     {
         return PhosphorTiles::AutotileDefaults::MaxGap;
     }
+    // The 8 is niri's default strip gap — intentionally independent of the
+    // snapping/autotile gap defaults, which derive from Defaults:: constants.
     static constexpr int scrollOuterGap()
     {
         return 8;
@@ -1681,5 +1685,14 @@ static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::anim
 static_assert(ConfigDefaults::animationSequenceMode() >= ConfigDefaults::animationSequenceModeMin()
                   && ConfigDefaults::animationSequenceMode() <= ConfigDefaults::animationSequenceModeMax(),
               "ConfigDefaults::animationSequenceMode() outside declared [min, max] range");
+static_assert(ConfigDefaults::scrollDefaultColumnWidth() >= ConfigDefaults::scrollColumnWidthMin()
+                  && ConfigDefaults::scrollDefaultColumnWidth() <= ConfigDefaults::scrollColumnWidthMax(),
+              "ConfigDefaults::scrollDefaultColumnWidth() outside declared [min, max] range");
+static_assert(ConfigDefaults::scrollInnerGap() >= ConfigDefaults::scrollInnerGapMin()
+                  && ConfigDefaults::scrollInnerGap() <= ConfigDefaults::scrollInnerGapMax(),
+              "ConfigDefaults::scrollInnerGap() outside declared [min, max] range");
+static_assert(ConfigDefaults::scrollOuterGap() >= ConfigDefaults::scrollOuterGapMin()
+                  && ConfigDefaults::scrollOuterGap() <= ConfigDefaults::scrollOuterGapMax(),
+              "ConfigDefaults::scrollOuterGap() outside declared [min, max] range");
 
 } // namespace PlasmaZones

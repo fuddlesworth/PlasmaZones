@@ -994,10 +994,12 @@ bool Daemon::init()
     // strip is resolved against the current scroll settings.
     loadScrollState();
 
-    // Push scroll-mode settings into ScrollEngine, and keep them in sync: each
-    // scroll setting has its own change signal, so connecting them individually
-    // (rather than the catch-all settingsChanged) keeps the strip re-resolve
-    // off the hot path of unrelated settings edits.
+    // The engine pulls scalar scroll geometry config via IScrollSettings
+    // (Settings implements it, wired in at construction); these connections do
+    // not push anything — they only force a strip re-resolve when a scroll
+    // setting changes. Each scroll setting has its own change signal, so
+    // connecting them individually (rather than the catch-all settingsChanged)
+    // keeps the strip re-resolve off the hot path of unrelated settings edits.
     refreshScrollConfigFromSettings();
     for (const auto signal : {&ISettings::scrollInnerGapChanged, &ISettings::scrollOuterGapChanged,
                               &ISettings::scrollDefaultColumnWidthChanged, &ISettings::scrollCenterFocusedColumnChanged,

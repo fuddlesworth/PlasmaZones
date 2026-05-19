@@ -25,7 +25,7 @@ public:
 
     virtual int scrollInnerGap() const = 0;
     virtual int scrollOuterGap() const = 0;
-    virtual double scrollDefaultColumnWidth() const = 0;
+    virtual qreal scrollDefaultColumnWidth() const = 0;
     virtual bool scrollCenterFocusedColumn() const = 0;
     virtual QVariantList scrollPresetColumnWidths() const = 0;
     virtual QVariantList scrollPresetWindowHeights() const = 0;

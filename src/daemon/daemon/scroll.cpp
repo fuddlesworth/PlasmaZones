@@ -184,6 +184,9 @@ void Daemon::refreshScrollConfigFromSettings()
     // Re-resolve every active scroll strip so a gap / preset / centering change
     // surfaces immediately. onScrollPlacementChanged reads the just-updated
     // engine config (global + per-screen) when it builds the layout config.
+    // No re-gate on scrollingEnabled is needed here: updateScrollScreens has
+    // already emptied activeScreens() when scrolling is disabled, so the
+    // re-resolve loop below no-ops.
     const QSet<QString> screens = m_scrollEngine->activeScreens();
     for (const QString& screenId : screens) {
         onScrollPlacementChanged(screenId);

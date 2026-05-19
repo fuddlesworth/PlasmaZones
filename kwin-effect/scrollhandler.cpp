@@ -543,6 +543,14 @@ void ScrollHandler::onWindowDragFinished(KWin::EffectWindow* w)
                 // already cleared m_reorderPending and rebuilt the tracking sets.
                 if (epoch == m_daemonEpoch) {
                     m_reorderPending.remove(windowId);
+                    // The post-drag windowFrameGeometryChanged event was already
+                    // suppressed while m_reorderPending held the window, so simply
+                    // clearing the flag re-enables drift correction but nothing
+                    // triggers it — the window would stay where the user dropped
+                    // it. Queue an explicit re-assert so flushReasserts() snaps it
+                    // back to its daemon-resolved slot.
+                    m_reassertPending.insert(windowId);
+                    m_reassertTimer->start();
                 }
             });
     qCDebug(lcEffect) << "Notified scroll: windowDropped" << windowId << "anchor" << anchorId << "after" << placeAfter;

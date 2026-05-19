@@ -3,9 +3,11 @@
 #
 # PhosphorScrollEngine — niri-style scrollable-tiling placement engine.
 #
-# Milestone 1 provides the pure-logic strip data model (ScrollScreenState,
-# Column, Tile) with no KWin or daemon dependency. Depends on phosphor-engine
-# for the IPlacementState contract.
+# Provides the pure-logic strip data model (ScrollScreenState, Column, Tile)
+# and the niri-style placement engine (ScrollEngine) that drives column/tile
+# navigation, per-screen config resolution, and layout serialization, with no
+# KWin or daemon dependency. Depends on phosphor-engine for the IPlacementState
+# / PlacementEngineBase contracts.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -33,6 +35,7 @@ add_library(PhosphorScrollEngine SHARED
     src/ScrollScreenState.cpp
     src/ScrollLayout.cpp
     src/ScrollEngine.cpp
+    src/ScrollEngineConfig.cpp
 )
 add_library(PhosphorScrollEngine::PhosphorScrollEngine ALIAS PhosphorScrollEngine)
 

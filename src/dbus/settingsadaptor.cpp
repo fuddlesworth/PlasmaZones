@@ -405,11 +405,13 @@ void SettingsAdaptor::initializeRegistry()
         return false;
     };
     m_schemas[QStringLiteral("overlayDisplayMode")] = QStringLiteral("int");
-    // Per-mode disable lists. Six entries — one per (context, mode) pair —
-    // because both the read and the write need a Mode argument that the
-    // REGISTER_STRINGLIST_SETTING macro doesn't expose. Pre-v3 these were a
-    // single set of three keys whose values silently gated both modes; the
-    // new wire schema names the mode explicitly so consumers can't conflate.
+    // Per-mode disable lists. Nine entries — one per (context, mode) pair, for
+    // three contexts (monitors, desktops, activities) × three modes (snap,
+    // autotile, scroll) — because both the read and the write need a Mode
+    // argument that the REGISTER_STRINGLIST_SETTING macro doesn't expose.
+    // Pre-v3 these were a single set of three keys whose values silently gated
+    // both modes; the new wire schema names the mode explicitly so consumers
+    // can't conflate.
 #define REGISTER_PER_MODE_DISABLE(keyName, modeEnum, getterFn, setterFn)                                               \
     m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
         return m_settings->getterFn(modeEnum);                                                                         \

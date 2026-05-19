@@ -234,6 +234,10 @@ private:
     /// leave path is handled per-window by clearDecoration(), so this only ever
     /// hides — it does not restore title bars for windows that left the set.
     void refreshDecorations();
+    /// Hide the server-side title bar of every tracked scroll window. Minimized
+    /// windows are skipped (onWindowMinimizedChanged re-hides them on restore).
+    /// Shared by refreshDecorations() and updateHideTitleBarsSetting()'s ON path.
+    void hideTitleBarsForTrackedWindows();
     /// Restore decoration (title bar + border) for a window no longer
     /// scroll-tracked. @p w may be null when the window has already closed.
     void clearDecoration(const QString& windowId, KWin::EffectWindow* w);

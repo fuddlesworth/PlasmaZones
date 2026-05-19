@@ -43,7 +43,7 @@ public:
     {
         return outerGap;
     }
-    double scrollDefaultColumnWidth() const override
+    qreal scrollDefaultColumnWidth() const override
     {
         return defaultColumnWidth;
     }

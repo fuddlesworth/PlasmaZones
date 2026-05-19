@@ -182,15 +182,21 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedZoneSelectorEnabled = v.toBool();
     });
 
-    // autotileHideTitleBars needs extra logic when toggled off — delegate to handler
+    // autotileHideTitleBars needs extra logic when toggled off — delegate to handler.
+    // Guard on isValid() so a failed reply does not un-hide title bars.
     loadSettingAsync(QStringLiteral("autotileHideTitleBars"), [this](const QVariant& v) {
-        m_autotileHandler->updateHideTitleBarsSetting(v.toBool());
-        updateAllBorders();
+        if (v.isValid()) {
+            m_autotileHandler->updateHideTitleBarsSetting(v.toBool());
+            updateAllBorders();
+        }
     });
 
+    // Guard on isValid() so a failed reply does not silently disable the border.
     loadSettingAsync(QStringLiteral("autotileShowBorder"), [this](const QVariant& v) {
-        m_autotileHandler->updateShowBorderSetting(v.toBool());
-        updateAllBorders();
+        if (v.isValid()) {
+            m_autotileHandler->updateShowBorderSetting(v.toBool());
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderWidth"), [this](const QVariant& v) {
@@ -214,14 +220,26 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
 
+    // A failed reply yields an empty string → invalid QColor; keep the prior
+    // colour rather than dropping the border.
     loadSettingAsync(QStringLiteral("autotileBorderColor"), [this](const QVariant& v) {
-        m_autotileHandler->setBorderColor(QColor(v.toString()));
-        updateAllBorders();
+        if (v.isValid()) {
+            const QColor c(v.toString());
+            if (c.isValid()) {
+                m_autotileHandler->setBorderColor(c);
+                updateAllBorders();
+            }
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileInactiveBorderColor"), [this](const QVariant& v) {
-        m_autotileHandler->setInactiveBorderColor(QColor(v.toString()));
-        updateAllBorders();
+        if (v.isValid()) {
+            const QColor c(v.toString());
+            if (c.isValid()) {
+                m_autotileHandler->setInactiveBorderColor(c);
+                updateAllBorders();
+            }
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
@@ -291,12 +309,17 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     // ── Scroll-mode behavior ─────────────────────────────────────────────────
+    // Guard on isValid() so a failed reply does not silently disable the behavior.
     loadSettingAsync(QStringLiteral("scrollFocusFollowsMouse"), [this](const QVariant& v) {
-        m_scrollHandler->setFocusFollowsMouse(v.toBool());
+        if (v.isValid()) {
+            m_scrollHandler->setFocusFollowsMouse(v.toBool());
+        }
     });
 
     loadSettingAsync(QStringLiteral("scrollFocusNewWindows"), [this](const QVariant& v) {
-        m_scrollHandler->setFocusNewWindows(v.toBool());
+        if (v.isValid()) {
+            m_scrollHandler->setFocusNewWindows(v.toBool());
+        }
     });
 
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization

@@ -35,6 +35,14 @@ void ScrollHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& wi
         if (!kw) {
             return;
         }
+        // Verify identity before hiding the title bar: hide-loop callers
+        // resolve w via findWindowById(), whose appId fuzzy fallback can return
+        // a *different* live window of the same app when the exact one is gone.
+        // setNoBorder(true) on that window would wrongly hide a title bar this
+        // windowId never owned.
+        if (m_effect->getWindowId(w) != windowId) {
+            return;
+        }
         if (!m_borderlessWindows.contains(windowId)) {
             m_borderlessWindows.insert(windowId);
             kw->setNoBorder(true);
@@ -61,20 +69,25 @@ void ScrollHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& wi
     }
 }
 
-void ScrollHandler::refreshDecorations()
+void ScrollHandler::hideTitleBarsForTrackedWindows()
 {
-    // Hide title bars for every tracked scroll window when the setting is on.
     // setWindowBorderless self-gates — already-borderless and CSD windows are
     // skipped — so this is safe to call after any tracked-set change. Minimized
     // windows are skipped: onWindowMinimizedChanged restores their title bar
     // and this must not re-hide it (it re-hides on restore).
-    if (m_border.hideTitleBars) {
-        for (const QString& windowId : std::as_const(m_notifiedWindows)) {
-            KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-            if (w && !w->isMinimized()) {
-                setWindowBorderless(w, windowId, true);
-            }
+    for (const QString& windowId : std::as_const(m_notifiedWindows)) {
+        KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+        if (w && !w->isMinimized()) {
+            setWindowBorderless(w, windowId, true);
         }
+    }
+}
+
+void ScrollHandler::refreshDecorations()
+{
+    // Hide title bars for every tracked scroll window when the setting is on.
+    if (m_border.hideTitleBars) {
+        hideTitleBarsForTrackedWindows();
     }
     m_effect->updateAllBorders();
 }
@@ -95,14 +108,7 @@ bool ScrollHandler::updateHideTitleBarsSetting(bool enabled)
     m_border.hideTitleBars = enabled;
     if (enabled) {
         // Turning ON — hide the title bar of every tracked scroll window.
-        // Minimized windows are skipped (onWindowMinimizedChanged re-hides them
-        // on restore) so a minimized window is not left chrome-less in overview.
-        for (const QString& windowId : std::as_const(m_notifiedWindows)) {
-            KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-            if (w && !w->isMinimized()) {
-                setWindowBorderless(w, windowId, true);
-            }
-        }
+        hideTitleBarsForTrackedWindows();
     } else {
         // Turning OFF — restore every title bar scroll hid. Snapshot first:
         // setWindowBorderless mutates m_borderlessWindows under the loop.

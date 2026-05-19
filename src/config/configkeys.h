@@ -366,14 +366,18 @@ public:
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Scrolling.Layout
-    //
-    // Scrolling.Gaps reuses innerKey / outerKey — the group context disambiguates.
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(defaultColumnWidthKey, "DefaultColumnWidth")
     PZ_CONFIG_KEY(centerFocusedColumnKey, "CenterFocusedColumn")
     PZ_CONFIG_KEY(presetColumnWidthsKey, "PresetColumnWidths")
     PZ_CONFIG_KEY(presetWindowHeightsKey, "PresetWindowHeights")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.Gaps
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // (uses innerKey, outerKey — the group context disambiguates)
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Exclusions

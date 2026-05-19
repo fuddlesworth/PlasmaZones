@@ -637,6 +637,59 @@ private Q_SLOTS:
     }
 
     /**
+     * Every scroll Layout/Gaps geometry setter fires its own NOTIFY signal on a
+     * genuine value change, and reset() restores all of them to the
+     * ConfigDefaults values — parity with testScrollAppearanceBehavior_signalsAndReset.
+     */
+    void testScrollGeometry_signalsAndReset()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        QSignalSpy innerGapSpy(&settings, &Settings::scrollInnerGapChanged);
+        QSignalSpy outerGapSpy(&settings, &Settings::scrollOuterGapChanged);
+        QSignalSpy defaultWidthSpy(&settings, &Settings::scrollDefaultColumnWidthChanged);
+        QSignalSpy centerSpy(&settings, &Settings::scrollCenterFocusedColumnChanged);
+        QSignalSpy presetWidthsSpy(&settings, &Settings::scrollPresetColumnWidthsChanged);
+        QSignalSpy presetHeightsSpy(&settings, &Settings::scrollPresetWindowHeightsChanged);
+        for (const QSignalSpy* spy :
+             {&innerGapSpy, &outerGapSpy, &defaultWidthSpy, &centerSpy, &presetWidthsSpy, &presetHeightsSpy}) {
+            QVERIFY(spy->isValid());
+        }
+
+        // Each set flips the value away from its default, so exactly one emit.
+        const QVariantList nonDefaultWidths{0.25, 0.5, 0.75};
+        const QVariantList nonDefaultHeights{0.3, 0.6};
+        settings.setScrollInnerGap(ConfigDefaults::scrollInnerGap() + 5);
+        settings.setScrollOuterGap(ConfigDefaults::scrollOuterGap() + 7);
+        settings.setScrollDefaultColumnWidth(ConfigDefaults::scrollDefaultColumnWidth() - 0.1);
+        settings.setScrollCenterFocusedColumn(!ConfigDefaults::scrollCenterFocusedColumn());
+        settings.setScrollPresetColumnWidths(nonDefaultWidths);
+        settings.setScrollPresetWindowHeights(nonDefaultHeights);
+
+        QCOMPARE(innerGapSpy.count(), 1);
+        QCOMPARE(outerGapSpy.count(), 1);
+        QCOMPARE(defaultWidthSpy.count(), 1);
+        QCOMPARE(centerSpy.count(), 1);
+        QCOMPARE(presetWidthsSpy.count(), 1);
+        QCOMPARE(presetHeightsSpy.count(), 1);
+
+        // A redundant set to the current value must NOT re-emit.
+        settings.setScrollInnerGap(ConfigDefaults::scrollInnerGap() + 5);
+        QCOMPARE(innerGapSpy.count(), 1);
+
+        settings.reset();
+
+        QCOMPARE(settings.scrollInnerGap(), ConfigDefaults::scrollInnerGap());
+        QCOMPARE(settings.scrollOuterGap(), ConfigDefaults::scrollOuterGap());
+        QVERIFY(qFuzzyCompare(settings.scrollDefaultColumnWidth(), ConfigDefaults::scrollDefaultColumnWidth()));
+        QCOMPARE(settings.scrollCenterFocusedColumn(), ConfigDefaults::scrollCenterFocusedColumn());
+        QCOMPARE(settings.scrollPresetColumnWidths(), ConfigDefaults::scrollPresetColumnWidths());
+        QCOMPARE(settings.scrollPresetWindowHeights(), ConfigDefaults::scrollPresetWindowHeights());
+    }
+
+    /**
      * The preset-list schema validator clamps each fraction into the valid
      * range and drops non-numeric junk, so a hand-edited config can never
      * feed the engine an out-of-range column width.
@@ -653,6 +706,8 @@ private Q_SLOTS:
         QVERIFY2(5.0 > ConfigDefaults::scrollColumnWidthMax(), "test input 5.0 must be above the column-width max");
         QVERIFY2(0.0 < ConfigDefaults::scrollWindowHeightMin(), "test input 0.0 must be below the window-height min");
         QVERIFY2(9.0 > ConfigDefaults::scrollWindowHeightMax(), "test input 9.0 must be above the window-height max");
+        QVERIFY2(0.5 > ConfigDefaults::scrollColumnWidthMin() && 0.5 < ConfigDefaults::scrollColumnWidthMax(),
+                 "in-range probe must be strictly inside the clamp range");
         // 0.0 is below the minimum, 5.0 above the maximum, and the string is
         // non-numeric junk that must be dropped entirely.
         settings.setScrollPresetColumnWidths(QVariantList{0.0, 0.5, 5.0, QStringLiteral("junk")});
