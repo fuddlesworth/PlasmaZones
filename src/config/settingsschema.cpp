@@ -907,10 +907,15 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          clampFractionList(CD::scrollWindowHeightMin(), CD::scrollWindowHeightMax())},
     };
     // Scrolling.Appearance — column border decoration (mirrors Tiling.Appearance).
+    // Key order mirrors tilingAppearanceColorsGroup for side-by-side readability.
     schema.groups[CD::scrollingAppearanceColorsGroup()] = {
+        {CD::activeKey(), CD::scrollBorderColor(), QMetaType::QColor, {}, validColorOr(CD::scrollBorderColor())},
+        {CD::inactiveKey(),
+         CD::scrollInactiveBorderColor(),
+         QMetaType::QColor,
+         {},
+         validColorOr(CD::scrollInactiveBorderColor())},
         {CD::useSystemKey(), CD::scrollUseSystemBorderColors(), QMetaType::Bool},
-        {CD::activeKey(), CD::scrollBorderColor(), QMetaType::QColor},
-        {CD::inactiveKey(), CD::scrollInactiveBorderColor(), QMetaType::QColor},
     };
     schema.groups[CD::scrollingAppearanceDecorationsGroup()] = {
         {CD::hideTitleBarsKey(), CD::scrollHideTitleBars(), QMetaType::Bool},

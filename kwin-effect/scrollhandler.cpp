@@ -53,6 +53,9 @@ bool ScrollHandler::isEligibleForScroll(KWin::EffectWindow* w) const
 
 void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w, bool focusOnAdd)
 {
+    if (!w) {
+        return;
+    }
     if (!isEligibleForScroll(w)) {
         return;
     }
@@ -97,9 +100,16 @@ void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w, bool focusOnAdd)
             });
     qCDebug(lcEffect) << "Notified scroll: windowOpened" << windowId << "on screen" << screenId;
 
-    // The window joined the tracked set — hide its title bar (when the setting
-    // is on) and rebuild borders so the new column is decorated immediately.
-    refreshDecorations();
+    // Decorate just this window — hide its title bar (when the setting is on)
+    // and draw its own border. A new column does not change existing windows'
+    // decoration, and their borders track their own geometry, so the per-open
+    // path decorates one window instead of rebuilding the whole strip
+    // (refreshDecorations() — reserved for the batch path). w is non-minimized
+    // here: isEligibleForScroll rejects minimized windows.
+    if (m_border.hideTitleBars) {
+        setWindowBorderless(w, windowId, true);
+    }
+    m_effect->updateWindowBorder(windowId, w);
 
     // Focus-new-windows: a genuinely-opened window takes focus. Only the
     // window-open path passes focusOnAdd — re-add callers (screen change,
@@ -258,10 +268,18 @@ void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
     qCDebug(lcEffect) << "Notified scroll: windowMinimizedChanged" << windowId << minimized;
 
     // A minimized window leaves the visible layout (updateWindowBorder skips
-    // it); a restored one rejoins it. Rebuild borders so the column border
-    // tracks the change. The window stays in m_notifiedWindows either way, so
-    // its title-bar state is left as-is.
-    m_effect->updateAllBorders();
+    // it); a restored one rejoins it. A minimized window must also not stay
+    // borderless — it would otherwise show chrome-less in the overview / task
+    // switcher — so its title bar is restored on minimize and re-hidden on
+    // restore. refreshDecorations() and updateHideTitleBarsSetting() skip
+    // minimized windows, so this state is not clobbered while it stays minimized.
+    if (m_border.hideTitleBars) {
+        setWindowBorderless(w, windowId, !minimized);
+    }
+    // Only this window's border changed — updateWindowBorder drops it on
+    // minimize (it skips minimized windows) and recreates it on restore. A
+    // full updateAllBorders() rebuild would be redundant work for siblings.
+    m_effect->updateWindowBorder(windowId, w);
 }
 
 void ScrollHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
@@ -504,6 +522,11 @@ void ScrollHandler::notifyWindowFocused(const QString& windowId, const QString& 
     if (!m_scrollScreens.contains(screenId)) {
         return;
     }
+    // Keep the focus-follows-mouse dedup key in step with focus changes that
+    // did not originate from FFM (a click, or the focus-new-windows activate):
+    // without this, handleCursorMoved's "already focused" short-circuit would
+    // be keyed off a stale window and could redundantly re-activate.
+    m_lastFocusFollowsMouseWindowId = windowId;
     PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
                                                    QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                    QStringLiteral("notifyWindowFocused"));
@@ -682,92 +705,6 @@ void ScrollHandler::slotScrollScreensChanged(const QStringList& screenIds)
         notifyWindowsAddedBatch(KWin::effects->stackingOrder());
     }
     qCDebug(lcEffect) << "Scroll screens updated:" << m_scrollScreens;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Border decoration — title-bar hiding + border refresh
-// ═══════════════════════════════════════════════════════════════════════════
-
-void ScrollHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless)
-{
-    if (borderless) {
-        if (!w) {
-            return;
-        }
-        // CSD windows (GTK/Electron) carry no server-side decoration —
-        // hasDecoration() is false — so there is no title bar to hide.
-        if (!w->hasDecoration()) {
-            return;
-        }
-        KWin::Window* kw = w->window();
-        if (!kw) {
-            return;
-        }
-        if (!m_borderlessWindows.contains(windowId)) {
-            m_borderlessWindows.insert(windowId);
-            kw->setNoBorder(true);
-            qCDebug(lcEffect) << "Scroll: hid title bar for" << windowId;
-        }
-    } else {
-        // Drop the tracking entry whether or not the window still exists, so a
-        // closed window cannot leak into m_borderlessWindows. setNoBorder is
-        // restored only when we actually hid this window's title bar.
-        if (!m_borderlessWindows.remove(windowId)) {
-            return;
-        }
-        if (w) {
-            if (KWin::Window* kw = w->window()) {
-                kw->setNoBorder(false);
-                qCDebug(lcEffect) << "Scroll: restored title bar for" << windowId;
-            }
-        }
-    }
-}
-
-void ScrollHandler::refreshDecorations()
-{
-    // Hide title bars for every tracked scroll window when the setting is on.
-    // setWindowBorderless self-gates — already-borderless and CSD windows are
-    // skipped — so this is safe to call after any tracked-set change.
-    if (m_border.hideTitleBars) {
-        for (const QString& windowId : std::as_const(m_notifiedWindows)) {
-            if (KWin::EffectWindow* w = m_effect->findWindowById(windowId)) {
-                setWindowBorderless(w, windowId, true);
-            }
-        }
-    }
-    m_effect->updateAllBorders();
-}
-
-void ScrollHandler::clearDecoration(const QString& windowId, KWin::EffectWindow* w)
-{
-    // The window is no longer scroll-managed — restore any title bar scroll hid
-    // and drop its border. Another placement mode (or none) now owns it.
-    setWindowBorderless(w, windowId, false);
-    m_effect->removeWindowBorder(windowId);
-}
-
-void ScrollHandler::updateHideTitleBarsSetting(bool enabled)
-{
-    if (m_border.hideTitleBars == enabled) {
-        return;
-    }
-    m_border.hideTitleBars = enabled;
-    if (enabled) {
-        // Turning ON — hide the title bar of every tracked scroll window.
-        for (const QString& windowId : std::as_const(m_notifiedWindows)) {
-            if (KWin::EffectWindow* w = m_effect->findWindowById(windowId)) {
-                setWindowBorderless(w, windowId, true);
-            }
-        }
-    } else {
-        // Turning OFF — restore every title bar scroll hid. Snapshot first:
-        // setWindowBorderless mutates m_borderlessWindows under the loop.
-        const QStringList borderless(m_borderlessWindows.cbegin(), m_borderlessWindows.cend());
-        for (const QString& windowId : borderless) {
-            setWindowBorderless(m_effect->findWindowById(windowId), windowId, false);
-        }
-    }
 }
 
 } // namespace PlasmaZones

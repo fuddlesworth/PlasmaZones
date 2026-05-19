@@ -58,7 +58,9 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // A window is managed by exactly one placement mode — the daemon's scroll
     // and autotile screen sets are disjoint — so the handler that tracks the
     // window also owns its border settings (width, colors, radius, visibility).
-    const bool isScroll = m_scrollHandler && m_scrollHandler->isTiledWindow(windowId);
+    // Both handlers are constructed unconditionally in the effect ctor and live
+    // for the effect's lifetime, so neither pointer is ever null here.
+    const bool isScroll = m_scrollHandler->isTiledWindow(windowId);
 
     const int bw = isScroll ? m_scrollHandler->borderWidth() : m_autotileHandler->borderWidth();
     if (bw <= 0) {
@@ -181,8 +183,8 @@ void PlasmaZonesEffect::updateAllBorders()
             continue;
         }
         const QString wid = getWindowId(w);
-        const bool showBorder = m_autotileHandler->shouldShowBorderForWindow(wid)
-            || (m_scrollHandler && m_scrollHandler->shouldShowBorderForWindow(wid));
+        const bool showBorder =
+            m_autotileHandler->shouldShowBorderForWindow(wid) || m_scrollHandler->shouldShowBorderForWindow(wid);
         if (showBorder) {
             updateWindowBorder(wid, w);
         }

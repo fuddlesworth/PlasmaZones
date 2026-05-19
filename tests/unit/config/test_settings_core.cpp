@@ -465,6 +465,62 @@ private Q_SLOTS:
     }
 
     /**
+     * The scroll-mode Appearance and Behavior settings must survive a
+     * save()/reload round-trip — every one is a Store-backed Q_PROPERTY in a
+     * Scrolling.Appearance.* / Scrolling.Behavior group.
+     */
+    void testScrollAppearanceBehaviorSettings_roundtrip()
+    {
+        IsolatedConfigGuard guard;
+
+        const QColor activeColor(0x11, 0x22, 0x33);
+        const QColor inactiveColor(0x44, 0x55, 0x66);
+
+        {
+            Settings settings;
+            // useSystemBorderColors must go false BEFORE setting the explicit
+            // colors — while true, applyScrollBorderSystemColor() overwrites
+            // them with the system highlight/inactive colors.
+            settings.setScrollUseSystemBorderColors(false);
+            settings.setScrollShowBorder(false);
+            settings.setScrollBorderWidth(7);
+            settings.setScrollBorderRadius(8);
+            settings.setScrollBorderColor(activeColor);
+            settings.setScrollInactiveBorderColor(inactiveColor);
+            settings.setScrollHideTitleBars(false);
+            settings.setScrollFocusNewWindows(false);
+            settings.setScrollFocusFollowsMouse(true);
+            settings.save();
+        }
+
+        Settings reloaded;
+        QCOMPARE(reloaded.scrollUseSystemBorderColors(), false);
+        QCOMPARE(reloaded.scrollShowBorder(), false);
+        QCOMPARE(reloaded.scrollBorderWidth(), 7);
+        QCOMPARE(reloaded.scrollBorderRadius(), 8);
+        QCOMPARE(reloaded.scrollBorderColor(), activeColor);
+        QCOMPARE(reloaded.scrollInactiveBorderColor(), inactiveColor);
+        QCOMPARE(reloaded.scrollHideTitleBars(), false);
+        QCOMPARE(reloaded.scrollFocusNewWindows(), false);
+        QCOMPARE(reloaded.scrollFocusFollowsMouse(), true);
+    }
+
+    /**
+     * scrollUseSystemBorderColors (default true) routes through
+     * applyScrollBorderSystemColor() on load(), so a fresh config reports the
+     * snapping highlight/inactive colors as the scroll border colors.
+     */
+    void testScrollUseSystemBorderColors_adoptsSystemColors()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QVERIFY(settings.scrollUseSystemBorderColors());
+        QCOMPARE(settings.scrollBorderColor(), settings.highlightColor());
+        QCOMPARE(settings.scrollInactiveBorderColor(), settings.inactiveColor());
+    }
+
+    /**
      * The preset-list schema validator clamps each fraction into the valid
      * range and drops non-numeric junk, so a hand-edited config can never
      * feed the engine an out-of-range column width.

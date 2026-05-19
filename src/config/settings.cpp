@@ -234,7 +234,8 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::generalGroup(), // "General"
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
-        ConfigDefaults::scrollingGroup(), // "Scrolling" — covers Scrolling.Layout + Scrolling.Gaps
+        ConfigDefaults::scrollingGroup(), // "Scrolling" — covers all Scrolling.* sub-groups (Layout, Gaps,
+                                          // Appearance.*, Behavior)
         ConfigDefaults::displayGroup(), // "Display" — mode-neutral, holds per-mode disable lists (v3+)
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"

@@ -222,9 +222,10 @@ private:
     /// reverse it. CSD windows (no server decoration) are skipped. @p w may be
     /// null — the tracking entry is still dropped so it cannot leak.
     void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless);
-    /// Re-apply title-bar hiding to the current scroll window set (when the
-    /// setting is on) and rebuild every border. Called after the tracked-window
-    /// set changes.
+    /// Hide the title bar of every currently-tracked scroll window (when the
+    /// setting is on) and rebuild all borders. Used by the batch-add path; the
+    /// leave path is handled per-window by clearDecoration(), so this only ever
+    /// hides — it does not restore title bars for windows that left the set.
     void refreshDecorations();
     /// Restore decoration (title bar + border) for a window no longer
     /// scroll-tracked. @p w may be null when the window has already closed.
