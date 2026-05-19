@@ -7,6 +7,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.5] - 2026-05-19
+
+### Fixed
+
+- **Shader picker dropdown disabled in the layout editor** ([#494](https://github.com/fuddlesworth/PlasmaZones/pull/494)): checking "Enable shader effect" left the dropdown disabled and unable to select a shader because the editor's shader list arrived empty. The `availableShaders` D-Bus call returns the list as an `av` (array of variant); unlike `a{sv}`, QtDBus does not auto-demarshal a bare `av` into a `QVariantList` — it hands the reply back wrapped in a `QDBusArgument`, so `.toList()` silently produced an empty list and every shader was dropped. The reply is now routed through `DBusVariantUtils::convertDbusArgument` first, exactly as the sibling `shaderInfo` and `translateShaderParams` queries already did.
+- **Auto-snap-on-open ignored the global snapping toggle** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#492](https://github.com/fuddlesworth/PlasmaZones/pull/492)): with `Snapping.Enabled=false`, newly-opened windows still got auto-snapped to empty or last zones. `SnapEngine::resolveWindowRestore` gated its empty-zone and last-zone fallbacks only on `modeForScreen() == Snapping`, but `modeForScreen` returns the screen's assigned layout mode — independent of the global Snapping toggle. The `snapTo*`, `restoreToPersistedZone`, and `resolveWindowRestore` D-Bus slots and the shared `applySnapResult` gate never checked the global toggle either; only `dragStarted` did. Both chokepoints now consult `snappingEnabled()`.
+- **Keyboard snap-to-zone shortcuts fired with snapping globally off** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#492](https://github.com/fuddlesworth/PlasmaZones/pull/492)): `IPlacementEngine::isEnabled()` defaulted to `false` and `SnapEngine` never overrode it, so the shared keyboard-shortcut dispatcher had no usable gate for snap-mode shortcuts (autotile shortcuts were already gated on `AutotileEngine::isEnabled()`). `SnapEngine::isEnabled()` now mirrors `AutotileEngine` and reports `snappingEnabled()`, and the navigator dispatcher skips any shortcut whose resolved engine is disabled. Together with the auto-snap fix, `Snapping.Enabled=false` is now a total kill-switch at parity with autotiling.
+- **Transient child surfaces snapped to zones** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#492](https://github.com/fuddlesworth/PlasmaZones/pull/492)): the effect's `shouldHandleWindow()` filtered dialogs, utilities, splashes, notifications, OSDs, modals, and popups, but never consulted `w->transientFor()` — despite the comment claiming it skipped transient windows. Sibling filters in the same file (`shouldAnimateWindow`, `isTileableWindow`) already had the transient-parent check. Electron/CEF apps (Steam image previews, Discord popups, VS Code dialogs) spawn child surfaces that frequently fail to report an accurate KWin window type but always set `transientFor`, so they passed the filter and got snapped to a zone. Transient children are now excluded.
+- **Generic "effect not running" message hid the real cause on bridge timeout** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481), [#485](https://github.com/fuddlesworth/PlasmaZones/pull/485)): the KWin effect plugin's IID embeds KWin's exact upstream version, and KWin's effect loader silently rejects any plugin whose IID does not match the running compositor — even across patch releases. On bridge watchdog timeout the daemon now reads the installed effect plugin's embedded IID via `QPluginLoader::metaData()`, asynchronously queries the running KWin's `supportInformation()`, and names the exact build-vs-running versions and the remediation in the log and desktop notification. The version probe is non-blocking, so the degraded startup path no longer freezes the daemon event loop for the duration of the round-trip.
+- **Nix flake hardened to keep PlasmaZones in sync with the host's KWin** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481), [#489](https://github.com/fuddlesworth/PlasmaZones/pull/489)): expanded module documentation, a new `overlays.default` output, and explicit guidance steer users toward the NixOS module, Home Manager module, and overlay (which build against the consumer's pkgs) and away from `nix profile install` / `packages.default` (which pins to the flake's own nixpkgs and breaks silently when the host's KWin moves past `flake.lock`). The `develop.nix` shell adds debugging tools.
+
 ## [3.0.4] - 2026-05-18
 
 ### Fixed
@@ -1318,7 +1329,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.4...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.5...HEAD
+[3.0.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.4...v3.0.5
 [3.0.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.3...v3.0.4
 [3.0.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.2...v3.0.3
 [3.0.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.1...v3.0.2

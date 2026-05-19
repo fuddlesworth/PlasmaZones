@@ -49,6 +49,15 @@
                 <annotation name="org.gtk.GDBus.DocString" value="True if setting was updated."/>
             </arg>
         </method>
+        <method name="setSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch-set multiple settings in one call. Applies every key via the setter registry and saves once. Unknown keys are logged but do not abort the batch."/>
+            <arg name="settings" type="a{sv}" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of setting key to value."/>
+            </arg>
+            <arg name="success" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if every key was found and its setter succeeded."/>
+            </arg>
+        </method>
         <method name="getSettingKeys">
             <annotation name="org.gtk.GDBus.DocString" value="Return the list of all setting key names."/>
             <arg name="keys" type="as" direction="out">
@@ -57,6 +66,9 @@
         </method>
         <signal name="settingsChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when any setting is modified."/>
+        </signal>
+        <signal name="motionProfileTreeChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: the per-event motion-profile tree changed (a profiles/&lt;path&gt;.json override was edited and rescanned). Kept separate from settingsChanged so the Settings app's value-change detection is not reset by its own profile-file writes; the KWin effect re-fetches motionProfileTree on this signal."/>
         </signal>
 
         <method name="isZoneSelectorEnabled">
@@ -130,6 +142,35 @@
             </arg>
         </method>
 
+        <!-- Shader methods. These are also published on the dedicated
+             org.plasmazones.Shader interface (see org.plasmazones.Shader.xml);
+             SettingsAdaptor keeps them here for backward compatibility with
+             callers that bind the Settings interface. Keep the method set and
+             signatures consistent across both interfaces. -->
+        <method name="availableShaders">
+            <annotation name="org.gtk.GDBus.DocString" value="Get list of available shader effects with metadata."/>
+            <arg name="shaders" type="av" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="List of shader metadata maps."/>
+            </arg>
+        </method>
+        <method name="shaderInfo">
+            <annotation name="org.gtk.GDBus.DocString" value="Get detailed information about a specific shader."/>
+            <arg name="shaderId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Shader UUID."/>
+            </arg>
+            <arg name="info" type="a{sv}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Shader metadata map (empty if not found)."/>
+            </arg>
+        </method>
+        <method name="defaultShaderParams">
+            <annotation name="org.gtk.GDBus.DocString" value="Get default parameter values for a shader."/>
+            <arg name="shaderId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Shader UUID."/>
+            </arg>
+            <arg name="params" type="a{sv}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of parameter IDs to default values."/>
+            </arg>
+        </method>
         <method name="translateShaderParams">
             <annotation name="org.gtk.GDBus.DocString" value="Translate shader params from param IDs to uniform names for ZoneShaderItem."/>
             <arg name="shaderId" type="s" direction="in">
@@ -138,8 +179,70 @@
             <arg name="params" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of param IDs to values (e.g. intensity: 0.5)."/>
             </arg>
-            <arg name="result" type="a{sv}" direction="out">
+            <arg name="uniforms" type="a{sv}" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of uniform names to values (e.g. customParams1_x: 0.5)."/>
+            </arg>
+        </method>
+        <method name="shadersEnabled">
+            <annotation name="org.gtk.GDBus.DocString" value="Check if shader effects are enabled (compiled with shader support)."/>
+            <arg name="enabled" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if shaders are available."/>
+            </arg>
+        </method>
+        <method name="userShadersEnabled">
+            <annotation name="org.gtk.GDBus.DocString" value="Check if user-installed shaders are supported."/>
+            <arg name="enabled" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if user shaders can be loaded."/>
+            </arg>
+        </method>
+        <method name="userShaderDirectory">
+            <annotation name="org.gtk.GDBus.DocString" value="Get path to the user shader installation directory."/>
+            <arg name="path" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Path to ~/.local/share/plasmazones/shaders."/>
+            </arg>
+        </method>
+        <method name="openUserShaderDirectory">
+            <annotation name="org.gtk.GDBus.DocString" value="Open the user shader directory in the file manager."/>
+        </method>
+        <method name="refreshShaders">
+            <annotation name="org.gtk.GDBus.DocString" value="Reload all shaders from disk."/>
+        </method>
+
+        <!-- Per-screen settings. Categories: 'autotile' | 'snapping' | 'zoneSelector'. -->
+        <method name="getPerScreenSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Get all per-screen settings for a screen and category."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
+            </arg>
+            <arg name="category" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'."/>
+            </arg>
+            <arg name="values" type="a{sv}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of per-screen setting key to value."/>
+            </arg>
+        </method>
+        <method name="setPerScreenSetting">
+            <annotation name="org.gtk.GDBus.DocString" value="Set a single per-screen setting and schedule a debounced save."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
+            </arg>
+            <arg name="category" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'."/>
+            </arg>
+            <arg name="key" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Per-screen setting key name."/>
+            </arg>
+            <arg name="value" type="v" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="New value (variant)."/>
+            </arg>
+        </method>
+        <method name="clearPerScreenSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Clear all per-screen overrides for a screen and category, reverting to global defaults."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
+            </arg>
+            <arg name="category" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'."/>
             </arg>
         </method>
 
@@ -171,6 +274,15 @@
         <method name="requestRunningWindows">
             <annotation name="org.gtk.GDBus.DocString" value="Asynchronously request the running-windows list. The daemon emits runningWindowsRequested to the KWin effect; the reply is delivered via the runningWindowsAvailable signal."/>
         </method>
+        <method name="provideRunningWindows">
+            <annotation name="org.gtk.GDBus.DocString" value="KWin effect to daemon callback: deliver the enumerated running-windows list in response to requestRunningWindows. The daemon re-broadcasts it via runningWindowsAvailable."/>
+            <arg name="json" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array: [{windowClass, appName, caption}, ...]."/>
+            </arg>
+        </method>
+        <signal name="runningWindowsRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: please enumerate running windows. Emitted by requestRunningWindows; the effect answers via provideRunningWindows."/>
+        </signal>
         <signal name="runningWindowsAvailable">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when a fresh running-windows list has arrived from the KWin effect."/>
             <arg name="json" type="s">
