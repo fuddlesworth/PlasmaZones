@@ -7,6 +7,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.4] - 2026-05-18
+
+### Fixed
+
+- **Blank-class windows restored into each other's saved zones** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): a window with a blank or whitespace-only KWin class produced a `" "` app identifier that became a live key in the snap restore queue, so unrelated blank-class windows consumed each other's saved zones. App identifiers are now normalized and validated — corrupt keys are rejected at the persist site and dropped by the session loader, which also discards pre-3.0 `"resourceName resourceClass"` keys left over from an upgrade.
+- **Maximized windows ballooning when autotiled** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): a user-maximized window kept its `MaximizeFull` state through the autotile `moveResize`, so KWin re-asserted the maximized geometry and the reactive centering loop compounded it into runaway growth. The tile path now clears maximize state before placing the window, and the desktop-switch restore path clears it too.
+- **Per-context disable ignored by auto-snap and keyboard snap** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): the interactive drag and autotile paths honored the per-monitor, per-desktop, and per-activity disable lists, but snap-on-open and the keyboard snap-to-zone shortcut did not, so windows still snapped on contexts the user had disabled. Both paths — and the float toggle — now gate on the disable lists.
+- **Windows stayed tiled after switching to an autotile-disabled desktop**: the desktop-switch handler never restored windows on the desktop being switched *to*, so arriving on an autotile-disabled desktop left its windows tiled and borderless. The handler now runs a per-window restore pass for the arrived-at desktop.
+- **Confusing new-window placement toggle labels** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): disabling "New windows to last zone" did not stop windows returning to zones — that behavior is governed by "Restore zones on login", whose title implied it applied only at login. Both toggles were retitled to describe what they actually do.
+- **Zone geometry not clamped to the screen** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): gap math could produce a zone rectangle extending past the screen edge when fed malformed layout data. `applyGapsToZoneGeometry` now clamps the gapped rectangle to the screen, and resolved snap placements are logged at INFO so geometry reports are diagnosable.
+- **KWin effect missing on NixOS** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481)): the KWin effect plugin's IID embeds KWin's exact upstream version, and KWin refuses to load an effect whose IID does not match the running compositor — even across patch releases. The flake's `nixosModules`, `homeManagerModules`, and `overlay` built PlasmaZones against the flake's own pinned `nixpkgs`, so on a rolling NixOS system whose KWin had moved past `flake.lock` the effect's IID no longer matched and KWin silently dropped it, leaving PlasmaZones absent from System Settings → Desktop Effects. The module and overlay now build against the consumer's nixpkgs, so the effect is always compiled against the KWin the user actually runs — matching the exact-version pinning the RPM, Debian, and Arch packages already do.
+- **Support report crashed on Qt 6.11+** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481)): qttools' `qdbus`/`qdbus6` segfaults at process exit on Qt 6.11+ (a static-destruction-order crash in `registerComplexDBusType`'s `QMetaType` cleanup) when introspecting an object that exposes complex D-Bus types, which `/PlasmaZones` does. The crash could discard the buffered support report before it was printed. `plasmazones-report` now prefers `busctl` — unaffected, and present on every systemd distro — over `qdbus`, and the bug-report template recommends the `busctl` invocation instead of `qdbus6`.
+
 ## [3.0.3] - 2026-05-17
 
 ### Fixed
@@ -1305,7 +1318,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.3...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.4...HEAD
+[3.0.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.3...v3.0.4
 [3.0.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.2...v3.0.3
 [3.0.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.0...v3.0.1

@@ -12,7 +12,7 @@
 # but we also include the raw files (config.json, session.json, data/) so that
 # triagers can inspect exact JSON without re-serialization artefacts.
 #
-# Requires: plasmazonesd running, qdbus6 or busctl, perl (with JSON::PP for busctl)
+# Requires: plasmazonesd running, busctl (or qdbus6/qdbus), perl (with JSON::PP for busctl)
 
 set -euo pipefail
 
@@ -74,11 +74,13 @@ OUTPUT_DIR=$(cd "$OUTPUT_DIR" && pwd)
 # ─── D-Bus call ───────────────────────────────────────────────────────────────
 
 call_dbus() {
-    if command -v qdbus6 &>/dev/null; then
-        qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportReport "$SINCE_MINUTES"
-    elif command -v qdbus &>/dev/null; then
-        qdbus org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportReport "$SINCE_MINUTES"
-    elif command -v busctl &>/dev/null; then
+    # Prefer busctl: qttools' `qdbus`/`qdbus6` segfaults at process exit on
+    # Qt 6.11+ (static-destruction-order crash in registerComplexDBusType ->
+    # QMetaType::unregisterMetaType) whenever it introspects an object that
+    # exposes complex D-Bus types — which /PlasmaZones does. That crash can
+    # discard buffered stdout, losing the report entirely. busctl (systemd)
+    # is unaffected and present on every systemd distro, so it is the default.
+    if command -v busctl &>/dev/null; then
         local raw
         if raw=$(busctl --user --json=short call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>/dev/null); then
             # Parse busctl JSON output: {"type":"s","data":["..."]}
@@ -93,8 +95,13 @@ call_dbus() {
             # embedded strings (e.g., literal backslash-n) may not round-trip perfectly.
             perl -e '$_=do{local $/;<STDIN>}; s/^s "//; s/"\s*$//; s/\\n/\n/g; s/\\t/\t/g; s/\\"/"/g; s/\\\\/\\/g; print' <<< "$raw"
         fi
+    elif command -v qdbus6 &>/dev/null; then
+        # Fallback only — see the busctl rationale above re: the Qt 6.11+ crash.
+        qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportReport "$SINCE_MINUTES"
+    elif command -v qdbus &>/dev/null; then
+        qdbus org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportReport "$SINCE_MINUTES"
     else
-        echo "Error: No D-Bus CLI tool found (qdbus6, qdbus, or busctl required)" >&2
+        echo "Error: No D-Bus CLI tool found (busctl, qdbus6, or qdbus required)" >&2
         exit 1
     fi
 }
