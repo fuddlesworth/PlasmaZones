@@ -214,6 +214,13 @@ void Daemon::applyPerScreenScrollOverrides()
     const QSet<QString> screens = m_scrollEngine->activeScreens();
     for (const QString& screenId : screens) {
         const QVariantMap overrides = m_settings->getPerScreenScrollSettings(screenId);
+        // Compare against the engine's currently-applied overrides and skip the
+        // push when nothing changed — applyPerScreenConfig/clearPerScreenConfig
+        // schedule a deferred re-resolve, and refreshScrollConfigFromSettings()
+        // calls this on every scroll-setting edit. Mirrors updateAutotileScreens.
+        if (overrides == scroll->perScreenOverrides(screenId)) {
+            continue;
+        }
         if (overrides.isEmpty()) {
             scroll->clearPerScreenConfig(screenId);
         } else {

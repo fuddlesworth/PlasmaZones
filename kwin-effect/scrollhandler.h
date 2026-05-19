@@ -267,7 +267,9 @@ private:
     /// Incremented on every daemon (re)connect. A D-Bus reply captures the
     /// epoch at call time and skips its rollback if the daemon reconnected
     /// meanwhile — onDaemonReady has already rebuilt the tracking sets.
-    int m_daemonEpoch = 0;
+    /// Unsigned: the increment is a pure generation counter and unsigned wrap
+    /// is well-defined, whereas signed overflow would be UB.
+    unsigned m_daemonEpoch = 0;
 
     /// Scroll-mode border decoration settings. Only the scalar fields are used
     /// (showBorder / hideTitleBars / width / radius / color / inactiveColor) —

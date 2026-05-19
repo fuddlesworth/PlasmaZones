@@ -40,6 +40,24 @@ PhosphorConfig::Schema buildSettingsSchema()
     return s;
 }
 
+// Shared fraction-list clamp helper (declared in settingsschema.h). Defined
+// here — above the anonymous-namespace clampFractionList() factory that wraps
+// it — so the definition precedes its use rather than relying on the header
+// forward declaration to bridge a definition placed at end of file.
+QVariantList clampFractionListValue(const QVariant& value, double minVal, double maxVal)
+{
+    QVariantList out;
+    const QVariantList raw = value.toList();
+    for (const QVariant& entry : raw) {
+        bool ok = false;
+        const double d = entry.toDouble(&ok);
+        if (ok) {
+            out.append(qBound(minVal, d, maxVal));
+        }
+    }
+    return out;
+}
+
 // ─── Validator helpers ──────────────────────────────────────────────────────
 // Common coercion patterns factored to keep group schemas readable. Return
 // the same function-object type as KeyDef::validator.
@@ -938,20 +956,6 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
         {CD::focusNewWindowsKey(), CD::scrollFocusNewWindows(), QMetaType::Bool},
         {CD::focusFollowsMouseKey(), CD::scrollFocusFollowsMouse(), QMetaType::Bool},
     };
-}
-
-QVariantList clampFractionListValue(const QVariant& value, double minVal, double maxVal)
-{
-    QVariantList out;
-    const QVariantList raw = value.toList();
-    for (const QVariant& entry : raw) {
-        bool ok = false;
-        const double d = entry.toDouble(&ok);
-        if (ok) {
-            out.append(qBound(minVal, d, maxVal));
-        }
-    }
-    return out;
 }
 
 } // namespace PlasmaZones

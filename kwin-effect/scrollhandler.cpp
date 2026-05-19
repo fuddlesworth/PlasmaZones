@@ -522,9 +522,29 @@ void ScrollHandler::onWindowDragFinished(KWin::EffectWindow* w)
     // clears m_reorderPending.
     m_reassertPending.remove(windowId);
     m_reorderPending.insert(windowId);
-    PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
-                                                   QStringLiteral("windowDropped"), {windowId, anchorId, placeAfter},
-                                                   QStringLiteral("windowDropped"));
+    // Tracked async call rather than fire-and-forget: m_reorderPending suppresses
+    // drift re-asserts for this window until the daemon's re-resolve lands. If
+    // the windowDropped call never reaches the daemon, that suppression must be
+    // lifted here — otherwise the window stays permanently uncorrectable for
+    // drift until it closes or the daemon reconnects.
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scroll,
+                                                   QStringLiteral("windowDropped"), {windowId, anchorId, placeAfter}),
+        this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, windowId, epoch = m_daemonEpoch](QDBusPendingCallWatcher* watcher) {
+                watcher->deleteLater();
+                if (!watcher->isError()) {
+                    return; // delivered — the daemon re-resolve will clear m_reorderPending
+                }
+                qCWarning(lcEffect) << "scroll windowDropped D-Bus call failed for" << windowId << ":"
+                                    << watcher->error().message();
+                // Skip if the daemon reconnected meanwhile — onDaemonReady has
+                // already cleared m_reorderPending and rebuilt the tracking sets.
+                if (epoch == m_daemonEpoch) {
+                    m_reorderPending.remove(windowId);
+                }
+            });
     qCDebug(lcEffect) << "Notified scroll: windowDropped" << windowId << "anchor" << anchorId << "after" << placeAfter;
 }
 

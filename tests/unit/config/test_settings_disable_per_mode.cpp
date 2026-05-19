@@ -265,7 +265,12 @@ private Q_SLOTS:
         QSignalSpy monitorSpy(&settings, &Settings::disabledMonitorsChanged);
         QSignalSpy desktopSpy(&settings, &Settings::disabledDesktopsChanged);
         QSignalSpy activitySpy(&settings, &Settings::disabledActivitiesChanged);
+        // Every spy must be validated — a mistyped signal yields an invalid spy
+        // that silently reports count() == 0, making the assertions below pass
+        // vacuously.
         QVERIFY(monitorSpy.isValid());
+        QVERIFY(desktopSpy.isValid());
+        QVERIFY(activitySpy.isValid());
 
         // Reload without any external mutation — file content matches memory.
         settings.load();
