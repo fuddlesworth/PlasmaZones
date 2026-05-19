@@ -102,7 +102,7 @@ jobs:
           apt-get install -y --no-install-recommends git ca-certificates
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install build dependencies
         run: |
@@ -173,7 +173,7 @@ jobs:
         run: dnf install -y git rpm-build rpmdevtools
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install build dependencies
         run: |
@@ -253,7 +253,7 @@ jobs:
           zypper -n install git rpm-build rpmdevtools
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install build dependencies
         run: |
@@ -331,7 +331,7 @@ jobs:
           pacman -S --noconfirm git tar
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install build dependencies
         run: |
@@ -429,7 +429,7 @@ jobs:
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install build dependencies
         run: |
@@ -532,7 +532,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install Nix
         # SHA-pinned to match ci.yml; bump together when verifying a new release.
@@ -580,12 +580,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -737,10 +737,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Download generic tarball artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: generic-linux-tarball
           path: dist
@@ -969,7 +969,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install osc (OBS command-line client)
         run: |
