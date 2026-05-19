@@ -57,15 +57,21 @@ void Daemon::updateScrollScreens()
     m_scrollEngine->setCurrentDesktop(desktop);
     m_scrollEngine->setCurrentActivity(activity);
 
+    // Master gate: when scrolling mode is globally disabled the active set
+    // stays empty, so no strip resolves on any screen. Restored session state
+    // in ScrollEngine is kept but dormant — re-enabling repopulates the set.
     QSet<QString> scrollScreens;
-    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-    for (const QString& screenId : effectiveIds) {
-        if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Scroll, screenId, desktop, activity)) {
-            continue;
-        }
-        const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        if (PhosphorLayout::LayoutId::isScroll(assignmentId)) {
-            scrollScreens.insert(screenId);
+    if (m_settings && m_settings->scrollingEnabled()) {
+        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+        for (const QString& screenId : effectiveIds) {
+            if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Scroll, screenId, desktop,
+                                  activity)) {
+                continue;
+            }
+            const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+            if (PhosphorLayout::LayoutId::isScroll(assignmentId)) {
+                scrollScreens.insert(screenId);
+            }
         }
     }
 

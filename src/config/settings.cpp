@@ -2425,6 +2425,9 @@ PZ_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActiva
                   autotileDragInsertToggleChanged)
 
 // ── Scroll Mode Settings (PhosphorConfig::Store-backed) ─────────────────────
+// Master gate — "Scrolling/Enabled", mirroring snapping/autotile's enabledKey.
+PZ_STORE_GET(bool, scrollingEnabled, scrollingGroup, enabledKey, bool)
+PZ_STORE_SET_BOOL(setScrollingEnabled, scrollingGroup, enabledKey, scrollingEnabledChanged)
 // Scrolling.Gaps — reuses innerKey / outerKey; the group context disambiguates.
 PZ_STORE_GET(int, scrollInnerGap, scrollingGapsGroup, innerKey, int)
 PZ_STORE_SET_INT(setScrollInnerGap, scrollingGapsGroup, innerKey, scrollInnerGapChanged)

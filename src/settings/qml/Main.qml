@@ -1135,20 +1135,22 @@ ApplicationWindow {
 
                             }
 
-                            // Enable/disable toggle for snapping and tiling.
-                            // Wraps the assignment in begin/endExternalEdit so
-                            // the dirty marker lands on snapping/tiling rather
-                            // than whatever page the user is currently viewing.
+                            // Enable/disable toggle for snapping, tiling and
+                            // scrolling. Wraps the assignment in begin/end
+                            // ExternalEdit so the dirty marker lands on that
+                            // mode rather than whatever page is being viewed.
                             SettingsSwitch {
-                                visible: (navDelegate.name === "snapping" || navDelegate.name === "tiling") && !window.sidebarCompact
-                                checked: navDelegate.name === "snapping" ? appSettings.snappingEnabled : appSettings.autotileEnabled
+                                visible: (navDelegate.name === "snapping" || navDelegate.name === "tiling" || navDelegate.name === "scrolling") && !window.sidebarCompact
+                                checked: navDelegate.name === "snapping" ? appSettings.snappingEnabled : navDelegate.name === "tiling" ? appSettings.autotileEnabled : appSettings.scrollingEnabled
                                 accessibleName: navDelegate.label
                                 onToggled: function(newValue) {
                                     settingsController.beginExternalEdit(navDelegate.name);
                                     if (navDelegate.name === "snapping")
                                         appSettings.snappingEnabled = newValue;
-                                    else
+                                    else if (navDelegate.name === "tiling")
                                         appSettings.autotileEnabled = newValue;
+                                    else
+                                        appSettings.scrollingEnabled = newValue;
                                     settingsController.endExternalEdit();
                                 }
                             }
@@ -1164,6 +1166,9 @@ ApplicationWindow {
                                         return 0.15;
 
                                     if (navDelegate.name === "tiling" && !appSettings.autotileEnabled)
+                                        return 0.15;
+
+                                    if (navDelegate.name === "scrolling" && !appSettings.scrollingEnabled)
                                         return 0.15;
 
                                     return 0.3;

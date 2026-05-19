@@ -1005,6 +1005,9 @@ bool Daemon::init()
                               &ISettings::perScreenScrollSettingsChanged}) {
         connect(m_settings.get(), signal, this, &Daemon::refreshScrollConfigFromSettings);
     }
+    // The master gate changes which screens are scroll-mode, so it re-runs the
+    // active-screen resolve rather than just re-pushing config.
+    connect(m_settings.get(), &ISettings::scrollingEnabledChanged, this, &Daemon::updateScrollScreens);
 
     // Give the window drag adaptor access to the autotile engine for per-screen
     // autotile checks (overlay suppression and snap rejection on autotile screens).

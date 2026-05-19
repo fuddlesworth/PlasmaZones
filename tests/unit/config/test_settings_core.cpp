@@ -433,6 +433,9 @@ private Q_SLOTS:
 
         {
             Settings settings;
+            // Master gate defaults to true; flip it to exercise the round-trip.
+            QCOMPARE(settings.scrollingEnabled(), true);
+            settings.setScrollingEnabled(false);
             settings.setScrollInnerGap(14);
             settings.setScrollOuterGap(22);
             settings.setScrollDefaultColumnWidth(0.42);
@@ -443,6 +446,7 @@ private Q_SLOTS:
         }
 
         Settings reloaded;
+        QCOMPARE(reloaded.scrollingEnabled(), false);
         QCOMPARE(reloaded.scrollInnerGap(), 14);
         QCOMPARE(reloaded.scrollOuterGap(), 22);
         QVERIFY(qFuzzyCompare(reloaded.scrollDefaultColumnWidth(), 0.42));

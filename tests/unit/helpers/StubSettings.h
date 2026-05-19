@@ -847,6 +847,13 @@ public:
     void setAutotileDragInsertToggle(bool) override
     {
     }
+    bool scrollingEnabled() const override
+    {
+        return ConfigDefaults::scrollingEnabled();
+    }
+    void setScrollingEnabled(bool) override
+    {
+    }
     int scrollInnerGap() const override
     {
         return ConfigDefaults::scrollInnerGap();

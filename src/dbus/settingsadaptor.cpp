@@ -327,6 +327,7 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
 
     // Scroll-mode (niri-style scrollable tiling) settings — interface-backed.
+    REGISTER_BOOL_SETTING("scrollingEnabled", scrollingEnabled, setScrollingEnabled)
     REGISTER_INT_SETTING("scrollInnerGap", scrollInnerGap, setScrollInnerGap)
     REGISTER_INT_SETTING("scrollOuterGap", scrollOuterGap, setScrollOuterGap)
     REGISTER_DOUBLE_SETTING("scrollDefaultColumnWidth", scrollDefaultColumnWidth, setScrollDefaultColumnWidth)
