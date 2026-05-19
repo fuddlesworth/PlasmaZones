@@ -235,4 +235,14 @@ QString SnapEngine::currentActivity() const
     return m_layoutManager ? m_layoutManager->currentActivity() : QString();
 }
 
+bool SnapEngine::isEnabled() const noexcept
+{
+    // Snapping's global master toggle is the engine's enabled state — there is
+    // no per-screen "is snapping active here" notion (that is the layout-mode
+    // router's job). When false, the whole snap subsystem is off, mirroring
+    // AutotileEngine::isEnabled() reporting autotile's effective state.
+    auto* s = snapSettings();
+    return s && s->snappingEnabled();
+}
+
 } // namespace PhosphorSnapEngine
