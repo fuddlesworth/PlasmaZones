@@ -1058,6 +1058,17 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (repaintRect.isEmpty()) {
         repaintRect = window->frameGeometry().toAlignedRect();
     }
+    // A surface-extent transition paints across the whole output; the
+    // layer repaint must span the output so the window's damage — and
+    // therefore the per-window present / buffer-copy region KWin derives
+    // from it — covers everything the shader draws. A frame-sized repaint
+    // would leave the off-frame band the shader sweeps showing stale
+    // pixels. See postPaintScreen for the full rationale.
+    if (eff.fboExtentKind == PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind::Surface) {
+        if (const auto* output = window->screen()) {
+            repaintRect = output->geometry();
+        }
+    }
     window->addLayerRepaint(repaintRect);
     if (KWin::effects) {
         // Match the null-guard the constructor and destructor use for
@@ -1085,6 +1096,20 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
         return;
     }
     const bool releaseCloseGrab = it->second.closeGrabHeld;
+    // Surface-extent transitions paint across the whole output, far past
+    // the window's own geometry. On teardown KWin only damages the
+    // window's frame as it unredirects, so the off-frame pixels the
+    // shader touched (a fly-in's slide path, a bounce's overshoot) keep
+    // the last shader frame until something else repaints them — the
+    // "glitch that only clears when you move the window" symptom. Capture
+    // the output rect now, while `it` and `window` are valid, and force
+    // one output-level repaint once teardown is complete.
+    QRect surfaceExtentRepaint;
+    if (it->second.surfaceExtent) {
+        if (const auto* output = window->screen()) {
+            surfaceExtentRepaint = output->geometry();
+        }
+    }
     // Guard against teardown on a window that's already been destroyed
     // (windowDeleted may have raced our timer). setShader / unredirect on a
     // deleted EffectWindow is undefined behaviour in KWin's offscreen-effect
@@ -1096,6 +1121,9 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
         unredirect(window);
     }
     m_shaderManager.m_shaderTransitions.erase(it);
+    if (!surfaceExtentRepaint.isEmpty() && KWin::effects) {
+        KWin::effects->addRepaint(surfaceExtentRepaint);
+    }
     if (releaseCloseGrab) {
         // Clear WindowClosedGrabRole while `window` is still alive
         // (the ref we hold via refWindow() guarantees refcount >= 1

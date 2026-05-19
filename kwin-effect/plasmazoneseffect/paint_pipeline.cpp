@@ -108,16 +108,26 @@ void PlasmaZonesEffect::postPaintScreen()
             const bool timeBasedActive =
                 transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs;
             if (transition.surfaceExtent) {
-                // Surface-extent transitions paint over the whole output,
-                // far past the window's expanded geometry — a window-layer
-                // repaint would clip to the window. Mirror KWin's own
-                // deformation effects (Magic Lamp) and repaint at the
-                // output level. Runs for animator-driven (durationMs == 0)
-                // transitions too: m_windowAnimator->scheduleRepaints()
-                // only dirties the window region, which is too small here.
+                // Surface-extent transitions paint the window translated
+                // far past its frame (bounce lifts it a full window-
+                // height above). KWin derives each window's PRESENT /
+                // buffer-copy region from THAT window's own damage — not
+                // from the output-sized quad apply() builds. addRepaintFull()
+                // dirties the SCREEN, but it never widens this window's
+                // damage, so the band the shader sweeps above the frame
+                // is composited into the back buffer yet never copied
+                // forward to the presented buffer: prior frames' pixels
+                // survive there as a stacked, garbled trail (worst at the
+                // top, where the dropping window dwells longest).
+                // addLayerRepaint over the whole output widens the
+                // window's OWN damage so its present region covers
+                // everything the shader draws. Runs for animator-driven
+                // (durationMs == 0) transitions too.
                 if ((timeBasedActive || transition.durationMs == 0) && KWin::effects) {
                     if (const auto* output = w->screen()) {
-                        KWin::effects->addRepaint(output->geometry());
+                        w->addLayerRepaint(output->geometry());
+                    } else {
+                        KWin::effects->addRepaintFull();
                     }
                 }
             } else if (timeBasedActive) {
@@ -156,6 +166,18 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // device coords and isn't the right surface for declaring "I
         // want to paint this many pixels past the natural frame".
         data.setTransformed();
+
+        // Mark the window non-opaque for the duration of the transition.
+        // Its shader-/animator-driven render bears no relation to its
+        // natural opaque content region: a surface-extent shader
+        // translates the window out of its frame (bounce, fly-in) and
+        // paints transparent where the frame's opaque region sits. If
+        // KWin keeps treating that region as opaque it skips
+        // recompositing whatever is underneath there, and the stale
+        // buffer pixels read back as a ghost / trail of the window for
+        // the whole animation. setTranslucent() clears the opaque region
+        // so every frame fully recomposites under the window.
+        data.setTranslucent();
     }
 
     OffscreenEffect::prePaintWindow(view, w, data, presentTime);
@@ -259,13 +281,51 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // the window; surface-extent transitions (fboExtent:
             // "surface") render over the whole output, with the window
             // placed at iAnchorPosInFbo. See ShaderInternal::computeAnchorUniforms.
-            QRectF outputGeo = geo;
+            //
+            // The "anchor" rect is the screen rect KWin's redirected
+            // texture (uTexture0) covers. For surface-extent transitions
+            // that is the window's EXPANDED geometry (frame + decoration
+            // + shadow): KWin's OffscreenEffect redirects the whole
+            // window item, shadow included, so the texture's [0,1] UV
+            // span maps the expanded rect. iAnchorSize / iAnchorPosInFbo
+            // must describe that same rect — describing the frame
+            // instead crams the expanded texture into a frame-sized
+            // region and the window renders slightly smaller for the
+            // duration of the animation. expandedGeometry is empty for a
+            // window with no decoration or shadow extents; fall back to
+            // the frame there.
+            QRectF anchorGeo = geo;
+            if (transition.surfaceExtent) {
+                const QRectF expanded = w->expandedGeometry();
+                anchorGeo = expanded.isEmpty() ? geo : expanded;
+            }
+            // Snap-restore pins the open shader's anchor to the resolved
+            // zone. KWin's moveResize is async, so for several frames
+            // after a restore frameGeometry() still reports the window's
+            // spawn position; a surface-extent open shader (bounce,
+            // fly-in) anchored to that live geometry plays into the spawn
+            // centre and jumps to the zone only once the configure lands.
+            // The override is a frame rect — re-apply the live shadow /
+            // decoration margins so it still describes the EXPANDED
+            // redirected texture the anchor uniforms must match.
+            if (transition.anchorOverride.isValid()) {
+                anchorGeo = transition.anchorOverride;
+                if (transition.surfaceExtent) {
+                    const QRectF expanded = w->expandedGeometry();
+                    if (!expanded.isEmpty() && geo.isValid()) {
+                        anchorGeo = transition.anchorOverride.adjusted(
+                            expanded.left() - geo.left(), expanded.top() - geo.top(), expanded.right() - geo.right(),
+                            expanded.bottom() - geo.bottom());
+                    }
+                }
+            }
+            QRectF outputGeo = anchorGeo;
             if (const auto* output = w->screen()) {
                 const QRect outRect = output->geometry();
                 outputGeo = outRect;
             }
             const ShaderInternal::AnchorUniforms anchorUniforms =
-                ShaderInternal::computeAnchorUniforms(geo, outputGeo, transition.surfaceExtent);
+                ShaderInternal::computeAnchorUniforms(anchorGeo, outputGeo, transition.surfaceExtent);
             {
                 KWin::ShaderBinder binder(shader);
                 if (cached->iTimeLoc >= 0) {
@@ -395,7 +455,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // extension isolation that protects the daemon's zone
                     // shaders from BaseUniforms growth doesn't apply on this
                     // runtime (kwin uses default-block uniforms, no UBO).
-                    QVector4D surfaceScreenPos(static_cast<float>(geo.x()), static_cast<float>(geo.y()), 0.0f, 0.0f);
+                    // .xy is the redirected surface's origin — the same
+                    // anchor rect the anchorRemap uniforms describe, so
+                    // fly-in's edge-distance math (iSurfaceScreenPos +
+                    // iAnchorSize) stays internally consistent.
+                    QVector4D surfaceScreenPos(static_cast<float>(anchorGeo.x()), static_cast<float>(anchorGeo.y()),
+                                               0.0f, 0.0f);
                     if (const auto* output = w->screen()) {
                         const QRect screenGeo = output->geometry();
                         surfaceScreenPos.setZ(static_cast<float>(screenGeo.width()));
@@ -592,9 +657,20 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     if (!output) {
         return;
     }
-    const QRectF windowFrame = window->frameGeometry();
+    // The redirected texture KWin hands us covers the window's EXPANDED
+    // geometry (frame + decoration + shadow), so the incoming quad — and
+    // the quad-space <-> screen-space offset derived from it below — is
+    // anchored to the expanded rect, not the frame. Pair it with the
+    // expanded rect (the surface-extent anchor uniforms use the same
+    // rect) so the output quad lands where KWin placed the texture.
+    // expandedGeometry can be empty for a window with no decoration or
+    // shadow extents; fall back to the frame there.
+    QRectF textureGeo = window->expandedGeometry();
+    if (textureGeo.isEmpty()) {
+        textureGeo = window->frameGeometry();
+    }
     const QRect outputGeo = output->geometry();
-    if (windowFrame.isEmpty() || outputGeo.isEmpty()) {
+    if (textureGeo.isEmpty() || outputGeo.isEmpty()) {
         return;
     }
 
@@ -611,23 +687,54 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
         qLeft = qMin(qLeft, q.left());
         qTop = qMin(qTop, q.top());
     }
-    const double ox = qLeft + (outputGeo.x() - windowFrame.x());
-    const double oy = qTop + (outputGeo.y() - windowFrame.y());
+    const double ox = qLeft + (outputGeo.x() - textureGeo.x());
+    const double oy = qTop + (outputGeo.y() - textureGeo.y());
     const double ow = outputGeo.width();
     const double oh = outputGeo.height();
 
+    // Texcoord handedness: replicate it from the quad KWin handed us
+    // rather than hardcoding. KWin's WindowQuad texcoord Y convention is
+    // not part of the public contract; assuming it (texcoord.y = 1 at
+    // the top) rendered every surface-extent transition upside down AND
+    // animating from the wrong screen edge — bounce dropped UP from the
+    // bottom — while the daemon path and the non-surface kwin shaders,
+    // which use KWin's own window quad, stayed correct. The surface quad
+    // below must carry the SAME (screen-position <-> texcoord)
+    // handedness as that window quad so the shared kwin vertex stage's
+    // `1.0 - texCoord.y` flip lands `vTexCoord` Y-down on this path
+    // exactly as it does for the window's own quad. Window content is
+    // axis-aligned, so u is linear in x and v in y — derive each axis's
+    // sign from the source quad's extreme vertices.
+    const KWin::WindowQuad& srcQuad = quads.first();
+    int topIdx = 0, bottomIdx = 0, leftIdx = 0, rightIdx = 0;
+    for (int i = 1; i < 4; ++i) {
+        if (srcQuad[i].y() < srcQuad[topIdx].y())
+            topIdx = i;
+        if (srcQuad[i].y() > srcQuad[bottomIdx].y())
+            bottomIdx = i;
+        if (srcQuad[i].x() < srcQuad[leftIdx].x())
+            leftIdx = i;
+        if (srcQuad[i].x() > srcQuad[rightIdx].x())
+            rightIdx = i;
+    }
+    // The surface quad spans the whole output, so its texcoords are the
+    // full 0..1 range; only the handedness comes from the source quad.
+    const double uAtLeft = (srcQuad[leftIdx].u() <= srcQuad[rightIdx].u()) ? 0.0 : 1.0;
+    const double uAtRight = 1.0 - uAtLeft;
+    const double vAtTop = (srcQuad[topIdx].v() <= srcQuad[bottomIdx].v()) ? 0.0 : 1.0;
+    const double vAtBottom = 1.0 - vAtTop;
+
     // One quad covering the whole output, clockwise from top-left (the
-    // vertex order WindowQuad documents). texCoord is Y-up — KWin's
-    // offscreen FBO origin is bottom-left — and the kwin vertex stage
-    // flips it to the Y-down vTexCoord the animation-shader contract
-    // expects, so vTexCoord lands 0..1 over the output. The window
-    // content stays in uTexture0 (the window-sized redirect FBO);
+    // vertex order WindowQuad documents). The shared kwin vertex stage
+    // flips texCoord to the Y-down vTexCoord the animation-shader
+    // contract expects, so vTexCoord lands 0..1 over the output. The
+    // window content stays in uTexture0 (the window-sized redirect FBO);
     // surface-extent shaders place it via iAnchorPosInFbo / anchorRemap.
     KWin::WindowQuad surfaceQuad;
-    surfaceQuad[0] = KWin::WindowVertex(ox, oy, 0.0, 1.0);
-    surfaceQuad[1] = KWin::WindowVertex(ox + ow, oy, 1.0, 1.0);
-    surfaceQuad[2] = KWin::WindowVertex(ox + ow, oy + oh, 1.0, 0.0);
-    surfaceQuad[3] = KWin::WindowVertex(ox, oy + oh, 0.0, 0.0);
+    surfaceQuad[0] = KWin::WindowVertex(ox, oy, uAtLeft, vAtTop);
+    surfaceQuad[1] = KWin::WindowVertex(ox + ow, oy, uAtRight, vAtTop);
+    surfaceQuad[2] = KWin::WindowVertex(ox + ow, oy + oh, uAtRight, vAtBottom);
+    surfaceQuad[3] = KWin::WindowVertex(ox, oy + oh, uAtLeft, vAtBottom);
     quads.clear();
     quads.append(surfaceQuad);
 }

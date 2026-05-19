@@ -216,6 +216,21 @@ struct ShaderTransition
     /// no-op, and clearing it on a deleted window lets KWin proceed with
     /// final destruction.
     bool closeGrabHeld = false;
+    /// Optional fixed anchor rect (window frame geometry, logical pixels).
+    /// When valid, paintWindow derives the surface-extent anchor uniforms
+    /// (iResolution / iAnchorSize / iAnchorPosInFbo) from this rect instead
+    /// of the window's live frameGeometry().
+    ///
+    /// Snap-restore pins this to the resolved zone geometry. KWin's
+    /// moveResize is asynchronous: after a restore the window's
+    /// frameGeometry() keeps reporting the spawn position for several
+    /// frames until the configure lands. A surface-extent open shader
+    /// (bounce, fly-in) anchored to that live geometry plays into the
+    /// spawn position and only jumps to the zone once the configure
+    /// commits. Pinning the anchor makes the open animation play into the
+    /// final zone from the first frame. Invalid (default) means "use the
+    /// live geometry" — every non-restore transition.
+    QRectF anchorOverride;
 };
 
 /// Pre-computed snap restore target for a pending app
