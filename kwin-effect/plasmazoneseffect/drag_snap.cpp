@@ -350,6 +350,15 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         }
     }
 
+    // If this window is held invisible until it is repositioned on open
+    // (first-frame suppression — see RestoreSuppression), stamp the
+    // resolved rect as its settle target. The windowFrameGeometryChanged
+    // handler treats the next geometry change as the real reposition (not
+    // the client's own initial sizing) only once this target is set.
+    if (auto supIt = m_restoreSuppress.find(window); supIt != m_restoreSuppress.end()) {
+        supIt->targetGeometry = geo;
+    }
+
     // Skip no-op: if window is already at the target geometry AND there is
     // no in-flight animation, calling moveResize() is redundant and can have
     // subtle stacking side effects on some KWin versions (e.g. during daemon

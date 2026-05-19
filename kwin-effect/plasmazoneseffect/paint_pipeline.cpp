@@ -64,7 +64,8 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
     // single-digit counts.
     m_windowAnimator->advanceAnimations();
 
-    if (m_windowAnimator->hasActiveAnimations() || !m_shaderManager.m_shaderTransitions.empty()) {
+    if (m_windowAnimator->hasActiveAnimations() || !m_shaderManager.m_shaderTransitions.empty()
+        || !m_restoreSuppress.empty()) {
         // Windows have translation transforms that move them outside their
         // frame geometry bounds — force full compositing mode. Shader
         // transitions also need this: without
@@ -144,6 +145,22 @@ void PlasmaZonesEffect::postPaintScreen()
             }
         }
     }
+    // Keep withheld (first-frame suppression) windows in the paint loop:
+    // paintWindow draws nothing for them, so without an explicit repaint a
+    // suppressed window with no open-shader transition driving damage
+    // would never get another paintWindow call — its deadline check and
+    // settle detection would stall. Schedule a layer repaint per entry.
+    for (auto it = m_restoreSuppress.cbegin(); it != m_restoreSuppress.cend(); ++it) {
+        KWin::EffectWindow* sw = it.key();
+        if (!sw || sw->isDeleted()) {
+            continue;
+        }
+        if (const auto* output = sw->screen()) {
+            sw->addLayerRepaint(output->geometry());
+        } else if (KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
+    }
     KWin::effects->postPaintScreen();
 }
 
@@ -152,7 +169,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
 {
     if (w
         && (m_windowAnimator->hasAnimation(w)
-            || m_shaderManager.m_shaderTransitions.find(w) != m_shaderManager.m_shaderTransitions.end())) {
+            || m_shaderManager.m_shaderTransitions.find(w) != m_shaderManager.m_shaderTransitions.end()
+            || m_restoreSuppress.contains(w))) {
         // Mark as transformed so paintWindow applies our translate+scale, and
         // so the OffscreenEffect redirect drives full-window repaints for the
         // shader leg's iTime advance even when the underlying window content
@@ -187,6 +205,19 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                                     KWin::WindowPaintData& data)
 {
+    // First-frame open suppression: a window repositioned on open
+    // (snap-restore / autotile) is withheld from compositing until its
+    // moveResize configure lands, so it never flashes at KWin's centred
+    // placement. Paint nothing until then. The deadline is the safety net
+    // — if the reposition never lands, release and paint normally rather
+    // than risk a permanently invisible window.
+    if (auto supIt = m_restoreSuppress.find(w); supIt != m_restoreSuppress.end()) {
+        if (shaderClockNowMs() <= supIt->deadlineMs) {
+            return;
+        }
+        endRestoreSuppression(w);
+    }
+
     m_windowAnimator->applyTransform(w, data);
 
     auto sit = m_shaderManager.m_shaderTransitions.find(w);

@@ -437,6 +437,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             m_windowIdReverse.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
+        m_restoreSuppress.remove(w);
         // Drop per-window shader-event bookkeeping. m_lastFocusShaderWindow is
         // a QPointer that auto-nulls on destroy, so it's already cleaned up;
         // m_shaderManager.m_lastFullyMaximized is a raw-pointer-keyed QHash so we explicitly

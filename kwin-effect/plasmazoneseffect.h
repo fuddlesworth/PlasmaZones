@@ -306,7 +306,13 @@ private:
      */
     void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
     void callCancelSnap();
-    void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr);
+    // releaseSuppressionOnMiss: when the daemon resolves no zone for the
+    // window, release its first-frame suppression (see RestoreSuppression).
+    // Pass false when something else will still reposition the window on a
+    // miss (the autotile-screen path tiles it via onComplete) — there the
+    // suppression must hold through that reposition instead.
+    void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr,
+                                  bool releaseSuppressionOnMiss = true);
     void connectNavigationSignals();
     void syncFloatingWindowsFromDaemon();
 
@@ -553,6 +559,14 @@ private:
     void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false);
     void endShaderTransition(KWin::EffectWindow* window);
+
+    // First-frame open suppression — implementations in window_lifecycle.cpp.
+    // beginRestoreSuppression withholds a window from compositing the moment
+    // it opens; endRestoreSuppression releases it once it has settled into
+    // its zone / tile (or on the hard deadline). See RestoreSuppression.
+    void beginRestoreSuppression(KWin::EffectWindow* window);
+    void endRestoreSuppression(KWin::EffectWindow* window);
+
     void loadShaderProfileFromDbus();
     void loadAnimationAppRulesFromDbus();
     void loadMotionProfileTreeFromDbus();
@@ -782,6 +796,13 @@ private:
     // Per-window tracked screen ID for cross-screen move detection.
     // Replaces the per-window `new QString` heap allocation that was leaked.
     QHash<KWin::EffectWindow*, QString> m_trackedScreenPerWindow;
+
+    // Windows withheld from compositing between windowAdded and the frame
+    // their snap-restore / autotile reposition lands — see RestoreSuppression.
+    // paintWindow draws nothing for a window present here. Entries are
+    // erased on settle, on a negative resolve, on the deadline, and on
+    // window close/delete.
+    QHash<KWin::EffectWindow*, RestoreSuppression> m_restoreSuppress;
 
     // Cursor output tracking (for daemon shortcut screen detection on Wayland)
     // Stores the connector name of the last output the cursor was on.

@@ -246,6 +246,38 @@ struct CachedSnapRestore
     QString screenId;
 };
 
+/// First-frame suppression bookkeeping for a window that is about to be
+/// repositioned on open (snap-restore or autotile).
+///
+/// KWin places a new window at its centred placement geometry and
+/// composites it there BEFORE the effect's `windowAdded` handler can move
+/// it into a zone / tile — `windowAdded` is the earliest hook an effect
+/// gets, and it fires post-placement. The effect's `moveResize` is an
+/// asynchronous Wayland configure, so without suppression the window
+/// visibly flashes at screen centre for the 1-N frames the configure
+/// takes to round-trip (longer for the autotile / async-resolve D-Bus
+/// paths). While a `RestoreSuppression` entry exists for a window,
+/// `paintWindow` draws nothing for it — the window is invisible until it
+/// has settled into its destination.
+struct RestoreSuppression
+{
+    /// frameGeometry at `windowAdded`. The window is released once its
+    /// live geometry leaves this point — i.e. the repositioning configure
+    /// has landed.
+    QRectF spawnGeometry;
+    /// The resolved snap / tile rect, stamped by `applySnapGeometry` once
+    /// the window is actually being repositioned. Invalid until then:
+    /// while invalid a geometry change is NOT treated as "settled" — it is
+    /// just the client's own initial size negotiation — so suppression
+    /// holds until the real reposition target is known.
+    QRectF targetGeometry;
+    /// `shaderClockNowMs()` hard deadline. If the window is never
+    /// repositioned (it floats, all zones are full, the daemon is
+    /// unreachable) suppression is released unconditionally here so a
+    /// window can never be lost behind a stuck suppression.
+    qint64 deadlineMs = 0;
+};
+
 /// A single virtual screen subdivision within a physical monitor.
 ///
 /// Virtual screens divide a physical monitor into independent sub-screens,
