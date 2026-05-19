@@ -233,8 +233,12 @@ void PlasmaZonesEffect::loadCachedSettings()
     // of autotile's. The daemon resolves scrollUseSystemBorderColors into the
     // scrollBorder*Color values, so the effect just reads the final colors.
     loadSettingAsync(QStringLiteral("scrollShowBorder"), [this](const QVariant& v) {
-        m_scrollHandler->updateShowBorderSetting(v.toBool());
-        updateAllBorders();
+        // Guard on isValid(): a failed D-Bus reply must not silently disable
+        // the border (toBool() returns false on an invalid variant). Only
+        // rebuild borders when the value actually changed.
+        if (v.isValid() && m_scrollHandler->updateShowBorderSetting(v.toBool())) {
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("scrollBorderWidth"), [this](const QVariant& v) {
@@ -254,19 +258,36 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("scrollBorderColor"), [this](const QVariant& v) {
-        m_scrollHandler->setBorderColor(QColor(v.toString()));
-        updateAllBorders();
+        // A failed reply yields an empty string → invalid QColor; keep the
+        // prior colour rather than dropping the border. Rebuild only on change.
+        if (!v.isValid()) {
+            return;
+        }
+        const QColor c(v.toString());
+        if (c.isValid() && m_scrollHandler->borderColor() != c) {
+            m_scrollHandler->setBorderColor(c);
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("scrollInactiveBorderColor"), [this](const QVariant& v) {
-        m_scrollHandler->setInactiveBorderColor(QColor(v.toString()));
-        updateAllBorders();
+        if (!v.isValid()) {
+            return;
+        }
+        const QColor c(v.toString());
+        if (c.isValid() && m_scrollHandler->inactiveBorderColor() != c) {
+            m_scrollHandler->setInactiveBorderColor(c);
+            updateAllBorders();
+        }
     });
 
-    // scrollHideTitleBars needs extra logic when toggled off — delegate to handler
+    // scrollHideTitleBars needs extra logic when toggled off — delegate to handler.
+    // Guard on isValid() so a failed reply does not un-hide title bars, and
+    // rebuild borders only when the value changed.
     loadSettingAsync(QStringLiteral("scrollHideTitleBars"), [this](const QVariant& v) {
-        m_scrollHandler->updateHideTitleBarsSetting(v.toBool());
-        updateAllBorders();
+        if (v.isValid() && m_scrollHandler->updateHideTitleBarsSetting(v.toBool())) {
+            updateAllBorders();
+        }
     });
 
     // ── Scroll-mode behavior ─────────────────────────────────────────────────

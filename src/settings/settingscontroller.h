@@ -289,8 +289,9 @@ public:
     Q_INVOKABLE void setLayoutAspectRatio(const QString& layoutId, int aspectRatioClass);
 
     // Screen helpers — `viewMode` selects the mode whose disable list to read/write
-    // (0 = snapping, 1 = autotile; matches PhosphorZones::AssignmentEntry::Mode).
-    // Disabling a monitor in one mode leaves the gate untouched in the other.
+    // (0 = snapping, 1 = autotile, 2 = scrolling; matches
+    // PhosphorZones::AssignmentEntry::Mode).
+    // Disabling a monitor in one mode leaves the gate untouched in the others.
     Q_INVOKABLE bool isMonitorDisabled(int viewMode, const QString& screenName) const;
     Q_INVOKABLE void setMonitorDisabled(int viewMode, const QString& screenName, bool disabled);
     Q_INVOKABLE bool isDesktopDisabled(int viewMode, const QString& screenName, int desktop) const;
@@ -569,8 +570,8 @@ Q_SIGNALS:
     void kzonesImportFinished(int count, const QString& message);
     void lockedScreensChanged();
     // Per-mode disable signals carry the mode that flipped (0 = snapping, 1 =
-    // autotile; matches PhosphorZones::AssignmentEntry::Mode). QML consumers
-    // can ignore the argument if they only render one page at a time.
+    // autotile, 2 = scrolling; matches PhosphorZones::AssignmentEntry::Mode).
+    // QML consumers can ignore the argument if they only render one page at a time.
     void disabledMonitorsChanged(int viewMode);
     void disabledDesktopsChanged(int viewMode);
     void disabledActivitiesChanged(int viewMode);

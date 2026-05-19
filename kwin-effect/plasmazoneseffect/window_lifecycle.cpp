@@ -589,14 +589,17 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 
     // Notify the placement engine of the focus change. Autotile needs it to
     // update m_windowToScreen; scroll needs it to track the focused column.
-    // The screen sets are disjoint, so at most one branch fires.
+    // The screen sets are disjoint, so the autotile D-Bus notify fires for at
+    // most one of them — but ScrollHandler::notifyWindowFocused is called
+    // unconditionally: it self-gates on its screen set, and even an
+    // off-scroll-screen focus change must reach it so it can clear its
+    // focus-follows-mouse dedup key (a stale key suppresses a later re-focus).
     if (m_autotileHandler->isAutotileScreen(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Autotile,
                                                        QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                        QStringLiteral("notifyWindowFocused"));
-    } else {
-        m_scrollHandler->notifyWindowFocused(windowId, screenId);
     }
+    m_scrollHandler->notifyWindowFocused(windowId, screenId);
 }
 
 KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) const

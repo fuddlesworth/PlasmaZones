@@ -87,10 +87,10 @@ void ScrollHandler::clearDecoration(const QString& windowId, KWin::EffectWindow*
     m_effect->removeWindowBorder(windowId);
 }
 
-void ScrollHandler::updateHideTitleBarsSetting(bool enabled)
+bool ScrollHandler::updateHideTitleBarsSetting(bool enabled)
 {
     if (m_border.hideTitleBars == enabled) {
-        return;
+        return false;
     }
     m_border.hideTitleBars = enabled;
     if (enabled) {
@@ -111,6 +111,7 @@ void ScrollHandler::updateHideTitleBarsSetting(bool enabled)
             setWindowBorderless(m_effect->findWindowById(windowId), windowId, false);
         }
     }
+    return true;
 }
 
 } // namespace PlasmaZones

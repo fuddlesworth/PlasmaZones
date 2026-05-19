@@ -366,6 +366,23 @@ private Q_SLOTS:
             settings.setDisabledDesktops(Mode::Scroll,
                                          {QStringLiteral("DP-3/1"), QStringLiteral("DP-3/1"),
                                           QStringLiteral(" DP-3/2 "), QStringLiteral("DP-3/2")});
+
+            // Desktop gate independence — a scroll desktop-1 disable leaves the
+            // snapping and autotile desktop gates untouched.
+            QVERIFY(settings.isDesktopDisabled(Mode::Scroll, screen, 1));
+            QVERIFY2(!settings.isDesktopDisabled(Mode::Snapping, screen, 1),
+                     "scroll desktop disable leaked into snapping gate");
+            QVERIFY2(!settings.isDesktopDisabled(Mode::Autotile, screen, 1),
+                     "scroll desktop disable leaked into autotile gate");
+
+            // Activity gate independence — likewise for the activity axis.
+            const QString activityId = QStringLiteral("uuid-a");
+            settings.setDisabledActivities(Mode::Scroll, {screen + QLatin1Char('/') + activityId});
+            QVERIFY(settings.isActivityDisabled(Mode::Scroll, screen, activityId));
+            QVERIFY2(!settings.isActivityDisabled(Mode::Snapping, screen, activityId),
+                     "scroll activity disable leaked into snapping gate");
+            QVERIFY2(!settings.isActivityDisabled(Mode::Autotile, screen, activityId),
+                     "scroll activity disable leaked into autotile gate");
             settings.save();
         }
 
@@ -375,8 +392,13 @@ private Q_SLOTS:
         QCOMPARE(reloaded.disabledMonitors(Mode::Scroll), QStringList{screen});
         QCOMPARE(reloaded.disabledDesktops(Mode::Scroll),
                  (QStringList{QStringLiteral("DP-3/1"), QStringLiteral("DP-3/2")}));
+        QCOMPARE(reloaded.disabledActivities(Mode::Scroll), QStringList{QStringLiteral("DP-3/uuid-a")});
         QVERIFY(reloaded.disabledMonitors(Mode::Snapping).isEmpty());
         QVERIFY(reloaded.disabledMonitors(Mode::Autotile).isEmpty());
+        QVERIFY(reloaded.disabledDesktops(Mode::Snapping).isEmpty());
+        QVERIFY(reloaded.disabledDesktops(Mode::Autotile).isEmpty());
+        QVERIFY(reloaded.disabledActivities(Mode::Snapping).isEmpty());
+        QVERIFY(reloaded.disabledActivities(Mode::Autotile).isEmpty());
     }
 
     /// Per-mode disable signals carry Mode::Scroll for scroll-side writes —
@@ -395,14 +417,21 @@ private Q_SLOTS:
 
         settings.setDisabledMonitors(Mode::Scroll, {QStringLiteral("DP-3")});
         QCOMPARE(monitorSpy.count(), 1);
+        // A monitor write must fire ONLY the monitor signal.
+        QCOMPARE(desktopSpy.count(), 0);
+        QCOMPARE(activitySpy.count(), 0);
         QCOMPARE(monitorSpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Scroll));
 
         settings.setDisabledDesktops(Mode::Scroll, {QStringLiteral("DP-3/1")});
         QCOMPARE(desktopSpy.count(), 1);
+        QCOMPARE(monitorSpy.count(), 0);
+        QCOMPARE(activitySpy.count(), 0);
         QCOMPARE(desktopSpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Scroll));
 
         settings.setDisabledActivities(Mode::Scroll, {QStringLiteral("DP-3/uuid-a")});
         QCOMPARE(activitySpy.count(), 1);
+        QCOMPARE(monitorSpy.count(), 0);
+        QCOMPARE(desktopSpy.count(), 0);
         QCOMPARE(activitySpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Scroll));
     }
 };

@@ -1670,19 +1670,19 @@ void SettingsController::toggleContextLock(const QString& screenName, int virtua
 // us a single place to add range-clamping if a future mode is introduced.
 //
 // SharedBridge.qml sets `assignmentViewMode: -1` as a sentinel that the
-// SnappingBridge / TilingBridge subclass MUST override. If a future bridge
-// subclass forgets the override, every disable read/write would silently
-// land on the snapping list — exactly the mode confusion this whole
+// SnappingBridge / TilingBridge / ScrollingBridge subclass MUST override. If a
+// future bridge subclass forgets the override, every disable read/write would
+// silently land on the snapping list — exactly the mode confusion this whole
 // machinery is meant to eliminate. Warn loudly so the bug shows up in logs.
 //
 // The previous implementation triggered Q_ASSERT(false) on the unexpected
 // path, but QML binding evaluation order during component construction can
 // run a `function on*Changed: isMonitorDisabled(name)` handler before the
-// SnappingBridge/TilingBridge subclass override of `assignmentViewMode`
-// takes effect, hard-crashing dev builds on what is otherwise transient
-// state. The warning is enough — the fallback to Snapping is the safest
-// choice (defaults to the more permissive of the two lists for reads,
-// avoids accidental writes to a list the user didn't intend).
+// bridge subclass override of `assignmentViewMode` takes effect,
+// hard-crashing dev builds on what is otherwise transient state. The warning
+// is enough — the fallback to Snapping is the safest choice (defaults to the
+// most permissive of the three lists for reads, avoids accidental writes to a
+// list the user didn't intend).
 static PhosphorZones::AssignmentEntry::Mode modeFromViewMode(int viewMode)
 {
     using Mode = PhosphorZones::AssignmentEntry::Mode;

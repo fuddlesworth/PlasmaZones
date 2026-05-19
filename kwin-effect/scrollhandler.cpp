@@ -96,6 +96,14 @@ void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w, bool focusOnAdd)
                 if (epoch == m_daemonEpoch) {
                     m_notifiedWindows.remove(windowId);
                     m_notifiedWindowScreens.remove(windowId);
+                    // The window never joined the engine — undo the decoration
+                    // applied synchronously below so a failed open cannot leave
+                    // it chrome-less (title bar hidden, untracked, with nothing
+                    // left to restore it until the next daemon reconnect). The
+                    // focus-new-windows activateWindow() is deliberately NOT
+                    // rolled back: a genuinely-opened window legitimately holds
+                    // focus regardless of whether the scroll engine accepted it.
+                    clearDecoration(windowId, m_effect->findWindowById(windowId));
                 }
             });
     qCDebug(lcEffect) << "Notified scroll: windowOpened" << windowId << "on screen" << screenId;
@@ -184,6 +192,9 @@ void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
                 for (const QString& wid : batchWindowIds) {
                     m_notifiedWindows.remove(wid);
                     m_notifiedWindowScreens.remove(wid);
+                    // Undo the decoration refreshDecorations() applied below —
+                    // an untracked window must not be left chrome-less.
+                    clearDecoration(wid, m_effect->findWindowById(wid));
                 }
             });
     qCInfo(lcEffect) << "Notified scroll: windowsOpenedBatch with" << batchEntries.size() << "windows";
@@ -519,14 +530,18 @@ void ScrollHandler::onWindowDragFinished(KWin::EffectWindow* w)
 
 void ScrollHandler::notifyWindowFocused(const QString& windowId, const QString& screenId)
 {
+    // Keep the focus-follows-mouse dedup key in step with every focus change —
+    // including focus leaving to a non-scroll window or another screen — not
+    // just FFM-originated ones. The key must equal the focused window iff that
+    // window is scroll-managed, else be empty: a stale key left pointing at a
+    // no-longer-focused scroll window would make handleCursorMoved's "already
+    // focused" short-circuit suppress a legitimate re-focus when the cursor
+    // returns to it. Updated before the scroll-screen guard so a focus change
+    // onto a snapping/autotile/unmanaged screen still clears it.
+    m_lastFocusFollowsMouseWindowId = m_notifiedWindows.contains(windowId) ? windowId : QString();
     if (!m_scrollScreens.contains(screenId)) {
         return;
     }
-    // Keep the focus-follows-mouse dedup key in step with focus changes that
-    // did not originate from FFM (a click, or the focus-new-windows activate):
-    // without this, handleCursorMoved's "already focused" short-circuit would
-    // be keyed off a stale window and could redundantly re-activate.
-    m_lastFocusFollowsMouseWindowId = windowId;
     PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
                                                    QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                    QStringLiteral("notifyWindowFocused"));

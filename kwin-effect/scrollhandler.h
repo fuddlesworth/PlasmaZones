@@ -166,12 +166,19 @@ public:
     {
         m_border.radius = r;
     }
-    void updateShowBorderSetting(bool enabled)
+    /// Apply the show-border setting. Returns true iff the value changed, so
+    /// the caller can skip a redundant full updateAllBorders() rebuild.
+    bool updateShowBorderSetting(bool enabled)
     {
+        if (m_border.showBorder == enabled) {
+            return false;
+        }
         m_border.showBorder = enabled;
+        return true;
     }
     /// Toggle server-side title-bar hiding across every scroll-managed window.
-    void updateHideTitleBarsSetting(bool enabled);
+    /// Returns true iff the value changed (a no-op when already at @p enabled).
+    bool updateHideTitleBarsSetting(bool enabled);
 
     // ── Focus behavior ───────────────────────────────────────────────────
     /// Enable/disable focus-follows-mouse for scroll screens. Clears the

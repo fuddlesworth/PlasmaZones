@@ -142,6 +142,7 @@ SettingsFlickable {
                                     property bool monitorActive: !root.settingsBridge.isMonitorDisabled(monitorDelegate.screenName)
 
                                     checked: monitorActive
+                                    Accessible.name: i18n("Scrolling mode on monitor %1", monitorDelegate.screenName)
                                     onToggled: {
                                         root.settingsBridge.setMonitorDisabled(monitorDelegate.screenName, !checked);
                                         monitorActive = checked;
@@ -165,6 +166,7 @@ SettingsFlickable {
                                     icon.name: monitorDelegate.expanded ? "go-up" : "go-down"
                                     text: monitorDelegate.expanded ? "" : i18n("Per-desktop")
                                     display: AbstractButton.TextBesideIcon
+                                    Accessible.name: monitorDelegate.expanded ? i18n("Hide per-desktop toggles") : i18n("Show per-desktop toggles")
                                     onClicked: monitorDelegate.expanded = !monitorDelegate.expanded
                                     ToolTip.visible: hovered
                                     ToolTip.text: monitorDelegate.expanded ? i18n("Hide per-desktop toggles") : i18n("Show per-desktop toggles")
@@ -213,6 +215,7 @@ SettingsFlickable {
 
                                         Switch {
                                             checked: desktopRow.desktopActive
+                                            Accessible.name: i18n("Scrolling mode on %1", desktopRow.desktopName)
                                             onToggled: {
                                                 root.settingsBridge.setDesktopDisabled(monitorDelegate.screenName, desktopRow.desktopNumber, !checked);
                                                 desktopRow.desktopActive = checked;
@@ -348,6 +351,7 @@ SettingsFlickable {
 
                                     Switch {
                                         checked: activityScreenRow.activityActive
+                                        Accessible.name: i18n("Scrolling mode for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName)
                                         onToggled: {
                                             root.settingsBridge.setActivityDisabled(activityScreenRow.screenName, activityDelegate.activityId, !checked);
                                             activityScreenRow.activityActive = checked;

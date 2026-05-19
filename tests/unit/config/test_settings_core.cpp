@@ -506,18 +506,134 @@ private Q_SLOTS:
     }
 
     /**
-     * scrollUseSystemBorderColors (default true) routes through
-     * applyScrollBorderSystemColor() on load(), so a fresh config reports the
-     * snapping highlight/inactive colors as the scroll border colors.
+     * scrollUseSystemBorderColors routes the scroll border colors through
+     * applyScrollBorderSystemColor(), which copies the system highlight /
+     * inactive colors. The adoption path is exercised directly via the toggle:
+     * an explicit non-system color is pinned while the toggle is off, then
+     * turning it on must overwrite that color with highlightColor() — proving
+     * applyScrollBorderSystemColor() ran rather than relying on identical
+     * defaults (which would be vacuous).
      */
     void testScrollUseSystemBorderColors_adoptsSystemColors()
     {
         IsolatedConfigGuard guard;
 
         Settings settings;
-        QVERIFY(settings.scrollUseSystemBorderColors());
+        settings.setScrollUseSystemBorderColors(false);
+
+        const QColor explicitColor(0x12, 0x34, 0x56);
+        const QColor explicitInactive(0x65, 0x43, 0x21);
+        settings.setScrollBorderColor(explicitColor);
+        settings.setScrollInactiveBorderColor(explicitInactive);
+        QCOMPARE(settings.scrollBorderColor(), explicitColor);
+        QCOMPARE(settings.scrollInactiveBorderColor(), explicitInactive);
+
+        // The pinned colors must differ from the system colors, else the
+        // adoption assertions below would hold even if nothing copied them.
+        QVERIFY2(explicitColor != settings.highlightColor(),
+                 "explicit active color must differ from the system highlight or the test is vacuous");
+        QVERIFY2(explicitInactive != settings.inactiveColor(),
+                 "explicit inactive color must differ from the system inactive or the test is vacuous");
+
+        // Turning the toggle on runs applyScrollBorderSystemColor().
+        settings.setScrollUseSystemBorderColors(true);
         QCOMPARE(settings.scrollBorderColor(), settings.highlightColor());
         QCOMPARE(settings.scrollInactiveBorderColor(), settings.inactiveColor());
+        QVERIFY(settings.scrollBorderColor() != explicitColor);
+        QVERIFY(settings.scrollInactiveBorderColor() != explicitInactive);
+    }
+
+    /**
+     * The mirror of the above: while scrollUseSystemBorderColors is true, an
+     * explicit scroll border color does not survive a load() — load() re-runs
+     * applyScrollBorderSystemColor() and overwrites it with the system color.
+     * This guards the documented hazard that
+     * testScrollAppearanceBehaviorSettings_roundtrip sidesteps by first
+     * disabling scrollUseSystemBorderColors.
+     */
+    void testScrollUseSystemBorderColors_overridesExplicitColorsOnLoad()
+    {
+        IsolatedConfigGuard guard;
+
+        const QColor explicitColor(0xAA, 0xBB, 0xCC);
+
+        {
+            Settings settings;
+            // useSystem stays at its true default; an explicit write persists
+            // to disk but is inert — load() will re-apply the system color.
+            QVERIFY(settings.scrollUseSystemBorderColors());
+            QVERIFY2(explicitColor != settings.highlightColor(),
+                     "explicit color must differ from the system highlight or the test is vacuous");
+            settings.setScrollBorderColor(explicitColor);
+            settings.save();
+        }
+
+        Settings reloaded;
+        QVERIFY(reloaded.scrollUseSystemBorderColors());
+        // load() re-ran applyScrollBorderSystemColor(): the explicit color is gone.
+        QCOMPARE(reloaded.scrollBorderColor(), reloaded.highlightColor());
+        QVERIFY(reloaded.scrollBorderColor() != explicitColor);
+    }
+
+    /**
+     * Every scroll Appearance/Behavior setter fires its own NOTIFY signal on a
+     * genuine value change, and reset() restores all of them to the
+     * ConfigDefaults values — parity with the snapping/tiling coverage.
+     */
+    void testScrollAppearanceBehavior_signalsAndReset()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        // useSystemBorderColors off first so the explicit-colour setters below
+        // are not shadowed by applyScrollBorderSystemColor().
+        settings.setScrollUseSystemBorderColors(false);
+
+        QSignalSpy showBorderSpy(&settings, &Settings::scrollShowBorderChanged);
+        QSignalSpy widthSpy(&settings, &Settings::scrollBorderWidthChanged);
+        QSignalSpy radiusSpy(&settings, &Settings::scrollBorderRadiusChanged);
+        QSignalSpy colorSpy(&settings, &Settings::scrollBorderColorChanged);
+        QSignalSpy inactiveColorSpy(&settings, &Settings::scrollInactiveBorderColorChanged);
+        QSignalSpy hideTitleBarsSpy(&settings, &Settings::scrollHideTitleBarsChanged);
+        QSignalSpy focusNewSpy(&settings, &Settings::scrollFocusNewWindowsChanged);
+        QSignalSpy focusFollowsSpy(&settings, &Settings::scrollFocusFollowsMouseChanged);
+        for (const QSignalSpy* spy : {&showBorderSpy, &widthSpy, &radiusSpy, &colorSpy, &inactiveColorSpy,
+                                      &hideTitleBarsSpy, &focusNewSpy, &focusFollowsSpy}) {
+            QVERIFY(spy->isValid());
+        }
+
+        // Each set flips the value away from its default, so exactly one emit.
+        settings.setScrollShowBorder(!ConfigDefaults::scrollShowBorder());
+        settings.setScrollBorderWidth(ConfigDefaults::scrollBorderWidth() + 1);
+        settings.setScrollBorderRadius(ConfigDefaults::scrollBorderRadius() + 3);
+        settings.setScrollBorderColor(QColor(0x10, 0x20, 0x30));
+        settings.setScrollInactiveBorderColor(QColor(0x40, 0x50, 0x60));
+        settings.setScrollHideTitleBars(!ConfigDefaults::scrollHideTitleBars());
+        settings.setScrollFocusNewWindows(!ConfigDefaults::scrollFocusNewWindows());
+        settings.setScrollFocusFollowsMouse(!ConfigDefaults::scrollFocusFollowsMouse());
+
+        QCOMPARE(showBorderSpy.count(), 1);
+        QCOMPARE(widthSpy.count(), 1);
+        QCOMPARE(radiusSpy.count(), 1);
+        QCOMPARE(colorSpy.count(), 1);
+        QCOMPARE(inactiveColorSpy.count(), 1);
+        QCOMPARE(hideTitleBarsSpy.count(), 1);
+        QCOMPARE(focusNewSpy.count(), 1);
+        QCOMPARE(focusFollowsSpy.count(), 1);
+
+        // A redundant set to the current value must NOT re-emit.
+        settings.setScrollBorderWidth(ConfigDefaults::scrollBorderWidth() + 1);
+        QCOMPARE(widthSpy.count(), 1);
+
+        settings.reset();
+
+        QCOMPARE(settings.scrollShowBorder(), ConfigDefaults::scrollShowBorder());
+        QCOMPARE(settings.scrollBorderWidth(), ConfigDefaults::scrollBorderWidth());
+        QCOMPARE(settings.scrollBorderRadius(), ConfigDefaults::scrollBorderRadius());
+        QCOMPARE(settings.scrollHideTitleBars(), ConfigDefaults::scrollHideTitleBars());
+        QCOMPARE(settings.scrollFocusNewWindows(), ConfigDefaults::scrollFocusNewWindows());
+        QCOMPARE(settings.scrollFocusFollowsMouse(), ConfigDefaults::scrollFocusFollowsMouse());
+        QCOMPARE(settings.scrollUseSystemBorderColors(), ConfigDefaults::scrollUseSystemBorderColors());
     }
 
     /**
@@ -531,10 +647,11 @@ private Q_SLOTS:
 
         Settings settings;
         // Guard against the assertions below going vacuous if the clamp
-        // constants are ever changed: 0.0 must be genuinely below the min and
-        // 5.0 / 9.0 genuinely above the max.
+        // constants are ever changed: 0.0 must be genuinely below both mins
+        // and 5.0 / 9.0 genuinely above the maxes.
         QVERIFY2(0.0 < ConfigDefaults::scrollColumnWidthMin(), "test input 0.0 must be below the column-width min");
         QVERIFY2(5.0 > ConfigDefaults::scrollColumnWidthMax(), "test input 5.0 must be above the column-width max");
+        QVERIFY2(0.0 < ConfigDefaults::scrollWindowHeightMin(), "test input 0.0 must be below the window-height min");
         QVERIFY2(9.0 > ConfigDefaults::scrollWindowHeightMax(), "test input 9.0 must be above the window-height max");
         // 0.0 is below the minimum, 5.0 above the maximum, and the string is
         // non-numeric junk that must be dropped entirely.
@@ -557,6 +674,23 @@ private Q_SLOTS:
         QVERIFY(qFuzzyCompare(heights.at(0).toDouble(), ConfigDefaults::scrollWindowHeightMin()));
         QVERIFY(qFuzzyCompare(heights.at(1).toDouble(), 0.5));
         QVERIFY(qFuzzyCompare(heights.at(2).toDouble(), ConfigDefaults::scrollWindowHeightMax()));
+
+        // The clamp must also survive persistence — confirm the schema's
+        // load-path validator is consistent with the setter-path validator
+        // and a hand-edited config file cannot smuggle out-of-range values
+        // back in. (The setter clamps in memory; this proves save/load do too.)
+        settings.save();
+        Settings reloaded;
+        const QVariantList reloadedWidths = reloaded.scrollPresetColumnWidths();
+        QCOMPARE(reloadedWidths.size(), 3);
+        QVERIFY(qFuzzyCompare(reloadedWidths.at(0).toDouble(), ConfigDefaults::scrollColumnWidthMin()));
+        QVERIFY(qFuzzyCompare(reloadedWidths.at(1).toDouble(), 0.5));
+        QVERIFY(qFuzzyCompare(reloadedWidths.at(2).toDouble(), ConfigDefaults::scrollColumnWidthMax()));
+        const QVariantList reloadedHeights = reloaded.scrollPresetWindowHeights();
+        QCOMPARE(reloadedHeights.size(), 3);
+        QVERIFY(qFuzzyCompare(reloadedHeights.at(0).toDouble(), ConfigDefaults::scrollWindowHeightMin()));
+        QVERIFY(qFuzzyCompare(reloadedHeights.at(1).toDouble(), 0.5));
+        QVERIFY(qFuzzyCompare(reloadedHeights.at(2).toDouble(), ConfigDefaults::scrollWindowHeightMax()));
     }
 
     // =========================================================================
