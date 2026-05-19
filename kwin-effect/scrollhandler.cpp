@@ -267,9 +267,12 @@ void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
         // would have cleared m_reorderPending now excludes the minimized
         // window, so it must be cleared here). Any interactive move/resize is
         // likewise over once the window is minimized — clear all of this
-        // window's transient effect-side state in one place.
+        // window's transient effect-side state in one place. m_reasserted is
+        // cleared too: the next daemon resolve after restore is a fresh
+        // episode that gets its own re-assert budget.
         m_appliedGeometry.remove(windowId);
         m_reassertPending.remove(windowId);
+        m_reasserted.remove(windowId);
         m_reorderPending.remove(windowId);
         m_interactiveResize.remove(windowId);
     }
@@ -380,8 +383,11 @@ void ScrollHandler::onWindowFrameGeometryChanged(KWin::EffectWindow* w)
         return; // the daemon has not resolved a geometry to compare against yet
     }
     // Ignore sub-pixel rounding and small compositor size-hint adjustments; a
-    // genuine app-initiated resize drifts further than the tolerance.
-    constexpr int kTolerance = 4;
+    // genuine app-initiated resize drifts further than the tolerance. Bumped
+    // from 4 to 8 to absorb the larger rounding errors that surface on HiDPI
+    // (2x) outputs without needing a per-window scale lookup. A genuine app
+    // resize still drifts well past 8 px on its first commit.
+    constexpr int kTolerance = 8;
     const QRect frame = w->frameGeometry().toRect();
     const QRect& expected = it.value();
     const bool drifted = qAbs(frame.x() - expected.x()) > kTolerance || qAbs(frame.y() - expected.y()) > kTolerance
@@ -493,7 +499,12 @@ void ScrollHandler::onWindowDragFinished(KWin::EffectWindow* w)
             continue;
         }
         const QRect& rect = it.value();
-        if (rect.left() == draggedRect.left()) {
+        // Same-column check uses BOTH edges, not just left(): zero-inner-gap
+        // strips with identical column widths can give two distinct columns
+        // matching x-edges, and a single-edge match would falsely skip a
+        // legitimate anchor in that case. Tiles within a column always share
+        // both x edges (they only differ in y).
+        if (rect.left() == draggedRect.left() && rect.right() == draggedRect.right()) {
             continue; // a tile of the dragged window's own column
         }
         int distance = 0;

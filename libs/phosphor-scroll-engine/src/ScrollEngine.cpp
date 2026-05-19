@@ -189,6 +189,32 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     }
 }
 
+void ScrollEngine::pruneStatesForScreen(const QString& screenId)
+{
+    if (screenId.isEmpty()) {
+        return;
+    }
+    for (auto it = m_states.begin(); it != m_states.end();) {
+        if (it->first.screenId == screenId) {
+            it = m_states.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = m_windowToKey.begin(); it != m_windowToKey.end();) {
+        if (it.value().screenId == screenId) {
+            it = m_windowToKey.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    m_perScreenConfig.remove(screenId);
+    m_activeScreens.remove(screenId);
+    if (m_activeScreen == screenId) {
+        m_activeScreen.clear();
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Window lifecycle
 // ─────────────────────────────────────────────────────────────────────────
@@ -201,13 +227,33 @@ void ScrollEngine::windowOpened(const QString& windowId, const QString& screenId
     // effect-side (constrainToScrollSlot), so the constraints are unused here.
     Q_UNUSED(minWidth)
     Q_UNUSED(minHeight)
-    if (windowId.isEmpty() || screenId.isEmpty() || m_windowToKey.contains(windowId)) {
+    if (windowId.isEmpty() || screenId.isEmpty()) {
         return;
     }
-    const TilingStateKey key = keyForScreen(screenId);
-    stateForKey(key, /*create=*/true)
+    const TilingStateKey newKey = keyForScreen(screenId);
+    const auto existingIt = m_windowToKey.constFind(windowId);
+    if (existingIt != m_windowToKey.constEnd()) {
+        // Already tracked. If the report names the same context, nothing to do
+        // — addColumnForWindow self-gates on duplicates anyway. If the screen
+        // (or desktop / activity) differs, the user moved the window between
+        // sessions while the daemon was down: the post-restore reconcile path
+        // already pruned non-live windows, but a live window that simply
+        // changed monitors still has its restored column under the OLD key.
+        // Migrate it to the new strip so geometry resolves against the right
+        // working area on the next placementChanged.
+        if (existingIt.value() == newKey) {
+            return;
+        }
+        const TilingStateKey oldKey = existingIt.value();
+        if (ScrollScreenState* oldState = stateForKey(oldKey, /*create=*/false)) {
+            oldState->removeWindow(windowId);
+            emitChanged(oldKey.screenId);
+        }
+        m_windowToKey.erase(existingIt);
+    }
+    stateForKey(newKey, /*create=*/true)
         ->addColumnForWindow(windowId, ColumnWidth::proportion(effectiveDefaultColumnWidth(screenId)));
-    m_windowToKey.insert(windowId, key);
+    m_windowToKey.insert(windowId, newKey);
     m_activeScreen = screenId;
     emitChanged(screenId);
 }
@@ -421,29 +467,41 @@ void ScrollEngine::toggleFocusedFloat(const NavigationContext& ctx)
 void ScrollEngine::rotateWindows(bool clockwise, const NavigationContext& ctx)
 {
     // Rotating the whole layout is a stack/grid concept with no scrollable
-    // equivalent — the strip is navigated, not rotated.
+    // equivalent — the strip is navigated, not rotated. Surface a negative
+    // navigation feedback so the existing OSD machinery can render
+    // "not supported in scroll mode" rather than silently absorbing the chord.
     Q_UNUSED(clockwise)
-    Q_UNUSED(ctx)
+    QString screenId;
+    resolveNavTarget(ctx, &screenId);
+    reportNav(false, QStringLiteral("rotate"), screenId);
 }
 
 void ScrollEngine::snapAllWindows(const NavigationContext& ctx)
 {
     // No unmanaged-window adoption in the skeleton — windows enter the strip
-    // through windowOpened. Daemon-driven adoption arrives with M3c wiring.
-    Q_UNUSED(ctx)
+    // through windowOpened. Daemon-driven adoption arrives with M3c wiring;
+    // until then surface a negative feedback so the chord isn't a silent no-op.
+    QString screenId;
+    resolveNavTarget(ctx, &screenId);
+    reportNav(false, QStringLiteral("snap_all"), screenId);
 }
 
 void ScrollEngine::pushToEmptyZone(const NavigationContext& ctx)
 {
     // "Empty zone" is a manual-layout concept; the strip has no fixed slots.
-    Q_UNUSED(ctx)
+    QString screenId;
+    resolveNavTarget(ctx, &screenId);
+    reportNav(false, QStringLiteral("push_to_empty_zone"), screenId);
 }
 
 void ScrollEngine::restoreFocusedWindow(const NavigationContext& ctx)
 {
     // Restoring a window's pre-tile geometry depends on the daemon-side
-    // unmanaged-geometry store; wired in a later milestone.
-    Q_UNUSED(ctx)
+    // unmanaged-geometry store; wired in a later milestone. Surface a negative
+    // feedback so the user sees an OSD instead of the shortcut feeling broken.
+    QString screenId;
+    resolveNavTarget(ctx, &screenId);
+    reportNav(false, QStringLiteral("restore"), screenId);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

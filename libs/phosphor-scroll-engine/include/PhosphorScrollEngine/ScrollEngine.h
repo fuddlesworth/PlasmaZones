@@ -73,6 +73,11 @@ public:
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
     void pruneStatesForActivities(const QStringList& validActivities) override;
+    /// Drop every state, window-mapping, and per-screen-config entry tied to
+    /// @p screenId. The daemon calls this when a monitor is disconnected so
+    /// the engine doesn't leak strip state and override maps for screens that
+    /// no longer exist. Symmetric with pruneStatesForDesktop / pruneStatesForActivities.
+    void pruneStatesForScreen(const QString& screenId);
 
     // ── Window lifecycle ────────────────────────────────────────────────
     using IPlacementEngine::windowOpened;

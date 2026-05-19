@@ -424,6 +424,12 @@ private:
      */
     void refreshScrollConfigFromSettings();
 
+    /// Schedule a coalesced refreshScrollConfigFromSettings on the next
+    /// event-loop tick. Wired to every scroll-setting change signal so a
+    /// burst of edits (slider drag at ~30 Hz) collapses into one re-resolve
+    /// pass rather than N. See @ref m_scrollRefreshTimer.
+    void requestScrollConfigRefresh();
+
     /**
      * @brief Push each active scroll screen's per-screen override map into
      *        ScrollEngine.
@@ -696,6 +702,16 @@ private:
     /// trampoline was first armed during the current event-loop tick).
     QTimer m_animationPublishTimer;
     bool m_animationPublishPending = false;
+
+    /// Coalescing trampoline for refreshScrollConfigFromSettings. The six
+    /// scroll-config Q_PROPERTY change signals fire ~30 Hz during a slider
+    /// drag, and each emit re-resolves every active scroll strip and pushes
+    /// applyGeometriesBatch to the effect. Routing through a 0-ms single-shot
+    /// timer collapses the burst into one re-resolve per event-loop tick —
+    /// the on-disk values it reads are already settled, so no payload
+    /// difference, just dropped redundant work. Same pattern as the
+    /// animation-profile publish path.
+    QTimer m_scrollRefreshTimer;
 
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)
     int currentDesktop() const;

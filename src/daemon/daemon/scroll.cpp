@@ -37,6 +37,27 @@
 
 namespace PlasmaZones {
 
+// Tie the scroll engine's standalone fallback constants (used only when no
+// IScrollSettings is wired — engine unit tests with no FakeScrollSettings) to
+// ConfigDefaults so a drift between the two values fails the build instead
+// of silently diverging behaviour between production and tests. Both
+// ScrollScreenState.h (for the engine constants) and configdefaults.h (for
+// the schema bounds and defaults) are included above this TU, so this is the
+// single shared reach-point that sees both layers.
+static_assert(::PhosphorScrollEngine::kMinSizeFraction == ConfigDefaults::scrollColumnWidthMin(),
+              "PhosphorScrollEngine::kMinSizeFraction drifted from ConfigDefaults::scrollColumnWidthMin");
+static_assert(::PhosphorScrollEngine::kMaxSizeFraction == ConfigDefaults::scrollColumnWidthMax(),
+              "PhosphorScrollEngine::kMaxSizeFraction drifted from ConfigDefaults::scrollColumnWidthMax");
+static_assert(::PhosphorScrollEngine::kMinStripGap == ConfigDefaults::scrollInnerGapMin(),
+              "PhosphorScrollEngine::kMinStripGap drifted from ConfigDefaults::scrollInnerGapMin");
+static_assert(::PhosphorScrollEngine::kMaxStripGap == ConfigDefaults::scrollInnerGapMax(),
+              "PhosphorScrollEngine::kMaxStripGap drifted from ConfigDefaults::scrollInnerGapMax");
+static_assert(::PhosphorScrollEngine::kDefaultColumnWidthFraction == ConfigDefaults::scrollDefaultColumnWidth(),
+              "PhosphorScrollEngine::kDefaultColumnWidthFraction drifted from "
+              "ConfigDefaults::scrollDefaultColumnWidth");
+static_assert(::PhosphorScrollEngine::kDefaultStripGap == ConfigDefaults::scrollInnerGap(),
+              "PhosphorScrollEngine::kDefaultStripGap drifted from ConfigDefaults::scrollInnerGap");
+
 PhosphorScrollEngine::ScrollEngine* Daemon::scrollEngine() const
 {
     return dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
@@ -190,6 +211,19 @@ void Daemon::refreshScrollConfigFromSettings()
     const QSet<QString> screens = m_scrollEngine->activeScreens();
     for (const QString& screenId : screens) {
         onScrollPlacementChanged(screenId);
+    }
+}
+
+void Daemon::requestScrollConfigRefresh()
+{
+    // Coalesce: a settings-page slider drag fires the change signal at ~30 Hz,
+    // and every emit re-resolves and re-pushes geometry for every active
+    // scroll strip. Funnel through a single-shot 0-ms timer so the whole
+    // burst collapses to one refresh in the next event-loop tick. The timer
+    // is constructed in start.cpp (mirrors the animation-publish path) and
+    // its slot calls refreshScrollConfigFromSettings exactly once.
+    if (!m_scrollRefreshTimer.isActive()) {
+        m_scrollRefreshTimer.start();
     }
 }
 

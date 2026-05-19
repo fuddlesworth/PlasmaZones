@@ -31,7 +31,16 @@
              with org.plasmazones.Autotile; scroll's strip model is
              size-agnostic, so the trailing minWidth/minHeight ints are
              ignored (non-resizable windows are fitted to the tile slot
-             effect-side). -->
+             effect-side).
+
+             SECONDARY ROLE — restore reconcile signal: the FIRST batch the
+             effect sends after a (re)connect doubles as the live-window
+             reconcile for any strip restored from scroll-session.json. The
+             daemon treats it as the complete live scroll-window set across
+             every scroll screen; restored windows that the batch does not
+             confirm are pruned (their column dropped when it empties), so
+             the empty batch case is meaningful and MUST be sent. Subsequent
+             batches are routine and the reconcile path no-ops. -->
         <method name="windowsOpenedBatch">
             <arg name="entries" type="a(ssii)" direction="in">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.In0"

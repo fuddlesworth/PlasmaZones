@@ -60,9 +60,30 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // window also owns its border settings (width, colors, radius, visibility).
     // Both handlers are constructed unconditionally in the effect ctor and live
     // for the effect's lifetime, so neither pointer is ever null here.
-    const bool isScroll = m_scrollHandler->isTiledWindow(windowId);
+    //
+    // Resolve all five scalars (width, radius, show flag, active/inactive color)
+    // from the same handler in one pass, so a future reader can't mix-and-match
+    // them with the previous five-ternary form.
+    struct ResolvedBorder
+    {
+        int width;
+        int radius;
+        bool show;
+        QColor active;
+        QColor inactive;
+    };
+    const ResolvedBorder cfg = [&] {
+        if (m_scrollHandler->isTiledWindow(windowId)) {
+            return ResolvedBorder{m_scrollHandler->borderWidth(), m_scrollHandler->borderRadius(),
+                                  m_scrollHandler->shouldShowBorderForWindow(windowId), m_scrollHandler->borderColor(),
+                                  m_scrollHandler->inactiveBorderColor()};
+        }
+        return ResolvedBorder{m_autotileHandler->borderWidth(), m_autotileHandler->borderRadius(),
+                              m_autotileHandler->shouldShowBorderForWindow(windowId), m_autotileHandler->borderColor(),
+                              m_autotileHandler->inactiveBorderColor()};
+    }();
 
-    const int bw = isScroll ? m_scrollHandler->borderWidth() : m_autotileHandler->borderWidth();
+    const int bw = cfg.width;
     if (bw <= 0) {
         return;
     }
@@ -71,18 +92,14 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         return;
     }
 
-    const bool showBorder = isScroll ? m_scrollHandler->shouldShowBorderForWindow(windowId)
-                                     : m_autotileHandler->shouldShowBorderForWindow(windowId);
-    if (!showBorder) {
+    if (!cfg.show) {
         return;
     }
 
     // Choose color: active for focused window, inactive for others
     KWin::EffectWindow* active = KWin::effects->activeWindow();
     const bool isFocused = (w == active);
-    const QColor bc = isScroll
-        ? (isFocused ? m_scrollHandler->borderColor() : m_scrollHandler->inactiveBorderColor())
-        : (isFocused ? m_autotileHandler->borderColor() : m_autotileHandler->inactiveBorderColor());
+    const QColor bc = isFocused ? cfg.active : cfg.inactive;
     if (!bc.isValid() || bc.alpha() == 0) {
         return;
     }
@@ -92,7 +109,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // by borderWidth so the border draws fully inside the frame (no clipping).
     const QRectF frame = w->frameGeometry();
     const KWin::RectF innerRect(bw, bw, frame.width() - 2.0 * bw, frame.height() - 2.0 * bw);
-    const int br = isScroll ? m_scrollHandler->borderRadius() : m_autotileHandler->borderRadius();
+    const int br = cfg.radius;
     const KWin::BorderOutline outline(bw, bc, KWin::BorderRadius(br));
 
     KWin::WindowItem* windowItem = w->windowItem();

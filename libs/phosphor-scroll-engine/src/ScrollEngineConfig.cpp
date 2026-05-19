@@ -73,22 +73,43 @@ const QVector<qreal> kNiriPresetFractions = {1.0 / 3.0, 0.5, 2.0 / 3.0};
 
 QVector<qreal> ScrollEngine::effectivePresetColumnWidths(const QString& screenId) const
 {
+    // A user that clears every preset would otherwise turn the cycle-width
+    // shortcut into a silent no-op (cyclePresetColumnWidth bails on an empty
+    // list). Fall back to the niri defaults when both the per-screen override
+    // and the global setting resolve to an empty list, so the shortcut keeps
+    // working — symmetric with effectivePresetWindowHeights below.
     const QVariant v = perScreenValue(screenId, QLatin1String("PresetColumnWidths"));
     if (v.isValid()) {
-        return clampedFractionVector(v.toList());
+        const QVector<qreal> overrideList = clampedFractionVector(v.toList());
+        if (!overrideList.isEmpty()) {
+            return overrideList;
+        }
     }
-    const IScrollSettings* s = scrollSettings();
-    return s ? clampedFractionVector(s->scrollPresetColumnWidths()) : kNiriPresetFractions;
+    if (const IScrollSettings* s = scrollSettings()) {
+        const QVector<qreal> global = clampedFractionVector(s->scrollPresetColumnWidths());
+        if (!global.isEmpty()) {
+            return global;
+        }
+    }
+    return kNiriPresetFractions;
 }
 
 QVector<qreal> ScrollEngine::effectivePresetWindowHeights(const QString& screenId) const
 {
     const QVariant v = perScreenValue(screenId, QLatin1String("PresetWindowHeights"));
     if (v.isValid()) {
-        return clampedFractionVector(v.toList());
+        const QVector<qreal> overrideList = clampedFractionVector(v.toList());
+        if (!overrideList.isEmpty()) {
+            return overrideList;
+        }
     }
-    const IScrollSettings* s = scrollSettings();
-    return s ? clampedFractionVector(s->scrollPresetWindowHeights()) : kNiriPresetFractions;
+    if (const IScrollSettings* s = scrollSettings()) {
+        const QVector<qreal> global = clampedFractionVector(s->scrollPresetWindowHeights());
+        if (!global.isEmpty()) {
+            return global;
+        }
+    }
+    return kNiriPresetFractions;
 }
 
 qreal ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const

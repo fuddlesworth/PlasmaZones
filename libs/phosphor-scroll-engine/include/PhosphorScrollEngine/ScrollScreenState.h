@@ -87,6 +87,13 @@ public:
     {
         return m_scrollX;
     }
+    /// Daemon-only setter. The viewport position is geometry-dependent (it
+    /// needs the working-area width to resolve), and ScrollEngine is
+    /// deliberately geometry-agnostic — the daemon's onScrollPlacementChanged
+    /// runs computeViewportScroll() and stores the result here before
+    /// resolveScrollLayout() consumes it. The value is also serialised
+    /// (toJson/fromJson) so a session restore lands the user at the same
+    /// view position they left.
     void setScrollX(qreal scrollX)
     {
         m_scrollX = scrollX;

@@ -100,6 +100,12 @@ private Q_SLOTS:
     void perDesktopState();
     void serializeRoundTrip();
     void restoreReconciliation();
+    void cyclePresetWidth_stalePresetIndex();
+    void cyclePresetWidth_emptyPresetListFallsBackToNiri();
+    void serialize_dropsDuplicateWindowIds();
+    void windowOpened_migratesAcrossScreens();
+    void pruneStatesForScreen_dropsContext();
+    void unsupportedOps_emitNegativeFeedback();
 };
 
 void TestScrollEngine::windowLifecycle()
@@ -602,6 +608,171 @@ void TestScrollEngine::restoreReconciliation()
     fresh.windowOpened(QStringLiteral("x"), QStringLiteral("S1"));
     fresh.reconcileRestoredWindows(QSet<QString>{});
     QVERIFY(fresh.isWindowTracked(QStringLiteral("x")));
+}
+
+void TestScrollEngine::cyclePresetWidth_stalePresetIndex()
+{
+    // Reproduces the "preset list shrank since the column was tagged" branch in
+    // cyclePresetColumnWidth. With a 2-element preset list and a column tagged
+    // presetWidthIndex=2 (out of range), the cycle must fall through to the
+    // -1 normalisation and land at index 0 — NOT wrap from a phantom index 2
+    // into something past-the-end.
+    ScrollEngine engine;
+    FakeScrollSettings settings;
+    settings.presetColumnWidths = QVariantList{0.4, 0.8};
+    engine.setEngineSettings(&settings);
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+
+    ScrollScreenState* mutState = scrollStateMut(engine, QStringLiteral("S1"));
+    QVERIFY(mutState);
+    // Stamp a stale index by hand — no engine op produces an out-of-range
+    // index, so this is the test's only path to the branch.
+    mutState->setActiveColumnWidth(ColumnWidth::proportion(0.5), /*presetIndex=*/2);
+    QCOMPARE(mutState->activeColumn()->presetWidthIndex(), 2);
+
+    engine.cyclePresetColumnWidth(contextFor(QStringLiteral("S1")));
+    QCOMPARE(mutState->activeColumn()->presetWidthIndex(), 0);
+    QVERIFY(qFuzzyCompare(mutState->activeColumn()->width().value, 0.4));
+}
+
+void TestScrollEngine::cyclePresetWidth_emptyPresetListFallsBackToNiri()
+{
+    // A user that clears every preset would previously turn the cycle-width
+    // shortcut into a silent no-op. After the empty-list fallback the cycle
+    // resolves to the niri defaults (1/3, 1/2, 2/3) so the chord still works.
+    ScrollEngine engine;
+    FakeScrollSettings settings;
+    settings.presetColumnWidths = QVariantList{}; // empty
+    settings.presetWindowHeights = QVariantList{};
+    engine.setEngineSettings(&settings);
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+
+    QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+    engine.cyclePresetColumnWidth(contextFor(QStringLiteral("S1")));
+    QCOMPARE(spy.count(), 1);
+    const ScrollScreenState* state = scrollState(engine, QStringLiteral("S1"));
+    QVERIFY(state && state->activeColumn());
+    QCOMPARE(state->activeColumn()->presetWidthIndex(), 0);
+    QVERIFY(qFuzzyCompare(state->activeColumn()->width().value, 1.0 / 3.0));
+
+    engine.cyclePresetWindowHeight(contextFor(QStringLiteral("S1")));
+    QCOMPARE(state->activeColumn()->activeTile()->height.kind, WindowHeight::Kind::Preset);
+    QCOMPARE(state->activeColumn()->activeTile()->height.presetIndex, 0);
+}
+
+void TestScrollEngine::serialize_dropsDuplicateWindowIds()
+{
+    // Build a malformed JSON blob with a window appearing twice across two
+    // columns plus once in the floating set. fromJson must keep only the first
+    // occurrence in strip order; later duplicates (and the floating mention)
+    // are dropped. Without dedup, locateWindow / removeWindow / windowCount
+    // would all give wrong answers downstream.
+    QJsonObject tileA;
+    tileA.insert(QLatin1String("windowId"), QStringLiteral("dup"));
+    QJsonObject heightAuto;
+    heightAuto.insert(QLatin1String("kind"), QStringLiteral("auto"));
+    heightAuto.insert(QLatin1String("weight"), 1.0);
+    tileA.insert(QLatin1String("height"), heightAuto);
+
+    QJsonObject column1;
+    column1.insert(QLatin1String("tiles"), QJsonArray{tileA});
+    column1.insert(QLatin1String("activeTileIndex"), 0);
+    QJsonObject column2;
+    column2.insert(QLatin1String("tiles"), QJsonArray{tileA}); // same windowId again
+    column2.insert(QLatin1String("activeTileIndex"), 0);
+
+    QJsonObject blob;
+    blob.insert(QLatin1String("screenId"), QStringLiteral("S1"));
+    blob.insert(QLatin1String("columns"), QJsonArray{column1, column2});
+    blob.insert(QLatin1String("activeColumnIndex"), 0);
+    blob.insert(QLatin1String("scrollX"), 0.0);
+    blob.insert(QLatin1String("floating"), QJsonArray{QStringLiteral("dup")}); // also floating
+
+    const ScrollScreenState state = ScrollScreenState::fromJson(blob);
+    QCOMPARE(state.columnCount(), 1); // duplicate column was dropped after its only tile
+    QVERIFY(!state.isFloating(QStringLiteral("dup")));
+    QCOMPARE(state.windowCount(), 1);
+}
+
+void TestScrollEngine::windowOpened_migratesAcrossScreens()
+{
+    // Cross-restart screen migration: a window persisted under screen S1 but
+    // reported alive on S2 by the post-restore batch must move to S2's strip.
+    // Without this the geometry resolve would run against S1's working area.
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    QCOMPARE(engine.screenForTrackedWindow(QStringLiteral("a")), QStringLiteral("S1"));
+    QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+
+    // Re-open under S2: the engine should drop "a" from S1, add it to S2, and
+    // emit one signal for each side so a daemon listener re-resolves both
+    // screens (S1 must clear its now-empty rect, S2 must place the window).
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S2"));
+    QCOMPARE(engine.screenForTrackedWindow(QStringLiteral("a")), QStringLiteral("S2"));
+    QVERIFY(spy.count() >= 2);
+
+    const ScrollScreenState* s1 = scrollState(engine, QStringLiteral("S1"));
+    if (s1) {
+        QVERIFY(!s1->containsWindow(QStringLiteral("a")));
+    }
+    const ScrollScreenState* s2 = scrollState(engine, QStringLiteral("S2"));
+    QVERIFY(s2);
+    QVERIFY(s2->containsWindow(QStringLiteral("a")));
+
+    // A second open under the SAME screen is a no-op (already-tracked + same
+    // key) — must NOT duplicate the column or emit a redundant signal.
+    const int before = spy.count();
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S2"));
+    QCOMPARE(spy.count(), before);
+    QCOMPARE(s2->columnCount(), 1);
+}
+
+void TestScrollEngine::pruneStatesForScreen_dropsContext()
+{
+    // Monitor unplug: pruneStatesForScreen drops every state, window mapping,
+    // active-screen entry, and per-screen-config override tied to that
+    // screenId — across all desktops/activities. Without this, long sessions
+    // with frequent hot-plug accumulate dead entries.
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    engine.setCurrentDesktop(2);
+    engine.windowOpened(QStringLiteral("b"), QStringLiteral("S1")); // different desktop, same screen
+    engine.setCurrentDesktop(1);
+    engine.windowOpened(QStringLiteral("c"), QStringLiteral("S2")); // different screen
+    engine.applyPerScreenConfig(QStringLiteral("S1"), QVariantMap{{QStringLiteral("InnerGap"), 20}});
+    engine.setActiveScreens(QSet<QString>{QStringLiteral("S1"), QStringLiteral("S2")});
+
+    engine.pruneStatesForScreen(QStringLiteral("S1"));
+
+    QVERIFY(!engine.isWindowTracked(QStringLiteral("a")));
+    QVERIFY(!engine.isWindowTracked(QStringLiteral("b")));
+    QVERIFY(engine.isWindowTracked(QStringLiteral("c"))); // S2 untouched
+    QVERIFY(engine.perScreenOverrides(QStringLiteral("S1")).isEmpty());
+    QVERIFY(!engine.activeScreens().contains(QStringLiteral("S1")));
+    QVERIFY(engine.activeScreens().contains(QStringLiteral("S2")));
+}
+
+void TestScrollEngine::unsupportedOps_emitNegativeFeedback()
+{
+    // The four ops that have no scrollable equivalent (rotate, snap-all,
+    // push-to-empty-zone, restore) must surface a negative navigationFeedback
+    // signal so the OSD machinery renders "not supported" instead of silently
+    // absorbing the chord.
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    QSignalSpy feedback(&engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+
+    const NavigationContext ctx = contextFor(QStringLiteral("S1"));
+    engine.rotateWindows(true, ctx);
+    engine.snapAllWindows(ctx);
+    engine.pushToEmptyZone(ctx);
+    engine.restoreFocusedWindow(ctx);
+
+    QCOMPARE(feedback.count(), 4);
+    for (int i = 0; i < feedback.count(); ++i) {
+        QCOMPARE(feedback.at(i).at(0).toBool(), false); // success=false
+        QCOMPARE(feedback.at(i).at(2).toString(), QStringLiteral("no_target")); // reason
+    }
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngine)

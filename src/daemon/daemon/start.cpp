@@ -27,6 +27,7 @@
 #include "../../dbus/autotileadaptor.h"
 #include "../../dbus/snapadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
@@ -164,6 +165,14 @@ void Daemon::connectScreenSignals()
                     if (changed) {
                         layout->setAllowedScreens(allowed);
                     }
+                }
+
+                // Drop scroll-mode strip state, window mappings, and per-screen
+                // overrides for the gone monitor. Symmetric with the autotile
+                // pruneAutotileOrdersForRemovedScreens path below; without this
+                // long sessions with frequent hot-plug accumulate dead entries.
+                if (auto* scroll = scrollEngine()) {
+                    scroll->pruneStatesForScreen(removedScreenId);
                 }
             });
 

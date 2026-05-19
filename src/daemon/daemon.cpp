@@ -1031,12 +1031,19 @@ bool Daemon::init()
     // setting changes. Each scroll setting has its own change signal, so
     // connecting them individually (rather than the catch-all settingsChanged)
     // keeps the strip re-resolve off the hot path of unrelated settings edits.
+    // Coalesce repeated refreshes into one event-loop tick. Single-shot at 0 ms
+    // — the timer's job is to merge a burst of scroll-setting change signals
+    // (slider drag at ~30 Hz) into one refresh, not to delay the work.
+    m_scrollRefreshTimer.setSingleShot(true);
+    m_scrollRefreshTimer.setInterval(0);
+    connect(&m_scrollRefreshTimer, &QTimer::timeout, this, &Daemon::refreshScrollConfigFromSettings);
+
     refreshScrollConfigFromSettings();
     for (const auto signal : {&ISettings::scrollInnerGapChanged, &ISettings::scrollOuterGapChanged,
                               &ISettings::scrollDefaultColumnWidthChanged, &ISettings::scrollCenterFocusedColumnChanged,
                               &ISettings::scrollPresetColumnWidthsChanged, &ISettings::scrollPresetWindowHeightsChanged,
                               &ISettings::perScreenScrollSettingsChanged}) {
-        connect(m_settings.get(), signal, this, &Daemon::refreshScrollConfigFromSettings);
+        connect(m_settings.get(), signal, this, &Daemon::requestScrollConfigRefresh);
     }
     // The master gate changes which screens are scroll-mode, so it re-runs the
     // active-screen resolve rather than just re-pushing config.
@@ -1568,6 +1575,7 @@ void Daemon::stop()
     // would otherwise still fire on the next event-loop tick after
     // m_settings (its data source) has been destroyed.
     m_animationPublishTimer.stop();
+    m_scrollRefreshTimer.stop();
     m_animationPublishPending = false;
 
     // Reset the loaders explicitly so the QFileSystemWatcher inside

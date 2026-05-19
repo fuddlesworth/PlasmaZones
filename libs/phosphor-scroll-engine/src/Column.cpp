@@ -226,9 +226,16 @@ QJsonObject Column::toJson() const
     obj.insert(QLatin1String("activeTileIndex"), m_activeTileIndex);
     obj.insert(QLatin1String("width"), columnWidthToJson(m_width));
     obj.insert(QLatin1String("presetWidthIndex"), m_presetWidthIndex);
-    obj.insert(QLatin1String("fullWidth"), m_fullWidth);
-    obj.insert(QLatin1String("restoreWidth"), columnWidthToJson(m_restoreWidth));
-    obj.insert(QLatin1String("restorePresetWidthIndex"), m_restorePresetWidthIndex);
+    // Full-width state and the restore-width fields it stores are only
+    // meaningful when m_fullWidth is true; serialise them conditionally so a
+    // strip whose every column is at its native width writes a noticeably
+    // smaller scroll-session.json. fromJson() defaults the missing fields to
+    // a half-width Proportion, matching the constructor defaults.
+    if (m_fullWidth) {
+        obj.insert(QLatin1String("fullWidth"), m_fullWidth);
+        obj.insert(QLatin1String("restoreWidth"), columnWidthToJson(m_restoreWidth));
+        obj.insert(QLatin1String("restorePresetWidthIndex"), m_restorePresetWidthIndex);
+    }
     return obj;
 }
 
