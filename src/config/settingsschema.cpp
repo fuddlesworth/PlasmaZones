@@ -906,6 +906,38 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          {},
          clampFractionList(CD::scrollWindowHeightMin(), CD::scrollWindowHeightMax())},
     };
+    // Scrolling.Appearance — column border decoration (mirrors Tiling.Appearance).
+    // Key order mirrors tilingAppearanceColorsGroup for side-by-side readability.
+    schema.groups[CD::scrollingAppearanceColorsGroup()] = {
+        {CD::activeKey(), CD::scrollBorderColor(), QMetaType::QColor, {}, validColorOr(CD::scrollBorderColor())},
+        {CD::inactiveKey(),
+         CD::scrollInactiveBorderColor(),
+         QMetaType::QColor,
+         {},
+         validColorOr(CD::scrollInactiveBorderColor())},
+        {CD::useSystemKey(), CD::scrollUseSystemBorderColors(), QMetaType::Bool},
+    };
+    schema.groups[CD::scrollingAppearanceDecorationsGroup()] = {
+        {CD::hideTitleBarsKey(), CD::scrollHideTitleBars(), QMetaType::Bool},
+    };
+    schema.groups[CD::scrollingAppearanceBordersGroup()] = {
+        {CD::showBorderKey(), CD::scrollShowBorder(), QMetaType::Bool},
+        {CD::widthKey(),
+         CD::scrollBorderWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollBorderWidthMin(), CD::scrollBorderWidthMax())},
+        {CD::radiusKey(),
+         CD::scrollBorderRadius(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollBorderRadiusMin(), CD::scrollBorderRadiusMax())},
+    };
+    // Scrolling.Behavior — focus behavior (mirrors Tiling.Behavior).
+    schema.groups[CD::scrollingBehaviorGroup()] = {
+        {CD::focusNewWindowsKey(), CD::scrollFocusNewWindows(), QMetaType::Bool},
+        {CD::focusFollowsMouseKey(), CD::scrollFocusFollowsMouse(), QMetaType::Bool},
+    };
 }
 
 QVariantList clampFractionListValue(const QVariant& value, double minVal, double maxVal)

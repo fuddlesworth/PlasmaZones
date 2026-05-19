@@ -183,6 +183,27 @@ public:
     virtual QVariantList scrollPresetWindowHeights() const = 0;
     virtual void setScrollPresetWindowHeights(const QVariantList& fractions) = 0;
 
+    // Scroll-mode appearance — column border decoration drawn by the KWin
+    // effect, mirroring the autotile decoration settings.
+    virtual bool scrollShowBorder() const = 0;
+    virtual void setScrollShowBorder(bool show) = 0;
+    virtual int scrollBorderWidth() const = 0;
+    virtual void setScrollBorderWidth(int width) = 0;
+    virtual int scrollBorderRadius() const = 0;
+    virtual void setScrollBorderRadius(int radius) = 0;
+    virtual QColor scrollBorderColor() const = 0;
+    virtual void setScrollBorderColor(const QColor& color) = 0;
+    virtual QColor scrollInactiveBorderColor() const = 0;
+    virtual void setScrollInactiveBorderColor(const QColor& color) = 0;
+    virtual bool scrollUseSystemBorderColors() const = 0;
+    virtual void setScrollUseSystemBorderColors(bool use) = 0;
+    virtual bool scrollHideTitleBars() const = 0;
+    virtual void setScrollHideTitleBars(bool hide) = 0;
+    virtual bool scrollFocusNewWindows() const = 0;
+    virtual void setScrollFocusNewWindows(bool focus) = 0;
+    virtual bool scrollFocusFollowsMouse() const = 0;
+    virtual void setScrollFocusFollowsMouse(bool follow) = 0;
+
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
@@ -514,6 +535,15 @@ Q_SIGNALS:
     void scrollCenterFocusedColumnChanged();
     void scrollPresetColumnWidthsChanged();
     void scrollPresetWindowHeightsChanged();
+    void scrollShowBorderChanged();
+    void scrollBorderWidthChanged();
+    void scrollBorderRadiusChanged();
+    void scrollBorderColorChanged();
+    void scrollInactiveBorderColorChanged();
+    void scrollUseSystemBorderColorsChanged();
+    void scrollHideTitleBarsChanged();
+    void scrollFocusNewWindowsChanged();
+    void scrollFocusFollowsMouseChanged();
 };
 
 } // namespace PlasmaZones

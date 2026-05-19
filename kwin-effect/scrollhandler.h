@@ -3,9 +3,13 @@
 
 #pragma once
 
+#include <PhosphorCompositor/AutotileState.h>
+
+#include <QColor>
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QPointF>
 #include <QRect>
 #include <QSet>
 #include <QString>
@@ -49,7 +53,12 @@ public:
 
     /// Report a newly-mapped window to the scroll engine if it sits on a
     /// scroll-mode screen. No-op for windows on autotile/snap screens.
-    void notifyWindowAdded(KWin::EffectWindow* w);
+    ///
+    /// @param focusOnAdd when true (a genuine window open), the window takes
+    /// focus if the focus-new-windows setting is on. Re-add callers (screen
+    /// change, sticky toggle, un-minimize) leave it false — a window merely
+    /// re-entering the layout must not steal focus, e.g. on monitor hotplug.
+    void notifyWindowAdded(KWin::EffectWindow* w, bool focusOnAdd = false);
 
     /// Report a window close to the scroll engine if it was on a scroll screen.
     void onWindowClosed(const QString& windowId, const QString& screenId);
@@ -95,12 +104,90 @@ public:
     /// Report a focus change to the scroll engine. No-op off scroll screens.
     void notifyWindowFocused(const QString& windowId, const QString& screenId);
 
+    /// Focus-follows-mouse: when enabled, activate the topmost scroll-managed
+    /// window under @p pos. @p screenId is the cursor's resolved screen. No-op
+    /// off scroll screens or when the setting is off. Mirrors AutotileHandler.
+    void handleCursorMoved(const QPointF& pos, const QString& screenId);
+
     /// Daemon (re)connected: clear stale tracking, re-subscribe, re-query.
     void onDaemonReady();
 
     // D-Bus signal connections and initial state query
     void connectSignals();
     void loadSettings();
+
+    // ── Border decoration ───────────────────────────────────────────────
+    // The KWin effect's generic border machinery (PlasmaZonesEffect::
+    // updateWindowBorder) consults these so a scroll-mode column is decorated
+    // exactly like an autotile window — just from this handler's settings.
+    // Only the scalar fields of BorderState are used; membership is tracked
+    // by m_notifiedWindows, not BorderState's per-screen buckets.
+
+    /// True when scroll mode manages @p windowId — used by the effect to pick
+    /// which handler's border settings apply to a window.
+    bool isTiledWindow(const QString& windowId) const
+    {
+        return m_notifiedWindows.contains(windowId);
+    }
+    /// True when @p windowId is a scroll-managed window AND borders are on.
+    bool shouldShowBorderForWindow(const QString& windowId) const
+    {
+        return m_border.showBorder && m_notifiedWindows.contains(windowId);
+    }
+    int borderWidth() const
+    {
+        return m_border.width;
+    }
+    QColor borderColor() const
+    {
+        return m_border.color;
+    }
+    QColor inactiveBorderColor() const
+    {
+        return m_border.inactiveColor;
+    }
+    int borderRadius() const
+    {
+        return m_border.radius;
+    }
+    void setBorderWidth(int w)
+    {
+        m_border.width = w;
+    }
+    void setBorderColor(const QColor& c)
+    {
+        m_border.color = c;
+    }
+    void setInactiveBorderColor(const QColor& c)
+    {
+        m_border.inactiveColor = c;
+    }
+    void setBorderRadius(int r)
+    {
+        m_border.radius = r;
+    }
+    void updateShowBorderSetting(bool enabled)
+    {
+        m_border.showBorder = enabled;
+    }
+    /// Toggle server-side title-bar hiding across every scroll-managed window.
+    void updateHideTitleBarsSetting(bool enabled);
+
+    // ── Focus behavior ───────────────────────────────────────────────────
+    /// Enable/disable focus-follows-mouse for scroll screens. Clears the
+    /// last-focused tracking when disabled so re-enabling re-evaluates.
+    void setFocusFollowsMouse(bool enabled)
+    {
+        m_focusFollowsMouse = enabled;
+        if (!enabled) {
+            m_lastFocusFollowsMouseWindowId.clear();
+        }
+    }
+    /// Enable/disable auto-focusing a window as it enters the scroll layout.
+    void setFocusNewWindows(bool enabled)
+    {
+        m_focusNewWindows = enabled;
+    }
 
 public Q_SLOTS:
     /// Daemon told us the scroll-mode screen set changed.
@@ -129,6 +216,20 @@ private:
     /// Debounced re-assert: snap every drifted window back to the geometry the
     /// daemon resolved for it.
     void flushReasserts();
+
+    /// Hide or restore @p w's server-side title bar, tracking the change in
+    /// m_borderlessWindows so the toggle and a window leaving scroll mode can
+    /// reverse it. CSD windows (no server decoration) are skipped. @p w may be
+    /// null — the tracking entry is still dropped so it cannot leak.
+    void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless);
+    /// Hide the title bar of every currently-tracked scroll window (when the
+    /// setting is on) and rebuild all borders. Used by the batch-add path; the
+    /// leave path is handled per-window by clearDecoration(), so this only ever
+    /// hides — it does not restore title bars for windows that left the set.
+    void refreshDecorations();
+    /// Restore decoration (title bar + border) for a window no longer
+    /// scroll-tracked. @p w may be null when the window has already closed.
+    void clearDecoration(const QString& windowId, KWin::EffectWindow* w);
 
     PlasmaZonesEffect* m_effect;
 
@@ -160,6 +261,28 @@ private:
     /// epoch at call time and skips its rollback if the daemon reconnected
     /// meanwhile — onDaemonReady has already rebuilt the tracking sets.
     int m_daemonEpoch = 0;
+
+    /// Scroll-mode border decoration settings. Only the scalar fields are used
+    /// (showBorder / hideTitleBars / width / radius / color / inactiveColor) —
+    /// the effect's generic border machinery reads them via the accessors
+    /// above; per-window membership is m_notifiedWindows, not BorderState's
+    /// per-screen buckets.
+    PhosphorCompositor::BorderState m_border;
+    /// Scroll windows whose server-side title bar this handler hid
+    /// (setNoBorder(true)) — the subset of m_notifiedWindows decorated while
+    /// hideTitleBars is on. A window is on exactly one screen, so a flat set
+    /// suffices (autotile needs per-screen buckets only for virtual screens).
+    QSet<QString> m_borderlessWindows;
+
+    /// Focus-follows-mouse enabled for scroll screens.
+    bool m_focusFollowsMouse = false;
+    /// Last window activated by focus-follows-mouse — suppresses redundant
+    /// activateWindow calls while the cursor stays over the same window.
+    QString m_lastFocusFollowsMouseWindowId;
+    /// Auto-focus a window as it enters the scroll layout. Mirrors the
+    /// ConfigDefaults::scrollFocusNewWindows() default until the real value
+    /// arrives over D-Bus (daemon_bringup loadSettingAsync).
+    bool m_focusNewWindows = true;
 };
 
 } // namespace PlasmaZones

@@ -121,8 +121,9 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Standard path: notify autotile first, then try snap restore
     m_autotileHandler->notifyWindowAdded(w);
     // Scroll mode reports independently — it acts only on scroll-mode
-    // screens, which are disjoint from autotile screens.
-    m_scrollHandler->notifyWindowAdded(w);
+    // screens, which are disjoint from autotile screens. focusOnAdd=true: this
+    // is a genuine window open, so focus-new-windows applies.
+    m_scrollHandler->notifyWindowAdded(w, /*focusOnAdd=*/true);
 
     if (!onAutotileScreen && canSnapRestore) {
         callResolveWindowRestore(w);

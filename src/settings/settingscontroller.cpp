@@ -618,7 +618,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("tiling"),
          {QStringLiteral("tiling-appearance"), QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm"),
           QStringLiteral("tiling-assignments"), QStringLiteral("tiling-ordering"), QStringLiteral("tiling-shortcuts")}},
-        {QStringLiteral("scrolling"), {QStringLiteral("scrolling-layout"), QStringLiteral("scrolling-assignments")}},
+        {QStringLiteral("scrolling"),
+         {QStringLiteral("scrolling-layout"), QStringLiteral("scrolling-appearance"),
+          QStringLiteral("scrolling-behavior"), QStringLiteral("scrolling-assignments")}},
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
@@ -649,6 +651,8 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("tiling-ordering"),
         QStringLiteral("snapping-apprules"),
         QStringLiteral("scrolling-layout"),
+        QStringLiteral("scrolling-appearance"),
+        QStringLiteral("scrolling-behavior"),
         QStringLiteral("scrolling-assignments"),
         QStringLiteral("exclusions"),
         QStringLiteral("editor"),
@@ -2219,6 +2223,32 @@ void SettingsController::clearPerScreenSnappingSettings(const QString& screenNam
 bool SettingsController::hasPerScreenSnappingSettings(const QString& screenName) const
 {
     return m_settings.hasPerScreenSnappingSettings(screenName);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Per-screen scroll overrides
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantMap SettingsController::getPerScreenScrollSettings(const QString& screenName) const
+{
+    return m_settings.getPerScreenScrollSettings(screenName);
+}
+
+void SettingsController::setPerScreenScrollSetting(const QString& screenName, const QString& key, const QVariant& value)
+{
+    m_settings.setPerScreenScrollSetting(screenName, key, value);
+    setNeedsSave(true);
+}
+
+void SettingsController::clearPerScreenScrollSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenScrollSettings(screenName);
+    setNeedsSave(true);
+}
+
+bool SettingsController::hasPerScreenScrollSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenScrollSettings(screenName);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

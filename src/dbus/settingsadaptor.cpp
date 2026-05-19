@@ -349,6 +349,18 @@ void SettingsAdaptor::initializeRegistry()
         return true;
     };
     m_schemas[QStringLiteral("scrollPresetWindowHeights")] = QStringLiteral("stringlist");
+    // Scrolling appearance — column border decoration.
+    REGISTER_BOOL_SETTING("scrollShowBorder", scrollShowBorder, setScrollShowBorder)
+    REGISTER_INT_SETTING("scrollBorderWidth", scrollBorderWidth, setScrollBorderWidth)
+    REGISTER_INT_SETTING("scrollBorderRadius", scrollBorderRadius, setScrollBorderRadius)
+    REGISTER_COLOR_SETTING("scrollBorderColor", scrollBorderColor, setScrollBorderColor)
+    REGISTER_COLOR_SETTING("scrollInactiveBorderColor", scrollInactiveBorderColor, setScrollInactiveBorderColor)
+    REGISTER_BOOL_SETTING("scrollUseSystemBorderColors", scrollUseSystemBorderColors, setScrollUseSystemBorderColors)
+    REGISTER_BOOL_SETTING("scrollHideTitleBars", scrollHideTitleBars, setScrollHideTitleBars)
+
+    // Scrolling behavior — focus behavior.
+    REGISTER_BOOL_SETTING("scrollFocusNewWindows", scrollFocusNewWindows, setScrollFocusNewWindows)
+    REGISTER_BOOL_SETTING("scrollFocusFollowsMouse", scrollFocusFollowsMouse, setScrollFocusFollowsMouse)
 
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
