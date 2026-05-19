@@ -51,7 +51,7 @@ bool ScrollHandler::isEligibleForScroll(KWin::EffectWindow* w) const
     return m_effect->isEligibleForTilingNotify(w) && !m_effect->isWindowSticky(w);
 }
 
-void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w)
+void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w, bool focusOnAdd)
 {
     if (!isEligibleForScroll(w)) {
         return;
@@ -100,6 +100,14 @@ void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w)
     // The window joined the tracked set — hide its title bar (when the setting
     // is on) and rebuild borders so the new column is decorated immediately.
     refreshDecorations();
+
+    // Focus-new-windows: a genuinely-opened window takes focus. Only the
+    // window-open path passes focusOnAdd — re-add callers (screen change,
+    // sticky toggle, un-minimize) and notifyWindowsAddedBatch (startup /
+    // daemon reconnect) deliberately do not steal focus.
+    if (focusOnAdd && m_focusNewWindows) {
+        KWin::effects->activateWindow(w);
+    }
 }
 
 void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows)
@@ -188,6 +196,9 @@ void ScrollHandler::onWindowClosed(const QString& windowId, const QString& scree
     m_reasserted.remove(windowId);
     m_reorderPending.remove(windowId);
     m_interactiveResize.remove(windowId);
+    if (m_lastFocusFollowsMouseWindowId == windowId) {
+        m_lastFocusFollowsMouseWindowId.clear();
+    }
 
     if (m_scrollScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
@@ -498,6 +509,41 @@ void ScrollHandler::notifyWindowFocused(const QString& windowId, const QString& 
                                                    QStringLiteral("notifyWindowFocused"));
 }
 
+void ScrollHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
+{
+    if (!m_focusFollowsMouse || m_scrollScreens.isEmpty()) {
+        return;
+    }
+    // Only act on scroll screens — the caller already resolved screenId.
+    if (screenId.isEmpty() || !m_scrollScreens.contains(screenId)) {
+        return;
+    }
+    // Find the topmost window under the cursor (stacking order, top → bottom).
+    const auto windows = KWin::effects->stackingOrder();
+    for (int i = windows.size() - 1; i >= 0; --i) {
+        KWin::EffectWindow* w = windows[i];
+        if (!w || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+            continue;
+        }
+        if (!w->frameGeometry().contains(pos)) {
+            continue;
+        }
+        const QString windowId = m_effect->getWindowId(w);
+        // The topmost window under the cursor is not scroll-managed (a dialog,
+        // popup, excluded app, floating window). Don't look through it to focus
+        // a scroll window beneath — that would steal focus from the overlay.
+        if (!m_notifiedWindows.contains(windowId)) {
+            return;
+        }
+        if (windowId == m_lastFocusFollowsMouseWindowId) {
+            return; // already focused — no-op
+        }
+        m_lastFocusFollowsMouseWindowId = windowId;
+        KWin::effects->activateWindow(w);
+        return;
+    }
+}
+
 void ScrollHandler::onDaemonReady()
 {
     // Bump the epoch so any D-Bus reply still in flight from before this
@@ -527,6 +573,7 @@ void ScrollHandler::onDaemonReady()
     m_reasserted.clear();
     m_reorderPending.clear();
     m_interactiveResize.clear();
+    m_lastFocusFollowsMouseWindowId.clear();
     m_reassertTimer->stop();
     connectSignals();
     loadSettings();

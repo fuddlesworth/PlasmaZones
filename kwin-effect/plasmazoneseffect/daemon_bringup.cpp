@@ -670,6 +670,15 @@ void PlasmaZonesEffect::loadCachedSettings()
         updateAllBorders();
     });
 
+    // ── Scroll-mode behavior ─────────────────────────────────────────────────
+    loadSettingAsync(QStringLiteral("scrollFocusFollowsMouse"), [this](const QVariant& v) {
+        m_scrollHandler->setFocusFollowsMouse(v.toBool());
+    });
+
+    loadSettingAsync(QStringLiteral("scrollFocusNewWindows"), [this](const QVariant& v) {
+        m_scrollHandler->setFocusNewWindows(v.toBool());
+    });
+
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization
     {
         PhosphorProtocol::ClientHelpers::loadSettingAsync(

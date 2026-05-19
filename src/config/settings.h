@@ -283,6 +283,10 @@ public:
                    NOTIFY scrollUseSystemBorderColorsChanged)
     Q_PROPERTY(bool scrollHideTitleBars READ scrollHideTitleBars WRITE setScrollHideTitleBars NOTIFY
                    scrollHideTitleBarsChanged)
+    Q_PROPERTY(bool scrollFocusNewWindows READ scrollFocusNewWindows WRITE setScrollFocusNewWindows NOTIFY
+                   scrollFocusNewWindowsChanged)
+    Q_PROPERTY(bool scrollFocusFollowsMouse READ scrollFocusFollowsMouse WRITE setScrollFocusFollowsMouse NOTIFY
+                   scrollFocusFollowsMouseChanged)
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
@@ -832,6 +836,10 @@ public:
     void setScrollUseSystemBorderColors(bool use) override;
     bool scrollHideTitleBars() const override;
     void setScrollHideTitleBars(bool hide) override;
+    bool scrollFocusNewWindows() const override;
+    void setScrollFocusNewWindows(bool focus) override;
+    bool scrollFocusFollowsMouse() const override;
+    void setScrollFocusFollowsMouse(bool follow) override;
 
     // Autotile Shortcuts — PhosphorConfig::Store-backed.
     QString autotileToggleShortcut() const;

@@ -199,6 +199,10 @@ public:
     virtual void setScrollUseSystemBorderColors(bool use) = 0;
     virtual bool scrollHideTitleBars() const = 0;
     virtual void setScrollHideTitleBars(bool hide) = 0;
+    virtual bool scrollFocusNewWindows() const = 0;
+    virtual void setScrollFocusNewWindows(bool focus) = 0;
+    virtual bool scrollFocusFollowsMouse() const = 0;
+    virtual void setScrollFocusFollowsMouse(bool follow) = 0;
 
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;
@@ -538,6 +542,8 @@ Q_SIGNALS:
     void scrollInactiveBorderColorChanged();
     void scrollUseSystemBorderColorsChanged();
     void scrollHideTitleBarsChanged();
+    void scrollFocusNewWindowsChanged();
+    void scrollFocusFollowsMouseChanged();
 };
 
 } // namespace PlasmaZones

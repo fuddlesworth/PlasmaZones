@@ -114,10 +114,13 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
         }
     }
 
-    // Focus follows mouse: activate autotile window under cursor when not dragging.
+    // Focus follows mouse: activate the tiled window under the cursor when not
+    // dragging. Autotile and scroll own disjoint screen sets — each handler
+    // self-gates on its own screens — so dispatching to both is safe.
     // Reuse effectiveScreenId computed above to avoid redundant resolveEffectiveScreenId call.
     if (!m_dragTracker->isDragging() && output) {
         m_autotileHandler->handleCursorMoved(pos, effectiveScreenId);
+        m_scrollHandler->handleCursorMoved(pos, effectiveScreenId);
     }
 }
 

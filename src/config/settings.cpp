@@ -2479,6 +2479,13 @@ PZ_STORE_GET(bool, scrollHideTitleBars, scrollingAppearanceDecorationsGroup, hid
 PZ_STORE_SET_BOOL(setScrollHideTitleBars, scrollingAppearanceDecorationsGroup, hideTitleBarsKey,
                   scrollHideTitleBarsChanged)
 
+// Scrolling.Behavior — focus behavior.
+PZ_STORE_GET(bool, scrollFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey, bool)
+PZ_STORE_SET_BOOL(setScrollFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey, scrollFocusNewWindowsChanged)
+PZ_STORE_GET(bool, scrollFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey, bool)
+PZ_STORE_SET_BOOL(setScrollFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey,
+                  scrollFocusFollowsMouseChanged)
+
 // Tiling.Appearance
 PZ_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)
 PZ_STORE_SET_COLOR(setAutotileBorderColor, tilingAppearanceColorsGroup, activeKey, autotileBorderColorChanged)

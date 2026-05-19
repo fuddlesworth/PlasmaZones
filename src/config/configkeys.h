@@ -96,6 +96,7 @@ public:
     PZ_CONFIG_GROUP(scrollingAppearanceColorsGroup, "Scrolling.Appearance.Colors")
     PZ_CONFIG_GROUP(scrollingAppearanceDecorationsGroup, "Scrolling.Appearance.Decorations")
     PZ_CONFIG_GROUP(scrollingAppearanceBordersGroup, "Scrolling.Appearance.Borders")
+    PZ_CONFIG_GROUP(scrollingBehaviorGroup, "Scrolling.Behavior")
 
     // Parent groups (for purge enumeration — covers all sub-groups)
     PZ_CONFIG_GROUP(shortcutsGroup, "Shortcuts")

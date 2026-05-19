@@ -928,6 +928,11 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          {},
          clampInt(CD::scrollBorderRadiusMin(), CD::scrollBorderRadiusMax())},
     };
+    // Scrolling.Behavior — focus behavior (mirrors Tiling.Behavior).
+    schema.groups[CD::scrollingBehaviorGroup()] = {
+        {CD::focusNewWindowsKey(), CD::scrollFocusNewWindows(), QMetaType::Bool},
+        {CD::focusFollowsMouseKey(), CD::scrollFocusFollowsMouse(), QMetaType::Bool},
+    };
 }
 
 QVariantList clampFractionListValue(const QVariant& value, double minVal, double maxVal)

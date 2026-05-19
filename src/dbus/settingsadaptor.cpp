@@ -358,6 +358,10 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("scrollUseSystemBorderColors", scrollUseSystemBorderColors, setScrollUseSystemBorderColors)
     REGISTER_BOOL_SETTING("scrollHideTitleBars", scrollHideTitleBars, setScrollHideTitleBars)
 
+    // Scrolling behavior — focus behavior.
+    REGISTER_BOOL_SETTING("scrollFocusNewWindows", scrollFocusNewWindows, setScrollFocusNewWindows)
+    REGISTER_BOOL_SETTING("scrollFocusFollowsMouse", scrollFocusFollowsMouse, setScrollFocusFollowsMouse)
+
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
 

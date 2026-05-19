@@ -945,6 +945,20 @@ public:
     void setScrollHideTitleBars(bool) override
     {
     }
+    bool scrollFocusNewWindows() const override
+    {
+        return ConfigDefaults::scrollFocusNewWindows();
+    }
+    void setScrollFocusNewWindows(bool) override
+    {
+    }
+    bool scrollFocusFollowsMouse() const override
+    {
+        return ConfigDefaults::scrollFocusFollowsMouse();
+    }
+    void setScrollFocusFollowsMouse(bool) override
+    {
+    }
     QStringList lockedScreens() const override
     {
         return {};

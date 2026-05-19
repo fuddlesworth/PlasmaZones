@@ -1187,6 +1187,15 @@ public:
     {
         return true;
     }
+    /// Scroll-mode focus behavior — mirrors the autotile defaults.
+    static bool scrollFocusNewWindows()
+    {
+        return true;
+    }
+    static bool scrollFocusFollowsMouse()
+    {
+        return false;
+    }
     /// Column-width presets the cycle-width shortcut steps through — fractions
     /// [0..1] of the working area. niri defaults: one third, one half, two
     /// thirds. Persisted as a QVariantList of doubles.

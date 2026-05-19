@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QPointF>
 #include <QRect>
 #include <QSet>
 #include <QString>
@@ -52,7 +53,12 @@ public:
 
     /// Report a newly-mapped window to the scroll engine if it sits on a
     /// scroll-mode screen. No-op for windows on autotile/snap screens.
-    void notifyWindowAdded(KWin::EffectWindow* w);
+    ///
+    /// @param focusOnAdd when true (a genuine window open), the window takes
+    /// focus if the focus-new-windows setting is on. Re-add callers (screen
+    /// change, sticky toggle, un-minimize) leave it false — a window merely
+    /// re-entering the layout must not steal focus, e.g. on monitor hotplug.
+    void notifyWindowAdded(KWin::EffectWindow* w, bool focusOnAdd = false);
 
     /// Report a window close to the scroll engine if it was on a scroll screen.
     void onWindowClosed(const QString& windowId, const QString& screenId);
@@ -97,6 +103,11 @@ public:
 
     /// Report a focus change to the scroll engine. No-op off scroll screens.
     void notifyWindowFocused(const QString& windowId, const QString& screenId);
+
+    /// Focus-follows-mouse: when enabled, activate the topmost scroll-managed
+    /// window under @p pos. @p screenId is the cursor's resolved screen. No-op
+    /// off scroll screens or when the setting is off. Mirrors AutotileHandler.
+    void handleCursorMoved(const QPointF& pos, const QString& screenId);
 
     /// Daemon (re)connected: clear stale tracking, re-subscribe, re-query.
     void onDaemonReady();
@@ -161,6 +172,22 @@ public:
     }
     /// Toggle server-side title-bar hiding across every scroll-managed window.
     void updateHideTitleBarsSetting(bool enabled);
+
+    // ── Focus behavior ───────────────────────────────────────────────────
+    /// Enable/disable focus-follows-mouse for scroll screens. Clears the
+    /// last-focused tracking when disabled so re-enabling re-evaluates.
+    void setFocusFollowsMouse(bool enabled)
+    {
+        m_focusFollowsMouse = enabled;
+        if (!enabled) {
+            m_lastFocusFollowsMouseWindowId.clear();
+        }
+    }
+    /// Enable/disable auto-focusing a window as it enters the scroll layout.
+    void setFocusNewWindows(bool enabled)
+    {
+        m_focusNewWindows = enabled;
+    }
 
 public Q_SLOTS:
     /// Daemon told us the scroll-mode screen set changed.
@@ -245,6 +272,16 @@ private:
     /// hideTitleBars is on. A window is on exactly one screen, so a flat set
     /// suffices (autotile needs per-screen buckets only for virtual screens).
     QSet<QString> m_borderlessWindows;
+
+    /// Focus-follows-mouse enabled for scroll screens.
+    bool m_focusFollowsMouse = false;
+    /// Last window activated by focus-follows-mouse — suppresses redundant
+    /// activateWindow calls while the cursor stays over the same window.
+    QString m_lastFocusFollowsMouseWindowId;
+    /// Auto-focus a window as it enters the scroll layout. Mirrors the
+    /// ConfigDefaults::scrollFocusNewWindows() default until the real value
+    /// arrives over D-Bus (daemon_bringup loadSettingAsync).
+    bool m_focusNewWindows = true;
 };
 
 } // namespace PlasmaZones

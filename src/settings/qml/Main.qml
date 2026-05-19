@@ -177,6 +177,15 @@ ApplicationWindow {
             "label": i18n("Layout"),
             "iconName": "view-grid"
         }, {
+            "name": "scrolling-appearance",
+            "label": i18n("Appearance"),
+            "iconName": "preferences-desktop-color"
+        }, {
+            "name": "scrolling-behavior",
+            "label": i18n("Behavior"),
+            "iconName": "preferences-system",
+            "hasDividerAfter": true
+        }, {
             "name": "scrolling-assignments",
             "label": i18n("Assignments"),
             "iconName": "view-list-details"
@@ -262,6 +271,8 @@ ApplicationWindow {
         "tiling-behavior": "TilingBehaviorPage.qml",
         "tiling-algorithm": "TilingAlgorithmPage.qml",
         "scrolling-layout": "ScrollingLayoutPage.qml",
+        "scrolling-appearance": "ScrollingAppearancePage.qml",
+        "scrolling-behavior": "ScrollingBehaviorPage.qml",
         "scrolling-assignments": "ScrollingAssignmentsPage.qml",
         "snapping-assignments": "SnappingAssignmentsPage.qml",
         "snapping-apprules": "AssignmentsAppRulesPage.qml",
