@@ -82,6 +82,60 @@ inline QString extractInstanceId(const QString& windowId)
 }
 
 /**
+ * @brief Derive a canonical appId from a window's desktop-file name and class.
+ *
+ * Prefers @p desktopFileName (stable across sessions). Falls back to the
+ * LAST whitespace-delimited token of @p windowClass: an X11 window class is
+ * "resourceName resourceClass" and the resourceName may itself contain
+ * spaces, so the last space is the split point and the resourceClass is the
+ * token kept. A Wayland app_id has no space and is taken whole.
+ *
+ * The result is trimmed and lower-cased. A blank or whitespace-only input
+ * (KWin reports a bare " " class for some unmapped / transient surfaces)
+ * yields an EMPTY string, never " " — a space-only appId would otherwise
+ * become a live key in every appId-map (most damagingly the snap restore
+ * queue, where it lets unrelated blank-class windows consume each other's
+ * saved zones). @c isValidAppId rejects whatever survives.
+ */
+inline QString normalizeAppId(const QString& desktopFileName, const QString& windowClass)
+{
+    QString appId = desktopFileName.trimmed();
+    if (appId.isEmpty()) {
+        // Trim the whole class BEFORE the split: a class with trailing
+        // whitespace ("resourceName resourceClass ") would otherwise split at
+        // the trailing space, yield an empty token, and drop an otherwise
+        // valid identity.
+        const QString trimmedClass = windowClass.trimmed();
+        const int sep = trimmedClass.lastIndexOf(QLatin1Char(' '));
+        appId = (sep >= 0 ? trimmedClass.mid(sep + 1) : trimmedClass);
+    }
+    return appId.toLower();
+}
+
+/**
+ * @brief Whether @p appId is a well-formed canonical app identifier.
+ *
+ * A canonical appId is a non-empty, whitespace-free token — a desktop-file
+ * name ("org.kde.konsole") or a normalized window-class token. A blank,
+ * whitespace-only, or whitespace-bearing string is a corrupt identity (a
+ * KWin bare-" " class, or a stale pre-3.0 "resourceName resourceClass"
+ * key) and must never be used as a map key. Gate every appId-keyed insert
+ * and every persisted-key load on this.
+ */
+inline bool isValidAppId(const QString& appId)
+{
+    if (appId.isEmpty()) {
+        return false;
+    }
+    for (const QChar c : appId) {
+        if (c.isSpace()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
  * @brief Derive short name from app ID for icon/app display
  * Reverse-DNS: "org.kde.dolphin" → last dot-segment (e.g., "dolphin")
  * Simple name: "firefox" → as-is

@@ -405,6 +405,26 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &PlasmaZonesEffect::slotWindowAdded);
     connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &PlasmaZonesEffect::slotWindowClosed);
 
+    // Panel (dock) lifecycle drives KWin's work area: a panel added, removed,
+    // or resized changes the strut-excluded clientArea. Route dock windows to
+    // the screen-change handler so it re-pushes the authoritative work area
+    // to the daemon. trackDockWindow / onWindowClosed no-op for non-docks.
+    connect(KWin::effects, &KWin::EffectsHandler::windowAdded, m_screenChangeHandler.get(),
+            &ScreenChangeHandler::trackDockWindow);
+    connect(KWin::effects, &KWin::EffectsHandler::windowClosed, m_screenChangeHandler.get(),
+            &ScreenChangeHandler::onWindowClosed);
+    // Panels mapped before the effect loaded never fire windowAdded — hook the
+    // already-present docks now so a later resize of one still re-reports.
+    for (KWin::EffectWindow* existing : KWin::effects->stackingOrder()) {
+        m_screenChangeHandler->trackDockWindow(existing);
+    }
+    // clientArea(MaximizeArea) is queried for the current virtual desktop, so a
+    // panel that reserves space on only one desktop changes the work area when
+    // the user switches desktops — re-push so the daemon tracks per-desktop
+    // struts too.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, m_screenChangeHandler.get(),
+            &ScreenChangeHandler::scheduleClientAreaReport);
+
     // Belt-and-suspenders: windowClosed removes animations, but if a deferred
     // timer re-adds one between windowClosed and windowDeleted, the Item tree
     // will be torn down while an animation entry still references the window.

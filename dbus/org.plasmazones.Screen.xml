@@ -40,6 +40,24 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Connector name from Workspace::outputOrder().first() (e.g. DP-1). Resolved to EDID-based identifier internally."/>
             </arg>
         </method>
+        <method name="setAvailableGeometryFromKWin">
+            <annotation name="org.gtk.GDBus.DocString" value="Record the authoritative per-screen available geometry (panel-excluded work area) as reported by the KWin effect's clientArea(MaximizeArea) query. Overrides the layer-shell sensor + plasmashell D-Bus panel-strut heuristic, which mis-attributes per-edge struts for top-panel layouts. The effect always reports a valid work area (the full screen rect when no panels reserve space); a zero-size rect is accepted defensively to clear the override and revert to the heuristic. Called by the KWin effect."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Connector name (e.g. DP-1)."/>
+            </arg>
+            <arg name="x" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Work-area X origin."/>
+            </arg>
+            <arg name="y" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Work-area Y origin."/>
+            </arg>
+            <arg name="width" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Work-area width."/>
+            </arg>
+            <arg name="height" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Work-area height."/>
+            </arg>
+        </method>
         <method name="getAvailableGeometry">
             <annotation name="org.gtk.GDBus.DocString" value="Return the available geometry (excluding panels/taskbars) for a screen. Handles virtual screen IDs (e.g. physId/vs:0). Uses layer-shell sensor data when available, falls back to Qt's availableGeometry."/>
             <arg name="screenId" type="s" direction="in">

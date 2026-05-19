@@ -70,17 +70,10 @@ QString PlasmaZonesEffect::getWindowAppId(KWin::EffectWindow* w) const
     if (!window) {
         return QString();
     }
-    // Prefer desktopFileName (stable cross-session identifier when available).
-    QString appId = window->desktopFileName();
-    if (appId.isEmpty()) {
-        // Fallback: normalize windowClass
-        //   X11: "resourceName resourceClass" → extract resourceClass
-        //   Wayland: app_id as-is
-        QString wc = w->windowClass();
-        int spaceIdx = wc.indexOf(QLatin1Char(' '));
-        appId = (spaceIdx > 0) ? wc.mid(spaceIdx + 1) : wc;
-    }
-    return appId.toLower();
+    // Canonical appId derivation lives in PhosphorIdentity so the daemon and
+    // effect spell it identically. A blank / whitespace-only window class
+    // yields an empty appId (never " ") — see normalizeAppId.
+    return ::PhosphorIdentity::WindowId::normalizeAppId(window->desktopFileName(), w->windowClass());
 }
 
 void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w)

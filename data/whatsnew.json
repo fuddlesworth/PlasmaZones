@@ -1,6 +1,25 @@
 {
     "releases": [
         {
+            "version": "3.0.4",
+            "date": "2026-05-18",
+            "highlights": [
+                "Fixed maximized windows ballooning in size when autotiled (#461)",
+                "Fixed snapping and keyboard snap-to-zone ignoring the per-monitor, per-desktop, and per-activity disable settings (#461)",
+                "Fixed windows with a blank window class restoring into each other's saved zones (#461)",
+                "Fixed windows staying tiled after switching onto a desktop where autotiling is disabled (#461)",
+                "Fixed the KWin desktop effect not appearing on NixOS — the flake now builds PlasmaZones against your system's KWin so the effect always matches the running compositor (#481)",
+                "Fixed support report generation crashing on Qt 6.11+ — plasmazones-report and the bug-report instructions now use busctl, which is unaffected (#481)"
+            ]
+        },
+        {
+            "version": "3.0.3",
+            "date": "2026-05-17",
+            "highlights": [
+                "Fixed zones sliding underneath a top panel, with the bottom edge over-reserved — the daemon now uses the compositor's authoritative work area for panel struts (#461, #472)"
+            ]
+        },
+        {
             "version": "3.0.2",
             "date": "2026-05-17",
             "highlights": [

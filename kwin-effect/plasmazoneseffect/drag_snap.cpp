@@ -398,7 +398,12 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         return;
     }
 
-    qCDebug(lcEffect) << "Setting window geometry from" << window->frameGeometry() << "to" << geo;
+    // INFO level: a standing record of every resolved window placement.
+    // Generally useful operationally, and the resolved pixel rect is the one
+    // number a support report needs to diagnose zone-geometry bugs (the zone
+    // id is logged elsewhere; the resolved rect previously was not). Mirrors
+    // the autotile path, which already logs "Autotile tile request: QRect=".
+    qCInfo(lcEffect) << "Setting window geometry from" << window->frameGeometry() << "to" << geo;
 
     // Capture old frame before moveResize for repaint region
     const QRectF oldFrame = window->frameGeometry();
@@ -537,7 +542,11 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
 
     KWin::Window* kwinWindow = window->window();
     if (kwinWindow) {
-        qCInfo(lcEffect) << "moveResize: QRect=" << geo << "-> QRectF=" << QRectF(geo);
+        // DEBUG: the resolved rect is already logged at INFO above ("Setting
+        // window geometry from ... to ..."), which covers both the animated
+        // and non-animated paths — keep this one at debug to avoid a
+        // duplicate INFO line for the same apply.
+        qCDebug(lcEffect) << "moveResize: QRect=" << geo << "-> QRectF=" << QRectF(geo);
         kwinWindow->moveResize(QRectF(geo));
 
         repaintSnapRegions(window, oldFrame, geo);

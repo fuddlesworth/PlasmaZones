@@ -148,6 +148,12 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
         }
     }
 
+    // Push KWin's authoritative per-screen work area (clientArea/MaximizeArea)
+    // now that the bridge is up — see ScreenChangeHandler::scheduleClientAreaReport.
+    if (m_screenChangeHandler) {
+        m_screenChangeHandler->scheduleClientAreaReport();
+    }
+
     // Re-push cursor screen — use the cached effective screen ID (which includes
     // virtual screen IDs like "A/vs:0") so the daemon's shortcut handler resolves
     // to the correct virtual screen, not the physical monitor.

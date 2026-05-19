@@ -100,6 +100,18 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
+    // Global snapping kill-switch. When the user turns snapping off entirely,
+    // no window may be auto-snapped on open — not via app rules, session
+    // restore, empty-zone auto-assign, or last-used-zone. The screen-mode gate
+    // below only covers autotile-mode screens; a screen still carrying a
+    // Snapping-mode layout assignment would otherwise keep auto-snapping new
+    // windows even with snapping globally disabled (discussion #461 item 2).
+    if (!isEnabled()) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "resolveWindowRestore:" << windowId << "snapping globally disabled, skipping";
+        return SnapResult::noSnap();
+    }
+
     // Pre-check: if this window already has an exact zone assignment (loaded from
     // KConfig with full windowId after daemon-only restart), skip the restore chain.
     // Consume the appId-based pending entry to prevent other instances of the same
@@ -178,8 +190,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // on an autotile screen must not be auto-assigned, autotile owns
     // placement there.
     if (m_layoutManager) {
-        int dt = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-        if (m_layoutManager->modeForScreen(screenId, dt, m_layoutManager->currentActivity())
+        const int dt = currentVirtualDesktop();
+        if (m_layoutManager->modeForScreen(screenId, dt, currentActivity())
             != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "caller screen"
                                                       << screenId << "is autotile — skipping empty/last zone fallbacks";
@@ -208,6 +220,26 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     }
 
     return SnapResult::noSnap();
+}
+
+int SnapEngine::currentVirtualDesktop() const
+{
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+}
+
+QString SnapEngine::currentActivity() const
+{
+    return m_layoutManager ? m_layoutManager->currentActivity() : QString();
+}
+
+bool SnapEngine::isEnabled() const noexcept
+{
+    // Snapping's global master toggle is the engine's enabled state — there is
+    // no per-screen "is snapping active here" notion (that is the layout-mode
+    // router's job). When false, the whole snap subsystem is off, mirroring
+    // AutotileEngine::isEnabled() reporting autotile's effective state.
+    auto* s = snapSettings();
+    return s && s->snappingEnabled();
 }
 
 } // namespace PhosphorSnapEngine

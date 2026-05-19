@@ -79,8 +79,10 @@ body:
     attributes:
       label: Support Report
       description: |
-        Run `plasmazones-report` and attach the generated archive, or paste the D-Bus output:
-        `qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportReport 0`
+        Run `plasmazones-report` and attach the generated archive.
+        If that command is unavailable, paste the D-Bus output instead:
+        `busctl --user call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i 0`
+        (Avoid `qdbus`/`qdbus6` — it segfaults at exit on Qt 6.11+ and can drop the report.)
       render: markdown
 
   - type: checkboxes

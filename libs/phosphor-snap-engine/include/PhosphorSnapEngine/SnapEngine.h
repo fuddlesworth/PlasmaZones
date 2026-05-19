@@ -57,11 +57,25 @@ public:
                         QObject* parent = nullptr);
     ~SnapEngine() override;
 
+    /// Current virtual desktop (1-based; 0 when no virtual-desktop manager is
+    /// wired) and activity, forwarded from the injected managers. Exposed so
+    /// daemon adaptors that gate on disabled context (see isContextDisabled)
+    /// can read the same values the engine's own restore logic uses, without
+    /// each adaptor wiring its own managers.
+    int currentVirtualDesktop() const;
+    QString currentActivity() const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — lifecycle
     // ═══════════════════════════════════════════════════════════════════════════
 
     bool isActiveOnScreen(const QString& screenId) const override;
+    /// True when snapping is globally enabled. Mirrors AutotileEngine::isEnabled()
+    /// so callers (daemon shortcut dispatch, mode routing) can gate snap-mode
+    /// operations through the IPlacementEngine interface uniformly. Without this
+    /// override SnapEngine inherits IPlacementEngine's `return false` default,
+    /// which made every snap engine a no-op to any isEnabled() caller.
+    bool isEnabled() const noexcept override;
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
     void windowClosed(const QString& windowId) override;

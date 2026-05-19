@@ -124,8 +124,16 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
     // Skip transient/dialog windows unconditionally. Dialogs, utilities, tooltips,
     // notifications, etc. should never be zone-managed. User-configured exclusion
     // lists and minimum size checks are handled by the daemon.
+    //
+    // transientFor() catches child surfaces that Electron/CEF apps (Steam, Discord,
+    // VS Code) spawn for image previews, context menus and popups: these frequently
+    // fail to report an accurate KWin window type (isDialog/isPopupWindow stay
+    // false) but always set the transient-parent relationship. Without this the
+    // popup passes the filter and gets snapped to a zone (discussion #461 item 11).
+    // Mirrors the transient bucket already enforced by shouldAnimateWindow() and
+    // isTileableWindow().
     if (w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isOnScreenDisplay()
-        || w->isModal() || w->isPopupWindow()) {
+        || w->isModal() || w->isPopupWindow() || w->transientFor()) {
         return false;
     }
 
