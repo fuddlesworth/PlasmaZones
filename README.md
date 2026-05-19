@@ -50,8 +50,6 @@ yay -S plasmazones-bin                                                # Arch (AU
 sudo dnf copr enable fuddlesworth/PlasmaZones && sudo dnf install plasmazones   # Fedora (COPR)
 ```
 
-**NixOS:** install via the flake's `nixosModules.default` (or `homeManagerModules.default`), which builds PlasmaZones against your system's nixpkgs. Avoid `nix profile install` — it compiles the KWin effect against the flake's pinned KWin, and KWin silently refuses to load an effect whose version does not match the running compositor.
-
 openSUSE Tumbleweed, a portable tarball for Fedora Atomic / no-root setups, and source-build instructions (including the `-DUSE_KDE_FRAMEWORKS=OFF` portable build): **[Install page →](https://phosphor-works.github.io/plasmazones/#install)**.
 
 After install, enable the daemon:
@@ -62,6 +60,44 @@ kbuildsycoca6 --noincremental    # KDE only — refresh the service cache
 ```
 
 Requirements: KDE Plasma 6 on Wayland — the integration runs as a KWin effect — plus Qt 6.6+, CMake 3.16+, and a C++20 compiler. Optional: KDE Frameworks 6.6+ for the settings KCM and KGlobalAccel shortcuts, PlasmaActivities for activity-based layouts. The portable build (`-DUSE_KDE_FRAMEWORKS=OFF`) drops the framework deps.
+
+### Nix / NixOS
+
+#### NixOS (recommended)
+
+Add to your flake inputs:
+
+```nix
+plasmazones.url = "github:fuddlesworth/PlasmaZones";
+```
+
+Import the module and enable it in your NixOS configuration:
+
+```nix
+imports = [ inputs.plasmazones.nixosModules.default ];
+programs.plasmazones.enable = true;
+```
+
+After rebuilding, enable the daemon and refresh KDE:
+
+```bash
+systemctl --user enable --now plasmazones.service
+kbuildsycoca6 --noincremental
+```
+
+Then log out and back in.
+
+---
+
+#### Nix profile (without NixOS)
+
+```bash
+nix profile install github:fuddlesworth/PlasmaZones
+```
+
+> **Note:** This pins the package to the flake's nixpkgs. If your system's KWin
+> updates, the effect plugin may stop loading until you reinstall. The NixOS
+> module method above avoids this by always building against your system's KWin.
 
 ---
 
