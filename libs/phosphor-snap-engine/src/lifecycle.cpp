@@ -106,13 +106,10 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // below only covers autotile-mode screens; a screen still carrying a
     // Snapping-mode layout assignment would otherwise keep auto-snapping new
     // windows even with snapping globally disabled (discussion #461 item 2).
-    {
-        auto* s = snapSettings();
-        if (!s || !s->snappingEnabled()) {
-            qCDebug(PhosphorSnapEngine::lcSnapEngine)
-                << "resolveWindowRestore:" << windowId << "snapping globally disabled, skipping";
-            return SnapResult::noSnap();
-        }
+    if (!isEnabled()) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "resolveWindowRestore:" << windowId << "snapping globally disabled, skipping";
+        return SnapResult::noSnap();
     }
 
     // Pre-check: if this window already has an exact zone assignment (loaded from
