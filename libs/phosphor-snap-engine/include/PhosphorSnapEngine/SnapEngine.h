@@ -70,6 +70,12 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     bool isActiveOnScreen(const QString& screenId) const override;
+    /// True when snapping is globally enabled. Mirrors AutotileEngine::isEnabled()
+    /// so callers (daemon shortcut dispatch, mode routing) can gate snap-mode
+    /// operations through the IPlacementEngine interface uniformly. Without this
+    /// override SnapEngine inherits IPlacementEngine's `return false` default,
+    /// which made every snap engine a no-op to any isEnabled() caller.
+    bool isEnabled() const noexcept override;
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
     void windowClosed(const QString& windowId) override;

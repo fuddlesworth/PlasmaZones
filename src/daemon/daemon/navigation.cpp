@@ -87,7 +87,19 @@ static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* 
     if (!router) {
         return nullptr;
     }
-    return router->engineFor(outCtx.screenId);
+    PhosphorEngine::IPlacementEngine* nav = router->engineFor(outCtx.screenId);
+    // Global feature-toggle gate. engineFor() routes purely on the screen's
+    // layout mode; it does not consult whether that mode's master toggle is
+    // on. isEnabled() reports the effective on/off state for both engines
+    // (SnapEngine → snappingEnabled, AutotileEngine → any-screen autotiling),
+    // so one check here suppresses every snap- and autotile-mode shortcut
+    // when its feature is globally disabled — the keyboard-nav counterpart of
+    // the auto-snap-on-open kill-switch in SnapEngine::resolveWindowRestore.
+    if (nav && !nav->isEnabled()) {
+        qCDebug(lcDaemon) << shortcutName << "shortcut: ignored — engine disabled for screen" << outCtx.screenId;
+        return nullptr;
+    }
+    return nav;
 }
 
 void Daemon::handleRotate(bool clockwise)
