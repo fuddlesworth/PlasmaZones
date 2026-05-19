@@ -174,20 +174,11 @@ void Daemon::refreshScrollConfigFromSettings()
         return;
     }
 
-    // Global defaults. Per-screen overrides layer on top via the engine's
-    // effective*() accessors — see applyPerScreenScrollOverrides() below.
-    // ScrollEngine::toFractionVector coerces the persisted QVariantList into
-    // the engine's typed QVector<qreal>; non-numeric junk is already dropped by
-    // the schema's clampFractionList validator.
-    using PhosphorScrollEngine::ScrollEngine;
-    scroll->setPresetColumnWidths(ScrollEngine::toFractionVector(m_settings->scrollPresetColumnWidths()));
-    scroll->setPresetWindowHeights(ScrollEngine::toFractionVector(m_settings->scrollPresetWindowHeights()));
-    scroll->setDefaultColumnWidth(m_settings->scrollDefaultColumnWidth());
-    scroll->setInnerGap(m_settings->scrollInnerGap());
-    scroll->setOuterGap(m_settings->scrollOuterGap());
-    scroll->setViewportMode(m_settings->scrollCenterFocusedColumn() ? PhosphorScrollEngine::ScrollViewportMode::Centered
-                                                                    : PhosphorScrollEngine::ScrollViewportMode::Fit);
-
+    // Global scroll geometry config is no longer pushed scalar-by-scalar: the
+    // engine pulls it through PhosphorEngine::IScrollSettings (Settings
+    // implements that interface and was wired into the engine at construction
+    // via setEngineSettings). Per-screen overrides still layer on top via the
+    // engine's effective*() accessors — see applyPerScreenScrollOverrides().
     applyPerScreenScrollOverrides();
 
     // Re-resolve every active scroll strip so a gap / preset / centering change

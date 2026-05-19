@@ -11,6 +11,7 @@
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
+#include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "configdefaults.h"
 #include "configbackends.h"
@@ -36,10 +37,11 @@ namespace PlasmaZones {
  */
 class PLASMAZONES_EXPORT Settings : public ISettings,
                                     public PhosphorEngine::IAutotileSettings,
-                                    public PhosphorEngine::ISnapSettings
+                                    public PhosphorEngine::ISnapSettings,
+                                    public PhosphorEngine::IScrollSettings
 {
     Q_OBJECT
-    Q_INTERFACES(PhosphorEngine::IAutotileSettings PhosphorEngine::ISnapSettings)
+    Q_INTERFACES(PhosphorEngine::IAutotileSettings PhosphorEngine::ISnapSettings PhosphorEngine::IScrollSettings)
 
 public:
     /** Maximum number of activation triggers per action (drag, multi-zone, zone span).
@@ -810,20 +812,25 @@ public:
     void setAutotileDragInsertToggle(bool enable) override;
 
     // Scroll Mode Settings — PhosphorConfig::Store-backed.
+    // The 6 geometry getters (scrollInnerGap … scrollPresetWindowHeights)
+    // override PhosphorEngine::IScrollSettings — the scroll engine pulls them
+    // through that interface. Their setters are plain Settings methods (no
+    // override): they back D-Bus/QML writes only, exactly like the autotile
+    // gap setters which are likewise absent from IAutotileSettings.
     bool scrollingEnabled() const override;
     void setScrollingEnabled(bool enabled) override;
     int scrollInnerGap() const override;
-    void setScrollInnerGap(int gap) override;
+    void setScrollInnerGap(int gap);
     int scrollOuterGap() const override;
-    void setScrollOuterGap(int gap) override;
+    void setScrollOuterGap(int gap);
     double scrollDefaultColumnWidth() const override;
-    void setScrollDefaultColumnWidth(double fraction) override;
+    void setScrollDefaultColumnWidth(double fraction);
     bool scrollCenterFocusedColumn() const override;
-    void setScrollCenterFocusedColumn(bool center) override;
+    void setScrollCenterFocusedColumn(bool center);
     QVariantList scrollPresetColumnWidths() const override;
-    void setScrollPresetColumnWidths(const QVariantList& fractions) override;
+    void setScrollPresetColumnWidths(const QVariantList& fractions);
     QVariantList scrollPresetWindowHeights() const override;
-    void setScrollPresetWindowHeights(const QVariantList& fractions) override;
+    void setScrollPresetWindowHeights(const QVariantList& fractions);
     bool scrollShowBorder() const override;
     void setScrollShowBorder(bool show) override;
     int scrollBorderWidth() const override;

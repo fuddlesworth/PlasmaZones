@@ -11,6 +11,7 @@
 namespace PhosphorScrollEngine {
 
 using PhosphorEngine::IPlacementState;
+using PhosphorEngine::IScrollSettings;
 using PhosphorEngine::NavigationContext;
 using PhosphorEngine::TilingStateKey;
 
@@ -27,14 +28,16 @@ QVector<qreal> ScrollEngine::toFractionVector(const QVariantList& list)
 ScrollEngine::ScrollEngine(QObject* parent)
     : PhosphorEngine::PlacementEngineBase(parent)
 {
-    // niri's default preset fractions: one third, one half, two thirds.
-    m_presetColumnWidths = {1.0 / 3.0, 0.5, 2.0 / 3.0};
-    m_presetWindowHeights = {1.0 / 3.0, 0.5, 2.0 / 3.0};
 }
 
 // ─────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────
+
+PhosphorEngine::IScrollSettings* ScrollEngine::scrollSettings() const
+{
+    return qobject_cast<PhosphorEngine::IScrollSettings*>(engineSettings());
+}
 
 TilingStateKey ScrollEngine::keyForScreen(const QString& screenId) const
 {
@@ -598,25 +601,6 @@ QStringList ScrollEngine::managedWindowOrder(const QString& screenId) const
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Preset lists
-// ─────────────────────────────────────────────────────────────────────────
-
-void ScrollEngine::setPresetColumnWidths(const QVector<qreal>& fractions)
-{
-    m_presetColumnWidths = fractions;
-}
-
-void ScrollEngine::setPresetWindowHeights(const QVector<qreal>& fractions)
-{
-    m_presetWindowHeights = fractions;
-}
-
-void ScrollEngine::setDefaultColumnWidth(qreal fraction)
-{
-    m_defaultColumnWidth = fraction;
-}
-
-// ─────────────────────────────────────────────────────────────────────────
 // Per-screen config (override → global default)
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -663,22 +647,44 @@ QVector<qreal> ScrollEngine::clampedFractionVector(const QVariantList& list)
 // and it keeps a malformed override (e.g. a non-numeric DefaultColumnWidth
 // coerced to 0.0) from yielding a degenerate column instead of a sane bound.
 
+// Hard defaults the effective*() resolvers fall back to when no IScrollSettings
+// is wired (unit tests with no fake installed). The daemon always wires one in
+// production, so these only ever apply in isolated engine tests.
+namespace {
+// niri's default preset fractions — one third, one half, two thirds.
+const QVector<qreal> kNiriPresetFractions = {1.0 / 3.0, 0.5, 2.0 / 3.0};
+// Strip gap default in logical pixels (the engine's pre-interface default).
+constexpr int kDefaultStripGap = 8;
+}
+
 QVector<qreal> ScrollEngine::effectivePresetColumnWidths(const QString& screenId) const
 {
     const QVariant v = perScreenValue(screenId, QLatin1String("PresetColumnWidths"));
-    return v.isValid() ? clampedFractionVector(v.toList()) : m_presetColumnWidths;
+    if (v.isValid()) {
+        return clampedFractionVector(v.toList());
+    }
+    const IScrollSettings* s = scrollSettings();
+    return s ? clampedFractionVector(s->scrollPresetColumnWidths()) : kNiriPresetFractions;
 }
 
 QVector<qreal> ScrollEngine::effectivePresetWindowHeights(const QString& screenId) const
 {
     const QVariant v = perScreenValue(screenId, QLatin1String("PresetWindowHeights"));
-    return v.isValid() ? clampedFractionVector(v.toList()) : m_presetWindowHeights;
+    if (v.isValid()) {
+        return clampedFractionVector(v.toList());
+    }
+    const IScrollSettings* s = scrollSettings();
+    return s ? clampedFractionVector(s->scrollPresetWindowHeights()) : kNiriPresetFractions;
 }
 
 qreal ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const
 {
     const QVariant v = perScreenValue(screenId, QLatin1String("DefaultColumnWidth"));
-    return v.isValid() ? qBound(kMinSizeFraction, v.toReal(), kMaxSizeFraction) : m_defaultColumnWidth;
+    if (v.isValid()) {
+        return qBound(kMinSizeFraction, v.toReal(), kMaxSizeFraction);
+    }
+    const IScrollSettings* s = scrollSettings();
+    return s ? qBound(kMinSizeFraction, s->scrollDefaultColumnWidth(), kMaxSizeFraction) : kDefaultColumnWidthFraction;
 }
 
 ScrollViewportMode ScrollEngine::effectiveViewportMode(const QString& screenId) const
@@ -687,19 +693,31 @@ ScrollViewportMode ScrollEngine::effectiveViewportMode(const QString& screenId) 
     if (v.isValid()) {
         return v.toBool() ? ScrollViewportMode::Centered : ScrollViewportMode::Fit;
     }
-    return m_viewportMode;
+    const IScrollSettings* s = scrollSettings();
+    if (s && s->scrollCenterFocusedColumn()) {
+        return ScrollViewportMode::Centered;
+    }
+    return ScrollViewportMode::Fit;
 }
 
 int ScrollEngine::effectiveInnerGap(const QString& screenId) const
 {
     const QVariant v = perScreenValue(screenId, QLatin1String("InnerGap"));
-    return v.isValid() ? qBound(kMinStripGap, v.toInt(), kMaxStripGap) : m_innerGap;
+    if (v.isValid()) {
+        return qBound(kMinStripGap, v.toInt(), kMaxStripGap);
+    }
+    const IScrollSettings* s = scrollSettings();
+    return s ? qBound(kMinStripGap, s->scrollInnerGap(), kMaxStripGap) : kDefaultStripGap;
 }
 
 int ScrollEngine::effectiveOuterGap(const QString& screenId) const
 {
     const QVariant v = perScreenValue(screenId, QLatin1String("OuterGap"));
-    return v.isValid() ? qBound(kMinStripGap, v.toInt(), kMaxStripGap) : m_outerGap;
+    if (v.isValid()) {
+        return qBound(kMinStripGap, v.toInt(), kMaxStripGap);
+    }
+    const IScrollSettings* s = scrollSettings();
+    return s ? qBound(kMinStripGap, s->scrollOuterGap(), kMaxStripGap) : kDefaultStripGap;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -740,11 +758,11 @@ bool ScrollEngine::hasPersistableState() const
 
 QJsonObject ScrollEngine::serializeEngineState() const
 {
-    // m_viewportMode is deliberately not serialized: the daemon re-pushes it
-    // from the scrollCenterFocusedColumn setting (global or per-screen) on
-    // every startup, so persisting it would only risk a stale value shadowing
-    // the configured one. Per-column full-width state *is* persisted (in
-    // ScrollScreenState).
+    // The viewport mode is deliberately not serialized: it is derived on every
+    // resolve from the scrollCenterFocusedColumn setting (per-screen override →
+    // IScrollSettings global) by effectiveViewportMode(), so there is no
+    // engine-local state to persist. Per-column full-width state *is* persisted
+    // (in ScrollScreenState).
     QJsonArray states;
     for (const auto& entry : m_states) {
         QJsonObject obj = entry.second.toJson();

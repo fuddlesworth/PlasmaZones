@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollScreenState.h>
 
 #include <PhosphorEngine/PlacementEngineBase.h>
 
+#include <QObject>
 #include <QSet>
 #include <QVariantList>
 #include <QVariantMap>
@@ -15,6 +17,49 @@ using namespace PhosphorScrollEngine;
 using PhosphorEngine::NavigationContext;
 
 namespace {
+
+/// Minimal in-test IScrollSettings the engine pulls global geometry config
+/// through (the daemon supplies a Settings instance in production). Public
+/// settable fields seeded with niri defaults; the engine qobject_casts to the
+/// interface, so it must declare Q_INTERFACES.
+class FakeScrollSettings : public QObject, public PhosphorEngine::IScrollSettings
+{
+    Q_OBJECT
+    Q_INTERFACES(PhosphorEngine::IScrollSettings)
+
+public:
+    int innerGap = 8;
+    int outerGap = 8;
+    double defaultColumnWidth = 0.5;
+    bool centerFocusedColumn = false;
+    QVariantList presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0};
+    QVariantList presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0};
+
+    int scrollInnerGap() const override
+    {
+        return innerGap;
+    }
+    int scrollOuterGap() const override
+    {
+        return outerGap;
+    }
+    double scrollDefaultColumnWidth() const override
+    {
+        return defaultColumnWidth;
+    }
+    bool scrollCenterFocusedColumn() const override
+    {
+        return centerFocusedColumn;
+    }
+    QVariantList scrollPresetColumnWidths() const override
+    {
+        return presetColumnWidths;
+    }
+    QVariantList scrollPresetWindowHeights() const override
+    {
+        return presetWindowHeights;
+    }
+};
 
 NavigationContext contextFor(const QString& screenId)
 {
@@ -83,19 +128,21 @@ void TestScrollEngine::windowLifecycle()
 void TestScrollEngine::defaultColumnWidth()
 {
     ScrollEngine engine;
+    FakeScrollSettings settings;
+    engine.setEngineSettings(&settings);
 
-    // Until a default is pushed, a freshly opened column uses niri's middle
-    // preset (one half).
+    // With the settings default at niri's middle preset (one half), a freshly
+    // opened column is created at that width.
     engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
     const ScrollScreenState* state = scrollState(engine, QStringLiteral("S1"));
     QVERIFY(state);
     QCOMPARE(state->columns().at(0).width().kind, ColumnWidth::Kind::Proportion);
     QVERIFY(qFuzzyCompare(state->columns().at(0).width().value, 0.5));
 
-    // A pushed default applies to subsequently opened columns; the existing
-    // column keeps its width.
-    engine.setDefaultColumnWidth(0.4);
-    QVERIFY(qFuzzyCompare(engine.defaultColumnWidth(), 0.4));
+    // A changed settings default applies to subsequently opened columns; the
+    // existing column keeps its width.
+    settings.defaultColumnWidth = 0.4;
+    QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S1")), 0.4));
     engine.windowOpened(QStringLiteral("b"), QStringLiteral("S1"));
     QCOMPARE(state->columnCount(), 2);
     QVERIFY(qFuzzyCompare(state->columns().at(1).width().value, 0.4));
@@ -105,10 +152,10 @@ void TestScrollEngine::defaultColumnWidth()
 void TestScrollEngine::perScreenConfig()
 {
     ScrollEngine engine;
-    engine.setDefaultColumnWidth(0.5);
-    engine.setInnerGap(8);
-    engine.setOuterGap(8);
-    engine.setPresetColumnWidths({1.0 / 3.0, 0.5, 2.0 / 3.0});
+    // The fake's defaults are the globals the effective*() resolvers fall back
+    // to: default column width 0.5, inner/outer gap 8, niri preset widths.
+    FakeScrollSettings settings;
+    engine.setEngineSettings(&settings);
 
     // No override → effective resolves to the global default.
     QVERIFY(qFuzzyCompare(engine.effectiveDefaultColumnWidth(QStringLiteral("S1")), 0.5));

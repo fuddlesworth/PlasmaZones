@@ -172,25 +172,18 @@ public:
     virtual bool autotileDragInsertToggle() const = 0;
     virtual void setAutotileDragInsertToggle(bool enable) = 0;
 
-    // Scroll-mode (niri-style scrollable tiling) settings. The daemon pushes
-    // these to ScrollEngine / the geometry resolver; the standalone settings
-    // app and KCM edit them. Preset lists are QVariantList of doubles.
-    // scrollingEnabled is the master gate — when false the daemon resolves no
-    // scroll strips on any screen (mirrors autotileEnabled).
+    // Scroll-mode (niri-style scrollable tiling) settings. scrollingEnabled is
+    // the master gate — when false the daemon resolves no scroll strips on any
+    // screen (mirrors autotileEnabled).
+    //
+    // The scroll *geometry* config (inner/outer gap, default column width,
+    // center-focused-column, preset width/height lists) is NOT on ISettings:
+    // the scroll engine pulls it through PhosphorEngine::IScrollSettings, which
+    // Settings also implements — full parity with autotile geometry config on
+    // IAutotileSettings. Their *Changed signals stay here, exactly as autotile
+    // gap signals do, because QObject signals must live on the QObject base.
     virtual bool scrollingEnabled() const = 0;
     virtual void setScrollingEnabled(bool enabled) = 0;
-    virtual int scrollInnerGap() const = 0;
-    virtual void setScrollInnerGap(int gap) = 0;
-    virtual int scrollOuterGap() const = 0;
-    virtual void setScrollOuterGap(int gap) = 0;
-    virtual double scrollDefaultColumnWidth() const = 0;
-    virtual void setScrollDefaultColumnWidth(double fraction) = 0;
-    virtual bool scrollCenterFocusedColumn() const = 0;
-    virtual void setScrollCenterFocusedColumn(bool center) = 0;
-    virtual QVariantList scrollPresetColumnWidths() const = 0;
-    virtual void setScrollPresetColumnWidths(const QVariantList& fractions) = 0;
-    virtual QVariantList scrollPresetWindowHeights() const = 0;
-    virtual void setScrollPresetWindowHeights(const QVariantList& fractions) = 0;
 
     // Scroll-mode appearance — column border decoration drawn by the KWin
     // effect, mirroring the autotile decoration settings.

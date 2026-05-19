@@ -326,29 +326,36 @@ void SettingsAdaptor::initializeRegistry()
 
     REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
 
-    // Scroll-mode (niri-style scrollable tiling) settings — interface-backed.
+    // Scroll-mode (niri-style scrollable tiling) settings. scrollingEnabled is
+    // the master gate — still on the ISettings interface.
     REGISTER_BOOL_SETTING("scrollingEnabled", scrollingEnabled, setScrollingEnabled)
-    REGISTER_INT_SETTING("scrollInnerGap", scrollInnerGap, setScrollInnerGap)
-    REGISTER_INT_SETTING("scrollOuterGap", scrollOuterGap, setScrollOuterGap)
-    REGISTER_DOUBLE_SETTING("scrollDefaultColumnWidth", scrollDefaultColumnWidth, setScrollDefaultColumnWidth)
-    REGISTER_BOOL_SETTING("scrollCenterFocusedColumn", scrollCenterFocusedColumn, setScrollCenterFocusedColumn)
-    // Preset lists (multi-bind) — QVariantLists of width / height fractions.
-    m_getters[QStringLiteral("scrollPresetColumnWidths")] = [this]() {
-        return QVariant::fromValue(m_settings->scrollPresetColumnWidths());
-    };
-    m_setters[QStringLiteral("scrollPresetColumnWidths")] = [this](const QVariant& v) {
-        m_settings->setScrollPresetColumnWidths(v.toList());
-        return true;
-    };
-    m_schemas[QStringLiteral("scrollPresetColumnWidths")] = QStringLiteral("stringlist");
-    m_getters[QStringLiteral("scrollPresetWindowHeights")] = [this]() {
-        return QVariant::fromValue(m_settings->scrollPresetWindowHeights());
-    };
-    m_setters[QStringLiteral("scrollPresetWindowHeights")] = [this](const QVariant& v) {
-        m_settings->setScrollPresetWindowHeights(v.toList());
-        return true;
-    };
-    m_schemas[QStringLiteral("scrollPresetWindowHeights")] = QStringLiteral("stringlist");
+    // Scroll geometry config (concrete Settings only): the scroll engine pulls
+    // it through PhosphorEngine::IScrollSettings, so its setters are concrete
+    // Settings methods rather than ISettings virtuals — mirrors the autotile
+    // core-settings block above.
+    if (concrete) {
+        REGISTER_CONCRETE_INT("scrollInnerGap", scrollInnerGap, setScrollInnerGap)
+        REGISTER_CONCRETE_INT("scrollOuterGap", scrollOuterGap, setScrollOuterGap)
+        REGISTER_CONCRETE_DOUBLE("scrollDefaultColumnWidth", scrollDefaultColumnWidth, setScrollDefaultColumnWidth)
+        REGISTER_CONCRETE_BOOL("scrollCenterFocusedColumn", scrollCenterFocusedColumn, setScrollCenterFocusedColumn)
+        // Preset lists (multi-bind) — QVariantLists of width / height fractions.
+        m_getters[QStringLiteral("scrollPresetColumnWidths")] = [concrete]() {
+            return QVariant::fromValue(concrete->scrollPresetColumnWidths());
+        };
+        m_setters[QStringLiteral("scrollPresetColumnWidths")] = [concrete](const QVariant& v) {
+            concrete->setScrollPresetColumnWidths(v.toList());
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollPresetColumnWidths")] = QStringLiteral("stringlist");
+        m_getters[QStringLiteral("scrollPresetWindowHeights")] = [concrete]() {
+            return QVariant::fromValue(concrete->scrollPresetWindowHeights());
+        };
+        m_setters[QStringLiteral("scrollPresetWindowHeights")] = [concrete](const QVariant& v) {
+            concrete->setScrollPresetWindowHeights(v.toList());
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollPresetWindowHeights")] = QStringLiteral("stringlist");
+    }
     // Scrolling appearance — column border decoration.
     REGISTER_BOOL_SETTING("scrollShowBorder", scrollShowBorder, setScrollShowBorder)
     REGISTER_INT_SETTING("scrollBorderWidth", scrollBorderWidth, setScrollBorderWidth)

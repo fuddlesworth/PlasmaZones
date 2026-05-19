@@ -27,6 +27,7 @@ add_library(PhosphorScrollEngine SHARED
     include/PhosphorScrollEngine/Column.h
     include/PhosphorScrollEngine/ScrollScreenState.h
     include/PhosphorScrollEngine/ScrollLayout.h
+    include/PhosphorScrollEngine/IScrollSettings.h
     include/PhosphorScrollEngine/ScrollEngine.h
     src/Column.cpp
     src/ScrollScreenState.cpp

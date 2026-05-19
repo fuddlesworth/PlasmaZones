@@ -863,48 +863,6 @@ public:
     void setScrollingEnabled(bool) override
     {
     }
-    int scrollInnerGap() const override
-    {
-        return ConfigDefaults::scrollInnerGap();
-    }
-    void setScrollInnerGap(int) override
-    {
-    }
-    int scrollOuterGap() const override
-    {
-        return ConfigDefaults::scrollOuterGap();
-    }
-    void setScrollOuterGap(int) override
-    {
-    }
-    double scrollDefaultColumnWidth() const override
-    {
-        return ConfigDefaults::scrollDefaultColumnWidth();
-    }
-    void setScrollDefaultColumnWidth(double) override
-    {
-    }
-    bool scrollCenterFocusedColumn() const override
-    {
-        return ConfigDefaults::scrollCenterFocusedColumn();
-    }
-    void setScrollCenterFocusedColumn(bool) override
-    {
-    }
-    QVariantList scrollPresetColumnWidths() const override
-    {
-        return ConfigDefaults::scrollPresetColumnWidths();
-    }
-    void setScrollPresetColumnWidths(const QVariantList&) override
-    {
-    }
-    QVariantList scrollPresetWindowHeights() const override
-    {
-        return ConfigDefaults::scrollPresetWindowHeights();
-    }
-    void setScrollPresetWindowHeights(const QVariantList&) override
-    {
-    }
     bool scrollShowBorder() const override
     {
         return ConfigDefaults::scrollShowBorder();
