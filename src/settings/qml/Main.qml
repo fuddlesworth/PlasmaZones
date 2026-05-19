@@ -71,7 +71,7 @@ ApplicationWindow {
         "name": "scrolling",
         "label": i18n("Scrolling"),
         "iconName": "transform-move-horizontal",
-        "hasChildren": false,
+        "hasChildren": true,
         "hasDividerAfter": true
     }, {
         "name": "animations",
@@ -172,6 +172,11 @@ ApplicationWindow {
             "label": i18n("Quick Shortcuts"),
             "iconName": "bookmark"
         }],
+        "scrolling": [{
+            "name": "scrolling-layout",
+            "label": i18n("Layout"),
+            "iconName": "view-grid"
+        }],
         "animations": [{
             "name": "animations-general",
             "label": i18n("General"),
@@ -252,7 +257,7 @@ ApplicationWindow {
         "tiling-appearance": "TilingAppearancePage.qml",
         "tiling-behavior": "TilingBehaviorPage.qml",
         "tiling-algorithm": "TilingAlgorithmPage.qml",
-        "scrolling": "ScrollingModePage.qml",
+        "scrolling-layout": "ScrollingLayoutPage.qml",
         "snapping-assignments": "SnappingAssignmentsPage.qml",
         "snapping-apprules": "AssignmentsAppRulesPage.qml",
         "snapping-shortcuts": "SnappingQuickShortcutsPage.qml",
