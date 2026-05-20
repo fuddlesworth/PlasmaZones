@@ -754,10 +754,10 @@ void WindowTrackingService::onLayoutChanged()
             // change had landed, which yielded the new layout and made
             // the lookup miss for OLD zoneIds. The all-layouts map
             // above handles every layout the window could have snapped
-            // to.
+            // to. The @p screenId parameter is still consumed below
+            // when constructing the ResnapEntry.
             const QHash<QString, int>* posMap = &globalZoneIdToPosition;
             int prevZoneCount = globalPrevZoneCount;
-            Q_UNUSED(screenId);
 
             // Use primary zone for position mapping
             QString zoneId = zoneIdList.isEmpty() ? QString() : zoneIdList.first();
