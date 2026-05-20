@@ -230,6 +230,22 @@ public:
     void setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
                                   const AssignmentEntry& entry);
 
+    /// Update only the @c snappingLayout field for the (@p screenId,
+    /// @p virtualDesktop, @p activity) entry, preserving mode and
+    /// tilingAlgorithm. When no visible entry exists at that key (no
+    /// entry, or entry whose @c activeLayoutId is empty), seeds a new
+    /// entry from the cascade-resolved ambient state at that context so
+    /// the recorded preference becomes effective without flipping the
+    /// rendered mode. Empty @p layoutId clears the snap field; if both
+    /// fields end up empty the entry is removed entirely.
+    void setSnappingLayoutPreservingMode(const QString& screenId, int virtualDesktop, const QString& activity,
+                                         const QString& layoutId);
+
+    /// Update only the @c tilingAlgorithm field, mirroring
+    /// @ref setSnappingLayoutPreservingMode for the tiling slot.
+    void setTilingAlgorithmPreservingMode(const QString& screenId, int virtualDesktop, const QString& activity,
+                                          const QString& algorithmId);
+
     Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const override;
 

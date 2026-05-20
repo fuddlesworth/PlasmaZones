@@ -107,7 +107,14 @@ void StagingService::stageSnapping(const QString& screen, int desktop, const QSt
     e.fullCleared = false;
     e.stagedMode = std::nullopt;
     e.snappingLayoutId = layoutId;
-    e.tilingAlgorithmId = std::nullopt; // Clear opposite to prevent mode conflict on flush
+    // Snap and tile are independent fields — editing the snap slot from
+    // the "Snapping > Assignments" page must NOT clobber a previously
+    // staged tile update for the same context, and (more importantly)
+    // must NOT flip the rendered mode at that context. The flush emits
+    // a `setSnappingLayoutEntry` D-Bus call that updates only the snap
+    // field on the daemon side; the tile field and the rendered mode
+    // are preserved there. (Per-context mode flips remain the explicit
+    // privilege of the Overview page via `stageAssignmentEntry`.)
 }
 
 void StagingService::stageTiling(const QString& screen, int desktop, const QString& activity, const QString& layoutId)
@@ -116,7 +123,9 @@ void StagingService::stageTiling(const QString& screen, int desktop, const QStri
     e.fullCleared = false;
     e.stagedMode = std::nullopt;
     e.tilingAlgorithmId = layoutId;
-    e.snappingLayoutId = std::nullopt; // Clear opposite to prevent mode conflict on flush
+    // See `stageSnapping`: snap and tile are independent. The flush
+    // emits `setTilingAlgorithmEntry`, which updates only the tile
+    // field and preserves snap + mode on the daemon side.
 }
 
 void StagingService::stageFullClear(const QString& screen, int desktop, const QString& activity)
@@ -131,10 +140,13 @@ void StagingService::stageFullClear(const QString& screen, int desktop, const QS
 void StagingService::stageTilingClear(const QString& screen, int desktop, const QString& activity)
 {
     auto& e = assignmentEntry(screen, desktop, activity);
-    // Clearing tiling reverts to snapping mode — drop any previously staged
-    // explicit mode so the flush takes the "tiling clear" branch
-    // (setAssignmentEntry with mode=0) rather than sending the stale
-    // Overview-page mode back to the daemon with an empty algorithm id.
+    // Clearing the tile slot from the "Tiling > Assignments" page now
+    // preserves both the snap field and the rendered mode: the flush
+    // sends `setTilingAlgorithmEntry(..., "")` so only the tile field
+    // is wiped on the daemon side. Drop any previously staged explicit
+    // mode (from a coalesced Overview edit on the same context) so the
+    // flush takes the partial-update path rather than re-sending the
+    // Overview's mode through `setAssignmentEntry`.
     e.stagedMode = std::nullopt;
     e.tilingAlgorithmId = QString(); // empty = cleared
 }
@@ -232,7 +244,9 @@ void StagingService::flushAssignmentsToDaemon()
         };
 
         // Explicit mode staging (Overview page) — setAssignmentEntry targets
-        // a full context triple, matching the KCM batch-save path.
+        // a full context triple, matching the KCM batch-save path. This is
+        // the ONLY path that may change the rendered mode at the context;
+        // the per-field paths below preserve mode by design.
         if (s.stagedMode.has_value()) {
             const int mode = *s.stagedMode;
             const QString snapping = s.snappingLayoutId.value_or(QString());
@@ -249,56 +263,29 @@ void StagingService::flushAssignmentsToDaemon()
             continue;
         }
 
-        // If BOTH fields are staged (e.g. snap assign followed by tiling clear
-        // on the same context), the two per-field D-Bus calls are not atomic:
-        // `assignLayoutToScreen(snap)` followed by `setAssignmentEntry(mode=0,
-        // "", "")` clobbers the snap we just assigned. Coalesce into a single
-        // `setAssignmentEntry` so the daemon writes the combined state in one
-        // shot. Mode = 1 when a non-empty tiling algo is staged, 0 otherwise.
-        if (hasSnap && hasTile) {
-            const QString snap = *s.snappingLayoutId;
-            const QString tile = normTile(*s.tilingAlgorithmId);
-            const int mode = tile.isEmpty() ? 0 : 1;
-            DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                   QStringLiteral("setAssignmentEntry"),
-                                   {s.screenId, s.virtualDesktop, s.activityId, mode, snap, tile});
-            continue;
-        }
-
-        // Only snap staged — use the per-field path. An empty staged value
-        // here has no dedicated D-Bus surface (there is no `clearSnappingOnly`
-        // method); assignment-page UI always routes empty-snap through
-        // stageFullClear, which took the `fullCleared` branch above.
+        // Per-field updates from the "Snapping > Assignments" / "Tiling >
+        // Assignments" pages — record the user's slot-specific preference
+        // without flipping the rendered mode at that context. Each field
+        // routes through its own dedicated daemon method
+        // (`setSnappingLayoutEntry` / `setTilingAlgorithmEntry`) so an
+        // empty value means "clear that one field" and a non-empty value
+        // means "store that one field"; the opposite field and the
+        // mode are preserved on the daemon side. Snap and tile are
+        // independent — when both are staged on the same context (a
+        // session that crossed both pages) we emit both calls in
+        // sequence.
         if (hasSnap) {
-            const QString& layoutId = *s.snappingLayoutId;
-            if (layoutId.isEmpty()) {
-                continue;
-            }
-            QDBusMessage reply;
-            if (isActivity) {
-                reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                               QStringLiteral("assignLayoutToScreenActivity"),
-                                               {s.screenId, s.activityId, layoutId});
-            } else if (isDesktop) {
-                reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                               QStringLiteral("assignLayoutToScreenDesktop"),
-                                               {s.screenId, s.virtualDesktop, layoutId});
-            } else {
-                reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                               QStringLiteral("assignLayoutToScreen"), {s.screenId, layoutId});
-            }
-            if (reply.type() == QDBusMessage::ErrorMessage) {
-                qCWarning(lcCore) << "  assignLayout FAILED:" << reply.errorMessage();
-            }
-            continue;
+            const QString layoutId = *s.snappingLayoutId;
+            DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                   QStringLiteral("setSnappingLayoutEntry"),
+                                   {s.screenId, s.virtualDesktop, s.activityId, layoutId});
         }
-
-        // Only tile staged. Empty ≡ tiling-clear (reverts to snapping mode 0).
-        const QString tile = normTile(*s.tilingAlgorithmId);
-        const int mode = tile.isEmpty() ? 0 : 1;
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("setAssignmentEntry"),
-                               {s.screenId, s.virtualDesktop, s.activityId, mode, QString(), tile});
+        if (hasTile) {
+            const QString algo = normTile(*s.tilingAlgorithmId);
+            DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                   QStringLiteral("setTilingAlgorithmEntry"),
+                                   {s.screenId, s.virtualDesktop, s.activityId, algo});
+        }
     }
     m_assignments.clear();
 }

@@ -184,6 +184,83 @@ void LayoutRegistry::setAssignmentEntryDirect(const QString& screenId, int virtu
     saveAssignments();
 }
 
+namespace {
+// Decide the AssignmentEntry to start from when a single-field write
+// arrives at (screenId, virtualDesktop, activity). The KCM "Assignments"
+// pages (per ADR-discussion-497) want the edit to record a preference at
+// that exact slot WITHOUT flipping the rendered mode. If the slot already
+// has an effective (cascade-visible) entry we keep its mode + opposite
+// field intact; otherwise we seed from the cascade-resolved ambient
+// state so the new value lands in the right mode and survives the
+// cascade visitor's `activeLayoutId().isEmpty()` reject filter.
+AssignmentEntry seedForPartialUpdate(const LayoutRegistry& self,
+                                     const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments,
+                                     const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
+    auto it = assignments.constFind(key);
+    if (it != assignments.constEnd() && !it->activeLayoutId().isEmpty()) {
+        return *it;
+    }
+    return self.assignmentEntryForScreen(screenId, virtualDesktop, activity);
+}
+} // namespace
+
+void LayoutRegistry::setSnappingLayoutPreservingMode(const QString& screenId, int virtualDesktop,
+                                                     const QString& activity, const QString& layoutId)
+{
+    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
+    AssignmentEntry entry = seedForPartialUpdate(*this, m_assignments, screenId, virtualDesktop, activity);
+    entry.snappingLayout = layoutId;
+
+    // Both fields empty → no preference at all; remove the entry rather
+    // than leaving a no-op record that the cascade visitor will skip.
+    if (entry.snappingLayout.isEmpty() && entry.tilingAlgorithm.isEmpty()) {
+        bool hadAssignment = m_assignments.remove(key);
+        if (!hadAssignment) {
+            return;
+        }
+        qCDebug(lcZonesLib) << "setSnappingLayoutPreservingMode: removed empty entry screen=" << screenId
+                            << "desktop=" << virtualDesktop << "activity=" << activity;
+    } else {
+        m_assignments[key] = entry;
+        qCDebug(lcZonesLib) << "setSnappingLayoutPreservingMode: screen=" << screenId << "desktop=" << virtualDesktop
+                            << "activity=" << activity << "mode=" << entry.mode << "snapping=" << entry.snappingLayout
+                            << "tiling=" << entry.tilingAlgorithm;
+    }
+
+    PhosphorZones::Layout* layout = layoutId.isEmpty() ? nullptr : layoutById(QUuid::fromString(layoutId));
+    Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
+    saveAssignments();
+}
+
+void LayoutRegistry::setTilingAlgorithmPreservingMode(const QString& screenId, int virtualDesktop,
+                                                      const QString& activity, const QString& algorithmId)
+{
+    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
+    AssignmentEntry entry = seedForPartialUpdate(*this, m_assignments, screenId, virtualDesktop, activity);
+    entry.tilingAlgorithm = algorithmId;
+
+    if (entry.snappingLayout.isEmpty() && entry.tilingAlgorithm.isEmpty()) {
+        bool hadAssignment = m_assignments.remove(key);
+        if (!hadAssignment) {
+            return;
+        }
+        qCDebug(lcZonesLib) << "setTilingAlgorithmPreservingMode: removed empty entry screen=" << screenId
+                            << "desktop=" << virtualDesktop << "activity=" << activity;
+    } else {
+        m_assignments[key] = entry;
+        qCDebug(lcZonesLib) << "setTilingAlgorithmPreservingMode: screen=" << screenId << "desktop=" << virtualDesktop
+                            << "activity=" << activity << "mode=" << entry.mode << "snapping=" << entry.snappingLayout
+                            << "tiling=" << entry.tilingAlgorithm;
+    }
+
+    // Emit with nullptr — tiling changes don't have a snap Layout* to
+    // pass through; daemon-side recalc paths key off the screenId.
+    Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
+    saveAssignments();
+}
+
 // layoutForScreen, assignmentIdForScreen, and assignmentEntryForScreen share the
 // same fallback cascade, implemented once in walkCascade() above. Each method
 // supplies a visitor that decides whether to accept or cascade past each entry.

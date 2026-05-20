@@ -671,6 +671,61 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
                          << "tiling=" << tilingAlgorithm;
 }
 
+void LayoutAdaptor::setSnappingLayoutEntry(const QString& screenId, int virtualDesktop, const QString& activity,
+                                           const QString& layoutId)
+{
+    QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+    if (resolvedId.isEmpty()) {
+        qCWarning(lcDbusLayout) << "setSnappingLayoutEntry: empty screen ID for" << screenId;
+        return;
+    }
+
+    // Validate snap UUID when non-empty so a corrupt id from a stale
+    // client doesn't end up persisted as the snapping field.
+    if (!layoutId.isEmpty()) {
+        QUuid uuid = QUuid::fromString(layoutId);
+        if (uuid.isNull()) {
+            qCWarning(lcDbusLayout) << "setSnappingLayoutEntry: invalid snapping layout UUID:" << layoutId;
+            return;
+        }
+    }
+
+    m_layoutManager->setSnappingLayoutPreservingMode(resolvedId, virtualDesktop, activity, layoutId);
+    m_changedScreenIds.insert(resolvedId);
+    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity);
+
+    qCInfo(lcDbusLayout) << "setSnappingLayoutEntry: screen=" << resolvedId << "desktop=" << virtualDesktop
+                         << "activity=" << activity << "snapping=" << layoutId;
+}
+
+void LayoutAdaptor::setTilingAlgorithmEntry(const QString& screenId, int virtualDesktop, const QString& activity,
+                                            const QString& algorithmId)
+{
+    QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+    if (resolvedId.isEmpty()) {
+        qCWarning(lcDbusLayout) << "setTilingAlgorithmEntry: empty screen ID for" << screenId;
+        return;
+    }
+
+    // Validate algorithm membership when non-empty. Same guard as the
+    // setAssignmentEntry path, so an unknown algorithm id from a stale
+    // client can't end up persisted (and silently confuse the autotile
+    // engine on the next mode switch at this context).
+    if (!algorithmId.isEmpty()) {
+        if (!m_algorithmRegistry || !m_algorithmRegistry->algorithm(algorithmId)) {
+            qCWarning(lcDbusLayout) << "setTilingAlgorithmEntry: unknown tiling algorithm:" << algorithmId;
+            return;
+        }
+    }
+
+    m_layoutManager->setTilingAlgorithmPreservingMode(resolvedId, virtualDesktop, activity, algorithmId);
+    m_changedScreenIds.insert(resolvedId);
+    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity);
+
+    qCInfo(lcDbusLayout) << "setTilingAlgorithmEntry: screen=" << resolvedId << "desktop=" << virtualDesktop
+                         << "activity=" << activity << "tiling=" << algorithmId;
+}
+
 void LayoutAdaptor::setSaveBatchMode(bool enabled)
 {
     m_suppressScreenLayoutSignal = enabled;

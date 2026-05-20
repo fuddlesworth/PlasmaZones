@@ -1270,9 +1270,16 @@ void SettingsController::assignTilingLayoutToScreenActivity(const QString& scree
     setNeedsSave(true);
 }
 
+// "Clear" on the per-page Assignment dropdowns means "clear this slot's
+// preference" — NOT "remove the entire (screen, desktop, activity) entry."
+// Snap-page clears route through stageSnapping(empty) so the flush
+// emits `setSnappingLayoutEntry(..., "")` which wipes only the snap
+// field on the daemon side; the tile preference and the rendered mode
+// at that context are preserved. Tile-page clears are symmetric via
+// stageTilingClear → `setTilingAlgorithmEntry(..., "")`.
 void SettingsController::clearScreenAssignment(const QString& screenName)
 {
-    m_staging.stageFullClear(screenName, 0, QString());
+    m_staging.stageSnapping(screenName, 0, QString(), QString());
     setNeedsSave(true);
 }
 
@@ -1284,13 +1291,13 @@ void SettingsController::clearTilingScreenAssignment(const QString& screenName)
 
 void SettingsController::clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
 {
-    m_staging.stageFullClear(screenName, virtualDesktop, QString());
+    m_staging.stageSnapping(screenName, virtualDesktop, QString(), QString());
     setNeedsSave(true);
 }
 
 void SettingsController::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
 {
-    m_staging.stageFullClear(screenName, 0, activityId);
+    m_staging.stageSnapping(screenName, 0, activityId, QString());
     setNeedsSave(true);
 }
 

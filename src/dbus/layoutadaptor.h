@@ -172,6 +172,21 @@ public Q_SLOTS:
     void setAssignmentEntry(const QString& screenId, int virtualDesktop, const QString& activity, int mode,
                             const QString& snappingLayout, const QString& tilingAlgorithm);
 
+    /// Partial-update writes for the KCM Assignments pages — record the
+    /// snapping-layout or tiling-algorithm preference for the
+    /// (screenId, virtualDesktop, activity) slot WITHOUT changing the
+    /// rendered mode at that context. The "Snapping > Assignments" and
+    /// "Tiling > Assignments" pages route per-row dropdowns through
+    /// these so editing the inactive-mode value just records the
+    /// preference for the next time the user explicitly switches mode
+    /// at that context (via the Overview page or shortcuts). Empty
+    /// @p layoutId / @p algorithmId clears the field; the entry is
+    /// removed if both fields end up empty.
+    void setSnappingLayoutEntry(const QString& screenId, int virtualDesktop, const QString& activity,
+                                const QString& layoutId);
+    void setTilingAlgorithmEntry(const QString& screenId, int virtualDesktop, const QString& activity,
+                                 const QString& algorithmId);
+
     // Suppress screenLayoutChanged D-Bus signals during KCM save batch.
     void setSaveBatchMode(bool enabled);
 
