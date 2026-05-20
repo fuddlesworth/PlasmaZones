@@ -1,6 +1,24 @@
 {
     "releases": [
         {
+            "version": "3.0.6",
+            "date": "2026-05-20",
+            "highlights": [
+                "Fixed the settings window (and any 5th+ window) being left tiled when toggling autotile → snapping with more autotiled windows than zones in the manual layout (#504)",
+                "Fixed the 250 ms+ stall before windows start moving on autotile → snap — windows now animate to their snap positions within ~2 ms of the toggle (#504)",
+                "Fixed focus-follows-mouse not re-focusing a window after focus was stolen by a keyboard shortcut, click, or new window (#461)",
+                "Fixed tiling assignments saved on the settings page silently dropping — the dropdown selection now persists across navigation (#497)",
+                "Fixed the daemon toggle re-enabling itself after disable — the unit is now masked so window-lifecycle D-Bus calls can't reactivate it (#497)",
+                "Fixed the Snapping Assignments Monitor row reverting to its old value after Save when a per-desktop or per-activity entry masked the screen-level slot (#497)",
+                "Fixed the OSD announcing the wrong layout name after editing a non-current-context assignment slot (#497)",
+                "Fixed windows on disabled monitors / desktops still being tracked and resurrected after restart (#461)",
+                "Fixed re-enabling a disabled virtual desktop sometimes silently failing after a screen redetect (#461)",
+                "Fixed popup menus and Steam image previews being snapped to weird zones (#461)",
+                "Fixed stale snap assignments from deleted layouts lingering across first-launch (and dangling zone IDs in multi-zone windows) (#461)",
+                "Fixed critical-notification windows triggering focus tracking and appearing in the app picker (#461)"
+            ]
+        },
+        {
             "version": "3.0.5",
             "date": "2026-05-19",
             "highlights": [
