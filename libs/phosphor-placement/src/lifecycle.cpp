@@ -562,22 +562,41 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     QString zoneId = zoneIds.isEmpty() ? QString() : zoneIds.first();
     // Check floating with full windowId first, fallback to appId
     bool isFloating = isWindowFloating(windowId);
-    if (!zoneId.isEmpty() && !zoneId.startsWith(kZoneSelectorIdPrefix) && !isFloating) {
+    if (!zoneId.isEmpty() && !zoneId.startsWith(kZoneSelectorIdPrefix)
+        && !isFloating
         // A whitespace-only / whitespace-bearing appId is a corrupt window
         // identity (KWin reported a blank class). Persisting a PendingRestore
         // under it pollutes the restore queue with a key no real window
         // matches cleanly — and a blank " " key is then consumed
         // indiscriminately by every later blank-class window. Drop it.
-        if (PhosphorIdentity::WindowId::isValidAppId(appId)) {
+        && PhosphorIdentity::WindowId::isValidAppId(appId)) {
+        const QString screenId = m_snapState->screenForWindow(windowId);
+        // Use 0 (all desktops) as the fallback when the actual desktop is unknown.
+        // 0 is the conservative default — it avoids restoring to the wrong desktop.
+        const int desktop = m_snapState->desktopForWindow(windowId);
+
+        // Disabled-context gate (discussion #461 item 2). When the closing
+        // window lives on a monitor/desktop/activity the user disabled snap
+        // for, recording a PendingRestore turns into a delayed footgun:
+        // either the same app reopens on the disabled screen and the snap
+        // restore path (gated on destination only) drags it to the saved
+        // zone, or KWin rehomes the window onto a surviving monitor after
+        // the disabled screen sleeps and the same restore fires there.
+        // The fix is to not record the entry at all — the snap-restore
+        // path already returns noSnap when the queue is empty.
+        //
+        // Activity is intentionally not threaded through SnapState today
+        // (no per-window activity tracking outside the daemon), so pass
+        // an empty activity string. The daemon-side predicate treats an
+        // empty activity as "any" — the monitor/desktop gates are the
+        // ones that matter for the reported leak.
+        if (m_shouldTrackPredicate && !m_shouldTrackPredicate(screenId, desktop, QString())) {
+            qCDebug(lcPlacement) << "Skipped PendingRestore for closed window" << appId
+                                 << "on disabled context — screen:" << screenId << "desktop:" << desktop;
+        } else {
             PendingRestore entry;
             entry.zoneIds = zoneIds;
-
-            QString screenId = m_snapState->screenForWindow(windowId);
             entry.screenId = screenId;
-
-            // Use 0 (all desktops) as the fallback when the actual desktop is unknown.
-            // 0 is the conservative default — it avoids restoring to the wrong desktop.
-            int desktop = m_snapState->desktopForWindow(windowId);
             entry.virtualDesktop = desktop;
 
             // Save the layout ID to ensure we only restore if the same layout is active

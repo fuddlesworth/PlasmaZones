@@ -183,6 +183,48 @@ private Q_SLOTS:
         QVERIFY(spy.count() >= 1);
     }
 
+    void testWindowClosed_skipsPendingRestoreWhenPredicateRejects()
+    {
+        // Discussion #461 item 2: a window closing on a monitor/desktop the
+        // user has disabled snapping for must not record a PendingRestore.
+        // Without the gate, the entry resurfaces when the same app reopens
+        // anywhere — yanking the window into a zone the user told us to
+        // leave alone. The predicate returns false for the disabled screen.
+        const QString disabledScreen = QStringLiteral("AOC:24B2W1G5:116");
+        m_service->setShouldTrackPredicate([disabledScreen](const QString& screenId, int, const QString&) {
+            return screenId != disabledScreen;
+        });
+
+        const QString windowId = QStringLiteral("vesktop|deadbeef-0000-0000-0000-000000000001");
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], disabledScreen, 1);
+        QVERIFY(m_service->isWindowSnapped(windowId));
+
+        m_service->windowClosed(windowId);
+
+        QVERIFY(!m_service->isWindowSnapped(windowId));
+        // No pending restore should have been recorded for the disabled monitor.
+        QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
+    }
+
+    void testWindowClosed_predicateAcceptsEnabledContext()
+    {
+        // Sanity counterpart: when the predicate accepts the closing context,
+        // the historical persist-on-close behavior is preserved.
+        m_service->setShouldTrackPredicate([](const QString&, int, const QString&) {
+            return true;
+        });
+
+        const QString windowId = QStringLiteral("firefox|cafef00d-0000-0000-0000-000000000001");
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
+        m_service->windowClosed(windowId);
+
+        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
+    }
+
     void testWindowClosed_persistsZoneToPending_virtualScreen()
     {
         // Same as testWindowClosed_persistsZoneToPending but using a virtual screen ID.

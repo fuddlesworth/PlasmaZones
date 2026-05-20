@@ -53,6 +53,22 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
         layoutManager, zoneDetector, screenManager, virtualDesktopManager, m_geometryResolver,
         PhosphorPlacement::PlacementConfig{settings->keepWindowsInZonesOnResolutionChange()}, this);
 
+    // Wire the disabled-context gate consulted before recording a snap-side
+    // PendingRestore on windowClosed. The placement library has no settings
+    // dependency, so the gate is injected from here. m_screenModeRouter may
+    // still be null at construction (the daemon late-wires it via
+    // setScreenModeRouter); when unset we fall back to Snapping mode since
+    // this hook is on the snap-mode tracking service. See discussion #461.
+    m_service->setShouldTrackPredicate(
+        [this](const QString& screenId, int virtualDesktop, const QString& activity) -> bool {
+            if (!m_settings) {
+                return true;
+            }
+            const PhosphorZones::AssignmentEntry::Mode mode =
+                m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
+            return !isContextDisabled(m_settings, mode, screenId, virtualDesktop, activity);
+        });
+
     // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
     // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on
     // first navigation call; setZoneDetectionAdaptor is forwarded to
