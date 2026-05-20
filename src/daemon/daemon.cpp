@@ -1145,36 +1145,94 @@ bool Daemon::init()
     // handler to avoid feedback loops with autotile/snapping transitions.
     connect(
         m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this,
-        [this](const QStringList& changedScreenIdsList) {
+        [this](const QStringList& changedScreenIdsList, const QStringList& changedAssignmentKeys) {
             const QSet<QString> changedScreenIds(changedScreenIdsList.begin(), changedScreenIdsList.end());
             if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
                 return;
 
-            const int desktop = currentDesktop();
-            const QString activity = currentActivity();
+            const int curDesktop = currentDesktop();
+            const QString curActivity = currentActivity();
 
-            // Collect autotile screens and per-screen OSD data in one pass
+            // Decode the (screenId, desktop, activity) tuples from the
+            // batched changedAssignmentKeys. Encoded format matches the
+            // populate sites in LayoutAdaptor: "screenId<US>desktop<US>activity".
+            struct ChangedKey
+            {
+                QString screenId;
+                int virtualDesktop;
+                QString activity;
+            };
+            QVector<ChangedKey> changedKeys;
+            changedKeys.reserve(changedAssignmentKeys.size());
+            for (const QString& enc : changedAssignmentKeys) {
+                const QStringList parts = enc.split(QChar(0x1F));
+                if (parts.size() != 3) {
+                    qCWarning(lcDaemon) << "assignmentChangesApplied: malformed key:" << enc;
+                    continue;
+                }
+                bool ok = false;
+                int vd = parts[1].toInt(&ok);
+                if (!ok) {
+                    qCWarning(lcDaemon) << "assignmentChangesApplied: non-numeric desktop in key:" << enc;
+                    continue;
+                }
+                changedKeys.append({parts[0], vd, parts[2]});
+            }
+
+            // Walk effective screens to (a) classify which screens are
+            // currently autotile-mode (for the resnap buffer) and (b)
+            // gather the OSDs to show. OSDs use the actual changed key
+            // (not the current-context cascade) so a screen-level edit
+            // isn't silently masked by a more-specific per-desktop /
+            // per-activity entry that wins the current-context lookup.
             QSet<QString> autotileScreens;
+            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+            for (const QString& screenId : effectiveIds) {
+                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, curDesktop, curActivity);
+                if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+                    autotileScreens.insert(screenId);
+                }
+            }
+
+            // Build the OSD list from the changed keys (one OSD per
+            // modified slot). For each, resolve the layout at that slot
+            // directly so the OSD reflects the user's actual edit.
+            // Falls back to iterating effectiveIds when no keys are
+            // tracked (legacy emit, e.g. a default-reset path) so the
+            // pre-fix behaviour is preserved for that case.
             struct ScreenOsd
             {
                 QString screenId;
                 bool isAutotile;
                 QString algoId;
+                int virtualDesktop;
+                QString activity;
             };
             QVector<ScreenOsd> osdEntries;
-            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-            for (const QString& screenId : effectiveIds) {
-                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-                if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
-                    autotileScreens.insert(screenId);
-                }
-                // Only show OSD for screens that actually changed
-                if (changedScreenIds.isEmpty() || changedScreenIds.contains(screenId)) {
-                    if (autotileScreens.contains(screenId)) {
-                        osdEntries.append({screenId, true, PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId)});
+            if (!changedKeys.isEmpty()) {
+                for (const auto& key : std::as_const(changedKeys)) {
+                    const QString assignmentId =
+                        m_layoutManager->assignmentIdForScreen(key.screenId, key.virtualDesktop, key.activity);
+                    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+                        osdEntries.append({key.screenId, true,
+                                           PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId),
+                                           key.virtualDesktop, key.activity});
                     } else {
-                        osdEntries.append({screenId, false, {}});
+                        osdEntries.append({key.screenId, false, {}, key.virtualDesktop, key.activity});
                     }
+                }
+            } else {
+                for (const QString& screenId : effectiveIds) {
+                    if (!changedScreenIds.isEmpty() && !changedScreenIds.contains(screenId))
+                        continue;
+                    const bool isAutotile = autotileScreens.contains(screenId);
+                    QString algoId;
+                    if (isAutotile) {
+                        const QString assignmentId =
+                            m_layoutManager->assignmentIdForScreen(screenId, curDesktop, curActivity);
+                        algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
+                    }
+                    osdEntries.append({screenId, isAutotile, algoId, curDesktop, curActivity});
                 }
             }
 
@@ -1202,7 +1260,8 @@ bool Daemon::init()
                     if (!osd.algoId.isEmpty())
                         showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
                 } else {
-                    PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
+                    PhosphorZones::Layout* layout =
+                        m_layoutManager->layoutForScreen(osd.screenId, osd.virtualDesktop, osd.activity);
                     if (layout)
                         showLayoutOsd(layout, osd.screenId);
                 }

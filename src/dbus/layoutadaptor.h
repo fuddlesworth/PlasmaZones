@@ -378,13 +378,21 @@ Q_SIGNALS:
     /**
      * @brief Emitted when the KCM requests resnap/retile after assignment changes
      * @param changedScreenIds Screen IDs whose assignments were modified in this batch
+     * @param changedAssignmentKeys Full keys (one per modified context) encoded as
+     *        "screenId<US>desktop<US>activity" with US = QChar(0x1F). Consumers
+     *        that need to know the EXACT slot the user changed (vs. the
+     *        cascaded resolution under the current desktop / activity) should
+     *        decode these and query the registry at that key directly. The
+     *        OSD callback does this so a screen-level edit isn't silently
+     *        masked by a per-desktop or per-activity entry that wins the
+     *        current-context cascade.
      *
      * Typed as QStringList (not QSet) because this is a Q_SIGNAL on a
      * QDBusAbstractAdaptor subclass and is therefore auto-exposed over D-Bus;
      * QSet is not a D-Bus-marshallable type. Internal callers that need
      * set semantics should convert via `QSet<QString>{list.begin(), list.end()}`.
      */
-    void assignmentChangesApplied(const QStringList& changedScreenIds);
+    void assignmentChangesApplied(const QStringList& changedScreenIds, const QStringList& changedAssignmentKeys);
 
 private Q_SLOTS:
     // String-based connection slots for PhosphorZones::LayoutRegistry signals
@@ -500,6 +508,15 @@ private:
     // Track which screens had assignments modified during the current batch.
     // Populated by setAssignmentEntry/clearAssignment, consumed by applyAssignmentChanges.
     QSet<QString> m_changedScreenIds;
+
+    // Track the full (screen, desktop, activity) keys of assignments
+    // modified during the current batch. Encoded as
+    // "screenId<US>desktop<US>activity" with US = QChar(0x1F). Used by
+    // the daemon's OSD callback to look up the layout at the EXACT slot
+    // the user just changed (and not via the current-context cascade,
+    // which silently masks non-current-context edits — see comment in
+    // `applyAssignmentChanges` for the bug this guards against).
+    QStringList m_changedAssignmentKeys;
 
     // JSON caching for performance
     QString m_cachedActiveLayoutJson;
