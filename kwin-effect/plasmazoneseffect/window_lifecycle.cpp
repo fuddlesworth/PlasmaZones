@@ -241,6 +241,19 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 m_autotileHandler->onWindowClosed(windowId, screenId);
                 removeWindowBorder(windowId);
                 qCInfo(lcEffect) << "Window moved off current desktop, removed from autotile:" << windowId;
+            } else if (m_scrollHandler->isTiledWindow(windowId)) {
+                // Scroll-mode strips are per-desktop too: a window moved to
+                // another desktop must drop off the current strip just like
+                // autotile, otherwise m_notifiedWindows / m_appliedGeometry /
+                // m_slotGeometry retain stale entries the daemon won't refresh
+                // (drift detection then runs against geometry resolved for the
+                // away-desktop's strip), and a subsequent scrollScreensChanged
+                // removed-screens loop emits a now-nonsensical windowClosed.
+                // ScrollHandler::onWindowClosed handles title-bar restore +
+                // border removal symmetrically with autotile's path above.
+                m_scrollHandler->onWindowClosed(windowId, screenId);
+                removeWindowBorder(windowId);
+                qCInfo(lcEffect) << "Window moved off current desktop, removed from scroll:" << windowId;
             }
         }
     });

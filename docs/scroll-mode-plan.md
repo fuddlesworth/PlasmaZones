@@ -372,9 +372,11 @@ with the Phase 3 navigation work.
   override → global via its `effective*()` accessors; the daemon's
   `applyPerScreenScrollOverrides()` pushes the per-screen maps. The mode *disable* lists
   (`ScrollDisabledMonitors` etc.) remain the per-context gate, as before.
-- ✅ **Settings UI + layout-picker entry** — a dedicated "Scrolling" page
-  (`ScrollingModePage.qml`, with the reusable `ScrollingPresetListCard.qml` preset-list
-  editor and a `MonitorSelectorSection` for per-monitor overrides) sits beside Snapping
+- ✅ **Settings UI + layout-picker entry** — a dedicated "Scrolling" parent
+  category with four sub-pages (`ScrollingLayoutPage.qml`, `ScrollingAppearancePage.qml`,
+  `ScrollingBehaviorPage.qml`, `ScrollingAssignmentsPage.qml`) — using the reusable
+  `ScrollingPresetListCard.qml` preset-list editor and a `MonitorSelectorSection`
+  for per-monitor overrides — sits beside Snapping
   and Tiling in the standalone settings app. The layout picker gains one synthetic
   **"Scrolling"** entry (`scroll:` id) injected by `buildUnifiedLayoutList`; selecting it
   routes through `UnifiedLayoutController::applyEntry` to assign `Mode::Scroll` to the

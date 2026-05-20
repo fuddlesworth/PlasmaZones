@@ -5,6 +5,7 @@
 
 #include <QJsonArray>
 
+#include <cmath>
 #include <utility>
 
 namespace PhosphorScrollEngine {
@@ -235,7 +236,10 @@ bool ScrollScreenState::moveColumnNextTo(const QString& draggedWindowId, const Q
     // A drop that lands the column back in its own slot (it was dragged only
     // just past an adjacent column's centre) is a positional no-op: skip the
     // reorder. The caller still re-resolves and focuses the window — that
-    // round-trip snaps the dragged window back into its (unchanged) slot.
+    // round-trip snaps the dragged window back into its (unchanged) slot,
+    // which is intentional: it absorbs any mid-drag drift that left the
+    // window slightly off its tile rect, restoring exact alignment without
+    // the user needing to drag again. Returning true here is the contract.
     if (target != from) {
         m_columns.move(from, target);
     }
@@ -390,7 +394,13 @@ ScrollScreenState ScrollScreenState::fromJson(const QJsonObject& obj)
             state.m_columns.append(std::move(column));
         }
     }
-    state.m_scrollX = obj.value(QLatin1String("scrollX")).toDouble(0.0);
+    // Defence-in-depth at the persistence boundary: a corrupt scroll-session.json
+    // with NaN or Inf for scrollX would propagate through the layout resolver
+    // (columnX = usableX + stripX - viewPos) and produce NaN window geometries.
+    // Reject non-finite values; the daemon will recompute the scroll offset
+    // on the next placementChanged via computeViewportScroll anyway.
+    const qreal rawScrollX = obj.value(QLatin1String("scrollX")).toDouble(0.0);
+    state.m_scrollX = std::isfinite(rawScrollX) ? rawScrollX : qreal(0.0);
     state.m_activeColumnIndex = obj.value(QLatin1String("activeColumnIndex")).toInt(-1);
     state.clampActiveColumnIndex();
 

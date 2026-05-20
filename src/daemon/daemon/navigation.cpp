@@ -108,12 +108,47 @@ static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* 
 // IScrollNavigation interface. Returns nullptr when the focused screen is not
 // a scroll screen — the snap and autotile engines do not implement that
 // interface, so the cross-cast fails and the niri-style op is simply skipped.
+//
+// Layered gating, in this order:
+//   1. navigatorForShortcut() resolves the engine and applies the global
+//      isEnabled() check — when scroll mode is globally off, this returns
+//      nullptr and we never reach the per-context check below. (That global
+//      gate is also why handleToggleCenterFocusedColumn is the one scroll
+//      shortcut not routed through this helper: the toggle predates having
+//      a focused column and must work even from a non-scroll context, so it
+//      runs its OWN context check on the resolved screenId.)
+//   2. The cross-cast to IScrollNavigation skips snap and autotile engines —
+//      a non-scroll screen returns nullptr without consulting settings.
+//   3. The per-context disable list (per-monitor / per-desktop / per-activity)
+//      for AssignmentEntry::Scroll, mirroring handleSnap and handleFloat.
+//      CLAUDE.md: "isContextDisabled gates per-mode disable lists in EVERY
+//      shortcut handler" — without this, a user who disabled scroll mode on
+//      a specific desktop or monitor (#461 pattern) could still trigger the
+//      niri column ops via shortcut because navigatorForShortcut routes by
+//      mode and IPlacementEngine::isEnabled() reports global, not per-context.
+//
+// The settings* arg is the daemon's m_settings pointer (or nullptr in tests).
+// When null, the disable check is skipped — matches navigatorForShortcut's
+// fail-open behaviour for incomplete daemon construction.
 static PhosphorEngine::IScrollNavigation* scrollNavigatorForShortcut(ScreenModeRouter* router,
-                                                                     WindowTrackingAdaptor* wta,
+                                                                     WindowTrackingAdaptor* wta, ISettings* settings,
+                                                                     int currentDesktop, const QString& currentActivity,
                                                                      PhosphorEngine::NavigationContext& outCtx,
                                                                      const char* shortcutName)
 {
-    return dynamic_cast<PhosphorEngine::IScrollNavigation*>(navigatorForShortcut(router, wta, outCtx, shortcutName));
+    auto* nav =
+        dynamic_cast<PhosphorEngine::IScrollNavigation*>(navigatorForShortcut(router, wta, outCtx, shortcutName));
+    if (!nav) {
+        return nullptr;
+    }
+    if (settings
+        && isContextDisabled(settings, PhosphorZones::AssignmentEntry::Scroll, outCtx.screenId, currentDesktop,
+                             currentActivity)) {
+        qCDebug(lcDaemon) << shortcutName << "shortcut: ignored — scroll disabled for context" << outCtx.screenId
+                          << "desktop" << currentDesktop << "activity" << currentActivity;
+        return nullptr;
+    }
+    return nav;
 }
 
 void Daemon::handleRotate(bool clockwise)
@@ -198,8 +233,8 @@ void Daemon::handleConsume()
     // yields nullptr on snap/autotile screens (they do not implement
     // IScrollNavigation), so the shortcut is simply skipped there.
     NavigationContext ctx;
-    if (auto* nav =
-            scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ConsumeWindow")) {
+    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_settings.get(),
+                                               currentDesktop(), currentActivity(), ctx, "ConsumeWindow")) {
         nav->consumeWindowIntoColumn(ctx);
     }
 }
@@ -209,7 +244,8 @@ void Daemon::handleExpel()
     // niri "expel": push the focused window out into its own new column.
     // Scroll-mode only; skipped on snap/autotile screens (see handleConsume).
     NavigationContext ctx;
-    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ExpelWindow")) {
+    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_settings.get(),
+                                               currentDesktop(), currentActivity(), ctx, "ExpelWindow")) {
         nav->expelWindowFromColumn(ctx);
     }
 }
@@ -219,8 +255,8 @@ void Daemon::handleCycleColumnWidth()
     // Cycle the focused column through the width presets. Scroll-mode only;
     // skipped on snap/autotile screens (see handleConsume).
     NavigationContext ctx;
-    if (auto* nav =
-            scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "CycleColumnWidth")) {
+    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_settings.get(),
+                                               currentDesktop(), currentActivity(), ctx, "CycleColumnWidth")) {
         nav->cyclePresetColumnWidth(ctx);
     }
 }
@@ -230,8 +266,8 @@ void Daemon::handleCycleWindowHeight()
     // Cycle the focused window through the height presets. Scroll-mode only;
     // skipped on snap/autotile screens (see handleConsume).
     NavigationContext ctx;
-    if (auto* nav =
-            scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "CycleWindowHeight")) {
+    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_settings.get(),
+                                               currentDesktop(), currentActivity(), ctx, "CycleWindowHeight")) {
         nav->cyclePresetWindowHeight(ctx);
     }
 }
@@ -242,8 +278,8 @@ void Daemon::handleToggleColumnFullWidth()
     // width. Scroll-mode only; skipped on snap/autotile screens (see
     // handleConsume).
     NavigationContext ctx;
-    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx,
-                                               "ToggleColumnFullWidth")) {
+    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_settings.get(),
+                                               currentDesktop(), currentActivity(), ctx, "ToggleColumnFullWidth")) {
         nav->toggleColumnFullWidth(ctx);
     }
 }
@@ -259,8 +295,8 @@ void Daemon::handleGrowColumnWidth()
     // Grow the focused column by one width step. Scroll-mode only; skipped on
     // snap/autotile screens (see handleConsume).
     NavigationContext ctx;
-    if (auto* nav =
-            scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "GrowColumnWidth")) {
+    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_settings.get(),
+                                               currentDesktop(), currentActivity(), ctx, "GrowColumnWidth")) {
         nav->adjustColumnWidth(kColumnWidthStep, ctx);
     }
 }
@@ -270,8 +306,8 @@ void Daemon::handleShrinkColumnWidth()
     // Shrink the focused column by one width step. Scroll-mode only; skipped
     // on snap/autotile screens (see handleConsume).
     NavigationContext ctx;
-    if (auto* nav =
-            scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "ShrinkColumnWidth")) {
+    if (auto* nav = scrollNavigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_settings.get(),
+                                               currentDesktop(), currentActivity(), ctx, "ShrinkColumnWidth")) {
         nav->adjustColumnWidth(-kColumnWidthStep, ctx);
     }
 }
@@ -292,14 +328,31 @@ void Daemon::handleToggleCenterFocusedColumn()
         return;
     }
     const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-    if (!screenId.isEmpty()) {
-        const QVariantMap overrides = m_settings->getPerScreenScrollSettings(screenId);
-        const auto it = overrides.constFind(QLatin1String(PerScreenScrollKey::CenterFocusedColumn));
-        if (it != overrides.constEnd()) {
-            m_settings->setPerScreenScrollSetting(screenId, QLatin1String(PerScreenScrollKey::CenterFocusedColumn),
-                                                  !it.value().toBool());
-            return;
-        }
+    // No resolvable focused screen → no scroll target → whole shortcut no-ops.
+    // Mirrors the other scroll-only shortcut handlers (which bail out when
+    // scrollNavigatorForShortcut returns nullptr). Without this guard the
+    // global-toggle fall-through below silently mutates a scroll setting from
+    // a context where no scroll target exists — most often a snap or autotile
+    // session with no focused window — turning the keybind into an
+    // out-of-mode setting changer.
+    if (screenId.isEmpty()) {
+        return;
+    }
+    // Honor the per-context disable lists, same as the other scroll handlers.
+    // Without this gate the toggle would still fire on a desktop/monitor/
+    // activity where the user has scroll mode disabled — silently mutating
+    // global or per-screen scroll settings via shortcut on a context that
+    // shouldn't accept scroll input.
+    if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Scroll, screenId, currentDesktop(),
+                          currentActivity())) {
+        return;
+    }
+    const QVariantMap overrides = m_settings->getPerScreenScrollSettings(screenId);
+    const auto it = overrides.constFind(QLatin1String(PerScreenScrollKey::CenterFocusedColumn));
+    if (it != overrides.constEnd()) {
+        m_settings->setPerScreenScrollSetting(screenId, QLatin1String(PerScreenScrollKey::CenterFocusedColumn),
+                                              !it.value().toBool());
+        return;
     }
     m_settings->setScrollCenterFocusedColumn(!m_settings->scrollCenterFocusedColumn());
 }

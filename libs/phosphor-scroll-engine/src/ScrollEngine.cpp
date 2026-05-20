@@ -264,26 +264,49 @@ void ScrollEngine::windowOpened(const QString& windowId, const QString& screenId
         // Migrate it to the new strip so geometry resolves against the right
         // working area on the next placementChanged.
         if (existingIt.value() == newKey) {
+            // Even on the same-context idempotent re-report, refresh the
+            // active-screen hint so the next navigation chord (or viewport
+            // re-resolve) targets the right strip. The first windowOpened
+            // sets m_activeScreen at the bottom of this method; a duplicate
+            // report from a D-Bus retry / effect re-announce should match
+            // that contract rather than leave m_activeScreen stale on
+            // whatever value preceded it.
+            m_activeScreen = screenId;
             return;
         }
         const TilingStateKey oldKey = existingIt.value();
-        if (ScrollScreenState* oldState = stateForKey(oldKey, /*create=*/false)) {
-            oldState->removeWindow(windowId);
-            // If migrating the window emptied the old strip entirely, drop the
-            // state so it doesn't linger as a phantom (eternally serialised
-            // into scroll-session.json with zero columns). hasPersistableState
-            // also relies on the m_states size, so leaving the husk in place
-            // would make the daemon write empty-strip JSON every shutdown.
-            //
-            // CRITICAL: oldState is an interior pointer into m_states; after
-            // m_states.erase(oldKey) it dangles. Null it out at the same scope
-            // so any future maintenance access in this block fails fast
-            // instead of corrupting heap.
-            const bool oldEmpty = oldState->isEmpty();
-            if (oldEmpty) {
-                m_states.erase(oldKey);
-                oldState = nullptr;
+        bool oldStateExisted = false;
+        {
+            // Inner scope owns the (potentially-dangling-after-erase) pointer
+            // so emitChanged below cannot accidentally touch it. The structural
+            // scope is the safety net — there is no `oldState` name visible
+            // outside.
+            ScrollScreenState* oldState = stateForKey(oldKey, /*create=*/false);
+            if (oldState) {
+                oldStateExisted = true;
+                oldState->removeWindow(windowId);
+                // If migrating the window emptied the old strip entirely, drop
+                // the state so it doesn't linger as a phantom (eternally
+                // serialised into scroll-session.json with zero columns).
+                // hasPersistableState also relies on the m_states size, so
+                // leaving the husk in place would make the daemon write
+                // empty-strip JSON every shutdown.
+                //
+                // Use managedWindows().isEmpty() — NOT isEmpty() — so a state
+                // with zero columns but non-empty floating set is correctly
+                // treated as still occupied. isEmpty() reports column count
+                // only, which would erase a state that still owns floating
+                // windows (a tracked floater migrated away while another window
+                // remained floating on the old strip). serializeEngineState and
+                // hasPersistableState use the same managedWindows()-based
+                // emptiness predicate, so this matches the persistence contract.
+                if (oldState->managedWindows().isEmpty()) {
+                    m_states.erase(oldKey);
+                    oldState = nullptr; // erased — every read after this would dangle
+                }
             }
+        }
+        if (oldStateExisted) {
             emitChanged(oldKey.screenId);
         }
         m_windowToKey.erase(existingIt);
@@ -303,20 +326,47 @@ void ScrollEngine::windowClosed(const QString& windowId)
     }
     const TilingStateKey key = it.value();
     m_windowToKey.erase(it);
-    if (ScrollScreenState* state = stateForKey(key, /*create=*/false)) {
-        state->removeWindow(windowId);
+    bool stateExisted = false;
+    {
+        // Inner scope owns the (potentially-dangling-after-erase) state pointer
+        // so emitChanged below cannot accidentally touch it. The structural
+        // scope is the safety net — there is no `state` name visible outside.
+        ScrollScreenState* state = stateForKey(key, /*create=*/false);
+        if (state) {
+            stateExisted = true;
+            state->removeWindow(windowId);
+            // If closing this window emptied the strip entirely, drop the state
+            // so it doesn't linger as bookkeeping noise. desktopsWithActiveState()
+            // and the daemon's prune paths would otherwise report this desktop
+            // as "having state" forever even after every window closed there.
+            // Symmetric with the windowOpened migration path's empty-state
+            // erase and with serializeEngineState's empty-state skip.
+            if (state->managedWindows().isEmpty()) {
+                m_states.erase(key);
+                state = nullptr; // erased — every read after this would dangle
+            }
+        }
+    }
+    if (stateExisted) {
         emitChanged(key.screenId);
     }
 }
 
 void ScrollEngine::windowFocused(const QString& windowId, const QString& screenId)
 {
-    if (!screenId.isEmpty()) {
-        m_activeScreen = screenId;
-    }
+    // Only update the active-screen hint when the focused window is
+    // scroll-tracked. Otherwise a focus event for an unmanaged window
+    // (a snap floater, an autotile window, an override-redirect popup)
+    // would silently shift the engine's active-screen target — and the
+    // next navigation chord would then operate on a strip the user
+    // never expected. The hint is scroll-engine state; only scroll-mode
+    // windows are entitled to move it.
     const auto it = m_windowToKey.constFind(windowId);
     if (it == m_windowToKey.constEnd()) {
         return;
+    }
+    if (!screenId.isEmpty()) {
+        m_activeScreen = screenId;
     }
     if (ScrollScreenState* state = stateForKey(it.value(), /*create=*/false); state && state->focusWindow(windowId)) {
         emitChanged(it.value().screenId);
@@ -515,6 +565,15 @@ void ScrollEngine::deserializeEngineState(const QJsonObject& state)
     m_currentDesktop = 1;
     m_currentActivity.clear();
     const QJsonArray states = state.value(QLatin1String("states")).toArray();
+    // Track every windowId already claimed by a previously-restored state so
+    // a corrupt scroll-session.json with the same windowId in two states
+    // doesn't leave m_windowToKey pointing at the second state while the
+    // first state still owns the column. ScrollScreenState::fromJson dedupes
+    // WITHIN a state; this set provides the cross-state dedup the engine
+    // owns. First occurrence wins (consistent with windowsOpenedBatch's
+    // dedup contract). The rejected duplicate's column is dropped from the
+    // second state so the in-memory shape matches m_windowToKey.
+    QSet<QString> claimedWindowIds;
     for (const QJsonValue& value : states) {
         const QJsonObject entry = value.toObject();
         // Validate desktop range at the persistence boundary: virtual desktops
@@ -529,10 +588,36 @@ void ScrollEngine::deserializeEngineState(const QJsonObject& state)
             continue;
         }
         ScrollScreenState restored = ScrollScreenState::fromJson(entry);
+        // Drop any window already claimed by an earlier state.
+        const QStringList rawWindows = restored.managedWindows();
+        for (const QString& windowId : rawWindows) {
+            if (claimedWindowIds.contains(windowId)) {
+                restored.removeWindow(windowId);
+            }
+        }
+        // Re-read the survivors after the dedup pass so m_windowToKey only
+        // points at windows actually still in this state.
         const QStringList windows = restored.managedWindows();
-        m_states.emplace(key, std::move(restored));
+        if (windows.isEmpty()) {
+            // Whole state dedup'd away — skip the empty husk.
+            continue;
+        }
+        // Cross-state dedup above prunes duplicate WINDOWS, but a corrupt
+        // scroll-session.json could still hand us two state entries with the
+        // same {screenId, desktop, activity} TilingStateKey. std::map::emplace
+        // returns inserted=false in that case and discards the second value —
+        // but the windowId loop below would still wire those (now-orphaned)
+        // windows into m_windowToKey, leaving permanent dangling references
+        // pointing at the FIRST state. Skip the windowId wiring whenever the
+        // emplace was rejected; this state's column is silently dropped, which
+        // is consistent with the cross-state dedup contract above (first
+        // occurrence wins).
+        if (!m_states.emplace(key, std::move(restored)).second) {
+            continue;
+        }
         for (const QString& windowId : windows) {
             m_windowToKey.insert(windowId, key);
+            claimedWindowIds.insert(windowId);
         }
     }
     // A restored strip is structural — it must be reconciled against the live

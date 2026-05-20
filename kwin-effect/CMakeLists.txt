@@ -65,6 +65,7 @@ set(plasmazones_effect_SRCS
     scrollhandler.cpp
     scrollhandler.h
     scrollhandler/decoration.cpp
+    scrollhandler/drag.cpp
     snapassisthandler.cpp
     snapassisthandler.h
     snapassistthumbnailcapture.cpp

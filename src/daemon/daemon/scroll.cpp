@@ -18,7 +18,9 @@
 #include <PhosphorScrollEngine/ScrollScreenState.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -310,6 +312,12 @@ void Daemon::saveScrollState()
         return;
     }
     const QString path = ConfigDefaults::scrollStateFilePath();
+    // Defence-in-depth: ensure the parent directory exists. Normally
+    // m_settings->save() runs first in stop() and the JSON config backend
+    // mkpath's the dir, but on paths where saveScrollState fires with no
+    // prior Settings save (test fixtures, early-stop ordering), QSaveFile::open
+    // would fail with "no such directory". mkpath is idempotent.
+    QDir().mkpath(QFileInfo(path).absolutePath());
     if (!scroll->hasPersistableState()) {
         // No strips to persist — drop any stale file so a later restart does
         // not restore an obsolete layout. QFile::remove returns false when
