@@ -881,6 +881,7 @@ bool Daemon::init()
         new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), m_screenManager.get(), this);
     m_layoutAdaptor->setActivityManager(m_activityManager.get());
     m_layoutAdaptor->setSettings(m_settings.get());
+    m_layoutAdaptor->setAlgorithmRegistry(m_algorithmRegistry.get());
     m_layoutAdaptor->setLayoutSource(m_layoutSources.composite());
     // Thread the bundle-owned autotile source through the adaptor's
     // buildUnifiedLayoutList path so its preview cache survives across
