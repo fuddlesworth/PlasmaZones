@@ -312,7 +312,6 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
     }
 
     m_autotileScreens = newScreens;
-    m_lastFocusFollowsMouseWindowId.clear();
 
     if (!added.isEmpty()) {
         if (isDesktopSwitch) {
