@@ -44,16 +44,13 @@ DaemonController::DaemonController(QObject* parent)
         refreshEnabledState();
     });
 
-    // Load initial state
+    // Load initial state. The header default for m_enabled is false; the
+    // async refreshEnabledState() below is the sole source of truth and
+    // will emit enabledChanged() iff the unit's actual on-disk state
+    // differs. No optimistic guess from isRunning() — a running daemon
+    // that was manually started against a disabled/masked unit is a real
+    // configuration and "running" does not imply "enabled".
     m_lastState = isRunning();
-    if (m_lastState) {
-        // Optimistic only when we already see the daemon running on the bus —
-        // refreshEnabledState() will reconcile against systemd's actual
-        // is-enabled state in the next tick. The header default is false so
-        // that when we don't see the daemon, QML reads "off" until the async
-        // resolution lands.
-        m_enabled = true;
-    }
     refreshEnabledState();
 }
 
@@ -111,7 +108,11 @@ void DaemonController::setEnabled(bool enabled)
     // first chain land — refreshEnabledState() will then push the real
     // state to QML, and the user can retry if it still doesn't match.
     if (m_chainInFlight) {
-        qCInfo(lcKcm) << "setEnabled(" << enabled << ") dropped — previous chain still in flight";
+        // qCWarning rather than qCInfo: a dropped toggle is a user-visible
+        // regression (the QML switch flicks back), not a debug curiosity,
+        // and it is the symptom anyone investigating a "toggle did nothing"
+        // bug needs to find in logs.
+        qCWarning(lcKcm) << "setEnabled(" << enabled << ") dropped — previous chain still in flight";
         return;
     }
     m_chainInFlight = true;
@@ -198,6 +199,16 @@ void DaemonController::setAutostart(bool enabled, std::function<void()> onComple
                                                  "actual on-disk state after refresh";
                                       }
                                       refreshEnabledState();
+                                      // Clear the chain-in-flight flag BEFORE the
+                                      // tail action runs. The systemctl invocations
+                                      // dispatched by startDaemon() / stopDaemon()
+                                      // are independent of the autostart chain — they
+                                      // don't need the guard, and clearing first lets
+                                      // a tail action that itself re-enters
+                                      // setEnabled (cascading state-machine logic
+                                      // a future caller might add) actually proceed
+                                      // rather than self-block at the guard.
+                                      m_chainInFlight = false;
                                       // Invoke the caller's tail action AFTER the
                                       // followup action lands so a `start` issued
                                       // here never races a still-pending unmask
@@ -207,7 +218,6 @@ void DaemonController::setAutostart(bool enabled, std::function<void()> onComple
                                       if (onComplete) {
                                           onComplete();
                                       }
-                                      m_chainInFlight = false;
                                   });
                  });
 }
@@ -264,15 +274,45 @@ void DaemonController::stopDaemon()
 void DaemonController::runSystemctl(const QStringList& args, SystemctlCallback callback)
 {
     auto* proc = new QProcess(this);
-    connect(proc, &QProcess::finished, this, [proc, callback, args](int exitCode, QProcess::ExitStatus status) {
-        bool success = (status == QProcess::NormalExit && exitCode == 0);
-        QString output = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
-        if (!success) {
-            QString errorOutput = QString::fromUtf8(proc->readAllStandardError()).trimmed();
-            qCWarning(lcKcm) << "systemctl" << args << "failed:" << errorOutput;
+    // Shared latch: exactly one of {finished, errorOccurred(FailedToStart)}
+    // is allowed to deliver the callback. Qt6's QProcess only emits
+    // `finished` when the process actually ran — a spawn failure (systemctl
+    // not on PATH, non-systemd init system, exec denied, etc.) ONLY emits
+    // `errorOccurred(FailedToStart)`. Without an errorOccurred handler the
+    // callback would never fire, the caller's onComplete chain would never
+    // run, and m_chainInFlight (set in setEnabled) would stay true forever
+    // — locking the QML daemon toggle permanently dead. Both branches
+    // converge on the same callback/cleanup sequence so callers see exactly
+    // one terminal event regardless of how the process ended.
+    auto handled = std::make_shared<bool>(false);
+    connect(proc, &QProcess::finished, this,
+            [proc, callback, args, handled](int exitCode, QProcess::ExitStatus status) {
+                if (*handled) {
+                    return;
+                }
+                *handled = true;
+                bool success = (status == QProcess::NormalExit && exitCode == 0);
+                QString output = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
+                if (!success) {
+                    QString errorOutput = QString::fromUtf8(proc->readAllStandardError()).trimmed();
+                    qCWarning(lcKcm) << "systemctl" << args << "failed:" << errorOutput;
+                }
+                if (callback) {
+                    callback(success, output);
+                }
+                proc->deleteLater();
+            });
+    connect(proc, &QProcess::errorOccurred, this, [proc, callback, args, handled](QProcess::ProcessError err) {
+        // Only FailedToStart needs explicit handling — every other error
+        // value (Crashed / Timedout / WriteError / ReadError / UnknownError)
+        // is followed by `finished`, which the lambda above already covers.
+        if (err != QProcess::FailedToStart || *handled) {
+            return;
         }
+        *handled = true;
+        qCWarning(lcKcm) << "systemctl" << args << "failed to start:" << proc->errorString();
         if (callback) {
-            callback(success, output);
+            callback(false, QString());
         }
         proc->deleteLater();
     });

@@ -1750,16 +1750,13 @@ void SettingsController::setDesktopDisabled(int viewMode, const QString& screenN
     const QString desktopSuffix = QLatin1Char('/') + QString::number(desktop);
     QStringList entries = m_settings.disabledDesktops(mode);
     if (disabled) {
-        // isDesktopDisabled already resolves both connector-name and
-        // resolved-id forms; mirror that on the add side so a second toggle
-        // doesn't append a duplicate entry in the other form. The local
-        // entries.contains() second check is a belt-and-suspenders guard:
-        // if a future read-side drift makes isDesktopDisabled report false
-        // on a stored entry, this still catches the exact-string duplicate
-        // and prevents the unbounded-append regression in a sneakier form.
-        const QString key = screenName + desktopSuffix;
-        if (!m_settings.isDesktopDisabled(mode, screenName, desktop) && !entries.contains(key)) {
-            entries.append(key);
+        // isDesktopDisabled probes the stored list under both connector-name
+        // and resolved-id forms (settings.cpp builds `namesToCheck` with the
+        // variant set), so its `false` return structurally implies "no
+        // matching variant in entries" — an additional entries.contains()
+        // would be re-validating the same invariant.
+        if (!m_settings.isDesktopDisabled(mode, screenName, desktop)) {
+            entries.append(screenName + desktopSuffix);
             m_settings.setDisabledDesktops(mode, entries);
             setNeedsSave(true);
         }
@@ -1790,12 +1787,11 @@ void SettingsController::setActivityDisabled(int viewMode, const QString& screen
     const QString activitySuffix = QLatin1Char('/') + activityId;
     QStringList entries = m_settings.disabledActivities(mode);
     if (disabled) {
-        // See setDesktopDisabled for the belt-and-suspenders entries.contains()
-        // rationale — locks the no-duplicate invariant locally regardless of
-        // read-side resolver behaviour.
-        const QString key = screenName + activitySuffix;
-        if (!m_settings.isActivityDisabled(mode, screenName, activityId) && !entries.contains(key)) {
-            entries.append(key);
+        // See setDesktopDisabled — isActivityDisabled probes every screen-name
+        // variant against the stored entries, so a false return implies no
+        // match in any form.
+        if (!m_settings.isActivityDisabled(mode, screenName, activityId)) {
+            entries.append(screenName + activitySuffix);
             m_settings.setDisabledActivities(mode, entries);
             setNeedsSave(true);
         }
