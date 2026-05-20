@@ -262,6 +262,15 @@ public Q_SLOTS:
     void assignLayoutToScreenActivity(const QString& screenId, const QString& activityId, const QString& layoutId);
     void clearAssignmentForScreenActivity(const QString& screenId, const QString& activityId);
     bool hasExplicitAssignmentForScreenActivity(const QString& screenId, const QString& activityId);
+    /// Per-field readers (mode-independent). These read the @c snappingLayout
+    /// / @c tilingAlgorithm field on the (screen, 0, activity) entry directly
+    /// instead of going through the mode-resolved active-layout id. Required
+    /// for the KCM Snapping/Tiling Assignments → Activity row so a stored-
+    /// but-inactive preference (e.g. snap layout recorded on an Autotile-
+    /// mode slot) is visible to the page. Mirrors
+    /// @ref getSnappingLayoutForScreenDesktop / @ref getTilingAlgorithmForScreenDesktop.
+    QString getSnappingLayoutForScreenActivity(const QString& screenId, const QString& activityId);
+    QString getTilingAlgorithmForScreenActivity(const QString& screenId, const QString& activityId);
     void
     setAllActivityAssignments(const QVariantMap& assignments); // Batch set - key: "screen:activity", value: layoutId
 

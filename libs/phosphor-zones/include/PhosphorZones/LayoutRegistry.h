@@ -232,12 +232,14 @@ public:
 
     /// Update only the @c snappingLayout field for the (@p screenId,
     /// @p virtualDesktop, @p activity) entry, preserving mode and
-    /// tilingAlgorithm. When no visible entry exists at that key (no
-    /// entry, or entry whose @c activeLayoutId is empty), seeds a new
+    /// tilingAlgorithm. When no entry exists at that key, seeds a new
     /// entry from the cascade-resolved ambient state at that context so
-    /// the recorded preference becomes effective without flipping the
-    /// rendered mode. Empty @p layoutId clears the snap field; if both
-    /// fields end up empty the entry is removed entirely.
+    /// the recorded preference lands in the right mode. A pre-existing
+    /// local entry — including one whose @c activeLayoutId() happens to
+    /// be empty (e.g. a stored tile-only preference) — is used as-is
+    /// as the seed so its opposite-field value is preserved.
+    /// Empty @p layoutId clears the snap field; if both fields end up
+    /// empty the entry is removed entirely.
     void setSnappingLayoutPreservingMode(const QString& screenId, int virtualDesktop, const QString& activity,
                                          const QString& layoutId);
 
@@ -258,6 +260,24 @@ public:
     /// actually moves windows. Snap and tile are independent fields
     /// (the slot's tile is left intact / inherited from the existing
     /// entry).
+    ///
+    /// Shadow scope by slot shape (see @ref clearShadowsForSlot):
+    ///   - Monitor row (vd=0, activity=""):  ALL other entries on the
+    ///     screen are wiped — this is the universal fallback so
+    ///     anything more specific shadows it for some context.
+    ///   - Per-desktop (vd>0, activity=""):  same-desktop entries
+    ///     (vd, anyActivity) AND every per-activity entry
+    ///     (0, activity!="") on the screen — the latter shadow the
+    ///     per-desktop slot at cascade L2 for any context with that
+    ///     activity, regardless of desktop, so leaving them intact
+    ///     would defeat the "cascade winner" guarantee.
+    ///   - Per-activity (vd=0, activity!=""):  entries with the same
+    ///     activity on any desktop.
+    ///   - Specific (vd>0, activity!=""):  no shadow possible — nothing
+    ///     wiped.
+    /// Promote is destructive: callers should reserve it for explicit
+    /// user "make this the active layout" intent, not for ambient
+    /// preference recording.
     void setSnappingLayoutPromoting(const QString& screenId, int virtualDesktop, const QString& activity,
                                     const QString& layoutId);
 
@@ -265,12 +285,6 @@ public:
     /// mode=Autotile after wiping shadows.
     void setTilingAlgorithmPromoting(const QString& screenId, int virtualDesktop, const QString& activity,
                                      const QString& algorithmId);
-
-    /// Remove every assignment entry on @p screenId's physical screen
-    /// (and its VS variants) that would shadow @p (virtualDesktop, activity)
-    /// in the cascade walk. Used by the @c promoting variants above.
-    /// The target slot itself is left intact for the caller to write.
-    void clearShadowsForSlot(const QString& screenId, int virtualDesktop, const QString& activity);
 
     Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const override;
@@ -324,6 +338,17 @@ public:
 
     AssignmentEntry::Mode modeForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const;
+
+    /// Per-field cascade readers — return the named field from the first
+    /// entry in the cascade where it is non-empty. Crucially, these do
+    /// NOT route through the @c activeLayoutId-based reject filter that
+    /// @ref assignmentEntryForScreen uses, so a "stored-but-inactive"
+    /// preference (e.g. an entry shaped like
+    /// {mode=Snapping, snap="", tile="cluster"} that the partial-update
+    /// path can produce) IS visible to the field-getter that targets
+    /// the populated field. On total cascade miss they synthesize from
+    /// the global default (snap provider for snap, autotile provider
+    /// for tile) and may still return empty if no provider has a value.
     QString snappingLayoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                     const QString& activity = QString()) const;
     QString tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop = 0,
@@ -399,6 +424,13 @@ Q_SIGNALS:
     void layoutsSaved();
 
 private:
+    /// Remove every assignment entry on @p screenId's physical screen
+    /// (and its VS variants) that would shadow @p (virtualDesktop, activity)
+    /// in the cascade walk. Internal helper used by the @c promoting
+    /// variants above; the target slot itself is left intact for the
+    /// caller to write.
+    void clearShadowsForSlot(const QString& screenId, int virtualDesktop, const QString& activity);
+
     void ensureLayoutDirectory();
     void loadLayoutsFromDirectory(const QString& directory);
     Layout* restoreSystemLayout(const QUuid& id, const QString& systemPath);

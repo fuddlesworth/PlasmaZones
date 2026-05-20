@@ -20,7 +20,6 @@
 #include <QJsonObject>
 #include <QLatin1String>
 #include <QLoggingCategory>
-#include <QStringLiteral>
 
 namespace PlasmaZones {
 
@@ -190,12 +189,7 @@ bool StagingService::stagedTilingLayout(const QString& screen, int desktop, cons
         return true;
     }
     if (s->tilingAlgorithmId.has_value()) {
-        const QString& val = *s->tilingAlgorithmId;
-        if (val.isEmpty()) {
-            out = QString();
-        } else {
-            out = PhosphorLayout::LayoutId::isAutotile(val) ? val : PhosphorLayout::LayoutId::makeAutotileId(val);
-        }
+        out = PhosphorLayout::LayoutId::normalizeAlgorithmId(*s->tilingAlgorithmId);
         return true;
     }
     return false;
@@ -210,6 +204,14 @@ const StagingService::StagedAssignment* StagingService::stagedAssignmentFor(cons
 void StagingService::flushAssignmentsToDaemon()
 {
     qCDebug(lcCore) << "flushStagedAssignments: count=" << m_assignments.size();
+
+    // Normalise the tiling id — callers may store either the raw algo id
+    // or the `autotile:` prefixed form; the D-Bus surface wants the raw id.
+    // Hoisted outside the loop so it isn't reconstructed per-entry.
+    const auto normTile = [](const QString& val) {
+        return PhosphorLayout::LayoutId::isAutotile(val) ? PhosphorLayout::LayoutId::extractAlgorithmId(val) : val;
+    };
+
     for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
         const auto& s = it.value();
         const bool isActivity = !s.activityId.isEmpty();
@@ -236,12 +238,6 @@ void StagingService::flushAssignmentsToDaemon()
             }
             continue;
         }
-
-        // Normalise the tiling id — callers may store either the raw algo id
-        // or the `autotile:` prefixed form; the D-Bus surface wants the raw id.
-        const auto normTile = [](const QString& val) {
-            return PhosphorLayout::LayoutId::isAutotile(val) ? PhosphorLayout::LayoutId::extractAlgorithmId(val) : val;
-        };
 
         // Explicit mode staging (Overview page) — setAssignmentEntry targets
         // a full context triple, matching the KCM batch-save path. This is

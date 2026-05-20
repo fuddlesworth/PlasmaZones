@@ -801,6 +801,18 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         propagateGlobalMasterCount();
     }
 
+    // Commit the new algorithm id BEFORE the write-back block so that any
+    // observer that reads m_algorithmId during write-back (e.g. a slot
+    // that survives the QSignalBlocker via a Qt::DirectConnection from
+    // outside engineSettings()) sees the new value, not the stale one.
+    // The guard timer + signal blocker still prevent the normal
+    // syncFromSettings re-entry path; this reorder just removes a latent
+    // observable window where m_algorithmId disagreed with the value
+    // being persisted.
+    m_algorithmEverSet = true;
+    m_algorithmId = newId;
+    m_config->algorithmId = newId;
+
     // Persist the per-algorithm tuning (split ratio, master count, saved
     // per-algorithm settings, and maxWindows when it changed) so the next
     // session restores the user's tuning for whatever algorithm they end
@@ -828,10 +840,6 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
                 s->setAutotileMaxWindows(m_config->maxWindows);
         }
     }
-
-    m_algorithmEverSet = true;
-    m_algorithmId = newId;
-    m_config->algorithmId = newId;
 
     // Clear stale split trees when switching away from a memory algorithm.
     // Without this, deserialized trees from a previous DwindleMemory session

@@ -232,13 +232,16 @@ bool applyPartialOrPromote(LayoutRegistry& self, QHash<LayoutAssignmentKey, Assi
                            const char* caller, Mutator&& mutator)
 {
     LayoutAssignmentKey key{screenId, virtualDesktop, activity};
-    AssignmentEntry entry =
-        seedFromCascade ? seedForPartialUpdate(self, assignments, screenId, virtualDesktop, activity) : [&]() {
-            AssignmentEntry e;
-            if (auto it = assignments.constFind(key); it != assignments.constEnd())
-                e = *it;
-            return e;
-        }();
+
+    // Seed entry: cascade-resolved fallback (preserve-mode path) or
+    // local-only (promote path — shadows are cleared separately, so
+    // pulling cascade data would defeat the point).
+    AssignmentEntry entry;
+    if (seedFromCascade) {
+        entry = seedForPartialUpdate(self, assignments, screenId, virtualDesktop, activity);
+    } else if (auto it = assignments.constFind(key); it != assignments.constEnd()) {
+        entry = *it;
+    }
 
     mutator(entry);
 
@@ -303,9 +306,15 @@ void LayoutRegistry::clearShadowsForSlot(const QString& screenId, int virtualDes
     //     fallback for the screen; every other entry on the screen
     //     shadows it for some context → clear them all.
     //   - Per-desktop (vd>0, activity=""): the slot is the fallback
-    //     for (this screen, this desktop, *). Per-desktop+activity
-    //     entries with the same desktop (vd, anyActivity!="") shadow
-    //     at L1/L2 → clear them.
+    //     for (this screen, this desktop, *). Two key shapes shadow it
+    //     for context (vd, activity=X):
+    //       L1 (vd, X)           — same-desktop+activity entries
+    //       L2 (0, X)            — per-activity entries (cascade walks
+    //                              activity before per-desktop, see
+    //                              walkCascade level 2)
+    //     Clear BOTH; leaving per-activity entries intact would let any
+    //     activity-keyed entry continue to win over the promoted slot
+    //     whenever that activity is current.
     //   - Per-activity (vd=0, activity!=""): the slot is the fallback
     //     for (this screen, *, this activity). Per-desktop+activity
     //     entries with the same activity (anyVd>0, activity) shadow
@@ -320,8 +329,14 @@ void LayoutRegistry::clearShadowsForSlot(const QString& screenId, int virtualDes
 
         if (virtualDesktop == 0 && activity.isEmpty())
             return true; // Monitor row: clear everything else on screen
-        if (virtualDesktop > 0 && activity.isEmpty())
-            return key.virtualDesktop == virtualDesktop; // Per-desktop scope
+        if (virtualDesktop > 0 && activity.isEmpty()) {
+            // Per-desktop scope: same-desktop entries (L1 shadows) AND
+            // per-activity entries (L2 shadows for contexts with matching
+            // activity). Leaving the latter would let an activity-keyed
+            // entry mask the promoted per-desktop slot when that activity
+            // is current.
+            return key.virtualDesktop == virtualDesktop || (key.virtualDesktop == 0 && !key.activity.isEmpty());
+        }
         if (virtualDesktop == 0 && !activity.isEmpty())
             return key.activity == activity; // Per-activity scope
         return false; // Specific (vd, activity): no shadow to clear
@@ -343,17 +358,18 @@ void LayoutRegistry::setSnappingLayoutPromoting(const QString& screenId, int vir
                                                 const QString& layoutId)
 {
     // clearShadowsForSlot itself emits no signal — its mutation is rolled
-    // into the layoutAssigned emit below. Note that even when the helper
-    // reports "unchanged" for the target slot, clearShadows may have
-    // removed shadow entries; always emit + save in the promote path so
-    // those shadow removals are persisted and observed.
+    // into the layoutAssigned emit below. The applyPartialOrPromote
+    // return is intentionally discarded (cast to void to make intent
+    // explicit): even when the helper reports "unchanged" for the
+    // target slot, clearShadows may have removed shadow entries that
+    // must still be persisted and observed.
     clearShadowsForSlot(screenId, virtualDesktop, activity);
 
-    applyPartialOrPromote(*this, m_assignments, screenId, virtualDesktop, activity, /*seedFromCascade=*/false,
-                          "setSnappingLayoutPromoting", [&](AssignmentEntry& entry) {
-                              entry.mode = AssignmentEntry::Snapping;
-                              entry.snappingLayout = layoutId;
-                          });
+    (void)applyPartialOrPromote(*this, m_assignments, screenId, virtualDesktop, activity, /*seedFromCascade=*/false,
+                                "setSnappingLayoutPromoting", [&](AssignmentEntry& entry) {
+                                    entry.mode = AssignmentEntry::Snapping;
+                                    entry.snappingLayout = layoutId;
+                                });
 
     PhosphorZones::Layout* layout = layoutId.isEmpty() ? nullptr : layoutById(QUuid::fromString(layoutId));
     Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
@@ -366,11 +382,11 @@ void LayoutRegistry::setTilingAlgorithmPromoting(const QString& screenId, int vi
     // See note in setSnappingLayoutPromoting about always emitting.
     clearShadowsForSlot(screenId, virtualDesktop, activity);
 
-    applyPartialOrPromote(*this, m_assignments, screenId, virtualDesktop, activity, /*seedFromCascade=*/false,
-                          "setTilingAlgorithmPromoting", [&](AssignmentEntry& entry) {
-                              entry.mode = AssignmentEntry::Autotile;
-                              entry.tilingAlgorithm = algorithmId;
-                          });
+    (void)applyPartialOrPromote(*this, m_assignments, screenId, virtualDesktop, activity, /*seedFromCascade=*/false,
+                                "setTilingAlgorithmPromoting", [&](AssignmentEntry& entry) {
+                                    entry.mode = AssignmentEntry::Autotile;
+                                    entry.tilingAlgorithm = algorithmId;
+                                });
 
     Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
     saveAssignments();
@@ -491,13 +507,53 @@ AssignmentEntry::Mode LayoutRegistry::modeForScreen(const QString& screenId, int
 QString LayoutRegistry::snappingLayoutForScreen(const QString& screenId, int virtualDesktop,
                                                 const QString& activity) const
 {
-    return assignmentEntryForScreen(screenId, virtualDesktop, activity).snappingLayout;
+    // Per-field cascade: accept the first entry whose snap field is set.
+    // Cannot route through `assignmentEntryForScreen` because its visitor
+    // rejects entries whose `activeLayoutId()` is empty — which happens
+    // for preserve-mode entries shaped like {mode=Snapping, snap="",
+    // tile="cluster"} after a snap-clear that preserved the tile
+    // preference (see setSnappingLayoutPreservingMode). Reading via the
+    // mode-resolved cascade would hide the stored tile field from the
+    // tile-row in the KCM Assignments page and vice versa.
+    auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
+                              [](const AssignmentEntry& entry) -> std::optional<QString> {
+                                  if (entry.snappingLayout.isEmpty())
+                                      return std::nullopt;
+                                  return entry.snappingLayout;
+                              });
+    if (result) {
+        return *result;
+    }
+    // Cascade miss — consult the snap-side global default provider
+    // directly. Cannot route through `resolveDefaultAssignmentEntry`
+    // because that helper synthesizes a single mode-resolved entry and
+    // returns Autotile-only state with snap="" when the user has
+    // autotile preferred (and vice versa for the tile reader). This is
+    // a per-field reader: the snap default exists independently of
+    // which mode the cascade winner would render.
+    return m_defaultLayoutIdProvider ? m_defaultLayoutIdProvider() : QString();
 }
 
 QString LayoutRegistry::tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop,
                                                  const QString& activity) const
 {
-    return assignmentEntryForScreen(screenId, virtualDesktop, activity).tilingAlgorithm;
+    // Per-field cascade — see snappingLayoutForScreen above.
+    auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
+                              [](const AssignmentEntry& entry) -> std::optional<QString> {
+                                  if (entry.tilingAlgorithm.isEmpty())
+                                      return std::nullopt;
+                                  return entry.tilingAlgorithm;
+                              });
+    if (result) {
+        return *result;
+    }
+    // Symmetric per-field default: consult the autotile-side global
+    // default provider directly so the KCM Tiling Assignments default
+    // row shows the user's configured default autotile algorithm even
+    // when the snapping-preferred provider would steer
+    // `resolveDefaultAssignmentEntry` into a snap-mode entry with an
+    // empty tile field.
+    return m_defaultAutotileAlgorithmProvider ? m_defaultAutotileAlgorithmProvider() : QString();
 }
 
 void LayoutRegistry::clearAutotileAssignments()

@@ -27,10 +27,16 @@ namespace {
 // Mirrors the decoder in daemon.cpp's assignmentChangesApplied lambda.
 // Inputs are constrained to printable ASCII + UUID-with-braces; no escaping
 // is required because 0x1F never appears in any legitimate screen id,
-// activity UUID, or field tag.
+// activity UUID, or field tag — but assert in debug builds so a future
+// caller passing a tainted id is caught immediately. The daemon-side
+// parser's behaviour on a tainted input would be either rejection (extra
+// parts.size() != 4) or — worse — silent field-tag misattribution if
+// the embedded 0x1F lands between the activity and field segments.
 QString encodeChangedKey(const QString& screenId, int virtualDesktop, const QString& activity, QLatin1String field)
 {
     constexpr QChar US(0x1F);
+    Q_ASSERT_X(!screenId.contains(US), "encodeChangedKey", "screenId contains 0x1F (Unit Separator)");
+    Q_ASSERT_X(!activity.contains(US), "encodeChangedKey", "activity contains 0x1F (Unit Separator)");
     return screenId + US + QString::number(virtualDesktop) + US + activity + US + field;
 }
 } // namespace
@@ -138,6 +144,13 @@ void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
     }
 
     m_layoutManager->setAllScreenAssignments(parsedAssignments);
+    // Track the (screen, 0, "") entry-level changes so the OSD lambda
+    // can show one OSD per modified slot instead of falling into the
+    // legacy all-screens enumeration when changedKeys is empty.
+    for (auto it = parsedAssignments.constBegin(); it != parsedAssignments.constEnd(); ++it) {
+        m_changedScreenIds.insert(it.key());
+        m_changedAssignmentKeys.append(encodeChangedKey(it.key(), 0, QString(), QLatin1String("entry")));
+    }
     // Update global active layout for the primary screen so zone overlay/drag see the new layout
     // immediately (same as assignLayoutToScreen). KCM Save uses this path.
     QScreen* primary = Utils::primaryScreen();
@@ -408,6 +421,14 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
     }
 
     m_layoutManager->setAllDesktopAssignments(parsedAssignments);
+    // Track each modified slot so the OSD lambda can resolve per-key
+    // instead of falling into the empty-keys all-screens fallback.
+    for (auto it = parsedAssignments.constBegin(); it != parsedAssignments.constEnd(); ++it) {
+        const QString& screenId = it.key().first;
+        const int desktop = it.key().second;
+        m_changedScreenIds.insert(screenId);
+        m_changedAssignmentKeys.append(encodeChangedKey(screenId, desktop, QString(), QLatin1String("entry")));
+    }
     qCInfo(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "desktop assignments";
 }
 
@@ -552,6 +573,18 @@ bool LayoutAdaptor::hasExplicitAssignmentForScreenActivity(const QString& screen
                                                   activityId);
 }
 
+QString LayoutAdaptor::getSnappingLayoutForScreenActivity(const QString& screenId, const QString& activityId)
+{
+    return m_layoutManager->snappingLayoutForScreen(Phosphor::Screens::ScreenIdentity::idForName(screenId), 0,
+                                                    activityId);
+}
+
+QString LayoutAdaptor::getTilingAlgorithmForScreenActivity(const QString& screenId, const QString& activityId)
+{
+    return m_layoutManager->tilingAlgorithmForScreen(Phosphor::Screens::ScreenIdentity::idForName(screenId), 0,
+                                                     activityId);
+}
+
 void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
 {
     QHash<QPair<QString, QString>, QString> parsedAssignments;
@@ -592,6 +625,14 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
     }
 
     m_layoutManager->setAllActivityAssignments(parsedAssignments);
+    // Track each modified slot so the OSD lambda can resolve per-key
+    // instead of falling into the empty-keys all-screens fallback.
+    for (auto it = parsedAssignments.constBegin(); it != parsedAssignments.constEnd(); ++it) {
+        const QString& screenId = it.key().first;
+        const QString& activityId = it.key().second;
+        m_changedScreenIds.insert(screenId);
+        m_changedAssignmentKeys.append(encodeChangedKey(screenId, 0, activityId, QLatin1String("entry")));
+    }
     qCInfo(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "activity assignments";
 }
 
@@ -787,11 +828,11 @@ void LayoutAdaptor::setTilingAlgorithmEntry(const QString& screenId, int virtual
     // preference without flipping the rendered mode. Clears (empty
     // algorithmId) ALWAYS preserve — see the rationale in
     // setSnappingLayoutEntry: a clear must not wipe sibling entries.
-    const int curDesktopT = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    const QString curActivityT = m_activityManager ? m_activityManager->currentActivity() : QString();
-    const PhosphorZones::AssignmentEntry::Mode currentModeT =
-        m_layoutManager->modeForScreen(resolvedId, curDesktopT, curActivityT);
-    if (!algorithmId.isEmpty() && currentModeT == PhosphorZones::AssignmentEntry::Autotile) {
+    const int curDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const QString curActivity = m_activityManager ? m_activityManager->currentActivity() : QString();
+    const PhosphorZones::AssignmentEntry::Mode currentMode =
+        m_layoutManager->modeForScreen(resolvedId, curDesktop, curActivity);
+    if (!algorithmId.isEmpty() && currentMode == PhosphorZones::AssignmentEntry::Autotile) {
         m_layoutManager->setTilingAlgorithmPromoting(resolvedId, virtualDesktop, activity, algorithmId);
     } else {
         m_layoutManager->setTilingAlgorithmPreservingMode(resolvedId, virtualDesktop, activity, algorithmId);
@@ -811,10 +852,11 @@ void LayoutAdaptor::setSaveBatchMode(bool enabled)
 
 void LayoutAdaptor::applyAssignmentChanges()
 {
+    // Move-out leaves the source containers in a valid empty state per
+    // Qt6 move semantics for QSet/QStringList; no explicit clear() is
+    // needed afterward.
     QSet<QString> changed = std::move(m_changedScreenIds);
-    m_changedScreenIds.clear();
     QStringList keys = std::move(m_changedAssignmentKeys);
-    m_changedAssignmentKeys.clear();
     // Signal is typed as QStringList for D-Bus compatibility (QSet is not
     // marshallable). Receivers that need set semantics convert back.
     // changedKeys carries the FULL (screen, desktop, activity) tuple of

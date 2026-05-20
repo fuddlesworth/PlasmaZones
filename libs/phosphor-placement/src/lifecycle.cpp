@@ -725,14 +725,9 @@ void WindowTrackingService::onLayoutChanged()
         // only prevLayout in the map, the lookup misses, addToBuffer
         // returns early, and the resnap buffer ends up empty.
         // Zone UUIDs are unique across all layouts, so this is safe.
-        QHash<QString, int> globalZoneIdToPosition;
-        int globalPrevZoneCount = prevLayout->zones().size();
-        for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
-            QHash<QString, int> layoutMap = PhosphorZones::LayoutUtils::buildZonePositionMap(layout);
-            for (auto it = layoutMap.constBegin(); it != layoutMap.constEnd(); ++it) {
-                globalZoneIdToPosition[it.key()] = it.value();
-            }
-        }
+        const QHash<QString, int> globalZoneIdToPosition =
+            PhosphorZones::LayoutUtils::buildGlobalZonePositionMap(m_layoutManager->layouts());
+        const int globalPrevZoneCount = prevLayout->zones().size();
 
         // Dedup: full windowId for live assignments (supports multi-instance apps),
         // appId for pending entries (avoids double-counting live + pending for same window)
@@ -749,19 +744,17 @@ void WindowTrackingService::onLayoutChanged()
                 return;
             }
 
-            // Use the all-layouts position map. The previous per-screen-
-            // layout branch resolved the screen's layout AFTER the
-            // change had landed, which yielded the new layout and made
-            // the lookup miss for OLD zoneIds. The all-layouts map
-            // above handles every layout the window could have snapped
-            // to. The @p screenId parameter is still consumed below
-            // when constructing the ResnapEntry.
-            const QHash<QString, int>* posMap = &globalZoneIdToPosition;
-            int prevZoneCount = globalPrevZoneCount;
+            // Use the all-layouts position map built above. The previous
+            // per-screen-layout branch resolved the screen's layout AFTER
+            // the change had landed, which yielded the new layout and made
+            // the lookup miss for OLD zoneIds. The all-layouts map handles
+            // every layout the window could have snapped to. The @p screenId
+            // parameter is still consumed below when constructing the
+            // ResnapEntry.
 
             // Use primary zone for position mapping
             QString zoneId = zoneIdList.isEmpty() ? QString() : zoneIdList.first();
-            int pos = posMap->value(zoneId, 0);
+            int pos = globalZoneIdToPosition.value(zoneId, 0);
             if (pos <= 0) {
                 // Handle zoneselector synthetic IDs: "zoneselector-{layoutId}-{index}"
                 if (zoneId.startsWith(kZoneSelectorIdPrefix)) {
@@ -769,7 +762,7 @@ void WindowTrackingService::onLayoutChanged()
                     if (lastDash > 0) {
                         bool ok = false;
                         int idx = zoneId.mid(lastDash + 1).toInt(&ok);
-                        if (ok && idx >= 0 && idx < prevZoneCount) {
+                        if (ok && idx >= 0 && idx < globalPrevZoneCount) {
                             pos = idx + 1; // 1-based position
                         }
                     }
@@ -789,7 +782,7 @@ void WindowTrackingService::onLayoutChanged()
             // Collect all zone positions for multi-zone resnap
             QList<int> allPositions;
             for (const QString& zid : zoneIdList) {
-                int p = posMap->value(zid, 0);
+                int p = globalZoneIdToPosition.value(zid, 0);
                 if (p > 0)
                     allPositions.append(p);
             }
