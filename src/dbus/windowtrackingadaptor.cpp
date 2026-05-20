@@ -58,14 +58,9 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // dependency, so the gate is injected from here — single funnel via
     // isPersistedContextDisabled() so the predicate and the load/save filters
     // share one decision implementation. See discussion #461.
-    //
-    // The predicate signature carries an `activity` slot for future use, but
-    // SnapState does not track per-window activity today — the placement lib
-    // passes an empty activity string and the helper accordingly ignores it.
-    m_service->setShouldTrackPredicate(
-        [this](const QString& screenId, int virtualDesktop, const QString& /*activity*/) -> bool {
-            return !isPersistedContextDisabled(screenId, virtualDesktop);
-        });
+    m_service->setShouldTrackPredicate([this](const QString& screenId, int virtualDesktop) -> bool {
+        return !isPersistedContextDisabled(screenId, virtualDesktop);
+    });
 
     // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
     // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on

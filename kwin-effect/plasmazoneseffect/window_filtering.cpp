@@ -132,11 +132,19 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
     // false) but always set the transient-parent relationship. Without this the
     // popup passes the filter and gets snapped to a zone (discussion #461 item 11).
     //
-    // The menu / dropdown / tooltip bucket below is the same set isTileableWindow()
-    // rejects. Without it a popup KWin classifies as e.g. PopupMenu — but that
-    // doesn't carry the isPopupWindow flag — passes snap but not autotile, which
-    // is the exact asymmetry that surfaces as "snapped to a zone in snap mode,
-    // ignored in tile mode" depending on the screen's current assignment.
+    // Relationship with isTileableWindow(): the autotile filter starts with
+    // `!isNormalWindow()`, which structurally catches every flag enumerated here
+    // (KWin marks Dialog/Utility/Splash/Notification/etc. as non-Normal types).
+    // We enumerate them explicitly on the snap side because the snap path runs
+    // before isNormalWindow() classification in some KWin versions, and the
+    // explicit list documents which window kinds the snap filter rejects.
+    // Anything in this block that ALSO appears verbatim in isTileableWindow
+    // (isModal, isPopupWindow, isPopupMenu, isDropdownMenu, isMenu, isTooltip,
+    // transientFor) must stay in lockstep with that filter — the Steam image-
+    // popup regression (#461 item 11) came from a missed sync of exactly that
+    // intersection. The flags isTileableWindow does NOT enumerate (isDialog,
+    // isUtility, isSplash, isNotification, isCriticalNotification,
+    // isOnScreenDisplay) are caught there by !isNormalWindow().
     if (w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isCriticalNotification()
         || w->isOnScreenDisplay() || w->isModal() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
         || w->isMenu() || w->isTooltip() || w->transientFor()) {
