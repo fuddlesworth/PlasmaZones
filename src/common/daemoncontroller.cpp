@@ -123,13 +123,40 @@ void DaemonController::refreshEnabledState()
 
 void DaemonController::setAutostart(bool enabled)
 {
-    QString action = enabled ? QStringLiteral("enable") : QStringLiteral("disable");
-    runSystemctl({QStringLiteral("--user"), action, QLatin1String(KCMConstants::SystemdServiceName)},
-                 [this](bool success, const QString& /*output*/) {
-                     if (success) {
-                         refreshEnabledState();
-                     }
-                 });
+    const QLatin1String unit(KCMConstants::SystemdServiceName);
+    if (enabled) {
+        // Two steps: unmask (in case the previous disable masked the unit —
+        // see the else branch) then enable. `systemctl enable` against a
+        // masked unit fails with "Unit is masked", so the unmask must run
+        // first. Both are no-ops in their inert state, so the chain is
+        // safe whether or not the unit was actually masked.
+        runSystemctl({QStringLiteral("--user"), QStringLiteral("unmask"), unit},
+                     [this, unit](bool /*success*/, const QString& /*output*/) {
+                         runSystemctl({QStringLiteral("--user"), QStringLiteral("enable"), unit},
+                                      [this](bool success, const QString& /*output*/) {
+                                          if (success) {
+                                              refreshEnabledState();
+                                          }
+                                      });
+                     });
+    } else {
+        // Mask, not just disable. A plain `disable` only blocks boot-time
+        // autostart — D-Bus activation via the org.plasmazones.service
+        // file (SystemdService=plasmazones.service) still routes through
+        // systemd and brings the daemon back the next time any client
+        // (KWin effect, settings app, editor) sends a method call. That
+        // is why the toggle re-enables itself within seconds in
+        // discussion #497: the KWin effect's window-lifecycle callbacks
+        // keep triggering activation as the user moves / closes windows.
+        // Masking blocks both autostart and activation. Re-enabling
+        // unmasks first (see the if branch).
+        runSystemctl({QStringLiteral("--user"), QStringLiteral("mask"), unit},
+                     [this](bool success, const QString& /*output*/) {
+                         if (success) {
+                             refreshEnabledState();
+                         }
+                     });
+    }
 }
 
 void DaemonController::startDaemon()
