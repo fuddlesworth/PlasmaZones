@@ -7,6 +7,7 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "../../config/configbackends.h"
 #include "../../core/interfaces.h"
+#include "../../core/screenmoderouter.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -58,7 +59,22 @@ bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, 
     // snap entries pre-multi-monitor, sticky windows, etc.). Loading and
     // keeping them is the historical default — the alternative drops snap
     // state on every windowless desktop session.
-    if (!m_settings || screenId.isEmpty()) {
+    //
+    // Snap entries (the primary caller) never have an activity tag because
+    // SnapState does not track per-window activity. Activity-mode disable
+    // gating therefore covers autotile entries (where the JSON carries the
+    // activity field, filtered by the daemon-side wrapper) but not snap
+    // entries — which is acceptable: a stored snap entry has no recorded
+    // activity to compare against.
+    //
+    // m_screenModeRouter is wired post-construction by the daemon; the very
+    // first call site is loadState() (invoked from this adaptor's own ctor
+    // before the daemon calls setScreenModeRouter), where it is still null.
+    // All callers of this helper are snap-side anyway (WindowZoneAssignmentsFull
+    // and PendingRestoreQueues are snap-mode only), so the Snapping fallback
+    // is the correct mode for every call — not an arbitrary default.
+    Q_ASSERT(m_settings);
+    if (screenId.isEmpty()) {
         return false;
     }
     const PhosphorZones::AssignmentEntry::Mode mode =

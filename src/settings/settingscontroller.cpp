@@ -1703,50 +1703,64 @@ bool SettingsController::isDesktopDisabled(int viewMode, const QString& screenNa
     return m_settings.isDesktopDisabled(modeFromViewMode(viewMode), screenName, desktop);
 }
 
+namespace {
+
+// Strip every connector-name ↔ resolved-id variant of `screenName + suffix`
+// from `entries`. Mirrors the read-side resolution in
+// Settings::isDesktopDisabled / isActivityDisabled so a stored entry in any
+// form gets removed regardless of which form the caller supplies.
+// Discussion #461 item 12.
+int removeDisabledKeyVariants(QStringList& entries, const QString& screenName, const QString& suffix)
+{
+    QStringList variants{screenName + suffix};
+    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenName)) {
+        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenName);
+        if (resolved != screenName && !resolved.isEmpty()) {
+            variants.append(resolved + suffix);
+        }
+    } else {
+        const QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenName);
+        if (!connector.isEmpty() && connector != screenName) {
+            variants.append(connector + suffix);
+        }
+    }
+    int removed = 0;
+    for (const QString& variant : std::as_const(variants)) {
+        removed += entries.removeAll(variant);
+    }
+    return removed;
+}
+
+} // namespace
+
 void SettingsController::setDesktopDisabled(int viewMode, const QString& screenName, int desktop, bool disabled)
 {
+    // desktop <= 0 is nonsensical (QML supplies 1-based desktop numbers; the
+    // read-side isDesktopDisabled fast-paths to "not disabled" on this input).
+    // Without the guard, repeated toggles with desktop=0 would unboundedly
+    // append "<screen>/0" entries because the dedup check below also
+    // fast-paths to "not disabled".
+    if (screenName.isEmpty() || desktop <= 0) {
+        return;
+    }
     // The disabledDesktopsChanged(viewMode) signal is fired by the
     // m_settings → controller forward in the constructor — no manual emit
     // needed here.
     const auto mode = modeFromViewMode(viewMode);
     const QString desktopSuffix = QLatin1Char('/') + QString::number(desktop);
-    const QString key = screenName + desktopSuffix;
     QStringList entries = m_settings.disabledDesktops(mode);
     if (disabled) {
         // isDesktopDisabled already resolves both connector-name and
         // resolved-id forms; mirror that on the add side so a second toggle
         // doesn't append a duplicate entry in the other form.
         if (!m_settings.isDesktopDisabled(mode, screenName, desktop)) {
-            entries.append(key);
+            entries.append(screenName + desktopSuffix);
             m_settings.setDisabledDesktops(mode, entries);
             setNeedsSave(true);
         }
-    } else {
-        // Discussion #461 item 12: toggling a disabled desktop back ON was a
-        // no-op when the stored key used a different screen-name form than
-        // the one QML passes in (e.g. saved under the connector name, looked
-        // up by stable id after a screen redetect). Strip every variant so
-        // the un-toggle survives whatever form was persisted.
-        QStringList variants{key};
-        if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenName)) {
-            const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenName);
-            if (resolved != screenName && !resolved.isEmpty()) {
-                variants.append(resolved + desktopSuffix);
-            }
-        } else {
-            const QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenName);
-            if (!connector.isEmpty() && connector != screenName) {
-                variants.append(connector + desktopSuffix);
-            }
-        }
-        int removed = 0;
-        for (const QString& variant : std::as_const(variants)) {
-            removed += entries.removeAll(variant);
-        }
-        if (removed > 0) {
-            m_settings.setDisabledDesktops(mode, entries);
-            setNeedsSave(true);
-        }
+    } else if (removeDisabledKeyVariants(entries, screenName, desktopSuffix) > 0) {
+        m_settings.setDisabledDesktops(mode, entries);
+        setNeedsSave(true);
     }
 }
 
@@ -1758,41 +1772,27 @@ bool SettingsController::isActivityDisabled(int viewMode, const QString& screenN
 void SettingsController::setActivityDisabled(int viewMode, const QString& screenName, const QString& activityId,
                                              bool disabled)
 {
+    // Empty activityId is nonsensical (no activity is being addressed; the
+    // read-side isActivityDisabled fast-paths to "not disabled" on this
+    // input). Same unbounded-append regression as setDesktopDisabled's
+    // desktop<=0 case without this guard.
+    if (screenName.isEmpty() || activityId.isEmpty()) {
+        return;
+    }
     // See setDesktopDisabled — the per-mode signal is forwarded from
     // m_settings via the connect set up in the constructor.
     const auto mode = modeFromViewMode(viewMode);
     const QString activitySuffix = QLatin1Char('/') + activityId;
-    const QString key = screenName + activitySuffix;
     QStringList entries = m_settings.disabledActivities(mode);
     if (disabled) {
         if (!m_settings.isActivityDisabled(mode, screenName, activityId)) {
-            entries.append(key);
+            entries.append(screenName + activitySuffix);
             m_settings.setDisabledActivities(mode, entries);
             setNeedsSave(true);
         }
-    } else {
-        // Mirror setDesktopDisabled: try every screen-name form so a stored
-        // entry in a different form than QML supplies still gets removed.
-        QStringList variants{key};
-        if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenName)) {
-            const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenName);
-            if (resolved != screenName && !resolved.isEmpty()) {
-                variants.append(resolved + activitySuffix);
-            }
-        } else {
-            const QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenName);
-            if (!connector.isEmpty() && connector != screenName) {
-                variants.append(connector + activitySuffix);
-            }
-        }
-        int removed = 0;
-        for (const QString& variant : std::as_const(variants)) {
-            removed += entries.removeAll(variant);
-        }
-        if (removed > 0) {
-            m_settings.setDisabledActivities(mode, entries);
-            setNeedsSave(true);
-        }
+    } else if (removeDisabledKeyVariants(entries, screenName, activitySuffix) > 0) {
+        m_settings.setDisabledActivities(mode, entries);
+        setNeedsSave(true);
     }
 }
 

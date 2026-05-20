@@ -137,9 +137,9 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
     // doesn't carry the isPopupWindow flag — passes snap but not autotile, which
     // is the exact asymmetry that surfaces as "snapped to a zone in snap mode,
     // ignored in tile mode" depending on the screen's current assignment.
-    if (w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isOnScreenDisplay()
-        || w->isModal() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu() || w->isMenu()
-        || w->isTooltip() || w->transientFor()) {
+    if (w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isCriticalNotification()
+        || w->isOnScreenDisplay() || w->isModal() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
+        || w->isMenu() || w->isTooltip() || w->transientFor()) {
         return false;
     }
 

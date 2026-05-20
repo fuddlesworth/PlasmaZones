@@ -1106,6 +1106,13 @@ bool Daemon::init()
     // the autotile-mode disable list specifically; the JSON layer is the
     // single funnel that sees both modes plus the activity field that
     // doesn't reach the autotile engine.
+    //
+    // Lifetime: filterAutotilePendingRestores captures `this` (Daemon) and is
+    // copied into both delegate lambdas. The delegates live on
+    // m_windowTrackingAdaptor, which is a Qt child of `this`, so WTA is
+    // destroyed before ~Daemon — no UAF window. saveStateOnShutdown() runs in
+    // stop() ahead of engine teardown, so m_settings and m_screenModeRouter
+    // are still live when the serialize delegate is invoked.
     auto filterAutotilePendingRestores = [this](const QJsonObject& src) -> QJsonObject {
         QJsonObject filtered;
         for (auto it = src.constBegin(); it != src.constEnd(); ++it) {
@@ -1119,15 +1126,23 @@ bool Daemon::init()
                 }
                 const QJsonObject entryObj = entryVal.toObject();
                 const QString screen = entryObj[QLatin1String("screen")].toString();
-                const int desktop = entryObj[QLatin1String("desktop")].toInt(0);
+                // Default to 1 (not 0) so a legacy entry missing the desktop
+                // key normalises the same way AutotileEngine::deserializePendingRestores
+                // does (qMax(1, ...)). With a 0 default the desktop gate
+                // would skip (it short-circuits on desktop <= 0) and a
+                // currently-disabled desktop 1 entry could slip through.
+                const int desktop = entryObj[QLatin1String("desktop")].toInt(1);
                 const QString activity = entryObj[QLatin1String("activity")].toString();
-                if (m_settings && !screen.isEmpty()) {
-                    const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter
-                        ? m_screenModeRouter->modeFor(screen)
-                        : PhosphorZones::AssignmentEntry::Autotile;
-                    if (isContextDisabled(m_settings.get(), mode, screen, desktop, activity)) {
-                        continue;
-                    }
+                // Empty-screen entries are dead weight: the engine's
+                // deserializer drops them outright (screenId.isEmpty()
+                // continue), so passing them through here would only persist
+                // garbage to disk. Skip in lockstep.
+                if (screen.isEmpty()) {
+                    continue;
+                }
+                const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter->modeFor(screen);
+                if (isContextDisabled(m_settings.get(), mode, screen, desktop, activity)) {
+                    continue;
                 }
                 kept.append(entryObj);
             }

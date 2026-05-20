@@ -80,28 +80,30 @@ bool DaemonController::isEnabled() const
 
 void DaemonController::setEnabled(bool enabled)
 {
-    // setAutostart now does unmask+enable / disable+mask (see the rationale
-    // there). On enable the mask must be lifted BEFORE startDaemon issues
-    // `systemctl start` — start against a still-masked unit fails. Sequence
-    // the start as a tail callback to setAutostart so it runs only after the
-    // followup action (enable) completes. On disable the stop can fire
-    // immediately; mask afterwards just prevents future activation.
+    // setAutostart does unmask+enable / disable+mask (see the rationale
+    // there). Both sides chain the side-effect through onComplete so the
+    // systemctl invocations run strictly sequenced and we never race:
+    //   enable:  unmask → enable → start  (start needs the unit unmasked)
+    //   disable: disable → mask → stop    (stop happens AFTER mask so a
+    //                                      concurrent D-Bus activation
+    //                                      during the shutdown window
+    //                                      hits a masked unit and is
+    //                                      refused — closes the
+    //                                      re-activation race)
+    //
+    // No optimistic m_enabled flip here: refreshEnabledState() in
+    // setAutostart's tail reads the unit's real on-disk state and emits
+    // enabledChanged() iff it actually changed. Flipping the property
+    // synchronously before systemctl confirms would lie to QML for the
+    // length of the chain (and stick a wrong value if the chain failed).
     if (enabled) {
         setAutostart(true, [this]() {
             startDaemon();
         });
     } else {
-        // Stop first so the running daemon is gone before we mask. If we
-        // masked first, the subsequent `stop` would still work, but a
-        // concurrent D-Bus client could re-activate between mask-completion
-        // and stop-completion — masking after stop closes that window.
-        stopDaemon();
-        setAutostart(false, nullptr);
-    }
-
-    if (m_enabled != enabled) {
-        m_enabled = enabled;
-        Q_EMIT enabledChanged();
+        setAutostart(false, [this]() {
+            stopDaemon();
+        });
     }
 }
 
@@ -146,28 +148,34 @@ void DaemonController::setAutostart(bool enabled, std::function<void()> onComple
     const QString primaryAction = enabled ? QStringLiteral("unmask") : QStringLiteral("disable");
     const QString followupAction = enabled ? QStringLiteral("enable") : QStringLiteral("mask");
     const QLatin1String unit(KCMConstants::SystemdServiceName);
-    runSystemctl(
-        {QStringLiteral("--user"), primaryAction, unit},
-        [this, followupAction, unit, onComplete = std::move(onComplete)](bool /*success*/, const QString& /*output*/) {
-            // Ignore primaryAction's exit code: unmask on an un-masked
-            // unit and disable on an already-disabled unit are no-ops
-            // (and systemctl reports them as failures with a benign
-            // "Unit not loaded" warning). We chain unconditionally so
-            // the second action always runs; refreshEnabledState then
-            // reconciles whatever the final on-disk state is.
-            runSystemctl({QStringLiteral("--user"), followupAction, unit},
-                         [this, onComplete = std::move(onComplete)](bool success, const QString& /*output*/) {
-                             if (success) {
-                                 refreshEnabledState();
-                             }
-                             // Invoke the caller's tail action AFTER the
-                             // followup action lands so a `start` issued
-                             // here never races a still-pending unmask.
-                             if (onComplete) {
-                                 onComplete();
-                             }
-                         });
-        });
+    runSystemctl({QStringLiteral("--user"), primaryAction, unit},
+                 // mutable so the inner `std::move(onComplete)` actually moves —
+                 // without it the outer capture is implicit-const and std::move
+                 // silently degrades to a copy.
+                 [this, followupAction, unit, onComplete = std::move(onComplete)](bool /*success*/,
+                                                                                  const QString& /*output*/) mutable {
+                     // Ignore primaryAction's exit code: unmask on an un-masked
+                     // unit and disable on an already-disabled unit are no-ops
+                     // (and systemctl reports them as failures with a benign
+                     // "Unit not loaded" warning). We chain unconditionally so
+                     // the second action always runs; refreshEnabledState then
+                     // reconciles whatever the final on-disk state is.
+                     runSystemctl({QStringLiteral("--user"), followupAction, unit},
+                                  [this, onComplete = std::move(onComplete)](bool success, const QString& /*output*/) {
+                                      if (success) {
+                                          refreshEnabledState();
+                                      }
+                                      // Invoke the caller's tail action AFTER the
+                                      // followup action lands so a `start` issued
+                                      // here never races a still-pending unmask
+                                      // (and on disable: stop runs only after mask
+                                      // completes, so the daemon dies into a
+                                      // masked unit and can't be re-activated).
+                                      if (onComplete) {
+                                          onComplete();
+                                      }
+                                  });
+                 });
 }
 
 void DaemonController::startDaemon()

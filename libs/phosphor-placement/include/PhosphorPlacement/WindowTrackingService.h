@@ -934,7 +934,7 @@ private:
     // Optional daemon-injected gate consulted before recording a PendingRestore
     // on windowClosed. When unset (e.g. unit tests), every context is treated
     // as active and the historical write-everything behavior is preserved.
-    ShouldTrackPredicate m_shouldTrackPredicate;
+    ShouldTrackPredicate m_shouldTrackPredicate{};
 
     // Pre-float zone and screen state is owned by SnapState (authoritative store).
     // WTS preFloat getter methods add appId-fallback queries for session-restored
