@@ -131,9 +131,6 @@ void AutotileHandler::updateShowBorderSetting(bool enabled)
 void AutotileHandler::setFocusFollowsMouse(bool enabled)
 {
     m_focusFollowsMouse = enabled;
-    if (!enabled) {
-        m_lastFocusFollowsMouseWindowId.clear();
-    }
 }
 
 bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId,

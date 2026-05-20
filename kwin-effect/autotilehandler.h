@@ -385,7 +385,6 @@ private:
     int m_suppressMaximizeChanged = 0;
     // ── Focus follows mouse ──
     bool m_focusFollowsMouse = false;
-    QString m_lastFocusFollowsMouseWindowId;
     // ── Border state — uses shared BorderState from compositor-common ──
     BorderState m_border;
 };
