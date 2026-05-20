@@ -56,8 +56,12 @@ DaemonController::DaemonController(QObject* parent)
 
 DaemonController::~DaemonController()
 {
-    // Kill any running systemctl processes before destruction to prevent
-    // QProcess::finished callbacks from firing with a dangling 'this'.
+    // Tear down any running systemctl processes before destruction. The Qt
+    // connect() calls use `this` as receiver context, so QObject teardown
+    // already disconnects the lambdas — the explicit disconnect() here is
+    // belt-and-suspenders. The kill() + waitForFinished() pair stops any
+    // process that would otherwise outlive the QObject parent and reparent
+    // itself to the event loop's deletion queue.
     const auto children = findChildren<QProcess*>();
     for (auto* proc : children) {
         proc->disconnect();
@@ -80,6 +84,20 @@ bool DaemonController::isRunning() const
 bool DaemonController::isEnabled() const
 {
     return m_enabled;
+}
+
+bool DaemonController::isBusy() const
+{
+    return m_chainInFlight;
+}
+
+void DaemonController::setChainInFlight(bool inFlight)
+{
+    if (m_chainInFlight == inFlight) {
+        return;
+    }
+    m_chainInFlight = inFlight;
+    Q_EMIT busyChanged();
 }
 
 void DaemonController::setEnabled(bool enabled)
@@ -111,11 +129,13 @@ void DaemonController::setEnabled(bool enabled)
         // qCWarning rather than qCInfo: a dropped toggle is a user-visible
         // regression (the QML switch flicks back), not a debug curiosity,
         // and it is the symptom anyone investigating a "toggle did nothing"
-        // bug needs to find in logs.
+        // bug needs to find in logs. QML binds the toggle's `enabled` to
+        // `!busy` so the UI path is unreachable; defense-in-depth for
+        // programmatic callers (D-Bus, test harness).
         qCWarning(lcKcm) << "setEnabled(" << enabled << ") dropped — previous chain still in flight";
         return;
     }
-    m_chainInFlight = true;
+    setChainInFlight(true);
     if (enabled) {
         setAutostart(true, [this]() {
             startDaemon();
@@ -168,57 +188,69 @@ void DaemonController::setAutostart(bool enabled, std::function<void()> onComple
     const QString primaryAction = enabled ? QStringLiteral("unmask") : QStringLiteral("disable");
     const QString followupAction = enabled ? QStringLiteral("enable") : QStringLiteral("mask");
     const QLatin1String unit(KCMConstants::SystemdServiceName);
-    runSystemctl({QStringLiteral("--user"), primaryAction, unit},
-                 // mutable so the inner `std::move(onComplete)` actually moves —
-                 // without it the outer capture is implicit-const and std::move
-                 // silently degrades to a copy.
-                 [this, followupAction, unit, onComplete = std::move(onComplete)](bool /*success*/,
-                                                                                  const QString& /*output*/) mutable {
-                     // Ignore primaryAction's exit code: unmask on an un-masked
-                     // unit and disable on an already-disabled unit are no-ops
-                     // (and systemctl reports them as failures with a benign
-                     // "Unit not loaded" warning). We chain unconditionally so
-                     // the second action always runs; refreshEnabledState then
-                     // reconciles whatever the final on-disk state is.
-                     runSystemctl({QStringLiteral("--user"), followupAction, unit},
-                                  [this, followupAction,
-                                   onComplete = std::move(onComplete)](bool success, const QString& /*output*/) {
-                                      // Always refresh against on-disk state — even
-                                      // on a failed followup, QML must reflect the
-                                      // unit's actual is-enabled value so the user
-                                      // isn't stranded on a stale toggle position.
-                                      // runSystemctl already logs the stderr for
-                                      // failed invocations; the followup is the
-                                      // load-bearing step (mask / enable) so a
-                                      // failure here means the toggle did NOT
-                                      // take full effect.
-                                      if (!success) {
-                                          qCWarning(lcKcm)
-                                              << "systemctl --user" << followupAction
-                                              << "failed — toggle may not have taken full effect; QML will reflect "
-                                                 "actual on-disk state after refresh";
-                                      }
-                                      refreshEnabledState();
-                                      // startDaemon() / stopDaemon() each issue
-                                      // their own runSystemctl call (`start` / `stop`)
-                                      // that is independent of the autostart chain
-                                      // this guard is scoped to (`unmask`+`enable` /
-                                      // `disable`+`mask`). Clearing first releases
-                                      // the guard the moment the chain it covers
-                                      // has finished — the tail action's systemctl
-                                      // does not need to run under it.
-                                      m_chainInFlight = false;
-                                      // Invoke the caller's tail action AFTER the
-                                      // followup action lands so a `start` issued
-                                      // here never races a still-pending unmask
-                                      // (and on disable: stop runs only after mask
-                                      // completes, so the daemon dies into a
-                                      // masked unit and can't be re-activated).
-                                      if (onComplete) {
-                                          onComplete();
-                                      }
-                                  });
-                 });
+    runSystemctl(
+        {QStringLiteral("--user"), primaryAction, unit},
+        // mutable so the inner `std::move(onComplete)` actually moves —
+        // without it the outer capture is implicit-const and std::move
+        // silently degrades to a copy.
+        [this, primaryAction, followupAction, unit,
+         onComplete = std::move(onComplete)](bool success, const QString& /*output*/) mutable {
+            // Don't abort on primaryAction failure: unmask on an un-masked
+            // unit and disable on an already-disabled unit are no-ops
+            // (and systemctl reports them as failures with a benign
+            // "Unit not loaded" warning). We chain unconditionally so
+            // the second action always runs; refreshEnabledState then
+            // reconciles whatever the final on-disk state is.
+            //
+            // Log the failure at debug level so an operator investigating
+            // "the toggle didn't take" can distinguish "already in the
+            // target state" (expected) from a real systemctl error like
+            // "Permission denied" or "Failed to connect to bus" (which
+            // will also fail the followup, and that failure surfaces as
+            // a qCWarning below).
+            if (!success) {
+                qCDebug(lcKcm) << "systemctl --user" << primaryAction
+                               << "reported failure (often a no-op when the unit is already in the target state); "
+                                  "chaining followup anyway";
+            }
+            runSystemctl(
+                {QStringLiteral("--user"), followupAction, unit},
+                [this, followupAction, onComplete = std::move(onComplete)](bool success, const QString& /*output*/) {
+                    // Always refresh against on-disk state — even
+                    // on a failed followup, QML must reflect the
+                    // unit's actual is-enabled value so the user
+                    // isn't stranded on a stale toggle position.
+                    // runSystemctl already logs the stderr for
+                    // failed invocations; the followup is the
+                    // load-bearing step (mask / enable) so a
+                    // failure here means the toggle did NOT
+                    // take full effect.
+                    if (!success) {
+                        qCWarning(lcKcm) << "systemctl --user" << followupAction
+                                         << "failed — toggle may not have taken full effect; QML will reflect "
+                                            "actual on-disk state after refresh";
+                    }
+                    refreshEnabledState();
+                    // startDaemon() / stopDaemon() each issue
+                    // their own runSystemctl call (`start` / `stop`)
+                    // that is independent of the autostart chain
+                    // this guard is scoped to (`unmask`+`enable` /
+                    // `disable`+`mask`). Clearing first releases
+                    // the guard the moment the chain it covers
+                    // has finished — the tail action's systemctl
+                    // does not need to run under it.
+                    setChainInFlight(false);
+                    // Invoke the caller's tail action AFTER the
+                    // followup action lands so a `start` issued
+                    // here never races a still-pending unmask
+                    // (and on disable: stop runs only after mask
+                    // completes, so the daemon dies into a
+                    // masked unit and can't be re-activated).
+                    if (onComplete) {
+                        onComplete();
+                    }
+                });
+        });
 }
 
 void DaemonController::startDaemon()

@@ -51,8 +51,6 @@ using PhosphorEngine::ZoneAssignmentEntry;
 using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
-using StubSettingsLifecycle = StubSettings;
-
 // =========================================================================
 // Test Class
 // =========================================================================
@@ -68,7 +66,7 @@ private Q_SLOTS:
         // Pass nullptr as parent to avoid double-delete: cleanup() deletes manually
         m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
                                                             QStringLiteral("plasmazones/layouts"));
-        m_settings = new StubSettingsLifecycle(nullptr);
+        m_settings = new StubSettings(nullptr);
         m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
@@ -191,18 +189,16 @@ private Q_SLOTS:
         // anywhere — yanking the window into a zone the user told us to
         // leave alone. The predicate returns false for the disabled screen
         // AND asserts the argument tuple so a future signature reshuffle
-        // (swapping screenId/activity, etc.) trips this test rather than
+        // (swapping screenId/desktop, etc.) trips this test rather than
         // silently passing.
         const QString disabledScreen = QStringLiteral("AOC:24B2W1G5:116");
         int predicateCallCount = 0;
-        bool everyCallMatched = true;
-        m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop, const QString& activity) {
+        QString lastScreenId;
+        int lastDesktop = -1;
+        m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop) {
             ++predicateCallCount;
-            // SnapState does not track per-window activity; the placement
-            // library passes an empty activity string. Each invocation must
-            // satisfy the contract — accumulate so a single mismatched call
-            // sticks rather than being overwritten by a later good one.
-            everyCallMatched = everyCallMatched && (screenId == disabledScreen) && (desktop == 1) && activity.isEmpty();
+            lastScreenId = screenId;
+            lastDesktop = desktop;
             return false;
         });
 
@@ -220,9 +216,12 @@ private Q_SLOTS:
 
         // Predicate-argument contract: exactly one invocation, and the
         // tuple it received matches what the placement library promised
-        // to pass (current screen, current desktop, empty activity).
+        // to pass (current screen, current desktop). Comparing fields
+        // individually gives a useful failure message — "Expected DP-1
+        // got DP-2" instead of "everyCallMatched was false".
         QCOMPARE(predicateCallCount, 1);
-        QVERIFY(everyCallMatched);
+        QCOMPARE(lastScreenId, disabledScreen);
+        QCOMPARE(lastDesktop, 1);
 
         // The rest of windowClosed's cleanup must still run even when the
         // pending-restore write is suppressed: zone unassigned, floating
@@ -244,11 +243,12 @@ private Q_SLOTS:
         // with the wrong tuple, or fires it more than once with mismatched
         // arguments, is caught.
         int predicateCallCount = 0;
-        bool everyCallMatched = true;
-        m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop, const QString& activity) {
+        QString lastScreenId;
+        int lastDesktop = -1;
+        m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop) {
             ++predicateCallCount;
-            everyCallMatched =
-                everyCallMatched && (screenId == QLatin1String("DP-1")) && (desktop == 1) && activity.isEmpty();
+            lastScreenId = screenId;
+            lastDesktop = desktop;
             return true;
         });
 
@@ -259,7 +259,8 @@ private Q_SLOTS:
         m_service->windowClosed(windowId);
 
         QCOMPARE(predicateCallCount, 1);
-        QVERIFY(everyCallMatched);
+        QCOMPARE(lastScreenId, QStringLiteral("DP-1"));
+        QCOMPARE(lastDesktop, 1);
         QVERIFY(m_service->pendingRestoreQueues().contains(appId));
     }
 
@@ -273,7 +274,7 @@ private Q_SLOTS:
         // confirm the unset-equivalent persist-everything behaviour is
         // restored. Catches a future bug where the setter only stores
         // non-empty functions, or where clearing leaks the prior predicate.
-        m_service->setShouldTrackPredicate([](const QString&, int, const QString&) {
+        m_service->setShouldTrackPredicate([](const QString&, int) {
             return false;
         });
         m_service->setShouldTrackPredicate({});
@@ -376,7 +377,7 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    StubSettingsLifecycle* m_settings = nullptr;
+    StubSettings* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;
     SnapEngine* m_engine = nullptr;

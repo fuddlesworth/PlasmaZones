@@ -1706,29 +1706,15 @@ bool SettingsController::isDesktopDisabled(int viewMode, const QString& screenNa
 namespace {
 
 // Strip every connector-name ↔ resolved-id variant of `screenName + suffix`
-// from `entries`. Mirrors the read-side resolution in
-// Settings::isDesktopDisabled / isActivityDisabled so a stored entry in any
-// form gets removed regardless of which form the caller supplies.
-// Discussion #461 item 12.
-int removeDisabledKeyVariants(QStringList& entries, const QString& screenName, const QString& suffix)
+// from `entries`. Mirrors the read-side resolution that
+// Settings::isDesktopDisabled / isActivityDisabled apply via
+// ScreenIdentity::variantsFor so a stored entry in any form gets removed
+// regardless of which form the caller supplies. Discussion #461 item 12.
+void removeDisabledKeyVariants(QStringList& entries, const QString& screenName, const QString& suffix)
 {
-    QStringList variants{screenName + suffix};
-    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenName)) {
-        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenName);
-        if (resolved != screenName && !resolved.isEmpty()) {
-            variants.append(resolved + suffix);
-        }
-    } else {
-        const QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenName);
-        if (!connector.isEmpty() && connector != screenName) {
-            variants.append(connector + suffix);
-        }
+    for (const QString& variant : Phosphor::Screens::ScreenIdentity::variantsFor(screenName)) {
+        entries.removeAll(variant + suffix);
     }
-    int removed = 0;
-    for (const QString& variant : std::as_const(variants)) {
-        removed += entries.removeAll(variant);
-    }
-    return removed;
 }
 
 } // namespace
@@ -1760,9 +1746,19 @@ void SettingsController::setDesktopDisabled(int viewMode, const QString& screenN
             m_settings.setDisabledDesktops(mode, entries);
             setNeedsSave(true);
         }
-    } else if (removeDisabledKeyVariants(entries, screenName, desktopSuffix) > 0) {
-        m_settings.setDisabledDesktops(mode, entries);
-        setNeedsSave(true);
+    } else {
+        // Strip every variant of `<screen>/<desktop>`. The CLAUDE rule
+        // "only emit signals when value actually changes" extends to the
+        // dirty flag: if the variant strip is a no-op (the entry was
+        // already absent — possible when a stale QML view toggles a
+        // checkbox off for a screen that was never in the list), skip
+        // both the writeback and the dirty mark.
+        const QStringList before = entries;
+        removeDisabledKeyVariants(entries, screenName, desktopSuffix);
+        if (entries != before) {
+            m_settings.setDisabledDesktops(mode, entries);
+            setNeedsSave(true);
+        }
     }
 }
 
@@ -1795,9 +1791,15 @@ void SettingsController::setActivityDisabled(int viewMode, const QString& screen
             m_settings.setDisabledActivities(mode, entries);
             setNeedsSave(true);
         }
-    } else if (removeDisabledKeyVariants(entries, screenName, activitySuffix) > 0) {
-        m_settings.setDisabledActivities(mode, entries);
-        setNeedsSave(true);
+    } else {
+        // See setDesktopDisabled — strip every variant, but only write
+        // and mark dirty when something actually changed.
+        const QStringList before = entries;
+        removeDisabledKeyVariants(entries, screenName, activitySuffix);
+        if (entries != before) {
+            m_settings.setDisabledActivities(mode, entries);
+            setNeedsSave(true);
+        }
     }
 }
 

@@ -1135,12 +1135,25 @@ bool Daemon::init()
                 const int desktop = qMax(1, entryObj[QLatin1String("desktop")].toInt(1));
                 const QString activity = entryObj[QLatin1String("activity")].toString();
                 // Lockstep with AutotileEngine::deserializePendingRestores'
-                // own reject conditions (pos < 0 || screenId.isEmpty()):
-                // entries that fail to satisfy them are dead bytes — drop
-                // them here so we don't persist garbage that the next load
-                // will silently discard anyway.
+                // inner-entry reject conditions (pos < 0 || screenId.isEmpty()):
+                // entries failing those are dead bytes — drop them here so
+                // we don't persist garbage the next load will discard anyway.
+                // The engine's outer-key rejects (empty appId, appId
+                // containing '|', per-app cap MaxPendingRestoresPerApp) are
+                // NOT mirrored — those are appId-shape invariants the
+                // serializer never violates, so they're unreachable here.
                 const int position = entryObj[QLatin1String("position")].toInt(-1);
                 if (screen.isEmpty() || position < 0) {
+                    continue;
+                }
+                // Defense-in-depth null guard: today the wiring order
+                // guarantees m_screenModeRouter is live before either
+                // delegate fires (constructed earlier in init(), reset
+                // only after saveStateOnShutdown drains the queue). If a
+                // future refactor changes that ordering the lambda would
+                // UAF — cheaper to short-circuit here than to debug later.
+                if (!m_screenModeRouter) {
+                    kept.append(entryObj);
                     continue;
                 }
                 const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter->modeFor(screen);

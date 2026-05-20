@@ -56,8 +56,8 @@ namespace PhosphorPlacement {
  * @brief Window-zone tracking service (business logic layer)
  *
  * This service encapsulates all window tracking business logic that was
- * previously in WindowTrackingAdaptor. Following separation of concerns,
- * Principle, it handles:
+ * previously in WindowTrackingAdaptor. Following the separation-of-concerns
+ * principle, it handles:
  *
  * - PhosphorZones::Zone assignment management (which window is in which zone)
  * - Pre-snap geometry storage (for restoring original size)
@@ -124,29 +124,40 @@ public:
     /**
      * @brief Predicate type for "is this snap-mode context active?".
      *
-     * Signature mirrors the (screenId, virtualDesktop, activity) tuple used by
-     * the daemon's isContextDisabled() helper. Returns true when the context is
-     * ACTIVE (i.e. tracking should proceed); false when the context is disabled
-     * via the snapping-disabled monitor / desktop / activity lists.
+     * Receives the (screenId, virtualDesktop) tuple recorded for the closing
+     * window. Returns true when the context is ACTIVE (i.e. tracking should
+     * proceed); false when the context is disabled via the snapping-disabled
+     * monitor / desktop lists.
+     *
+     * No activity parameter: SnapState does not track per-window activity, so
+     * the placement library has nothing to thread through. If activity-mode
+     * filtering grows here later, extend the signature then — until then the
+     * dead slot would be misleading.
      *
      * The placement library is intentionally settings-agnostic (LGPL boundary),
      * so the daemon adaptor injects the predicate. When unset, the service
      * behaves as if every context is active — the historical default that unit
      * tests rely on.
      */
-    using ShouldTrackPredicate =
-        std::function<bool(const QString& screenId, int virtualDesktop, const QString& activity)>;
+    using ShouldTrackPredicate = std::function<bool(const QString& screenId, int virtualDesktop)>;
 
     /**
      * @brief Inject a context-active predicate. See ShouldTrackPredicate.
      *
      * Used to suppress PendingRestore writes for windows that close on a
-     * monitor/desktop/activity the user has disabled snapping for. Without
-     * this, a window closed on a disabled monitor still gets a snap restore
+     * monitor/desktop the user has disabled snapping for. Without this, a
+     * window closed on a disabled monitor still gets a snap restore
      * recorded against that monitor — when the same app reopens (or KWin
      * rehomes the window onto a surviving monitor after sleep), the snap
      * machinery picks the stale entry up and yanks the window back into a
      * zone the user told us to stay out of. See discussion #461 item 2.
+     *
+     * Ownership: the caller is responsible for keeping any captured state
+     * (e.g. `this` pointers to a settings adaptor) valid for the lifetime
+     * of this WindowTrackingService. If the captured object is destroyed
+     * before WTS, clear the predicate first (`setShouldTrackPredicate({})`)
+     * — otherwise a subsequent `windowClosed` call dereferences freed
+     * memory.
      */
     void setShouldTrackPredicate(ShouldTrackPredicate predicate)
     {
