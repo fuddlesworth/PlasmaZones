@@ -1345,8 +1345,17 @@ QString SettingsController::getTilingLayoutForScreen(const QString& screenName) 
         return staged;
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, 0});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        // Daemon's getTilingAlgorithmForScreenDesktop returns the raw algorithm
+        // name (e.g. "cluster"); the LayoutComboBox model uses the prefixed
+        // "autotile:<algo>" form. Match the staged path (stagedTilingLayout
+        // already prefixes) so saved values resolve to a model entry instead
+        // of falling through to "Default".
+        const QString algo = reply.arguments().first().toString();
+        if (algo.isEmpty())
+            return {};
+        return PhosphorLayout::LayoutId::isAutotile(algo) ? algo : PhosphorLayout::LayoutId::makeAutotileId(algo);
+    }
     return {};
 }
 
