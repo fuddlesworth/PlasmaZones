@@ -40,6 +40,7 @@
 #include "modetracker.h"
 #include "shortcutmanager.h"
 #include "rendering/zoneshadernoderhi.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../config/configbackends.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -1096,87 +1097,18 @@ bool Daemon::init()
                 engine->deserializeWindowOrders(orders);
         });
 
-    // Disabled-context filter (discussion #461 item 2). Wrap the autotile
-    // pending-restore JSON on both sides — serialize drops entries on a
-    // monitor/desktop/activity the user has disabled, and deserialize drops
-    // them coming back. Autotile already prunes restores for screens that
-    // leave its active set via pruneStaleRestores(), but that runs against
-    // the autotile-mode disable list specifically; the JSON layer is the
-    // single funnel that sees both modes plus the activity field that
-    // doesn't reach the autotile engine.
-    //
-    // Lifetime: filterAutotilePendingRestores captures `this` (Daemon) and is
-    // copied into both delegate lambdas. The delegates live on
-    // m_windowTrackingAdaptor, which is a Qt child of `this`, so WTA is
-    // destroyed before ~Daemon — no UAF window. saveStateOnShutdown() runs in
-    // stop() ahead of engine teardown, so m_settings and m_screenModeRouter
-    // are still live when the serialize delegate is invoked.
-    auto filterAutotilePendingRestores = [this](const QJsonObject& src) -> QJsonObject {
-        QJsonObject filtered;
-        for (auto it = src.constBegin(); it != src.constEnd(); ++it) {
-            if (!it.value().isArray()) {
-                continue;
-            }
-            QJsonArray kept;
-            for (const QJsonValue& entryVal : it.value().toArray()) {
-                if (!entryVal.isObject()) {
-                    continue;
-                }
-                const QJsonObject entryObj = entryVal.toObject();
-                const QString screen = entryObj[QLatin1String("screen")].toString();
-                // qMax(1, toInt(1)) fully mirrors AutotileEngine::deserialize
-                // PendingRestores: missing-key defaults to 1 and explicit
-                // zero/negative also normalises to 1. With a bare .toInt(0)
-                // an explicit zero would slip the desktop-disabled gate
-                // (it short-circuits on desktop <= 0) while the engine on
-                // the next load would tile that entry into desktop 1.
-                const int desktop = qMax(1, entryObj[QLatin1String("desktop")].toInt(1));
-                const QString activity = entryObj[QLatin1String("activity")].toString();
-                // Lockstep with AutotileEngine::deserializePendingRestores'
-                // inner-entry reject conditions (pos < 0 || screenId.isEmpty()):
-                // entries failing those are dead bytes — drop them here so
-                // we don't persist garbage the next load will discard anyway.
-                // The engine's outer-key rejects (empty appId, appId
-                // containing '|', per-app cap MaxPendingRestoresPerApp) are
-                // NOT mirrored — those are appId-shape invariants the
-                // serializer never violates, so they're unreachable here.
-                const int position = entryObj[QLatin1String("position")].toInt(-1);
-                if (screen.isEmpty() || position < 0) {
-                    continue;
-                }
-                // Defense-in-depth null guard: today the wiring order
-                // guarantees m_screenModeRouter is live before either
-                // delegate fires (constructed earlier in init(), reset
-                // only after saveStateOnShutdown drains the queue). If a
-                // future refactor changes that ordering the lambda would
-                // UAF — cheaper to short-circuit here than to debug later.
-                if (!m_screenModeRouter) {
-                    kept.append(entryObj);
-                    continue;
-                }
-                const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter->modeFor(screen);
-                if (isContextDisabled(m_settings.get(), mode, screen, desktop, activity)) {
-                    continue;
-                }
-                kept.append(entryObj);
-            }
-            if (!kept.isEmpty()) {
-                filtered[it.key()] = kept;
-            }
-        }
-        return filtered;
-    };
-
+    // Autotile pending-restore filtering (discussion #461 item 2) is owned
+    // by AutotileEngine itself via setShouldPersistRestorePredicate, which
+    // WTA wires in setEngines() — same isPersistedContextDisabled funnel as
+    // the snap-side ShouldTrackPredicate. Delegates here are now bare
+    // forwarders; the engine's own serialize/deserialize apply the gate.
     m_windowTrackingAdaptor->setTilingPendingRestoreDelegates(
-        [engine = QPointer(autotileEngine), filterAutotilePendingRestores]() -> QJsonObject {
-            if (!engine) {
-                return QJsonObject{};
-            }
-            return filterAutotilePendingRestores(engine->serializePendingRestores());
+        [engine = QPointer(autotileEngine)]() -> QJsonObject {
+            return engine ? engine->serializePendingRestores() : QJsonObject{};
         },
-        [engine = QPointer(autotileEngine), filterAutotilePendingRestores](const QJsonObject& obj) {
+        [engine = QPointer(autotileEngine)](const QJsonObject& obj) {
             if (engine)
-                engine->deserializePendingRestores(filterAutotilePendingRestores(obj));
+                engine->deserializePendingRestores(obj);
         });
 
     // Trigger WTA save on autotile state changes (window order, split ratio, master count).
@@ -1216,44 +1148,210 @@ bool Daemon::init()
     // handler to avoid feedback loops with autotile/snapping transitions.
     connect(
         m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this,
-        [this](const QStringList& changedScreenIdsList) {
+        [this](const QStringList& changedScreenIdsList, const QStringList& changedAssignmentKeys) {
             const QSet<QString> changedScreenIds(changedScreenIdsList.begin(), changedScreenIdsList.end());
             if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
                 return;
 
-            const int desktop = currentDesktop();
-            const QString activity = currentActivity();
+            const int curDesktop = currentDesktop();
+            const QString curActivity = currentActivity();
 
-            // Collect autotile screens and per-screen OSD data in one pass
+            // Decode the (screenId, desktop, activity, field) tuples from
+            // the batched changedAssignmentKeys. Encoded format matches
+            // `encodeChangedKey` in src/dbus/layoutadaptor/assignment.cpp:
+            // "screenId<US>desktop<US>activity<US>field" with US=0x1F and
+            // field one of "snap", "tile", or "entry".
+            enum class ChangedField {
+                Snap,
+                Tile,
+                Entry
+            };
+            struct ChangedKey
+            {
+                QString screenId;
+                int virtualDesktop;
+                QString activity;
+                ChangedField field;
+            };
+            QVector<ChangedKey> changedKeys;
+            changedKeys.reserve(changedAssignmentKeys.size());
+            for (const QString& enc : changedAssignmentKeys) {
+                const QStringList parts = enc.split(QChar(0x1F));
+                if (parts.size() != 4) {
+                    qCWarning(lcDaemon) << "assignmentChangesApplied: malformed key (expected 4 parts):" << enc;
+                    continue;
+                }
+                bool ok = false;
+                int vd = parts[1].toInt(&ok);
+                if (!ok) {
+                    qCWarning(lcDaemon) << "assignmentChangesApplied: non-numeric desktop in key:" << enc;
+                    continue;
+                }
+                ChangedField field;
+                if (parts[3] == QLatin1String("snap")) {
+                    field = ChangedField::Snap;
+                } else if (parts[3] == QLatin1String("tile")) {
+                    field = ChangedField::Tile;
+                } else if (parts[3] == QLatin1String("entry")) {
+                    field = ChangedField::Entry;
+                } else {
+                    qCWarning(lcDaemon) << "assignmentChangesApplied: unknown field tag" << parts[3] << "in key:" << enc
+                                        << "— treating as entry";
+                    field = ChangedField::Entry;
+                }
+                changedKeys.append({parts[0], vd, parts[2], field});
+            }
+
+            // Walk effective screens to classify which screens are
+            // currently autotile-mode (used by the resnap buffer below).
             QSet<QString> autotileScreens;
+            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+            for (const QString& screenId : effectiveIds) {
+                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, curDesktop, curActivity);
+                if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+                    autotileScreens.insert(screenId);
+                }
+            }
+
+            // Build the OSD list from the changed keys (one OSD per
+            // modified slot). The OSD should reflect *what the user
+            // edited*, not the cascade-resolved layout at the slot:
+            //
+            //   - field == Snap: show the snap layout the user just set
+            //     — but only when the slot's preserved mode is Snapping.
+            //     A snap edit on an Autotile-mode slot is a stored-but-
+            //     inactive preference; surfacing it would announce a
+            //     layout the user can't see, since the slot still
+            //     renders autotile.
+            //   - field == Tile: symmetric — only show when mode is
+            //     Autotile at the slot. Cleared fields are also
+            //     suppressed since there's nothing meaningful to
+            //     preview.
+            //   - field == Entry: legacy / full-entry edits (Overview,
+            //     assignLayoutToScreen*, clear-whole-entry). Resolve via
+            //     the slot's active layout id as before; mode is set
+            //     by the caller in this path so we always show.
             struct ScreenOsd
             {
                 QString screenId;
                 bool isAutotile;
                 QString algoId;
+                QString snappingLayoutId; // empty unless isAutotile=false and field-specific
+                int virtualDesktop;
+                QString activity;
+                bool suppress; // edit doesn't affect this slot's rendering (or field cleared)
             };
             QVector<ScreenOsd> osdEntries;
-            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-            for (const QString& screenId : effectiveIds) {
-                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-                if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
-                    autotileScreens.insert(screenId);
-                }
-                // Only show OSD for screens that actually changed
-                if (changedScreenIds.isEmpty() || changedScreenIds.contains(screenId)) {
-                    if (autotileScreens.contains(screenId)) {
-                        osdEntries.append({screenId, true, PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId)});
-                    } else {
-                        osdEntries.append({screenId, false, {}});
+            if (!changedKeys.isEmpty()) {
+                for (const auto& key : std::as_const(changedKeys)) {
+                    // For partial-field edits (snap / tile), read the
+                    // stored entry directly rather than via the cascade
+                    // so the OSD reflects exactly what the user wrote at
+                    // that key. The cascade can hide a freshly-cleared
+                    // empty slot behind a higher-priority entry, which
+                    // would show a stale layout in the OSD.
+                    PhosphorZones::AssignmentEntry entry;
+                    if (m_layoutManager->hasExplicitAssignment(key.screenId, key.virtualDesktop, key.activity)) {
+                        entry =
+                            m_layoutManager->assignmentEntryForScreen(key.screenId, key.virtualDesktop, key.activity);
                     }
+                    // ^ when no entry exists, `entry` is default-constructed
+                    //   (mode=Snapping, snap="", tile=""): a "cleared" view.
+
+                    if (key.field == ChangedField::Snap) {
+                        const bool modeMatches = (entry.mode == PhosphorZones::AssignmentEntry::Snapping);
+                        const bool cleared = entry.snappingLayout.isEmpty();
+                        osdEntries.append({key.screenId,
+                                           false,
+                                           {},
+                                           entry.snappingLayout,
+                                           key.virtualDesktop,
+                                           key.activity,
+                                           !modeMatches || cleared});
+                    } else if (key.field == ChangedField::Tile) {
+                        const bool modeMatches = (entry.mode == PhosphorZones::AssignmentEntry::Autotile);
+                        const bool cleared = entry.tilingAlgorithm.isEmpty();
+                        osdEntries.append({key.screenId,
+                                           true,
+                                           entry.tilingAlgorithm,
+                                           {},
+                                           key.virtualDesktop,
+                                           key.activity,
+                                           !modeMatches || cleared});
+                    } else {
+                        // Entry-level: use the slot's active layout id
+                        const QString assignmentId =
+                            m_layoutManager->assignmentIdForScreen(key.screenId, key.virtualDesktop, key.activity);
+                        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+                            osdEntries.append({key.screenId,
+                                               true,
+                                               PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId),
+                                               {},
+                                               key.virtualDesktop,
+                                               key.activity,
+                                               false});
+                        } else {
+                            osdEntries.append(
+                                {key.screenId, false, {}, assignmentId, key.virtualDesktop, key.activity, false});
+                        }
+                    }
+                }
+            } else {
+                for (const QString& screenId : effectiveIds) {
+                    if (!changedScreenIds.isEmpty() && !changedScreenIds.contains(screenId))
+                        continue;
+                    const bool isAutotile = autotileScreens.contains(screenId);
+                    QString algoId;
+                    if (isAutotile) {
+                        const QString assignmentId =
+                            m_layoutManager->assignmentIdForScreen(screenId, curDesktop, curActivity);
+                        algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
+                    }
+                    osdEntries.append({screenId, isAutotile, algoId, {}, curDesktop, curActivity, false});
+                }
+            }
+
+            // Re-derive the autotile engine's active screens + per-screen
+            // overrides from the new assignments. The partial-update path
+            // (`setSnappingLayoutPreservingMode` /
+            // `setTilingAlgorithmPreservingMode`) emits `layoutAssigned`
+            // which already triggers `updateAutotileScreens` via the
+            // signal hookup in `connectLayoutSignals`, but explicit-mode
+            // and entry-level edits also need it to be called and
+            // depending on emit ordering across the batch the signal
+            // path can land after this lambda runs — call it here so
+            // retile is unconditionally driven once per batch.
+            updateAutotileScreens();
+            updateLayoutFilter();
+
+            // Expand changedScreenIds with the virtual-screen children of
+            // every changed physical screen. The resnap buffer's
+            // includeScreens filter compares against the snap state's
+            // recorded screen-id per window — those IDs are VS IDs
+            // (`physId/vs:N`) when the user is on a virtual screen, so
+            // an edit at the physical slot (e.g. Monitor row writes
+            // `(physId, 0, "")`) leaves the include filter holding only
+            // the physical id and silently drops every VS-resident
+            // window from the buffer. The cascade itself already routes
+            // a VS lookup through to its physical parent (walkCascade
+            // level 6), so the expansion here mirrors that fallback —
+            // any VS whose cascade winner is the changed physical slot
+            // needs its windows resnapped.
+            QSet<QString> expandedScreenIds = changedScreenIds;
+            for (const QString& screenId : effectiveIds) {
+                if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId))
+                    continue;
+                const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+                if (changedScreenIds.contains(physId)) {
+                    expandedScreenIds.insert(screenId);
                 }
             }
 
             // Resnap only the snapping-mode screens whose assignments actually changed.
-            // changedScreenIds scopes the resnap to avoid spurious geometry-set on
+            // expandedScreenIds scopes the resnap to avoid spurious geometry-set on
             // screens whose layout didn't change (prevents flicker on unrelated VS).
             m_suppressResnapOsd = osdEntries.size();
-            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
+            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, expandedScreenIds);
             m_snapAdaptor->resnapToNewLayout();
 
             // Show OSD for changed screens — use locked OSD variant when context is locked.
@@ -1269,11 +1367,35 @@ bool Daemon::init()
                     showLockedPreviewOsd(osd.screenId);
                 } else if (!osdEnabled) {
                     continue;
+                } else if (osd.suppress) {
+                    // Edit was a stored-but-inactive preference (the
+                    // partial-update path preserved mode and the edited
+                    // field isn't the active one), OR the edited field
+                    // was cleared. In either case there's no visible
+                    // change to announce — showing an OSD would either
+                    // misrepresent the rendering or chase the cascade
+                    // winner. Skip.
+                    continue;
                 } else if (osd.isAutotile) {
+                    // Skip when algoId is empty — happens for a tile
+                    // entry that resolved to "autotile:" (algo missing).
                     if (!osd.algoId.isEmpty())
                         showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
                 } else {
-                    PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
+                    // Prefer the field-specific snap id supplied by the
+                    // partial-update path: it's the exact value the
+                    // user edited. Falling back to layoutForScreen is
+                    // for legacy / entry-level edits where the encoder
+                    // didn't set snappingLayoutId.
+                    PhosphorZones::Layout* layout = nullptr;
+                    if (!osd.snappingLayoutId.isEmpty()) {
+                        const QUuid uuid = QUuid::fromString(osd.snappingLayoutId);
+                        if (!uuid.isNull())
+                            layout = m_layoutManager->layoutById(uuid);
+                    }
+                    if (!layout) {
+                        layout = m_layoutManager->layoutForScreen(osd.screenId, osd.virtualDesktop, osd.activity);
+                    }
                     if (layout)
                         showLayoutOsd(layout, osd.screenId);
                 }

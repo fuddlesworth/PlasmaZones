@@ -45,14 +45,12 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // is the one whose zone IDs match the window's zone assignments.
     // We look up each zone ID in ALL loaded layouts to find the position.
 
-    // Build a global zoneId → (layoutId, position) map from all layouts
-    QHash<QString, int> globalZoneIdToPosition;
-    for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
-        QHash<QString, int> layoutMap = PhosphorZones::LayoutUtils::buildZonePositionMap(layout);
-        for (auto it = layoutMap.constBegin(); it != layoutMap.constEnd(); ++it) {
-            globalZoneIdToPosition[it.key()] = it.value();
-        }
-    }
+    // Build a global zoneId → position map merged across all layouts.
+    // Shared with `WindowTrackingService::onLayoutChanged` (lifecycle.cpp);
+    // see `PhosphorZones::LayoutUtils::buildGlobalZonePositionMap` for
+    // why the merge is unambiguous (zone UUIDs are unique across layouts).
+    const QHash<QString, int> globalZoneIdToPosition =
+        PhosphorZones::LayoutUtils::buildGlobalZonePositionMap(m_layoutManager->layouts());
 
     const QHash<QString, QStringList>& snapZones = m_snapState->zoneAssignments();
     const QHash<QString, QString>& snapScreens = m_snapState->screenAssignments();

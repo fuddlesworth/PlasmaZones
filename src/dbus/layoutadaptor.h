@@ -172,6 +172,21 @@ public Q_SLOTS:
     void setAssignmentEntry(const QString& screenId, int virtualDesktop, const QString& activity, int mode,
                             const QString& snappingLayout, const QString& tilingAlgorithm);
 
+    /// Partial-update writes for the KCM Assignments pages — record the
+    /// snapping-layout or tiling-algorithm preference for the
+    /// (screenId, virtualDesktop, activity) slot WITHOUT changing the
+    /// rendered mode at that context. The "Snapping > Assignments" and
+    /// "Tiling > Assignments" pages route per-row dropdowns through
+    /// these so editing the inactive-mode value just records the
+    /// preference for the next time the user explicitly switches mode
+    /// at that context (via the Overview page or shortcuts). Empty
+    /// @p layoutId / @p algorithmId clears the field; the entry is
+    /// removed if both fields end up empty.
+    void setSnappingLayoutEntry(const QString& screenId, int virtualDesktop, const QString& activity,
+                                const QString& layoutId);
+    void setTilingAlgorithmEntry(const QString& screenId, int virtualDesktop, const QString& activity,
+                                 const QString& algorithmId);
+
     // Suppress screenLayoutChanged D-Bus signals during KCM save batch.
     void setSaveBatchMode(bool enabled);
 
@@ -247,6 +262,15 @@ public Q_SLOTS:
     void assignLayoutToScreenActivity(const QString& screenId, const QString& activityId, const QString& layoutId);
     void clearAssignmentForScreenActivity(const QString& screenId, const QString& activityId);
     bool hasExplicitAssignmentForScreenActivity(const QString& screenId, const QString& activityId);
+    /// Per-field readers (mode-independent). These read the @c snappingLayout
+    /// / @c tilingAlgorithm field on the (screen, 0, activity) entry directly
+    /// instead of going through the mode-resolved active-layout id. Required
+    /// for the KCM Snapping/Tiling Assignments → Activity row so a stored-
+    /// but-inactive preference (e.g. snap layout recorded on an Autotile-
+    /// mode slot) is visible to the page. Mirrors
+    /// @ref getSnappingLayoutForScreenDesktop / @ref getTilingAlgorithmForScreenDesktop.
+    QString getSnappingLayoutForScreenActivity(const QString& screenId, const QString& activityId);
+    QString getTilingAlgorithmForScreenActivity(const QString& screenId, const QString& activityId);
     void
     setAllActivityAssignments(const QVariantMap& assignments); // Batch set - key: "screen:activity", value: layoutId
 
@@ -378,13 +402,29 @@ Q_SIGNALS:
     /**
      * @brief Emitted when the KCM requests resnap/retile after assignment changes
      * @param changedScreenIds Screen IDs whose assignments were modified in this batch
+     * @param changedAssignmentKeys Full keys (one per modified context) encoded
+     *        as `"screenId<US>desktop<US>activity<US>field"` with
+     *        `US = QChar(0x1F)`. The trailing @c field segment is the value
+     *        the user touched at that slot — one of:
+     *          - `"snap"` for a partial snap-layout update (Snapping Assignments page).
+     *          - `"tile"` for a partial tile-algorithm update (Tiling Assignments page).
+     *          - `"entry"` for a full-entry write — the legacy
+     *            `assignLayoutTo*` paths, `setAssignmentEntry`, and the
+     *            whole-entry clears. The caller has set mode explicitly.
+     *        Consumers that need to know the EXACT slot the user changed
+     *        (vs. the cascaded resolution under the current desktop / activity)
+     *        should decode these and query the registry at that key directly,
+     *        branching on @c field to pick the right OSD shape. The OSD
+     *        callback does this so a screen-level edit isn't silently masked
+     *        by a per-desktop or per-activity entry that wins the
+     *        current-context cascade.
      *
      * Typed as QStringList (not QSet) because this is a Q_SIGNAL on a
      * QDBusAbstractAdaptor subclass and is therefore auto-exposed over D-Bus;
      * QSet is not a D-Bus-marshallable type. Internal callers that need
      * set semantics should convert via `QSet<QString>{list.begin(), list.end()}`.
      */
-    void assignmentChangesApplied(const QStringList& changedScreenIds);
+    void assignmentChangesApplied(const QStringList& changedScreenIds, const QStringList& changedAssignmentKeys);
 
 private Q_SLOTS:
     // String-based connection slots for PhosphorZones::LayoutRegistry signals
@@ -500,6 +540,18 @@ private:
     // Track which screens had assignments modified during the current batch.
     // Populated by setAssignmentEntry/clearAssignment, consumed by applyAssignmentChanges.
     QSet<QString> m_changedScreenIds;
+
+    // Track the full (screen, desktop, activity, field) tuples of
+    // assignments modified during the current batch. Encoded as
+    // "screenId<US>desktop<US>activity<US>field" with US = QChar(0x1F).
+    // The trailing `field` segment is one of "snap" / "tile" / "entry"
+    // and tells the daemon's OSD lambda which field to inspect — so a
+    // snap-layout edit on an Autotile-mode slot can still surface the
+    // snap layout it just wrote (instead of the slot's cascaded active
+    // layout id, which would announce the unchanged autotile algo).
+    // See the `assignmentChangesApplied` signal docstring above for the
+    // full encoding contract.
+    QStringList m_changedAssignmentKeys;
 
     // JSON caching for performance
     QString m_cachedActiveLayoutJson;
