@@ -39,11 +39,6 @@ QString ConfigDefaults::assignmentsFilePath()
     return configDir() + QStringLiteral("/plasmazones/assignments.json");
 }
 
-QString ConfigDefaults::scrollStateFilePath()
-{
-    return configDir() + QStringLiteral("/plasmazones/scroll-session.json");
-}
-
 QString ConfigDefaults::legacyConfigFilePath()
 {
     return configDir() + QStringLiteral("/plasmazonesrc");

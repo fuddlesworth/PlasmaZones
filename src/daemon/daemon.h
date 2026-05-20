@@ -443,21 +443,6 @@ private:
     void applyPerScreenScrollOverrides();
 
     /**
-     * @brief Persist / restore the scroll-mode strip state across a restart.
-     *
-     * ScrollEngine is geometry-agnostic and daemon-orchestrated, so the daemon
-     * owns its disk persistence: saveScrollState() writes serializeEngineState()
-     * to scroll-session.json on shutdown; loadScrollState() feeds it back
-     * through deserializeEngineState() at startup, before the effect re-reports
-     * windows (a still-existing window's windowOpened then no-ops, keeping its
-     * restored column). A restored window that did not survive the restart is
-     * pruned by ScrollEngine::reconcileRestoredWindows() when the effect's first
-     * windowsOpenedBatch arrives, so no phantom column lingers.
-     */
-    void saveScrollState();
-    void loadScrollState();
-
-    /**
      * @brief The scroll placement engine narrowed to its IScrollEngine surface.
      *
      * m_scrollEngine is held as the base PlacementEngineBase pointer, but the

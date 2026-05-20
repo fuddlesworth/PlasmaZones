@@ -2531,9 +2531,8 @@ void Settings::reset()
     if (!QFile::remove(ConfigDefaults::sessionFilePath()) && QFile::exists(ConfigDefaults::sessionFilePath())) {
         qCWarning(lcConfig) << "Failed to remove session file:" << ConfigDefaults::sessionFilePath();
     }
-    if (!QFile::remove(ConfigDefaults::scrollStateFilePath()) && QFile::exists(ConfigDefaults::scrollStateFilePath())) {
-        qCWarning(lcConfig) << "Failed to remove scroll state file:" << ConfigDefaults::scrollStateFilePath();
-    }
+    // Scroll engine strip state lives inside session.json (removed above) via
+    // WTA's scroll-state delegates — no separate file to clean up.
     deletePerScreenGroups(m_configBackend);
     m_configBackend->sync();
     load();

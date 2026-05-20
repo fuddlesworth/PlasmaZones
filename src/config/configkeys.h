@@ -164,6 +164,12 @@ public:
     // Autotile mode — pending restore queue for close/reopen window preservation
     PZ_CONFIG_KEY(autotilePendingRestoresKey, "AutotilePendingRestores")
 
+    // Scroll mode — per-screen strip state (columns, focus, scroll offset).
+    // Lives under WindowTracking alongside the autotile keys so the scroll
+    // engine's session persistence flows through the same WTA save/load path
+    // as autotile (engine-symmetry goal).
+    PZ_CONFIG_KEY(scrollEngineStateKey, "ScrollEngineState")
+
     // Obsolete keys (cleaned up on save to prevent stale data)
     PZ_CONFIG_KEY(obsoleteFloatingWindowsKey, "FloatingWindows")
     PZ_CONFIG_KEY(obsoletePendingWindowScreenAssignmentsKey, "PendingWindowScreenAssignments")

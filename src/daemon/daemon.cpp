@@ -1038,6 +1038,18 @@ bool Daemon::init()
     connect(m_scrollEngine.get(), &PhosphorEngine::PlacementEngineBase::placementChanged, this,
             &Daemon::onScrollPlacementChanged);
 
+    // Mirror the autotile placementChanged → markDirty wiring below. ScrollEngine
+    // owns one persisted blob (the per-screen strip state); marking only
+    // DirtyScrollState here rewrites just that key on the next debounced save
+    // rather than the whole window-tracking JSON.
+    connect(m_scrollEngine.get(), &PhosphorEngine::PlacementEngineBase::placementChanged, m_windowTrackingAdaptor,
+            [this]() {
+                if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+                    m_windowTrackingAdaptor->service()->markDirty(
+                        PhosphorPlacement::WindowTrackingService::DirtyScrollState);
+                }
+            });
+
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::settingsPersistRequested, this, [this]() {
         if (m_settings) {
             m_settings->save();
@@ -1046,9 +1058,31 @@ bool Daemon::init()
 
     autotileEngine->refreshConfigFromSettings();
 
-    // Restore the persisted scroll strip before pushing config, so a restored
-    // strip is resolved against the current scroll settings.
-    loadScrollState();
+    // Wire scroll-engine state serialization delegates so WTA includes scroll
+    // strip state in its save/load cycle (engine-symmetry goal: snap, autotile
+    // and scroll all flow through the same WTA save path → one session.json,
+    // one debounced save timer). Capture the IScrollEngine surface — that's
+    // where the serialize/deserialize/hasPersistableState contract lives.
+    if (auto* scroll = m_scrollEngineCached) {
+        m_windowTrackingAdaptor->setScrollStateDelegates(
+            [scroll]() -> QJsonObject {
+                // Empty-state probe lets WTA drop the key entirely instead of
+                // writing the engine's empty-strip stubs; mirrors the
+                // hasPersistableState gate the old saveScrollState used.
+                return scroll->hasPersistableState() ? scroll->serializeEngineState() : QJsonObject{};
+            },
+            [scroll](const QJsonObject& state) {
+                scroll->deserializeEngineState(state);
+            });
+
+        // Restore the persisted scroll strip now (delegates are wired) before
+        // pushing config so a restored strip is resolved against the current
+        // scroll settings. Re-running WTA::loadState() is idempotent — it
+        // re-populates in-memory state from the same on-disk snapshot WTA
+        // already loaded in its constructor (autotile uses the same pattern
+        // via finalizeStartup → autotileEngine->loadState).
+        m_windowTrackingAdaptor->loadState();
+    }
 
     // The engine pulls scalar scroll geometry config via IScrollSettings
     // (Settings implements it, wired in at construction); these connections do
@@ -1660,10 +1694,11 @@ void Daemon::stop()
     m_layoutManager->saveAssignments();
     m_settings->save();
     if (m_windowTrackingAdaptor) {
+        // saveStateOnShutdown() flushes scroll strip state alongside the snap +
+        // autotile blobs via the scroll-state delegates wired in start(); no
+        // separate scroll-only save call is required.
         m_windowTrackingAdaptor->saveStateOnShutdown();
     }
-    // Persist the scroll strip before the engines are destroyed below.
-    saveScrollState();
 
     // ModeTracker delegates to LayoutManager's KConfig — no separate save needed
 

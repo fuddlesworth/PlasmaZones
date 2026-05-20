@@ -754,7 +754,8 @@ public:
         DirtyUserSnapped = 1u << 7,
         DirtyAutotileOrders = 1u << 8,
         DirtyAutotilePending = 1u << 9,
-        DirtyAll = 0x3FFu,
+        DirtyScrollState = 1u << 10,
+        DirtyAll = 0x7FFu,
     };
     using DirtyMask = uint32_t;
 

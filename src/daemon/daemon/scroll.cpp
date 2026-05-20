@@ -18,22 +18,13 @@
 #include <PhosphorScrollEngine/ScrollScreenState.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QHash>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonParseError>
 #include <QRect>
 #include <QRectF>
-#include <QSaveFile>
 #include <QScreen>
 #include <QSet>
 #include <QString>
 #include <QStringList>
-#include <QVariant>
-#include <QVariantList>
 #include <QVariantMap>
 #include <QVector>
 
@@ -325,68 +316,6 @@ void Daemon::applyPerScreenScrollOverrides()
             scroll->applyPerScreenConfig(screenId, overrides);
         }
     }
-}
-
-void Daemon::saveScrollState()
-{
-    auto* scroll = scrollEngine();
-    if (!scroll) {
-        return;
-    }
-    const QString path = ConfigDefaults::scrollStateFilePath();
-    // Defence-in-depth: ensure the parent directory exists. Normally
-    // m_settings->save() runs first in stop() and the JSON config backend
-    // mkpath's the dir, but on paths where saveScrollState fires with no
-    // prior Settings save (test fixtures, early-stop ordering), QSaveFile::open
-    // would fail with "no such directory". mkpath is idempotent.
-    QDir().mkpath(QFileInfo(path).absolutePath());
-    if (!scroll->hasPersistableState()) {
-        // No strips to persist — drop any stale file so a later restart does
-        // not restore an obsolete layout. QFile::remove returns false when
-        // the file doesn't exist (the common case after first launch) AND
-        // when the remove genuinely fails — log only the failure case so a
-        // read-only directory or a race with another daemon instance shows
-        // up in logs. exists() is a cheap stat — pre-checking avoids the
-        // false-positive "removed nothing" warning for first launches.
-        if (QFile::exists(path) && !QFile::remove(path)) {
-            qCWarning(lcDaemon) << "Failed to remove stale scroll state at" << path;
-        }
-        return;
-    }
-    const QJsonObject state = scroll->serializeEngineState();
-    // QSaveFile commits atomically (write to a temp file, then rename), so a
-    // crash mid-write cannot leave a truncated scroll-session.json behind.
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly)) {
-        qCWarning(lcDaemon) << "Failed to write scroll state to" << path;
-        return;
-    }
-    file.write(QJsonDocument(state).toJson(QJsonDocument::Compact));
-    if (!file.commit()) {
-        qCWarning(lcDaemon) << "Failed to commit scroll state to" << path;
-        return;
-    }
-    qCDebug(lcDaemon) << "Saved scroll state to" << path;
-}
-
-void Daemon::loadScrollState()
-{
-    auto* scroll = scrollEngine();
-    if (!scroll) {
-        return;
-    }
-    QFile file(ConfigDefaults::scrollStateFilePath());
-    if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
-        return;
-    }
-    QJsonParseError err{};
-    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &err);
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        qCWarning(lcDaemon) << "Ignoring malformed scroll state:" << err.errorString();
-        return;
-    }
-    scroll->deserializeEngineState(doc.object());
-    qCDebug(lcDaemon) << "Restored scroll state from" << file.fileName();
 }
 
 } // namespace PlasmaZones

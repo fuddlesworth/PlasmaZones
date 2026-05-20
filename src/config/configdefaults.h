@@ -640,14 +640,6 @@ public:
     // and PhosphorZones::LayoutRegistry have independent ownership of their files.
     PLASMAZONES_EXPORT static QString assignmentsFilePath();
 
-    // Returns the absolute path to scroll-session.json — the persisted
-    // scroll-mode strip state (columns, widths, heights, focus, scroll offset).
-    // Ephemeral per-session state owned by the daemon; kept in its own file so
-    // a scroll relayout never contends with user-preference or window-tracking
-    // saves. Restored on a daemon restart (window IDs are stable while KWin
-    // keeps running); stale after a full compositor restart.
-    PLASMAZONES_EXPORT static QString scrollStateFilePath();
-
     // Returns the absolute path to the legacy plasmazonesrc file (INI format).
     // Used only by the one-time migration module.
     PLASMAZONES_EXPORT static QString legacyConfigFilePath();

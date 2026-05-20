@@ -253,6 +253,26 @@ void WindowTrackingAdaptor::saveState()
         }
     }
 
+    // Save scroll-engine strip state (columns, focus, scroll offset). Mirrors
+    // the autotile pending-restores branch above: the engine reports a JSON
+    // snapshot via its serialize delegate (sourced from
+    // IScrollEngine::serializeEngineState), an empty object means "no
+    // persistable state" and the key is dropped from disk so a stale strip
+    // cannot resurrect on next start.
+    if (dirty & D::DirtyScrollState) {
+        if (m_serializeScrollStateFn) {
+            const QJsonObject scrollState = m_serializeScrollStateFn();
+            if (!scrollState.isEmpty()) {
+                tracking->writeString(ConfigKeys::scrollEngineStateKey(),
+                                      QString::fromUtf8(QJsonDocument(scrollState).toJson(QJsonDocument::Compact)));
+            } else {
+                tracking->deleteKey(ConfigKeys::scrollEngineStateKey());
+            }
+        } else {
+            tracking->deleteKey(ConfigKeys::scrollEngineStateKey());
+        }
+    }
+
     tracking.reset(); // release group before write
 
     // Async I/O: snapshot the in-memory JSON root (COW copy) and hand off
@@ -700,6 +720,24 @@ void WindowTrackingAdaptor::loadState()
             } else {
                 qCWarning(lcDbusWindow) << "Failed to parse saved autotile pending restores:"
                                         << parseError.errorString();
+            }
+        }
+    }
+
+    // Restore scroll-engine strip state (per-screen columns, focus, scroll
+    // offset). Mirrors the autotile branch above; the deserialize delegate
+    // forwards into IScrollEngine::deserializeEngineState which reconciles
+    // against the live window set when the effect's first windowsOpenedBatch
+    // arrives.
+    if (m_deserializeScrollStateFn) {
+        const QString scrollStateStr = readVal(ConfigKeys::scrollEngineStateKey(), QString());
+        if (!scrollStateStr.isEmpty()) {
+            QJsonParseError parseError;
+            const QJsonDocument doc = QJsonDocument::fromJson(scrollStateStr.toUtf8(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+                m_deserializeScrollStateFn(doc.object());
+            } else {
+                qCWarning(lcDbusWindow) << "Failed to parse saved scroll engine state:" << parseError.errorString();
             }
         }
     }

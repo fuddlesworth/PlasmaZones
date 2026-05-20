@@ -543,6 +543,21 @@ public Q_SLOTS:
      */
     void setTilingPendingRestoreDelegates(std::function<QJsonObject()> serializeFn,
                                           std::function<void(const QJsonObject&)> deserializeFn);
+
+    /**
+     * @brief Set scroll-engine state serialization delegates
+     *
+     * Mirrors @ref setTilingStateDelegates for the scroll placement engine
+     * (engine-symmetry goal). The serialize delegate returns the JSON snapshot
+     * produced by IScrollEngine::serializeEngineState(); a returned empty
+     * object means "no persistable state" and the key is dropped from disk.
+     * The deserialize delegate hands the loaded blob back to
+     * IScrollEngine::deserializeEngineState(). Routing scroll state through
+     * the same WTA save/load path as autotile keeps every engine's session
+     * persistence in one file (session.json) under one debounced timer.
+     */
+    void setScrollStateDelegates(std::function<QJsonObject()> serializeFn,
+                                 std::function<void(const QJsonObject&)> deserializeFn);
 #endif
 
     /**
@@ -875,6 +890,12 @@ private:
     std::function<void(const QJsonArray&)> m_deserializeTilingStatesFn;
     std::function<QJsonObject()> m_serializePendingRestoresFn;
     std::function<void(const QJsonObject&)> m_deserializePendingRestoresFn;
+
+    // Scroll-engine state serialization delegates (scroll engine → WTA persistence).
+    // Symmetric with the autotile tiling-state delegates above — both engines
+    // route their session blob through WTA so there is exactly one save path.
+    std::function<QJsonObject()> m_serializeScrollStateFn;
+    std::function<void(const QJsonObject&)> m_deserializeScrollStateFn;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Startup timing coordination
