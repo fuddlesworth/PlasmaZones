@@ -675,12 +675,26 @@ void WindowTrackingService::onLayoutChanged()
     {
         QVector<ResnapEntry> newBuffer;
 
-        QHash<QString, int> globalZoneIdToPosition = PhosphorZones::LayoutUtils::buildZonePositionMap(prevLayout);
+        // Build the position map from EVERY loaded layout, not just
+        // prevLayout. The window's stored zoneIds came from whatever
+        // layout was the cascade winner at the time it snapped — which
+        // can differ from prevLayout when the user has per-screen /
+        // per-context entries. Restricting to prevLayout's zones broke
+        // the resnap path on promote edits: clearing shadows shifts the
+        // cascade winner from a per-context entry (whose layout differs
+        // from the global active) to the screen-level slot, but the
+        // window is still in the old per-context layout's zones. With
+        // only prevLayout in the map, the lookup misses, addToBuffer
+        // returns early, and the resnap buffer ends up empty.
+        // Zone UUIDs are unique across all layouts, so this is safe.
+        QHash<QString, int> globalZoneIdToPosition;
         int globalPrevZoneCount = prevLayout->zones().size();
-
-        // Cache per-screen position maps for screens with per-screen layouts
-        // Key: layout pointer (avoids rebuilding for screens sharing the same layout)
-        QHash<PhosphorZones::Layout*, QHash<QString, int>> perLayoutPositionMaps;
+        for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
+            QHash<QString, int> layoutMap = PhosphorZones::LayoutUtils::buildZonePositionMap(layout);
+            for (auto it = layoutMap.constBegin(); it != layoutMap.constEnd(); ++it) {
+                globalZoneIdToPosition[it.key()] = it.value();
+            }
+        }
 
         // Dedup: full windowId for live assignments (supports multi-instance apps),
         // appId for pending entries (avoids double-counting live + pending for same window)
@@ -697,23 +711,15 @@ void WindowTrackingService::onLayoutChanged()
                 return;
             }
 
-            // Resolve the position map for this window's screen.
-            // If the screen has a per-screen layout that differs from the global
-            // previous layout, use that layout's zone positions instead.
+            // Use the all-layouts position map. The previous per-screen-
+            // layout branch resolved the screen's layout AFTER the
+            // change had landed, which yielded the new layout and made
+            // the lookup miss for OLD zoneIds. The all-layouts map
+            // above handles every layout the window could have snapped
+            // to.
             const QHash<QString, int>* posMap = &globalZoneIdToPosition;
             int prevZoneCount = globalPrevZoneCount;
-            if (!screenId.isEmpty() && m_layoutManager) {
-                PhosphorZones::Layout* screenLayout = m_layoutManager->resolveLayoutForScreen(screenId);
-                if (screenLayout && screenLayout != prevLayout) {
-                    auto cacheIt = perLayoutPositionMaps.constFind(screenLayout);
-                    if (cacheIt == perLayoutPositionMaps.constEnd()) {
-                        cacheIt = perLayoutPositionMaps.insert(
-                            screenLayout, PhosphorZones::LayoutUtils::buildZonePositionMap(screenLayout));
-                    }
-                    posMap = &cacheIt.value();
-                    prevZoneCount = screenLayout->zones().size();
-                }
-            }
+            Q_UNUSED(screenId);
 
             // Use primary zone for position mapping
             QString zoneId = zoneIdList.isEmpty() ? QString() : zoneIdList.first();
