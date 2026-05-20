@@ -801,16 +801,29 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         propagateGlobalMasterCount();
     }
 
-    // Persist ALL changed fields back to settings to avoid desync between
-    // the engine's runtime state and the Settings object. Signal-blocked write
-    // prevents recursive corruption (daemon settingsChanged → syncFromSettings →
-    // setAlgorithm with stale KCM algo).
+    // Persist the per-algorithm tuning (split ratio, master count, saved
+    // per-algorithm settings, and maxWindows when it changed) so the next
+    // session restores the user's tuning for whatever algorithm they end
+    // up on. Signal-blocked write prevents recursive corruption (daemon
+    // settingsChanged → syncFromSettings → setAlgorithm with stale KCM
+    // algo).
+    //
+    // NOTE: we deliberately do NOT call `setDefaultAutotileAlgorithm(newId)`
+    // here. The global default algorithm is a user-owned setting modified
+    // ONLY through the Layouts page (or its sub-pages / context menus).
+    // Per-screen / per-context applies that route through this method —
+    // e.g. UnifiedLayoutController applying an autotile entry on the
+    // current screen, or AutotileAdaptor::setAlgorithm from a script —
+    // must not silently overwrite that global preference. Per-screen
+    // assignments already carry the algorithm in the (screen, desktop,
+    // activity) entry; the engine's m_algorithmId tracks the runtime
+    // ambient algorithm and resyncs from defaultAutotileAlgorithm on the
+    // next session start, which is the intended behaviour.
     {
         m_writeBackGuardTimer.start();
         const QSignalBlocker blocker(engineSettings());
         writeBackTuning();
         if (auto* s = autotileSettings()) {
-            s->setDefaultAutotileAlgorithm(newId);
             if (m_config->maxWindows != oldMaxWindows)
                 s->setAutotileMaxWindows(m_config->maxWindows);
         }
