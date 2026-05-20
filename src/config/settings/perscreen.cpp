@@ -344,7 +344,20 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
         }
         ++it;
     }
+    // Insertion phase — when a connector entry resolves to a stable id that
+    // already exists in `settings` (e.g. a config that holds both "DP-1" and
+    // its resolved EDID id at once because the resolver succeeded on a prior
+    // boot but failed on another), the migrated entry would silently
+    // overwrite the pre-existing one. Detect and warn so a user with a
+    // partially-migrated config sees the collision in logs instead of
+    // losing a row to a silent overwrite. Last-write-wins is preserved
+    // (the migrated entry was just-saved by the running session, so it is
+    // typically more authoritative than a stale stable-id row).
     for (auto mit = migrated.constBegin(); mit != migrated.constEnd(); ++mit) {
+        if (settings.contains(mit.key()) && settings.value(mit.key()) != mit.value()) {
+            qCWarning(lcConfig) << "Per-screen migration collision: stable id" << mit.key()
+                                << "already had a separate entry; migrated connector entry overwrites it";
+        }
         settings.insert(mit.key(), mit.value());
     }
 }

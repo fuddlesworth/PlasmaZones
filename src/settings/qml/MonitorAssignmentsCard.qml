@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.settings
 
 /**
  * @brief Monitor assignments card - Assign layouts to monitors and virtual desktops
@@ -16,15 +17,16 @@ SettingsCard {
 
     required property var appSettings
     // PhosphorZones::AssignmentEntry::{Snapping, Autotile} — required so future
-    // call sites can't silently fall back to a magic default (snapping). Every
-    // existing caller already passes its page-level `viewMode` (which itself is
-    // bound to `AssignmentEntry.Snapping` / `AssignmentEntry.Autotile`).
+    // call sites can't silently fall back to a magic default (snapping). The
+    // body compares against `AssignmentEntry.Autotile` directly (see imports
+    // above) so a future enum renumber surfaces as a compile error rather
+    // than silently flipping every header / label / layoutFilter.
     required property int viewMode
     // Revision counter — incremented when lock state changes externally,
     // forcing lock-dependent bindings to re-evaluate.
     property int _lockRevision: 0
 
-    headerText: root.viewMode === 1 ? i18n("Monitor Tiling Assignments") : i18n("Monitor Assignments")
+    headerText: root.viewMode === AssignmentEntry.Autotile ? i18n("Monitor Tiling Assignments") : i18n("Monitor Assignments")
     collapsible: true
 
     Connections {
@@ -158,7 +160,7 @@ SettingsCard {
                         }
 
                         Label {
-                            text: root.viewMode === 1 ? i18n("Algorithm:") : i18n("All Desktops:")
+                            text: root.viewMode === AssignmentEntry.Autotile ? i18n("Algorithm:") : i18n("All Desktops:")
                             Layout.alignment: Qt.AlignVCenter
                             enabled: monitorEnableSwitch.checked
                         }
@@ -177,14 +179,14 @@ SettingsCard {
                             appSettings: root.appSettings
                             noneText: i18n("Default")
                             showPreview: true
-                            layoutFilter: root.viewMode === 1 ? 1 : 0
+                            layoutFilter: root.viewMode === AssignmentEntry.Autotile ? 1 : 0
                             currentLayoutId: {
                                 void (monitorDelegate._assignmentRevision); // force re-evaluate on data change
-                                return root.viewMode === 1 ? (root.appSettings.getTilingLayoutForScreen(monitorDelegate.screenName) || "") : (root.appSettings.getLayoutForScreen(monitorDelegate.screenName) || "");
+                                return root.viewMode === AssignmentEntry.Autotile ? (root.appSettings.getTilingLayoutForScreen(monitorDelegate.screenName) || "") : (root.appSettings.getLayoutForScreen(monitorDelegate.screenName) || "");
                             }
                             onActivated: {
                                 let selectedValue = model[currentIndex].value;
-                                if (root.viewMode === 1) {
+                                if (root.viewMode === AssignmentEntry.Autotile) {
                                     if (selectedValue === "")
                                         root.appSettings.clearTilingScreenAssignment(monitorDelegate.screenName);
                                     else
@@ -226,7 +228,7 @@ SettingsCard {
                                 return monitorEnableSwitch.checked && !root.appSettings.isScreenLocked(monitorDelegate.screenName, root.viewMode);
                             }
                             onClicked: {
-                                if (root.viewMode === 1)
+                                if (root.viewMode === AssignmentEntry.Autotile)
                                     root.appSettings.clearTilingScreenAssignment(monitorDelegate.screenName);
                                 else
                                     root.appSettings.clearScreenAssignment(monitorDelegate.screenName);
@@ -314,7 +316,7 @@ SettingsCard {
                                     // Per-desktop "Default" resolves to monitor's layout (or global if monitor has none)
                                     property string monitorLayout: {
                                         void (monitorDelegate._assignmentRevision);
-                                        return root.viewMode === 1 ? (root.appSettings.getTilingLayoutForScreen(monitorDelegate.screenName) || "") : (root.appSettings.getLayoutForScreen(monitorDelegate.screenName) || "");
+                                        return root.viewMode === AssignmentEntry.Autotile ? (root.appSettings.getTilingLayoutForScreen(monitorDelegate.screenName) || "") : (root.appSettings.getLayoutForScreen(monitorDelegate.screenName) || "");
                                     }
 
                                     Layout.fillWidth: true
@@ -326,21 +328,21 @@ SettingsCard {
                                     appSettings: root.appSettings
                                     iconSource: "preferences-desktop-virtual"
                                     labelText: desktopRowContainer.desktopName
-                                    layoutFilter: root.viewMode === 1 ? 1 : 0
+                                    layoutFilter: root.viewMode === AssignmentEntry.Autotile ? 1 : 0
                                     showPreview: true
                                     noneText: i18n("Use default")
                                     resolvedDefaultId: {
                                         if (monitorLayout !== "")
                                             return monitorLayout;
 
-                                        if (root.viewMode === 1)
+                                        if (root.viewMode === AssignmentEntry.Autotile)
                                             return "autotile:" + root.appSettings.defaultAutotileAlgorithm;
 
                                         return root.appSettings.defaultLayoutId || "";
                                     }
                                     currentLayoutId: {
                                         void (monitorDelegate._assignmentRevision);
-                                        if (root.viewMode === 1) {
+                                        if (root.viewMode === AssignmentEntry.Autotile) {
                                             let hasExplicit = root.appSettings.hasExplicitTilingAssignmentForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
                                             return hasExplicit ? (root.appSettings.getTilingLayoutForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber) || "") : "";
                                         } else {
@@ -349,13 +351,13 @@ SettingsCard {
                                         }
                                     }
                                     onAssignmentSelected: layoutId => {
-                                        if (root.viewMode === 1)
+                                        if (root.viewMode === AssignmentEntry.Autotile)
                                             root.appSettings.assignTilingLayoutToScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber, layoutId);
                                         else
                                             root.appSettings.assignLayoutToScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber, layoutId);
                                     }
                                     onAssignmentCleared: {
-                                        if (root.viewMode === 1)
+                                        if (root.viewMode === AssignmentEntry.Autotile)
                                             root.appSettings.clearTilingScreenDesktopAssignment(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
                                         else
                                             root.appSettings.clearScreenDesktopAssignment(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
