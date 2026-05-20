@@ -1211,16 +1211,19 @@ bool Daemon::init()
             // edited*, not the cascade-resolved layout at the slot:
             //
             //   - field == Snap: show the snap layout the user just set
-            //     (or the cleared state), regardless of the slot's mode.
-            //     If they edited snap on a context whose stored mode is
-            //     still Autotile (the "preserve mode" semantics from the
-            //     assignment-page partial-update path), the OSD still
-            //     shows the snap they picked — the tile algo would have
-            //     been a confusing mismatch with the user's action.
-            //   - field == Tile: symmetric for the tile field.
+            //     — but only when the slot's preserved mode is Snapping.
+            //     A snap edit on an Autotile-mode slot is a stored-but-
+            //     inactive preference; surfacing it would announce a
+            //     layout the user can't see, since the slot still
+            //     renders autotile.
+            //   - field == Tile: symmetric — only show when mode is
+            //     Autotile at the slot. Cleared fields are also
+            //     suppressed since there's nothing meaningful to
+            //     preview.
             //   - field == Entry: legacy / full-entry edits (Overview,
             //     assignLayoutToScreen*, clear-whole-entry). Resolve via
-            //     the slot's active layout id as before.
+            //     the slot's active layout id as before; mode is set
+            //     by the caller in this path so we always show.
             struct ScreenOsd
             {
                 QString screenId;
@@ -1229,7 +1232,7 @@ bool Daemon::init()
                 QString snappingLayoutId; // empty unless isAutotile=false and field-specific
                 int virtualDesktop;
                 QString activity;
-                bool fieldCleared; // user cleared the edited field; suppress OSD content
+                bool suppress; // edit doesn't affect this slot's rendering (or field cleared)
             };
             QVector<ScreenOsd> osdEntries;
             if (!changedKeys.isEmpty()) {
@@ -1249,13 +1252,25 @@ bool Daemon::init()
                     //   (mode=Snapping, snap="", tile=""): a "cleared" view.
 
                     if (key.field == ChangedField::Snap) {
+                        const bool modeMatches = (entry.mode == PhosphorZones::AssignmentEntry::Snapping);
                         const bool cleared = entry.snappingLayout.isEmpty();
-                        osdEntries.append(
-                            {key.screenId, false, {}, entry.snappingLayout, key.virtualDesktop, key.activity, cleared});
+                        osdEntries.append({key.screenId,
+                                           false,
+                                           {},
+                                           entry.snappingLayout,
+                                           key.virtualDesktop,
+                                           key.activity,
+                                           !modeMatches || cleared});
                     } else if (key.field == ChangedField::Tile) {
+                        const bool modeMatches = (entry.mode == PhosphorZones::AssignmentEntry::Autotile);
                         const bool cleared = entry.tilingAlgorithm.isEmpty();
-                        osdEntries.append(
-                            {key.screenId, true, entry.tilingAlgorithm, {}, key.virtualDesktop, key.activity, cleared});
+                        osdEntries.append({key.screenId,
+                                           true,
+                                           entry.tilingAlgorithm,
+                                           {},
+                                           key.virtualDesktop,
+                                           key.activity,
+                                           !modeMatches || cleared});
                     } else {
                         // Entry-level: use the slot's active layout id
                         const QString assignmentId =
@@ -1309,11 +1324,14 @@ bool Daemon::init()
                     showLockedPreviewOsd(osd.screenId);
                 } else if (!osdEnabled) {
                     continue;
-                } else if (osd.fieldCleared) {
-                    // Partial-update path cleared the edited field;
-                    // showing the cascade winner here would be misleading
-                    // ("you cleared this, but here's the layout that
-                    // still applies elsewhere"), so skip.
+                } else if (osd.suppress) {
+                    // Edit was a stored-but-inactive preference (the
+                    // partial-update path preserved mode and the edited
+                    // field isn't the active one), OR the edited field
+                    // was cleared. In either case there's no visible
+                    // change to announce — showing an OSD would either
+                    // misrepresent the rendering or chase the cascade
+                    // winner. Skip.
                     continue;
                 } else if (osd.isAutotile) {
                     // Skip when algoId is empty — happens for a tile

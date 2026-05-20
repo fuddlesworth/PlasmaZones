@@ -702,14 +702,30 @@ void LayoutAdaptor::setSnappingLayoutEntry(const QString& screenId, int virtualD
 
     m_layoutManager->setSnappingLayoutPreservingMode(resolvedId, virtualDesktop, activity, layoutId);
     m_changedScreenIds.insert(resolvedId);
-    // Field marker "snap" — the OSD should reflect the new snap layout
-    // the user just chose, regardless of whether the slot's mode is
-    // Snapping or Autotile. If mode is Autotile here it means the
-    // edit lands as a stored preference for next time the user
-    // switches that context to snapping; the OSD still shows the snap
-    // they picked so the dialog matches their action.
+    // Field marker "snap" — the OSD decides whether to surface this
+    // edit by re-reading the slot's stored entry; the field tag tells
+    // it which field to inspect (snap vs tile vs full entry).
     m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity
                                    + QChar(0x1F) + QStringLiteral("snap"));
+
+    // Keep the daemon-wide active layout pointer in sync with the
+    // primary screen's resolved layout. The snap engine, overlay, and
+    // zone detector all key off m_activeLayout via the
+    // `activeLayoutChanged` signal — without this, editing snap for
+    // the primary screen at the current context stores correctly but
+    // the rendered zones / drag overlay continue using the previous
+    // layout until the next active-layout-changing event. Mirrors the
+    // setActiveLayout call the legacy `assignLayoutToScreen` made; the
+    // resolveLayoutForScreen walk uses the current desktop / activity,
+    // so a slot that the cascade now skips (e.g. a screen-level snap
+    // shadowed by a per-context entry) won't flip the active layout.
+    QScreen* primary = Utils::primaryScreen();
+    if (primary && Phosphor::Screens::ScreenIdentity::identifierFor(primary) == resolvedId) {
+        PhosphorZones::Layout* primaryLayout = m_layoutManager->resolveLayoutForScreen(resolvedId);
+        if (primaryLayout) {
+            m_layoutManager->setActiveLayout(primaryLayout);
+        }
+    }
 
     qCInfo(lcDbusLayout) << "setSnappingLayoutEntry: screen=" << resolvedId << "desktop=" << virtualDesktop
                          << "activity=" << activity << "snapping=" << layoutId;
