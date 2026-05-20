@@ -571,11 +571,14 @@ void WindowTrackingService::windowClosed(const QString& windowId)
         // indiscriminately by every later blank-class window. Drop it.
         && PhosphorIdentity::WindowId::isValidAppId(appId)) {
         const QString screenId = m_snapState->screenForWindow(windowId);
-        // A stuck-sticky window (no recorded desktop) yields desktop=0 — the
-        // predicate's caller short-circuits the desktop-disabled check on
-        // desktop <= 0, so sticky windows fall through the monitor-disabled
-        // gate only. That's intentional: a sticky window isn't "on" any one
-        // desktop.
+        // SnapState::desktopForWindow returns 0 (all-desktops / unknown
+        // sentinel) for untracked windows. The disabled-context predicate
+        // short-circuits its desktop-disabled check on desktop <= 0, so
+        // sticky and untracked windows fall through the monitor-disabled
+        // gate only — intentional: a sticky window isn't "on" any one
+        // desktop. The restore path treats 0 as "don't constrain on
+        // desktop" too, so a value of 0 carried into the PendingRestore
+        // entry won't migrate the window to a wrong desktop on reopen.
         const int desktop = m_snapState->desktopForWindow(windowId);
 
         // Disabled-context gate (discussion #461 item 2). When the closing
@@ -690,15 +693,24 @@ void WindowTrackingService::onLayoutChanged()
     // Only replace m_resnapBuffer when we capture at least one window. If user does A->B->C (snapped
     // on A, B has no windows), prev=B yields nothing - we keep the buffer from A->B so resnap on C works.
     PhosphorZones::Layout* prevLayout = m_layoutManager->previousLayout();
-    if (!prevLayout) {
-        qCInfo(lcPlacement) << "onLayoutChanged: no previous layout (first launch), skipping resnap buffer";
-        return;
+    // Resnap-buffer construction requires a previous layout to map zone
+    // positions from. On first launch (no prevLayout) skip just the buffer
+    // build — but DO NOT return: the stale-assignment cleanup further down
+    // still has to run, otherwise session-restored windows whose zoneIds
+    // reference a since-deleted layout would stay in m_snapState forever
+    // (the only other purge path is windowClosed, which doesn't fire for
+    // assignments restored at startup).
+    const bool layoutSwitched = prevLayout && (prevLayout != newLayout);
+    if (prevLayout) {
+        qCDebug(lcPlacement) << "onLayoutChanged: newLayout="
+                             << (newLayout ? newLayout->name() : QStringLiteral("null"))
+                             << "prevLayout=" << prevLayout->name() << "switched=" << layoutSwitched
+                             << "windowAssignments=" << m_snapState->zoneAssignments().size();
+    } else {
+        qCDebug(lcPlacement) << "onLayoutChanged: no previous layout (first launch); skipping resnap-buffer "
+                                "build, running stale-assignment cleanup only";
     }
-    const bool layoutSwitched = (prevLayout != newLayout);
-    qCDebug(lcPlacement) << "onLayoutChanged: newLayout=" << (newLayout ? newLayout->name() : QStringLiteral("null"))
-                         << "prevLayout=" << prevLayout->name() << "switched=" << layoutSwitched
-                         << "windowAssignments=" << m_snapState->zoneAssignments().size();
-    {
+    if (prevLayout) {
         QVector<ResnapEntry> newBuffer;
 
         QHash<QString, int> globalZoneIdToPosition = PhosphorZones::LayoutUtils::buildZonePositionMap(prevLayout);
@@ -889,6 +901,12 @@ void WindowTrackingService::onLayoutChanged()
     const QHash<QString, int>& lcDesktops = m_snapState->desktopAssignments();
 
     QStringList toRemove;
+    // Multi-zone windows where SOME zones survived the layout change: we
+    // keep the window, but rewrite the assignment to drop the dangling zone
+    // ids. Without this, multiZoneGeometry / zonesForWindow downstream would
+    // keep seeing invalid uuids and either return zero rects for them or
+    // (worse) fold them into geometry queries that silently no-op.
+    QHash<QString, QPair<QStringList, QString>> toRewrite; // windowId → (validZones, screenId)
     for (auto it = lcZones.constBegin(); it != lcZones.constEnd(); ++it) {
         const QStringList& zoneIdList = it.value();
         if (zoneIdList.isEmpty()) {
@@ -921,16 +939,35 @@ void WindowTrackingService::onLayoutChanged()
             toRemove.append(it.key());
             continue;
         }
-        // Multi-zone windows are kept as long as at least one zone is valid —
-        // matches calculateResnapFromCurrentAssignments which handles multi-zone
-        // via multiZoneGeometry.
-        if (!anyZoneExistsInLayout(zoneIdList, effectiveLayout)) {
+        if (allZonesExistInLayout(zoneIdList, effectiveLayout)) {
+            continue; // fully valid, nothing to do
+        }
+        // Partial or full invalidity: rebuild the surviving subset. Empty
+        // result means the whole window lost its zones → mark for unassign.
+        QStringList survivingZones;
+        survivingZones.reserve(zoneIdList.size());
+        for (const QString& zid : zoneIdList) {
+            const auto uuid = parseUuid(zid);
+            if (uuid && effectiveLayout->zoneById(*uuid)) {
+                survivingZones.append(zid);
+            }
+        }
+        if (survivingZones.isEmpty()) {
             toRemove.append(it.key());
+        } else {
+            toRewrite.insert(it.key(), {survivingZones, windowScreen});
         }
     }
 
     for (const QString& windowId : toRemove) {
         unassignWindow(windowId);
+    }
+    for (auto it = toRewrite.constBegin(); it != toRewrite.constEnd(); ++it) {
+        const QString& windowId = it.key();
+        const QStringList& survivingZones = it.value().first;
+        const QString& windowScreen = it.value().second;
+        const int windowDesktop = lcDesktops.value(windowId, 0);
+        assignWindowToZones(windowId, survivingZones, windowScreen, windowDesktop);
     }
 }
 
