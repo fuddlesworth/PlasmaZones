@@ -121,19 +121,32 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
         return false;
     }
 
-    // Skip transient/dialog windows unconditionally. Dialogs, utilities, tooltips,
-    // notifications, etc. should never be zone-managed. User-configured exclusion
-    // lists and minimum size checks are handled by the daemon.
+    // Skip transient/dialog/menu windows unconditionally. Dialogs, utilities,
+    // tooltips, menus, notifications, etc. should never be zone-managed.
+    // User-configured exclusion lists and minimum size checks are handled by
+    // the daemon.
     //
     // transientFor() catches child surfaces that Electron/CEF apps (Steam, Discord,
     // VS Code) spawn for image previews, context menus and popups: these frequently
     // fail to report an accurate KWin window type (isDialog/isPopupWindow stay
     // false) but always set the transient-parent relationship. Without this the
     // popup passes the filter and gets snapped to a zone (discussion #461 item 11).
-    // Mirrors the transient bucket already enforced by shouldAnimateWindow() and
-    // isTileableWindow().
+    //
+    // The menu / dropdown / tooltip bucket below is the same set isTileableWindow()
+    // rejects. Without it a popup KWin classifies as e.g. PopupMenu — but that
+    // doesn't carry the isPopupWindow flag — passes snap but not autotile, which
+    // is the exact asymmetry that surfaces as "snapped to a zone in snap mode,
+    // ignored in tile mode" depending on the screen's current assignment.
     if (w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isOnScreenDisplay()
-        || w->isModal() || w->isPopupWindow() || w->transientFor()) {
+        || w->isModal() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu() || w->isMenu()
+        || w->isTooltip() || w->transientFor()) {
+        return false;
+    }
+
+    // Keep-above overlays (Spectacle, color pickers, screen rulers, screenshot
+    // tools that linger after capture) shouldn't be snapped to a zone — same
+    // rationale as isTileableWindow's keep-above gate.
+    if (w->keepAbove()) {
         return false;
     }
 
