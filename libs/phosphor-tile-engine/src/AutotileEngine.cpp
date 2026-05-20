@@ -1469,6 +1469,15 @@ QJsonObject AutotileEngine::serializePendingRestores() const
     for (auto it = m_pendingAutotileRestores.constBegin(); it != m_pendingAutotileRestores.constEnd(); ++it) {
         QJsonArray queueArray;
         for (const PendingAutotileRestore& restore : it.value()) {
+            // Save-time gate (discussion #461 item 2). Drop entries whose
+            // context the user has disabled since the entry was queued —
+            // otherwise persisting them just resurrects the same restore
+            // on the next session.
+            if (m_shouldPersistRestorePredicate
+                && !m_shouldPersistRestorePredicate(restore.context.screenId, restore.context.desktop,
+                                                    restore.context.activity)) {
+                continue;
+            }
             QJsonObject restoreObj;
             restoreObj[QLatin1String("position")] = restore.position;
             restoreObj[QLatin1String("screen")] = restore.context.screenId;
@@ -1477,7 +1486,9 @@ QJsonObject AutotileEngine::serializePendingRestores() const
             restoreObj[QLatin1String("wasFloating")] = restore.wasFloating;
             queueArray.append(restoreObj);
         }
-        queuesObj[it.key()] = queueArray;
+        if (!queueArray.isEmpty()) {
+            queuesObj[it.key()] = queueArray;
+        }
     }
     return queuesObj;
 }
@@ -1503,6 +1514,13 @@ void AutotileEngine::deserializePendingRestores(const QJsonObject& queuesObj)
             ctx.screenId = screenId;
             ctx.desktop = qMax(1, restoreObj[QLatin1String("desktop")].toInt(1));
             ctx.activity = restoreObj[QLatin1String("activity")].toString();
+            // Load-time gate (discussion #461 item 2). Drop entries whose
+            // context the user disabled while the daemon was off (or that
+            // were written by an older daemon that didn't have the gate).
+            if (m_shouldPersistRestorePredicate
+                && !m_shouldPersistRestorePredicate(ctx.screenId, ctx.desktop, ctx.activity)) {
+                continue;
+            }
             restoreList.append(
                 PendingAutotileRestore(pos, std::move(ctx), restoreObj[QLatin1String("wasFloating")].toBool(false)));
             if (restoreList.size() >= MaxPendingRestoresPerApp)
@@ -2687,16 +2705,29 @@ void AutotileEngine::removeWindow(const QString& windowId)
             // mid-session rename still routes the restore to the right bucket.
             const QString appId = currentAppIdFor(windowId);
             if (!appId.isEmpty() && appId != windowId) {
-                PendingAutotileRestore entry(pos, key, state->isFloating(windowId));
-                auto& queue = m_pendingAutotileRestores[appId];
-                // Cap per-appId queue to prevent unbounded growth from windows
-                // that are closed repeatedly without reopening.
-                if (queue.size() >= MaxPendingRestoresPerApp) {
-                    queue.removeFirst();
+                // Live write gate (discussion #461 item 2). A window that
+                // closes on a disabled monitor/desktop/activity should not
+                // even enter the in-memory queue — otherwise it sits in RAM
+                // until the next save filter strips it, and a same-session
+                // reopen would resurrect it mid-flight. Matches the snap-side
+                // gate in WindowTrackingService::windowClosed.
+                if (m_shouldPersistRestorePredicate
+                    && !m_shouldPersistRestorePredicate(key.screenId, key.desktop, key.activity)) {
+                    qCDebug(PhosphorTileEngine::lcTileEngine)
+                        << "Skipped pending restore for" << appId << "-- disabled context, screen=" << key.screenId
+                        << "desktop=" << key.desktop;
+                } else {
+                    PendingAutotileRestore entry(pos, key, state->isFloating(windowId));
+                    auto& queue = m_pendingAutotileRestores[appId];
+                    // Cap per-appId queue to prevent unbounded growth from windows
+                    // that are closed repeatedly without reopening.
+                    if (queue.size() >= MaxPendingRestoresPerApp) {
+                        queue.removeFirst();
+                    }
+                    queue.append(entry);
+                    qCDebug(PhosphorTileEngine::lcTileEngine)
+                        << "Saved pending restore for" << appId << "position=" << pos << "screen=" << key.screenId;
                 }
-                queue.append(entry);
-                qCDebug(PhosphorTileEngine::lcTileEngine)
-                    << "Saved pending restore for" << appId << "position=" << pos << "screen=" << key.screenId;
             }
         }
         state->removeWindow(windowId);

@@ -254,6 +254,19 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_autotileEngine) {
         connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this,
                 &WindowTrackingAdaptor::navigationFeedback);
+
+        // Disabled-context gate for autotile pending restores (discussion
+        // #461 item 2). Mirror of the snap-side ShouldTrackPredicate wired
+        // in the constructor — both routes share isPersistedContextDisabled
+        // so the live, save-time, and load-time gates can never drift.
+        // Activity is threaded through because autotile entries carry it
+        // (snap entries do not). See AutotileEngine::ShouldPersistRestorePredicate.
+        if (auto* autotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(autotileEngine)) {
+            autotile->setShouldPersistRestorePredicate(
+                [this](const QString& screenId, int desktop, const QString& activity) -> bool {
+                    return !isPersistedContextDisabled(screenId, desktop, activity);
+                });
+        }
     }
 }
 

@@ -790,23 +790,23 @@ private:
                                  const QString& screenId, bool isFloating, const QString& changeType) const;
 
     /**
-     * @brief Test whether the given (screen, virtualDesktop) tuple is currently disabled.
+     * @brief Test whether the given (screen, virtualDesktop, activity) tuple is currently disabled.
      *
      * Used by the save/load filters to drop entries persisted before the user
-     * disabled a monitor / virtual desktop. Selects the mode via the
+     * disabled a monitor / virtual desktop / activity. Selects the mode via the
      * ScreenModeRouter when wired; falls back to Snapping mode otherwise
      * (consistent with the snap-side write gate, and the helper's only
      * load-time caller chain is snap-side anyway). Empty screenId is treated
      * as "context unknown" and the entry is kept.
      *
-     * No activity parameter: snap-mode storage carries no per-window
-     * activity tag (SnapState does not track it), so the activity-mode
-     * disable list cannot apply to entries this helper sees. Autotile
-     * pending-restore filtering — which DOES have activity — lives in
-     * Daemon::init's filterAutotilePendingRestores lambda and calls
-     * isContextDisabled directly with the autotile mode.
+     * The activity parameter is optional and defaults to empty — snap-mode
+     * storage carries no per-window activity tag (SnapState does not track it)
+     * so snap callers leave it unset and the activity-mode disable list never
+     * applies to them. Autotile pending-restore filtering passes the entry's
+     * activity tag explicitly via the engine's ShouldPersistRestorePredicate.
      */
-    bool isPersistedContextDisabled(const QString& screenId, int virtualDesktop) const;
+    bool isPersistedContextDisabled(const QString& screenId, int virtualDesktop,
+                                    const QString& activity = QString()) const;
 
     // clearFloatingStateForSnap was removed — PhosphorPlacement::WindowTrackingService::commitSnap
     // now handles floating-state clearing internally (and emits
