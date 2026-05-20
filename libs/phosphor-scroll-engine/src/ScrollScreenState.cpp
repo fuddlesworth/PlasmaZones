@@ -119,6 +119,17 @@ bool ScrollScreenState::consumeIntoColumn()
     if (!source) {
         return false;
     }
+    // Skip silently when the source tile is minimized: consume copies the tile
+    // verbatim into the focused column and then makes it the focused tile, so
+    // a minimized=true source would land as the focused tile of the focused
+    // column — but a minimized tile is excluded from the resolved layout, so
+    // the user would see the focused column's *previously* visible tile vanish
+    // with no visible feedback. Refusing the op here keeps the focused column
+    // visually anchored on a window the user can actually see; the next chord
+    // (or an unminimize) is then a sensible target.
+    if (source->minimized) {
+        return false;
+    }
     const Tile moved = *source;
     m_columns[nextIndex].removeWindow(moved.windowId);
 
@@ -188,6 +199,15 @@ bool ScrollScreenState::focusWindow(const QString& windowId)
     if (columnIndex < 0) {
         return false;
     }
+    // Already-focused window: skip the mutation so the engine's caller
+    // (windowFocused → focusWindow → emitChanged) can detect a real refocus
+    // and avoid fanning out a redundant placementChanged when the compositor
+    // re-announces focus on the same window (effect re-attach, D-Bus retry,
+    // a second focus event from a wl_pointer/wl_keyboard pair). The contract
+    // mirrors setWindowMinimized's flag-already-in-state behaviour.
+    if (columnIndex == m_activeColumnIndex && tileIndex == m_columns.at(columnIndex).activeTileIndex()) {
+        return false;
+    }
     m_activeColumnIndex = columnIndex;
     m_columns[columnIndex].setActiveTileIndex(tileIndex);
     return true;
@@ -233,19 +253,20 @@ bool ScrollScreenState::moveColumnNextTo(const QString& draggedWindowId, const Q
     const int anchorAfterRemoval = (anchorColumn > from) ? anchorColumn - 1 : anchorColumn;
     const int target =
         qBound(0, placeAfter ? anchorAfterRemoval + 1 : anchorAfterRemoval, static_cast<int>(m_columns.size()) - 1);
-    // A drop that lands the column back in its own slot (it was dragged only
-    // just past an adjacent column's centre) is a positional no-op: skip the
-    // reorder. The caller still re-resolves and focuses the window — that
-    // round-trip snaps the dragged window back into its (unchanged) slot,
-    // which is intentional: it absorbs any mid-drag drift that left the
-    // window slightly off its tile rect, restoring exact alignment without
-    // the user needing to drag again. Returning true here is the contract.
     if (target != from) {
         m_columns.move(from, target);
+        // The user just dragged this window — focus it (and its column).
+        focusWindow(draggedWindowId);
+        return true;
     }
-    // The user just dragged this window — focus it (and its column).
-    focusWindow(draggedWindowId);
-    return true;
+    // Positional no-op: the column would land back in its own slot. If the
+    // dragged window's tile is also already the active tile (focusWindow
+    // returns false in that case), nothing about the strip changed and the
+    // engine has no work to dispatch — skip the daemon's placementChanged
+    // round-trip. When the focus DID move (the user dragged a non-focused
+    // window into its own slot), report the focus change as a real mutation
+    // so the daemon re-resolves and snaps the dragged window into alignment.
+    return focusWindow(draggedWindowId);
 }
 
 void ScrollScreenState::setActiveColumnWidth(const ColumnWidth& width, int presetIndex)

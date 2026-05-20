@@ -12,6 +12,8 @@
 #include "pz_i18n.h"
 #include "pz_qml_i18n.h"
 
+#include <PhosphorZones/AssignmentEntry.h>
+
 #include "../core/constants.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -25,6 +27,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QScopeGuard>
+#include <QtQml/qqml.h>
 
 namespace {
 
@@ -160,6 +163,15 @@ int main(int argc, char* argv[])
 
     engine.rootContext()->setContextProperty(QStringLiteral("settingsController"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), controller.settings());
+
+    // Expose PhosphorZones::AssignmentEntry::Mode to QML so the per-mode
+    // bridges (ScrollingBridge / SnappingBridge / TilingBridge) can name the
+    // mode they target instead of carrying a magic integer literal. Only the
+    // enum is reachable — instantiating the gadget from QML is uncreatable
+    // because callers don't need the value type itself, just its enum.
+    qmlRegisterUncreatableType<PhosphorZones::AssignmentEntry>(
+        "org.plasmazones.settings", 1, 0, "AssignmentEntry",
+        QStringLiteral("AssignmentEntry exposes only its Mode enum to QML"));
 
     if (!requestedPage.isEmpty()) {
         controller.setActivePage(requestedPage);

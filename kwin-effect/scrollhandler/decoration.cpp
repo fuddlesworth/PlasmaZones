@@ -85,7 +85,16 @@ void ScrollHandler::hideTitleBarsForTrackedWindows()
     // skipped — so this is safe to call after any tracked-set change. Minimized
     // windows are skipped: onWindowMinimizedChanged restores their title bar
     // and this must not re-hide it (it re-hides on restore).
-    for (const QString& windowId : std::as_const(m_notifiedWindows)) {
+    //
+    // Snapshot m_notifiedWindows into a QStringList before iterating: while
+    // setWindowBorderless mutates m_borderlessWindows (a different set),
+    // findWindowById may resolve to a window whose lifecycle handlers run
+    // synchronously and prune m_notifiedWindows under us (e.g. an X11 window
+    // closing mid-iteration). Mirrors the snapshot-then-iterate pattern in
+    // ScrollHandler::onDaemonReady (scrollhandler.cpp:525) and in the
+    // updateHideTitleBarsSetting "turning off" branch below.
+    const QStringList tracked(m_notifiedWindows.cbegin(), m_notifiedWindows.cend());
+    for (const QString& windowId : tracked) {
         KWin::EffectWindow* w = m_effect->findWindowById(windowId);
         if (w && !w->isMinimized()) {
             setWindowBorderless(w, windowId, true);

@@ -7,9 +7,29 @@
 // enable/disable gates that SharedBridge already exposes.
 
 import QtQuick
+import org.plasmazones.settings
 
-// assignmentViewMode 2 == PhosphorZones::AssignmentEntry::Scroll, so every
-// isMonitorDisabled/setDesktopDisabled/... call routes to the scroll lists.
+// AssignmentEntry.Scroll names the same integer as the C++ enum so every
+// isMonitorDisabled / setDesktopDisabled / ... call routes to the scroll
+// disable lists — a magic literal would silently desync if the C++ enum
+// values are ever renumbered.
 SharedBridge {
-    assignmentViewMode: 2
+    id: bridge
+
+    assignmentViewMode: AssignmentEntry.Scroll
+
+    // Tick counters bumped from the SharedBridge notify signals so QML
+    // bindings that consult `isMonitorDisabled(name)` etc. (no QML-side
+    // dependency on a mutating property otherwise) re-evaluate when the
+    // settings controller flips a disable list. Without this, the binding
+    // is one-shot — the page used to cache the value into a local property
+    // and re-read it from a `Connections` handler, which races the
+    // initial signal-target wiring.
+    property int disabledMonitorsTick: 0
+    property int disabledDesktopsTick: 0
+    property int disabledActivitiesTick: 0
+
+    onDisabledMonitorsChanged: bridge.disabledMonitorsTick++
+    onDisabledDesktopsChanged: bridge.disabledDesktopsTick++
+    onDisabledActivitiesChanged: bridge.disabledActivitiesTick++
 }

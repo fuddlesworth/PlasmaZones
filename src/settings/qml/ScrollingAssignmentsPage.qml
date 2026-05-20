@@ -21,9 +21,7 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
-    readonly property var
-    settingsBridge: ScrollingBridge {
-    }
+    readonly property var settingsBridge: ScrollingBridge {}
 
     contentHeight: mainCol.implicitHeight
     clip: true
@@ -74,6 +72,22 @@ SettingsFlickable {
                         required property var modelData
                         required property int index
                         property string screenName: modelData.name || ""
+                        // Composed display label: connector name + manufacturer +
+                        // model, joined identically to the visible Label below.
+                        // Centralised here so the visible text and the
+                        // Switch's Accessible.name read the same string —
+                        // screen readers should announce "LG ULTRAGEAR" not
+                        // the raw "DP-1" connector id.
+                        readonly property string composedDisplayName: {
+                            const name = modelData.name || i18n("Unknown Monitor");
+                            const mfr = modelData.manufacturer || "";
+                            const mdl = modelData.model || "";
+                            const parts = [mfr, mdl].filter(function (s) {
+                                return s !== "";
+                            });
+                            const info = parts.join(" ");
+                            return info ? name + " — " + info : name;
+                        }
                         property bool expanded: false
 
                         width: ListView.view.width
@@ -106,16 +120,7 @@ SettingsFlickable {
 
                                     Label {
                                         Layout.fillWidth: true
-                                        text: {
-                                            let name = monitorDelegate.modelData.name || i18n("Unknown Monitor");
-                                            let mfr = monitorDelegate.modelData.manufacturer || "";
-                                            let mdl = monitorDelegate.modelData.model || "";
-                                            let parts = [mfr, mdl].filter(function(s) {
-                                                return s !== "";
-                                            });
-                                            let info = parts.join(" ");
-                                            return info ? name + " — " + info : name;
-                                        }
+                                        text: monitorDelegate.composedDisplayName
                                         font.weight: Font.DemiBold
                                         elide: Text.ElideRight
                                     }
@@ -133,31 +138,29 @@ SettingsFlickable {
                                         font: Kirigami.Theme.smallFont
                                         elide: Text.ElideRight
                                     }
-
                                 }
 
                                 Switch {
                                     id: monitorSwitch
 
-                                    property bool monitorActive: !root.settingsBridge.isMonitorDisabled(monitorDelegate.screenName)
-
-                                    checked: monitorActive
-                                    Accessible.name: i18n("Scrolling mode on monitor %1", monitorDelegate.screenName)
+                                    // Direct binding: every tick bump in the
+                                    // bridge re-evaluates this expression so
+                                    // the switch tracks external mutations
+                                    // (e.g. another tab flipping the same
+                                    // gate) without the cached-property +
+                                    // Connections race the page used to have.
+                                    checked: {
+                                        // Reference the tick so QML records
+                                        // it as a binding dependency.
+                                        void root.settingsBridge.disabledMonitorsTick;
+                                        return !root.settingsBridge.isMonitorDisabled(monitorDelegate.screenName);
+                                    }
+                                    Accessible.name: i18n("Scrolling mode on monitor %1", monitorDelegate.composedDisplayName)
                                     onToggled: {
                                         root.settingsBridge.setMonitorDisabled(monitorDelegate.screenName, !checked);
-                                        monitorActive = checked;
                                     }
                                     ToolTip.visible: hovered
                                     ToolTip.text: checked ? i18n("Disable scrolling mode on this monitor") : i18n("Enable scrolling mode on this monitor")
-
-                                    Connections {
-                                        function onDisabledMonitorsChanged() {
-                                            monitorSwitch.monitorActive = !root.settingsBridge.isMonitorDisabled(monitorDelegate.screenName);
-                                        }
-
-                                        target: root.settingsBridge
-                                    }
-
                                 }
 
                                 ToolButton {
@@ -171,7 +174,6 @@ SettingsFlickable {
                                     ToolTip.visible: hovered
                                     ToolTip.text: monitorDelegate.expanded ? i18n("Hide per-desktop toggles") : i18n("Show per-desktop toggles")
                                 }
-
                             }
 
                             // Per-desktop toggles (expandable)
@@ -195,7 +197,6 @@ SettingsFlickable {
                                         required property int index
                                         property int desktopNumber: index + 1
                                         property string desktopName: root.settingsBridge.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
-                                        property bool desktopActive: !root.settingsBridge.isDesktopDisabled(monitorDelegate.screenName, desktopNumber)
 
                                         Layout.fillWidth: true
                                         spacing: Kirigami.Units.smallSpacing
@@ -214,39 +215,24 @@ SettingsFlickable {
                                         }
 
                                         Switch {
-                                            checked: desktopRow.desktopActive
+                                            checked: {
+                                                void root.settingsBridge.disabledDesktopsTick;
+                                                return !root.settingsBridge.isDesktopDisabled(monitorDelegate.screenName, desktopRow.desktopNumber);
+                                            }
                                             Accessible.name: i18n("Scrolling mode on %1", desktopRow.desktopName)
                                             onToggled: {
                                                 root.settingsBridge.setDesktopDisabled(monitorDelegate.screenName, desktopRow.desktopNumber, !checked);
-                                                desktopRow.desktopActive = checked;
                                             }
                                             ToolTip.visible: hovered
                                             ToolTip.text: checked ? i18n("Disable scrolling mode on %1", desktopRow.desktopName) : i18n("Enable scrolling mode on %1", desktopRow.desktopName)
-
-                                            Connections {
-                                                function onDisabledDesktopsChanged() {
-                                                    desktopRow.desktopActive = !root.settingsBridge.isDesktopDisabled(monitorDelegate.screenName, desktopRow.desktopNumber);
-                                                }
-
-                                                target: root.settingsBridge
-                                            }
-
                                         }
-
                                     }
-
                                 }
-
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // ── Activities ────────────────────────────────────────────────
@@ -318,7 +304,6 @@ SettingsFlickable {
                                     font.italic: true
                                     opacity: 0.7
                                 }
-
                             }
 
                             Repeater {
@@ -330,7 +315,6 @@ SettingsFlickable {
                                     required property var modelData
                                     required property int index
                                     property string screenName: modelData.name || ""
-                                    property bool activityActive: !root.settingsBridge.isActivityDisabled(screenName, activityDelegate.activityId)
 
                                     Layout.fillWidth: true
                                     Layout.leftMargin: Kirigami.Units.gridUnit * 2
@@ -350,33 +334,21 @@ SettingsFlickable {
                                     }
 
                                     Switch {
-                                        checked: activityScreenRow.activityActive
+                                        checked: {
+                                            void root.settingsBridge.disabledActivitiesTick;
+                                            return !root.settingsBridge.isActivityDisabled(activityScreenRow.screenName, activityDelegate.activityId);
+                                        }
                                         Accessible.name: i18n("Scrolling mode for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName)
                                         onToggled: {
                                             root.settingsBridge.setActivityDisabled(activityScreenRow.screenName, activityDelegate.activityId, !checked);
-                                            activityScreenRow.activityActive = checked;
                                         }
                                         ToolTip.visible: hovered
                                         ToolTip.text: checked ? i18n("Disable scrolling mode for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName) : i18n("Enable scrolling mode for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName)
-
-                                        Connections {
-                                            function onDisabledActivitiesChanged() {
-                                                activityScreenRow.activityActive = !root.settingsBridge.isActivityDisabled(activityScreenRow.screenName, activityDelegate.activityId);
-                                            }
-
-                                            target: root.settingsBridge
-                                        }
-
                                     }
-
                                 }
-
                             }
-
                         }
-
                     }
-
                 }
 
                 Kirigami.InlineMessage {
@@ -386,9 +358,7 @@ SettingsFlickable {
                     type: Kirigami.MessageType.Information
                     text: i18n("No activities found. Create activities in System Settings → Activities.")
                 }
-
             }
-
         }
 
         Kirigami.InlineMessage {
@@ -397,7 +367,5 @@ SettingsFlickable {
             type: Kirigami.MessageType.Information
             text: i18n("KDE Activities support is not available. Activity-based gating requires the KDE Activities service to be running.")
         }
-
     }
-
 }

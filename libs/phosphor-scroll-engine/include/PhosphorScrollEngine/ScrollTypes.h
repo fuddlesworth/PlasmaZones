@@ -39,6 +39,13 @@ inline constexpr int kMaxStripGap = 50;
 /// is wired — niri's default strip gap in logical pixels.
 inline constexpr int kDefaultStripGap = 8;
 
+/// Default virtual-desktop id used to seed ScrollEngine::m_currentDesktop and
+/// to normalise non-positive values read from a corrupt scroll-session.json.
+/// KWin numbers virtual desktops 1-based, so the field defaults to desktop 1
+/// rather than 0. Pulled into a named constant so the header default and any
+/// JSON normalisation path reference the same value.
+inline constexpr int kDefaultDesktopId = 1;
+
 /// A column's width, expressed as *intent* — resolved to pixels only at
 /// layout time. Mirrors niri's `ColumnWidth`: a column keeps its width when
 /// neighbouring columns open or close, so opening a window never reflows the

@@ -110,4 +110,13 @@ inline constexpr int SnapAssistThumbnailPostTimeoutMs = 2000;
 // the daemon has already evicted. 24 × 256² ARGB32 ≈ 6 MB on the daemon.
 inline constexpr int SnapAssistThumbnailCacheCapacity = 24;
 
+// Upper bound on entries accepted by the per-engine `windowsOpenedBatch`
+// D-Bus methods (org.plasmazones.Scroll, …Autotile, …Snap). The session bus
+// is unauthenticated within the user session, so a hostile or runaway peer
+// could otherwise submit a multi-MB array. 4096 entries comfortably covers
+// any realistic window count (Plasma sessions rarely exceed a few hundred);
+// a batch larger than this is rejected outright. Centralised here so a
+// future tuning bump moves every engine atomically.
+inline constexpr int MaxWindowsOpenedBatchEntries = 4096;
+
 } // namespace PhosphorProtocol::Service

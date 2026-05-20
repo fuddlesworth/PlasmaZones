@@ -38,6 +38,7 @@ set(plasmazones_settings_SRCS
     snappingshaderspagecontroller.cpp
     snappingzoneselectorcontroller.h
     snappingzoneselectorcontroller.cpp
+    scrollinglayoutcontroller.h
     tilingalgorithmcontroller.h
     tilingalgorithmcontroller.cpp
     tilingappearancecontroller.h

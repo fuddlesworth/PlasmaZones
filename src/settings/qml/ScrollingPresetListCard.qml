@@ -27,6 +27,12 @@ SettingsCard {
     // Fractions [0.1..1.0]; the page binds this to a Settings QVariantList.
     property var values: []
     property string description: ""
+    // Seed value for a freshly-added preset row. Defaults to the canonical
+    // "default column width" Setting so the new row matches the rest of the
+    // scroll-mode tuning out of the box; callers using this card for
+    // window-height presets can override per-page if needed. A literal 0.5
+    // would silently desync from any future change to that default.
+    property real defaultFraction: appSettings.scrollDefaultColumnWidth
 
     signal valuesModified(var values)
 
@@ -48,19 +54,20 @@ SettingsCard {
                 }
             }
             if (identical)
-                return ;
-
+                return;
         }
         presetModel.clear();
-        for (let i = 0; i < v.length; ++i) presetModel.append({
-            "fraction": v[i]
-        })
+        for (let i = 0; i < v.length; ++i)
+            presetModel.append({
+                "fraction": v[i]
+            });
     }
 
     // Emit the current model contents as the complete edited list.
     function emitValues() {
         let out = [];
-        for (let i = 0; i < presetModel.count; ++i) out.push(presetModel.get(i).fraction)
+        for (let i = 0; i < presetModel.count; ++i)
+            out.push(presetModel.get(i).fraction);
         card.valuesModified(out);
     }
 
@@ -111,7 +118,7 @@ SettingsCard {
                     stepSize: 1
                     value: Math.round(presetRow.fraction * 100)
                     Accessible.name: i18n("Preset %1 size in percent", presetRow.index + 1)
-                    textFromValue: function(value, locale) {
+                    textFromValue: function (value, locale) {
                         return Number(value).toLocaleString(locale, 'f', 0) + "%";
                     }
                     onValueModified: {
@@ -137,9 +144,7 @@ SettingsCard {
                         card.emitValues();
                     }
                 }
-
             }
-
         }
 
         Button {
@@ -148,12 +153,10 @@ SettingsCard {
             icon.name: "list-add"
             onClicked: {
                 presetModel.append({
-                    "fraction": 0.5
+                    "fraction": card.defaultFraction
                 });
                 card.emitValues();
             }
         }
-
     }
-
 }

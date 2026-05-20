@@ -1086,6 +1086,7 @@ public:
 
     // The 8 is niri's default strip gap — intentionally independent of the
     // snapping/autotile gap defaults, which derive from Defaults:: constants.
+    // Reuses autotile gap bounds; scroll has no separate clamp today.
     static constexpr int scrollInnerGap()
     {
         return 8;
@@ -1100,6 +1101,7 @@ public:
     }
     // The 8 is niri's default strip gap — intentionally independent of the
     // snapping/autotile gap defaults, which derive from Defaults:: constants.
+    // Reuses autotile gap bounds; scroll has no separate clamp today.
     static constexpr int scrollOuterGap()
     {
         return 8;

@@ -86,6 +86,7 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorEngine/IScrollNavigation.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -997,9 +998,9 @@ bool Daemon::init()
     // Create both placement engines and the mode router via factory.
     // The factory returns concrete types; we grab raw pointers for adaptor
     // wiring before moving into the base-class unique_ptr members.
-    auto engines = createEngines(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_screenManager.get(),
-                                 m_algorithmRegistry.get(), m_zoneDetector.get(), m_settings.get(),
-                                 m_virtualDesktopManager.get(), m_windowRegistry.get());
+    auto engines = createBuiltInEngines(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
+                                        m_screenManager.get(), m_algorithmRegistry.get(), m_zoneDetector.get(),
+                                        m_settings.get(), m_virtualDesktopManager.get(), m_windowRegistry.get());
     auto* autotileEngine = engines.autotile.get();
     auto* snapEngine = engines.snap.get();
     auto* scrollEngine = engines.scroll.get();
@@ -1013,6 +1014,16 @@ bool Daemon::init()
     // derived type. Per-call dynamic_cast on the hot path was the previous
     // shape; caching avoids RTTI on every onScrollPlacementChanged.
     m_scrollEngineCached = dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    // RTTI-visibility canary: navigation handlers cross-cast m_scrollEngine to
+    // IScrollNavigation* per-shortcut (scroll.cpp:140). That dynamic_cast
+    // crosses the libphosphor-scroll-engine ↔ daemon shared-library boundary
+    // and silently returns nullptr if PHOSPHORENGINE_EXPORT loses default
+    // visibility on IScrollNavigation's typeinfo — every scroll shortcut
+    // would then degrade to a no-op in release builds with no diagnostic.
+    // One-time assertion at engine wiring guarantees the build catches this
+    // class of regression immediately.
+    Q_ASSERT_X(dynamic_cast<PhosphorEngine::IScrollNavigation*>(m_scrollEngine.get()) != nullptr, "Daemon::start",
+               "ScrollEngine cross-cast to IScrollNavigation failed (RTTI visibility regression?)");
     m_screenModeRouter = std::move(engines.router);
 
     // ScrollEngine is geometry-agnostic: when its strip state changes the
@@ -1103,7 +1114,7 @@ bool Daemon::init()
                 }
             });
 
-    // ScreenModeRouter was created by createEngines() above; wire it to WTA.
+    // ScreenModeRouter was created by createBuiltInEngines() above; wire it to WTA.
     m_windowTrackingAdaptor->setScreenModeRouter(m_screenModeRouter.get());
 
     // m_virtualScreenStore is constructed in the initializer list (it's a
@@ -1693,12 +1704,18 @@ void Daemon::stop()
     // a dangling pointer. Then destroy the router.
     m_screenModeRouter.reset();
 
-    // Destroy engines now (during stop(), before Qt child destruction order).
-    // Null the scroll-engine cache BEFORE the unique_ptr resets so a late call
-    // to scrollEngine() during teardown returns nullptr instead of dangling.
+    // Destroy engines now (during stop(), before Qt child destruction order),
+    // in the strict reverse of the createBuiltInEngines construction order
+    // (autotile, snap, scroll). SnapEngine holds a back-pointer to
+    // AutotileEngine (set via SnapEngine::setAutotileEngine in
+    // enginefactory.cpp), so snap MUST be reset before autotile or its
+    // dtor would dereference a freed engine. Scroll has no cross-wires and
+    // can leave first. Null the scroll-engine cache BEFORE the unique_ptr
+    // resets so a late call to scrollEngine() during teardown returns
+    // nullptr instead of dangling.
     m_scrollEngineCached = nullptr;
-    m_snapEngine.reset();
     m_scrollEngine.reset();
+    m_snapEngine.reset();
     m_autotileEngine.reset();
 
     // Unregister D-Bus object path and service to prevent late calls during shutdown

@@ -103,6 +103,12 @@ void Daemon::updateScrollScreens()
 
     const QSet<QString> previousActive = m_scrollEngine->activeScreens();
     const bool screensChanged = (previousActive != scrollScreens);
+    // Track the master-gate transition (any-screen-active flip). The D-Bus
+    // surface exposes `enabled` as a Q_PROPERTY mirroring AutotileAdaptor —
+    // emit on the empty/non-empty boundary rather than every single
+    // scroll-screen reshuffle.
+    const bool wasEnabled = !previousActive.isEmpty();
+    const bool isEnabled = !scrollScreens.isEmpty();
     if (screensChanged) {
         m_scrollEngine->setActiveScreens(scrollScreens);
         // Invalidate the per-screen geometry cache for any screen leaving
@@ -140,6 +146,14 @@ void Daemon::updateScrollScreens()
             // accessor that backs the scrollScreens property — so the signal
             // and a subsequent property read cannot disagree.
             Q_EMIT m_scrollAdaptor->scrollScreensChanged(m_scrollAdaptor->scrollScreens());
+            if (wasEnabled != isEnabled) {
+                // Master gate flip: emit alongside scrollScreensChanged so a
+                // subscriber that listens only on `enabled` (rather than
+                // diffing the screen list) sees the global on/off transition.
+                // Mirrors AutotileAdaptor::enabledChanged which the autotile
+                // engine emits on the same any-screen-active boundary.
+                Q_EMIT m_scrollAdaptor->enabledChanged(isEnabled);
+            }
         }
     }
     qCDebug(lcDaemon) << "Updated scroll screens=" << scrollScreens;
@@ -147,6 +161,14 @@ void Daemon::updateScrollScreens()
 
 void Daemon::onScrollPlacementChanged(const QString& screenId)
 {
+    // Stay silent during shutdown — a late engine `placementChanged` emit on
+    // the way out would otherwise resolve geometry and dispatch
+    // `applyGeometriesBatch` to a soon-to-be-unregistered WindowTrackingAdaptor.
+    // Mirrors the m_shuttingDown gating used elsewhere in stop() teardown
+    // (warnCompositorBridgeMissing / OSD).
+    if (m_shuttingDown) {
+        return;
+    }
     if (screenId.isEmpty() || !m_scrollEngine || !m_screenManager || !m_windowTrackingAdaptor) {
         return;
     }

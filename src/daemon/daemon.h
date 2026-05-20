@@ -665,7 +665,7 @@ private:
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_scrollEngine;
     /// Cached down-cast of m_scrollEngine to its concrete type. Set once when
-    /// the engine is constructed (daemon::start.cpp's createEngines path) and
+    /// the engine is constructed (daemon::start.cpp's createBuiltInEngines path) and
     /// nulled in stop() before m_scrollEngine.reset(). The concrete-type API
     /// (effective*(), serialize/deserializeEngineState, hasPersistableState,
     /// reconcileRestoredWindows, applyPerScreenConfig) is reached through this

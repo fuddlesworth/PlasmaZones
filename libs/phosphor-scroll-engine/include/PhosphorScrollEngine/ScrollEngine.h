@@ -216,7 +216,7 @@ private:
     std::unordered_map<PhosphorEngine::TilingStateKey, ScrollScreenState, TilingStateKeyHash> m_states;
     QHash<QString, PhosphorEngine::TilingStateKey> m_windowToKey;
     QSet<QString> m_activeScreens;
-    int m_currentDesktop = 1;
+    int m_currentDesktop = kDefaultDesktopId;
     QString m_currentActivity;
     QString m_activeScreen;
     /// Per-screen config overrides, keyed by screenId (screen-only, like

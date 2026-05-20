@@ -11,12 +11,13 @@
 
 namespace PlasmaZones {
 
-EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
-                        PhosphorPlacement::WindowTrackingService* windowTracker,
-                        Phosphor::Screens::ScreenManager* screenManager,
-                        PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
-                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
-                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry)
+EngineSet createBuiltInEngines(PhosphorZones::LayoutRegistry* layoutManager,
+                               PhosphorPlacement::WindowTrackingService* windowTracker,
+                               Phosphor::Screens::ScreenManager* screenManager,
+                               PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
+                               PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
+                               PhosphorWorkspaces::VirtualDesktopManager* vdm,
+                               PhosphorEngine::WindowRegistry* windowRegistry)
 {
     // --- AutotileEngine ---
     auto autotile = std::make_unique<PhosphorTileEngine::AutotileEngine>(layoutManager, windowTracker, screenManager,

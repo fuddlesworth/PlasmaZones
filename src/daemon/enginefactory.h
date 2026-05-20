@@ -60,12 +60,19 @@ struct EngineSet
 };
 
 /**
- * @brief Create all three placement engines (snap, autotile, scroll) and the mode router.
+ * @brief Create the three built-in placement engines (snap, autotile, scroll) and the mode router.
  *
  * Concrete engine headers are included in the .cpp — the factory header
  * only forward-declares them. The caller (Daemon) must wire persistence
  * delegates, signal connections, and adaptor setup after receiving the
  * returned EngineSet.
+ *
+ * The "BuiltIn" qualifier signals that this is the interim factory shape:
+ * the eventual plugin architecture (see project_plugin_architecture memory)
+ * will replace this with a registry-iterating factory that returns a
+ * `std::vector<std::unique_ptr<IPlacementEngine>>` and has zero concrete
+ * engine knowledge in the daemon. Until that lands, this function
+ * intentionally hardcodes the three modes.
  *
  * Pointer-type guide (for the daemon and its consumers):
  * - PlacementEngineBase* — when you need QObject signal connections
@@ -83,11 +90,12 @@ struct EngineSet
  * @param windowRegistry  Window registry for class lookups (borrowed)
  * @return EngineSet with all three objects constructed
  */
-EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
-                        PhosphorPlacement::WindowTrackingService* windowTracker,
-                        Phosphor::Screens::ScreenManager* screenManager,
-                        PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
-                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
-                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry);
+EngineSet createBuiltInEngines(PhosphorZones::LayoutRegistry* layoutManager,
+                               PhosphorPlacement::WindowTrackingService* windowTracker,
+                               Phosphor::Screens::ScreenManager* screenManager,
+                               PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
+                               PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
+                               PhosphorWorkspaces::VirtualDesktopManager* vdm,
+                               PhosphorEngine::WindowRegistry* windowRegistry);
 
 } // namespace PlasmaZones

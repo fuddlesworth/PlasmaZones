@@ -172,15 +172,28 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     }
 
     // Keep the border in sync when the window resizes or moves.
-    const QString wid = windowId; // capture by value
+    //
+    // Capture a non-owning QPointer to the OutlinedBorderItem rather than the
+    // windowId + per-frame QHash lookup the previous form used: a 4-pointer
+    // hash probe per windowFrameGeometryChanged signal added up across drag /
+    // resize streams (every pixel of a fast resize fires the signal). The
+    // lifecycle invariant that makes this safe lives in removeWindowBorder
+    // (borders.cpp:38–43): wb.item->deleteLater() is followed by
+    // QObject::disconnect(wb.geometryConnection) BEFORE m_windowBorders.erase,
+    // so once a border is removed the lambda is severed and never observes a
+    // dangling pointer. The QPointer guard further covers the unlikely case
+    // where Qt parent-child ownership destroys the OutlinedBorderItem outside
+    // removeWindowBorder (item is parented to WindowItem) — a still-connected
+    // lambda then sees a null QPointer and no-ops.
+    const QPointer<KWin::OutlinedBorderItem> itemPtr = wb.item;
     wb.geometryConnection =
         connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
-                [this, wid, bw](KWin::EffectWindow* ew, const QRectF& /*oldGeo*/) {
-                    auto it = m_windowBorders.find(wid);
-                    if (it != m_windowBorders.end() && it->item) {
-                        const QRectF f = ew->frameGeometry();
-                        it->item->setInnerRect(KWin::RectF(bw, bw, f.width() - 2.0 * bw, f.height() - 2.0 * bw));
+                [itemPtr, bw](KWin::EffectWindow* ew, const QRectF& /*oldGeo*/) {
+                    if (!itemPtr) {
+                        return;
                     }
+                    const QRectF f = ew->frameGeometry();
+                    itemPtr->setInnerRect(KWin::RectF(bw, bw, f.width() - 2.0 * bw, f.height() - 2.0 * bw));
                 });
 
     m_windowBorders.insert(windowId, wb);

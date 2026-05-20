@@ -24,14 +24,24 @@ ScreenModeRouter::ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager,
 
 PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& screenId) const
 {
-    // Prefer the autotile engine's live set: it reflects the actual
-    // runtime state including per-screen overrides that the layout
-    // manager's cascade doesn't know about. Fall back to the layout
-    // manager for screens the engine hasn't seen yet.
-    if (m_autotileEngine->isActiveOnScreen(screenId)) {
+    // Prefer the engines' live sets: they reflect the actual runtime state
+    // including per-screen overrides that the layout manager's cascade
+    // doesn't know about. Fall back to the layout manager for screens the
+    // engines haven't seen yet.
+    //
+    // Mutual exclusion: a screen can be active in autotile OR scroll, never
+    // both. Updating the active set is the responsibility of
+    // updateAutotileScreens / updateScrollScreens; if both ever flag the same
+    // screen we silently let autotile win below — fail loudly in debug builds
+    // so the underlying bug surfaces immediately.
+    const bool autotileActive = m_autotileEngine->isActiveOnScreen(screenId);
+    const bool scrollActive = m_scrollEngine->isActiveOnScreen(screenId);
+    Q_ASSERT_X(!(autotileActive && scrollActive), "ScreenModeRouter::modeFor",
+               "screen reported active in both autotile and scroll engines");
+    if (autotileActive) {
         return PhosphorZones::AssignmentEntry::Autotile;
     }
-    if (m_scrollEngine->isActiveOnScreen(screenId)) {
+    if (scrollActive) {
         return PhosphorZones::AssignmentEntry::Scroll;
     }
     const int desktop = m_layoutManager->currentVirtualDesktop();

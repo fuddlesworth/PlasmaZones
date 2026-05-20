@@ -47,11 +47,10 @@ SettingsFlickable {
 
                         checked: appSettings.scrollUseSystemBorderColors
                         accessibleName: i18n("Use system accent color")
-                        onToggled: function(newValue) {
+                        onToggled: function (newValue) {
                             appSettings.scrollUseSystemBorderColors = newValue;
                         }
                     }
-
                 }
 
                 SettingsSeparator {
@@ -70,7 +69,6 @@ SettingsFlickable {
                             activeBorderColorDialog.open();
                         }
                     }
-
                 }
 
                 SettingsSeparator {
@@ -89,11 +87,8 @@ SettingsFlickable {
                             inactiveBorderColorDialog.open();
                         }
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -114,15 +109,12 @@ SettingsFlickable {
                     SettingsSwitch {
                         checked: appSettings.scrollHideTitleBars
                         accessibleName: i18n("Hide title bars on scroll-managed windows")
-                        onToggled: function(newValue) {
+                        onToggled: function (newValue) {
                             appSettings.scrollHideTitleBars = newValue;
                         }
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -133,7 +125,7 @@ SettingsFlickable {
             headerText: i18n("Borders")
             showToggle: true
             toggleChecked: appSettings.scrollShowBorder
-            onToggleClicked: (checked) => {
+            onToggleClicked: checked => {
                 return appSettings.scrollShowBorder = checked;
             }
             collapsible: true
@@ -146,43 +138,34 @@ SettingsFlickable {
                     description: i18n("Thickness of colored borders around scroll columns")
 
                     SettingsSpinBox {
-                        from: 0
-                        // Matches the Scrolling.Appearance.Borders schema clamp
-                        // (ConfigDefaults::scrollBorderWidthMax) — a larger
-                        // value would be silently truncated on save.
-                        to: 10
+                        // Bounds surfaced by ScrollingLayoutController so the
+                        // UI and the schema clamp stay in lockstep.
+                        from: settingsController.scrollingLayoutPage.scrollBorderWidthMin
+                        to: settingsController.scrollingLayoutPage.scrollBorderWidthMax
                         value: appSettings.scrollBorderWidth
-                        onValueModified: (value) => {
+                        onValueModified: value => {
                             return appSettings.scrollBorderWidth = value;
                         }
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Corner radius")
                     description: i18n("Roundness of border corners (0 for square)")
 
                     SettingsSpinBox {
-                        from: 0
-                        // Matches the Scrolling.Appearance.Borders schema clamp
-                        // (ConfigDefaults::scrollBorderRadiusMax).
-                        to: 20
+                        from: settingsController.scrollingLayoutPage.scrollBorderRadiusMin
+                        to: settingsController.scrollingLayoutPage.scrollBorderRadiusMax
                         value: appSettings.scrollBorderRadius
-                        onValueModified: (value) => {
+                        onValueModified: value => {
                             return appSettings.scrollBorderRadius = value;
                         }
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // =====================================================================
@@ -201,5 +184,4 @@ SettingsFlickable {
         title: i18n("Choose Inactive Border Color")
         onAccepted: appSettings.scrollInactiveBorderColor = selectedColor
     }
-
 }

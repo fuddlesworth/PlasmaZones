@@ -19,6 +19,8 @@
 #include <QLoggingCategory>
 #include <QTimer>
 
+#include <tuple>
+
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
@@ -106,16 +108,21 @@ void ScrollHandler::onWindowDragFinished(KWin::EffectWindow* w)
         } else if (dropX > slot.right()) {
             distance = dropX - slot.right();
         }
-        const bool fresh = (bestDistance < 0);
-        const bool closerColumn = !fresh && (distance < bestDistance);
-        const bool sameDistanceLeftmostColumn = !fresh && (distance == bestDistance) && (slot.left() < bestLeft);
-        // Stacked-column tile pick: when the column itself is the anchor (same
-        // distance AND same left edge), break on otherId lexicographic so the
-        // result is deterministic. Without this, QHash iteration order picks
-        // arbitrarily among tiles in the same column.
-        const bool sameColumnLexicographicTile =
-            !fresh && (distance == bestDistance) && (slot.left() == bestLeft) && (otherId < anchorId);
-        if (fresh || closerColumn || sameDistanceLeftmostColumn || sameColumnLexicographicTile) {
+        // Lexicographic ordering on (distance ascending, left edge ascending,
+        // windowId ascending) replaces the previous four-flag chain. The
+        // semantics it preserves:
+        //   1. closer column wins (smaller distance);
+        //   2. tied distance → leftmost column wins (smaller left edge);
+        //   3. tied column (same distance, same left edge — i.e. tiles in a
+        //      stacked column) → lowest windowId wins, so the chosen anchor
+        //      is reproducible across QHash iteration orders / hash seeds.
+        // The "fresh" branch (no candidate yet) is folded in via the empty
+        // anchorId sentinel: an empty current best loses every comparison.
+        // QString is implicitly shared so the per-iteration tuple build is
+        // cheap (refcount bump, not a string copy).
+        const std::tuple<int, int, QString> candidate{distance, slot.left(), otherId};
+        const std::tuple<int, int, QString> current{bestDistance, bestLeft, anchorId};
+        if (anchorId.isEmpty() || candidate < current) {
             bestDistance = distance;
             bestLeft = slot.left();
             anchorId = otherId;

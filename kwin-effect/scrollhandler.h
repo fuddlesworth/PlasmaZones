@@ -284,12 +284,25 @@ private:
     /// hit the exact tile rect (X11 size increments) does not loop.
     QSet<QString> m_reasserted;
     QTimer* m_reassertTimer = nullptr;
+    /// Re-entrancy guard for flushReasserts. applySnapGeometry inside the
+    /// flush loop emits windowFrameGeometryChanged synchronously, which
+    /// re-enters onWindowFrameGeometryChanged for OTHER pending windows —
+    /// without this guard a reasserting window's resize signal would let
+    /// another pending window observe stale geometry and queue a redundant
+    /// (or contradictory) re-assert mid-flush. Mirrors AutotileHandler::
+    /// m_inOutputChanged. Manual bool + try/finally pattern (matching the
+    /// autotile sister) rather than a QScopedValueRollback, so the guard's
+    /// intent is visible inline.
+    bool m_inFlushReasserts = false;
     /// Incremented on every daemon (re)connect. A D-Bus reply captures the
     /// epoch at call time and skips its rollback if the daemon reconnected
     /// meanwhile — onDaemonReady has already rebuilt the tracking sets.
-    /// Unsigned: the increment is a pure generation counter and unsigned wrap
-    /// is well-defined, whereas signed overflow would be UB.
-    unsigned m_daemonEpoch = 0;
+    /// quint64 to match AutotileHandler::m_autotileStaggerGeneration — both
+    /// are pure monotonic generation counters and the wider type pushes any
+    /// theoretical wrap so far out it never matters in practice. Unsigned
+    /// because the increment is a generation counter and unsigned wrap is
+    /// well-defined, whereas signed overflow would be UB.
+    quint64 m_daemonEpoch = 0;
 
     /// Scroll-mode border decoration settings. Only the scalar fields are used
     /// (showBorder / hideTitleBars / width / radius / color / inactiveColor) —

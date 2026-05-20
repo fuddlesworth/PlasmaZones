@@ -78,14 +78,28 @@ void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w, bool focusOnAdd)
     m_notifiedWindows.insert(windowId);
     m_notifiedWindowScreens[windowId] = screenId;
 
+    const bool wantFocusOnSuccess = focusOnAdd && m_focusNewWindows;
     auto* watcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scroll,
                                                    QStringLiteral("windowOpened"), {windowId, screenId}),
         this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, windowId, epoch = m_daemonEpoch](QDBusPendingCallWatcher* watcher) {
+            [this, windowId, wantFocusOnSuccess, epoch = m_daemonEpoch](QDBusPendingCallWatcher* watcher) {
                 watcher->deleteLater();
                 if (!watcher->isError()) {
+                    // Daemon accepted the open — only NOW is it safe to steal
+                    // focus. A rejected open (cap exceeded, daemon refusal)
+                    // must not leave a non-tracked window holding activation
+                    // it took from the previous focus owner. Skip the focus
+                    // step if the daemon reconnected meanwhile — the ack
+                    // belongs to the prior session, onDaemonReady rebuilt
+                    // tracking from scratch, and the next windowsOpenedBatch
+                    // re-announce intentionally does not steal focus.
+                    if (wantFocusOnSuccess && epoch == m_daemonEpoch) {
+                        if (KWin::EffectWindow* live = m_effect->findWindowById(windowId)) {
+                            KWin::effects->activateWindow(live);
+                        }
+                    }
                     return;
                 }
                 qCWarning(lcEffect) << "scroll windowOpened D-Bus call failed for" << windowId << ":"
@@ -99,10 +113,10 @@ void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w, bool focusOnAdd)
                     // The window never joined the engine — undo the decoration
                     // applied synchronously below so a failed open cannot leave
                     // it chrome-less (title bar hidden, untracked, with nothing
-                    // left to restore it until the next daemon reconnect). The
-                    // focus-new-windows activateWindow() is deliberately NOT
-                    // rolled back: a genuinely-opened window legitimately holds
-                    // focus regardless of whether the scroll engine accepted it.
+                    // left to restore it until the next daemon reconnect).
+                    // Focus is NOT touched here either: activateWindow now
+                    // lives in the success branch above, so a rejected open
+                    // simply never steals focus in the first place.
                     clearDecoration(windowId, m_effect->findWindowById(windowId));
                 }
             });
@@ -114,18 +128,17 @@ void ScrollHandler::notifyWindowAdded(KWin::EffectWindow* w, bool focusOnAdd)
     // path decorates one window instead of rebuilding the whole strip
     // (refreshDecorations() — reserved for the batch path). w is non-minimized
     // here: isEligibleForScroll rejects minimized windows.
+    //
+    // Decoration is still applied synchronously even though focus is gated on
+    // the daemon ack: the rollback above clears it on rejection, and applying
+    // it eagerly avoids a one-frame chrome-flash on the common (accepted) path.
     if (m_border.hideTitleBars) {
         setWindowBorderless(w, windowId, true);
     }
     m_effect->updateWindowBorder(windowId, w);
 
-    // Focus-new-windows: a genuinely-opened window takes focus. Only the
-    // window-open path passes focusOnAdd — re-add callers (screen change,
-    // sticky toggle, un-minimize) and notifyWindowsAddedBatch (startup /
-    // daemon reconnect) deliberately do not steal focus.
-    if (focusOnAdd && m_focusNewWindows) {
-        KWin::effects->activateWindow(w);
-    }
+    // Focus-new-windows is deferred to the watcher's success branch above —
+    // a daemon-rejected open must not steal focus from the previous owner.
 }
 
 void ScrollHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows)
@@ -368,6 +381,16 @@ void ScrollHandler::onWindowFrameGeometryChanged(KWin::EffectWindow* w)
     if (!w) {
         return;
     }
+    // Re-entrancy guard: applySnapGeometry inside flushReasserts emits
+    // windowFrameGeometryChanged synchronously, which re-enters this slot for
+    // OTHER pending windows. Suppress every drift evaluation while the flush
+    // loop runs — the loop already iterates m_reassertPending and applies a
+    // single re-assert per window per episode. Allowing the synchronous
+    // re-entry would let one window's resize signal trigger a redundant
+    // re-assert evaluation against another pending window's stale geometry.
+    if (m_inFlushReasserts) {
+        return;
+    }
     // Never correct geometry mid interactive move/resize — that would fight
     // the user's drag. A minimized window is not in the visible layout, so its
     // frame changes are KWin bookkeeping, not an app resize. After an
@@ -422,6 +445,17 @@ void ScrollHandler::flushReasserts()
 {
     const QStringList pending(m_reassertPending.cbegin(), m_reassertPending.cend());
     m_reassertPending.clear();
+    // Re-entrancy guard: applySnapGeometry below emits
+    // windowFrameGeometryChanged synchronously, which re-enters
+    // onWindowFrameGeometryChanged. The slot consults m_inFlushReasserts and
+    // bails — without this, one window's re-assert would let another pending
+    // window observe its own stale frameGeometry mid-loop and queue a fresh
+    // (redundant or contradictory) re-assert against it. Mirrors the pattern
+    // AutotileHandler::handleWindowOutputChanged uses for m_inOutputChanged.
+    m_inFlushReasserts = true;
+    const auto guard = qScopeGuard([this] {
+        m_inFlushReasserts = false;
+    });
     for (const QString& windowId : pending) {
         const auto it = m_appliedGeometry.constFind(windowId);
         if (it == m_appliedGeometry.constEnd() || !m_notifiedWindows.contains(windowId)) {

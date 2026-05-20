@@ -5,6 +5,7 @@
 
 #include "core/logging.h"
 
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
 #include <QSet>
@@ -35,6 +36,14 @@ QStringList ScrollAdaptor::scrollScreens() const
     return ids;
 }
 
+bool ScrollAdaptor::enabled() const
+{
+    if (!m_engine) {
+        return false;
+    }
+    return m_engine->isEnabled();
+}
+
 void ScrollAdaptor::clearEngine()
 {
     m_engine = nullptr;
@@ -57,21 +66,17 @@ void ScrollAdaptor::windowOpened(const QString& windowId, const QString& screenI
     m_engine->windowOpened(windowId, screenId);
 }
 
-// Upper bound on entries accepted by windowsOpenedBatch. The session bus is
-// unauthenticated within the user session, so a hostile or runaway peer could
-// otherwise submit a multi-MB array. 4096 entries comfortably covers any
-// realistic window count (Plasma sessions rarely exceed a few hundred); a
-// batch larger than this is rejected outright.
-constexpr int kMaxWindowsOpenedBatchEntries = 4096;
-
 void ScrollAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList& entries)
 {
     if (!ensureEngine("windowsOpenedBatch")) {
         return;
     }
-    if (entries.size() > kMaxWindowsOpenedBatchEntries) {
+    // Cap is shared with the autotile / snap windowsOpenedBatch surfaces;
+    // see PhosphorProtocol::Service::MaxWindowsOpenedBatchEntries for the
+    // rationale (session-bus DOS protection).
+    if (entries.size() > PhosphorProtocol::Service::MaxWindowsOpenedBatchEntries) {
         qCWarning(lcDaemon) << "ScrollAdaptor::windowsOpenedBatch rejected: entry count" << entries.size()
-                            << "exceeds cap" << kMaxWindowsOpenedBatchEntries;
+                            << "exceeds cap" << PhosphorProtocol::Service::MaxWindowsOpenedBatchEntries;
         return;
     }
     // WindowOpenedList is shared with org.plasmazones.Autotile and carries
@@ -81,10 +86,23 @@ void ScrollAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
     // skipped at this boundary so a malformed entry can't corrupt the
     // reconcile set (an empty-string id would never match any live window
     // and would silently prune a real one).
+    //
+    // Active-screen validation: a misbehaving effect (or a stale wire payload
+    // racing a mode-switch) could otherwise forward windows on screens that
+    // are NOT in scroll mode, which would create dormant ScrollScreenStates
+    // for phantom screens that nothing ever prunes. Reject per-entry against
+    // the engine's live `activeScreens()` set rather than failing the whole
+    // batch — a partial payload still reconciles the screens that ARE valid.
+    const QSet<QString> activeScreens = m_engine->activeScreens();
     QSet<QString> liveWindowIds;
     liveWindowIds.reserve(entries.size());
     for (const PhosphorProtocol::WindowOpenedEntry& entry : entries) {
         if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
+            continue;
+        }
+        if (!activeScreens.contains(entry.screenId)) {
+            qCWarning(lcDaemon) << "ScrollAdaptor::windowsOpenedBatch dropping entry for inactive screen"
+                                << entry.screenId << "windowId=" << entry.windowId;
             continue;
         }
         // Dedupe before forwarding: a malformed wire payload with the same id

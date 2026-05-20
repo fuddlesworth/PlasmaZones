@@ -3,76 +3,99 @@
 <!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <node>
-    <!--
-        org.plasmazones.Scroll — niri-style scrollable-tiling control.
-
-        The KWin effect reports window lifecycle for screens in scroll mode to
-        this interface; the daemon forwards each event to the ScrollEngine.
-        Window geometry flows back to the effect over org.plasmazones.WindowTracking
-        (applyGeometriesBatch), shared with the other placement modes.
-    -->
     <interface name="org.plasmazones.Scroll">
-        <!-- Screens currently in scroll mode. The effect subscribes to the
-             change signal so it knows whose windows to report here. -->
-        <property name="scrollScreens" type="as" access="read"/>
+        <annotation name="org.gtk.GDBus.DocString" value="Niri-style scrollable-tiling control. The KWin effect reports window lifecycle for screens in scroll mode here; the daemon forwards each event to the ScrollEngine. Window geometry flows back to the effect over org.plasmazones.WindowTracking (applyGeometriesBatch), shared with the other placement modes."/>
 
-        <signal name="scrollScreensChanged">
-            <arg name="screenIds" type="as"/>
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Properties
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <property name="enabled" type="b" access="read">
+            <annotation name="org.gtk.GDBus.DocString" value="Whether scroll mode is active on any screen (read-only, derived from the engine's any-screen-active state)."/>
+        </property>
+
+        <property name="scrollScreens" type="as" access="read">
+            <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using scroll mode. The effect subscribes to scrollScreensChanged so it knows whose windows to report on this interface."/>
+        </property>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Signals
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <signal name="enabledChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the master scroll-mode gate flips (any-screen-active → none, or vice versa)."/>
+            <arg name="enabled" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="New enabled state."/>
+            </arg>
         </signal>
 
-        <!-- A new window appeared on a scroll-mode screen. -->
+        <signal name="scrollScreensChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of screens using scroll mode changes."/>
+            <arg name="screenIds" type="as">
+                <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using scroll mode."/>
+            </arg>
+        </signal>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Window Event Notifications (called by KWin effect)
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
         <method name="windowOpened">
-            <arg name="windowId" type="s" direction="in"/>
-            <arg name="screenId" type="s" direction="in"/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window appeared on a scroll-mode screen."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
+            </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window appeared."/>
+            </arg>
         </method>
 
-        <!-- Batch form used on daemon startup / mode toggle-on to avoid
-             per-window D-Bus round-trips. The (ssii) entry struct is shared
-             with org.plasmazones.Autotile; scroll's strip model is
-             size-agnostic, so the trailing minWidth/minHeight ints are
-             ignored (non-resizable windows are fitted to the tile slot
-             effect-side).
-
-             SECONDARY ROLE — restore reconcile signal: the FIRST batch the
-             effect sends after a (re)connect doubles as the live-window
-             reconcile for any strip restored from scroll-session.json. The
-             daemon treats it as the complete live scroll-window set across
-             every scroll screen; restored windows that the batch does not
-             confirm are pruned (their column dropped when it empties), so
-             the empty batch case is meaningful and MUST be sent. Subsequent
-             batches are routine and the reconcile path no-ops. -->
         <method name="windowsOpenedBatch">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch form of windowOpened used on daemon startup / scroll-mode toggle-on to avoid per-window D-Bus round-trips. The (ssii) entry struct is shared with org.plasmazones.Autotile; scroll's strip model is size-agnostic, so the trailing minWidth/minHeight ints are ignored (non-resizable windows are fitted to the tile slot effect-side). SECONDARY ROLE — restore reconcile signal: the FIRST batch the effect sends after a (re)connect doubles as the live-window reconcile for any strip restored from scroll-session.json. The daemon treats it as the complete live scroll-window set; restored windows that the batch does not confirm are pruned (their column dropped when it empties), so the empty batch case is meaningful and MUST be sent. Subsequent batches are routine and the reconcile path no-ops."/>
             <arg name="entries" type="a(ssii)" direction="in">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.In0"
-                            value="PhosphorProtocol::WindowOpenedList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PhosphorProtocol::WindowOpenedList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, screenId, minWidth, minHeight) entries; minWidth/minHeight are ignored by scroll."/>
             </arg>
         </method>
 
         <method name="windowClosed">
-            <arg name="windowId" type="s" direction="in"/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a scroll-mode window was closed."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
+            </arg>
         </method>
 
         <method name="notifyWindowFocused">
-            <arg name="windowId" type="s" direction="in"/>
-            <arg name="screenId" type="s" direction="in"/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a scroll-mode window gained focus. Updates the engine's active column / tile and triggers a viewport scroll if the new focus falls outside the visible viewport."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID that gained focus."/>
+            </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the focused window is located."/>
+            </arg>
         </method>
 
-        <!-- A scroll-mode window was minimized (true) or restored (false).
-             A minimized window keeps its slot in the strip but drops out of
-             the visible layout. -->
         <method name="windowMinimizedChanged">
-            <arg name="windowId" type="s" direction="in"/>
-            <arg name="minimized" type="b" direction="in"/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a scroll-mode window was minimized (true) or restored (false). A minimized window keeps its slot in the strip but drops out of the visible layout."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID whose minimized state changed."/>
+            </arg>
+            <arg name="minimized" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the window was minimized, false if restored."/>
+            </arg>
         </method>
 
-        <!-- A scroll-mode window was drag-released (drag-to-reorder). Its
-             column is moved next to the anchor window's column — before it,
-             or after when placeAfter is true. The effect picks the anchor as
-             the on-strip window nearest the drop point. -->
         <method name="windowDropped">
-            <arg name="draggedWindowId" type="s" direction="in"/>
-            <arg name="anchorWindowId" type="s" direction="in"/>
-            <arg name="placeAfter" type="b" direction="in"/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a scroll-mode window was drag-released (drag-to-reorder). Its column is moved next to the anchor window's column — before it, or after when placeAfter is true. The effect picks the anchor as the on-strip window nearest the drop point."/>
+            <arg name="draggedWindowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID being dragged."/>
+            </arg>
+            <arg name="anchorWindowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID of the on-strip anchor nearest the drop point."/>
+            </arg>
+            <arg name="placeAfter" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True to place the dragged column after the anchor's column; false to place it before."/>
+            </arg>
         </method>
     </interface>
 </node>

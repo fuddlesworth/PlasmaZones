@@ -411,8 +411,16 @@ void ScrollEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
         return;
     }
     ScrollScreenState* state = stateForKey(it.value(), /*create=*/false);
-    if (!state || state->isFloating(windowId) == shouldFloat) {
-        // Already in the requested state — no transition, no signal.
+    if (!state) {
+        return;
+    }
+    // Already in the requested state — no transition, no signal. The
+    // isFloating==shouldFloat half catches the two equality paths
+    // (floating→float and tiled→tile, the latter being the "not floating,
+    // asked to un-float" case): isFloating returns false for a tiled window,
+    // and shouldFloat=false matches it, so the comparison guards both
+    // directions in one branch.
+    if (state->isFloating(windowId) == shouldFloat) {
         return;
     }
     if (shouldFloat) {
@@ -550,20 +558,17 @@ QJsonObject ScrollEngine::serializeEngineState() const
 
 void ScrollEngine::deserializeEngineState(const QJsonObject& state)
 {
-    // Full reset of every per-engine container before applying the persisted
-    // state. m_states/m_windowToKey were already cleared; the rest are
-    // session-time bookkeeping that the serialised JSON does not own (active
-    // screens, per-screen overrides, focus hint, current desktop/activity).
-    // Leaving them behind on a re-deserialise (e.g. a config-reload path)
-    // would carry stale config from the previous session into the restored
-    // strip and silently desync from the daemon's authoritative state.
+    // Reset only the persisted-shape containers — the strip states keyed by
+    // {screenId, desktop, activity} and the windowId→key index. The runtime
+    // context (m_currentDesktop / m_currentActivity / m_activeScreens / focus
+    // hint / per-screen overrides) is OWNED by the daemon: on boot it calls
+    // setCurrentDesktop / setActiveScreens / applyPerScreenConfig BEFORE
+    // handing the persisted JSON to the engine, so clearing those fields here
+    // would silently overwrite the daemon's authoritative live values with
+    // whatever defaults the engine carried at construction. Only m_states and
+    // m_windowToKey are derived from the JSON blob, so only they are reset.
     m_states.clear();
     m_windowToKey.clear();
-    m_perScreenConfig.clear();
-    m_activeScreens.clear();
-    m_activeScreen.clear();
-    m_currentDesktop = 1;
-    m_currentActivity.clear();
     const QJsonArray states = state.value(QLatin1String("states")).toArray();
     // Track every windowId already claimed by a previously-restored state so
     // a corrupt scroll-session.json with the same windowId in two states
@@ -578,10 +583,11 @@ void ScrollEngine::deserializeEngineState(const QJsonObject& state)
         const QJsonObject entry = value.toObject();
         // Validate desktop range at the persistence boundary: virtual desktops
         // are 1-based, so a zero or negative entry from corrupt JSON would
-        // create an unreachable state-key. Default to desktop 1 in that case
-        // so the strip surfaces somewhere rather than disappearing entirely.
-        const int rawDesktop = entry.value(QLatin1String("desktop")).toInt(1);
-        const int desktop = rawDesktop > 0 ? rawDesktop : 1;
+        // create an unreachable state-key. Default to kDefaultDesktopId in
+        // that case so the strip surfaces somewhere rather than disappearing
+        // entirely.
+        const int rawDesktop = entry.value(QLatin1String("desktop")).toInt(kDefaultDesktopId);
+        const int desktop = rawDesktop > 0 ? rawDesktop : kDefaultDesktopId;
         const TilingStateKey key{entry.value(QLatin1String("screenId")).toString(), desktop,
                                  entry.value(QLatin1String("activity")).toString()};
         if (key.screenId.isEmpty()) {

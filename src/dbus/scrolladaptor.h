@@ -38,6 +38,7 @@ class PLASMAZONES_EXPORT ScrollAdaptor : public QDBusAbstractAdaptor
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Scroll")
 
+    Q_PROPERTY(bool enabled READ enabled NOTIFY enabledChanged)
     Q_PROPERTY(QStringList scrollScreens READ scrollScreens NOTIFY scrollScreensChanged)
 
 public:
@@ -48,6 +49,15 @@ public:
      */
     explicit ScrollAdaptor(PhosphorScrollEngine::ScrollEngine* engine, QObject* parent = nullptr);
     ~ScrollAdaptor() override = default;
+
+    /// Whether scroll mode is globally enabled (master gate). Mirrors the
+    /// shape of AutotileAdaptor::enabled — exposed so external tooling can
+    /// query the master toggle without reading Settings directly. Sourced
+    /// from the engine's isEnabled() (any-screen-active), which the daemon
+    /// keeps in sync with `Settings::scrollingEnabled` via
+    /// `updateScrollScreens` — the gate empties activeScreens() when the
+    /// master toggle goes off.
+    bool enabled() const;
 
     /// Screens currently using scroll mode.
     QStringList scrollScreens() const;
@@ -87,6 +97,12 @@ public Q_SLOTS:
     void windowDropped(const QString& draggedWindowId, const QString& anchorWindowId, bool placeAfter);
 
 Q_SIGNALS:
+    /// Emitted when the master scroll-mode gate flips. The daemon emits this
+    /// when `updateScrollScreens` sees the engine's active set transition
+    /// between empty (gate off / no scroll-mode screens) and non-empty
+    /// (any scroll-mode screen active).
+    void enabledChanged(bool enabled);
+
     /// Emitted when the set of scroll-mode screens changes; the KWin effect
     /// subscribes so it reports the right screens' windows to this interface.
     void scrollScreensChanged(const QStringList& screenIds);

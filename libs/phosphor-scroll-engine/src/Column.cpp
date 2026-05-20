@@ -167,11 +167,33 @@ bool Column::moveTile(int from, int to)
     if (from < 0 || from >= m_tiles.size() || to < 0 || to >= m_tiles.size() || from == to) {
         return false;
     }
-    const QString activeId = (m_activeTileIndex >= 0) ? m_tiles.at(m_activeTileIndex).windowId : QString();
     const Tile tile = m_tiles.takeAt(from);
     m_tiles.insert(to, tile);
-    if (!activeId.isEmpty()) {
-        m_activeTileIndex = indexOfWindow(activeId);
+    // Recompute the active-tile index arithmetically rather than relinking by
+    // windowId: a takeAt(from)+insert(to) shifts a contiguous span by exactly
+    // one slot, and the active tile's new index is fully determined by the
+    // (from, to, prevActive) triple — no linear scan needed. The cases:
+    //
+    //   * the moved tile WAS the active one (m_activeTileIndex == from):
+    //     focus follows it to its new position `to`.
+    //   * the active tile sat strictly between `from` and `to` going
+    //     forward (from < m_activeTileIndex <= to): takeAt removed an
+    //     earlier slot, every tile from from+1..to shifts left by one, so
+    //     the active index decrements.
+    //   * the active tile sat strictly between `to` and `from` going
+    //     backward (to <= m_activeTileIndex < from): insert pushed every
+    //     tile from to..from-1 right by one, so the active index
+    //     increments.
+    //   * otherwise (the active tile is on the far side of both `from` and
+    //     `to`, or the column had no active tile): the index is unchanged.
+    if (m_activeTileIndex == from) {
+        m_activeTileIndex = to;
+    } else if (m_activeTileIndex >= 0) {
+        if (from < m_activeTileIndex && m_activeTileIndex <= to) {
+            --m_activeTileIndex;
+        } else if (to <= m_activeTileIndex && m_activeTileIndex < from) {
+            ++m_activeTileIndex;
+        }
     }
     return true;
 }

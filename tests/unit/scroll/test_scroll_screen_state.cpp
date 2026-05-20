@@ -29,6 +29,9 @@ private Q_SLOTS:
     void focusWindowById();
     void malformedJson();
     void duplicateWindowIdsDropped();
+    void consumeSkipsMinimizedSource();
+    void moveColumnNextToNoOpReturnsFalse();
+    void focusWindowAlreadyFocusedReturnsFalse();
 };
 
 void TestScrollScreenState::emptyState()
@@ -349,6 +352,92 @@ void TestScrollScreenState::duplicateWindowIdsDropped()
     const ScrollScreenState restored = ScrollScreenState::fromJson(json);
     QCOMPARE(restored.columnCount(), 2); // the duplicate column is dropped (became empty)
     QCOMPARE(restored.tiledWindowCount(), 2); // "a" survives exactly once
+}
+
+void TestScrollScreenState::consumeSkipsMinimizedSource()
+{
+    // consumeIntoColumn pulls the next column's active tile into the focused
+    // column AND makes it the focused tile. A minimized source tile would
+    // therefore land as the focused tile of the focused column — but a
+    // minimized tile is excluded from the resolved layout, so the user would
+    // see the focused column's previously visible tile vanish with no
+    // feedback. The op must skip silently in that case.
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b")); // [a][b], focus=b
+    QVERIFY(state.focusColumn(-1)); // focus column "a"
+
+    // Minimize the active tile of the next column ("b"). Note: setWindowMinimized
+    // on the focused window hands focus away — but here we minimize "b", which
+    // is NOT focused, so column "a" stays focused.
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true));
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("a"));
+
+    // The consume must refuse: column count, structure, and focus all
+    // unchanged.
+    QVERIFY(!state.consumeIntoColumn());
+    QCOMPARE(state.columnCount(), 2);
+    QCOMPARE(state.columns().at(0).windowIds(), QStringList{QStringLiteral("a")});
+    QCOMPARE(state.columns().at(1).windowIds(), QStringList{QStringLiteral("b")});
+    QVERIFY(state.isWindowMinimized(QStringLiteral("b")));
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("a"));
+
+    // Restoring the source tile lets the consume succeed normally.
+    QVERIFY(state.setWindowMinimized(QStringLiteral("b"), false));
+    QVERIFY(state.consumeIntoColumn());
+    QCOMPARE(state.columnCount(), 1);
+    QCOMPARE(state.activeColumn()->windowIds(), (QStringList{QStringLiteral("a"), QStringLiteral("b")}));
+}
+
+void TestScrollScreenState::moveColumnNextToNoOpReturnsFalse()
+{
+    // A drag drop that lands the dragged column in its own slot AND was
+    // already the focused window is a complete no-op: column order unchanged,
+    // focus unchanged. moveColumnNextTo must return false in that case so
+    // ScrollEngine::windowDropped skips the placementChanged emit.
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addColumnForWindow(QStringLiteral("b"));
+    state.addColumnForWindow(QStringLiteral("c")); // [a][b][c]
+    QVERIFY(state.focusWindow(QStringLiteral("a"))); // focus a (column 0)
+
+    // Drop "a" before "b": target == from (a stays at 0), focus already on a.
+    QVERIFY(!state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("b"), /*placeAfter=*/false));
+    QCOMPARE(state.columns().at(0).windowIds().first(), QStringLiteral("a"));
+    QCOMPARE(state.columns().at(1).windowIds().first(), QStringLiteral("b"));
+    QCOMPARE(state.columns().at(2).windowIds().first(), QStringLiteral("c"));
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("a"));
+
+    // The companion case — same target == from, but focus had moved away — is
+    // a real mutation (focus changes c → a) and must still return true. This
+    // pins the asymmetry: only the COMPLETE no-op is suppressed.
+    QVERIFY(state.focusWindow(QStringLiteral("c")));
+    QVERIFY(state.moveColumnNextTo(QStringLiteral("a"), QStringLiteral("b"), /*placeAfter=*/false));
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("a"));
+}
+
+void TestScrollScreenState::focusWindowAlreadyFocusedReturnsFalse()
+{
+    // focusWindow on the already-focused {column, tile} must not mutate state
+    // and must report no change so the engine skips a redundant emit on a
+    // duplicate compositor-side focus event.
+    ScrollScreenState state;
+    state.addColumnForWindow(QStringLiteral("a"));
+    state.addWindowToActiveColumn(QStringLiteral("a2")); // column 0 = [a, a2], focus a2
+    state.addColumnForWindow(QStringLiteral("b")); // column 1 = [b], focus b
+
+    // Already focused: returns false, no mutation.
+    QVERIFY(!state.focusWindow(QStringLiteral("b")));
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("b"));
+    QCOMPARE(state.activeColumnIndex(), 1);
+
+    // Switching to a sibling tile within the same column counts as a real
+    // change (column matches, tile differs).
+    QVERIFY(state.focusWindow(QStringLiteral("a"))); // column 0 tile 0
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("a"));
+    QVERIFY(state.focusWindow(QStringLiteral("a2"))); // same column, different tile
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("a2"));
+    QVERIFY(!state.focusWindow(QStringLiteral("a2"))); // already focused — no change
 }
 
 QTEST_GUILESS_MAIN(TestScrollScreenState)

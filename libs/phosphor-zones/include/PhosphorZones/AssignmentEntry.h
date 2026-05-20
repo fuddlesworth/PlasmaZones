@@ -4,8 +4,10 @@
 #pragma once
 
 #include <PhosphorLayoutApi/LayoutId.h>
+#include <phosphorzones_export.h>
 
 #include <QHash>
+#include <QObject>
 #include <QString>
 
 namespace PhosphorZones {
@@ -83,13 +85,17 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
  * between modes only flips the mode field — the other payload fields are
  * preserved, eliminating the need for shadow assignments.
  */
-struct AssignmentEntry
+struct PHOSPHORZONES_EXPORT AssignmentEntry
 {
+    Q_GADGET
+public:
     enum Mode {
         Snapping = 0,
         Autotile = 1,
         Scroll = 2
     };
+    Q_ENUM(Mode)
+
     Mode mode = Snapping;
     QString snappingLayout; // UUID string of manual layout
     QString tilingAlgorithm; // e.g. "dwindle", "wide", "tall"

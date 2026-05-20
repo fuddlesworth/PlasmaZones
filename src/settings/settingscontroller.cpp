@@ -10,6 +10,7 @@
 #include "snappingbehaviorcontroller.h"
 #include "snappingeffectscontroller.h"
 #include "snappingzoneselectorcontroller.h"
+#include "scrollinglayoutcontroller.h"
 #include "tilingalgorithmcontroller.h"
 #include "tilingappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
@@ -289,6 +290,12 @@ SettingsController::SettingsController(QObject* parent)
     // Snapping→Effects + Tiling→Appearance pages — CONSTANT-only bounds facades.
     m_snappingEffectsPage = new SnappingEffectsController(this);
     m_tilingAppearancePage = new TilingAppearanceController(this);
+
+    // Scrolling→Layout / Scrolling→Appearance pages — CONSTANT-only bounds
+    // facade over ConfigDefaults so the scrolling SpinBoxes / Sliders bind
+    // their `from:` / `to:` to the same numeric clamps the schema enforces
+    // on save (replaces the hand-synced literals the QML used to carry).
+    m_scrollingLayoutPage = new ScrollingLayoutController(this);
 
     // Tiling→Algorithm page sub-controller. Owns 7 slider bounds + the
     // custom-parameter CRUD surface. Borrows the algorithm registry this

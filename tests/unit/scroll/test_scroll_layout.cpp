@@ -361,7 +361,12 @@ void TestScrollLayout::sharedMetricsMatchInternalResolve()
     state.addColumnForWindow(QStringLiteral("b"));
     state.addColumnForWindow(QStringLiteral("c"));
     QVERIFY(state.setWindowMinimized(QStringLiteral("b"), true)); // a collapsed column
-    QVERIFY(state.focusWindow(QStringLiteral("c")));
+    // Focus is already on "c" (addColumnForWindow focuses the new column, and
+    // minimizing the non-focused "b" did not shift it). focusWindow("c")
+    // therefore returns false now — the no-op contract — so just assert the
+    // expected post-condition rather than the call's return value.
+    state.focusWindow(QStringLiteral("c"));
+    QCOMPARE(state.focusedWindowId(), QStringLiteral("c"));
     state.setScrollX(300.0);
 
     // One config drives the metrics resolve and every consuming call, so the

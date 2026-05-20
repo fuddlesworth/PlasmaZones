@@ -88,48 +88,40 @@ SettingsFlickable {
                     description: i18n("Spacing between columns, and between windows stacked within a column")
 
                     SettingsSpinBox {
-                        from: 0
-                        // Matches the Scrolling.Gaps schema clamp
-                        // (ConfigDefaults::scrollInnerGapMax) — a larger value
-                        // would be silently truncated on save.
-                        to: 50
+                        // Matches the Scrolling.Gaps schema clamps surfaced by
+                        // ScrollingLayoutController so the UI and the
+                        // ConfigDefaults clamp can never drift.
+                        from: settingsController.scrollingLayoutPage.scrollInnerGapMin
+                        to: settingsController.scrollingLayoutPage.scrollInnerGapMax
                         value: root.settingValue("InnerGap", appSettings.scrollInnerGap)
                         unitText: i18n("px")
-                        onValueModified: function(newValue) {
-                            root.writeSetting("InnerGap", newValue, function(v) {
+                        onValueModified: function (newValue) {
+                            root.writeSetting("InnerGap", newValue, function (v) {
                                 appSettings.scrollInnerGap = v;
                             });
                         }
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Outer gap")
                     description: i18n("Spacing between the strip and the screen edges")
 
                     SettingsSpinBox {
-                        from: 0
-                        // Matches the Scrolling.Gaps schema clamp
-                        // (ConfigDefaults::scrollOuterGapMax) — a larger value
-                        // would be silently truncated on save.
-                        to: 50
+                        from: settingsController.scrollingLayoutPage.scrollOuterGapMin
+                        to: settingsController.scrollingLayoutPage.scrollOuterGapMax
                         value: root.settingValue("OuterGap", appSettings.scrollOuterGap)
                         unitText: i18n("px")
-                        onValueModified: function(newValue) {
-                            root.writeSetting("OuterGap", newValue, function(v) {
+                        onValueModified: function (newValue) {
+                            root.writeSetting("OuterGap", newValue, function (v) {
                                 appSettings.scrollOuterGap = v;
                             });
                         }
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -148,21 +140,22 @@ SettingsFlickable {
                     description: i18n("Width a freshly opened column takes, as a fraction of the screen")
 
                     SettingsSlider {
-                        from: 10
-                        to: 100
+                        // The slider edits whole percents; the underlying
+                        // setting is a fraction [0.1..1.0] so multiply the
+                        // controller's fractional bounds.
+                        from: Math.round(settingsController.scrollingLayoutPage.scrollColumnWidthMin * 100)
+                        to: Math.round(settingsController.scrollingLayoutPage.scrollColumnWidthMax * 100)
                         stepSize: 1
                         value: root.fractionToPercent(root.settingValue("DefaultColumnWidth", appSettings.scrollDefaultColumnWidth))
-                        onMoved: function(newValue) {
-                            root.writeSetting("DefaultColumnWidth", newValue / 100, function(v) {
+                        onMoved: function (newValue) {
+                            root.writeSetting("DefaultColumnWidth", newValue / 100, function (v) {
                                 appSettings.scrollDefaultColumnWidth = v;
                             });
                         }
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Center focused column")
@@ -171,17 +164,14 @@ SettingsFlickable {
                     SettingsSwitch {
                         checked: root.settingValue("CenterFocusedColumn", appSettings.scrollCenterFocusedColumn)
                         accessibleName: i18n("Center the focused column")
-                        onToggled: function(newValue) {
-                            root.writeSetting("CenterFocusedColumn", newValue, function(v) {
+                        onToggled: function (newValue) {
+                            root.writeSetting("CenterFocusedColumn", newValue, function (v) {
                                 appSettings.scrollCenterFocusedColumn = v;
                             });
                         }
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -192,8 +182,8 @@ SettingsFlickable {
             headerText: i18n("Column width presets")
             description: i18n("Widths the cycle-column-width shortcut steps through, as a percentage of the screen")
             values: root.settingValue("PresetColumnWidths", appSettings.scrollPresetColumnWidths)
-            onValuesModified: function(newValues) {
-                root.writeSetting("PresetColumnWidths", newValues, function(v) {
+            onValuesModified: function (newValues) {
+                root.writeSetting("PresetColumnWidths", newValues, function (v) {
                     appSettings.scrollPresetColumnWidths = v;
                 });
             }
@@ -204,13 +194,11 @@ SettingsFlickable {
             headerText: i18n("Window height presets")
             description: i18n("Heights the cycle-window-height shortcut steps through, as a percentage of the column")
             values: root.settingValue("PresetWindowHeights", appSettings.scrollPresetWindowHeights)
-            onValuesModified: function(newValues) {
-                root.writeSetting("PresetWindowHeights", newValues, function(v) {
+            onValuesModified: function (newValues) {
+                root.writeSetting("PresetWindowHeights", newValues, function (v) {
                     appSettings.scrollPresetWindowHeights = v;
                 });
             }
         }
-
     }
-
 }

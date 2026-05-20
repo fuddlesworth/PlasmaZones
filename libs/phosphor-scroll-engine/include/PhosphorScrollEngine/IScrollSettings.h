@@ -16,8 +16,18 @@ namespace PhosphorEngine {
 /// IScrollSettings at point of use (see ScrollEngine::scrollSettings()) and
 /// reads the global defaults its effective*() resolvers fall back to when a
 /// screen has no per-screen override. Getters only — the engine never writes
-/// scroll geometry config back; settings change signals are wired by the
-/// daemon externally, exactly as for autotile and snap.
+/// scroll geometry config back.
+///
+/// Implementations MUST emit a Qt change signal whenever any of the values
+/// returned by these getters changes — the engine's effective*() resolvers
+/// run lazily, so without a change notification the daemon (which observes
+/// these signals on the concrete QObject — see Settings's
+/// scrollInnerGapChanged / scrollOuterGapChanged / scrollDefaultColumnWidthChanged
+/// / scrollCenterFocusedColumnChanged / scrollPresetColumnWidthsChanged /
+/// scrollPresetWindowHeightsChanged signals) cannot trigger the
+/// placementChanged re-resolve that propagates the new geometry to KWin.
+/// IAutotileSettings and ISnapSettings rely on the same daemon-side signal
+/// wiring; this interface follows that precedent.
 class IScrollSettings
 {
 public:

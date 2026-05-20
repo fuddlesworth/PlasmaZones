@@ -115,6 +115,8 @@ private Q_SLOTS:
     void reapplyLayout_doesNotEmitForUnknownScreen();
     void windowOpened_migrationDropsEmptyOldState();
     void fromJson_clampsOutOfRangeWidth();
+    void windowFocused_skipsEmitOnAlreadyFocusedWindow();
+    void setWindowFloat_skipsEmitOnTiledWindowAskedToUnFloat();
 };
 
 void TestScrollEngine::windowLifecycle()
@@ -360,12 +362,26 @@ void TestScrollEngine::windowDropped()
     QCOMPARE(state->columns().at(1).windowIds().first(), QStringLiteral("b"));
     QCOMPARE(state->columns().at(2).windowIds().first(), QStringLiteral("c"));
 
-    // A positional no-op — dropping "a" before "b" again, where it already
-    // sits — emits without reordering: moveColumnNextTo skips the column move
-    // but still returns true, so the daemon re-resolves and snaps the dragged
-    // window back into its unchanged slot.
+    // A complete positional no-op — dropping "a" before "b" again, where it
+    // already sits AND it is already the focused window — must NOT emit:
+    // moveColumnNextTo detects the no-op (target == from AND focusWindow
+    // reports no change) and returns false, so the daemon is spared a
+    // redundant placementChanged round-trip.
     engine.windowDropped(QStringLiteral("a"), QStringLiteral("b"), /*placeAfter=*/false);
-    QCOMPARE(spy.count(), 3);
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(state->columns().at(0).windowIds().first(), QStringLiteral("a"));
+    QCOMPARE(state->columns().at(1).windowIds().first(), QStringLiteral("b"));
+    QCOMPARE(state->columns().at(2).windowIds().first(), QStringLiteral("c"));
+
+    // ...but a "positional no-op" that DOES move focus is a real mutation.
+    // Focus a non-dragged window, drop "a" before "b" (already its slot):
+    // target == from but focus changes "c" → "a", so moveColumnNextTo returns
+    // true and the daemon re-resolves once.
+    engine.windowFocused(QStringLiteral("c"), QStringLiteral("S1"));
+    spy.clear();
+    engine.windowDropped(QStringLiteral("a"), QStringLiteral("b"), /*placeAfter=*/false);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(state->focusedWindowId(), QStringLiteral("a"));
     QCOMPARE(state->columns().at(0).windowIds().first(), QStringLiteral("a"));
     QCOMPARE(state->columns().at(1).windowIds().first(), QStringLiteral("b"));
     QCOMPARE(state->columns().at(2).windowIds().first(), QStringLiteral("c"));
@@ -827,28 +843,39 @@ void TestScrollEngine::hasPersistableState_rejectsEmptyStates()
 
 void TestScrollEngine::deserializeEngineState_clearsAllSessionState()
 {
-    // A re-deserialise (e.g. config-reload path) must not carry stale
-    // m_perScreenConfig / m_activeScreens / current-context entries from the
-    // previous session into the restored state. Build an engine with the full
-    // session shape, deserialise an unrelated restore blob, then verify every
-    // session-time container was cleared.
+    // Deserialise resets ONLY the persisted-shape containers (m_states /
+    // m_windowToKey). The runtime-context fields (current desktop, current
+    // activity, active screens, per-screen overrides) are owned by the daemon
+    // — it has typically already pushed them via setCurrentDesktop /
+    // setActiveScreens / applyPerScreenConfig before handing the persisted
+    // JSON in — so resetting them here would silently overwrite the daemon's
+    // authoritative live values. Build an engine with the full session shape,
+    // deserialise an unrelated blob, and verify the runtime context survives
+    // while the strip-state containers are cleared.
     ScrollEngine engine;
     engine.setCurrentDesktop(5);
     engine.setCurrentActivity(QStringLiteral("activity-Z"));
     engine.setActiveScreens(QSet<QString>{QStringLiteral("S1")});
     engine.applyPerScreenConfig(QStringLiteral("S1"), QVariantMap{{QStringLiteral("InnerGap"), 20}});
+    // Open a window so m_states and m_windowToKey have something to clear.
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    QVERIFY(engine.isWindowTracked(QStringLiteral("a")));
 
     QJsonObject blob;
     blob.insert(QLatin1String("states"), QJsonArray{});
     engine.deserializeEngineState(blob);
 
-    QVERIFY(engine.activeScreens().isEmpty());
-    QVERIFY(engine.perScreenOverrides(QStringLiteral("S1")).isEmpty());
-    // Setting a new desktop after the deserialise reset, and opening a window,
-    // proves the engine's keyed state is the freshly set one (not desktop=5).
-    engine.setCurrentDesktop(2);
+    // Strip-state containers cleared.
+    QVERIFY(!engine.isWindowTracked(QStringLiteral("a")));
+    QVERIFY(engine.desktopsWithActiveState().isEmpty());
+
+    // Runtime-context fields survive — the daemon keeps owning them.
+    QCOMPARE(engine.activeScreens(), QSet<QString>{QStringLiteral("S1")});
+    QCOMPARE(engine.perScreenOverrides(QStringLiteral("S1")).value(QStringLiteral("InnerGap")).toInt(), 20);
+    // Opening a fresh window honours the surviving current desktop (5), not
+    // the engine's construction-time default (kDefaultDesktopId == 1).
     engine.windowOpened(QStringLiteral("x"), QStringLiteral("S1"));
-    QCOMPARE(engine.desktopsWithActiveState(), QSet<int>{2});
+    QCOMPARE(engine.desktopsWithActiveState(), QSet<int>{5});
 }
 
 void TestScrollEngine::deserializeEngineState_normalisesNonPositiveDesktop()
@@ -980,6 +1007,64 @@ void TestScrollEngine::fromJson_clampsOutOfRangeWidth()
     QCOMPARE(restored.width().kind, ColumnWidth::Kind::Proportion);
     QVERIFY(restored.width().value <= 1.0);
     QVERIFY(restored.width().value >= 0.1);
+}
+
+void TestScrollEngine::windowFocused_skipsEmitOnAlreadyFocusedWindow()
+{
+    // A duplicate focus event on the already-focused window — Qt-side
+    // wl_keyboard/wl_pointer can deliver paired events, the effect can
+    // re-announce after a reattach — must not fan out a redundant
+    // placementChanged. The engine routes through ScrollScreenState::focusWindow,
+    // which now early-returns false when {column, tile} already match.
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    engine.windowOpened(QStringLiteral("b"), QStringLiteral("S1")); // focus = b
+    QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+
+    // Refocus the already-focused window: no signal.
+    engine.windowFocused(QStringLiteral("b"), QStringLiteral("S1"));
+    QCOMPARE(spy.count(), 0);
+
+    // A real focus change still emits.
+    engine.windowFocused(QStringLiteral("a"), QStringLiteral("S1"));
+    QCOMPARE(spy.count(), 1);
+
+    // ...and re-announcing the new focus is a no-op too.
+    engine.windowFocused(QStringLiteral("a"), QStringLiteral("S1"));
+    QCOMPARE(spy.count(), 1);
+}
+
+void TestScrollEngine::setWindowFloat_skipsEmitOnTiledWindowAskedToUnFloat()
+{
+    // A daemon path that calls setWindowFloat(false) on a window that is
+    // already tiled (never floated) must not emit windowFloatingChanged or
+    // placementChanged — there is no transition. Symmetric with the
+    // floating→float-already case.
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1")); // tiled
+    QSignalSpy placementSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+    QSignalSpy floatingSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+
+    // Already tiled, asked to un-float: no transition.
+    engine.setWindowFloat(QStringLiteral("a"), false);
+    QCOMPARE(placementSpy.count(), 0);
+    QCOMPARE(floatingSpy.count(), 0);
+    QVERIFY(engine.isWindowTiled(QStringLiteral("a")));
+
+    // Float the window — that's a real transition, both signals fire once.
+    engine.setWindowFloat(QStringLiteral("a"), true);
+    QCOMPARE(placementSpy.count(), 1);
+    QCOMPARE(floatingSpy.count(), 1);
+
+    // Already floating, asked to float: no transition.
+    engine.setWindowFloat(QStringLiteral("a"), true);
+    QCOMPARE(placementSpy.count(), 1);
+    QCOMPARE(floatingSpy.count(), 1);
+
+    // Un-float — real transition, signals fire again.
+    engine.setWindowFloat(QStringLiteral("a"), false);
+    QCOMPARE(placementSpy.count(), 2);
+    QCOMPARE(floatingSpy.count(), 2);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngine)
