@@ -40,6 +40,7 @@
 #include "modetracker.h"
 #include "shortcutmanager.h"
 #include "rendering/zoneshadernoderhi.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../config/configbackends.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -1304,11 +1305,47 @@ bool Daemon::init()
                 }
             }
 
+            // Re-derive the autotile engine's active screens + per-screen
+            // overrides from the new assignments. The partial-update path
+            // (`setSnappingLayoutPreservingMode` /
+            // `setTilingAlgorithmPreservingMode`) emits `layoutAssigned`
+            // which already triggers `updateAutotileScreens` via the
+            // signal hookup in `connectLayoutSignals`, but explicit-mode
+            // and entry-level edits also need it to be called and
+            // depending on emit ordering across the batch the signal
+            // path can land after this lambda runs — call it here so
+            // retile is unconditionally driven once per batch.
+            updateAutotileScreens();
+            updateLayoutFilter();
+
+            // Expand changedScreenIds with the virtual-screen children of
+            // every changed physical screen. The resnap buffer's
+            // includeScreens filter compares against the snap state's
+            // recorded screen-id per window — those IDs are VS IDs
+            // (`physId/vs:N`) when the user is on a virtual screen, so
+            // an edit at the physical slot (e.g. Monitor row writes
+            // `(physId, 0, "")`) leaves the include filter holding only
+            // the physical id and silently drops every VS-resident
+            // window from the buffer. The cascade itself already routes
+            // a VS lookup through to its physical parent (walkCascade
+            // level 6), so the expansion here mirrors that fallback —
+            // any VS whose cascade winner is the changed physical slot
+            // needs its windows resnapped.
+            QSet<QString> expandedScreenIds = changedScreenIds;
+            for (const QString& screenId : effectiveIds) {
+                if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId))
+                    continue;
+                const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+                if (changedScreenIds.contains(physId)) {
+                    expandedScreenIds.insert(screenId);
+                }
+            }
+
             // Resnap only the snapping-mode screens whose assignments actually changed.
-            // changedScreenIds scopes the resnap to avoid spurious geometry-set on
+            // expandedScreenIds scopes the resnap to avoid spurious geometry-set on
             // screens whose layout didn't change (prevents flicker on unrelated VS).
             m_suppressResnapOsd = osdEntries.size();
-            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
+            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, expandedScreenIds);
             m_snapAdaptor->resnapToNewLayout();
 
             // Show OSD for changed screens — use locked OSD variant when context is locked.
