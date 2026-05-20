@@ -68,16 +68,21 @@ TilingStateKey ScrollEngine::keyForScreen(const QString& screenId) const
 
 ScrollScreenState* ScrollEngine::stateForKey(const TilingStateKey& key, bool create)
 {
-    // Single-pass lookup: try_emplace finds the existing entry without
-    // mutating the map (insert is skipped, `inserted` flag is false), and
-    // creates one when @p create is true. The previous shape did a separate
-    // find() then try_emplace which double-hashed the key on every miss.
-    auto [it, inserted] = m_states.try_emplace(key, key.screenId);
-    if (inserted && !create) {
-        m_states.erase(it);
+    // Two-branch lookup: never construct-then-erase on a miss. The
+    // create=false path (windowFocused / windowMinimizedChanged /
+    // windowDropped / setWindowFloat / toggleWindowFloat) hits this on every
+    // unknown key, so building a ScrollScreenState{key.screenId} just to
+    // immediately discard it would be a per-call waste. The create=true path
+    // does a second hash via emplace, but only on the actual-miss branch
+    // where allocation is unavoidable anyway.
+    auto it = m_states.find(key);
+    if (it != m_states.end()) {
+        return &it->second;
+    }
+    if (!create) {
         return nullptr;
     }
-    return &it->second;
+    return &m_states.emplace(key, key.screenId).first->second;
 }
 
 const ScrollScreenState* ScrollEngine::stateForWindowConst(const QString& windowId) const
@@ -512,7 +517,12 @@ const IPlacementState* ScrollEngine::stateForScreen(const QString& screenId) con
 
 ScrollScreenState* ScrollEngine::scrollStateForScreen(const QString& screenId)
 {
-    return stateForKey(keyForScreen(screenId), /*create=*/false);
+    // IScrollEngine's contract is "no creation here", so an explicit find is
+    // both clearer than threading `create=false` through stateForKey() and
+    // mirrors the const overload below — the only structural difference
+    // between the two is the return-type constness.
+    const auto it = m_states.find(keyForScreen(screenId));
+    return it == m_states.end() ? nullptr : &it->second;
 }
 
 const ScrollScreenState* ScrollEngine::scrollStateForScreen(const QString& screenId) const
@@ -671,15 +681,14 @@ void ScrollEngine::reconcileRestoredWindows(const QSet<QString>& liveWindowIds)
     // Coalesce placementChanged emits: many stale windows on the same screen
     // would otherwise fan out into N daemon resolves. Bypass windowClosed()'s
     // per-window emit and dispatch one emit per affected screen at the end.
+    // No re-lookup of m_windowToKey: every windowId in `stale` was just
+    // observed live in the first pass and nothing mutates the map between
+    // collection and now, so QHash::take() is safe and one operation cheaper
+    // than constFind() + erase(it).
     QSet<QString> dirtyScreens;
     QSet<TilingStateKey> touchedKeys;
     for (const QString& windowId : stale) {
-        const auto it = m_windowToKey.constFind(windowId);
-        if (it == m_windowToKey.constEnd()) {
-            continue;
-        }
-        const TilingStateKey key = it.value();
-        m_windowToKey.erase(it);
+        const TilingStateKey key = m_windowToKey.take(windowId);
         if (ScrollScreenState* state = stateForKey(key, /*create=*/false)) {
             state->removeWindow(windowId);
             dirtyScreens.insert(key.screenId);

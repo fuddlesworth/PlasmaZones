@@ -17,11 +17,16 @@ QtObject {
     // ─── Shortcuts ──────────────────────────────────────────────────
     // ─── External signal forwarding ─────────────────────────────────
     // assignmentViewMode is the per-page mode set by the SnappingBridge /
-    // TilingBridge subclasses (0 = snapping, 1 = tiling) and forwarded into
-    // every disable check / mutation so the snapping page only reads-and-writes
-    // the snapping list, the tiling page only the tiling list.
+    // TilingBridge subclasses (one of PhosphorZones::AssignmentEntry::
+    // {Snapping, Autotile, Scroll}) and forwarded into every disable check /
+    // mutation so the snapping page only reads-and-writes the snapping list,
+    // the tiling page only the tiling list, etc.
 
-    // 0 = snapping, 1 = tiling — overridden by subclass
+    // -1 is the uninitialized sentinel — a subclass that forgets to bind this
+    // (or imports without `org.plasmazones.settings` so AssignmentEntry.* is
+    // undefined) leaves the value at -1 and every controller call below is a
+    // visible no-op rather than a silent write to the wrong list. Subclasses
+    // bind it to PhosphorZones::AssignmentEntry::{Snapping, Autotile, Scroll}.
     property int assignmentViewMode: -1
     readonly property bool autotileEnabled: appSettings.autotileEnabled
     readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
@@ -36,17 +41,17 @@ QtObject {
     // Forward external changes (daemon shortcuts) to QML consumers
     property Connections _externalSignals
 
-    signal disabledMonitorsChanged()
-    signal disabledDesktopsChanged()
-    signal disabledActivitiesChanged()
-    signal screenAssignmentsChanged()
-    signal tilingScreenAssignmentsChanged()
-    signal tilingDesktopAssignmentsChanged()
-    signal lockedScreensChanged()
-    signal activityAssignmentsChanged()
-    signal tilingActivityAssignmentsChanged()
-    signal quickLayoutSlotsChanged()
-    signal tilingQuickLayoutSlotsChanged()
+    signal disabledMonitorsChanged
+    signal disabledDesktopsChanged
+    signal disabledActivitiesChanged
+    signal screenAssignmentsChanged
+    signal tilingScreenAssignmentsChanged
+    signal tilingDesktopAssignmentsChanged
+    signal lockedScreensChanged
+    signal activityAssignmentsChanged
+    signal tilingActivityAssignmentsChanged
+    signal quickLayoutSlotsChanged
+    signal tilingQuickLayoutSlotsChanged
 
     function isMonitorDisabled(name) {
         return settingsController.isMonitorDisabled(assignmentViewMode, name);
@@ -111,22 +116,18 @@ QtObject {
         function onDisabledMonitorsChanged(viewMode) {
             if (viewMode === assignmentViewMode)
                 disabledMonitorsChanged();
-
         }
 
         function onDisabledDesktopsChanged(viewMode) {
             if (viewMode === assignmentViewMode)
                 disabledDesktopsChanged();
-
         }
 
         function onDisabledActivitiesChanged(viewMode) {
             if (viewMode === assignmentViewMode)
                 disabledActivitiesChanged();
-
         }
 
         target: settingsController
     }
-
 }

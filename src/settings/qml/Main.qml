@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
+import org.plasmazones.settings
 
 ApplicationWindow {
     // Cached breadcrumb segment list for the current navigation
@@ -1663,7 +1664,10 @@ ApplicationWindow {
                 id: layoutContextMenu
 
                 property var layout: null
-                property int viewMode: 0
+                // PhosphorZones::AssignmentEntry::{Snapping, Autotile} —
+                // showForLayout() rebinds this to the correct mode when the
+                // user opens the menu on a layout vs autotile algorithm row.
+                property int viewMode: AssignmentEntry.Snapping
                 /// Tracks the kind (`"snap"` / `"autotile"` / `"none"`) the
                 /// aspect-ratio submenu was last reconciled to. showForLayout
                 /// only mutates the menu when the current layout's kind
@@ -1699,7 +1703,7 @@ ApplicationWindow {
 
                 function showForLayout(layout) {
                     layoutContextMenu.layout = layout;
-                    layoutContextMenu.viewMode = (layout && layout.isAutotile === true) ? 1 : 0;
+                    layoutContextMenu.viewMode = (layout && layout.isAutotile === true) ? AssignmentEntry.Autotile : AssignmentEntry.Snapping;
                     var wantKind = layoutContextMenu.isAutotile ? "autotile" : "snap";
                     // Only reconcile the submenu when the layout kind flips.
                     // Reconciling on every show churns Qt 6's MenuItem
@@ -1815,13 +1819,13 @@ ApplicationWindow {
                         if (!layoutContextMenu.layout)
                             return false;
 
-                        if (layoutContextMenu.viewMode === 1)
+                        if (layoutContextMenu.viewMode === AssignmentEntry.Autotile)
                             return layoutContextMenu.layoutId !== ("autotile:" + appSettings.defaultAutotileAlgorithm);
 
                         return layoutContextMenu.layoutId !== appSettings.defaultLayoutId;
                     }
                     onTriggered: {
-                        if (layoutContextMenu.viewMode === 1)
+                        if (layoutContextMenu.viewMode === AssignmentEntry.Autotile)
                             appSettings.defaultAutotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
                         else
                             appSettings.defaultLayoutId = layoutContextMenu.layoutId;
@@ -1858,31 +1862,31 @@ ApplicationWindow {
 
                 // -- Manage (snapping layouts) --
                 MenuSeparator {
-                    visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
+                    visible: layoutContextMenu.viewMode === AssignmentEntry.Snapping && !layoutContextMenu.isAutotile
                 }
 
                 MenuItem {
                     text: i18n("Duplicate")
                     icon.name: "edit-copy"
-                    visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
+                    visible: layoutContextMenu.viewMode === AssignmentEntry.Snapping && !layoutContextMenu.isAutotile
                     onTriggered: settingsController.duplicateLayout(layoutContextMenu.layoutId)
                 }
 
                 MenuItem {
                     text: i18n("Export")
                     icon.name: "document-export"
-                    visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
+                    visible: layoutContextMenu.viewMode === AssignmentEntry.Snapping && !layoutContextMenu.isAutotile
                     onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
                 }
 
                 MenuSeparator {
-                    visible: layoutContextMenu.viewMode === 0 && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+                    visible: layoutContextMenu.viewMode === AssignmentEntry.Snapping && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
                 }
 
                 MenuItem {
                     text: i18n("Delete")
                     icon.name: "edit-delete"
-                    visible: layoutContextMenu.viewMode === 0 && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+                    visible: layoutContextMenu.viewMode === AssignmentEntry.Snapping && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
                     onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
                 }
 

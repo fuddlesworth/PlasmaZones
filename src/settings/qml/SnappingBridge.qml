@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import org.plasmazones.settings
 
 // Snapping-mode settings bridge.
 // Extends SharedBridge with snapping-specific assignment, quick-slot,
-// and app-rule methods.
+// and app-rule methods. The org.plasmazones.settings import is required
+// for AssignmentEntry.Snapping to resolve at the assignmentViewMode
+// binding below — without it the binding silently falls back to the
+// SharedBridge default (-1) and every disable toggle silently no-ops.
 SharedBridge {
     id: bridge
 

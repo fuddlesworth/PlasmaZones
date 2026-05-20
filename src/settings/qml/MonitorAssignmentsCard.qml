@@ -15,8 +15,11 @@ SettingsCard {
     id: root
 
     required property var appSettings
-    // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
-    property int viewMode: 0
+    // PhosphorZones::AssignmentEntry::{Snapping, Autotile} — required so future
+    // call sites can't silently fall back to a magic default (snapping). Every
+    // existing caller already passes its page-level `viewMode` (which itself is
+    // bound to `AssignmentEntry.Snapping` / `AssignmentEntry.Autotile`).
+    required property int viewMode
     // Revision counter — incremented when lock state changes externally,
     // forcing lock-dependent bindings to re-evaluate.
     property int _lockRevision: 0
@@ -106,7 +109,7 @@ SettingsCard {
                                     let name = modelData.name || i18n("Unknown Monitor");
                                     let mfr = modelData.manufacturer || "";
                                     let mdl = modelData.model || "";
-                                    let parts = [mfr, mdl].filter(function(s) {
+                                    let parts = [mfr, mdl].filter(function (s) {
                                         return s !== "";
                                     });
                                     let displayInfo = parts.join(" ");
@@ -130,7 +133,6 @@ SettingsCard {
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
-
                         }
 
                         Switch {
@@ -153,7 +155,6 @@ SettingsCard {
 
                                 target: root.appSettings
                             }
-
                         }
 
                         Label {
@@ -215,7 +216,6 @@ SettingsCard {
 
                                 target: root.appSettings
                             }
-
                         }
 
                         ToolButton {
@@ -272,7 +272,6 @@ SettingsCard {
                             ToolTip.visible: hovered
                             ToolTip.text: monitorDelegate.expanded ? i18n("Hide per-desktop assignments") : i18n("Show per-desktop assignments")
                         }
-
                     }
 
                     // Per-desktop section (expandable)
@@ -349,7 +348,7 @@ SettingsCard {
                                             return hasExplicit ? (root.appSettings.getSnappingLayoutForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber) || "") : "";
                                         }
                                     }
-                                    onAssignmentSelected: (layoutId) => {
+                                    onAssignmentSelected: layoutId => {
                                         if (root.viewMode === 1)
                                             root.appSettings.assignTilingLayoutToScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber, layoutId);
                                         else
@@ -380,11 +379,8 @@ SettingsCard {
 
                                                 target: root.appSettings
                                             }
-
                                         }
-
                                     }
-
                                 }
 
                                 ToolButton {
@@ -408,9 +404,7 @@ SettingsCard {
                                     ToolTip.visible: hovered
                                     onClicked: root.appSettings.toggleContextLock(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode)
                                 }
-
                             }
-
                         }
 
                         Kirigami.InlineMessage {
@@ -422,7 +416,6 @@ SettingsCard {
                                 for (let i = 1; i <= count; i++) {
                                     if (!root.appSettings.isDesktopDisabled(monitorDelegate.screenName, i))
                                         return false;
-
                                 }
                                 return true;
                             }
@@ -439,19 +432,14 @@ SettingsCard {
 
                                 target: root.appSettings
                             }
-
                         }
-
                     }
 
                     Item {
                         height: Kirigami.Units.smallSpacing
                     }
-
                 }
-
             }
-
         }
 
         Kirigami.InlineMessage {
@@ -461,7 +449,5 @@ SettingsCard {
             type: Kirigami.MessageType.Information
             text: i18n("Per-desktop assignments are available with multiple virtual desktops.")
         }
-
     }
-
 }
