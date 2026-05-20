@@ -83,7 +83,12 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, 0, QString(), layoutId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QStringLiteral("0") + QChar(0x1F));
+    // Field marker "entry" — assignLayoutToScreen accepts either a snap
+    // UUID or an "autotile:<algo>" id and switches the entry's mode to
+    // match, so the OSD should reflect the entry's effective active
+    // layout (mode-resolved), not just one slot.
+    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QStringLiteral("0") + QChar(0x1F) + QChar(0x1F)
+                                   + QStringLiteral("entry"));
 
     // Update global active layout when assigning to the primary screen (manual layouts only)
     if (layout) {
@@ -101,7 +106,8 @@ void LayoutAdaptor::clearAssignment(const QString& screenId)
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QStringLiteral("0") + QChar(0x1F));
+    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QStringLiteral("0") + QChar(0x1F) + QChar(0x1F)
+                                   + QStringLiteral("entry"));
 }
 
 void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
@@ -244,7 +250,8 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, virtualDesktop, QString(), layoutId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F));
+    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F)
+                                   + QChar(0x1F) + QStringLiteral("entry"));
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "(id:" << resolvedId
                          << ") on desktop" << virtualDesktop;
 
@@ -257,7 +264,8 @@ void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenId, int
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, virtualDesktop, QString());
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F));
+    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F)
+                                   + QChar(0x1F) + QStringLiteral("entry"));
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "on desktop" << virtualDesktop;
 }
 
@@ -511,8 +519,8 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
     const QString resolvedActivityScreen = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedActivityScreen, 0, activityId, layoutId);
     m_changedScreenIds.insert(resolvedActivityScreen);
-    m_changedAssignmentKeys.append(resolvedActivityScreen + QChar(0x1F) + QStringLiteral("0") + QChar(0x1F)
-                                   + activityId);
+    m_changedAssignmentKeys.append(resolvedActivityScreen + QChar(0x1F) + QStringLiteral("0") + QChar(0x1F) + activityId
+                                   + QChar(0x1F) + QStringLiteral("entry"));
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "for activity" << activityId;
 
@@ -525,7 +533,8 @@ void LayoutAdaptor::clearAssignmentForScreenActivity(const QString& screenId, co
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, 0, activityId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QStringLiteral("0") + QChar(0x1F) + activityId);
+    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QStringLiteral("0") + QChar(0x1F) + activityId
+                                   + QChar(0x1F) + QStringLiteral("entry"));
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "activity" << activityId;
 }
 
@@ -609,8 +618,8 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, virtualDesktop, activityId, layoutId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F)
-                                   + activityId);
+    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activityId
+                                   + QChar(0x1F) + QStringLiteral("entry"));
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "desktop" << virtualDesktop
                          << "activity" << activityId;
@@ -625,8 +634,8 @@ void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& scree
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, virtualDesktop, activityId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F)
-                                   + activityId);
+    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activityId
+                                   + QChar(0x1F) + QStringLiteral("entry"));
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "desktop" << virtualDesktop << "activity"
                          << activityId;
 }
@@ -664,7 +673,8 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
 
     m_layoutManager->setAssignmentEntryDirect(resolvedId, virtualDesktop, activity, entry);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity);
+    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity
+                                   + QChar(0x1F) + QStringLiteral("entry"));
 
     qCInfo(lcDbusLayout) << "setAssignmentEntry: screen=" << resolvedId << "desktop=" << virtualDesktop
                          << "activity=" << activity << "mode=" << mode << "snapping=" << snappingLayout
@@ -692,7 +702,14 @@ void LayoutAdaptor::setSnappingLayoutEntry(const QString& screenId, int virtualD
 
     m_layoutManager->setSnappingLayoutPreservingMode(resolvedId, virtualDesktop, activity, layoutId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity);
+    // Field marker "snap" — the OSD should reflect the new snap layout
+    // the user just chose, regardless of whether the slot's mode is
+    // Snapping or Autotile. If mode is Autotile here it means the
+    // edit lands as a stored preference for next time the user
+    // switches that context to snapping; the OSD still shows the snap
+    // they picked so the dialog matches their action.
+    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity
+                                   + QChar(0x1F) + QStringLiteral("snap"));
 
     qCInfo(lcDbusLayout) << "setSnappingLayoutEntry: screen=" << resolvedId << "desktop=" << virtualDesktop
                          << "activity=" << activity << "snapping=" << layoutId;
@@ -720,7 +737,9 @@ void LayoutAdaptor::setTilingAlgorithmEntry(const QString& screenId, int virtual
 
     m_layoutManager->setTilingAlgorithmPreservingMode(resolvedId, virtualDesktop, activity, algorithmId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity);
+    // Field marker "tile" — symmetric to the snap entry above.
+    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity
+                                   + QChar(0x1F) + QStringLiteral("tile"));
 
     qCInfo(lcDbusLayout) << "setTilingAlgorithmEntry: screen=" << resolvedId << "desktop=" << virtualDesktop
                          << "activity=" << activity << "tiling=" << algorithmId;
