@@ -294,11 +294,22 @@ void Daemon::setupAnimationProfiles()
     using namespace PhosphorAnimation;
 
     // Wipe any entries left over from prior wiring on this same daemon
-    // instance. The registry is a daemon-owned member, so a fresh
-    // Daemon construction always starts with an empty registry — but
-    // setupAnimationProfiles is also called on configure-reload paths
-    // where prior loaders may have populated the partitions; clearing
-    // here keeps the post-condition uniform.
+    // instance. setupAnimationProfiles is called exactly once per
+    // Daemon::init() today, so the registry is always empty when we get
+    // here — the narrow-clear is a no-op in current code paths. Kept
+    // because a future reload caller would need exactly this precondition
+    // reset before re-running the wiring below.
+    //
+    // CAUTION for a future reload caller: the signal `connect()` calls
+    // further down (m_animationPublishTimer::timeout, Settings::
+    // animationProfileChanged, ProfileLoader::profilesChanged,
+    // CurveLoader::curvesChanged) are lambda-bound and therefore not
+    // amenable to Qt::UniqueConnection. Adding a second call to this
+    // function without first issuing matching `disconnect()`s on those
+    // four signals would stack handlers and run `publishActiveAnimation
+    // Profile` once per stacked handler per slider tick. m_curveLoader
+    // and m_profileLoader auto-disconnect on the std::move below
+    // (unique_ptr replace), but m_settings persists.
     //
     // Narrow the clear to the two partitions we publish under: the
     // loader-owned user-JSON partition (clearOwner by tag) and each
@@ -1290,6 +1301,15 @@ void Daemon::start()
     if (m_running) {
         return;
     }
+
+    // Reset the shutdown latch — stop() sets it true and nothing else clears
+    // it, so a stop()→start() cycle (tests, programmatic restart) would
+    // permanently silence every shutdown-guarded code path
+    // (warnCompositorBridgeMissing, late-arrival reply guards, OSD
+    // suppression in daemon/osd.cpp) on the second run. m_aboutToQuitConnected
+    // already contemplates this cycle to avoid stacking the aboutToQuit
+    // handler; this is the matching reset on the value side.
+    m_shuttingDown = false;
 
     // Suppress OSDs once Qt begins shutdown (SIGTERM, programmatic quit).
     // Connected once — m_aboutToQuitConnected prevents stacking on stop()→start().
