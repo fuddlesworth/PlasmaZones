@@ -3,12 +3,13 @@
 
 #pragma once
 
+#include "tilinghandlerbase.h"
+
 #include <PhosphorCompositor/AutotileState.h>
 
 #include <QColor>
 #include <QHash>
 #include <QList>
-#include <QObject>
 #include <QPointF>
 #include <QRect>
 #include <QSet>
@@ -40,13 +41,18 @@ class PlasmaZonesEffect;
  * nothing of scroll and this class knows nothing of autotile; the daemon's
  * screen sets are disjoint, so each handler acts only on its own screens.
  */
-class ScrollHandler : public QObject
+class ScrollHandler : public TilingHandlerBase
 {
     Q_OBJECT
 
 public:
     explicit ScrollHandler(PlasmaZonesEffect* effect, QObject* parent = nullptr);
 
+protected:
+    QString interfaceName() const override;
+    QString screensProperty() const override;
+
+public:
     // ═══════════════════════════════════════════════════════════════════
     // Integration points (called by PlasmaZonesEffect)
     // ═══════════════════════════════════════════════════════════════════
@@ -187,15 +193,8 @@ public:
     bool updateHideTitleBarsSetting(bool enabled);
 
     // ── Focus behavior ───────────────────────────────────────────────────
-    /// Enable/disable focus-follows-mouse for scroll screens. Clears the
-    /// last-focused tracking when disabled so re-enabling re-evaluates.
-    void setFocusFollowsMouse(bool enabled)
-    {
-        m_focusFollowsMouse = enabled;
-        if (!enabled) {
-            m_lastFocusFollowsMouseWindowId.clear();
-        }
-    }
+    // setFocusFollowsMouse(bool) is inherited from TilingHandlerBase.
+
     /// Enable/disable auto-focusing a window as it enters the scroll layout.
     void setFocusNewWindows(bool enabled)
     {
@@ -248,14 +247,11 @@ private:
     /// scroll-tracked. @p w may be null when the window has already closed.
     void clearDecoration(const QString& windowId, KWin::EffectWindow* w);
 
-    PlasmaZonesEffect* m_effect;
+    // m_effect, m_notifiedWindows, m_notifiedWindowScreens, m_pendingCloses,
+    // m_focusFollowsMouse, m_lastFocusFollowsMouseWindowId are inherited
+    // from TilingHandlerBase.
 
     QSet<QString> m_scrollScreens; ///< Screens currently in scroll mode.
-    QSet<QString> m_notifiedWindows; ///< Windows reported open to the scroll engine.
-    QHash<QString, QString> m_notifiedWindowScreens; ///< windowId → screen ID at report time.
-    /// Windows closed before their windowOpened D-Bus call resolved; the
-    /// matching open is suppressed when it arrives (D-Bus ordering race).
-    QSet<QString> m_pendingCloses;
     /// windowId → geometry the daemon last resolved for it; the reference
     /// point for detecting app-initiated resizes. For constrained (fixed-size)
     /// windows this is the centered sub-rect, NOT the column rect — drag-to-
@@ -316,11 +312,6 @@ private:
     /// suffices (autotile needs per-screen buckets only for virtual screens).
     QSet<QString> m_borderlessWindows;
 
-    /// Focus-follows-mouse enabled for scroll screens.
-    bool m_focusFollowsMouse = false;
-    /// Last window activated by focus-follows-mouse — suppresses redundant
-    /// activateWindow calls while the cursor stays over the same window.
-    QString m_lastFocusFollowsMouseWindowId;
     /// Auto-focus a window as it enters the scroll layout. Mirrors the
     /// ConfigDefaults::scrollFocusNewWindows() default until the real value
     /// arrives over D-Bus (daemon_bringup loadSettingAsync).

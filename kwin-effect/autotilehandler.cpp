@@ -30,9 +30,18 @@ namespace PlasmaZones {
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 AutotileHandler::AutotileHandler(PlasmaZonesEffect* effect, QObject* parent)
-    : QObject(parent)
-    , m_effect(effect)
+    : TilingHandlerBase(effect, parent)
 {
+}
+
+QString AutotileHandler::interfaceName() const
+{
+    return PhosphorProtocol::Service::Interface::Autotile;
+}
+
+QString AutotileHandler::screensProperty() const
+{
+    return QStringLiteral("autotileScreens");
 }
 
 void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
@@ -454,9 +463,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     // KWin-specific cleanup not covered by the shared helper
     m_savedNotifiedForDesktopReturn.remove(windowId);
     m_savedPreAutotileForDesktopMove.remove(windowId);
-    if (m_lastFocusFollowsMouseWindowId == windowId) {
-        m_lastFocusFollowsMouseWindowId.clear();
-    }
+    clearLastFocusFollowsMouseWindow(windowId);
     auto pendingConn = m_pendingCrossScreenRestore.find(windowId);
     if (pendingConn != m_pendingCrossScreenRestore.end()) {
         QObject::disconnect(pendingConn.value());

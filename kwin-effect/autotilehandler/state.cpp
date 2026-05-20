@@ -128,13 +128,7 @@ void AutotileHandler::updateShowBorderSetting(bool enabled)
     m_border.showBorder = enabled;
 }
 
-void AutotileHandler::setFocusFollowsMouse(bool enabled)
-{
-    m_focusFollowsMouse = enabled;
-    if (!enabled) {
-        m_lastFocusFollowsMouseWindowId.clear();
-    }
-}
+// setFocusFollowsMouse(bool) is provided by TilingHandlerBase.
 
 bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId,
                                                        const QRectF& frame, bool knownFreeFloating)

@@ -3,11 +3,12 @@
 
 #pragma once
 
+#include "tilinghandlerbase.h"
+
 #include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 
 #include <QHash>
-#include <QObject>
 #include <QPointer>
 #include <QRect>
 #include <QRectF>
@@ -36,13 +37,18 @@ class PlasmaZonesEffect;
  *
  * Delegates window lookups, geometry application, and animation back to the effect.
  */
-class AutotileHandler : public QObject
+class AutotileHandler : public TilingHandlerBase
 {
     Q_OBJECT
 
 public:
     explicit AutotileHandler(PlasmaZonesEffect* effect, QObject* parent = nullptr);
 
+protected:
+    QString interfaceName() const override;
+    QString screensProperty() const override;
+
+public:
     // ═══════════════════════════════════════════════════════════════════
     // Integration points (called by PlasmaZonesEffect)
     // ═══════════════════════════════════════════════════════════════════
@@ -105,8 +111,8 @@ public:
     void updateHideTitleBarsSetting(bool enabled);
     void updateShowBorderSetting(bool enabled);
 
-    // Focus follows mouse: focus autotile window under cursor
-    void setFocusFollowsMouse(bool enabled);
+    // Focus follows mouse: focus autotile window under cursor.
+    // setFocusFollowsMouse(bool) is inherited from TilingHandlerBase.
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
 
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
@@ -323,7 +329,9 @@ private:
     // Member variables
     // ═══════════════════════════════════════════════════════════════════
 
-    PlasmaZonesEffect* m_effect;
+    // m_effect, m_notifiedWindows, m_notifiedWindowScreens, m_pendingCloses,
+    // m_focusFollowsMouse, m_lastFocusFollowsMouseWindowId are inherited from
+    // TilingHandlerBase.
 
     QSet<QString> m_autotileScreens;
     /// Pre-autotile frame geometry, keyed [screenId][windowId].
@@ -342,8 +350,6 @@ private:
     QHash<QString, QHash<QString, QRectF>> m_preAutotileGeometries;
     QHash<QString, QStringList> m_savedSnapStackingOrder; ///< snap-mode stacking order, restored on autotile→snap
     QHash<QString, QStringList> m_savedAutotileStackingOrder; ///< autotile stacking order, restored on snap→autotile
-    QSet<QString> m_notifiedWindows;
-    QHash<QString, QString> m_notifiedWindowScreens; ///< windowId → screen ID at time of notification
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
     /// Pre-autotile geometry preserved when a window is moved to another
     /// desktop. Keyed by windowId; value holds (sourceScreenId, frameRect)
@@ -352,7 +358,6 @@ private:
     /// source screen's coordinate space and would land off-target on a
     /// different monitor).
     QHash<QString, QPair<QString, QRectF>> m_savedPreAutotileForDesktopMove;
-    QSet<QString> m_pendingCloses;
     bool m_inOutputChanged = false; ///< re-entrancy guard for handleWindowOutputChanged
     QHash<QString, QMetaObject::Connection>
         m_pendingCrossScreenRestore; ///< windowId → deferred size-restore connection
@@ -373,9 +378,6 @@ private:
     QPointer<KWin::EffectWindow> m_pendingReactivateWindow; ///< re-activate after raise loop (daemon restart)
     QSet<QString> m_monocleMaximizedWindows;
     int m_suppressMaximizeChanged = 0;
-    // ── Focus follows mouse ──
-    bool m_focusFollowsMouse = false;
-    QString m_lastFocusFollowsMouseWindowId;
     // ── Border state — uses shared BorderState from compositor-common ──
     BorderState m_border;
 };

@@ -33,13 +33,22 @@ constexpr int ReassertDebounceMs = 150;
 } // namespace
 
 ScrollHandler::ScrollHandler(PlasmaZonesEffect* effect, QObject* parent)
-    : QObject(parent)
-    , m_effect(effect)
+    : TilingHandlerBase(effect, parent)
     , m_reassertTimer(new QTimer(this))
 {
     m_reassertTimer->setSingleShot(true);
     m_reassertTimer->setInterval(ReassertDebounceMs);
     connect(m_reassertTimer, &QTimer::timeout, this, &ScrollHandler::flushReasserts);
+}
+
+QString ScrollHandler::interfaceName() const
+{
+    return PhosphorProtocol::Service::Interface::Scroll;
+}
+
+QString ScrollHandler::screensProperty() const
+{
+    return QStringLiteral("scrollScreens");
 }
 
 bool ScrollHandler::isEligibleForScroll(KWin::EffectWindow* w) const
@@ -231,9 +240,7 @@ void ScrollHandler::onWindowClosed(const QString& windowId, const QString& scree
     m_reasserted.remove(windowId);
     m_reorderPending.remove(windowId);
     m_interactiveResize.remove(windowId);
-    if (m_lastFocusFollowsMouseWindowId == windowId) {
-        m_lastFocusFollowsMouseWindowId.clear();
-    }
+    clearLastFocusFollowsMouseWindow(windowId);
 
     if (m_scrollScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,

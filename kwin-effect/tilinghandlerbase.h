@@ -1,0 +1,107 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include <QHash>
+#include <QObject>
+#include <QPointF>
+#include <QSet>
+#include <QString>
+#include <QStringList>
+
+namespace KWin {
+class EffectWindow;
+}
+
+namespace PlasmaZones {
+
+class PlasmaZonesEffect;
+
+/**
+ * @brief Common state and primitives for tiling-mode lifecycle handlers.
+ *
+ * @c ScrollHandler and @c AutotileHandler each route window-lifecycle events
+ * to their respective daemon-side engine over D-Bus. The two share an
+ * irreducible set of bookkeeping:
+ *
+ *   - @c m_notifiedWindows: windows currently reported open to the engine
+ *   - @c m_notifiedWindowScreens: each tracked window's screen at report time
+ *   - @c m_pendingCloses: windows that closed before their windowOpened ack
+ *     resolved (D-Bus ordering race) — the late ack is suppressed
+ *   - @c m_focusFollowsMouse / @c m_lastFocusFollowsMouseWindowId: FFM dedup
+ *
+ * Every other piece of state is mode-specific:
+ *   - Autotile owns per-screen borderless buckets, monocle-maximized tracking,
+ *     pre-autotile geometry caches, stagger generations, and a re-entrancy
+ *     guard for handleWindowOutputChanged.
+ *   - Scroll owns a flat borderless set, slot/applied geometry caches, a
+ *     re-assert debounce timer with re-entrancy guard, drag-to-reorder bookkeeping,
+ *     and a daemon-epoch counter for rolling back failed D-Bus calls safely
+ *     across reconnects.
+ *
+ * The base deliberately does NOT abstract the signal-wiring / settings-load
+ * surface: each subclass listens to a distinct set of D-Bus signals
+ * (autotile has five mode-specific ones, scroll has one), and the post-load
+ * batch they trigger has different shape (autotile filters by screen, scroll
+ * always sends the whole stacking order). Forcing a template method there
+ * would just smear the differences without saving lines.
+ *
+ * The pure-virtual @c interfaceName() / @c screensProperty() hooks document
+ * the per-mode constants without unifying the call sites — they are kept
+ * available for any future helper that needs them but are not consumed by
+ * the base today (the subclasses still inline @c Service::Interface::Scroll
+ * / @c Autotile at their D-Bus call sites for clarity).
+ */
+class TilingHandlerBase : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit TilingHandlerBase(PlasmaZonesEffect* effect, QObject* parent = nullptr);
+    ~TilingHandlerBase() override = default;
+
+    // ── Focus follows mouse ─────────────────────────────────────────────
+    /// Enable/disable focus-follows-mouse for this handler's screens.
+    /// Clears the last-focused tracking when disabled so a re-enable
+    /// re-evaluates from scratch.
+    void setFocusFollowsMouse(bool enabled);
+
+protected:
+    // ── Mode-specific D-Bus identifiers ─────────────────────────────────
+    /// Fully-qualified D-Bus interface name (e.g. @c org.plasmazones.Scroll).
+    /// Available for derived helpers that want to factor an asyncCall site.
+    virtual QString interfaceName() const = 0;
+    /// Property name on @c interfaceName() that publishes this mode's screen
+    /// set (e.g. @c scrollScreens, @c autotileScreens). Available for derived
+    /// helpers that share the @c org.freedesktop.DBus.Properties.Get pattern.
+    virtual QString screensProperty() const = 0;
+
+    /// Drop the last-focused FFM dedup key. Subclasses call this from their
+    /// per-window cleanup paths (close, output-changed, etc.) so a stale key
+    /// pointing at a no-longer-tracked window cannot suppress a legitimate
+    /// re-focus. Inlined here so both subclasses share the exact one-liner.
+    void clearLastFocusFollowsMouseWindow(const QString& windowId);
+
+    PlasmaZonesEffect* m_effect; ///< Non-owning. The effect outlives this handler.
+
+    /// Windows currently reported open to this mode's engine.
+    QSet<QString> m_notifiedWindows;
+    /// windowId → screen ID at the time the window was reported. The
+    /// authoritative answer to "where does the engine think this window
+    /// lives?" — does not change implicitly when KWin moves the window
+    /// across outputs; subclasses update it via their handleWindowOutputChanged
+    /// path so the per-mode logic can detect and act on the move.
+    QHash<QString, QString> m_notifiedWindowScreens;
+    /// Windows closed before their @c windowOpened D-Bus call resolved; the
+    /// matching open is suppressed when it arrives (D-Bus ordering race).
+    QSet<QString> m_pendingCloses;
+
+    /// Focus-follows-mouse enabled for this handler's screens.
+    bool m_focusFollowsMouse = false;
+    /// Last window activated by focus-follows-mouse — suppresses redundant
+    /// activateWindow calls while the cursor stays over the same window.
+    QString m_lastFocusFollowsMouseWindowId;
+};
+
+} // namespace PlasmaZones
