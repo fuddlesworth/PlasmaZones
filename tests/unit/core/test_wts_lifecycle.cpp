@@ -194,65 +194,61 @@ private Q_SLOTS:
         // (swapping screenId/activity, etc.) trips this test rather than
         // silently passing.
         const QString disabledScreen = QStringLiteral("AOC:24B2W1G5:116");
-        bool predicateSeenScreen = false;
-        bool predicateSeenDesktop = false;
-        bool predicateSeenActivity = false;
+        int predicateCallCount = 0;
+        bool everyCallMatched = true;
         m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop, const QString& activity) {
-            predicateSeenScreen = (screenId == disabledScreen);
-            predicateSeenDesktop = (desktop == 1);
+            ++predicateCallCount;
             // SnapState does not track per-window activity; the placement
-            // library passes an empty activity string. Locking this in.
-            predicateSeenActivity = activity.isEmpty();
+            // library passes an empty activity string. Each invocation must
+            // satisfy the contract — accumulate so a single mismatched call
+            // sticks rather than being overwritten by a later good one.
+            everyCallMatched = everyCallMatched && (screenId == disabledScreen) && (desktop == 1) && activity.isEmpty();
             return false;
         });
 
         const QString windowId = QStringLiteral("vesktop|deadbeef-0000-0000-0000-000000000001");
         const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
+        // Plain snapped setup — predicate gate behaviour holds without
+        // depending on incidental float churn. Float-clearing on close has
+        // its own dedicated test (testWindowClosed_floatStateClearedOnClose).
         m_service->assignWindowToZone(windowId, m_zoneIds[0], disabledScreen, 1);
-        m_service->unsnapForFloat(windowId);
-        m_service->setWindowFloating(windowId, true);
-        m_service->assignWindowToZone(windowId, m_zoneIds[0], disabledScreen, 1);
-        m_service->setWindowFloating(windowId, false);
         QVERIFY(m_service->isWindowSnapped(windowId));
 
         QSignalSpy stateSpy(m_service, &PhosphorPlacement::WindowTrackingService::stateChanged);
         m_service->windowClosed(windowId);
 
-        // Predicate-argument contract: the placement library must pass
-        // (current screen, current desktop, empty activity) — anything else
-        // means the predicate is being mis-fed and the gate's filtering
-        // behavior is unreliable.
-        QVERIFY(predicateSeenScreen);
-        QVERIFY(predicateSeenDesktop);
-        QVERIFY(predicateSeenActivity);
+        // Predicate-argument contract: exactly one invocation, and the
+        // tuple it received matches what the placement library promised
+        // to pass (current screen, current desktop, empty activity).
+        QCOMPARE(predicateCallCount, 1);
+        QVERIFY(everyCallMatched);
 
         // The rest of windowClosed's cleanup must still run even when the
         // pending-restore write is suppressed: zone unassigned, floating
-        // state cleared (both windowId and appId keys), pre-float state
-        // cleared, stateChanged emitted. A silent regression in any of
-        // these would leak just as badly as the original bug.
+        // state cleared (both windowId and appId keys), stateChanged
+        // emitted. A silent regression in any of these would leak just as
+        // badly as the original bug.
         QVERIFY(!m_service->isWindowSnapped(windowId));
         QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
         QVERIFY(!m_service->isWindowFloating(windowId));
         QVERIFY(!m_service->isWindowFloating(appId));
-        QVERIFY(m_service->preFloatZone(appId).isEmpty());
         QVERIFY(stateSpy.count() >= 1);
     }
 
     void testWindowClosed_predicateAcceptsEnabledContext()
     {
         // Sanity counterpart: when the predicate accepts the closing context,
-        // the historical persist-on-close behavior is preserved. Predicate
-        // also asserts it received the same (screen, desktop, empty-activity)
-        // shape as the rejecting test, locking the contract on both branches.
-        bool predicateSeenScreen = false;
-        bool predicateSeenDesktop = false;
-        bool predicateSeenActivity = false;
+        // the historical persist-on-close behavior is preserved. Same
+        // accumulator pattern — a regression that fires the predicate
+        // with the wrong tuple, or fires it more than once with mismatched
+        // arguments, is caught.
+        int predicateCallCount = 0;
+        bool everyCallMatched = true;
         m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop, const QString& activity) {
-            predicateSeenScreen = (screenId == QLatin1String("DP-1"));
-            predicateSeenDesktop = (desktop == 1);
-            predicateSeenActivity = activity.isEmpty();
+            ++predicateCallCount;
+            everyCallMatched =
+                everyCallMatched && (screenId == QLatin1String("DP-1")) && (desktop == 1) && activity.isEmpty();
             return true;
         });
 
@@ -262,9 +258,8 @@ private Q_SLOTS:
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
         m_service->windowClosed(windowId);
 
-        QVERIFY(predicateSeenScreen);
-        QVERIFY(predicateSeenDesktop);
-        QVERIFY(predicateSeenActivity);
+        QCOMPARE(predicateCallCount, 1);
+        QVERIFY(everyCallMatched);
         QVERIFY(m_service->pendingRestoreQueues().contains(appId));
     }
 
@@ -273,7 +268,14 @@ private Q_SLOTS:
         // Production daemons always wire a predicate via WTA, but unit tests
         // and library consumers may construct WTS without one. The header's
         // ShouldTrackPredicate contract promises "When unset, the service
-        // behaves as if every context is active." Lock that explicitly.
+        // behaves as if every context is active." Lock that explicitly with
+        // a round-trip: install a rejecting predicate then clear it, and
+        // confirm the unset-equivalent persist-everything behaviour is
+        // restored. Catches a future bug where the setter only stores
+        // non-empty functions, or where clearing leaks the prior predicate.
+        m_service->setShouldTrackPredicate([](const QString&, int, const QString&) {
+            return false;
+        });
         m_service->setShouldTrackPredicate({});
 
         const QString windowId = QStringLiteral("alacritty|11112222-3333-4444-5555-666677778888");

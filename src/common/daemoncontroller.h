@@ -50,8 +50,13 @@ private:
     using SystemctlCallback = std::function<void(bool success, const QString& output)>;
     void runSystemctl(const QStringList& args, SystemctlCallback callback = nullptr);
 
-    bool m_enabled = true;
+    bool m_enabled = false;
     bool m_lastState = false;
+    // Set while an async enable/disable chain is in flight so a rapid
+    // QML re-click can't fire a parallel chain on the same systemd unit
+    // (parallel systemctl invocations on the same unit have undefined
+    // final state). Cleared in the inner-most callback of setAutostart.
+    bool m_chainInFlight = false;
     QTimer* m_checkTimer = nullptr;
     QDBusServiceWatcher* m_watcher = nullptr;
 };

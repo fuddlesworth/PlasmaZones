@@ -217,7 +217,8 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // remainder — notification windows some apps spawn as ordinary
     // toplevels. Placed after the rule-override so a class-targeted
     // rule can still re-enable them, mirroring the transient filter.
-    if (m_animationExcludeNotificationsAndOsd && (w->isNotification() || w->isOnScreenDisplay())) {
+    if (m_animationExcludeNotificationsAndOsd
+        && (w->isNotification() || w->isCriticalNotification() || w->isOnScreenDisplay())) {
         return false;
     }
 

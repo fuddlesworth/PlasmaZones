@@ -592,7 +592,7 @@ void WindowTrackingService::windowClosed(const QString& windowId)
         // ones that matter for the reported leak.
         if (m_shouldTrackPredicate && !m_shouldTrackPredicate(screenId, desktop, QString())) {
             qCDebug(lcPlacement) << "Skipped PendingRestore for closed window" << appId
-                                 << "on disabled context — screen:" << screenId << "desktop:" << desktop;
+                                 << "-- disabled context, screen:" << screenId << "desktop:" << desktop;
         } else {
             PendingRestore entry;
             entry.zoneIds = zoneIds;

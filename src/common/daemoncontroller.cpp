@@ -46,7 +46,14 @@ DaemonController::DaemonController(QObject* parent)
 
     // Load initial state
     m_lastState = isRunning();
-    m_enabled = m_lastState; // Assume enabled if running, will be corrected async
+    if (m_lastState) {
+        // Optimistic only when we already see the daemon running on the bus —
+        // refreshEnabledState() will reconcile against systemd's actual
+        // is-enabled state in the next tick. The header default is false so
+        // that when we don't see the daemon, QML reads "off" until the async
+        // resolution lands.
+        m_enabled = true;
+    }
     refreshEnabledState();
 }
 
@@ -96,6 +103,18 @@ void DaemonController::setEnabled(bool enabled)
     // enabledChanged() iff it actually changed. Flipping the property
     // synchronously before systemctl confirms would lie to QML for the
     // length of the chain (and stick a wrong value if the chain failed).
+    //
+    // Re-entrancy guard: dropping the optimistic flip means QML can re-fire
+    // setEnabled() while the previous chain is still in flight. Running
+    // parallel systemctl invocations on the same unit leaves the final
+    // state ordering-dependent. Drop overlapping requests and let the
+    // first chain land — refreshEnabledState() will then push the real
+    // state to QML, and the user can retry if it still doesn't match.
+    if (m_chainInFlight) {
+        qCInfo(lcKcm) << "setEnabled(" << enabled << ") dropped — previous chain still in flight";
+        return;
+    }
+    m_chainInFlight = true;
     if (enabled) {
         setAutostart(true, [this]() {
             startDaemon();
@@ -161,10 +180,24 @@ void DaemonController::setAutostart(bool enabled, std::function<void()> onComple
                      // the second action always runs; refreshEnabledState then
                      // reconciles whatever the final on-disk state is.
                      runSystemctl({QStringLiteral("--user"), followupAction, unit},
-                                  [this, onComplete = std::move(onComplete)](bool success, const QString& /*output*/) {
-                                      if (success) {
-                                          refreshEnabledState();
+                                  [this, followupAction,
+                                   onComplete = std::move(onComplete)](bool success, const QString& /*output*/) {
+                                      // Always refresh against on-disk state — even
+                                      // on a failed followup, QML must reflect the
+                                      // unit's actual is-enabled value so the user
+                                      // isn't stranded on a stale toggle position.
+                                      // runSystemctl already logs the stderr for
+                                      // failed invocations; the followup is the
+                                      // load-bearing step (mask / enable) so a
+                                      // failure here means the toggle did NOT
+                                      // take full effect.
+                                      if (!success) {
+                                          qCWarning(lcKcm)
+                                              << "systemctl --user" << followupAction
+                                              << "failed — toggle may not have taken full effect; QML will reflect "
+                                                 "actual on-disk state after refresh";
                                       }
+                                      refreshEnabledState();
                                       // Invoke the caller's tail action AFTER the
                                       // followup action lands so a `start` issued
                                       // here never races a still-pending unmask
@@ -174,6 +207,7 @@ void DaemonController::setAutostart(bool enabled, std::function<void()> onComple
                                       if (onComplete) {
                                           onComplete();
                                       }
+                                      m_chainInFlight = false;
                                   });
                  });
 }

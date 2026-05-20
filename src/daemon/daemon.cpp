@@ -1126,18 +1126,21 @@ bool Daemon::init()
                 }
                 const QJsonObject entryObj = entryVal.toObject();
                 const QString screen = entryObj[QLatin1String("screen")].toString();
-                // Default to 1 (not 0) so a legacy entry missing the desktop
-                // key normalises the same way AutotileEngine::deserializePendingRestores
-                // does (qMax(1, ...)). With a 0 default the desktop gate
-                // would skip (it short-circuits on desktop <= 0) and a
-                // currently-disabled desktop 1 entry could slip through.
-                const int desktop = entryObj[QLatin1String("desktop")].toInt(1);
+                // qMax(1, toInt(1)) fully mirrors AutotileEngine::deserialize
+                // PendingRestores: missing-key defaults to 1 and explicit
+                // zero/negative also normalises to 1. With a bare .toInt(0)
+                // an explicit zero would slip the desktop-disabled gate
+                // (it short-circuits on desktop <= 0) while the engine on
+                // the next load would tile that entry into desktop 1.
+                const int desktop = qMax(1, entryObj[QLatin1String("desktop")].toInt(1));
                 const QString activity = entryObj[QLatin1String("activity")].toString();
-                // Empty-screen entries are dead weight: the engine's
-                // deserializer drops them outright (screenId.isEmpty()
-                // continue), so passing them through here would only persist
-                // garbage to disk. Skip in lockstep.
-                if (screen.isEmpty()) {
+                // Lockstep with AutotileEngine::deserializePendingRestores'
+                // own reject conditions (pos < 0 || screenId.isEmpty()):
+                // entries that fail to satisfy them are dead bytes — drop
+                // them here so we don't persist garbage that the next load
+                // will silently discard anyway.
+                const int position = entryObj[QLatin1String("position")].toInt(-1);
+                if (screen.isEmpty() || position < 0) {
                     continue;
                 }
                 const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter->modeFor(screen);
