@@ -240,7 +240,6 @@ void ScrollHandler::onWindowClosed(const QString& windowId, const QString& scree
     m_reasserted.remove(windowId);
     m_reorderPending.remove(windowId);
     m_interactiveResize.remove(windowId);
-    clearLastFocusFollowsMouseWindow(windowId);
 
     if (m_scrollScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scroll,
@@ -492,18 +491,6 @@ void ScrollHandler::notifyWindowFocused(const QString& windowId, const QString& 
 {
     // Keep the focus-follows-mouse dedup key in step with every focus change —
     // including focus leaving to a non-scroll window or another screen — not
-    // just FFM-originated ones. The key must equal the focused window iff that
-    // window is scroll-managed AND on a scroll screen right now; otherwise be
-    // empty. A stale key left pointing at a no-longer-focused scroll window —
-    // OR a tracked window now on a non-scroll screen — would make
-    // handleCursorMoved's "already focused" short-circuit suppress a legitimate
-    // re-focus when the cursor returns. Both predicates are required: a window
-    // tracked on its OLD strip (after the user moved it to a non-scroll screen)
-    // is still in m_notifiedWindows but should not act as a dedup anchor for
-    // scroll-mode focus events. Updated before the scroll-screen guard so a
-    // focus change onto a snapping/autotile/unmanaged screen still clears it.
-    const bool isCurrentlyOnScrollScreen = m_notifiedWindows.contains(windowId) && m_scrollScreens.contains(screenId);
-    m_lastFocusFollowsMouseWindowId = isCurrentlyOnScrollScreen ? windowId : QString();
     if (!m_scrollScreens.contains(screenId)) {
         return;
     }
@@ -538,10 +525,17 @@ void ScrollHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
         if (!m_notifiedWindows.contains(windowId)) {
             return;
         }
-        if (windowId == m_lastFocusFollowsMouseWindowId) {
+        // Skip the activateWindow call when the window under the cursor
+        // already holds compositor focus. The live activeWindow() read is
+        // load-bearing: a local "last auto-focused window" cache would go
+        // stale every time focus moved through another path (keyboard
+        // shortcut, click, daemon-driven activate, focus-stealing window),
+        // and the next cursor pass over the originally-cached window would
+        // short-circuit without re-focusing it. Mirrors the autotile fix
+        // from #503 — see discussion #461 item 13.
+        if (w == KWin::effects->activeWindow()) {
             return; // already focused — no-op
         }
-        m_lastFocusFollowsMouseWindowId = windowId;
         KWin::effects->activateWindow(w);
         return;
     }
@@ -577,7 +571,6 @@ void ScrollHandler::onDaemonReady()
     m_reasserted.clear();
     m_reorderPending.clear();
     m_interactiveResize.clear();
-    m_lastFocusFollowsMouseWindowId.clear();
     m_reassertTimer->stop();
     connectSignals();
     loadSettings();

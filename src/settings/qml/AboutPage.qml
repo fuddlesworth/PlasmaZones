@@ -44,18 +44,17 @@ SettingsFlickable {
 
                 SettingsSwitch {
                     checked: settingsController.daemonRunning
-                    onToggled: function(newValue) {
+                    enabled: !settingsController.daemonController.busy
+                    onToggled: function (newValue) {
                         settingsController.daemonController.setEnabled(newValue);
                     }
                     accessibleName: i18n("Enable PlasmaZones")
                 }
-
             }
 
             Kirigami.Separator {
                 Layout.fillWidth: true
             }
-
         }
 
         // App header with icon and version
@@ -83,9 +82,7 @@ SettingsFlickable {
                     text: Qt.application.version.length > 0 ? i18n("Version %1", Qt.application.version) : i18n("Version unknown")
                     opacity: 0.7
                 }
-
             }
-
         }
 
         // Description
@@ -163,15 +160,10 @@ SettingsFlickable {
                                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
                                 opacity: 0.5
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // License card
@@ -199,11 +191,8 @@ SettingsFlickable {
                         linkIcon: "license"
                         url: "https://www.gnu.org/licenses/gpl-3.0.html"
                     }
-
                 }
-
             }
-
         }
 
         // Credits card
@@ -237,17 +226,13 @@ SettingsFlickable {
                         text: i18n("Built with Qt, KDE Frameworks, and Kirigami")
                         opacity: 0.7
                     }
-
                 }
-
             }
-
         }
 
         Item {
             Layout.fillHeight: true
         }
-
     }
 
     // Helper component for link buttons (matching original design)
@@ -287,9 +272,6 @@ SettingsFlickable {
                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
                 opacity: 0.5
             }
-
         }
-
     }
-
 }

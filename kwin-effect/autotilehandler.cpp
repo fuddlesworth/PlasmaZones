@@ -85,15 +85,20 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
                 return;
             }
         }
-        const QString windowId = m_effect->getWindowId(w);
-        if (windowId == m_lastFocusFollowsMouseWindowId) {
+        // Skip the activateWindow call when the window under the cursor
+        // already holds compositor focus. The live activeWindow() read is
+        // load-bearing: a local "last auto-focused window" cache would go
+        // stale every time focus moved through another path (keyboard
+        // shortcut, click, daemon-driven activate, focus-stealing window),
+        // and the next cursor pass over the originally-cached window would
+        // short-circuit without re-focusing it. See discussion #461 item 13.
+        if (w == KWin::effects->activeWindow()) {
             return; // Already focused — no-op
         }
         // Only focus windows on autotile screens
         if (!m_autotileScreens.contains(m_effect->getWindowScreenId(w))) {
             return;
         }
-        m_lastFocusFollowsMouseWindowId = windowId;
         KWin::effects->activateWindow(w);
         return;
     }
@@ -463,7 +468,6 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     // KWin-specific cleanup not covered by the shared helper
     m_savedNotifiedForDesktopReturn.remove(windowId);
     m_savedPreAutotileForDesktopMove.remove(windowId);
-    clearLastFocusFollowsMouseWindow(windowId);
     auto pendingConn = m_pendingCrossScreenRestore.find(windowId);
     if (pendingConn != m_pendingCrossScreenRestore.end()) {
         QObject::disconnect(pendingConn.value());

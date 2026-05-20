@@ -92,6 +92,17 @@ PHOSPHORZONES_EXPORT QVariantMap layoutToVariantMap(Layout* layout, ZoneFields z
 PHOSPHORZONES_EXPORT void sortZonesByNumber(QVector<Zone*>& zones);
 PHOSPHORZONES_EXPORT QHash<QString, int> buildZonePositionMap(Layout* layout);
 
+/**
+ * @brief Build a global zoneId → position map merged across every layout in @p layouts.
+ *
+ * Zone UUIDs are unique across all layouts in the registry, so the merge is
+ * unambiguous. Used by the resnap path (lifecycle.cpp + resnap.cpp) when a
+ * window's stored zoneId may have come from any layout — for example, after
+ * a promote edit shifts the cascade winner from a per-context layout to the
+ * screen-level slot.
+ */
+PHOSPHORZONES_EXPORT QHash<QString, int> buildGlobalZonePositionMap(const QList<Layout*>& layouts);
+
 } // namespace LayoutUtils
 
 } // namespace PhosphorZones

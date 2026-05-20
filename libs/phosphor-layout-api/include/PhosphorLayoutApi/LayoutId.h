@@ -62,6 +62,20 @@ inline QString makeAutotileId(const QString& algorithmId)
     return AutotilePrefix + algorithmId;
 }
 
+/// Normalize an algorithm-id-or-prefixed-layout-id into the canonical
+/// `autotile:<algo>` form: pass-through when already prefixed, prefix
+/// when raw. Empty input returns empty (no `autotile:` wrap). Centralises
+/// the prefix-or-not check that several daemon readers apply to the raw
+/// `entry.tilingAlgorithm` field so it round-trips with the prefixed
+/// LayoutComboBox model values.
+inline QString normalizeAlgorithmId(const QString& id)
+{
+    if (id.isEmpty()) {
+        return id;
+    }
+    return isAutotile(id) ? id : makeAutotileId(id);
+}
+
 inline constexpr QLatin1String ScrollPrefix{"scroll:"};
 
 inline bool isScroll(const QString& id)

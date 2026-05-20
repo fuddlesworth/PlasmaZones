@@ -1342,19 +1342,8 @@ void Settings::setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, co
 bool Settings::isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const
 {
     const QStringList entries = disabledMonitors(mode);
-    if (entries.contains(screenIdOrName)) {
-        return true;
-    }
-    // Backward compat: resolve between connector name and screen id so
-    // stored entries still match across the two representations.
-    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
-        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
-        if (resolved != screenIdOrName && entries.contains(resolved)) {
-            return true;
-        }
-    } else {
-        const QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenIdOrName);
-        if (!connector.isEmpty() && entries.contains(connector)) {
+    for (const QString& name : Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName)) {
+        if (entries.contains(name)) {
             return true;
         }
     }
@@ -1381,20 +1370,9 @@ bool Settings::isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, cons
         return false;
     }
     const QStringList entries = disabledDesktops(mode);
-    QStringList namesToCheck = {screenIdOrName};
-    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
-        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
-        if (resolved != screenIdOrName) {
-            namesToCheck.append(resolved);
-        }
-    } else {
-        const QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenIdOrName);
-        if (!connector.isEmpty() && connector != screenIdOrName) {
-            namesToCheck.append(connector);
-        }
-    }
+    const QStringList namesToCheck = Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName);
     const QString desktopStr = QString::number(desktop);
-    for (const QString& name : std::as_const(namesToCheck)) {
+    for (const QString& name : namesToCheck) {
         if (entries.contains(name + QLatin1Char('/') + desktopStr)) {
             return true;
         }
@@ -1422,19 +1400,8 @@ bool Settings::isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, con
         return false;
     }
     const QStringList entries = disabledActivities(mode);
-    QStringList namesToCheck = {screenIdOrName};
-    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
-        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
-        if (resolved != screenIdOrName) {
-            namesToCheck.append(resolved);
-        }
-    } else {
-        const QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenIdOrName);
-        if (!connector.isEmpty() && connector != screenIdOrName) {
-            namesToCheck.append(connector);
-        }
-    }
-    for (const QString& name : std::as_const(namesToCheck)) {
+    const QStringList namesToCheck = Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName);
+    for (const QString& name : namesToCheck) {
         if (entries.contains(name + QLatin1Char('/') + activityId)) {
             return true;
         }
@@ -2363,19 +2330,8 @@ void Settings::setScreenLocked(const QString& screenIdOrName, bool locked)
 bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity) const
 {
     const QStringList locked = lockedScreens();
-    QStringList namesToCheck = {screenIdOrName};
-    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
-        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
-        if (resolved != screenIdOrName) {
-            namesToCheck.append(resolved);
-        }
-    } else {
-        const QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenIdOrName);
-        if (!connector.isEmpty() && connector != screenIdOrName) {
-            namesToCheck.append(connector);
-        }
-    }
-    for (const QString& name : std::as_const(namesToCheck)) {
+    const QStringList namesToCheck = Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName);
+    for (const QString& name : namesToCheck) {
         if (virtualDesktop > 0 && !activity.isEmpty()) {
             const QString k =
                 name + QStringLiteral(":") + QString::number(virtualDesktop) + QStringLiteral(":") + activity;

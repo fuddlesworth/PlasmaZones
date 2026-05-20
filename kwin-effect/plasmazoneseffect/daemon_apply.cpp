@@ -698,9 +698,12 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
             continue;
         }
 
-        // Include all normal, non-special windows (relaxed filter for the picker)
+        // Include all normal, non-special windows (relaxed filter for the picker).
+        // isCriticalNotification is a distinct KWin window type from isNotification,
+        // so both must be rejected — a window flagged only critical-notification
+        // would otherwise show up in the app picker.
         if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isSkipSwitcher() || w->isNotification()
-            || w->isOnScreenDisplay() || w->isPopupWindow()) {
+            || w->isCriticalNotification() || w->isOnScreenDisplay() || w->isPopupWindow()) {
             continue;
         }
 

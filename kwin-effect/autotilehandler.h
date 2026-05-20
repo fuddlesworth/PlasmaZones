@@ -330,7 +330,7 @@ private:
     // ═══════════════════════════════════════════════════════════════════
 
     // m_effect, m_notifiedWindows, m_notifiedWindowScreens, m_pendingCloses,
-    // m_focusFollowsMouse, m_lastFocusFollowsMouseWindowId are inherited from
+    // m_focusFollowsMouse is inherited from
     // TilingHandlerBase.
 
     QSet<QString> m_autotileScreens;

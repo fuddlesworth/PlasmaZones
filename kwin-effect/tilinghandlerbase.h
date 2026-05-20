@@ -29,7 +29,7 @@ class PlasmaZonesEffect;
  *   - @c m_notifiedWindowScreens: each tracked window's screen at report time
  *   - @c m_pendingCloses: windows that closed before their windowOpened ack
  *     resolved (D-Bus ordering race) — the late ack is suppressed
- *   - @c m_focusFollowsMouse / @c m_lastFocusFollowsMouseWindowId: FFM dedup
+ *   - @c m_focusFollowsMouse: FFM master toggle
  *
  * Every other piece of state is mode-specific:
  *   - Autotile owns per-screen borderless buckets, monocle-maximized tracking,
@@ -63,8 +63,6 @@ public:
 
     // ── Focus follows mouse ─────────────────────────────────────────────
     /// Enable/disable focus-follows-mouse for this handler's screens.
-    /// Clears the last-focused tracking when disabled so a re-enable
-    /// re-evaluates from scratch.
     void setFocusFollowsMouse(bool enabled);
 
 protected:
@@ -76,12 +74,6 @@ protected:
     /// set (e.g. @c scrollScreens, @c autotileScreens). Available for derived
     /// helpers that share the @c org.freedesktop.DBus.Properties.Get pattern.
     virtual QString screensProperty() const = 0;
-
-    /// Drop the last-focused FFM dedup key. Subclasses call this from their
-    /// per-window cleanup paths (close, output-changed, etc.) so a stale key
-    /// pointing at a no-longer-tracked window cannot suppress a legitimate
-    /// re-focus. Inlined here so both subclasses share the exact one-liner.
-    void clearLastFocusFollowsMouseWindow(const QString& windowId);
 
     PlasmaZonesEffect* m_effect; ///< Non-owning. The effect outlives this handler.
 
@@ -97,11 +89,13 @@ protected:
     /// matching open is suppressed when it arrives (D-Bus ordering race).
     QSet<QString> m_pendingCloses;
 
-    /// Focus-follows-mouse enabled for this handler's screens.
+    /// Focus-follows-mouse enabled for this handler's screens. The
+    /// per-handler @c handleCursorMoved compares the under-cursor window
+    /// against @c KWin::effects->activeWindow() rather than caching a last-
+    /// auto-focused id, because that cache went stale every time another
+    /// path changed compositor focus and silently suppressed legitimate
+    /// re-focuses (see fix #503 / discussion #461 item 13).
     bool m_focusFollowsMouse = false;
-    /// Last window activated by focus-follows-mouse — suppresses redundant
-    /// activateWindow calls while the cursor stays over the same window.
-    QString m_lastFocusFollowsMouseWindowId;
 };
 
 } // namespace PlasmaZones

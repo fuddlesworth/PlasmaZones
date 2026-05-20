@@ -567,8 +567,8 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
         return;
     }
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()
-        || w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isOnScreenDisplay()
-        || w->isModal() || w->isPopupWindow()) {
+        || w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isCriticalNotification()
+        || w->isOnScreenDisplay() || w->isModal() || w->isPopupWindow()) {
         return;
     }
 

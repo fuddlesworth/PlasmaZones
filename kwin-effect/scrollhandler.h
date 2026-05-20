@@ -248,8 +248,7 @@ private:
     void clearDecoration(const QString& windowId, KWin::EffectWindow* w);
 
     // m_effect, m_notifiedWindows, m_notifiedWindowScreens, m_pendingCloses,
-    // m_focusFollowsMouse, m_lastFocusFollowsMouseWindowId are inherited
-    // from TilingHandlerBase.
+    // m_focusFollowsMouse is inherited from TilingHandlerBase.
 
     QSet<QString> m_scrollScreens; ///< Screens currently in scroll mode.
     /// windowId → geometry the daemon last resolved for it; the reference

@@ -121,19 +121,40 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
         return false;
     }
 
-    // Skip transient/dialog windows unconditionally. Dialogs, utilities, tooltips,
-    // notifications, etc. should never be zone-managed. User-configured exclusion
-    // lists and minimum size checks are handled by the daemon.
+    // Skip transient/dialog/menu windows unconditionally. Dialogs, utilities,
+    // tooltips, menus, notifications, etc. should never be zone-managed.
+    // User-configured exclusion lists and minimum size checks are handled by
+    // the daemon.
     //
     // transientFor() catches child surfaces that Electron/CEF apps (Steam, Discord,
     // VS Code) spawn for image previews, context menus and popups: these frequently
     // fail to report an accurate KWin window type (isDialog/isPopupWindow stay
     // false) but always set the transient-parent relationship. Without this the
     // popup passes the filter and gets snapped to a zone (discussion #461 item 11).
-    // Mirrors the transient bucket already enforced by shouldAnimateWindow() and
-    // isTileableWindow().
-    if (w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isOnScreenDisplay()
-        || w->isModal() || w->isPopupWindow() || w->transientFor()) {
+    //
+    // Relationship with isTileableWindow(): the autotile filter starts with
+    // `!isNormalWindow()`, which structurally catches every flag enumerated here
+    // (KWin marks Dialog/Utility/Splash/Notification/etc. as non-Normal types).
+    // We enumerate them explicitly on the snap side because the snap path runs
+    // before isNormalWindow() classification in some KWin versions, and the
+    // explicit list documents which window kinds the snap filter rejects.
+    // Anything in this block that ALSO appears verbatim in isTileableWindow
+    // (isModal, isPopupWindow, isPopupMenu, isDropdownMenu, isMenu, isTooltip,
+    // transientFor) must stay in lockstep with that filter — the Steam image-
+    // popup regression (#461 item 11) came from a missed sync of exactly that
+    // intersection. The flags isTileableWindow does NOT enumerate (isDialog,
+    // isUtility, isSplash, isNotification, isCriticalNotification,
+    // isOnScreenDisplay) are caught there by !isNormalWindow().
+    if (w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isCriticalNotification()
+        || w->isOnScreenDisplay() || w->isModal() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
+        || w->isMenu() || w->isTooltip() || w->transientFor()) {
+        return false;
+    }
+
+    // Keep-above overlays (Spectacle, color pickers, screen rulers, screenshot
+    // tools that linger after capture) shouldn't be snapped to a zone — same
+    // rationale as isTileableWindow's keep-above gate.
+    if (w->keepAbove()) {
         return false;
     }
 
@@ -204,7 +225,8 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // remainder — notification windows some apps spawn as ordinary
     // toplevels. Placed after the rule-override so a class-targeted
     // rule can still re-enable them, mirroring the transient filter.
-    if (m_animationExcludeNotificationsAndOsd && (w->isNotification() || w->isOnScreenDisplay())) {
+    if (m_animationExcludeNotificationsAndOsd
+        && (w->isNotification() || w->isCriticalNotification() || w->isOnScreenDisplay())) {
         return false;
     }
 

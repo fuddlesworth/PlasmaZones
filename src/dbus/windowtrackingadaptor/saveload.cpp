@@ -7,6 +7,7 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "../../config/configbackends.h"
 #include "../../core/interfaces.h"
+#include "../../core/screenmoderouter.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -16,6 +17,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSet>
 #include "../../config/configkeys.h"
 #include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -49,6 +51,30 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
         }
     }
     return result;
+}
+
+bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, int virtualDesktop,
+                                                       const QString& activity) const
+{
+    // Empty screen means the entry never carried a usable context tag (legacy
+    // snap entries pre-multi-monitor, sticky windows, etc.). Loading and
+    // keeping them is the historical default — the alternative drops snap
+    // state on every windowless desktop session.
+    //
+    // m_screenModeRouter is wired post-construction by the daemon; the very
+    // first call site is loadState() (invoked from this adaptor's own ctor
+    // before the daemon calls setScreenModeRouter), where it is still null.
+    // Snap-side consumers (WindowZoneAssignmentsFull, PendingRestoreQueues,
+    // PreFloat* maps) and snap's ShouldTrackPredicate route through here and
+    // get the Snapping fallback. Autotile's ShouldPersistRestorePredicate also
+    // routes through here and supplies its own activity tag — `modeFor` picks
+    // up the screen's current Autotile mode whenever the router is wired.
+    if (screenId.isEmpty()) {
+        return false;
+    }
+    const PhosphorZones::AssignmentEntry::Mode mode =
+        m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
+    return isContextDisabled(m_settings, mode, screenId, virtualDesktop, activity);
 }
 
 void WindowTrackingAdaptor::saveState()
@@ -87,14 +113,24 @@ void WindowTrackingAdaptor::saveState()
     QJsonArray fullAssignments;
     if (dirty & D::DirtyZoneAssignments) {
         for (auto it = m_service->zoneAssignments().constBegin(); it != m_service->zoneAssignments().constEnd(); ++it) {
+            const QString assignedScreen = m_service->screenAssignments().value(it.key());
+            const int desktop = m_service->desktopAssignments().value(it.key(), 0);
+            // Disabled-context filter (discussion #461 item 2). A window that
+            // crossed onto a now-disabled monitor (e.g. user disabled snapping
+            // on their secondary) should not have its zone assignment
+            // re-persisted — that's the entry that resurfaces and yanks the
+            // window back on the next session. The runtime in-memory map keeps
+            // the assignment; only persistence is suppressed.
+            if (isPersistedContextDisabled(assignedScreen, desktop)) {
+                continue;
+            }
             QJsonObject entry;
             entry[QLatin1String("windowId")] = it.key();
             entry[QLatin1String("zoneIds")] = toJsonArray(it.value());
-            const QString assignedScreen = m_service->screenAssignments().value(it.key());
             entry[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(assignedScreen)
                 ? assignedScreen
                 : Phosphor::Screens::ScreenIdentity::idForName(assignedScreen);
-            entry[QLatin1String("desktop")] = m_service->desktopAssignments().value(it.key(), 0);
+            entry[QLatin1String("desktop")] = desktop;
             fullAssignments.append(entry);
         }
         tracking->writeString(ConfigKeys::windowZoneAssignmentsFullKey(),
@@ -109,6 +145,14 @@ void WindowTrackingAdaptor::saveState()
              it != m_service->pendingRestoreQueues().constEnd(); ++it) {
             QJsonArray entryArray;
             for (const auto& entry : it.value()) {
+                // Disabled-context filter (discussion #461 item 2). The Tier-A
+                // write gate in lifecycle.cpp covers new closes, but the
+                // in-memory queue may still hold pre-fix entries from before
+                // the user disabled the screen. Filtering here keeps them out
+                // of the on-disk session.
+                if (isPersistedContextDisabled(entry.screenId, entry.virtualDesktop)) {
+                    continue;
+                }
                 QJsonObject entryObj;
                 entryObj[QLatin1String("zoneIds")] = toJsonArray(entry.zoneIds);
                 if (!entry.screenId.isEmpty()) {
@@ -156,11 +200,24 @@ void WindowTrackingAdaptor::saveState()
     // even after daemon restart (windows stay at their zone positions across restarts).
     // Save full windowId format for daemon-only restarts (UUIDs stable, multi-instance distinction).
     // Save appId format as fallback for KWin restarts (UUIDs change).
+    //
+    // Disabled-context filter (discussion #461 item 2): drop entries whose
+    // screenId is on the disabled-monitor list. Without this, float-restore
+    // on the next session would place the window at coordinates the user
+    // disabled snapping on (and after a screen-disconnect they may even be
+    // off-screen). Mirrors the WindowZoneAssignmentsFull filter above.
     if ((dirty & D::DirtyPreTileGeometries) && m_snapEngine) {
-        tracking->writeString(ConfigKeys::preTileGeometriesFullKey(),
-                              serializeGeometryMapFull(m_snapEngine->unmanagedGeometries()));
-        tracking->writeString(ConfigKeys::preTileGeometriesKey(),
-                              serializeGeometryMap(m_snapEngine->unmanagedGeometries(), m_service));
+        QHash<QString, PhosphorEngine::PlacementEngineBase::UnmanagedEntry> filteredGeoms;
+        const auto& allGeoms = m_snapEngine->unmanagedGeometries();
+        filteredGeoms.reserve(allGeoms.size());
+        for (auto it = allGeoms.constBegin(); it != allGeoms.constEnd(); ++it) {
+            if (isPersistedContextDisabled(it.value().screenId, 0)) {
+                continue;
+            }
+            filteredGeoms.insert(it.key(), it.value());
+        }
+        tracking->writeString(ConfigKeys::preTileGeometriesFullKey(), serializeGeometryMapFull(filteredGeoms));
+        tracking->writeString(ConfigKeys::preTileGeometriesKey(), serializeGeometryMap(filteredGeoms, m_service));
     }
 
     // Save last used zone info (from service)
@@ -173,6 +230,24 @@ void WindowTrackingAdaptor::saveState()
     // Clear any stale entry from older versions so restored sessions start clean.
     tracking->deleteKey(ConfigKeys::obsoleteFloatingWindowsKey());
 
+    // Disabled-context filter (discussion #461 item 2) for the pre-float maps:
+    // a window floated on a since-disabled monitor would otherwise restore
+    // there on unfloat. PreFloat has no desktop dimension (it's appId-keyed),
+    // so we pass desktop=0 — the helper short-circuits the desktop gate on
+    // 0 and the monitor-disabled list is the load-bearing check anyway.
+    // Build the set of dropped appIds from the screen map so the zone map
+    // can drop its paired entries without re-doing the screen lookup.
+    QSet<QString> droppedPreFloatAppIds;
+    for (auto it = m_service->preFloatScreenAssignments().constBegin();
+         it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
+        if (isPersistedContextDisabled(it.value(), 0)) {
+            const QString key = m_service->currentAppIdFor(it.key());
+            if (!key.isEmpty()) {
+                droppedPreFloatAppIds.insert(key);
+            }
+        }
+    }
+
     // Save pre-float zone assignments (for unfloating after session restore).
     // Runtime keys are full window IDs; convert to the CURRENT app class so
     // that a window which renamed mid-session persists under the live class.
@@ -181,7 +256,7 @@ void WindowTrackingAdaptor::saveState()
         for (auto it = m_service->preFloatZoneAssignments().constBegin();
              it != m_service->preFloatZoneAssignments().constEnd(); ++it) {
             QString key = m_service->currentAppIdFor(it.key());
-            if (key.isEmpty()) {
+            if (key.isEmpty() || droppedPreFloatAppIds.contains(key)) {
                 continue;
             }
             preFloatZonesObj[key] = toJsonArray(it.value());
@@ -192,12 +267,14 @@ void WindowTrackingAdaptor::saveState()
 
     // Save pre-float screen assignments (for unfloating to correct monitor).
     // Same current-class conversion as above, plus translate to screen IDs.
+    // Disabled-context drop is funnelled through droppedPreFloatAppIds
+    // (built above) so the screen and zone loops use a single decision.
     if (dirty & D::DirtyPreFloatScreens) {
         QJsonObject preFloatScreensObj;
         for (auto it = m_service->preFloatScreenAssignments().constBegin();
              it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
             QString key = m_service->currentAppIdFor(it.key());
-            if (key.isEmpty()) {
+            if (key.isEmpty() || droppedPreFloatAppIds.contains(key)) {
                 continue;
             }
             preFloatScreensObj[key] = PhosphorIdentity::VirtualScreenId::isVirtual(it.value())
@@ -418,6 +495,19 @@ void WindowTrackingAdaptor::loadState()
                 QString screen = entry[QLatin1String("screen")].toString();
                 int desktop = entry[QLatin1String("desktop")].toInt(0);
 
+                // Disabled-context filter (discussion #461 item 2). A session
+                // saved before the user disabled this monitor/desktop carries
+                // assignments that would otherwise resurface and yank the
+                // window back into a zone the user told us to leave alone.
+                // Drop them on load — the matching autotile cleanup in
+                // pruneStaleRestores fires automatically when active screens
+                // are recomputed; this is the snap-side equivalent.
+                if (isPersistedContextDisabled(screen, desktop)) {
+                    qCInfo(lcDbusWindow) << "loadState: dropping zone assignment for" << windowId
+                                         << "on disabled context — screen:" << screen << "desktop:" << desktop;
+                    continue;
+                }
+
                 fullZones[windowId] = zoneIds;
                 fullScreens[windowId] = screen;
                 fullDesktops[windowId] = desktop;
@@ -497,6 +587,16 @@ void WindowTrackingAdaptor::loadState()
                             entry.zoneNumbers.append(v.toInt());
                         }
                     }
+                    // Disabled-context filter (discussion #461 item 2).
+                    // Pre-fix sessions may contain restore entries for a
+                    // monitor / desktop the user has since disabled snapping
+                    // on; drop those on load so they never get replayed.
+                    if (isPersistedContextDisabled(entry.screenId, entry.virtualDesktop)) {
+                        qCInfo(lcDbusWindow)
+                            << "loadState: dropping pending restore for" << it.key()
+                            << "on disabled context — screen:" << entry.screenId << "desktop:" << entry.virtualDesktop;
+                        continue;
+                    }
                     pendingQueues[it.key()].append(entry);
                 }
             }
@@ -571,9 +671,12 @@ void WindowTrackingAdaptor::loadState()
     m_service->setPendingRestoreQueues(pendingQueues);
 
     // Load pre-tile geometries into the engine's unmanaged-geometry store.
+    // Disabled-context filter mirrors saveState: drop entries whose stored
+    // screen is on the user's disabled-monitor list, so a session saved
+    // before the fix doesn't replay leaked entries on the next start.
     using UnmanagedEntry = PhosphorEngine::PlacementEngineBase::UnmanagedEntry;
     QHash<QString, UnmanagedEntry> unmanagedGeometries;
-    auto loadGeometries = [](const QString& json, QHash<QString, UnmanagedEntry>& out) {
+    auto loadGeometries = [this](const QString& json, QHash<QString, UnmanagedEntry>& out) {
         if (json.isEmpty()) {
             return;
         }
@@ -589,6 +692,9 @@ void WindowTrackingAdaptor::loadState()
                            geomObj[QLatin1String("width")].toInt(), geomObj[QLatin1String("height")].toInt());
                 if (geom.width() > 0 && geom.height() > 0) {
                     QString screen = geomObj[QLatin1String("screen")].toString();
+                    if (isPersistedContextDisabled(screen, 0)) {
+                        continue;
+                    }
                     out[it.key()] = UnmanagedEntry{geom, screen};
                 }
             }
@@ -615,6 +721,9 @@ void WindowTrackingAdaptor::loadState()
                            entry[QLatin1String("width")].toInt(), entry[QLatin1String("height")].toInt());
                 if (geom.width() > 0 && geom.height() > 0) {
                     QString screen = entry[QLatin1String("screen")].toString();
+                    if (isPersistedContextDisabled(screen, 0)) {
+                        continue;
+                    }
                     unmanagedGeometries[windowId] = UnmanagedEntry{geom, screen};
                 }
             }
@@ -646,15 +755,23 @@ void WindowTrackingAdaptor::loadState()
     // Float state is ephemeral (session-only) — skip loading.
     // Any stale FloatingWindows entries from older versions are cleaned up in saveState().
 
-    // Load pre-float zone assignments (for unfloating after session restore)
-    // Supports both old format (string) and new format (JSON array) for backward compat
+    // Load pre-float zone assignments (for unfloating after session restore).
+    // Supports both old format (string) and new format (JSON array) for
+    // backward compat. The disabled-context filter for these entries needs
+    // the paired screen, so the zone-keyed drop-set is built below from the
+    // screen-load loop and then applied to the parsed zones map.
     QHash<QString, QStringList> preFloatZones =
         parseZoneListMap(readVal(ConfigKeys::preFloatZoneAssignmentsKey(), QString()));
-    m_service->setPreFloatZoneAssignments(preFloatZones);
 
-    // Load pre-float screen assignments (for unfloating to correct monitor)
-    // Values may be screen IDs (new) or connector names (legacy) — resolve to current connector name
+    // Load pre-float screen assignments (for unfloating to correct monitor).
+    // Values may be screen IDs (new) or connector names (legacy) — resolve to
+    // current connector name. Disabled-context filter (discussion #461 item 2):
+    // drop entries whose stored screen is on the user's disabled-monitor list
+    // before they reach the in-memory map. PreFloat has no desktop dimension,
+    // so we pass desktop=0 — the helper short-circuits the desktop gate and
+    // monitor-disabled is the load-bearing check.
     QHash<QString, QString> preFloatScreens;
+    QSet<QString> droppedPreFloatAppIds;
     QString preFloatScreensJson = readVal(ConfigKeys::preFloatScreenAssignmentsKey(), QString());
     if (!preFloatScreensJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(preFloatScreensJson.toUtf8());
@@ -663,6 +780,12 @@ void WindowTrackingAdaptor::loadState()
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 if (it.value().isString()) {
                     QString storedScreen = it.value().toString();
+                    if (isPersistedContextDisabled(storedScreen, 0)) {
+                        qCInfo(lcDbusWindow) << "loadState: dropping pre-float screen entry for" << it.key()
+                                             << "on disabled context — screen:" << storedScreen;
+                        droppedPreFloatAppIds.insert(it.key());
+                        continue;
+                    }
                     // Virtual screen IDs are stored as-is — no connector/ID translation
                     if (!PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
                         if (!Phosphor::Screens::ScreenIdentity::isConnectorName(storedScreen)) {
@@ -677,6 +800,14 @@ void WindowTrackingAdaptor::loadState()
             }
         }
     }
+
+    // Strip paired zone entries for any appId whose screen entry was dropped
+    // above — keeping a zone-only entry would unfloat to the wrong screen.
+    for (const QString& appId : std::as_const(droppedPreFloatAppIds)) {
+        preFloatZones.remove(appId);
+    }
+
+    m_service->setPreFloatZoneAssignments(preFloatZones);
     m_service->setPreFloatScreenAssignments(preFloatScreens);
 
     // Load user-snapped classes

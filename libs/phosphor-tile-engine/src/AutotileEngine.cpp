@@ -801,24 +801,45 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         propagateGlobalMasterCount();
     }
 
-    // Persist ALL changed fields back to settings to avoid desync between
-    // the engine's runtime state and the Settings object. Signal-blocked write
-    // prevents recursive corruption (daemon settingsChanged → syncFromSettings →
-    // setAlgorithm with stale KCM algo).
+    // Commit the new algorithm id BEFORE the write-back block so that any
+    // observer that reads m_algorithmId during write-back (e.g. a slot
+    // that survives the QSignalBlocker via a Qt::DirectConnection from
+    // outside engineSettings()) sees the new value, not the stale one.
+    // The guard timer + signal blocker still prevent the normal
+    // syncFromSettings re-entry path; this reorder just removes a latent
+    // observable window where m_algorithmId disagreed with the value
+    // being persisted.
+    m_algorithmEverSet = true;
+    m_algorithmId = newId;
+    m_config->algorithmId = newId;
+
+    // Persist the per-algorithm tuning (split ratio, master count, saved
+    // per-algorithm settings, and maxWindows when it changed) so the next
+    // session restores the user's tuning for whatever algorithm they end
+    // up on. Signal-blocked write prevents recursive corruption (daemon
+    // settingsChanged → syncFromSettings → setAlgorithm with stale KCM
+    // algo).
+    //
+    // NOTE: we deliberately do NOT call `setDefaultAutotileAlgorithm(newId)`
+    // here. The global default algorithm is a user-owned setting modified
+    // ONLY through the Layouts page (or its sub-pages / context menus).
+    // Per-screen / per-context applies that route through this method —
+    // e.g. UnifiedLayoutController applying an autotile entry on the
+    // current screen, or AutotileAdaptor::setAlgorithm from a script —
+    // must not silently overwrite that global preference. Per-screen
+    // assignments already carry the algorithm in the (screen, desktop,
+    // activity) entry; the engine's m_algorithmId tracks the runtime
+    // ambient algorithm and resyncs from defaultAutotileAlgorithm on the
+    // next session start, which is the intended behaviour.
     {
         m_writeBackGuardTimer.start();
         const QSignalBlocker blocker(engineSettings());
         writeBackTuning();
         if (auto* s = autotileSettings()) {
-            s->setDefaultAutotileAlgorithm(newId);
             if (m_config->maxWindows != oldMaxWindows)
                 s->setAutotileMaxWindows(m_config->maxWindows);
         }
     }
-
-    m_algorithmEverSet = true;
-    m_algorithmId = newId;
-    m_config->algorithmId = newId;
 
     // Clear stale split trees when switching away from a memory algorithm.
     // Without this, deserialized trees from a previous DwindleMemory session
@@ -1469,6 +1490,15 @@ QJsonObject AutotileEngine::serializePendingRestores() const
     for (auto it = m_pendingAutotileRestores.constBegin(); it != m_pendingAutotileRestores.constEnd(); ++it) {
         QJsonArray queueArray;
         for (const PendingAutotileRestore& restore : it.value()) {
+            // Save-time gate (discussion #461 item 2). Drop entries whose
+            // context the user has disabled since the entry was queued —
+            // otherwise persisting them just resurrects the same restore
+            // on the next session.
+            if (m_shouldPersistRestorePredicate
+                && !m_shouldPersistRestorePredicate(restore.context.screenId, restore.context.desktop,
+                                                    restore.context.activity)) {
+                continue;
+            }
             QJsonObject restoreObj;
             restoreObj[QLatin1String("position")] = restore.position;
             restoreObj[QLatin1String("screen")] = restore.context.screenId;
@@ -1477,7 +1507,9 @@ QJsonObject AutotileEngine::serializePendingRestores() const
             restoreObj[QLatin1String("wasFloating")] = restore.wasFloating;
             queueArray.append(restoreObj);
         }
-        queuesObj[it.key()] = queueArray;
+        if (!queueArray.isEmpty()) {
+            queuesObj[it.key()] = queueArray;
+        }
     }
     return queuesObj;
 }
@@ -1503,6 +1535,13 @@ void AutotileEngine::deserializePendingRestores(const QJsonObject& queuesObj)
             ctx.screenId = screenId;
             ctx.desktop = qMax(1, restoreObj[QLatin1String("desktop")].toInt(1));
             ctx.activity = restoreObj[QLatin1String("activity")].toString();
+            // Load-time gate (discussion #461 item 2). Drop entries whose
+            // context the user disabled while the daemon was off (or that
+            // were written by an older daemon that didn't have the gate).
+            if (m_shouldPersistRestorePredicate
+                && !m_shouldPersistRestorePredicate(ctx.screenId, ctx.desktop, ctx.activity)) {
+                continue;
+            }
             restoreList.append(
                 PendingAutotileRestore(pos, std::move(ctx), restoreObj[QLatin1String("wasFloating")].toBool(false)));
             if (restoreList.size() >= MaxPendingRestoresPerApp)
@@ -2687,16 +2726,29 @@ void AutotileEngine::removeWindow(const QString& windowId)
             // mid-session rename still routes the restore to the right bucket.
             const QString appId = currentAppIdFor(windowId);
             if (!appId.isEmpty() && appId != windowId) {
-                PendingAutotileRestore entry(pos, key, state->isFloating(windowId));
-                auto& queue = m_pendingAutotileRestores[appId];
-                // Cap per-appId queue to prevent unbounded growth from windows
-                // that are closed repeatedly without reopening.
-                if (queue.size() >= MaxPendingRestoresPerApp) {
-                    queue.removeFirst();
+                // Live write gate (discussion #461 item 2). A window that
+                // closes on a disabled monitor/desktop/activity should not
+                // even enter the in-memory queue — otherwise it sits in RAM
+                // until the next save filter strips it, and a same-session
+                // reopen would resurrect it mid-flight. Matches the snap-side
+                // gate in WindowTrackingService::windowClosed.
+                if (m_shouldPersistRestorePredicate
+                    && !m_shouldPersistRestorePredicate(key.screenId, key.desktop, key.activity)) {
+                    qCDebug(PhosphorTileEngine::lcTileEngine)
+                        << "Skipped pending restore for" << appId << "-- disabled context, screen=" << key.screenId
+                        << "desktop=" << key.desktop;
+                } else {
+                    PendingAutotileRestore entry(pos, key, state->isFloating(windowId));
+                    auto& queue = m_pendingAutotileRestores[appId];
+                    // Cap per-appId queue to prevent unbounded growth from windows
+                    // that are closed repeatedly without reopening.
+                    if (queue.size() >= MaxPendingRestoresPerApp) {
+                        queue.removeFirst();
+                    }
+                    queue.append(entry);
+                    qCDebug(PhosphorTileEngine::lcTileEngine)
+                        << "Saved pending restore for" << appId << "position=" << pos << "screen=" << key.screenId;
                 }
-                queue.append(entry);
-                qCDebug(PhosphorTileEngine::lcTileEngine)
-                    << "Saved pending restore for" << appId << "position=" << pos << "screen=" << key.screenId;
             }
         }
         state->removeWindow(windowId);
