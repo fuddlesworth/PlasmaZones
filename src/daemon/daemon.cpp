@@ -86,7 +86,13 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorEngine/IScrollEngine.h>
 #include <PhosphorEngine/IScrollNavigation.h>
+// ScrollEngine.h is needed here for the unique_ptr<ScrollEngine> →
+// unique_ptr<PlacementEngineBase> move-conversion in start() — the conversion
+// requires the compiler to see ScrollEngine's inheritance chain. The
+// daemon's *runtime* surface to the engine still goes through IScrollEngine
+// (no concrete-type method calls in this TU after the move).
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -1007,13 +1013,14 @@ bool Daemon::init()
     m_autotileEngine = std::move(engines.autotile);
     m_snapEngine = std::move(engines.snap);
     m_scrollEngine = std::move(engines.scroll);
-    // Cache the concrete down-cast once. m_scrollEngine is the base
+    // Cache the cross-cast to IScrollEngine once. m_scrollEngine is the base
     // PlacementEngineBase pointer; the scroll-specific API
     // (serialize/deserializeEngineState, hasPersistableState, effective*(),
-    // reconcileRestoredWindows, applyPerScreenConfig) only exists on the
-    // derived type. Per-call dynamic_cast on the hot path was the previous
-    // shape; caching avoids RTTI on every onScrollPlacementChanged.
-    m_scrollEngineCached = dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    // reconcileRestoredWindows, applyPerScreenConfig) lives on the
+    // PhosphorEngine::IScrollEngine pure interface. Per-call dynamic_cast on
+    // the hot path was the previous shape; caching avoids RTTI on every
+    // onScrollPlacementChanged.
+    m_scrollEngineCached = dynamic_cast<PhosphorEngine::IScrollEngine*>(m_scrollEngine.get());
     // RTTI-visibility canary: navigation handlers cross-cast m_scrollEngine to
     // IScrollNavigation* per-shortcut (scroll.cpp:140). That dynamic_cast
     // crosses the libphosphor-scroll-engine ↔ daemon shared-library boundary
@@ -1195,8 +1202,12 @@ bool Daemon::init()
     // disabled. The forced re-push after the batch seeds it correctly.
     m_scrollAdaptor->setBatchProcessedCallback([this]() {
         m_lastScrollGeometryByScreen.clear();
-        if (auto* scroll = this->scrollEngine()) {
-            const QSet<QString> screens = scroll->activeScreens();
+        // Gate on the IScrollEngine surface (i.e. a scroll engine is wired)
+        // but read activeScreens() through the IPlacementEngine base — the
+        // active-screen set lives on the generic placement contract, not the
+        // scroll-specific surface.
+        if (this->scrollEngine() && m_scrollEngine) {
+            const QSet<QString> screens = m_scrollEngine->activeScreens();
             for (const QString& screenId : screens) {
                 onScrollPlacementChanged(screenId);
             }

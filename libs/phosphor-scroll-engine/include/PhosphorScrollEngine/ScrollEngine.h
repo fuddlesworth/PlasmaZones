@@ -9,6 +9,7 @@
 #include <phosphorscrollengine_export.h>
 
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorEngine/IScrollEngine.h>
 #include <PhosphorEngine/IScrollNavigation.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 
@@ -46,6 +47,7 @@ struct TilingStateKeyHash
 /// resolveScrollLayout) and applying it is the daemon's job, since only the
 /// daemon knows each screen's working area.
 class PHOSPHORSCROLLENGINE_EXPORT ScrollEngine final : public PhosphorEngine::PlacementEngineBase,
+                                                       public PhosphorEngine::IScrollEngine,
                                                        public PhosphorEngine::IScrollNavigation
 {
     Q_OBJECT
@@ -77,7 +79,7 @@ public:
     /// @p screenId. The daemon calls this when a monitor is disconnected so
     /// the engine doesn't leak strip state and override maps for screens that
     /// no longer exist. Symmetric with pruneStatesForDesktop / pruneStatesForActivities.
-    void pruneStatesForScreen(const QString& screenId);
+    void pruneStatesForScreen(const QString& screenId) override;
 
     // ── Window lifecycle ────────────────────────────────────────────────
     using IPlacementEngine::windowOpened;
@@ -150,11 +152,11 @@ public:
 
     // ── Effective config (per-screen override → IScrollSettings global) ──
     QVector<qreal> effectivePresetColumnWidths(const QString& screenId) const;
-    QVector<qreal> effectivePresetWindowHeights(const QString& screenId) const;
+    QVector<qreal> effectivePresetWindowHeights(const QString& screenId) const override;
     qreal effectiveDefaultColumnWidth(const QString& screenId) const;
-    ScrollViewportMode effectiveViewportMode(const QString& screenId) const;
-    int effectiveInnerGap(const QString& screenId) const;
-    int effectiveOuterGap(const QString& screenId) const;
+    ScrollViewportMode effectiveViewportMode(const QString& screenId) const override;
+    int effectiveInnerGap(const QString& screenId) const override;
+    int effectiveOuterGap(const QString& screenId) const override;
 
     // ── State access ────────────────────────────────────────────────────
     PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) override;
@@ -169,7 +171,7 @@ public:
     /// True when the engine holds strip state worth persisting. Lets the
     /// daemon decide whether to write or drop scroll-session.json without
     /// re-parsing serializeEngineState()'s own JSON output.
-    bool hasPersistableState() const;
+    bool hasPersistableState() const override;
 
     /// Reconcile a freshly restored strip against the live window set.
     ///
@@ -183,7 +185,7 @@ public:
     /// restored window order is likewise only ever reconciled against the
     /// windows the effect actually reports. A no-op unless a restore is
     /// pending, so the routine windowsOpenedBatch path stays unaffected.
-    void reconcileRestoredWindows(const QSet<QString>& liveWindowIds);
+    void reconcileRestoredWindows(const QSet<QString>& liveWindowIds) override;
 
 protected:
     void onWindowClaimed(const QString& windowId) override;

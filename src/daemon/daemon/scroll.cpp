@@ -9,11 +9,11 @@
 #include "../../config/configdefaults.h"
 #include "../../config/settings.h"
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/IScrollEngine.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/WindowTypes.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollLayout.h>
 #include <PhosphorScrollEngine/ScrollScreenState.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -60,7 +60,7 @@ static_assert(::PhosphorScrollEngine::kDefaultColumnWidthFraction == ConfigDefau
 static_assert(::PhosphorScrollEngine::kDefaultStripGap == ConfigDefaults::scrollInnerGap(),
               "PhosphorScrollEngine::kDefaultStripGap drifted from ConfigDefaults::scrollInnerGap");
 
-PhosphorScrollEngine::ScrollEngine* Daemon::scrollEngine() const
+PhosphorEngine::IScrollEngine* Daemon::scrollEngine() const
 {
     // Cached at engine-creation time in start.cpp; nulled in stop() before
     // m_scrollEngine.reset(). Avoids RTTI on the hot path

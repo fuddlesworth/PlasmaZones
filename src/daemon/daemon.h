@@ -41,6 +41,7 @@ class AnimationShaderRegistry;
 }
 
 namespace PhosphorEngine {
+class IScrollEngine;
 class WindowRegistry;
 }
 
@@ -457,14 +458,15 @@ private:
     void loadScrollState();
 
     /**
-     * @brief The scroll placement engine narrowed to its concrete type.
+     * @brief The scroll placement engine narrowed to its IScrollEngine surface.
      *
      * m_scrollEngine is held as the base PlacementEngineBase pointer, but the
-     * scroll-specific config / persistence / reconciliation API lives on
-     * ScrollEngine. Centralises the down-cast the scroll handlers all need;
-     * returns nullptr when no scroll engine is active.
+     * scroll-specific config / persistence / reconciliation API lives on the
+     * IScrollEngine pure interface (resolved via cross-cast at engine-creation
+     * time). Centralises the cross-cast the scroll handlers all need; returns
+     * nullptr when no scroll engine is active.
      */
-    PhosphorScrollEngine::ScrollEngine* scrollEngine() const;
+    PhosphorEngine::IScrollEngine* scrollEngine() const;
 
     /**
      * @brief Respond to a Phosphor::Screens::ScreenManager VS cache change for a physical screen
@@ -664,16 +666,18 @@ private:
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_scrollEngine;
-    /// Cached down-cast of m_scrollEngine to its concrete type. Set once when
-    /// the engine is constructed (daemon::start.cpp's createBuiltInEngines path) and
-    /// nulled in stop() before m_scrollEngine.reset(). The concrete-type API
-    /// (effective*(), serialize/deserializeEngineState, hasPersistableState,
-    /// reconcileRestoredWindows, applyPerScreenConfig) is reached through this
-    /// pointer instead of running dynamic_cast on every onScrollPlacementChanged
-    /// — that path fires per scroll setting change and per scroll-mode resolve,
-    /// so caching matters under slider-drag rates. Lifetime tied 1:1 with
-    /// m_scrollEngine's unique_ptr.
-    PhosphorScrollEngine::ScrollEngine* m_scrollEngineCached = nullptr;
+    /// Cached cross-cast of m_scrollEngine to its IScrollEngine surface. Set
+    /// once when the engine is constructed (daemon::start.cpp's
+    /// createBuiltInEngines path) and nulled in stop() before
+    /// m_scrollEngine.reset(). The scroll-only API (effective*(),
+    /// serialize/deserializeEngineState, hasPersistableState,
+    /// reconcileRestoredWindows, applyPerScreenConfig, pruneStatesForScreen,
+    /// stateForScreen) is reached through this pointer instead of running
+    /// dynamic_cast on every onScrollPlacementChanged — that path fires per
+    /// scroll setting change and per scroll-mode resolve, so caching matters
+    /// under slider-drag rates. Lifetime tied 1:1 with m_scrollEngine's
+    /// unique_ptr.
+    PhosphorEngine::IScrollEngine* m_scrollEngineCached = nullptr;
     /// Single source of truth for "which engine owns screen X". Used by
     /// WindowTrackingAdaptor and (via @ref engineForScreen) daemon-internal
     /// dispatch paths. Owns no state of its own — just delegates to the
