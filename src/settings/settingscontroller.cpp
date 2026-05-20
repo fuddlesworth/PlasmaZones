@@ -1323,8 +1323,16 @@ QString SettingsController::getLayoutForScreen(const QString& screenName) const
     QString staged;
     if (m_staging.stagedSnappingLayout(screenName, 0, QString(), staged))
         return staged;
+    // Query the SCREEN-LEVEL snap slot (desktop=0, activity=""), not the
+    // daemon's contextual `getLayoutForScreen`. The latter walks the
+    // current-desktop / current-activity cascade — so when the user edits
+    // the Monitor row on the Snapping Assignments page (which writes the
+    // screen-level entry), the page's own re-read picks up the higher-
+    // priority per-desktop / per-activity entry instead and renders as
+    // "the save didn't stick". Mirrors `getTilingLayoutForScreen`, which
+    // already queries `getTilingAlgorithmForScreenDesktop(screen, 0)`.
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayoutForScreen"), {screenName});
+                                                QStringLiteral("getSnappingLayoutForScreenDesktop"), {screenName, 0});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
