@@ -53,6 +53,15 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
         layoutManager, zoneDetector, screenManager, virtualDesktopManager, m_geometryResolver,
         PhosphorPlacement::PlacementConfig{settings->keepWindowsInZonesOnResolutionChange()}, this);
 
+    // Wire the disabled-context gate consulted before recording a snap-side
+    // PendingRestore on windowClosed. The placement library has no settings
+    // dependency, so the gate is injected from here — single funnel via
+    // isPersistedContextDisabled() so the predicate and the load/save filters
+    // share one decision implementation. See discussion #461.
+    m_service->setShouldTrackPredicate([this](const QString& screenId, int virtualDesktop) -> bool {
+        return !isPersistedContextDisabled(screenId, virtualDesktop);
+    });
+
     // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
     // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on
     // first navigation call; setZoneDetectionAdaptor is forwarded to

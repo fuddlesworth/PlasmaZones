@@ -1233,6 +1233,7 @@ ApplicationWindow {
                         SettingsSwitch {
                             Layout.alignment: Qt.AlignVCenter
                             checked: settingsController.daemonRunning
+                            enabled: !settingsController.daemonController.busy
                             accessibleName: i18n("Toggle daemon")
                             onToggled: function(newValue) {
                                 settingsController.daemonController.setEnabled(newValue);

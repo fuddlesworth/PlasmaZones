@@ -789,6 +789,25 @@ private:
     QJsonObject buildStateObject(const QString& windowId, const QString& zoneId, const QJsonArray& zoneIds,
                                  const QString& screenId, bool isFloating, const QString& changeType) const;
 
+    /**
+     * @brief Test whether the given (screen, virtualDesktop) tuple is currently disabled.
+     *
+     * Used by the save/load filters to drop entries persisted before the user
+     * disabled a monitor / virtual desktop. Selects the mode via the
+     * ScreenModeRouter when wired; falls back to Snapping mode otherwise
+     * (consistent with the snap-side write gate, and the helper's only
+     * load-time caller chain is snap-side anyway). Empty screenId is treated
+     * as "context unknown" and the entry is kept.
+     *
+     * No activity parameter: snap-mode storage carries no per-window
+     * activity tag (SnapState does not track it), so the activity-mode
+     * disable list cannot apply to entries this helper sees. Autotile
+     * pending-restore filtering — which DOES have activity — lives in
+     * Daemon::init's filterAutotilePendingRestores lambda and calls
+     * isContextDisabled directly with the autotile mode.
+     */
+    bool isPersistedContextDisabled(const QString& screenId, int virtualDesktop) const;
+
     // clearFloatingStateForSnap was removed — PhosphorPlacement::WindowTrackingService::commitSnap
     // now handles floating-state clearing internally (and emits
     // windowFloatingClearedForSnap which the adaptor relays to its own

@@ -294,11 +294,9 @@ void Daemon::setupAnimationProfiles()
     using namespace PhosphorAnimation;
 
     // Wipe any entries left over from prior wiring on this same daemon
-    // instance. The registry is a daemon-owned member, so a fresh
-    // Daemon construction always starts with an empty registry — but
-    // setupAnimationProfiles is also called on configure-reload paths
-    // where prior loaders may have populated the partitions; clearing
-    // here keeps the post-condition uniform.
+    // instance. setupAnimationProfiles is called exactly once per
+    // Daemon::init() today, so the registry is always empty when we get
+    // here — the narrow-clear is a no-op in current code paths.
     //
     // Narrow the clear to the two partitions we publish under: the
     // loader-owned user-JSON partition (clearOwner by tag) and each
@@ -306,8 +304,7 @@ void Daemon::setupAnimationProfiles()
     // Wholesale `clear()` would also evict any other consumer's
     // entries if they happened to register before us — not a concern
     // in production today but the narrower scope is the correct
-    // contract for a registry that may be shared with other consumers
-    // in future multi-publisher configurations.
+    // contract for a registry that may be shared with other consumers.
     PhosphorProfileRegistry& registry = m_profileRegistry;
     registry.clearOwner(kPlasmaZonesUserProfilesOwnerTag);
     registry.clearOwner(QString(kShellAnimationFamilySeedsOwnerTag));
@@ -881,6 +878,7 @@ bool Daemon::init()
         new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), m_screenManager.get(), this);
     m_layoutAdaptor->setActivityManager(m_activityManager.get());
     m_layoutAdaptor->setSettings(m_settings.get());
+    m_layoutAdaptor->setAlgorithmRegistry(m_algorithmRegistry.get());
     m_layoutAdaptor->setLayoutSource(m_layoutSources.composite());
     // Thread the bundle-owned autotile source through the adaptor's
     // buildUnifiedLayoutList path so its preview cache survives across
@@ -1098,13 +1096,87 @@ bool Daemon::init()
                 engine->deserializeWindowOrders(orders);
         });
 
+    // Disabled-context filter (discussion #461 item 2). Wrap the autotile
+    // pending-restore JSON on both sides — serialize drops entries on a
+    // monitor/desktop/activity the user has disabled, and deserialize drops
+    // them coming back. Autotile already prunes restores for screens that
+    // leave its active set via pruneStaleRestores(), but that runs against
+    // the autotile-mode disable list specifically; the JSON layer is the
+    // single funnel that sees both modes plus the activity field that
+    // doesn't reach the autotile engine.
+    //
+    // Lifetime: filterAutotilePendingRestores captures `this` (Daemon) and is
+    // copied into both delegate lambdas. The delegates live on
+    // m_windowTrackingAdaptor, which is a Qt child of `this`, so WTA is
+    // destroyed before ~Daemon — no UAF window. saveStateOnShutdown() runs in
+    // stop() ahead of engine teardown, so m_settings and m_screenModeRouter
+    // are still live when the serialize delegate is invoked.
+    auto filterAutotilePendingRestores = [this](const QJsonObject& src) -> QJsonObject {
+        QJsonObject filtered;
+        for (auto it = src.constBegin(); it != src.constEnd(); ++it) {
+            if (!it.value().isArray()) {
+                continue;
+            }
+            QJsonArray kept;
+            for (const QJsonValue& entryVal : it.value().toArray()) {
+                if (!entryVal.isObject()) {
+                    continue;
+                }
+                const QJsonObject entryObj = entryVal.toObject();
+                const QString screen = entryObj[QLatin1String("screen")].toString();
+                // qMax(1, toInt(1)) fully mirrors AutotileEngine::deserialize
+                // PendingRestores: missing-key defaults to 1 and explicit
+                // zero/negative also normalises to 1. With a bare .toInt(0)
+                // an explicit zero would slip the desktop-disabled gate
+                // (it short-circuits on desktop <= 0) while the engine on
+                // the next load would tile that entry into desktop 1.
+                const int desktop = qMax(1, entryObj[QLatin1String("desktop")].toInt(1));
+                const QString activity = entryObj[QLatin1String("activity")].toString();
+                // Lockstep with AutotileEngine::deserializePendingRestores'
+                // inner-entry reject conditions (pos < 0 || screenId.isEmpty()):
+                // entries failing those are dead bytes — drop them here so
+                // we don't persist garbage the next load will discard anyway.
+                // The engine's outer-key rejects (empty appId, appId
+                // containing '|', per-app cap MaxPendingRestoresPerApp) are
+                // NOT mirrored — those are appId-shape invariants the
+                // serializer never violates, so they're unreachable here.
+                const int position = entryObj[QLatin1String("position")].toInt(-1);
+                if (screen.isEmpty() || position < 0) {
+                    continue;
+                }
+                // Defense-in-depth null guard: today the wiring order
+                // guarantees m_screenModeRouter is live before either
+                // delegate fires (constructed earlier in init(), reset
+                // only after saveStateOnShutdown drains the queue). If a
+                // future refactor changes that ordering the lambda would
+                // UAF — cheaper to short-circuit here than to debug later.
+                if (!m_screenModeRouter) {
+                    kept.append(entryObj);
+                    continue;
+                }
+                const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter->modeFor(screen);
+                if (isContextDisabled(m_settings.get(), mode, screen, desktop, activity)) {
+                    continue;
+                }
+                kept.append(entryObj);
+            }
+            if (!kept.isEmpty()) {
+                filtered[it.key()] = kept;
+            }
+        }
+        return filtered;
+    };
+
     m_windowTrackingAdaptor->setTilingPendingRestoreDelegates(
-        [engine = QPointer(autotileEngine)]() -> QJsonObject {
-            return engine ? engine->serializePendingRestores() : QJsonObject{};
+        [engine = QPointer(autotileEngine), filterAutotilePendingRestores]() -> QJsonObject {
+            if (!engine) {
+                return QJsonObject{};
+            }
+            return filterAutotilePendingRestores(engine->serializePendingRestores());
         },
-        [engine = QPointer(autotileEngine)](const QJsonObject& obj) {
+        [engine = QPointer(autotileEngine), filterAutotilePendingRestores](const QJsonObject& obj) {
             if (engine)
-                engine->deserializePendingRestores(obj);
+                engine->deserializePendingRestores(filterAutotilePendingRestores(obj));
         });
 
     // Trigger WTA save on autotile state changes (window order, split ratio, master count).
@@ -1289,6 +1361,15 @@ void Daemon::start()
     if (m_running) {
         return;
     }
+
+    // Reset the shutdown latch — stop() sets it true and nothing else clears
+    // it, so a stop()→start() cycle (tests, programmatic restart) would
+    // permanently silence every shutdown-guarded code path
+    // (warnCompositorBridgeMissing, late-arrival reply guards, OSD
+    // suppression in daemon/osd.cpp) on the second run. m_aboutToQuitConnected
+    // already contemplates this cycle to avoid stacking the aboutToQuit
+    // handler; this is the matching reset on the value side.
+    m_shuttingDown = false;
 
     // Suppress OSDs once Qt begins shutdown (SIGTERM, programmatic quit).
     // Connected once — m_aboutToQuitConnected prevents stacking on stop()→start().
