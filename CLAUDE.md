@@ -87,9 +87,18 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 
 ### Adding a Setting
 1. `configdefaults.h` — static default accessor + `xxxKey()` accessor for the config key string
-2. `interfaces.h` — signal in ISettings
-3. `settings.h` — Q_PROPERTY + getter + setter + member
-4. `settings.cpp` — setter (check changed, emit), load/save/reset using `ConfigDefaults::xxx()`
+2. `core/settings_interfaces.h` — virtual getter + setter on the matching narrow interface
+   (`IAutotileSettings` for autotile, `IScrollSettings` for scroll, `IZoneActivationSettings` /
+   `IZoneVisualizationSettings` / `IZoneGeometrySettings` / `IWindowExclusionSettings` /
+   `IZoneSelectorSettings` / `IWindowBehaviorSettings` for snap, `IDefaultLayoutSettings` /
+   `IOrderingSettings` for cross-mode). Touch only the relevant slice; don't widen ISettings.
+3. `core/isettings.h` — `Q_SIGNALS:` change-notify signal (signals must live on the QObject base)
+4. `settings.h` — Q_PROPERTY + getter + setter + member
+5. `settings.cpp` — setter (check changed, emit), load/save/reset using `ConfigDefaults::xxx()`
+6. `tests/unit/helpers/StubXxxSettings.h` — narrow-stub default for the new method (e.g.
+   `StubAutotileSettings.h` for an autotile setting). `StubSettings.h` picks it up via
+   composition — don't touch the unified stub. A scroll-only or autotile-only consumer can take
+   the narrow interface and a test can stub it standalone (see `test_settings_narrow_stubs.cpp`).
 
 ### Config Key Strings
 - ALL config group names and key strings MUST use `ConfigDefaults::` accessors — never inline `QStringLiteral("...")`

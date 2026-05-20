@@ -411,6 +411,106 @@ public:
 };
 
 /**
+ * @brief Autotile-only settings owned PZ-side.
+ *
+ * Holds the autotile *master gate* (toggles the whole mode off across the
+ * daemon, mirroring snappingEnabled / scrollingEnabled), the decoration
+ * surface that the KWin effect pulls via D-Bus (border colors / titlebars /
+ * focus-follows-mouse / sticky / overflow / drag), and the drag-insert
+ * trigger list. Engine-side autotile geometry (gaps, algorithm, master
+ * count, …) lives separately on PhosphorEngine::IAutotileSettings — that's
+ * the contract the tile engine consumes, NOT this one. A new autotile-only
+ * setting on the PZ side should be added here, not on ISettings; the
+ * StubAutotileSettings test helper mirrors this surface.
+ *
+ * Used by: KWin Effect (decoration), Daemon (master gate), KCM
+ */
+class PLASMAZONES_EXPORT IAutotileSettings
+{
+public:
+    virtual ~IAutotileSettings() = default;
+
+    // Master gate — when false the daemon resolves no autotile screens.
+    virtual bool autotileEnabled() const = 0;
+    virtual void setAutotileEnabled(bool enabled) = 0;
+
+    // Decoration (fetched by KWin effect via D-Bus)
+    virtual bool autotileFocusFollowsMouse() const = 0;
+    virtual void setAutotileFocusFollowsMouse(bool enabled) = 0;
+    virtual bool autotileHideTitleBars() const = 0;
+    virtual void setAutotileHideTitleBars(bool hide) = 0;
+    virtual bool autotileShowBorder() const = 0;
+    virtual void setAutotileShowBorder(bool show) = 0;
+    virtual int autotileBorderWidth() const = 0;
+    virtual void setAutotileBorderWidth(int width) = 0;
+    virtual int autotileBorderRadius() const = 0;
+    virtual void setAutotileBorderRadius(int radius) = 0;
+    virtual QColor autotileBorderColor() const = 0;
+    virtual void setAutotileBorderColor(const QColor& color) = 0;
+    virtual QColor autotileInactiveBorderColor() const = 0;
+    virtual void setAutotileInactiveBorderColor(const QColor& color) = 0;
+    virtual bool autotileUseSystemBorderColors() const = 0;
+    virtual void setAutotileUseSystemBorderColors(bool use) = 0;
+    virtual StickyWindowHandling autotileStickyWindowHandling() const = 0;
+    virtual void setAutotileStickyWindowHandling(StickyWindowHandling handling) = 0;
+    virtual AutotileDragBehavior autotileDragBehavior() const = 0;
+    virtual void setAutotileDragBehavior(AutotileDragBehavior behavior) = 0;
+    virtual AutotileOverflowBehavior autotileOverflowBehavior() const = 0;
+    virtual void setAutotileOverflowBehavior(AutotileOverflowBehavior behavior) = 0;
+
+    // Drag-insert: hold-to-activate list for live re-inserting a dragged window.
+    virtual QVariantList autotileDragInsertTriggers() const = 0;
+    virtual void setAutotileDragInsertTriggers(const QVariantList& triggers) = 0;
+    virtual bool autotileDragInsertToggle() const = 0;
+    virtual void setAutotileDragInsertToggle(bool enable) = 0;
+};
+
+/**
+ * @brief Scroll-mode-only settings owned PZ-side.
+ *
+ * Holds the scroll *master gate* (mirrors autotileEnabled / snappingEnabled)
+ * and the column-decoration surface drawn by the KWin effect, plus the
+ * focus-new-windows / focus-follows-mouse policy bits. Engine-side scroll
+ * geometry (inner/outer gap, default column width, center-focused-column,
+ * preset column-width and window-height lists) lives separately on
+ * PhosphorEngine::IScrollSettings — the scroll engine pulls that contract,
+ * NOT this one. A new scroll-only setting on the PZ side should be added
+ * here, not on ISettings; the StubScrollSettings test helper mirrors this
+ * surface.
+ *
+ * Used by: KWin Effect (decoration), Daemon (master gate), KCM
+ */
+class PLASMAZONES_EXPORT IScrollSettings
+{
+public:
+    virtual ~IScrollSettings() = default;
+
+    // Master gate — when false the daemon resolves no scroll strips.
+    virtual bool scrollingEnabled() const = 0;
+    virtual void setScrollingEnabled(bool enabled) = 0;
+
+    // Column decoration (drawn by KWin effect, mirrors autotile decoration).
+    virtual bool scrollShowBorder() const = 0;
+    virtual void setScrollShowBorder(bool show) = 0;
+    virtual int scrollBorderWidth() const = 0;
+    virtual void setScrollBorderWidth(int width) = 0;
+    virtual int scrollBorderRadius() const = 0;
+    virtual void setScrollBorderRadius(int radius) = 0;
+    virtual QColor scrollBorderColor() const = 0;
+    virtual void setScrollBorderColor(const QColor& color) = 0;
+    virtual QColor scrollInactiveBorderColor() const = 0;
+    virtual void setScrollInactiveBorderColor(const QColor& color) = 0;
+    virtual bool scrollUseSystemBorderColors() const = 0;
+    virtual void setScrollUseSystemBorderColors(bool use) = 0;
+    virtual bool scrollHideTitleBars() const = 0;
+    virtual void setScrollHideTitleBars(bool hide) = 0;
+    virtual bool scrollFocusNewWindows() const = 0;
+    virtual void setScrollFocusNewWindows(bool focus) = 0;
+    virtual bool scrollFocusFollowsMouse() const = 0;
+    virtual void setScrollFocusFollowsMouse(bool follow) = 0;
+};
+
+/**
  * @brief Why PlasmaZones is disabled in a given context.
  *
  * Priority order: Monitor > Desktop > Activity (matches isContextDisabled check order).

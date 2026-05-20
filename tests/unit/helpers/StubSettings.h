@@ -5,6 +5,8 @@
 
 #include "config/configdefaults.h"
 #include "core/interfaces.h"
+#include "StubAutotileSettings.h"
+#include "StubScrollSettings.h"
 
 #include <PhosphorSnapEngine/ISnapSettings.h>
 
@@ -13,8 +15,16 @@ namespace PlasmaZones {
 /**
  * @brief Unified stub ISettings for unit tests
  *
- * Provides sensible defaults for all ISettings pure virtual methods.
- * The defaultLayoutId can be overridden via setTestDefaultLayoutId().
+ * Composes the narrow per-mode stub helpers (StubAutotileSettings,
+ * StubScrollSettings) so adding a new autotile-only or scroll-only setting
+ * requires touching ONLY the matching narrow interface + its narrow stub —
+ * StubSettings picks the new defaults up automatically. Tests that only
+ * need one slice can use the narrow stub directly without the full ISettings
+ * abstract-base requirement (see test_scroll_settings_narrow_stub.cpp).
+ *
+ * Provides sensible defaults for the remaining ISettings pure virtual
+ * methods (snap-side, animations, persistence, generic). The defaultLayoutId
+ * can be overridden via setTestDefaultLayoutId().
  *
  * Also inherits PhosphorEngine::ISnapSettings so SnapEngine's
  * dynamic_cast<ISnapSettings*>(engineSettings()) succeeds when a stub is wired
@@ -23,7 +33,10 @@ namespace PlasmaZones {
  * autoAssignAllLayouts) are already implemented for ISettings — the multiple
  * inheritance just registers the second base so the cast resolves.
  */
-class StubSettings : public ISettings, public PhosphorEngine::ISnapSettings
+class StubSettings : public ISettings,
+                     public StubAutotileSettings,
+                     public StubScrollSettings,
+                     public PhosphorEngine::ISnapSettings
 {
     // No Q_OBJECT — this stub defines no NEW signals/slots; ISettings's
     // meta-object is reused for the inherited signal emits (e.g.
@@ -755,177 +768,11 @@ public:
         Q_EMIT settingsChanged();
     }
 
-    // Autotile master gate (ISettings)
-    bool autotileEnabled() const override
-    {
-        return ConfigDefaults::autotileEnabled();
-    }
-    void setAutotileEnabled(bool) override
-    {
-    }
+    // Autotile + Scroll mode-specific settings come from StubAutotileSettings
+    // and StubScrollSettings (above in the inheritance list). Adding a new
+    // autotile-only or scroll-only setting only requires touching the matching
+    // narrow stub and its narrow interface, NOT this unified file.
 
-    // Autotile decoration settings (ISettings)
-    bool autotileFocusFollowsMouse() const override
-    {
-        return false;
-    }
-    void setAutotileFocusFollowsMouse(bool) override
-    {
-    }
-    bool autotileHideTitleBars() const override
-    {
-        return false;
-    }
-    void setAutotileHideTitleBars(bool) override
-    {
-    }
-    bool autotileShowBorder() const override
-    {
-        return false;
-    }
-    void setAutotileShowBorder(bool) override
-    {
-    }
-    int autotileBorderWidth() const override
-    {
-        return 2;
-    }
-    void setAutotileBorderWidth(int) override
-    {
-    }
-    int autotileBorderRadius() const override
-    {
-        return 0;
-    }
-    void setAutotileBorderRadius(int) override
-    {
-    }
-    QColor autotileBorderColor() const override
-    {
-        return Qt::white;
-    }
-    void setAutotileBorderColor(const QColor&) override
-    {
-    }
-    QColor autotileInactiveBorderColor() const override
-    {
-        return {};
-    }
-    void setAutotileInactiveBorderColor(const QColor&) override
-    {
-    }
-    bool autotileUseSystemBorderColors() const override
-    {
-        return false;
-    }
-    void setAutotileUseSystemBorderColors(bool) override
-    {
-    }
-    StickyWindowHandling autotileStickyWindowHandling() const override
-    {
-        return StickyWindowHandling::TreatAsNormal;
-    }
-    void setAutotileStickyWindowHandling(StickyWindowHandling) override
-    {
-    }
-    AutotileDragBehavior autotileDragBehavior() const override
-    {
-        return AutotileDragBehavior::Float;
-    }
-    void setAutotileDragBehavior(AutotileDragBehavior) override
-    {
-    }
-    AutotileOverflowBehavior autotileOverflowBehavior() const override
-    {
-        return AutotileOverflowBehavior::Float;
-    }
-    void setAutotileOverflowBehavior(AutotileOverflowBehavior) override
-    {
-    }
-    QVariantList autotileDragInsertTriggers() const override
-    {
-        return ConfigDefaults::autotileDragInsertTriggers();
-    }
-    void setAutotileDragInsertTriggers(const QVariantList&) override
-    {
-    }
-    bool autotileDragInsertToggle() const override
-    {
-        return false;
-    }
-    void setAutotileDragInsertToggle(bool) override
-    {
-    }
-    bool scrollingEnabled() const override
-    {
-        return ConfigDefaults::scrollingEnabled();
-    }
-    void setScrollingEnabled(bool) override
-    {
-    }
-    bool scrollShowBorder() const override
-    {
-        return ConfigDefaults::scrollShowBorder();
-    }
-    void setScrollShowBorder(bool) override
-    {
-    }
-    int scrollBorderWidth() const override
-    {
-        return ConfigDefaults::scrollBorderWidth();
-    }
-    void setScrollBorderWidth(int) override
-    {
-    }
-    int scrollBorderRadius() const override
-    {
-        return ConfigDefaults::scrollBorderRadius();
-    }
-    void setScrollBorderRadius(int) override
-    {
-    }
-    QColor scrollBorderColor() const override
-    {
-        return ConfigDefaults::scrollBorderColor();
-    }
-    void setScrollBorderColor(const QColor&) override
-    {
-    }
-    QColor scrollInactiveBorderColor() const override
-    {
-        return ConfigDefaults::scrollInactiveBorderColor();
-    }
-    void setScrollInactiveBorderColor(const QColor&) override
-    {
-    }
-    bool scrollUseSystemBorderColors() const override
-    {
-        return ConfigDefaults::scrollUseSystemBorderColors();
-    }
-    void setScrollUseSystemBorderColors(bool) override
-    {
-    }
-    bool scrollHideTitleBars() const override
-    {
-        return ConfigDefaults::scrollHideTitleBars();
-    }
-    void setScrollHideTitleBars(bool) override
-    {
-    }
-    bool scrollFocusNewWindows() const override
-    {
-        return ConfigDefaults::scrollFocusNewWindows();
-    }
-    void setScrollFocusNewWindows(bool) override
-    {
-    }
-    bool scrollFocusFollowsMouse() const override
-    {
-        return ConfigDefaults::scrollFocusFollowsMouse();
-    }
-    void setScrollFocusFollowsMouse(bool) override
-    {
-    }
     QStringList lockedScreens() const override
     {
         return {};

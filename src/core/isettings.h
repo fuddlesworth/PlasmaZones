@@ -40,7 +40,9 @@ class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IZoneSelectorSettings,
                                      public IWindowBehaviorSettings,
                                      public IDefaultLayoutSettings,
-                                     public IOrderingSettings
+                                     public IOrderingSettings,
+                                     public virtual IAutotileSettings,
+                                     public virtual IScrollSettings
 {
     Q_OBJECT
 
@@ -83,16 +85,30 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // All settings methods are inherited from the segregated interfaces:
-    //   - IZoneActivationSettings: drag modifiers, activation triggers
-    //   - IZoneVisualizationSettings: colors, opacity, blur, shader effects
-    //   - IZoneGeometrySettings: padding, gaps, thresholds, performance
-    //   - IWindowExclusionSettings: excluded apps/classes, size filters
-    //   - IZoneSelectorSettings: zone selector UI configuration
-    //   - IWindowBehaviorSettings: snap restore, sticky handling
-    //   - IDefaultLayoutSettings: default layout ID
+    // All mode-specific settings methods are inherited from the segregated
+    // interfaces below (see settings_interfaces.h for the full API):
     //
-    // See settings_interfaces.h for the full API.
+    // Snap-side (split across multiple narrow interfaces — snap is heavily
+    // segregated because it has the largest surface area):
+    //   - IZoneActivationSettings: drag modifiers, snappingEnabled gate
+    //   - IZoneVisualizationSettings: colors, opacity, blur, shader effects
+    //   - IZoneGeometrySettings:     padding, gaps, thresholds, performance
+    //   - IWindowExclusionSettings:  excluded apps/classes, size filters
+    //   - IZoneSelectorSettings:     zone selector UI configuration
+    //   - IWindowBehaviorSettings:   snap restore, sticky handling, snap-assist
+    //
+    // Autotile-side (single interface — surface is smaller):
+    //   - IAutotileSettings: master gate, decoration, drag-insert triggers
+    //
+    // Scroll-side (single interface — surface is smaller):
+    //   - IScrollSettings: master gate, column decoration, focus policy
+    //
+    // Generic (cross-mode):
+    //   - IDefaultLayoutSettings: default layout ID
+    //   - IOrderingSettings:      manual algorithm/layout ordering
+    //
+    // Adding a NEW mode-specific setting? Touch only its narrow interface
+    // and its matching StubXxxSettings — not this monolithic file.
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Animation settings (global — applies to snapping and autotiling)
@@ -132,79 +148,14 @@ public:
     virtual QStringList animationExcludedWindowClasses() const = 0;
     virtual void setAnimationExcludedWindowClasses(const QStringList& classes) = 0;
 
-    // Autotile master gate — when false the daemon resolves no autotile
-    // screens (mirrors scrollingEnabled / snappingEnabled). The autotile
-    // *engine* settings (gaps, algorithm, master count, …) live on
-    // PhosphorEngine::IAutotileSettings so the tile-engine library consumes
-    // them without depending on the app; the master gate is an app/daemon
-    // concern and belongs on ISettings alongside the other two mode gates.
-    virtual bool autotileEnabled() const = 0;
-    virtual void setAutotileEnabled(bool enabled) = 0;
-
-    // Autotile decoration settings (fetched by KWin effect via D-Bus)
-    virtual bool autotileFocusFollowsMouse() const = 0;
-    virtual void setAutotileFocusFollowsMouse(bool enabled) = 0;
-    virtual bool autotileHideTitleBars() const = 0;
-    virtual void setAutotileHideTitleBars(bool hide) = 0;
-    virtual bool autotileShowBorder() const = 0;
-    virtual void setAutotileShowBorder(bool show) = 0;
-    virtual int autotileBorderWidth() const = 0;
-    virtual void setAutotileBorderWidth(int width) = 0;
-    virtual int autotileBorderRadius() const = 0;
-    virtual void setAutotileBorderRadius(int radius) = 0;
-    virtual QColor autotileBorderColor() const = 0;
-    virtual void setAutotileBorderColor(const QColor& color) = 0;
-    virtual QColor autotileInactiveBorderColor() const = 0;
-    virtual void setAutotileInactiveBorderColor(const QColor& color) = 0;
-    virtual bool autotileUseSystemBorderColors() const = 0;
-    virtual void setAutotileUseSystemBorderColors(bool use) = 0;
-    virtual StickyWindowHandling autotileStickyWindowHandling() const = 0;
-    virtual void setAutotileStickyWindowHandling(StickyWindowHandling handling) = 0;
-    virtual AutotileDragBehavior autotileDragBehavior() const = 0;
-    virtual void setAutotileDragBehavior(AutotileDragBehavior behavior) = 0;
-    virtual AutotileOverflowBehavior autotileOverflowBehavior() const = 0;
-    virtual void setAutotileOverflowBehavior(AutotileOverflowBehavior behavior) = 0;
-
-    // Autotile drag-insert triggers: hold-to-activate list for live
-    // re-inserting a dragged window into the autotile stack.
-    virtual QVariantList autotileDragInsertTriggers() const = 0;
-    virtual void setAutotileDragInsertTriggers(const QVariantList& triggers) = 0;
-    virtual bool autotileDragInsertToggle() const = 0;
-    virtual void setAutotileDragInsertToggle(bool enable) = 0;
-
-    // Scroll-mode (niri-style scrollable tiling) settings. scrollingEnabled is
-    // the master gate — when false the daemon resolves no scroll strips on any
-    // screen (mirrors autotileEnabled).
-    //
-    // The scroll *geometry* config (inner/outer gap, default column width,
-    // center-focused-column, preset width/height lists) is NOT on ISettings:
-    // the scroll engine pulls it through PhosphorEngine::IScrollSettings, which
-    // Settings also implements — full parity with autotile geometry config on
-    // IAutotileSettings. Their *Changed signals stay here, exactly as autotile
-    // gap signals do, because QObject signals must live on the QObject base.
-    virtual bool scrollingEnabled() const = 0;
-    virtual void setScrollingEnabled(bool enabled) = 0;
-
-    // Scroll-mode appearance — column border decoration drawn by the KWin
-    // effect, mirroring the autotile decoration settings.
-    virtual bool scrollShowBorder() const = 0;
-    virtual void setScrollShowBorder(bool show) = 0;
-    virtual int scrollBorderWidth() const = 0;
-    virtual void setScrollBorderWidth(int width) = 0;
-    virtual int scrollBorderRadius() const = 0;
-    virtual void setScrollBorderRadius(int radius) = 0;
-    virtual QColor scrollBorderColor() const = 0;
-    virtual void setScrollBorderColor(const QColor& color) = 0;
-    virtual QColor scrollInactiveBorderColor() const = 0;
-    virtual void setScrollInactiveBorderColor(const QColor& color) = 0;
-    virtual bool scrollUseSystemBorderColors() const = 0;
-    virtual void setScrollUseSystemBorderColors(bool use) = 0;
-    virtual bool scrollHideTitleBars() const = 0;
-    virtual void setScrollHideTitleBars(bool hide) = 0;
-    virtual bool scrollFocusNewWindows() const = 0;
-    virtual void setScrollFocusNewWindows(bool focus) = 0;
-    virtual bool scrollFocusFollowsMouse() const = 0;
-    virtual void setScrollFocusFollowsMouse(bool follow) = 0;
+    // Autotile + Scroll mode-specific settings (master gate + decoration +
+    // drag-insert triggers) are inherited from IAutotileSettings and
+    // IScrollSettings respectively (see settings_interfaces.h). Adding a new
+    // autotile-only or scroll-only PZ-side setting touches only that interface
+    // and its matching StubAutotileSettings / StubScrollSettings test helper —
+    // the *Changed signals stay below on the QObject base because Q_SIGNALS
+    // must live on the QObject. Engine-side autotile/scroll geometry lives
+    // separately on PhosphorEngine::IAutotileSettings / IScrollSettings.
 
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;

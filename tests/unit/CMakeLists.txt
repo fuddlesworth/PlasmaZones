@@ -380,6 +380,14 @@ add_test(NAME test_foreigntoplevel COMMAND test_foreigntoplevel)
 pz_add_test(test_support_report core/test_support_report.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ - Settings Narrow-Stub Composition (PR #493 follow-up)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Demonstrates that StubAutotileSettings / StubScrollSettings can be used on
+# their own — a future scroll-only or autotile-only consumer doesn't need the
+# full ISettings abstract base.
+pz_add_test(test_settings_narrow_stubs core/test_settings_narrow_stubs.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Zone Detection Tests (layout, service)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_zone_detection_layout core/test_zone_detection_layout.cpp)
