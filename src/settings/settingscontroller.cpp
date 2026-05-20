@@ -1270,9 +1270,16 @@ void SettingsController::assignTilingLayoutToScreenActivity(const QString& scree
     setNeedsSave(true);
 }
 
+// "Clear" on the per-page Assignment dropdowns means "clear this slot's
+// preference" — NOT "remove the entire (screen, desktop, activity) entry."
+// Snap-page clears route through stageSnapping(empty) so the flush
+// emits `setSnappingLayoutEntry(..., "")` which wipes only the snap
+// field on the daemon side; the tile preference and the rendered mode
+// at that context are preserved. Tile-page clears are symmetric via
+// stageTilingClear → `setTilingAlgorithmEntry(..., "")`.
 void SettingsController::clearScreenAssignment(const QString& screenName)
 {
-    m_staging.stageFullClear(screenName, 0, QString());
+    m_staging.stageSnapping(screenName, 0, QString(), QString());
     setNeedsSave(true);
 }
 
@@ -1284,13 +1291,13 @@ void SettingsController::clearTilingScreenAssignment(const QString& screenName)
 
 void SettingsController::clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
 {
-    m_staging.stageFullClear(screenName, virtualDesktop, QString());
+    m_staging.stageSnapping(screenName, virtualDesktop, QString(), QString());
     setNeedsSave(true);
 }
 
 void SettingsController::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
 {
-    m_staging.stageFullClear(screenName, 0, activityId);
+    m_staging.stageSnapping(screenName, 0, activityId, QString());
     setNeedsSave(true);
 }
 
@@ -1323,8 +1330,16 @@ QString SettingsController::getLayoutForScreen(const QString& screenName) const
     QString staged;
     if (m_staging.stagedSnappingLayout(screenName, 0, QString(), staged))
         return staged;
+    // Query the SCREEN-LEVEL snap slot (desktop=0, activity=""), not the
+    // daemon's contextual `getLayoutForScreen`. The latter walks the
+    // current-desktop / current-activity cascade — so when the user edits
+    // the Monitor row on the Snapping Assignments page (which writes the
+    // screen-level entry), the page's own re-read picks up the higher-
+    // priority per-desktop / per-activity entry instead and renders as
+    // "the save didn't stick". Mirrors `getTilingLayoutForScreen`, which
+    // already queries `getTilingAlgorithmForScreenDesktop(screen, 0)`.
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayoutForScreen"), {screenName});
+                                                QStringLiteral("getSnappingLayoutForScreenDesktop"), {screenName, 0});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
@@ -1337,8 +1352,14 @@ QString SettingsController::getTilingLayoutForScreen(const QString& screenName) 
         return staged;
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, 0});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        // Daemon returns the raw algorithm name (e.g. "cluster"); the
+        // LayoutComboBox model uses the prefixed "autotile:<algo>" form.
+        // Match the staged path (stagedTilingLayout already prefixes) so
+        // saved values resolve to a model entry instead of falling through
+        // to "Default".
+        return PhosphorLayout::LayoutId::normalizeAlgorithmId(reply.arguments().first().toString());
+    }
     return {};
 }
 
@@ -1398,11 +1419,8 @@ QString SettingsController::getTilingLayoutForScreenDesktop(const QString& scree
     QDBusMessage reply =
         DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, virtualDesktop});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString algo = reply.arguments().first().toString();
-        if (!algo.isEmpty())
-            return PhosphorLayout::LayoutId::makeAutotileId(algo);
-    }
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        return PhosphorLayout::LayoutId::normalizeAlgorithmId(reply.arguments().first().toString());
     return {};
 }
 
@@ -1438,13 +1456,18 @@ QString SettingsController::getSnappingLayoutForScreenActivity(const QString& sc
     QString staged;
     if (m_staging.stagedSnappingLayout(screenName, 0, activityId, staged))
         return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString layoutId = reply.arguments().first().toString();
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId))
-            return layoutId;
-    }
+    // Read the per-field snap slot at (screen, 0, activity), not the
+    // mode-resolved active-layout id. Mirrors
+    // SettingsController::getLayoutForScreen (commit 0bee42ee) — the legacy
+    // `getLayoutForScreenActivity` reply is mode-filtered and would hide a
+    // stored-but-inactive snap preference when the activity slot's mode is
+    // Autotile (per the partial-update / preserve-mode semantics added in
+    // c5d909034).
+    QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("getSnappingLayoutForScreenActivity"), {screenName, activityId});
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        return reply.arguments().first().toString();
     return {};
 }
 
@@ -1473,13 +1496,17 @@ QString SettingsController::getTilingLayoutForScreenActivity(const QString& scre
     QString staged;
     if (m_staging.stagedTilingLayout(screenName, 0, activityId, staged))
         return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString layoutId = reply.arguments().first().toString();
-        if (PhosphorLayout::LayoutId::isAutotile(layoutId))
-            return layoutId;
-    }
+    // Mirrors SettingsController::getTilingLayoutForScreen (commit d5cc4936):
+    // read the per-field tile slot via `getTilingAlgorithmForScreenActivity`
+    // and prefix the raw algo to the `autotile:<algo>` form so it matches
+    // LayoutComboBox model entries. The legacy `getLayoutForScreenActivity`
+    // path was mode-filtered and would silently hide a stored-but-inactive
+    // tile preference (Snapping-mode slot with a tile field set).
+    QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("getTilingAlgorithmForScreenActivity"), {screenName, activityId});
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        return PhosphorLayout::LayoutId::normalizeAlgorithmId(reply.arguments().first().toString());
     return {};
 }
 
