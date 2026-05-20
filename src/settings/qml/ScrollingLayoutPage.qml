@@ -194,6 +194,15 @@ SettingsFlickable {
             headerText: i18n("Window height presets")
             description: i18n("Heights the cycle-window-height shortcut steps through, as a percentage of the column")
             values: root.settingValue("PresetWindowHeights", appSettings.scrollPresetWindowHeights)
+            // Override the column-width seed (the card's default seeds new
+            // rows from `appSettings.scrollDefaultColumnWidth`). Window-height
+            // presets default to a half-column tile when the user adds a new
+            // entry; the engine has no `scrollDefaultWindowHeight` setting,
+            // so the literal here is the canonical "half a column" intent
+            // and stays in sync with the height clamp range. Without this
+            // override a freshly-added height preset would seed from the
+            // column-width default, which is conceptually unrelated.
+            defaultFraction: 0.5
             onValuesModified: function (newValues) {
                 root.writeSetting("PresetWindowHeights", newValues, function (v) {
                     appSettings.scrollPresetWindowHeights = v;

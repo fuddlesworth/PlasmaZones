@@ -111,6 +111,14 @@ void ScrollAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
         // a same-id-different-screen duplicate would migrate the window mid-
         // batch and yield the second screen as the "live" location. Reject
         // the second occurrence — first wins.
+        //
+        // Keying the dedup set on windowId alone (rather than a
+        // {windowId, screenId} pair) is sufficient because the compositor
+        // guarantees windowIds are globally unique across screens — a single
+        // window cannot legitimately appear under two screen ids in the same
+        // batch. A duplicate windowId on a different screen is therefore
+        // always a malformed payload, never a legitimate two-screen window;
+        // first-wins is the documented rejection contract for both shapes.
         if (liveWindowIds.contains(entry.windowId)) {
             continue;
         }

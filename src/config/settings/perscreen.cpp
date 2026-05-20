@@ -472,6 +472,33 @@ void Settings::saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend)
     savePerScreenOverrides(backend, ConfigDefaults::scrollingScreenGroupPrefix(), m_perScreenScrollSettings);
 }
 
+/// Resolve the storage key a per-screen settings setter should write under.
+///
+/// All four per-screen setters (zone-selector, autotile, snapping, scroll)
+/// previously inlined the same connector-name → id resolution. This helper
+/// factors it out so they share a single source of truth, which in turn
+/// matches the symmetric resolution in @c findPerScreenEntry below — every
+/// override map entry is read and written under the same key shape, and an
+/// override stored under a connector name (resolver fails) survives a later
+/// resolver run that produces a stable id without orphaning the value.
+///
+/// Resolution order:
+///   1. If @p screenIdOrName is a connector name, resolve it to a stable id
+///      and use the id when resolution succeeds; fall back to the connector
+///      name otherwise so the override survives until a resolver run lands.
+///   2. Otherwise the input is already a stable id (or an unknown string),
+///      stored verbatim.
+static QString resolveScreenStorageKey(const QString& screenIdOrName)
+{
+    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
+        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
+        if (!resolved.isEmpty() && resolved != screenIdOrName) {
+            return resolved;
+        }
+    }
+    return screenIdOrName;
+}
+
 template<typename T>
 static typename QHash<QString, T>::const_iterator findPerScreenEntry(const QHash<QString, T>& hash,
                                                                      const QString& screenIdOrName)
@@ -555,10 +582,10 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, co
         return;
     }
 
-    // Resolve to EDID-based screen ID so the key matches daemon lookups
-    const QString resolved = Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)
-        ? Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName)
-        : screenIdOrName;
+    // Resolve to EDID-based screen ID so the key matches daemon lookups —
+    // shared helper used by every per-screen setter and findPerScreenEntry,
+    // so storage shape stays in lock-step.
+    const QString resolved = resolveScreenStorageKey(screenIdOrName);
     QVariantMap& screenSettings = m_perScreenZoneSelectorSettings[resolved];
     if (screenSettings.value(key) == validated) {
         return;
@@ -612,10 +639,9 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
     // Animation keys ("AnimationsEnabled", etc.) have no "Autotile" prefix.
     const QString normalizedKey = key.startsWith(QLatin1String("Autotile")) ? key.mid(8) : key;
 
-    // Resolve to EDID-based screen ID so the key matches daemon lookups
-    const QString resolved = Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)
-        ? Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName)
-        : screenIdOrName;
+    // Resolve to EDID-based screen ID so the key matches daemon lookups —
+    // shared helper, see resolveScreenStorageKey() for rationale.
+    const QString resolved = resolveScreenStorageKey(screenIdOrName);
     QVariantMap& screenSettings = m_perScreenAutotileSettings[resolved];
     if (screenSettings.value(normalizedKey) == validated) {
         return;
@@ -658,10 +684,9 @@ void Settings::setPerScreenSnappingSetting(const QString& screenIdOrName, const 
         return;
     }
 
-    // Resolve to EDID-based screen ID so the key matches daemon lookups
-    const QString resolved = Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)
-        ? Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName)
-        : screenIdOrName;
+    // Resolve to EDID-based screen ID so the key matches daemon lookups —
+    // shared helper, see resolveScreenStorageKey() for rationale.
+    const QString resolved = resolveScreenStorageKey(screenIdOrName);
     QVariantMap& screenSettings = m_perScreenSnappingSettings[resolved];
     if (screenSettings.value(key) == validated) {
         return;
@@ -704,10 +729,9 @@ void Settings::setPerScreenScrollSetting(const QString& screenIdOrName, const QS
         return;
     }
 
-    // Resolve to EDID-based screen ID so the key matches daemon lookups.
-    const QString resolved = Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)
-        ? Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName)
-        : screenIdOrName;
+    // Resolve to EDID-based screen ID so the key matches daemon lookups —
+    // shared helper, see resolveScreenStorageKey() for rationale.
+    const QString resolved = resolveScreenStorageKey(screenIdOrName);
     QVariantMap& screenSettings = m_perScreenScrollSettings[resolved];
     if (screenSettings.value(key) == validated) {
         return;

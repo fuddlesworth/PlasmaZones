@@ -9,6 +9,7 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QtGlobal>
 
 namespace KWin {
 class EffectWindow;
@@ -96,6 +97,22 @@ protected:
     /// path changed compositor focus and silently suppressed legitimate
     /// re-focuses (see fix #503 / discussion #461 item 13).
     bool m_focusFollowsMouse = false;
+
+    /// Incremented on every daemon (re)connect via @c onDaemonReady (or its
+    /// per-handler equivalent). A D-Bus reply captures the epoch at call time
+    /// and skips its rollback if the daemon reconnected meanwhile —
+    /// onDaemonReady has already rebuilt the tracking sets, and removing the
+    /// windowId here would corrupt that fresh state.
+    ///
+    /// Lives on the base because both AutotileHandler and ScrollHandler need
+    /// the same rollback-skip pattern: a stale @c windowOpened ack landing
+    /// after a daemon restart must not mutate @c m_notifiedWindows, which the
+    /// daemon-ready handler has already re-seeded from a fresh batch.
+    ///
+    /// @c quint64 because the increment is a generation counter and unsigned
+    /// wrap is well-defined; signed overflow would be UB. The wider type
+    /// pushes any theoretical wrap so far out it never matters in practice.
+    quint64 m_daemonEpoch = 0;
 };
 
 } // namespace PlasmaZones

@@ -1316,32 +1316,54 @@ void Settings::writeDisableList(const QString& key, const QStringList& entries,
 
 QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    // Resolve connector names → stable screen ids on every read. Stored
-    // connector names stay human-readable; consumers see canonical ids.
-    // Desktop/activity getters intentionally skip this resolution because
-    // their composite keys (`screenId/desktop`, `screenId/activity`) embed
-    // the screen id in a non-isolatable way; the connector↔id matching is
-    // done at lookup time inside isDesktopDisabled / isActivityDisabled.
-    QStringList entries = readDisableList(disabledMonitorsKeyFor(mode));
-    for (auto& name : entries) {
-        if (Phosphor::Screens::ScreenIdentity::isConnectorName(name)) {
-            const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(name);
-            if (resolved != name) {
-                name = resolved;
-            }
-        }
-    }
-    return entries;
+    // The list is stored in canonical (resolved) form — setDisabledMonitors
+    // resolves connector names → stable screen ids on write — so this getter
+    // is a straight read with no per-entry resolution. Desktop/activity
+    // getters use a different scheme: their composite keys
+    // (`screenId/desktop`, `screenId/activity`) embed the screen id in a
+    // non-isolatable way, so connector↔id matching for those is done at
+    // lookup time inside isDesktopDisabled / isActivityDisabled.
+    return readDisableList(disabledMonitorsKeyFor(mode));
 }
 
 void Settings::setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames)
 {
-    writeDisableList(disabledMonitorsKeyFor(mode), screenIdOrNames, mode, &Settings::disabledMonitorsChanged);
+    // Resolve connector names → stable screen ids before persisting so the
+    // canonical store form is always the resolved id. Without this the
+    // setter/getter were asymmetric: the read-side rewrote connector names
+    // to ids, but the write-side stored whatever the caller passed — which
+    // meant `setDisabledMonitors(["DP-1"])` followed by a connector-name
+    // probe would round-trip differently from the same call followed by an
+    // id probe, and an `isMonitorDisabled` lookup bypassed the resolution
+    // because it consulted the post-getter (already-resolved) list. Resolve
+    // on write closes both gaps with a single source of truth.
+    QStringList resolved;
+    resolved.reserve(screenIdOrNames.size());
+    for (const QString& entry : screenIdOrNames) {
+        if (Phosphor::Screens::ScreenIdentity::isConnectorName(entry)) {
+            const QString resolvedEntry = Phosphor::Screens::ScreenIdentity::idForName(entry);
+            resolved.append(resolvedEntry.isEmpty() ? entry : resolvedEntry);
+        } else {
+            resolved.append(entry);
+        }
+    }
+    writeDisableList(disabledMonitorsKeyFor(mode), resolved, mode, &Settings::disabledMonitorsChanged);
 }
 
 bool Settings::isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const
 {
-    const QStringList entries = disabledMonitors(mode);
+    // The stored list is canonical (resolved-id form, see setDisabledMonitors),
+    // but the caller may pass a connector name OR an id — variantsFor() yields
+    // every form so a single `contains` per variant covers the whole match
+    // surface without re-resolving the stored list per call.
+    //
+    // Convert the QStringList to QSet once per call so the per-variant
+    // contains() lookups are O(1) instead of O(n). No long-lived cache —
+    // the resolution invalidation surface (monitors hot-plug, settings
+    // changes) is wider than this gate's hot-path frequency, and a stale
+    // cache would silently leak disabled state across reconfigures.
+    const QStringList list = disabledMonitors(mode);
+    const QSet<QString> entries(list.cbegin(), list.cend());
     for (const QString& name : Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName)) {
         if (entries.contains(name)) {
             return true;
@@ -2486,6 +2508,15 @@ void Settings::reset()
     m_configBackend->deleteGroup(ConfigDefaults::tilingQuickLayoutSlotsGroup());
     if (!QFile::remove(ConfigDefaults::sessionFilePath()) && QFile::exists(ConfigDefaults::sessionFilePath())) {
         qCWarning(lcConfig) << "Failed to remove session file:" << ConfigDefaults::sessionFilePath();
+    }
+    // Reset wipes the assignments file too — it is the per-context
+    // {Mode, layoutId, algorithmId, scrollSettingId} payload that the
+    // settings backend would otherwise reload on next start, leaving the
+    // user with a half-defaulted state (everything in config.json reset, but
+    // every screen still wired to its prior assignment). Symmetric with the
+    // session.json removal above.
+    if (!QFile::remove(ConfigDefaults::assignmentsFilePath()) && QFile::exists(ConfigDefaults::assignmentsFilePath())) {
+        qCWarning(lcConfig) << "Failed to remove assignments file:" << ConfigDefaults::assignmentsFilePath();
     }
     // Scroll engine strip state lives inside session.json (removed above) via
     // WTA's scroll-state delegates — no separate file to clean up.

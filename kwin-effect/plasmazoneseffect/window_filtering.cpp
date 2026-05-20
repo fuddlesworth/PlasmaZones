@@ -48,8 +48,7 @@ void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const
     // capture and freeze float-restore at ancient coordinates.
     PhosphorProtocol::ClientHelpers::fireAndForget(
         this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-        {windowId, static_cast<int>(geom.x()), static_cast<int>(geom.y()), static_cast<int>(geom.width()),
-         static_cast<int>(geom.height()), screenId, false},
+        {windowId, qRound(geom.x()), qRound(geom.y()), qRound(geom.width()), qRound(geom.height()), screenId, false},
         QStringLiteral("storePreTileGeometry"));
     qCInfo(lcEffect) << "Stored pre-tile geometry for window" << windowId << "geom=" << geom;
 }

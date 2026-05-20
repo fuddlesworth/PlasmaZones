@@ -289,15 +289,9 @@ private:
     /// autotile sister) rather than a QScopedValueRollback, so the guard's
     /// intent is visible inline.
     bool m_inFlushReasserts = false;
-    /// Incremented on every daemon (re)connect. A D-Bus reply captures the
-    /// epoch at call time and skips its rollback if the daemon reconnected
-    /// meanwhile — onDaemonReady has already rebuilt the tracking sets.
-    /// quint64 to match AutotileHandler::m_autotileStaggerGeneration — both
-    /// are pure monotonic generation counters and the wider type pushes any
-    /// theoretical wrap so far out it never matters in practice. Unsigned
-    /// because the increment is a generation counter and unsigned wrap is
-    /// well-defined, whereas signed overflow would be UB.
-    quint64 m_daemonEpoch = 0;
+    // m_daemonEpoch is inherited from TilingHandlerBase — both autotile and
+    // scroll need the same rollback-skip pattern, so the counter lives on the
+    // base. Increment via @c ++m_daemonEpoch in @c onDaemonReady.
 
     /// Scroll-mode border decoration settings. Only the scalar fields are used
     /// (showBorder / hideTitleBars / width / radius / color / inactiveColor) —

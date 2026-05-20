@@ -133,8 +133,13 @@ public:
     /// @p anchorWindowId, and focus @p draggedWindowId. Drives drag-to-reorder.
     /// Returns false when either window is not tiled here or both share a
     /// column (a drop onto the dragged window's own column). A drop that
-    /// resolves to the dragged column's existing slot still returns true (it
-    /// is a valid drop — the column order is simply left unchanged).
+    /// resolves to the dragged column's existing slot AND already has the
+    /// dragged window focused likewise returns false — the operation is a
+    /// total no-op, and the false return intentionally suppresses the
+    /// downstream `placementChanged` emit so callers do not pay for a
+    /// daemon resolve that would re-publish identical geometry. (A move that
+    /// only flips focus, or only re-positions the column, still returns true
+    /// and emits.)
     bool moveColumnNextTo(const QString& draggedWindowId, const QString& anchorWindowId, bool placeAfter);
 
     // ── Width / height intent ───────────────────────────────────────────

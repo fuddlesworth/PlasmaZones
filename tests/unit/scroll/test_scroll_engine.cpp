@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <PhosphorScrollEngine/IScrollSettings.h>
+#include <PhosphorEngine/IScrollSettings.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollScreenState.h>
 
@@ -617,15 +617,17 @@ void TestScrollEngine::restoreReconciliation()
     QCOMPARE(restoredState->columnCount(), 2);
 
     // Zero live windows after a restart — the effect sends an empty batch and
-    // every restored column is reconciled away. The screen state survives as
-    // an empty strip (windowClosed drops emptied columns, not the state).
+    // every restored column is reconciled away. The whole screen state is
+    // dropped (not just emptied to zero columns) so a husk state is not
+    // visible to desktopsWithActiveState() / serializeEngineState — those
+    // already filter empty states, and reconcileRestoredWindows now matches
+    // their post-condition.
     ScrollEngine emptied;
     emptied.deserializeEngineState(saved);
     emptied.reconcileRestoredWindows(QSet<QString>{});
     QVERIFY(!emptied.isWindowTracked(QStringLiteral("a")));
     const ScrollScreenState* emptiedState = scrollState(emptied, QStringLiteral("S1"));
-    QVERIFY(emptiedState);
-    QCOMPARE(emptiedState->columnCount(), 0);
+    QVERIFY(emptiedState == nullptr);
 
     // An engine with no pending restore ignores reconciliation entirely — a
     // live-opened window is never pruned by a stray batch.
@@ -734,7 +736,10 @@ void TestScrollEngine::windowOpened_migratesAcrossScreens()
     // screens (S1 must clear its now-empty rect, S2 must place the window).
     engine.windowOpened(QStringLiteral("a"), QStringLiteral("S2"));
     QCOMPARE(engine.screenForTrackedWindow(QStringLiteral("a")), QStringLiteral("S2"));
-    QVERIFY(spy.count() >= 2);
+    // Pin the exact contract: one emit clears S1, one emit places on S2.
+    // Looser than QVERIFY(>= 2) so a regression that fans out into 3+ emits
+    // (e.g. an extra reorder pass on cross-screen migration) is caught.
+    QCOMPARE(spy.count(), 2);
 
     const ScrollScreenState* s1 = scrollState(engine, QStringLiteral("S1"));
     if (s1) {

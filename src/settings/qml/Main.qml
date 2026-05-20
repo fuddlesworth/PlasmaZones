@@ -1565,7 +1565,20 @@ ApplicationWindow {
 
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.largeSpacing
-                    source: Qt.resolvedUrl(window._pageComponents[settingsController.activePage] || "LayoutsPage.qml")
+                    // Resolve the QML page for the active controller key. A
+                    // typo'd `activePage` value used to silently land on
+                    // LayoutsPage.qml — making the bad lookup invisible in
+                    // logs. Warn now so the typo surfaces, but still route
+                    // to LayoutsPage to keep the UI responsive (the user
+                    // sees something rather than a blank loader).
+                    source: {
+                        const page = window._pageComponents[settingsController.activePage];
+                        if (page) {
+                            return Qt.resolvedUrl(page);
+                        }
+                        console.warn("Main.qml: unrecognized activePage:", settingsController.activePage, "— falling back to LayoutsPage.qml");
+                        return Qt.resolvedUrl("LayoutsPage.qml");
+                    }
                     asynchronous: false
                     // Fade in on page change
                     onLoaded: {

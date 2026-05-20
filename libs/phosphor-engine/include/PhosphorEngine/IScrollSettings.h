@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <phosphorengine_export.h>
+
 #include <QObject>
 #include <QVariantList>
 
@@ -28,7 +30,14 @@ namespace PhosphorEngine {
 /// placementChanged re-resolve that propagates the new geometry to KWin.
 /// IAutotileSettings and ISnapSettings rely on the same daemon-side signal
 /// wiring; this interface follows that precedent.
-class IScrollSettings
+///
+/// The class is exported so its typeinfo has default visibility across the
+/// libphosphor-scroll-engine ↔ daemon shared-library boundary; the engine
+/// resolves the daemon's settings backend via `qobject_cast<IScrollSettings*>`,
+/// and losing the export silently turns every effective*() resolver into a
+/// fall-through to the engine's hard-coded defaults. Mirrors IScrollEngine /
+/// IScrollNavigation, both of which document and apply the same export.
+class PHOSPHORENGINE_EXPORT IScrollSettings
 {
 public:
     virtual ~IScrollSettings() = default;

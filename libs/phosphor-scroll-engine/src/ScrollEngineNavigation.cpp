@@ -218,8 +218,12 @@ void ScrollEngine::cyclePresetColumnWidth(const NavigationContext& ctx)
     // and detached to -1, then cycle bringing it back to a different value)
     // still proceeds.
     const ColumnWidth currentWidth = state->activeColumn()->width();
-    const bool isProportionAtPreset = currentWidth.kind == ColumnWidth::Kind::Proportion
-        && qFuzzyCompare(currentWidth.value + 1.0, presets.at(next) + 1.0);
+    // Direct qFuzzyCompare is safe here — both operands are bounded in
+    // [kMinSizeFraction, kMaxSizeFraction] (the preset list and column-width
+    // intent ranges enforce that), so the +1.0 offset trick used to robustify
+    // qFuzzyCompare around zero is unnecessary.
+    const bool isProportionAtPreset =
+        currentWidth.kind == ColumnWidth::Kind::Proportion && qFuzzyCompare(currentWidth.value, presets.at(next));
     if (next == current && isProportionAtPreset) {
         reportNav(false, QStringLiteral("width"), screenId);
         return;

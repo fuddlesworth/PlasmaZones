@@ -21,6 +21,12 @@ namespace PhosphorScrollEngine {
 // `int` as their underlying type, which makes this opaque forward declaration
 // well-formed and ABI-stable across the cross-library boundary.
 enum class ScrollViewportMode : int;
+// Forward-declared so the IScrollEngine surface can return the concrete strip
+// type — letting the daemon avoid a dynamic_cast on every
+// onScrollPlacementChanged emit and removing one cross-library RTTI-visibility
+// trap at the same time. The full type is only included where the strip is
+// actually consumed (daemon/scroll.cpp).
+class ScrollScreenState;
 } // namespace PhosphorScrollEngine
 
 namespace PhosphorEngine {
@@ -101,6 +107,19 @@ public:
     virtual IPlacementState* stateForScreen(const QString& screenId) = 0;
     /// Const overload — same contract.
     virtual const IPlacementState* stateForScreen(const QString& screenId) const = 0;
+    /// Per-screen strip state, typed as the concrete ScrollScreenState the
+    /// daemon's geometry resolver consumes. Lets onScrollPlacementChanged()
+    /// avoid a `dynamic_cast<ScrollScreenState*>` on every emit — the cast
+    /// crosses the libphosphor-scroll-engine ↔ daemon shared-library boundary
+    /// and would silently return nullptr if PHOSPHORENGINE_EXPORT lost default
+    /// visibility on ScrollScreenState's typeinfo, degrading every scroll
+    /// placementChanged into a no-op in release builds with no diagnostic.
+    /// Returning the concrete pointer here pushes that cast inside the engine
+    /// (a same-library cast, no visibility risk) and gives the daemon a
+    /// link-time guarantee that the strip type is reachable.
+    virtual PhosphorScrollEngine::ScrollScreenState* scrollStateForScreen(const QString& screenId) = 0;
+    /// Const overload — same contract.
+    virtual const PhosphorScrollEngine::ScrollScreenState* scrollStateForScreen(const QString& screenId) const = 0;
 };
 
 } // namespace PhosphorEngine

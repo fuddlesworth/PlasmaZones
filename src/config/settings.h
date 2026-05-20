@@ -11,7 +11,7 @@
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
-#include <PhosphorScrollEngine/IScrollSettings.h>
+#include <PhosphorEngine/IScrollSettings.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "configdefaults.h"
 #include "configbackends.h"

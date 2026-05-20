@@ -162,14 +162,23 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
                                             PhosphorProtocol::Service::Interface::Autotile,
                                             QStringLiteral("windowOpened"), {windowId, screenId, minWidth, minHeight}),
                                         this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            if (w->isError()) {
-                qCWarning(lcEffect) << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
-                m_notifiedWindows.remove(windowId);
-                m_notifiedWindowScreens.remove(windowId);
-            }
-        });
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, windowId, epoch = m_daemonEpoch](QDBusPendingCallWatcher* w) {
+                    w->deleteLater();
+                    if (w->isError()) {
+                        qCWarning(lcEffect)
+                            << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
+                        // Skip the rollback if the daemon reconnected meanwhile —
+                        // onDaemonReady has already rebuilt the tracking sets,
+                        // and removing the windowId here would corrupt that
+                        // fresh state. Mirrors ScrollHandler::notifyWindowAdded.
+                        if (epoch != m_daemonEpoch) {
+                            return;
+                        }
+                        m_notifiedWindows.remove(windowId);
+                        m_notifiedWindowScreens.remove(windowId);
+                    }
+                });
         qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenId
                           << "minSize:" << minWidth << "x" << minHeight;
     }
@@ -245,16 +254,23 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
                                         PhosphorProtocol::Service::Interface::Autotile,
                                         QStringLiteral("windowsOpenedBatch"), {QVariant::fromValue(batchEntries)}),
                                     this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, batchWindowIds](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        if (w->isError()) {
-            qCWarning(lcEffect) << "windowsOpenedBatch D-Bus call failed:" << w->error().message();
-            for (const QString& wid : batchWindowIds) {
-                m_notifiedWindows.remove(wid);
-                m_notifiedWindowScreens.remove(wid);
-            }
-        }
-    });
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, batchWindowIds, epoch = m_daemonEpoch](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                if (w->isError()) {
+                    qCWarning(lcEffect) << "windowsOpenedBatch D-Bus call failed:" << w->error().message();
+                    // Skip the rollback if the daemon reconnected meanwhile —
+                    // onDaemonReady rebuilt tracking from scratch. Mirrors
+                    // ScrollHandler::notifyWindowsAddedBatch.
+                    if (epoch != m_daemonEpoch) {
+                        return;
+                    }
+                    for (const QString& wid : batchWindowIds) {
+                        m_notifiedWindows.remove(wid);
+                        m_notifiedWindowScreens.remove(wid);
+                    }
+                }
+            });
     qCInfo(lcEffect) << "Notified autotile: windowsOpenedBatch with" << batchEntries.size() << "windows";
 }
 
@@ -563,6 +579,12 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
 
 void AutotileHandler::onDaemonReady()
 {
+    // Bump epoch FIRST so any in-flight watcher whose D-Bus reply lands after
+    // we wipe the tracking sets below sees a stale epoch and skips its
+    // rollback — without this, a late `windowOpened` failure ack could remove
+    // a windowId that the fresh post-restart batch has just re-added. Mirrors
+    // ScrollHandler::onDaemonReady.
+    ++m_daemonEpoch;
     loadSettings();
     connectSignals();
     m_notifiedWindows.clear();

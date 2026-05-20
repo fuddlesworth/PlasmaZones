@@ -1909,7 +1909,8 @@ void SettingsController::onVirtualDesktopsChanged()
     // Prune both per-mode disabled-desktop lists — see start.cpp comment re:
     // mid-range renumbering limitation. The per-mode disabledDesktopsChanged
     // signal is forwarded from m_settings (see ctor); no manual emit here.
-    for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+    for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile,
+                            PhosphorZones::AssignmentEntry::Scroll}) {
         QStringList disabled = m_settings.disabledDesktops(mode);
         if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
             m_settings.setDisabledDesktops(mode, disabled);
@@ -1935,7 +1936,8 @@ void SettingsController::onActivitiesChanged()
             }
         }
         // Per-mode signal forwarded from m_settings (see ctor) — no manual emit.
-        for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+        for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile,
+                                PhosphorZones::AssignmentEntry::Scroll}) {
             QStringList disabledActs = m_settings.disabledActivities(mode);
             if (pruneDisabledActivityEntries(disabledActs, validIds)) {
                 m_settings.setDisabledActivities(mode, disabledActs);

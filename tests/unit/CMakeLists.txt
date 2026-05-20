@@ -673,4 +673,12 @@ add_test(NAME test_autotile_state COMMAND test_autotile_state)
 # tests aborting in CI when the author forgot to append.
 # ═══════════════════════════════════════════════════════════════════════════════
 get_property(_all_tests DIRECTORY . PROPERTY TESTS)
-set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+# Use set_property(TEST ... APPEND PROPERTY ENVIRONMENT ...) (rather than the
+# destructive set_tests_properties(... PROPERTIES ENVIRONMENT ...) form) so
+# any future per-test ENVIRONMENT additions made above this line — for example
+# an XDG_RUNTIME_DIR or display-server override on a single test — are not
+# silently clobbered when this loop runs. set_tests_properties does NOT accept
+# `APPEND PROPERTY`; only set_property does, so a per-test loop is required.
+foreach(_pz_test IN LISTS _all_tests)
+    set_property(TEST ${_pz_test} APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endforeach()

@@ -30,6 +30,7 @@ set(CMAKE_AUTOMOC ON)
 
 add_library(PhosphorEngine SHARED
     include/PhosphorEngine/PlacementEngineBase.h
+    include/PhosphorEngine/IScrollSettings.h
     src/PlacementEngineBase.cpp
     src/GeometryUtils.cpp
     src/WindowRegistry.cpp

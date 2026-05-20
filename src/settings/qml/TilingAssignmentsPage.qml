@@ -5,13 +5,16 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.settings
 
 SettingsFlickable {
     id: root
 
     readonly property var settingsBridge: TilingBridge {}
 
-    readonly property int viewMode: 1
+    // AssignmentEntry.Autotile names the same integer as the C++ enum so a
+    // future renumber stays in sync; magic 1 here would silently desync.
+    readonly property int viewMode: AssignmentEntry.Autotile
 
     contentHeight: mainCol.implicitHeight
     clip: true

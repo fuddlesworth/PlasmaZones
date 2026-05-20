@@ -173,11 +173,11 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
         // (keyed by appId for session restore), so a stale entry from a
         // prior session would otherwise block the fresh capture and leave
         // float-restore teleporting the window to ancient coordinates.
-        PhosphorProtocol::ClientHelpers::fireAndForget(
-            m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-            {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()), static_cast<int>(frame.width()),
-             static_cast<int>(frame.height()), screenId, true},
-            QStringLiteral("storePreTileGeometry"));
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("storePreTileGeometry"),
+                                                       {windowId, qRound(frame.x()), qRound(frame.y()),
+                                                        qRound(frame.width()), qRound(frame.height()), screenId, true},
+                                                       QStringLiteral("storePreTileGeometry"));
     }
     return true;
 }

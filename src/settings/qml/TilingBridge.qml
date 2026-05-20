@@ -86,5 +86,7 @@ SharedBridge {
         tilingQuickLayoutSlotsChanged();
     }
 
-    assignmentViewMode: 1
+    // AssignmentEntry.Autotile names the same integer as the C++ enum so a
+    // future renumber stays in sync; magic 1 here would silently desync.
+    assignmentViewMode: AssignmentEntry.Autotile
 }

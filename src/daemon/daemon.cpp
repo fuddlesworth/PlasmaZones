@@ -1020,16 +1020,35 @@ bool Daemon::init()
     // the hot path was the previous shape; caching avoids RTTI on every
     // onScrollPlacementChanged.
     m_scrollEngineCached = dynamic_cast<PhosphorEngine::IScrollEngine*>(m_scrollEngine.get());
-    // RTTI-visibility canary: navigation handlers cross-cast m_scrollEngine to
-    // IScrollNavigation* per-shortcut (scroll.cpp:140). That dynamic_cast
-    // crosses the libphosphor-scroll-engine ↔ daemon shared-library boundary
-    // and silently returns nullptr if PHOSPHORENGINE_EXPORT loses default
-    // visibility on IScrollNavigation's typeinfo — every scroll shortcut
-    // would then degrade to a no-op in release builds with no diagnostic.
-    // One-time assertion at engine wiring guarantees the build catches this
-    // class of regression immediately.
-    Q_ASSERT_X(dynamic_cast<PhosphorEngine::IScrollNavigation*>(m_scrollEngine.get()) != nullptr, "Daemon::start",
-               "ScrollEngine cross-cast to IScrollNavigation failed (RTTI visibility regression?)");
+    // RTTI-visibility canaries — two cross-casts the daemon performs on its
+    // m_scrollEngine pointer must resolve correctly across the
+    // libphosphor-scroll-engine ↔ daemon shared-library boundary:
+    //
+    //   1. IScrollEngine     — cached above (m_scrollEngineCached) and used by
+    //                          scroll-only paths in start().
+    //   2. IScrollNavigation — re-resolved per-shortcut by navigation handlers
+    //                          (scroll.cpp:140).
+    //
+    // Either one silently returns nullptr if PHOSPHORENGINE_EXPORT loses
+    // default visibility on the matching typeinfo — scroll-only paths would
+    // then degrade to no-ops in release builds with no diagnostic. We use a
+    // hard `qFatal` (NOT Q_ASSERT_X, which compiles out under NDEBUG) so a
+    // release build aborts immediately on a visibility regression rather than
+    // silently producing a degraded daemon.
+    //
+    // The third cast site (scroll.cpp:172, IPlacementState* →
+    // ScrollScreenState*) is now covered by IScrollEngine::scrollStateForScreen()
+    // which returns the concrete strip type directly — no dynamic_cast needed.
+    if (!m_scrollEngineCached) {
+        qFatal(
+            "Daemon::start: ScrollEngine cross-cast to IScrollEngine failed — "
+            "PHOSPHORENGINE_EXPORT visibility regression on IScrollEngine?");
+    }
+    if (dynamic_cast<PhosphorEngine::IScrollNavigation*>(m_scrollEngine.get()) == nullptr) {
+        qFatal(
+            "Daemon::start: ScrollEngine cross-cast to IScrollNavigation failed — "
+            "PHOSPHORENGINE_EXPORT visibility regression on IScrollNavigation?");
+    }
     m_screenModeRouter = std::move(engines.router);
 
     // ScrollEngine is geometry-agnostic: when its strip state changes the
@@ -1527,8 +1546,20 @@ bool Daemon::init()
     }
 
     // Retry D-Bus service registration with exponential backoff.
-    // Synchronous retry is required here because init() runs before QGuiApplication::exec(),
-    // so QTimer-based async approaches won't fire. Delays are kept short (700ms total max).
+    //
+    // QThread::msleep blocks the calling thread (and therefore the
+    // not-yet-running event loop) — that is intentional here. init() runs
+    // before QGuiApplication::exec(), so a QTimer-based async retry would
+    // never fire (no event loop spinning), and a QEventLoop spin would
+    // require structuring the whole retry as a chain of single-shot timers
+    // for sub-second delays. The accepted trade-off is event-loop blocking
+    // for at most 700ms (100ms + 200ms + 400ms exponential backoff) during
+    // pre-exec startup; no UI is alive yet to suffer from it, and any
+    // session-bus subscriber that races us simply gets a `ServiceUnknown`
+    // until the next attempt lands. If the retry chain ever needs to grow
+    // long enough that 700ms becomes user-visible, the structured fix is to
+    // hoist the bus-registration step into the post-exec event loop so a
+    // QTimer chain replaces this blocking sleep.
     constexpr int maxRetries = 3;
     constexpr int baseDelayMs = 100; // 100ms, 200ms, 400ms exponential backoff
     bool serviceRegistered = false;

@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorScrollEngine/ScrollLayout.h>
 #include <PhosphorScrollEngine/ScrollScreenState.h>
 #include <phosphorscrollengine_export.h>
@@ -11,6 +10,7 @@
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IScrollEngine.h>
 #include <PhosphorEngine/IScrollNavigation.h>
+#include <PhosphorEngine/IScrollSettings.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 
 #include <QHash>
@@ -161,6 +161,11 @@ public:
     // ── State access ────────────────────────────────────────────────────
     PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) override;
     const PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) const override;
+    /// Concrete strip accessor — see IScrollEngine::scrollStateForScreen for
+    /// rationale (avoids a cross-library dynamic_cast on the geometry-resolve
+    /// hot path).
+    ScrollScreenState* scrollStateForScreen(const QString& screenId) override;
+    const ScrollScreenState* scrollStateForScreen(const QString& screenId) const override;
 
     // ── Persistence ─────────────────────────────────────────────────────
     void saveState() override;

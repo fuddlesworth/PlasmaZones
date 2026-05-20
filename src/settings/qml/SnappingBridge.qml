@@ -126,5 +126,7 @@ SharedBridge {
         return settingsController.cachedRunningWindows();
     }
 
-    assignmentViewMode: 0
+    // AssignmentEntry.Snapping names the same integer as the C++ enum so a
+    // future renumber stays in sync; magic 0 here would silently desync.
+    assignmentViewMode: AssignmentEntry.Snapping
 }

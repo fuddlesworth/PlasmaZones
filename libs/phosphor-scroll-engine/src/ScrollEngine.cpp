@@ -68,14 +68,16 @@ TilingStateKey ScrollEngine::keyForScreen(const QString& screenId) const
 
 ScrollScreenState* ScrollEngine::stateForKey(const TilingStateKey& key, bool create)
 {
-    auto it = m_states.find(key);
-    if (it != m_states.end()) {
-        return &it->second;
-    }
-    if (!create) {
+    // Single-pass lookup: try_emplace finds the existing entry without
+    // mutating the map (insert is skipped, `inserted` flag is false), and
+    // creates one when @p create is true. The previous shape did a separate
+    // find() then try_emplace which double-hashed the key on every miss.
+    auto [it, inserted] = m_states.try_emplace(key, key.screenId);
+    if (inserted && !create) {
+        m_states.erase(it);
         return nullptr;
     }
-    return &m_states.try_emplace(key, key.screenId).first->second;
+    return &it->second;
 }
 
 const ScrollScreenState* ScrollEngine::stateForWindowConst(const QString& windowId) const
@@ -167,6 +169,14 @@ QSet<int> ScrollEngine::desktopsWithActiveState() const
 {
     QSet<int> desktops;
     for (const auto& entry : m_states) {
+        // Skip husk states — a state with zero managed windows is the
+        // residue of every-window-closed that reconcileRestoredWindows /
+        // pruneStatesForDesktop / pruneStatesForScreen left behind. The
+        // signal "this desktop has live state" must reflect actual content,
+        // not lifetime artefacts. Mirrors serializeEngineState's filter.
+        if (entry.second.managedWindows().isEmpty()) {
+            continue;
+        }
         desktops.insert(entry.first.desktop);
     }
     return desktops;
@@ -500,6 +510,17 @@ const IPlacementState* ScrollEngine::stateForScreen(const QString& screenId) con
     return it == m_states.end() ? nullptr : &it->second;
 }
 
+ScrollScreenState* ScrollEngine::scrollStateForScreen(const QString& screenId)
+{
+    return stateForKey(keyForScreen(screenId), /*create=*/false);
+}
+
+const ScrollScreenState* ScrollEngine::scrollStateForScreen(const QString& screenId) const
+{
+    const auto it = m_states.find(keyForScreen(screenId));
+    return it == m_states.end() ? nullptr : &it->second;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Persistence
 // ─────────────────────────────────────────────────────────────────────────
@@ -651,6 +672,7 @@ void ScrollEngine::reconcileRestoredWindows(const QSet<QString>& liveWindowIds)
     // would otherwise fan out into N daemon resolves. Bypass windowClosed()'s
     // per-window emit and dispatch one emit per affected screen at the end.
     QSet<QString> dirtyScreens;
+    QSet<TilingStateKey> touchedKeys;
     for (const QString& windowId : stale) {
         const auto it = m_windowToKey.constFind(windowId);
         if (it == m_windowToKey.constEnd()) {
@@ -661,6 +683,18 @@ void ScrollEngine::reconcileRestoredWindows(const QSet<QString>& liveWindowIds)
         if (ScrollScreenState* state = stateForKey(key, /*create=*/false)) {
             state->removeWindow(windowId);
             dirtyScreens.insert(key.screenId);
+            touchedKeys.insert(key);
+        }
+    }
+    // A state that loses every window during reconcile is a husk — leaving it
+    // in m_states would inflate desktopsWithActiveState() / serializeEngineState
+    // with empty entries that carry no information. Drop them now so the
+    // post-reconcile shape matches a fresh boot with the same surviving
+    // window set.
+    for (const TilingStateKey& key : touchedKeys) {
+        const auto it = m_states.find(key);
+        if (it != m_states.end() && it->second.managedWindows().isEmpty()) {
+            m_states.erase(it);
         }
     }
     for (const QString& screenId : dirtyScreens) {

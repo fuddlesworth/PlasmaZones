@@ -170,6 +170,13 @@ QHash<QString, QRectF> resolveScrollLayout(const ScrollScreenState& state, const
             qreal height = heights.at(ti);
             if (height < 0.0) {
                 const qreal weight = qMax(visible.at(ti)->height.weight, qreal(0.0));
+                // height < 0 marks an Auto tile from the first pass; the
+                // first pass increments autoCount whenever it adds an Auto
+                // tile, so the only way to reach this branch with autoCount
+                // == 0 is a logic bug elsewhere (the two passes have drifted
+                // apart). Local assert so a future refactor breaks fast on
+                // this branch instead of trapping zero-divides downstream.
+                Q_ASSERT(autoCount > 0);
                 height = (weightSum > 0.0) ? autoSpace * weight / weightSum : autoSpace / autoCount;
             }
             // Floor to a positive height, mirroring resolveColumnWidth — a

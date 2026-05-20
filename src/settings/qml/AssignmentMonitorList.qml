@@ -45,6 +45,24 @@ ColumnLayout {
     /** @brief Inline message shown when the activities service is unavailable. */
     required property string activitiesUnavailableMessage
 
+    /// Compose the visible label for a monitor entry — connector name plus
+    /// manufacturer/model when available, joined identically to the visible
+    /// `Label` and the Switch's Accessible.name so screen readers announce
+    /// the same string a sighted user reads. Single source of truth shared
+    /// by the Monitors list (above) and the per-activity Monitors expander
+    /// (below); previously each delegate inlined its own copy and the two
+    /// drifted into subtly different fallback strings.
+    function _composeMonitorLabel(modelData) {
+        const name = modelData.name || i18n("Unknown Monitor");
+        const mfr = modelData.manufacturer || "";
+        const mdl = modelData.model || "";
+        const parts = [mfr, mdl].filter(function (s) {
+            return s !== "";
+        });
+        const info = parts.join(" ");
+        return info ? name + " — " + info : name;
+    }
+
     spacing: Kirigami.Units.largeSpacing
 
     // ── Monitors ──────────────────────────────────────────────────────
@@ -80,22 +98,13 @@ ColumnLayout {
                     required property var modelData
                     required property int index
                     property string screenName: modelData.name || ""
-                    // Composed display label: connector name + manufacturer +
-                    // model, joined identically to the visible Label below.
-                    // Centralised here so the visible text and the Switch's
-                    // Accessible.name read the same string — screen readers
-                    // should announce "LG ULTRAGEAR" not the raw "DP-1"
-                    // connector id (see PR #493).
-                    readonly property string composedDisplayName: {
-                        const name = modelData.name || i18n("Unknown Monitor");
-                        const mfr = modelData.manufacturer || "";
-                        const mdl = modelData.model || "";
-                        const parts = [mfr, mdl].filter(function (s) {
-                            return s !== "";
-                        });
-                        const info = parts.join(" ");
-                        return info ? name + " — " + info : name;
-                    }
+                    // Composed display label — see root._composeMonitorLabel
+                    // for the join recipe (centralised so the visible text
+                    // and the Switch's Accessible.name always read the same
+                    // string — screen readers should announce
+                    // "LG ULTRAGEAR" not the raw "DP-1" connector id, per
+                    // PR #493).
+                    readonly property string composedDisplayName: root._composeMonitorLabel(modelData)
                     property bool expanded: false
 
                     width: ListView.view.width
@@ -262,7 +271,11 @@ ColumnLayout {
 
             ListView {
                 Layout.fillWidth: true
-                Layout.preferredHeight: contentHeight
+                // Same empty-state fallback as the monitors list above —
+                // a `Layout.preferredHeight: contentHeight` binding collapses
+                // to 0 on an empty model, hiding the placeholder message and
+                // making the card look broken until activities arrive.
+                Layout.preferredHeight: count > 0 ? contentHeight : Kirigami.Units.gridUnit * 4
                 Layout.margins: Kirigami.Units.smallSpacing
                 clip: true
                 interactive: false
@@ -323,19 +336,10 @@ ColumnLayout {
                                 required property int index
                                 property string screenName: modelData.name || ""
                                 // Composed display label — same join as the
-                                // monitor list above so the Accessible.name
-                                // reads the manufacturer + model, not the
-                                // raw connector id.
-                                readonly property string composedDisplayName: {
-                                    const name = modelData.name || i18n("Unknown Monitor");
-                                    const mfr = modelData.manufacturer || "";
-                                    const mdl = modelData.model || "";
-                                    const parts = [mfr, mdl].filter(function (s) {
-                                        return s !== "";
-                                    });
-                                    const info = parts.join(" ");
-                                    return info ? name + " — " + info : name;
-                                }
+                                // monitor list above (root._composeMonitorLabel)
+                                // so the Accessible.name reads the manufacturer
+                                // + model, not the raw connector id.
+                                readonly property string composedDisplayName: root._composeMonitorLabel(modelData)
 
                                 Layout.fillWidth: true
                                 Layout.leftMargin: Kirigami.Units.gridUnit * 2

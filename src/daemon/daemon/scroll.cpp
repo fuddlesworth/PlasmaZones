@@ -169,7 +169,10 @@ void Daemon::onScrollPlacementChanged(const QString& screenId)
     if (!scroll) {
         return;
     }
-    auto* state = dynamic_cast<PhosphorScrollEngine::ScrollScreenState*>(scroll->stateForScreen(screenId));
+    // scrollStateForScreen() returns the concrete strip type directly so this
+    // hot path skips the cross-library dynamic_cast that the IPlacementState*
+    // accessor would require — see IScrollEngine::scrollStateForScreen() docs.
+    auto* state = scroll->scrollStateForScreen(screenId);
     if (!state) {
         return;
     }

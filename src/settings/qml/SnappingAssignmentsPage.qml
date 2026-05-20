@@ -5,13 +5,16 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.settings
 
 SettingsFlickable {
     id: root
 
     readonly property var settingsBridge: SnappingBridge {}
 
-    readonly property int viewMode: 0
+    // AssignmentEntry.Snapping names the same integer as the C++ enum so a
+    // future renumber stays in sync; magic 0 here would silently desync.
+    readonly property int viewMode: AssignmentEntry.Snapping
 
     contentHeight: mainCol.implicitHeight
     clip: true

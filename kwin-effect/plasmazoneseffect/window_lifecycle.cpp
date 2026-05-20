@@ -338,6 +338,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (m_inDaemonGeometryApply) {
                 return;
             }
+            // getWindowScreenId is the costly part of this lambda — it
+            // re-resolves the window's VS by hit-testing every cached VS
+            // region. We cannot skip it (no newScreenId without it), but it
+            // is bounded by the VS count and runs only on geometry changes
+            // that survived the early-outs above. The down-stream
+            // isVirtualScreenCrossing predicate then drops every same-VS
+            // emit before the expensive autotile/scroll handlers see it, so
+            // the steady-state cost on a non-crossing geometry change is
+            // one lookup + one predicate call.
             const QString newScreenId = getWindowScreenId(safeW);
             const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
             if (!PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {

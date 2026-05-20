@@ -9,6 +9,11 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
+    /// Single source of truth for the upstream repository URL — every
+    /// LinkButton and any future "report a bug" / "releases" deep link
+    /// composes from this base so a fork or repo rename only edits one place.
+    readonly property string _githubBase: "https://github.com/fuddlesworth/PlasmaZones"
+
     contentHeight: content.implicitHeight
     clip: true
 
@@ -111,13 +116,13 @@ SettingsFlickable {
                     LinkButton {
                         linkText: i18n("GitHub Repository")
                         linkIcon: "vcs-branch"
-                        url: "https://github.com/fuddlesworth/PlasmaZones"
+                        url: root._githubBase
                     }
 
                     LinkButton {
                         linkText: i18n("Report a Bug")
                         linkIcon: "tools-report-bug"
-                        url: "https://github.com/fuddlesworth/PlasmaZones/issues/new"
+                        url: root._githubBase + "/issues/new"
                     }
 
                     LinkButton {
@@ -129,7 +134,7 @@ SettingsFlickable {
                     LinkButton {
                         linkText: i18n("Releases")
                         linkIcon: "package-available"
-                        url: "https://github.com/fuddlesworth/PlasmaZones/releases"
+                        url: root._githubBase + "/releases"
                     }
 
                     Button {
