@@ -1227,10 +1227,9 @@ bool Daemon::init()
 
             // Decode the (screenId, desktop, activity, field) tuples from
             // the batched changedAssignmentKeys. Encoded format matches
-            // the populate sites in LayoutAdaptor:
-            // "screenId<US>desktop<US>activity<US>field" where field is
-            // "snap", "tile", or "entry". An empty (3-part) form is
-            // tolerated for forward compatibility and treated as "entry".
+            // `encodeChangedKey` in src/dbus/layoutadaptor/assignment.cpp:
+            // "screenId<US>desktop<US>activity<US>field" with US=0x1F and
+            // field one of "snap", "tile", or "entry".
             enum class ChangedField {
                 Snap,
                 Tile,
@@ -1247,8 +1246,8 @@ bool Daemon::init()
             changedKeys.reserve(changedAssignmentKeys.size());
             for (const QString& enc : changedAssignmentKeys) {
                 const QStringList parts = enc.split(QChar(0x1F));
-                if (parts.size() != 4 && parts.size() != 3) {
-                    qCWarning(lcDaemon) << "assignmentChangesApplied: malformed key:" << enc;
+                if (parts.size() != 4) {
+                    qCWarning(lcDaemon) << "assignmentChangesApplied: malformed key (expected 4 parts):" << enc;
                     continue;
                 }
                 bool ok = false;
@@ -1257,12 +1256,17 @@ bool Daemon::init()
                     qCWarning(lcDaemon) << "assignmentChangesApplied: non-numeric desktop in key:" << enc;
                     continue;
                 }
-                ChangedField field = ChangedField::Entry;
-                if (parts.size() == 4) {
-                    if (parts[3] == QLatin1String("snap"))
-                        field = ChangedField::Snap;
-                    else if (parts[3] == QLatin1String("tile"))
-                        field = ChangedField::Tile;
+                ChangedField field;
+                if (parts[3] == QLatin1String("snap")) {
+                    field = ChangedField::Snap;
+                } else if (parts[3] == QLatin1String("tile")) {
+                    field = ChangedField::Tile;
+                } else if (parts[3] == QLatin1String("entry")) {
+                    field = ChangedField::Entry;
+                } else {
+                    qCWarning(lcDaemon) << "assignmentChangesApplied: unknown field tag" << parts[3] << "in key:" << enc
+                                        << "— treating as entry";
+                    field = ChangedField::Entry;
                 }
                 changedKeys.append({parts[0], vd, parts[2], field});
             }

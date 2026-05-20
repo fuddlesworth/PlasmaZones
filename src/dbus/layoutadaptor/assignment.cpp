@@ -21,6 +21,20 @@
 
 namespace PlasmaZones {
 
+namespace {
+// Encode a (screen, desktop, activity, field) tuple as
+// "screen<US>desktop<US>activity<US>field" with US = 0x1F (Unit Separator).
+// Mirrors the decoder in daemon.cpp's assignmentChangesApplied lambda.
+// Inputs are constrained to printable ASCII + UUID-with-braces; no escaping
+// is required because 0x1F never appears in any legitimate screen id,
+// activity UUID, or field tag.
+QString encodeChangedKey(const QString& screenId, int virtualDesktop, const QString& activity, QLatin1String field)
+{
+    constexpr QChar US(0x1F);
+    return screenId + US + QString::number(virtualDesktop) + US + activity + US + field;
+}
+} // namespace
+
 QJsonObject LayoutAdaptor::buildActivityInfoJson(const QString& activityId) const
 {
     QJsonObject info;
@@ -87,8 +101,7 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
     // UUID or an "autotile:<algo>" id and switches the entry's mode to
     // match, so the OSD should reflect the entry's effective active
     // layout (mode-resolved), not just one slot.
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QStringLiteral("0") + QChar(0x1F) + QChar(0x1F)
-                                   + QStringLiteral("entry"));
+    m_changedAssignmentKeys.append(encodeChangedKey(resolvedId, 0, QString(), QLatin1String("entry")));
 
     // Update global active layout when assigning to the primary screen (manual layouts only)
     if (layout) {
@@ -106,8 +119,7 @@ void LayoutAdaptor::clearAssignment(const QString& screenId)
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QStringLiteral("0") + QChar(0x1F) + QChar(0x1F)
-                                   + QStringLiteral("entry"));
+    m_changedAssignmentKeys.append(encodeChangedKey(resolvedId, 0, QString(), QLatin1String("entry")));
 }
 
 void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
@@ -250,8 +262,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, virtualDesktop, QString(), layoutId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F)
-                                   + QChar(0x1F) + QStringLiteral("entry"));
+    m_changedAssignmentKeys.append(encodeChangedKey(resolvedId, virtualDesktop, QString(), QLatin1String("entry")));
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "(id:" << resolvedId
                          << ") on desktop" << virtualDesktop;
 
@@ -264,8 +275,7 @@ void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenId, int
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, virtualDesktop, QString());
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F)
-                                   + QChar(0x1F) + QStringLiteral("entry"));
+    m_changedAssignmentKeys.append(encodeChangedKey(resolvedId, virtualDesktop, QString(), QLatin1String("entry")));
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "on desktop" << virtualDesktop;
 }
 
@@ -519,8 +529,7 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
     const QString resolvedActivityScreen = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedActivityScreen, 0, activityId, layoutId);
     m_changedScreenIds.insert(resolvedActivityScreen);
-    m_changedAssignmentKeys.append(resolvedActivityScreen + QChar(0x1F) + QStringLiteral("0") + QChar(0x1F) + activityId
-                                   + QChar(0x1F) + QStringLiteral("entry"));
+    m_changedAssignmentKeys.append(encodeChangedKey(resolvedActivityScreen, 0, activityId, QLatin1String("entry")));
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "for activity" << activityId;
 
@@ -533,8 +542,7 @@ void LayoutAdaptor::clearAssignmentForScreenActivity(const QString& screenId, co
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, 0, activityId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QStringLiteral("0") + QChar(0x1F) + activityId
-                                   + QChar(0x1F) + QStringLiteral("entry"));
+    m_changedAssignmentKeys.append(encodeChangedKey(resolvedId, 0, activityId, QLatin1String("entry")));
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "activity" << activityId;
 }
 
@@ -618,8 +626,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, virtualDesktop, activityId, layoutId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activityId
-                                   + QChar(0x1F) + QStringLiteral("entry"));
+    m_changedAssignmentKeys.append(encodeChangedKey(resolvedId, virtualDesktop, activityId, QLatin1String("entry")));
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "desktop" << virtualDesktop
                          << "activity" << activityId;
@@ -634,8 +641,7 @@ void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& scree
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, virtualDesktop, activityId);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activityId
-                                   + QChar(0x1F) + QStringLiteral("entry"));
+    m_changedAssignmentKeys.append(encodeChangedKey(resolvedId, virtualDesktop, activityId, QLatin1String("entry")));
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "desktop" << virtualDesktop << "activity"
                          << activityId;
 }
@@ -673,8 +679,7 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
 
     m_layoutManager->setAssignmentEntryDirect(resolvedId, virtualDesktop, activity, entry);
     m_changedScreenIds.insert(resolvedId);
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity
-                                   + QChar(0x1F) + QStringLiteral("entry"));
+    m_changedAssignmentKeys.append(encodeChangedKey(resolvedId, virtualDesktop, activity, QLatin1String("entry")));
 
     qCInfo(lcDbusLayout) << "setAssignmentEntry: screen=" << resolvedId << "desktop=" << virtualDesktop
                          << "activity=" << activity << "mode=" << mode << "snapping=" << snappingLayout
@@ -709,11 +714,19 @@ void LayoutAdaptor::setSnappingLayoutEntry(const QString& screenId, int virtualD
     // inactive preference — preserve the slot's existing mode and
     // don't touch other entries (matches the earlier "editing the
     // inactive field shouldn't flip context mode" rule).
+    //
+    // Clears (empty layoutId) ALWAYS go through preserve, never promote.
+    // A clear is "remove my preference for this one slot", not "make this
+    // empty slot the cascade winner" — the latter would wipe every other
+    // assignment on the screen and silently destroy any per-desktop or
+    // per-activity configuration the user had built up. The Snap-page
+    // and Tile-page X buttons stage `stageSnapping(.., "")` / equivalent,
+    // which routes here with an empty id; we MUST preserve in that case.
     const int curDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     const QString curActivity = m_activityManager ? m_activityManager->currentActivity() : QString();
     const PhosphorZones::AssignmentEntry::Mode currentMode =
         m_layoutManager->modeForScreen(resolvedId, curDesktop, curActivity);
-    if (currentMode == PhosphorZones::AssignmentEntry::Snapping) {
+    if (!layoutId.isEmpty() && currentMode == PhosphorZones::AssignmentEntry::Snapping) {
         m_layoutManager->setSnappingLayoutPromoting(resolvedId, virtualDesktop, activity, layoutId);
     } else {
         m_layoutManager->setSnappingLayoutPreservingMode(resolvedId, virtualDesktop, activity, layoutId);
@@ -722,8 +735,7 @@ void LayoutAdaptor::setSnappingLayoutEntry(const QString& screenId, int virtualD
     // Field marker "snap" — the OSD decides whether to surface this
     // edit by re-reading the slot's stored entry; the field tag tells
     // it which field to inspect (snap vs tile vs full entry).
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity
-                                   + QChar(0x1F) + QStringLiteral("snap"));
+    m_changedAssignmentKeys.append(encodeChangedKey(resolvedId, virtualDesktop, activity, QLatin1String("snap")));
 
     // Keep the daemon-wide active layout pointer in sync with the
     // primary screen's resolved layout. The snap engine, overlay, and
@@ -772,20 +784,21 @@ void LayoutAdaptor::setTilingAlgorithmEntry(const QString& screenId, int virtual
     // promote when the user's current rendered context is already in
     // Autotile mode (this tile edit matches the active mode), preserve
     // otherwise so a tile change on a snap context lands as a stored
-    // preference without flipping the rendered mode.
+    // preference without flipping the rendered mode. Clears (empty
+    // algorithmId) ALWAYS preserve — see the rationale in
+    // setSnappingLayoutEntry: a clear must not wipe sibling entries.
     const int curDesktopT = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     const QString curActivityT = m_activityManager ? m_activityManager->currentActivity() : QString();
     const PhosphorZones::AssignmentEntry::Mode currentModeT =
         m_layoutManager->modeForScreen(resolvedId, curDesktopT, curActivityT);
-    if (currentModeT == PhosphorZones::AssignmentEntry::Autotile) {
+    if (!algorithmId.isEmpty() && currentModeT == PhosphorZones::AssignmentEntry::Autotile) {
         m_layoutManager->setTilingAlgorithmPromoting(resolvedId, virtualDesktop, activity, algorithmId);
     } else {
         m_layoutManager->setTilingAlgorithmPreservingMode(resolvedId, virtualDesktop, activity, algorithmId);
     }
     m_changedScreenIds.insert(resolvedId);
     // Field marker "tile" — symmetric to the snap entry above.
-    m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity
-                                   + QChar(0x1F) + QStringLiteral("tile"));
+    m_changedAssignmentKeys.append(encodeChangedKey(resolvedId, virtualDesktop, activity, QLatin1String("tile")));
 
     qCInfo(lcDbusLayout) << "setTilingAlgorithmEntry: screen=" << resolvedId << "desktop=" << virtualDesktop
                          << "activity=" << activity << "tiling=" << algorithmId;

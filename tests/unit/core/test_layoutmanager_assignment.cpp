@@ -927,6 +927,220 @@ private Q_SLOTS:
         QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("wide"));
         QCOMPARE(entry2.snappingLayout, QStringLiteral("{some-uuid}")); // preserved
     }
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PR #501: partial-update / promote semantics
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // PreservingMode on a slot with NO existing entry: seeds from the cascade
+    // (display default) and writes the new snap, keeping mode + opposite field.
+    void testSetSnappingLayoutPreservingMode_noEntry_seedsFromCascade()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+
+        // Set a base entry on the screen so the cascade resolves to something.
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
+
+        // Now write a per-desktop snap preference. Slot (DP-1, vd=3, "") has
+        // no local entry; seed should come from the screen-only cascade.
+        mgr->setSnappingLayoutPreservingMode(QStringLiteral("DP-1"), 3, QString(), layoutB->id().toString());
+
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 3, QString()));
+        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 3, QString());
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, layoutB->id().toString());
+    }
+
+    // PR #501 regression: when the slot has a local entry whose
+    // activeLayoutId() happens to be empty (e.g. {mode=Snapping, snap="",
+    // tile="cluster"}), a partial snap update must NOT cascade-seed and
+    // drop the locally-stored opposite-field value. seedForPartialUpdate
+    // used to gate on `!activeLayoutId().isEmpty()` and clobber the tile.
+    void testSetSnappingLayoutPreservingMode_preservesLocalOppositeFieldWhenActiveIdEmpty()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+
+        // Seed a different cascade winner at a higher level (per-desktop)
+        // so that if seedForPartialUpdate falls back to the cascade it
+        // would pick this entry up.
+        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), layoutA);
+
+        // Place a local entry at (DP-1, 0, "") that has mode=Snapping but
+        // empty snap (only a tile preference). activeLayoutId() == "".
+        PhosphorZones::AssignmentEntry tileOnly;
+        tileOnly.mode = PhosphorZones::AssignmentEntry::Snapping;
+        tileOnly.snappingLayout = QString();
+        tileOnly.tilingAlgorithm = QStringLiteral("cluster");
+        mgr->setAssignmentEntryDirect(QStringLiteral("DP-1"), 0, QString(), tileOnly);
+
+        // Partial snap update at THIS slot — must preserve local tile,
+        // not pick up cascade winner's data.
+        mgr->setSnappingLayoutPreservingMode(QStringLiteral("DP-1"), 0, QString(), layoutB->id().toString());
+
+        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString());
+        QCOMPARE(entry.snappingLayout, layoutB->id().toString());
+        QCOMPARE(entry.tilingAlgorithm, QStringLiteral("cluster")); // preserved!
+    }
+
+    // PreservingMode with empty layoutId removes the entry when both
+    // fields end up empty, and leaves OTHER entries on the screen alone.
+    void testSetSnappingLayoutPreservingMode_emptyClear_removesOnlyTargetSlot()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+
+        // Per-desktop entry the user cares about — must survive a
+        // monitor-row clear.
+        mgr->assignLayout(QStringLiteral("DP-1"), 2, QString(), layoutA);
+        // Monitor-row entry (snap-only) — target of the clear.
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutB);
+
+        mgr->setSnappingLayoutPreservingMode(QStringLiteral("DP-1"), 0, QString(), QString());
+
+        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
+        // Per-desktop entry MUST still be present (this is the regression
+        // for the destructive-clear bug — promote would have wiped it).
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 2, QString()));
+        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2, QString());
+        QCOMPARE(entry.snappingLayout, layoutA->id().toString());
+    }
+
+    // Promoting on the Monitor row (vd=0, activity="") wipes ALL other
+    // entries on the screen (and its VS variants) — this is intentional,
+    // it's the cascade-winner promotion semantics. Pin behavior so the
+    // shadow-clear rule doesn't regress.
+    void testSetSnappingLayoutPromoting_monitorRow_wipesAllShadows()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+        auto* layoutC = createTestLayout(QStringLiteral("LayoutC"));
+        mgr->addLayout(layoutC);
+
+        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), layoutA);
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x"), layoutB);
+        mgr->assignLayout(QStringLiteral("DP-1"), 3, QStringLiteral("activity-y"), layoutC);
+
+        mgr->setSnappingLayoutPromoting(QStringLiteral("DP-1"), 0, QString(), layoutA->id().toString());
+
+        // The target slot is set + every shadow on the same screen gone.
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
+        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QString()));
+        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x")));
+        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 3, QStringLiteral("activity-y")));
+    }
+
+    // Promoting on a per-desktop slot (vd>0, activity="") only wipes
+    // entries with the same desktop — other desktops + screen-default
+    // must survive.
+    void testSetSnappingLayoutPromoting_perDesktop_wipesOnlySameDesktopShadows()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+        auto* layoutC = createTestLayout(QStringLiteral("LayoutC"));
+        mgr->addLayout(layoutC);
+
+        // Screen-level — must survive.
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
+        // Another desktop — must survive.
+        mgr->assignLayout(QStringLiteral("DP-1"), 2, QString(), layoutB);
+        // Same desktop + activity — shadows the target, must be wiped.
+        mgr->assignLayout(QStringLiteral("DP-1"), 1, QStringLiteral("activity-x"), layoutC);
+        // Different desktop + activity — must survive.
+        mgr->assignLayout(QStringLiteral("DP-1"), 2, QStringLiteral("activity-y"), layoutC);
+
+        mgr->setSnappingLayoutPromoting(QStringLiteral("DP-1"), 1, QString(), layoutA->id().toString());
+
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 2, QString()));
+        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QStringLiteral("activity-x")));
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 2, QStringLiteral("activity-y")));
+    }
+
+    // Promoting on a per-activity slot (vd=0, activity!="") only wipes
+    // entries with the same activity.
+    void testSetSnappingLayoutPromoting_perActivity_wipesOnlySameActivityShadows()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+        auto* layoutC = createTestLayout(QStringLiteral("LayoutC"));
+        mgr->addLayout(layoutC);
+
+        // Screen-level — must survive.
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
+        // Per-desktop, no activity — must survive.
+        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), layoutB);
+        // Same activity, any desktop — shadows the target, must be wiped.
+        mgr->assignLayout(QStringLiteral("DP-1"), 2, QStringLiteral("activity-x"), layoutC);
+        // Different activity — must survive.
+        mgr->assignLayout(QStringLiteral("DP-1"), 3, QStringLiteral("activity-y"), layoutC);
+
+        mgr->setSnappingLayoutPromoting(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x"),
+                                        layoutA->id().toString());
+
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QString()));
+        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 2, QStringLiteral("activity-x")));
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 3, QStringLiteral("activity-y")));
+    }
+
+    // Promoting on a fully-specific slot (vd>0, activity!="") doesn't wipe
+    // anything — no other entry can shadow it in the cascade.
+    void testSetSnappingLayoutPromoting_specificSlot_noShadowsToClear()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
+        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), layoutB);
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x"), layoutB);
+
+        mgr->setSnappingLayoutPromoting(QStringLiteral("DP-1"), 1, QStringLiteral("activity-x"),
+                                        layoutA->id().toString());
+
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QString()));
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x")));
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QStringLiteral("activity-x")));
+    }
+
+    // Tile-promoting forces mode=Autotile and writes the tile field.
+    void testSetTilingAlgorithmPromoting_forcesAutotileMode()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
+
+        mgr->setTilingAlgorithmPromoting(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("cluster"));
+
+        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString());
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(entry.tilingAlgorithm, QStringLiteral("cluster"));
+        QCOMPARE(entry.snappingLayout, layoutA->id().toString()); // preserved
+    }
 };
 
 QTEST_MAIN(TestLayoutManagerAssignment)
