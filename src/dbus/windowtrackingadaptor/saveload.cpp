@@ -51,6 +51,21 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
     return result;
 }
 
+bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, int virtualDesktop,
+                                                       const QString& activity) const
+{
+    // Empty screen means the entry never carried a usable context tag (legacy
+    // snap entries pre-multi-monitor, sticky windows, etc.). Loading and
+    // keeping them is the historical default — the alternative drops snap
+    // state on every windowless desktop session.
+    if (!m_settings || screenId.isEmpty()) {
+        return false;
+    }
+    const PhosphorZones::AssignmentEntry::Mode mode =
+        m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
+    return isContextDisabled(m_settings, mode, screenId, virtualDesktop, activity);
+}
+
 void WindowTrackingAdaptor::saveState()
 {
     using D = PhosphorPlacement::WindowTrackingService;
@@ -87,14 +102,24 @@ void WindowTrackingAdaptor::saveState()
     QJsonArray fullAssignments;
     if (dirty & D::DirtyZoneAssignments) {
         for (auto it = m_service->zoneAssignments().constBegin(); it != m_service->zoneAssignments().constEnd(); ++it) {
+            const QString assignedScreen = m_service->screenAssignments().value(it.key());
+            const int desktop = m_service->desktopAssignments().value(it.key(), 0);
+            // Disabled-context filter (discussion #461 item 2). A window that
+            // crossed onto a now-disabled monitor (e.g. user disabled snapping
+            // on their secondary) should not have its zone assignment
+            // re-persisted — that's the entry that resurfaces and yanks the
+            // window back on the next session. The runtime in-memory map keeps
+            // the assignment; only persistence is suppressed.
+            if (isPersistedContextDisabled(assignedScreen, desktop)) {
+                continue;
+            }
             QJsonObject entry;
             entry[QLatin1String("windowId")] = it.key();
             entry[QLatin1String("zoneIds")] = toJsonArray(it.value());
-            const QString assignedScreen = m_service->screenAssignments().value(it.key());
             entry[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(assignedScreen)
                 ? assignedScreen
                 : Phosphor::Screens::ScreenIdentity::idForName(assignedScreen);
-            entry[QLatin1String("desktop")] = m_service->desktopAssignments().value(it.key(), 0);
+            entry[QLatin1String("desktop")] = desktop;
             fullAssignments.append(entry);
         }
         tracking->writeString(ConfigKeys::windowZoneAssignmentsFullKey(),
@@ -109,6 +134,14 @@ void WindowTrackingAdaptor::saveState()
              it != m_service->pendingRestoreQueues().constEnd(); ++it) {
             QJsonArray entryArray;
             for (const auto& entry : it.value()) {
+                // Disabled-context filter (discussion #461 item 2). The Tier-A
+                // write gate in lifecycle.cpp covers new closes, but the
+                // in-memory queue may still hold pre-fix entries from before
+                // the user disabled the screen. Filtering here keeps them out
+                // of the on-disk session.
+                if (isPersistedContextDisabled(entry.screenId, entry.virtualDesktop)) {
+                    continue;
+                }
                 QJsonObject entryObj;
                 entryObj[QLatin1String("zoneIds")] = toJsonArray(entry.zoneIds);
                 if (!entry.screenId.isEmpty()) {
@@ -398,6 +431,19 @@ void WindowTrackingAdaptor::loadState()
                 QString screen = entry[QLatin1String("screen")].toString();
                 int desktop = entry[QLatin1String("desktop")].toInt(0);
 
+                // Disabled-context filter (discussion #461 item 2). A session
+                // saved before the user disabled this monitor/desktop carries
+                // assignments that would otherwise resurface and yank the
+                // window back into a zone the user told us to leave alone.
+                // Drop them on load — the matching autotile cleanup in
+                // pruneStaleRestores fires automatically when active screens
+                // are recomputed; this is the snap-side equivalent.
+                if (isPersistedContextDisabled(screen, desktop)) {
+                    qCInfo(lcDbusWindow) << "loadState: dropping zone assignment for" << windowId
+                                         << "on disabled context — screen:" << screen << "desktop:" << desktop;
+                    continue;
+                }
+
                 fullZones[windowId] = zoneIds;
                 fullScreens[windowId] = screen;
                 fullDesktops[windowId] = desktop;
@@ -476,6 +522,16 @@ void WindowTrackingAdaptor::loadState()
                         if (v.isDouble()) {
                             entry.zoneNumbers.append(v.toInt());
                         }
+                    }
+                    // Disabled-context filter (discussion #461 item 2).
+                    // Pre-fix sessions may contain restore entries for a
+                    // monitor / desktop the user has since disabled snapping
+                    // on; drop those on load so they never get replayed.
+                    if (isPersistedContextDisabled(entry.screenId, entry.virtualDesktop)) {
+                        qCInfo(lcDbusWindow)
+                            << "loadState: dropping pending restore for" << it.key()
+                            << "on disabled context — screen:" << entry.screenId << "desktop:" << entry.virtualDesktop;
+                        continue;
                     }
                     pendingQueues[it.key()].append(entry);
                 }

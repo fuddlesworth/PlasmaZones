@@ -1098,13 +1098,56 @@ bool Daemon::init()
                 engine->deserializeWindowOrders(orders);
         });
 
+    // Disabled-context filter (discussion #461 item 2). Wrap the autotile
+    // pending-restore JSON on both sides — serialize drops entries on a
+    // monitor/desktop/activity the user has disabled, and deserialize drops
+    // them coming back. Autotile already prunes restores for screens that
+    // leave its active set via pruneStaleRestores(), but that runs against
+    // the autotile-mode disable list specifically; the JSON layer is the
+    // single funnel that sees both modes plus the activity field that
+    // doesn't reach the autotile engine.
+    auto filterAutotilePendingRestores = [this](const QJsonObject& src) -> QJsonObject {
+        QJsonObject filtered;
+        for (auto it = src.constBegin(); it != src.constEnd(); ++it) {
+            if (!it.value().isArray()) {
+                continue;
+            }
+            QJsonArray kept;
+            for (const QJsonValue& entryVal : it.value().toArray()) {
+                if (!entryVal.isObject()) {
+                    continue;
+                }
+                const QJsonObject entryObj = entryVal.toObject();
+                const QString screen = entryObj[QLatin1String("screen")].toString();
+                const int desktop = entryObj[QLatin1String("desktop")].toInt(0);
+                const QString activity = entryObj[QLatin1String("activity")].toString();
+                if (m_settings && !screen.isEmpty()) {
+                    const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter
+                        ? m_screenModeRouter->modeFor(screen)
+                        : PhosphorZones::AssignmentEntry::Autotile;
+                    if (isContextDisabled(m_settings.get(), mode, screen, desktop, activity)) {
+                        continue;
+                    }
+                }
+                kept.append(entryObj);
+            }
+            if (!kept.isEmpty()) {
+                filtered[it.key()] = kept;
+            }
+        }
+        return filtered;
+    };
+
     m_windowTrackingAdaptor->setTilingPendingRestoreDelegates(
-        [engine = QPointer(autotileEngine)]() -> QJsonObject {
-            return engine ? engine->serializePendingRestores() : QJsonObject{};
+        [engine = QPointer(autotileEngine), filterAutotilePendingRestores]() -> QJsonObject {
+            if (!engine) {
+                return QJsonObject{};
+            }
+            return filterAutotilePendingRestores(engine->serializePendingRestores());
         },
-        [engine = QPointer(autotileEngine)](const QJsonObject& obj) {
+        [engine = QPointer(autotileEngine), filterAutotilePendingRestores](const QJsonObject& obj) {
             if (engine)
-                engine->deserializePendingRestores(obj);
+                engine->deserializePendingRestores(filterAutotilePendingRestores(obj));
         });
 
     // Trigger WTA save on autotile state changes (window order, split ratio, master count).
