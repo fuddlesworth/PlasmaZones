@@ -15,9 +15,11 @@ ScrollAdaptor::ScrollAdaptor(PhosphorScrollEngine::ScrollEngine* engine, QObject
     : QDBusAbstractAdaptor(parent)
     , m_engine(engine)
 {
-    if (!m_engine) {
-        qCWarning(lcDaemon) << "ScrollAdaptor created with null engine";
-    }
+    // A null engine at construction is a programming bug, not a runtime
+    // condition. Daemon::start always passes a non-null engine; the late-stage
+    // shutdown null-out path is clearEngine(), not the constructor. Match
+    // SettingsAdaptor's contract.
+    Q_ASSERT(engine);
 }
 
 QStringList ScrollAdaptor::scrollScreens() const
@@ -55,18 +57,45 @@ void ScrollAdaptor::windowOpened(const QString& windowId, const QString& screenI
     m_engine->windowOpened(windowId, screenId);
 }
 
+// Upper bound on entries accepted by windowsOpenedBatch. The session bus is
+// unauthenticated within the user session, so a hostile or runaway peer could
+// otherwise submit a multi-MB array. 4096 entries comfortably covers any
+// realistic window count (Plasma sessions rarely exceed a few hundred); a
+// batch larger than this is rejected outright.
+constexpr int kMaxWindowsOpenedBatchEntries = 4096;
+
 void ScrollAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList& entries)
 {
     if (!ensureEngine("windowsOpenedBatch")) {
         return;
     }
+    if (entries.size() > kMaxWindowsOpenedBatchEntries) {
+        qCWarning(lcDaemon) << "ScrollAdaptor::windowsOpenedBatch rejected: entry count" << entries.size()
+                            << "exceeds cap" << kMaxWindowsOpenedBatchEntries;
+        return;
+    }
     // WindowOpenedList is shared with org.plasmazones.Autotile and carries
     // per-entry minWidth/minHeight; scroll's strip model is size-agnostic and
     // ignores them (non-resizable windows are fitted to the tile slot
-    // effect-side), so only windowId/screenId are forwarded.
+    // effect-side), so only windowId/screenId are forwarded. Empty ids are
+    // skipped at this boundary so a malformed entry can't corrupt the
+    // reconcile set (an empty-string id would never match any live window
+    // and would silently prune a real one).
     QSet<QString> liveWindowIds;
     liveWindowIds.reserve(entries.size());
     for (const PhosphorProtocol::WindowOpenedEntry& entry : entries) {
+        if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
+            continue;
+        }
+        // Dedupe before forwarding: a malformed wire payload with the same id
+        // listed twice would otherwise drive two windowOpened calls for the
+        // same window. The engine is idempotent in the same-screen case, but
+        // a same-id-different-screen duplicate would migrate the window mid-
+        // batch and yield the second screen as the "live" location. Reject
+        // the second occurrence — first wins.
+        if (liveWindowIds.contains(entry.windowId)) {
+            continue;
+        }
         m_engine->windowOpened(entry.windowId, entry.screenId);
         liveWindowIds.insert(entry.windowId);
     }
@@ -75,6 +104,14 @@ void ScrollAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
     // strip against it so a window closed while the daemon was down leaves no
     // phantom column. A no-op on every later (routine) batch.
     m_engine->reconcileRestoredWindows(liveWindowIds);
+    // Notify the daemon so it can invalidate its per-screen geometry cache and
+    // force a re-push of resolved geometry to the effect. The effect's
+    // m_notifiedWindows is now populated, so the re-push's recordAppliedGeometry
+    // will seed drift detection. See setBatchProcessedCallback for the full
+    // race-condition rationale.
+    if (m_batchProcessedCallback) {
+        m_batchProcessedCallback();
+    }
 }
 
 void ScrollAdaptor::windowClosed(const QString& windowId)

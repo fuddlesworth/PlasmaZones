@@ -82,7 +82,13 @@ public:
 
     /// Record the geometry the daemon last resolved for a scroll window, so
     /// an app-initiated resize away from it can be detected and corrected.
-    void recordAppliedGeometry(const QString& windowId, const QRect& geometry);
+    /// @p slotRect is the column's full rect (the daemon's resolved tile slot
+    /// before any effect-side centering — see PlasmaZonesEffect::
+    /// constrainToScrollSlot). @p appliedRect is the rect actually pushed via
+    /// moveResize, which may be smaller and centered inside slotRect for a
+    /// constrained (fixed-size) window. Drag-to-reorder anchor selection
+    /// uses slotRect (column edges); drift detection uses appliedRect.
+    void recordAppliedGeometry(const QString& windowId, const QRect& slotRect, const QRect& appliedRect);
 
     /// React to a scroll window's frame geometry changing. An app resizing
     /// itself out of its tile slot is re-asserted (debounced); the strip owns
@@ -251,8 +257,18 @@ private:
     /// matching open is suppressed when it arrives (D-Bus ordering race).
     QSet<QString> m_pendingCloses;
     /// windowId → geometry the daemon last resolved for it; the reference
-    /// point for detecting app-initiated resizes.
+    /// point for detecting app-initiated resizes. For constrained (fixed-size)
+    /// windows this is the centered sub-rect, NOT the column rect — drag-to-
+    /// reorder anchor selection MUST use m_slotGeometry below for column-edge
+    /// comparisons, otherwise an in-column nudge of a constrained window can
+    /// be misclassified as crossing into a sibling column.
     QHash<QString, QRect> m_appliedGeometry;
+    /// windowId → COLUMN rect the daemon resolved for this window (the full
+    /// tile slot before constrainToScrollSlot's centering). Drag-to-reorder
+    /// (onWindowDragFinished) compares the drop position against these column
+    /// edges so the anchor selection is correct for constrained-and-centered
+    /// windows. Subset of m_notifiedWindows by the same invariant.
+    QHash<QString, QRect> m_slotGeometry;
     QSet<QString> m_reassertPending; ///< Windows awaiting a debounced re-assert.
     /// Windows currently in an interactive *resize* (recorded at the start
     /// signal). onWindowDragFinished consults this to skip resizes — only a

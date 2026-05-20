@@ -301,10 +301,14 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         p.geometry = entry.toRect();
         // Scroll-mode windows that cannot fill their tile slot (fixed-size or
         // max-constrained) are centred within it; record the resolved rect so
-        // ScrollHandler can detect and correct an app-initiated resize.
+        // ScrollHandler can detect and correct an app-initiated resize. Pass
+        // BOTH the column rect (pre-constrain) and the applied rect: drag-to-
+        // reorder anchor selection needs the column edges, drift detection
+        // needs the applied rect.
         if (action == QLatin1String("scroll")) {
-            p.geometry = constrainToScrollSlot(window, p.geometry);
-            m_scrollHandler->recordAppliedGeometry(getWindowId(window), p.geometry);
+            const QRect slotRect = p.geometry;
+            p.geometry = constrainToScrollSlot(window, slotRect);
+            m_scrollHandler->recordAppliedGeometry(getWindowId(window), slotRect, p.geometry);
         }
         p.screenId = entry.screenId;
         pending.append(p);

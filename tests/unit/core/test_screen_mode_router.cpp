@@ -219,6 +219,9 @@ private Q_SLOTS:
         const auto result = m_router->partitionByMode({});
         QVERIFY(result.snap.isEmpty());
         QVERIFY(result.autotile.isEmpty());
+        // Scroll bucket must also be empty — a regression that left dirty
+        // state in the scroll bucket would otherwise pass these tests.
+        QVERIFY(result.scroll.isEmpty());
     }
 
     void partitionByMode_allSnap_allAutotileIsEmpty()
@@ -227,6 +230,7 @@ private Q_SLOTS:
         const auto result = m_router->partitionByMode(input);
         QCOMPARE(result.snap, input);
         QVERIFY(result.autotile.isEmpty());
+        QVERIFY(result.scroll.isEmpty());
     }
 
     void partitionByMode_allAutotile_allSnapIsEmpty()
@@ -236,6 +240,7 @@ private Q_SLOTS:
         const auto result = m_router->partitionByMode(input);
         QVERIFY(result.snap.isEmpty());
         QCOMPARE(result.autotile, input);
+        QVERIFY(result.scroll.isEmpty());
     }
 
     // ─── scroll mode ──────────────────────────────────────────────────────

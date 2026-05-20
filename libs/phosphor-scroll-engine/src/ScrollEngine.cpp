@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QSet>
 
+#include <cmath>
 #include <utility>
 
 namespace PhosphorScrollEngine {
@@ -17,10 +18,21 @@ using PhosphorEngine::TilingStateKey;
 
 QVector<qreal> ScrollEngine::toFractionVector(const QVariantList& list)
 {
+    // Drop entries that don't convert cleanly to a finite number. Two failure
+    // modes: (a) a string that toReal() coerces to 0.0 with ok=false would
+    // silently appear as a 0.0 entry and the wrapping clampedFractionVector
+    // would pin it to kMinSizeFraction; (b) Qt's number parser accepts the
+    // literal strings "nan" and "inf" with ok=true, and NaN propagates
+    // through qBound (NaN comparisons are unordered) into the layout
+    // resolver where it produces NaN geometry. Filter both cases.
     QVector<qreal> out;
     out.reserve(list.size());
     for (const QVariant& v : list) {
-        out.append(v.toReal());
+        bool ok = false;
+        const qreal value = v.toReal(&ok);
+        if (ok && std::isfinite(value)) {
+            out.append(value);
+        }
     }
     return out;
 }
@@ -36,7 +48,17 @@ ScrollEngine::ScrollEngine(QObject* parent)
 
 PhosphorEngine::IScrollSettings* ScrollEngine::scrollSettings() const
 {
-    return qobject_cast<PhosphorEngine::IScrollSettings*>(engineSettings());
+    // Cache the qobject_cast result keyed by the underlying QObject* identity.
+    // The effective*() resolvers run on every relayout — making the cross-cast
+    // a hot path — and the engineSettings pointer rarely changes (it's set
+    // once at construction and survives daemon restarts). Re-cast only when
+    // the underlying pointer flips so the fast path is a single comparison.
+    QObject* current = engineSettings();
+    if (current != m_cachedScrollSettingsSource) {
+        m_cachedScrollSettingsSource = current;
+        m_cachedScrollSettings = qobject_cast<PhosphorEngine::IScrollSettings*>(current);
+    }
+    return m_cachedScrollSettings;
 }
 
 TilingStateKey ScrollEngine::keyForScreen(const QString& screenId) const
@@ -247,6 +269,21 @@ void ScrollEngine::windowOpened(const QString& windowId, const QString& screenId
         const TilingStateKey oldKey = existingIt.value();
         if (ScrollScreenState* oldState = stateForKey(oldKey, /*create=*/false)) {
             oldState->removeWindow(windowId);
+            // If migrating the window emptied the old strip entirely, drop the
+            // state so it doesn't linger as a phantom (eternally serialised
+            // into scroll-session.json with zero columns). hasPersistableState
+            // also relies on the m_states size, so leaving the husk in place
+            // would make the daemon write empty-strip JSON every shutdown.
+            //
+            // CRITICAL: oldState is an interior pointer into m_states; after
+            // m_states.erase(oldKey) it dangles. Null it out at the same scope
+            // so any future maintenance access in this block fails fast
+            // instead of corrupting heap.
+            const bool oldEmpty = oldState->isEmpty();
+            if (oldEmpty) {
+                m_states.erase(oldKey);
+                oldState = nullptr;
+            }
             emitChanged(oldKey.screenId);
         }
         m_windowToKey.erase(existingIt);
@@ -352,279 +389,11 @@ void ScrollEngine::toggleWindowFloat(const QString& windowId, const QString& scr
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Navigation
+// Navigation handlers (focus/move/swap/cycle/reapply/float, plus the niri
+// strip ops consume/expel/cyclePreset/toggleFullWidth/adjustColumnWidth, plus
+// the unsupported-op feedback paths) live in ScrollEngineNavigation.cpp to
+// keep this translation unit under the 800-line limit.
 // ─────────────────────────────────────────────────────────────────────────
-
-void ScrollEngine::focusInDirection(const QString& direction, const NavigationContext& ctx)
-{
-    QString screenId;
-    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    bool moved = false;
-    if (state) {
-        if (direction == QLatin1String("left")) {
-            moved = state->focusColumn(-1);
-        } else if (direction == QLatin1String("right")) {
-            moved = state->focusColumn(1);
-        } else if (direction == QLatin1String("up")) {
-            moved = state->focusTile(-1);
-        } else if (direction == QLatin1String("down")) {
-            moved = state->focusTile(1);
-        }
-    }
-    if (moved) {
-        emitChanged(screenId);
-    }
-    reportNav(moved, QStringLiteral("focus"), screenId);
-}
-
-void ScrollEngine::moveFocusedInDirection(const QString& direction, const NavigationContext& ctx)
-{
-    QString screenId;
-    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    bool moved = false;
-    if (state) {
-        if (direction == QLatin1String("left")) {
-            moved = state->moveColumn(-1);
-        } else if (direction == QLatin1String("right")) {
-            moved = state->moveColumn(1);
-        } else if (direction == QLatin1String("up")) {
-            moved = state->moveTile(-1);
-        } else if (direction == QLatin1String("down")) {
-            moved = state->moveTile(1);
-        }
-    }
-    if (moved) {
-        emitChanged(screenId);
-    }
-    reportNav(moved, QStringLiteral("move"), screenId);
-}
-
-void ScrollEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
-{
-    // A scrollable strip has no separate "swap" — reordering a column or tile
-    // is the move. Route swap onto the same reorder.
-    moveFocusedInDirection(direction, ctx);
-}
-
-void ScrollEngine::moveFocusedToPosition(int position, const NavigationContext& ctx)
-{
-    QString screenId;
-    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    bool moved = false;
-    if (state && state->activeColumnIndex() >= 0) {
-        const int targetIndex = position - 1; // navigation positions are 1-based
-        moved = state->moveColumn(targetIndex - state->activeColumnIndex());
-    }
-    if (moved) {
-        emitChanged(screenId);
-    }
-    reportNav(moved, QStringLiteral("move"), screenId);
-}
-
-void ScrollEngine::cycleFocus(bool forward, const NavigationContext& ctx)
-{
-    QString screenId;
-    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    if (!state || state->columnCount() == 0) {
-        reportNav(false, QStringLiteral("focus"), screenId);
-        return;
-    }
-    const int count = state->columnCount();
-    const int current = state->activeColumnIndex();
-    const int next = forward ? (current + 1) % count : (current - 1 + count) % count;
-    const bool moved = state->focusColumn(next - current);
-    if (moved) {
-        emitChanged(screenId);
-    }
-    reportNav(moved, QStringLiteral("focus"), screenId);
-}
-
-void ScrollEngine::reapplyLayout(const NavigationContext& ctx)
-{
-    QString screenId;
-    resolveNavTarget(ctx, &screenId);
-    emitChanged(screenId);
-}
-
-void ScrollEngine::toggleFocusedFloat(const NavigationContext& ctx)
-{
-    QString screenId;
-    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    QString windowId = state ? state->focusedWindowId() : QString();
-    if (windowId.isEmpty()) {
-        windowId = ctx.windowId;
-    }
-    // The focused-window path yields a tracked window; the ctx.windowId
-    // fallback may not — guard so an untracked id still reports feedback
-    // rather than silently no-op'ing inside toggleWindowFloat().
-    if (windowId.isEmpty() || !isWindowTracked(windowId)) {
-        reportNav(false, QStringLiteral("float"), screenId);
-        return;
-    }
-    toggleWindowFloat(windowId, screenId);
-}
-
-void ScrollEngine::rotateWindows(bool clockwise, const NavigationContext& ctx)
-{
-    // Rotating the whole layout is a stack/grid concept with no scrollable
-    // equivalent — the strip is navigated, not rotated. Surface a negative
-    // navigation feedback so the existing OSD machinery can render
-    // "not supported in scroll mode" rather than silently absorbing the chord.
-    Q_UNUSED(clockwise)
-    QString screenId;
-    resolveNavTarget(ctx, &screenId);
-    reportNav(false, QStringLiteral("rotate"), screenId);
-}
-
-void ScrollEngine::snapAllWindows(const NavigationContext& ctx)
-{
-    // No unmanaged-window adoption in the skeleton — windows enter the strip
-    // through windowOpened. Daemon-driven adoption arrives with M3c wiring;
-    // until then surface a negative feedback so the chord isn't a silent no-op.
-    QString screenId;
-    resolveNavTarget(ctx, &screenId);
-    reportNav(false, QStringLiteral("snap_all"), screenId);
-}
-
-void ScrollEngine::pushToEmptyZone(const NavigationContext& ctx)
-{
-    // "Empty zone" is a manual-layout concept; the strip has no fixed slots.
-    QString screenId;
-    resolveNavTarget(ctx, &screenId);
-    reportNav(false, QStringLiteral("push_to_empty_zone"), screenId);
-}
-
-void ScrollEngine::restoreFocusedWindow(const NavigationContext& ctx)
-{
-    // Restoring a window's pre-tile geometry depends on the daemon-side
-    // unmanaged-geometry store; wired in a later milestone. Surface a negative
-    // feedback so the user sees an OSD instead of the shortcut feeling broken.
-    QString screenId;
-    resolveNavTarget(ctx, &screenId);
-    reportNav(false, QStringLiteral("restore"), screenId);
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// niri scrollable-tiling operations
-// ─────────────────────────────────────────────────────────────────────────
-
-void ScrollEngine::consumeWindowIntoColumn(const NavigationContext& ctx)
-{
-    QString screenId;
-    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    const bool ok = state && state->consumeIntoColumn();
-    if (ok) {
-        emitChanged(screenId);
-    }
-    reportNav(ok, QStringLiteral("consume"), screenId);
-}
-
-void ScrollEngine::expelWindowFromColumn(const NavigationContext& ctx)
-{
-    QString screenId;
-    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    const bool ok = state && state->expelFromColumn();
-    if (ok) {
-        emitChanged(screenId);
-    }
-    reportNav(ok, QStringLiteral("expel"), screenId);
-}
-
-void ScrollEngine::cyclePresetColumnWidth(const NavigationContext& ctx)
-{
-    QString screenId;
-    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    const QVector<qreal> presets = effectivePresetColumnWidths(screenId);
-    if (!state || !state->activeColumn() || presets.isEmpty()) {
-        reportNav(false, QStringLiteral("width"), screenId);
-        return;
-    }
-    const int presetCount = static_cast<int>(presets.size());
-    // A stale index (the preset list shrank since it was set) or the detached
-    // -1 both normalise to -1, so the next press restarts the cycle at the
-    // first preset rather than wrapping from an out-of-range value.
-    const int rawIndex = state->activeColumn()->presetWidthIndex();
-    const int current = (rawIndex >= 0 && rawIndex < presetCount) ? rawIndex : -1;
-    const int next = (current + 1) % presetCount;
-    if (next == current) {
-        // Single-element preset list, already on it — nothing changes.
-        reportNav(false, QStringLiteral("width"), screenId);
-        return;
-    }
-    state->setActiveColumnWidth(ColumnWidth::proportion(presets.at(next)), next);
-    emitChanged(screenId);
-    reportNav(true, QStringLiteral("width"), screenId);
-}
-
-void ScrollEngine::cyclePresetWindowHeight(const NavigationContext& ctx)
-{
-    QString screenId;
-    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    const Column* column = state ? state->activeColumn() : nullptr;
-    const Tile* tile = column ? column->activeTile() : nullptr;
-    const QVector<qreal> presets = effectivePresetWindowHeights(screenId);
-    if (!tile || presets.isEmpty()) {
-        reportNav(false, QStringLiteral("height"), screenId);
-        return;
-    }
-    const int presetCount = static_cast<int>(presets.size());
-    // A stale preset index (the preset list shrank since it was set) or a
-    // non-preset height both normalise to -1, so the next press restarts the
-    // cycle at the first preset rather than wrapping from an out-of-range value.
-    const int rawIndex = (tile->height.kind == WindowHeight::Kind::Preset) ? tile->height.presetIndex : -1;
-    const int current = (rawIndex >= 0 && rawIndex < presetCount) ? rawIndex : -1;
-    const int next = (current + 1) % presetCount;
-    if (next == current) {
-        // Single-element preset list, already on it — nothing changes.
-        reportNav(false, QStringLiteral("height"), screenId);
-        return;
-    }
-    state->setActiveTileHeight(WindowHeight::preset(next));
-    emitChanged(screenId);
-    reportNav(true, QStringLiteral("height"), screenId);
-}
-
-void ScrollEngine::toggleColumnFullWidth(const NavigationContext& ctx)
-{
-    QString screenId;
-    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    if (!state || !state->activeColumn()) {
-        reportNav(false, QStringLiteral("fullwidth"), screenId);
-        return;
-    }
-    state->toggleActiveColumnFullWidth();
-    emitChanged(screenId);
-    reportNav(true, QStringLiteral("fullwidth"), screenId);
-}
-
-void ScrollEngine::adjustColumnWidth(qreal deltaFraction, const NavigationContext& ctx)
-{
-    QString screenId;
-    ScrollScreenState* state = resolveNavTarget(ctx, &screenId);
-    const Column* column = state ? state->activeColumn() : nullptr;
-    if (!column || column->width().kind != ColumnWidth::Kind::Proportion) {
-        // No focused column, or a fixed-pixel width — the geometry-agnostic
-        // engine cannot resolve a pixel width to a working-area fraction.
-        reportNav(false, QStringLiteral("width"), screenId);
-        return;
-    }
-    // Clamp the starting width into range before applying the delta: a
-    // Proportion width is normally already within [kMinSizeFraction,
-    // kMaxSizeFraction], but clamping here keeps grow/shrink monotonic —
-    // without it a shrink keypress on an out-of-range narrow column would
-    // grow it. kMinSizeFraction is also the smallest width a column can
-    // settle on, so it can never shrink away to nothing.
-    const qreal current = qBound(kMinSizeFraction, column->width().value, kMaxSizeFraction);
-    const qreal target = qBound(kMinSizeFraction, current + deltaFraction, kMaxSizeFraction);
-    if (qFuzzyCompare(target, current)) {
-        reportNav(false, QStringLiteral("width"), screenId); // already at the limit
-        return;
-    }
-    // The width is no longer one of the presets; -1 detaches it from the cycle.
-    state->setActiveColumnWidth(ColumnWidth::proportion(target), /*presetIndex=*/-1);
-    emitChanged(screenId);
-    reportNav(true, QStringLiteral("width"), screenId);
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Tracking queries
@@ -691,7 +460,17 @@ void ScrollEngine::loadState()
 
 bool ScrollEngine::hasPersistableState() const
 {
-    return !m_states.empty();
+    // An empty-strip state is bookkeeping noise — the daemon's saveScrollState
+    // would otherwise write a non-empty scroll-session.json containing only
+    // {"states": [{"columns": [], ...}]} every shutdown. Treat the engine as
+    // having nothing to persist when every state has zero columns AND the
+    // floating set is empty too. (managedWindows() empty implies both.)
+    for (const auto& entry : m_states) {
+        if (!entry.second.managedWindows().isEmpty()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 QJsonObject ScrollEngine::serializeEngineState() const
@@ -701,8 +480,14 @@ QJsonObject ScrollEngine::serializeEngineState() const
     // IScrollSettings global) by effectiveViewportMode(), so there is no
     // engine-local state to persist. Per-column full-width state *is* persisted
     // (in ScrollScreenState).
+    //
+    // Empty states (zero columns AND zero floating windows) are skipped: they
+    // carry no information and would just bloat scroll-session.json.
     QJsonArray states;
     for (const auto& entry : m_states) {
+        if (entry.second.managedWindows().isEmpty()) {
+            continue;
+        }
         QJsonObject obj = entry.second.toJson();
         obj.insert(QLatin1String("desktop"), entry.first.desktop);
         obj.insert(QLatin1String("activity"), entry.first.activity);
@@ -715,13 +500,30 @@ QJsonObject ScrollEngine::serializeEngineState() const
 
 void ScrollEngine::deserializeEngineState(const QJsonObject& state)
 {
+    // Full reset of every per-engine container before applying the persisted
+    // state. m_states/m_windowToKey were already cleared; the rest are
+    // session-time bookkeeping that the serialised JSON does not own (active
+    // screens, per-screen overrides, focus hint, current desktop/activity).
+    // Leaving them behind on a re-deserialise (e.g. a config-reload path)
+    // would carry stale config from the previous session into the restored
+    // strip and silently desync from the daemon's authoritative state.
     m_states.clear();
     m_windowToKey.clear();
+    m_perScreenConfig.clear();
+    m_activeScreens.clear();
+    m_activeScreen.clear();
+    m_currentDesktop = 1;
+    m_currentActivity.clear();
     const QJsonArray states = state.value(QLatin1String("states")).toArray();
     for (const QJsonValue& value : states) {
         const QJsonObject entry = value.toObject();
-        const TilingStateKey key{entry.value(QLatin1String("screenId")).toString(),
-                                 entry.value(QLatin1String("desktop")).toInt(1),
+        // Validate desktop range at the persistence boundary: virtual desktops
+        // are 1-based, so a zero or negative entry from corrupt JSON would
+        // create an unreachable state-key. Default to desktop 1 in that case
+        // so the strip surfaces somewhere rather than disappearing entirely.
+        const int rawDesktop = entry.value(QLatin1String("desktop")).toInt(1);
+        const int desktop = rawDesktop > 0 ? rawDesktop : 1;
+        const TilingStateKey key{entry.value(QLatin1String("screenId")).toString(), desktop,
                                  entry.value(QLatin1String("activity")).toString()};
         if (key.screenId.isEmpty()) {
             continue;
@@ -754,8 +556,24 @@ void ScrollEngine::reconcileRestoredWindows(const QSet<QString>& liveWindowIds)
             stale.append(it.key());
         }
     }
+    // Coalesce placementChanged emits: many stale windows on the same screen
+    // would otherwise fan out into N daemon resolves. Bypass windowClosed()'s
+    // per-window emit and dispatch one emit per affected screen at the end.
+    QSet<QString> dirtyScreens;
     for (const QString& windowId : stale) {
-        windowClosed(windowId);
+        const auto it = m_windowToKey.constFind(windowId);
+        if (it == m_windowToKey.constEnd()) {
+            continue;
+        }
+        const TilingStateKey key = it.value();
+        m_windowToKey.erase(it);
+        if (ScrollScreenState* state = stateForKey(key, /*create=*/false)) {
+            state->removeWindow(windowId);
+            dirtyScreens.insert(key.screenId);
+        }
+    }
+    for (const QString& screenId : dirtyScreens) {
+        emitChanged(screenId);
     }
 }
 

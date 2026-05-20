@@ -339,19 +339,33 @@ void SettingsAdaptor::initializeRegistry()
         REGISTER_CONCRETE_DOUBLE("scrollDefaultColumnWidth", scrollDefaultColumnWidth, setScrollDefaultColumnWidth)
         REGISTER_CONCRETE_BOOL("scrollCenterFocusedColumn", scrollCenterFocusedColumn, setScrollCenterFocusedColumn)
         // Preset lists (multi-bind) — QVariantLists of width / height fractions.
+        // Cap entry count: the session bus is unauthenticated within the user
+        // session, and the schema validator clamps individual fractions but
+        // doesn't bound list length. 32 entries is well above any realistic
+        // user need (the UI ships 3 by default) and stops a hostile peer from
+        // forcing a multi-MB persistence cycle.
+        constexpr int kMaxScrollPresetEntries = 32;
         m_getters[QStringLiteral("scrollPresetColumnWidths")] = [concrete]() {
             return QVariant::fromValue(concrete->scrollPresetColumnWidths());
         };
-        m_setters[QStringLiteral("scrollPresetColumnWidths")] = [concrete](const QVariant& v) {
-            concrete->setScrollPresetColumnWidths(v.toList());
+        m_setters[QStringLiteral("scrollPresetColumnWidths")] = [concrete](const QVariant& v) -> bool {
+            const QVariantList list = v.toList();
+            if (list.size() > kMaxScrollPresetEntries) {
+                return false;
+            }
+            concrete->setScrollPresetColumnWidths(list);
             return true;
         };
         m_schemas[QStringLiteral("scrollPresetColumnWidths")] = QStringLiteral("stringlist");
         m_getters[QStringLiteral("scrollPresetWindowHeights")] = [concrete]() {
             return QVariant::fromValue(concrete->scrollPresetWindowHeights());
         };
-        m_setters[QStringLiteral("scrollPresetWindowHeights")] = [concrete](const QVariant& v) {
-            concrete->setScrollPresetWindowHeights(v.toList());
+        m_setters[QStringLiteral("scrollPresetWindowHeights")] = [concrete](const QVariant& v) -> bool {
+            const QVariantList list = v.toList();
+            if (list.size() > kMaxScrollPresetEntries) {
+                return false;
+            }
+            concrete->setScrollPresetWindowHeights(list);
             return true;
         };
         m_schemas[QStringLiteral("scrollPresetWindowHeights")] = QStringLiteral("stringlist");
@@ -1156,7 +1170,9 @@ struct PerScreenDispatch
 
 std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString& category)
 {
-    if (category == QLatin1String("autotile")) {
+    // Category strings come from ConfigDefaults accessors so the wire-format
+    // contract has a single source of truth shared with the QML settings app.
+    if (category == ConfigDefaults::perScreenCategoryAutotile()) {
         return PerScreenDispatch{
             [settings](const QString& id) {
                 return settings->getPerScreenAutotileSettings(id);
@@ -1169,7 +1185,7 @@ std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString&
             },
         };
     }
-    if (category == QLatin1String("snapping")) {
+    if (category == ConfigDefaults::perScreenCategorySnapping()) {
         return PerScreenDispatch{
             [settings](const QString& id) {
                 return settings->getPerScreenSnappingSettings(id);
@@ -1182,7 +1198,7 @@ std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString&
             },
         };
     }
-    if (category == QLatin1String("zoneSelector")) {
+    if (category == ConfigDefaults::perScreenCategoryZoneSelector()) {
         return PerScreenDispatch{
             [settings](const QString& id) {
                 return settings->getPerScreenZoneSelectorSettings(id);
@@ -1195,7 +1211,7 @@ std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString&
             },
         };
     }
-    if (category == QLatin1String("scrolling")) {
+    if (category == ConfigDefaults::perScreenCategoryScrolling()) {
         return PerScreenDispatch{
             [settings](const QString& id) {
                 return settings->getPerScreenScrollSettings(id);

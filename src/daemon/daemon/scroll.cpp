@@ -60,7 +60,10 @@ static_assert(::PhosphorScrollEngine::kDefaultStripGap == ConfigDefaults::scroll
 
 PhosphorScrollEngine::ScrollEngine* Daemon::scrollEngine() const
 {
-    return dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    // Cached at engine-creation time in start.cpp; nulled in stop() before
+    // m_scrollEngine.reset(). Avoids RTTI on the hot path
+    // (onScrollPlacementChanged + applyPerScreenScrollOverrides).
+    return m_scrollEngineCached;
 }
 
 void Daemon::updateScrollScreens()
@@ -96,10 +99,27 @@ void Daemon::updateScrollScreens()
         }
     }
 
-    const bool screensChanged = (m_scrollEngine->activeScreens() != scrollScreens);
-    m_scrollEngine->setActiveScreens(scrollScreens);
+    const QSet<QString> previousActive = m_scrollEngine->activeScreens();
+    const bool screensChanged = (previousActive != scrollScreens);
+    if (screensChanged) {
+        m_scrollEngine->setActiveScreens(scrollScreens);
+        // Invalidate the per-screen geometry cache for any screen leaving
+        // scroll mode while staying connected. Without this, a stale
+        // last-pushed-geometry entry sits in the cache until the screen rejoins
+        // scroll mode and the dedup check happens to mismatch — wasted memory
+        // for the duration. screenRemoved already handles the unplug case;
+        // this handles the same-screen mode-switch case symmetrically.
+        for (const QString& screenId : previousActive) {
+            if (!scrollScreens.contains(screenId)) {
+                m_lastScrollGeometryByScreen.remove(screenId);
+            }
+        }
+    }
     // A screen entering scroll mode needs its per-screen overrides in the
-    // engine before its windows resolve geometry.
+    // engine before its windows resolve geometry. Push regardless of whether
+    // the active set itself changed — a same-set settings edit (e.g. an
+    // override appearing for a screen that's already active) still needs the
+    // override pushed.
     applyPerScreenScrollOverrides();
     if (screensChanged) {
         // Resolve every active scroll strip now. setActiveScreens() emits no
@@ -148,6 +168,11 @@ void Daemon::onScrollPlacementChanged(const QString& screenId)
         workArea = m_screenManager->actualAvailableGeometry(screen);
     }
     if (!workArea.isValid()) {
+        // The screen disappeared between the placementChanged emit and this
+        // resolve (a hot-unplug mid-flight). Silent skip is correct, but log
+        // the miss so a debugging session can see why a strip stopped pushing
+        // geometry even though the engine still thinks the screen is active.
+        qCDebug(lcDaemon) << "scroll geometry resolve: screen has no working area" << screenId;
         return;
     }
 
@@ -174,13 +199,34 @@ void Daemon::onScrollPlacementChanged(const QString& screenId)
     const QHash<QString, QRectF> geometries =
         PhosphorScrollEngine::resolveScrollLayout(*state, QRectF(workArea), config, &metrics);
     if (geometries.isEmpty()) {
+        // No tiled windows on this screen: invalidate the cache so a
+        // subsequent placement that re-introduces the same windows at the
+        // same rects is not falsely matched against a stale cache.
+        m_lastScrollGeometryByScreen.remove(screenId);
         return;
     }
 
-    PhosphorProtocol::WindowGeometryList batch;
-    batch.reserve(geometries.size());
+    // Dedupe against the last push for this screen. Slider drags at the
+    // settings page (and the daemon's own ratchet of placementChanged →
+    // applyPerScreenScrollOverrides → refresh → onScrollPlacementChanged)
+    // can produce multiple resolves per tick that all yield identical pixel
+    // geometry; emitting applyGeometriesBatch each time is wasted work for
+    // the effect (full window-map walk + per-window moveResize). Compare
+    // the windowId→QRect map directly — QHash::operator== is structural.
+    QHash<QString, QRect> snapshot;
+    snapshot.reserve(geometries.size());
     for (auto it = geometries.cbegin(); it != geometries.cend(); ++it) {
-        batch.append(PhosphorProtocol::WindowGeometryEntry::fromRect(it.key(), it.value().toRect(), screenId));
+        snapshot.insert(it.key(), it.value().toRect());
+    }
+    if (m_lastScrollGeometryByScreen.value(screenId) == snapshot) {
+        return;
+    }
+    m_lastScrollGeometryByScreen.insert(screenId, snapshot);
+
+    PhosphorProtocol::WindowGeometryList batch;
+    batch.reserve(snapshot.size());
+    for (auto it = snapshot.cbegin(); it != snapshot.cend(); ++it) {
+        batch.append(PhosphorProtocol::WindowGeometryEntry::fromRect(it.key(), it.value(), screenId));
     }
     Q_EMIT m_windowTrackingAdaptor->applyGeometriesBatch(batch, QStringLiteral("scroll"));
 }
@@ -266,8 +312,15 @@ void Daemon::saveScrollState()
     const QString path = ConfigDefaults::scrollStateFilePath();
     if (!scroll->hasPersistableState()) {
         // No strips to persist — drop any stale file so a later restart does
-        // not restore an obsolete layout.
-        QFile::remove(path);
+        // not restore an obsolete layout. QFile::remove returns false when
+        // the file doesn't exist (the common case after first launch) AND
+        // when the remove genuinely fails — log only the failure case so a
+        // read-only directory or a race with another daemon instance shows
+        // up in logs. exists() is a cheap stat — pre-checking avoids the
+        // false-positive "removed nothing" warning for first launches.
+        if (QFile::exists(path) && !QFile::remove(path)) {
+            qCWarning(lcDaemon) << "Failed to remove stale scroll state at" << path;
+        }
         return;
     }
     const QJsonObject state = scroll->serializeEngineState();

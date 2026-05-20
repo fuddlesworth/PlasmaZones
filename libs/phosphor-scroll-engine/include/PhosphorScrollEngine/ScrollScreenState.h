@@ -18,27 +18,10 @@
 
 namespace PhosphorScrollEngine {
 
-/// Width a freshly-opened column is created with when no configured default
-/// has been pushed yet — niri's middle preset (one half). The single source
-/// for this fallback: ScrollEngine::m_defaultColumnWidth and the
-/// addColumn*/addWindow* default arguments all reference it.
-inline constexpr qreal kDefaultColumnWidthFraction = 0.5;
-
-/// Inclusive clamp bounds for a column-width / window-height fraction and for
-/// a strip gap (logical px). ScrollEngine's effective*() resolvers clamp every
-/// per-screen override to these ranges — defence-in-depth mirroring
-/// AutotileEngine's PerScreenConfigResolver, which likewise range-checks every
-/// per-screen override on read. The strip-gap range mirrors the Settings
-/// schema's scroll-gap clamp (ConfigDefaults::scrollInnerGapMin/Max, i.e.
-/// the shared autotile MinGap/MaxGap); kept in sync so the engine guard never
-/// disagrees with the boundary the schema and the settings UI enforce.
-inline constexpr qreal kMinSizeFraction = 0.1;
-inline constexpr qreal kMaxSizeFraction = 1.0;
-inline constexpr int kMinStripGap = 0;
-inline constexpr int kMaxStripGap = 50;
-/// Strip gap the effective*() resolvers fall back to when no IScrollSettings
-/// is wired — niri's default strip gap in logical pixels.
-inline constexpr int kDefaultStripGap = 8;
+// Engine-internal constants moved to ScrollTypes.h so Column.h and the
+// fromJson clamp paths can reference them without including this header
+// (which depends on Column.h, creating a cycle). See PhosphorScrollEngine/
+// ScrollTypes.h for the constant declarations.
 
 /// Per-screen (per desktop/activity) scrollable-tiling state: the niri-style
 /// horizontal strip of columns, the focused column/tile, and the viewport

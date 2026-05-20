@@ -174,6 +174,11 @@ void Daemon::connectScreenSignals()
                 if (auto* scroll = scrollEngine()) {
                     scroll->pruneStatesForScreen(removedScreenId);
                 }
+                // Drop the daemon's per-screen geometry cache for the gone
+                // monitor too — without this, a future screen with the same id
+                // (a monitor reconnecting to the same EDID) would silently see
+                // a stale "last push" entry that mismatches the fresh resolve.
+                m_lastScrollGeometryByScreen.remove(removedScreenId);
             });
 
     connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenGeometryChanged, this, [this] {
@@ -258,11 +263,12 @@ void Daemon::connectDesktopActivity()
                 // removed (not available from desktopCountChanged). A future improvement could
                 // use KDE's desktop UUIDs instead of 1-based numbers.
                 if (m_settings) {
-                    // Prune both per-mode lists — a stale entry in either side leaks
+                    // Prune all per-mode lists — a stale entry in any side leaks
                     // gates on now-deleted desktops just as effectively.
                     bool changed = false;
                     for (const auto mode :
-                         {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+                         {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile,
+                          PhosphorZones::AssignmentEntry::Scroll}) {
                         QStringList disabled = m_settings->disabledDesktops(mode);
                         if (pruneDisabledDesktopEntries(disabled, newCount)) {
                             m_settings->setDisabledDesktops(mode, disabled);
@@ -274,19 +280,26 @@ void Daemon::connectDesktopActivity()
                     }
                 }
 
-                if (m_autotileEngine) {
-                    // Desktop numbers are 1-based. Any state with desktop > newCount
-                    // is stale. desktopsWithActiveState() returns the set of desktops
-                    // currently holding tiling state — we filter that for anything
-                    // past the new count and prune, avoiding the arbitrary upper
-                    // bound of the old newCount+20 sweep.
-                    const QSet<int> active = m_autotileEngine->desktopsWithActiveState();
+                // Desktop numbers are 1-based. Any state with desktop > newCount
+                // is stale. desktopsWithActiveState() returns the set of desktops
+                // currently holding tiling state — we filter that for anything
+                // past the new count and prune, avoiding the arbitrary upper
+                // bound of the old newCount+20 sweep. Both engines need this so
+                // a strip on a deleted desktop doesn't survive into shutdown
+                // serialisation.
+                const auto pruneEngineDesktops = [newCount](PhosphorEngine::PlacementEngineBase* engine) {
+                    if (!engine) {
+                        return;
+                    }
+                    const QSet<int> active = engine->desktopsWithActiveState();
                     for (int d : active) {
                         if (d > newCount) {
-                            m_autotileEngine->pruneStatesForDesktop(d);
+                            engine->pruneStatesForDesktop(d);
                         }
                     }
-                }
+                };
+                pruneEngineDesktops(m_autotileEngine.get());
+                pruneEngineDesktops(m_scrollEngine.get());
                 // Prune fallback assignment maps
                 pruneContextMapsForDesktop(newCount);
             });
@@ -314,11 +327,12 @@ void Daemon::connectDesktopActivity()
             const QStringList activities = m_activityManager->activities();
             const QSet<QString> validSet(activities.begin(), activities.end());
 
-            // Prune both per-mode disabled-activity lists.
+            // Prune all per-mode disabled-activity lists.
             if (m_settings) {
                 bool changed = false;
                 for (const auto mode :
-                     {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+                     {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile,
+                      PhosphorZones::AssignmentEntry::Scroll}) {
                     QStringList disabled = m_settings->disabledActivities(mode);
                     if (pruneDisabledActivityEntries(disabled, validSet)) {
                         m_settings->setDisabledActivities(mode, disabled);
@@ -332,6 +346,9 @@ void Daemon::connectDesktopActivity()
 
             if (m_autotileEngine) {
                 m_autotileEngine->pruneStatesForActivities(activities);
+            }
+            if (m_scrollEngine) {
+                m_scrollEngine->pruneStatesForActivities(activities);
             }
             pruneContextMapsForActivities(validSet);
         });

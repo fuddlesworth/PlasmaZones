@@ -81,7 +81,6 @@ struct EngineSet
  * @param settings        Settings instance (borrowed)
  * @param vdm             Virtual desktop manager (borrowed)
  * @param windowRegistry  Window registry for class lookups (borrowed)
- * @param parent          Unused (engines use unique_ptr ownership)
  * @return EngineSet with all three objects constructed
  */
 EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
@@ -89,7 +88,6 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
                         Phosphor::Screens::ScreenManager* screenManager,
                         PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
-                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry,
-                        QObject* parent);
+                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry);
 
 } // namespace PlasmaZones

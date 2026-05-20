@@ -574,6 +574,15 @@ public:
     PZ_CONFIG_GROUP(snappingScreenGroupPrefix, "SnappingScreen:")
     PZ_CONFIG_GROUP(scrollingScreenGroupPrefix, "ScrollingScreen:")
 
+    // Per-screen-settings category strings used by SettingsAdaptor's D-Bus
+    // dispatch (setPerScreenSetting/getPerScreenSettings/clearPerScreenSettings).
+    // Centralised so a typo can't silently route to nullopt — wire-format
+    // contract that QML and the settings app both depend on.
+    PZ_CONFIG_KEY(perScreenCategoryAutotile, "autotile")
+    PZ_CONFIG_KEY(perScreenCategorySnapping, "snapping")
+    PZ_CONFIG_KEY(perScreenCategoryZoneSelector, "zoneSelector")
+    PZ_CONFIG_KEY(perScreenCategoryScrolling, "scrolling")
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Legacy v1 key accessors — used ONLY by migration code.
     // Some names are identical to their v2 counterparts (marked "= v2") because

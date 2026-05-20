@@ -66,9 +66,15 @@ QVector<qreal> ScrollEngine::clampedFractionVector(const QVariantList& list)
 // is wired. The daemon always wires one in production, so these only ever
 // apply in engine tests that do not install an IScrollSettings (e.g.
 // FakeScrollSettings).
+//
+// The width and height fallbacks share the same numeric values today
+// (niri's defaults), but they are kept as separate constants so the two ranges
+// can diverge without silently sharing a value — same rationale as
+// ConfigDefaults::scrollWindowHeightMin/Max being declared independently of
+// the column-width bounds.
 namespace {
-// niri's default preset fractions — one third, one half, two thirds.
-const QVector<qreal> kNiriPresetFractions = {1.0 / 3.0, 0.5, 2.0 / 3.0};
+const QVector<qreal> kNiriPresetWidthFractions = {1.0 / 3.0, 0.5, 2.0 / 3.0};
+const QVector<qreal> kNiriPresetHeightFractions = {1.0 / 3.0, 0.5, 2.0 / 3.0};
 }
 
 QVector<qreal> ScrollEngine::effectivePresetColumnWidths(const QString& screenId) const
@@ -91,7 +97,7 @@ QVector<qreal> ScrollEngine::effectivePresetColumnWidths(const QString& screenId
             return global;
         }
     }
-    return kNiriPresetFractions;
+    return kNiriPresetWidthFractions;
 }
 
 QVector<qreal> ScrollEngine::effectivePresetWindowHeights(const QString& screenId) const
@@ -109,7 +115,7 @@ QVector<qreal> ScrollEngine::effectivePresetWindowHeights(const QString& screenI
             return global;
         }
     }
-    return kNiriPresetFractions;
+    return kNiriPresetHeightFractions;
 }
 
 qreal ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const

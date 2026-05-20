@@ -20,6 +20,14 @@ qreal resolveColumnWidth(const ColumnWidth& width, qreal usableWidth)
 /// resolveColumnMetrics; @p activeIndex must be a valid column index.
 int viewportAnchorColumn(const QVector<qreal>& widths, int activeIndex)
 {
+    // Defensive bounds check: callers must pass an in-range activeIndex (the
+    // contract is documented at the declaration), but the function operates
+    // on widths.size() while computeViewportScroll's outer guard uses
+    // columns.size() — they're equal by construction in resolveColumnMetrics
+    // but the abstraction crosses a boundary, so guard explicitly here.
+    if (activeIndex < 0 || activeIndex >= widths.size()) {
+        return -1;
+    }
     if (widths.at(activeIndex) > 0.0) {
         return activeIndex;
     }
@@ -236,6 +244,10 @@ QStringList scrollVisibleWindows(const QHash<QString, QRectF>& geometries, const
             visible.append(it.key());
         }
     }
+    // QHash iteration order is unspecified; sort for deterministic output so
+    // callers using this list (logging, geometry-application scheduling,
+    // tests) don't see flapping order across runs.
+    visible.sort();
     return visible;
 }
 

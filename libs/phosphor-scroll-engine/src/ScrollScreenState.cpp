@@ -201,8 +201,8 @@ bool ScrollScreenState::moveColumn(int delta)
     if (target == m_activeColumnIndex) {
         return false;
     }
-    const Column column = m_columns.takeAt(m_activeColumnIndex);
-    m_columns.insert(target, column);
+    Column column = m_columns.takeAt(m_activeColumnIndex);
+    m_columns.insert(target, std::move(column));
     m_activeColumnIndex = target;
     return true;
 }
@@ -296,9 +296,14 @@ QStringList ScrollScreenState::managedWindows() const
     for (const Column& column : m_columns) {
         ids += column.windowIds();
     }
-    for (const QString& id : m_floatingWindows) {
-        ids.append(id);
-    }
+    // Floating-set iteration order is unspecified for QSet; sort so the
+    // returned list is deterministic. floatingWindows() and toJson() apply the
+    // same sort for the same reason — managedWindows had been the asymmetric
+    // exception, which made any caller iterating the result (D-Bus marshal,
+    // logging, persistence) order-flap across runs.
+    QStringList floatingIds(m_floatingWindows.cbegin(), m_floatingWindows.cend());
+    floatingIds.sort();
+    ids += floatingIds;
     return ids;
 }
 

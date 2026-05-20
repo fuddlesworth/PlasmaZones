@@ -664,6 +664,16 @@ private:
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_scrollEngine;
+    /// Cached down-cast of m_scrollEngine to its concrete type. Set once when
+    /// the engine is constructed (daemon::start.cpp's createEngines path) and
+    /// nulled in stop() before m_scrollEngine.reset(). The concrete-type API
+    /// (effective*(), serialize/deserializeEngineState, hasPersistableState,
+    /// reconcileRestoredWindows, applyPerScreenConfig) is reached through this
+    /// pointer instead of running dynamic_cast on every onScrollPlacementChanged
+    /// — that path fires per scroll setting change and per scroll-mode resolve,
+    /// so caching matters under slider-drag rates. Lifetime tied 1:1 with
+    /// m_scrollEngine's unique_ptr.
+    PhosphorScrollEngine::ScrollEngine* m_scrollEngineCached = nullptr;
     /// Single source of truth for "which engine owns screen X". Used by
     /// WindowTrackingAdaptor and (via @ref engineForScreen) daemon-internal
     /// dispatch paths. Owns no state of its own — just delegates to the
@@ -712,6 +722,16 @@ private:
     /// difference, just dropped redundant work. Same pattern as the
     /// animation-profile publish path.
     QTimer m_scrollRefreshTimer;
+
+    /// Per-screen cache of the last scroll-mode geometry batch we pushed via
+    /// applyGeometriesBatch. onScrollPlacementChanged compares the freshly
+    /// resolved set against this cache and skips the emit when identical —
+    /// a slider drag at the settings page can produce multiple
+    /// placementChanged + refresh fires per event-loop tick that all resolve
+    /// to the same pixel geometry. Cleared on shutdown via stop(). Keyed by
+    /// screenId so a per-screen-only change doesn't clobber other screens'
+    /// cache entries.
+    QHash<QString, QHash<QString, QRect>> m_lastScrollGeometryByScreen;
 
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)
     int currentDesktop() const;

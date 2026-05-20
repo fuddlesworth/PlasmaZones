@@ -227,6 +227,13 @@ private:
     /// reconcileRestoredWindows() prunes the restored strip against the live
     /// window set. One-shot — see reconcileRestoredWindows().
     bool m_pendingRestoreReconcile = false;
+    /// Cached qobject_cast result for the engineSettings() pointer. Avoids
+    /// running the cast on every relayout (called by the effective*()
+    /// resolvers). Recomputed when the underlying engineSettings() pointer
+    /// changes (or becomes null when the daemon swaps Settings backends).
+    /// Mutable because scrollSettings() is logically const.
+    mutable PhosphorEngine::IScrollSettings* m_cachedScrollSettings = nullptr;
+    mutable QObject* m_cachedScrollSettingsSource = nullptr;
 };
 
 } // namespace PhosphorScrollEngine

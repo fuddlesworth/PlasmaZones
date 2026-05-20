@@ -106,6 +106,15 @@ private Q_SLOTS:
     void windowOpened_migratesAcrossScreens();
     void pruneStatesForScreen_dropsContext();
     void unsupportedOps_emitNegativeFeedback();
+    void pruneStatesForActivities_dropsByActivity();
+    void hasPersistableState_rejectsEmptyStates();
+    void deserializeEngineState_clearsAllSessionState();
+    void deserializeEngineState_normalisesNonPositiveDesktop();
+    void reconcileRestoredWindows_coalescesPlacementChangedPerScreen();
+    void cyclePresetWidth_skipsEmitOnSameValue();
+    void reapplyLayout_doesNotEmitForUnknownScreen();
+    void windowOpened_migrationDropsEmptyOldState();
+    void fromJson_clampsOutOfRangeWidth();
 };
 
 void TestScrollEngine::windowLifecycle()
@@ -773,6 +782,204 @@ void TestScrollEngine::unsupportedOps_emitNegativeFeedback()
         QCOMPARE(feedback.at(i).at(0).toBool(), false); // success=false
         QCOMPARE(feedback.at(i).at(2).toString(), QStringLiteral("no_target")); // reason
     }
+}
+
+void TestScrollEngine::pruneStatesForActivities_dropsByActivity()
+{
+    // Symmetric to the existing pruneStatesForDesktop_dropsContext: open windows
+    // under different activity contexts, prune one activity, verify the other
+    // survives.
+    ScrollEngine engine;
+    engine.setCurrentActivity(QStringLiteral("activity-A"));
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    engine.setCurrentActivity(QStringLiteral("activity-B"));
+    engine.windowOpened(QStringLiteral("b"), QStringLiteral("S1"));
+
+    QCOMPARE(engine.isWindowTracked(QStringLiteral("a")), true);
+    QCOMPARE(engine.isWindowTracked(QStringLiteral("b")), true);
+
+    // Only activity-B is "valid" — A's windows should be dropped.
+    engine.pruneStatesForActivities(QStringList{QStringLiteral("activity-B")});
+
+    QVERIFY(!engine.isWindowTracked(QStringLiteral("a")));
+    QVERIFY(engine.isWindowTracked(QStringLiteral("b")));
+}
+
+void TestScrollEngine::hasPersistableState_rejectsEmptyStates()
+{
+    // After every window is closed on a screen, the screen state may linger in
+    // m_states (windowClosed prunes columns but not the state itself). Such a
+    // state holds no information and must NOT cause hasPersistableState() to
+    // report true — otherwise saveScrollState writes a non-empty
+    // scroll-session.json containing only empty-strip stubs.
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    QVERIFY(engine.hasPersistableState());
+
+    engine.windowClosed(QStringLiteral("a"));
+    QVERIFY(!engine.hasPersistableState());
+
+    // Round-trip the now-empty engine state and confirm the persisted blob
+    // contains zero state entries.
+    const QJsonObject blob = engine.serializeEngineState();
+    QCOMPARE(blob.value(QLatin1String("states")).toArray().size(), 0);
+}
+
+void TestScrollEngine::deserializeEngineState_clearsAllSessionState()
+{
+    // A re-deserialise (e.g. config-reload path) must not carry stale
+    // m_perScreenConfig / m_activeScreens / current-context entries from the
+    // previous session into the restored state. Build an engine with the full
+    // session shape, deserialise an unrelated restore blob, then verify every
+    // session-time container was cleared.
+    ScrollEngine engine;
+    engine.setCurrentDesktop(5);
+    engine.setCurrentActivity(QStringLiteral("activity-Z"));
+    engine.setActiveScreens(QSet<QString>{QStringLiteral("S1")});
+    engine.applyPerScreenConfig(QStringLiteral("S1"), QVariantMap{{QStringLiteral("InnerGap"), 20}});
+
+    QJsonObject blob;
+    blob.insert(QLatin1String("states"), QJsonArray{});
+    engine.deserializeEngineState(blob);
+
+    QVERIFY(engine.activeScreens().isEmpty());
+    QVERIFY(engine.perScreenOverrides(QStringLiteral("S1")).isEmpty());
+    // Setting a new desktop after the deserialise reset, and opening a window,
+    // proves the engine's keyed state is the freshly set one (not desktop=5).
+    engine.setCurrentDesktop(2);
+    engine.windowOpened(QStringLiteral("x"), QStringLiteral("S1"));
+    QCOMPARE(engine.desktopsWithActiveState(), QSet<int>{2});
+}
+
+void TestScrollEngine::deserializeEngineState_normalisesNonPositiveDesktop()
+{
+    // A corrupt or hand-edited scroll-session.json with desktop=0 (or negative)
+    // must not produce an unreachable state-key. The deserialise path normalises
+    // non-positive values to 1 so the strip surfaces somewhere instead of
+    // disappearing.
+    QJsonObject column;
+    column.insert(QLatin1String("tiles"), QJsonArray{});
+    QJsonObject tile;
+    tile.insert(QLatin1String("windowId"), QStringLiteral("w"));
+    QJsonObject heightAuto;
+    heightAuto.insert(QLatin1String("kind"), QStringLiteral("auto"));
+    column.insert(QLatin1String("tiles"), QJsonArray{tile});
+    column.insert(QLatin1String("activeTileIndex"), 0);
+
+    QJsonObject state;
+    state.insert(QLatin1String("screenId"), QStringLiteral("S1"));
+    state.insert(QLatin1String("columns"), QJsonArray{column});
+    state.insert(QLatin1String("activeColumnIndex"), 0);
+    state.insert(QLatin1String("scrollX"), 0.0);
+    state.insert(QLatin1String("floating"), QJsonArray{});
+    state.insert(QLatin1String("desktop"), 0); // invalid
+    state.insert(QLatin1String("activity"), QStringLiteral(""));
+
+    QJsonObject blob;
+    blob.insert(QLatin1String("states"), QJsonArray{state});
+
+    ScrollEngine engine;
+    engine.deserializeEngineState(blob);
+    // Desktop=0 should have been clamped to 1; check the resulting active set.
+    QCOMPARE(engine.desktopsWithActiveState(), QSet<int>{1});
+}
+
+void TestScrollEngine::reconcileRestoredWindows_coalescesPlacementChangedPerScreen()
+{
+    // Build a strip with three stale windows on one screen, persist + restore.
+    // Then reconcile against an empty live set: every restored window is stale
+    // and must be pruned, but the dispatch of placementChanged must coalesce
+    // into ONE emit per screen (not three).
+    ScrollEngine source;
+    source.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    source.windowOpened(QStringLiteral("b"), QStringLiteral("S1"));
+    source.windowOpened(QStringLiteral("c"), QStringLiteral("S1"));
+    const QJsonObject saved = source.serializeEngineState();
+
+    ScrollEngine restored;
+    restored.deserializeEngineState(saved);
+    QSignalSpy spy(&restored, &PhosphorEngine::PlacementEngineBase::placementChanged);
+    restored.reconcileRestoredWindows(QSet<QString>{}); // every window stale
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.takeFirst().at(0).toString(), QStringLiteral("S1"));
+    QVERIFY(!restored.isWindowTracked(QStringLiteral("a")));
+    QVERIFY(!restored.isWindowTracked(QStringLiteral("b")));
+    QVERIFY(!restored.isWindowTracked(QStringLiteral("c")));
+}
+
+void TestScrollEngine::cyclePresetWidth_skipsEmitOnSameValue()
+{
+    // Single-element preset list: the column's width is set to that preset, and
+    // a subsequent cycle press normalises to (0+1)%1==0 == current. With both
+    // index AND value matching, the engine must skip the emit. Without this
+    // guard the user sees flicker / a redundant daemon resolve every press.
+    ScrollEngine engine;
+    FakeScrollSettings settings;
+    settings.presetColumnWidths = QVariantList{0.5}; // one preset
+    engine.setEngineSettings(&settings);
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+
+    // First press lands at preset 0 (value 0.5).
+    engine.cyclePresetColumnWidth(contextFor(QStringLiteral("S1")));
+    QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+    engine.cyclePresetColumnWidth(contextFor(QStringLiteral("S1")));
+    QCOMPARE(spy.count(), 0); // same index, same value — no-op
+}
+
+void TestScrollEngine::reapplyLayout_doesNotEmitForUnknownScreen()
+{
+    // reapplyLayout used to emit placementChanged unconditionally; the daemon
+    // would then dispatch a layout pass for a screen the engine doesn't manage.
+    // The fix gates the emit on a non-null state — verify by sending a context
+    // for a screen where no window has ever been opened.
+    ScrollEngine engine;
+    QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+    engine.reapplyLayout(contextFor(QStringLiteral("S99")));
+    QCOMPARE(spy.count(), 0);
+}
+
+void TestScrollEngine::windowOpened_migrationDropsEmptyOldState()
+{
+    // Cross-restart screen migration must not leave the old empty state
+    // hanging in m_states. Open one window on S1, migrate it to S2, verify
+    // the S1 state is gone (so it doesn't get serialised on shutdown).
+    ScrollEngine engine;
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S1"));
+    engine.windowOpened(QStringLiteral("a"), QStringLiteral("S2"));
+
+    // S1's state should be erased — no serialised blob entry for it.
+    const QJsonObject blob = engine.serializeEngineState();
+    const QJsonArray states = blob.value(QLatin1String("states")).toArray();
+    QCOMPARE(states.size(), 1);
+    QCOMPARE(states.first().toObject().value(QLatin1String("screenId")).toString(), QStringLiteral("S2"));
+}
+
+void TestScrollEngine::fromJson_clampsOutOfRangeWidth()
+{
+    // Defence-in-depth: a corrupt scroll-session.json with a 100.0 proportion
+    // would otherwise produce a column 100x the screen width on restore.
+    // Column::fromJson clamps Proportion widths into [kMinSizeFraction,
+    // kMaxSizeFraction] at the persistence boundary.
+    QJsonObject widthBlob;
+    widthBlob.insert(QLatin1String("kind"), QStringLiteral("proportion"));
+    widthBlob.insert(QLatin1String("value"), 100.0);
+
+    QJsonObject tileObj;
+    tileObj.insert(QLatin1String("windowId"), QStringLiteral("w"));
+    QJsonObject heightAuto;
+    heightAuto.insert(QLatin1String("kind"), QStringLiteral("auto"));
+    heightAuto.insert(QLatin1String("weight"), 1.0);
+    tileObj.insert(QLatin1String("height"), heightAuto);
+
+    QJsonObject columnObj;
+    columnObj.insert(QLatin1String("tiles"), QJsonArray{tileObj});
+    columnObj.insert(QLatin1String("activeTileIndex"), 0);
+    columnObj.insert(QLatin1String("width"), widthBlob);
+
+    Column restored = Column::fromJson(columnObj);
+    QCOMPARE(restored.width().kind, ColumnWidth::Kind::Proportion);
+    QVERIFY(restored.width().value <= 1.0);
+    QVERIFY(restored.width().value >= 0.1);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngine)

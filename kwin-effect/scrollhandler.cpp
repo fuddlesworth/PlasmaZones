@@ -29,7 +29,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 namespace {
 /// Debounce window for re-asserting geometry after an app-initiated resize —
 /// long enough to coalesce a noisy resize stream into one corrective move.
-constexpr int kReassertDebounceMs = 150;
+constexpr int ReassertDebounceMs = 150;
 } // namespace
 
 ScrollHandler::ScrollHandler(PlasmaZonesEffect* effect, QObject* parent)
@@ -38,7 +38,7 @@ ScrollHandler::ScrollHandler(PlasmaZonesEffect* effect, QObject* parent)
     , m_reassertTimer(new QTimer(this))
 {
     m_reassertTimer->setSingleShot(true);
-    m_reassertTimer->setInterval(kReassertDebounceMs);
+    m_reassertTimer->setInterval(ReassertDebounceMs);
     connect(m_reassertTimer, &QTimer::timeout, this, &ScrollHandler::flushReasserts);
 }
 
@@ -213,6 +213,7 @@ void ScrollHandler::onWindowClosed(const QString& windowId, const QString& scree
     m_notifiedWindows.remove(windowId);
     m_notifiedWindowScreens.remove(windowId);
     m_appliedGeometry.remove(windowId);
+    m_slotGeometry.remove(windowId);
     m_reassertPending.remove(windowId);
     m_reasserted.remove(windowId);
     m_reorderPending.remove(windowId);
@@ -271,6 +272,7 @@ void ScrollHandler::onWindowMinimizedChanged(KWin::EffectWindow* w)
         // cleared too: the next daemon resolve after restore is a fresh
         // episode that gets its own re-assert budget.
         m_appliedGeometry.remove(windowId);
+        m_slotGeometry.remove(windowId);
         m_reassertPending.remove(windowId);
         m_reasserted.remove(windowId);
         m_reorderPending.remove(windowId);
@@ -337,7 +339,7 @@ void ScrollHandler::handleWindowStickyChanged(KWin::EffectWindow* w)
     }
 }
 
-void ScrollHandler::recordAppliedGeometry(const QString& windowId, const QRect& geometry)
+void ScrollHandler::recordAppliedGeometry(const QString& windowId, const QRect& slotRect, const QRect& appliedRect)
 {
     if (!m_notifiedWindows.contains(windowId)) {
         // Only scroll-tracked windows — keeps m_appliedGeometry a subset of
@@ -345,14 +347,20 @@ void ScrollHandler::recordAppliedGeometry(const QString& windowId, const QRect& 
         // momentarily name a window dropped from tracking mid-flight).
         return;
     }
-    m_appliedGeometry[windowId] = geometry;
+    m_appliedGeometry[windowId] = appliedRect;
+    m_slotGeometry[windowId] = slotRect;
     // The window is being moved to match this geometry — drop any stale
     // re-assert queued from an earlier drift, and reset the re-assert budget:
     // a fresh daemon resolve is a new episode. A drag-reorder for this window
     // is likewise now resolved, so the re-assert suppression can lift.
+    // m_interactiveResize is also cleared: a daemon resolve cannot fire mid-
+    // drag (onWindowFrameGeometryChanged skips during isUserMove/isUserResize
+    // and applyGeometriesBatch doesn't fire mid-drag), so its presence here
+    // would be a stale flag from a prior drag that was already over.
     m_reassertPending.remove(windowId);
     m_reasserted.remove(windowId);
     m_reorderPending.remove(windowId);
+    m_interactiveResize.remove(windowId);
 }
 
 void ScrollHandler::onWindowFrameGeometryChanged(KWin::EffectWindow* w)
@@ -474,15 +482,21 @@ void ScrollHandler::onWindowDragFinished(KWin::EffectWindow* w)
     // The dragged window kept its tile slot during the move (the geometry
     // re-assert is suppressed mid-drag). On release, reorder its column to the
     // strip slot nearest the drop point.
-    const auto draggedIt = m_appliedGeometry.constFind(windowId);
-    if (draggedIt == m_appliedGeometry.constEnd()) {
+    //
+    // Use m_slotGeometry (column rect) — NOT m_appliedGeometry (which is the
+    // centered sub-rect for constrained windows). For a fixed-size window
+    // centred in a wider slot, the applied rect is narrower than the column,
+    // so column-edge comparisons against it would mis-classify within-column
+    // nudges as cross-column drops.
+    const auto draggedIt = m_slotGeometry.constFind(windowId);
+    if (draggedIt == m_slotGeometry.constEnd()) {
         return; // the daemon has not resolved a slot for this window yet
     }
-    const QRect draggedRect = draggedIt.value();
+    const QRect draggedSlot = draggedIt.value();
     const int dropX = w->frameGeometry().toRect().center().x();
-    // A drop still within the dragged window's own column is a no-op — the
+    // A drop still within the dragged window's own COLUMN is a no-op — the
     // window was nudged but not carried out of its slot.
-    if (dropX >= draggedRect.left() && dropX <= draggedRect.right()) {
+    if (dropX >= draggedSlot.left() && dropX <= draggedSlot.right()) {
         return;
     }
     // Pick the anchor: among scroll windows on the same screen in a *different*
@@ -493,34 +507,32 @@ void ScrollHandler::onWindowDragFinished(KWin::EffectWindow* w)
     int bestDistance = -1;
     int bestLeft = 0;
     bool placeAfter = false;
-    for (auto it = m_appliedGeometry.cbegin(); it != m_appliedGeometry.cend(); ++it) {
+    for (auto it = m_slotGeometry.cbegin(); it != m_slotGeometry.cend(); ++it) {
         const QString& otherId = it.key();
         if (otherId == windowId || m_notifiedWindowScreens.value(otherId) != screenId) {
             continue;
         }
-        const QRect& rect = it.value();
-        // Same-column check uses BOTH edges, not just left(): zero-inner-gap
-        // strips with identical column widths can give two distinct columns
-        // matching x-edges, and a single-edge match would falsely skip a
-        // legitimate anchor in that case. Tiles within a column always share
-        // both x edges (they only differ in y).
-        if (rect.left() == draggedRect.left() && rect.right() == draggedRect.right()) {
+        const QRect& slot = it.value();
+        // Same-column check uses BOTH edges. Tiles within a column always
+        // share both x edges (they only differ in y). Comparing slot rects
+        // (not applied rects) makes this reliable for constrained windows.
+        if (slot.left() == draggedSlot.left() && slot.right() == draggedSlot.right()) {
             continue; // a tile of the dragged window's own column
         }
         int distance = 0;
-        if (dropX < rect.left()) {
-            distance = rect.left() - dropX;
-        } else if (dropX > rect.right()) {
-            distance = dropX - rect.right();
+        if (dropX < slot.left()) {
+            distance = slot.left() - dropX;
+        } else if (dropX > slot.right()) {
+            distance = dropX - slot.right();
         }
-        if (bestDistance < 0 || distance < bestDistance || (distance == bestDistance && rect.left() < bestLeft)) {
+        if (bestDistance < 0 || distance < bestDistance || (distance == bestDistance && slot.left() < bestLeft)) {
             bestDistance = distance;
-            bestLeft = rect.left();
+            bestLeft = slot.left();
             anchorId = otherId;
             // Distance ranks columns by their edges; the side to land on is
             // taken from the column centre — for a gap drop these compose
             // (a drop in the gap left of a column is left of its centre).
-            placeAfter = dropX > rect.center().x();
+            placeAfter = dropX > slot.center().x();
         }
     }
     if (anchorId.isEmpty()) {
@@ -552,17 +564,32 @@ void ScrollHandler::onWindowDragFinished(KWin::EffectWindow* w)
                                     << watcher->error().message();
                 // Skip if the daemon reconnected meanwhile — onDaemonReady has
                 // already cleared m_reorderPending and rebuilt the tracking sets.
-                if (epoch == m_daemonEpoch) {
-                    m_reorderPending.remove(windowId);
-                    // The post-drag windowFrameGeometryChanged event was already
-                    // suppressed while m_reorderPending held the window, so simply
-                    // clearing the flag re-enables drift correction but nothing
-                    // triggers it — the window would stay where the user dropped
-                    // it. Queue an explicit re-assert so flushReasserts() snaps it
-                    // back to its daemon-resolved slot.
-                    m_reassertPending.insert(windowId);
-                    m_reassertTimer->start();
+                if (epoch != m_daemonEpoch) {
+                    return;
                 }
+                m_reorderPending.remove(windowId);
+                // Only queue the re-assert if the window is STILL scroll-tracked
+                // by the time the failure reply arrives. Between the drop and
+                // this lambda, the window may have closed, moved off a scroll
+                // screen, or gone sticky — and the tracking-set cleanups
+                // (onWindowClosed, handleWindowOutputChanged, handleWindowSticky-
+                // Changed) all run synchronously on their own paths, so they
+                // cannot evict an entry we haven't inserted yet. Without this
+                // guard, m_reassertPending accumulates a stale entry that
+                // flushReasserts later discards on dispatch but which still
+                // violates the "subset of m_notifiedWindows" invariant
+                // recordAppliedGeometry's comment claims.
+                if (!m_notifiedWindows.contains(windowId)) {
+                    return;
+                }
+                // The post-drag windowFrameGeometryChanged event was already
+                // suppressed while m_reorderPending held the window, so simply
+                // clearing the flag re-enables drift correction but nothing
+                // triggers it — the window would stay where the user dropped
+                // it. Queue an explicit re-assert so flushReasserts() snaps it
+                // back to its daemon-resolved slot.
+                m_reassertPending.insert(windowId);
+                m_reassertTimer->start();
             });
     qCDebug(lcEffect) << "Notified scroll: windowDropped" << windowId << "anchor" << anchorId << "after" << placeAfter;
 }
@@ -572,12 +599,17 @@ void ScrollHandler::notifyWindowFocused(const QString& windowId, const QString& 
     // Keep the focus-follows-mouse dedup key in step with every focus change —
     // including focus leaving to a non-scroll window or another screen — not
     // just FFM-originated ones. The key must equal the focused window iff that
-    // window is scroll-managed, else be empty: a stale key left pointing at a
-    // no-longer-focused scroll window would make handleCursorMoved's "already
-    // focused" short-circuit suppress a legitimate re-focus when the cursor
-    // returns to it. Updated before the scroll-screen guard so a focus change
-    // onto a snapping/autotile/unmanaged screen still clears it.
-    m_lastFocusFollowsMouseWindowId = m_notifiedWindows.contains(windowId) ? windowId : QString();
+    // window is scroll-managed AND on a scroll screen right now; otherwise be
+    // empty. A stale key left pointing at a no-longer-focused scroll window —
+    // OR a tracked window now on a non-scroll screen — would make
+    // handleCursorMoved's "already focused" short-circuit suppress a legitimate
+    // re-focus when the cursor returns. Both predicates are required: a window
+    // tracked on its OLD strip (after the user moved it to a non-scroll screen)
+    // is still in m_notifiedWindows but should not act as a dedup anchor for
+    // scroll-mode focus events. Updated before the scroll-screen guard so a
+    // focus change onto a snapping/autotile/unmanaged screen still clears it.
+    const bool isCurrentlyOnScrollScreen = m_notifiedWindows.contains(windowId) && m_scrollScreens.contains(screenId);
+    m_lastFocusFollowsMouseWindowId = isCurrentlyOnScrollScreen ? windowId : QString();
     if (!m_scrollScreens.contains(screenId)) {
         return;
     }
@@ -646,6 +678,7 @@ void ScrollHandler::onDaemonReady()
     m_notifiedWindowScreens.clear();
     m_pendingCloses.clear();
     m_appliedGeometry.clear();
+    m_slotGeometry.clear();
     m_reassertPending.clear();
     m_reasserted.clear();
     m_reorderPending.clear();

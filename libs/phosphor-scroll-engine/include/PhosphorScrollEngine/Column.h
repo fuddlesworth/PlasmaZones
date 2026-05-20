@@ -124,12 +124,12 @@ private:
 
     QVector<Tile> m_tiles;
     int m_activeTileIndex = -1;
-    ColumnWidth m_width = ColumnWidth::proportion(0.5);
+    ColumnWidth m_width = ColumnWidth::proportion(kDefaultColumnWidthFraction);
     int m_presetWidthIndex = -1;
     /// Full-width toggle state: when m_fullWidth is set, m_restoreWidth /
     /// m_restorePresetWidthIndex hold the width to return to on toggle-off.
     bool m_fullWidth = false;
-    ColumnWidth m_restoreWidth = ColumnWidth::proportion(0.5);
+    ColumnWidth m_restoreWidth = ColumnWidth::proportion(kDefaultColumnWidthFraction);
     int m_restorePresetWidthIndex = -1;
 };
 

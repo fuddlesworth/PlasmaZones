@@ -11,6 +11,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
 namespace PhosphorScrollEngine {
 class ScrollEngine;
 }
@@ -58,6 +60,24 @@ public:
      */
     void clearEngine();
 
+    /**
+     * @brief Daemon-injected callback fired after windowsOpenedBatch's
+     *        reconcileRestoredWindows completes.
+     *
+     * The daemon uses this to invalidate its per-screen geometry cache so
+     * the next onScrollPlacementChanged push is NOT dedup-skipped. Without
+     * this hook, drift detection silently stays disabled for all restored
+     * scroll windows after a daemon restart: the daemon's first push (at
+     * load time) reaches the effect before it knows the window IDs, the
+     * effect's recordAppliedGeometry no-ops, and subsequent pushes get
+     * dedup-skipped because the geometry didn't change. Set once via
+     * @ref setBatchProcessedCallback at daemon::start; cleared in stop().
+     */
+    void setBatchProcessedCallback(std::function<void()> callback)
+    {
+        m_batchProcessedCallback = std::move(callback);
+    }
+
 public Q_SLOTS:
     void windowOpened(const QString& windowId, const QString& screenId);
     void windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList& entries);
@@ -75,6 +95,9 @@ private:
     bool ensureEngine(const char* methodName) const;
 
     PhosphorScrollEngine::ScrollEngine* m_engine = nullptr;
+    /// Daemon-injected callback — see setBatchProcessedCallback. Invoked from
+    /// windowsOpenedBatch after reconcileRestoredWindows runs; null until set.
+    std::function<void()> m_batchProcessedCallback;
 };
 
 } // namespace PlasmaZones

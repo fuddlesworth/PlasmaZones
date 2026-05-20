@@ -2,8 +2,12 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorScrollEngine/Column.h>
+// kDefaultColumnWidthFraction / kMinSizeFraction / kMaxSizeFraction live in
+// ScrollTypes.h (transitively included via Column.h's include of it).
 
 #include <QJsonArray>
+
+#include <cmath>
 
 namespace PhosphorScrollEngine {
 
@@ -23,7 +27,23 @@ ColumnWidth columnWidthFromJson(const QJsonObject& obj)
     ColumnWidth width;
     width.kind = obj.value(QLatin1String("kind")).toString() == QLatin1String("fixed") ? ColumnWidth::Kind::Fixed
                                                                                        : ColumnWidth::Kind::Proportion;
-    width.value = obj.value(QLatin1String("value")).toDouble(0.5);
+    width.value = obj.value(QLatin1String("value")).toDouble(kDefaultColumnWidthFraction);
+    // Defence-in-depth at the persistence boundary: a corrupt or hand-edited
+    // scroll-session.json with a 100.0 proportion would otherwise produce a
+    // column 100x the screen width on restore. Reject NaN/Inf first (qBound
+    // is unordered against NaN and would let the value through), then clamp:
+    // proportions into [kMinSizeFraction, kMaxSizeFraction]; fixed-pixel
+    // widths floored to a positive value (resolveColumnWidth itself enforces
+    // a >=1 floor too, but rejecting negative pixel intent at the read site
+    // keeps the data model honest).
+    if (!std::isfinite(width.value)) {
+        width.value = kDefaultColumnWidthFraction;
+    }
+    if (width.kind == ColumnWidth::Kind::Proportion) {
+        width.value = qBound(kMinSizeFraction, width.value, kMaxSizeFraction);
+    } else {
+        width.value = qMax(width.value, qreal(1.0));
+    }
     return width;
 }
 
@@ -38,9 +58,21 @@ QJsonObject windowHeightToJson(const WindowHeight& height)
 
     QJsonObject obj;
     obj.insert(QLatin1String("kind"), kind);
-    obj.insert(QLatin1String("weight"), height.weight);
-    obj.insert(QLatin1String("fixedPx"), height.fixedPx);
-    obj.insert(QLatin1String("presetIndex"), height.presetIndex);
+    // Only the field meaningful for the active kind is serialised; the others
+    // would be persisted at their default values and bloat scroll-session.json.
+    // fromJson defaults each field individually when missing, so a strip with
+    // many tiles compacts notably.
+    switch (height.kind) {
+    case WindowHeight::Kind::Auto:
+        obj.insert(QLatin1String("weight"), height.weight);
+        break;
+    case WindowHeight::Kind::Fixed:
+        obj.insert(QLatin1String("fixedPx"), height.fixedPx);
+        break;
+    case WindowHeight::Kind::Preset:
+        obj.insert(QLatin1String("presetIndex"), height.presetIndex);
+        break;
+    }
     return obj;
 }
 
@@ -55,9 +87,18 @@ WindowHeight windowHeightFromJson(const QJsonObject& obj)
     } else {
         height.kind = WindowHeight::Kind::Auto;
     }
-    height.weight = obj.value(QLatin1String("weight")).toDouble(1.0);
-    height.fixedPx = obj.value(QLatin1String("fixedPx")).toDouble(0.0);
-    height.presetIndex = obj.value(QLatin1String("presetIndex")).toInt(0);
+    // Same defence-in-depth as columnWidthFromJson: reject NaN/Inf, clamp
+    // persisted intent into a non-negative range so a corrupt scroll-
+    // session.json can't drive the layout resolver into pathological
+    // geometry.
+    const qreal rawWeight = obj.value(QLatin1String("weight")).toDouble(1.0);
+    height.weight = std::isfinite(rawWeight) ? qMax(rawWeight, qreal(0.0)) : qreal(1.0);
+    const qreal rawFixed = obj.value(QLatin1String("fixedPx")).toDouble(0.0);
+    height.fixedPx = std::isfinite(rawFixed) ? qMax(rawFixed, qreal(0.0)) : qreal(0.0);
+    // presetIndex out-of-range falls back to Auto inside resolveConcreteTileHeight,
+    // so we don't need to clamp it here — but rejecting negative values at
+    // read keeps the in-memory invariant clean.
+    height.presetIndex = qMax(obj.value(QLatin1String("presetIndex")).toInt(0), 0);
     return height;
 }
 

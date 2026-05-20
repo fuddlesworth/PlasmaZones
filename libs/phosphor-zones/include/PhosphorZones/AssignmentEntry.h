@@ -119,7 +119,22 @@ struct AssignmentEntry
     }
     bool isValid() const
     {
-        return !snappingLayout.isEmpty() || !tilingAlgorithm.isEmpty() || !scrollSetting.isEmpty();
+        // Validity is mode-driven: a Snapping entry needs a non-empty
+        // snappingLayout, an Autotile entry can have an empty tilingAlgorithm
+        // (use the engine default — see makeAutotileId comment above), and a
+        // Scroll entry can have an empty scrollSetting (use defaults — same
+        // rationale). The previous "any field non-empty" check was both lax
+        // (a Snapping mode with a stray tilingAlgorithm reported valid) and
+        // strict (a legitimate "scroll, use defaults" with all fields empty
+        // reported invalid).
+        switch (mode) {
+        case Autotile:
+        case Scroll:
+            return true; // mode-only is acceptable; emptyness means "defaults"
+        case Snapping:
+            return !snappingLayout.isEmpty();
+        }
+        return false;
     }
     bool operator==(const AssignmentEntry& other) const
     {
@@ -150,18 +165,9 @@ struct AssignmentEntry
     /** @brief Create a fresh AssignmentEntry from a layoutId string */
     static AssignmentEntry fromLayoutId(const QString& layoutId)
     {
-        AssignmentEntry entry;
-        if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-            entry.mode = Autotile;
-            entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
-        } else if (PhosphorLayout::LayoutId::isScroll(layoutId)) {
-            entry.mode = Scroll;
-            entry.scrollSetting = PhosphorLayout::LayoutId::extractScrollSettingId(layoutId);
-        } else {
-            entry.mode = Snapping;
-            entry.snappingLayout = layoutId;
-        }
-        return entry;
+        // Forward to the two-arg overload with a default-constructed existing
+        // — same mode classification, single source of truth.
+        return fromLayoutId(layoutId, AssignmentEntry{});
     }
 };
 

@@ -999,13 +999,20 @@ bool Daemon::init()
     // wiring before moving into the base-class unique_ptr members.
     auto engines = createEngines(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_screenManager.get(),
                                  m_algorithmRegistry.get(), m_zoneDetector.get(), m_settings.get(),
-                                 m_virtualDesktopManager.get(), m_windowRegistry.get(), this);
+                                 m_virtualDesktopManager.get(), m_windowRegistry.get());
     auto* autotileEngine = engines.autotile.get();
     auto* snapEngine = engines.snap.get();
     auto* scrollEngine = engines.scroll.get();
     m_autotileEngine = std::move(engines.autotile);
     m_snapEngine = std::move(engines.snap);
     m_scrollEngine = std::move(engines.scroll);
+    // Cache the concrete down-cast once. m_scrollEngine is the base
+    // PlacementEngineBase pointer; the scroll-specific API
+    // (serialize/deserializeEngineState, hasPersistableState, effective*(),
+    // reconcileRestoredWindows, applyPerScreenConfig) only exists on the
+    // derived type. Per-call dynamic_cast on the hot path was the previous
+    // shape; caching avoids RTTI on every onScrollPlacementChanged.
+    m_scrollEngineCached = dynamic_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
     m_screenModeRouter = std::move(engines.router);
 
     // ScrollEngine is geometry-agnostic: when its strip state changes the
@@ -1168,6 +1175,22 @@ bool Daemon::init()
     m_snapAdaptor->setScreenModeRouter(m_screenModeRouter.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
     m_scrollAdaptor = new ScrollAdaptor(scrollEngine, this);
+    // After the effect's windowsOpenedBatch settles (reconcileRestoredWindows
+    // has run and the effect's m_notifiedWindows is populated), invalidate
+    // the per-screen geometry cache and re-push every active scroll strip.
+    // This breaks the startup race where the daemon's restore-time geometry
+    // push reaches the effect BEFORE the effect knows the window IDs:
+    // recordAppliedGeometry no-ops there, leaving drift detection silently
+    // disabled. The forced re-push after the batch seeds it correctly.
+    m_scrollAdaptor->setBatchProcessedCallback([this]() {
+        m_lastScrollGeometryByScreen.clear();
+        if (auto* scroll = this->scrollEngine()) {
+            const QSet<QString> screens = scroll->activeScreens();
+            for (const QString& screenId : screens) {
+                onScrollPlacementChanged(screenId);
+            }
+        }
+    });
 
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members
@@ -1576,6 +1599,7 @@ void Daemon::stop()
     // m_settings (its data source) has been destroyed.
     m_animationPublishTimer.stop();
     m_scrollRefreshTimer.stop();
+    m_lastScrollGeometryByScreen.clear();
     m_animationPublishPending = false;
 
     // Reset the loaders explicitly so the QFileSystemWatcher inside
@@ -1639,6 +1663,10 @@ void Daemon::stop()
         m_autotileAdaptor->clearEngine();
     }
     if (m_scrollAdaptor) {
+        // Drop the callback first — it captures `this` and would otherwise
+        // run on a half-torn-down daemon if a late batch reply lands during
+        // shutdown.
+        m_scrollAdaptor->setBatchProcessedCallback({});
         m_scrollAdaptor->clearEngine();
     }
     if (m_snapAdaptor) {
@@ -1666,6 +1694,9 @@ void Daemon::stop()
     m_screenModeRouter.reset();
 
     // Destroy engines now (during stop(), before Qt child destruction order).
+    // Null the scroll-engine cache BEFORE the unique_ptr resets so a late call
+    // to scrollEngine() during teardown returns nullptr instead of dangling.
+    m_scrollEngineCached = nullptr;
     m_snapEngine.reset();
     m_scrollEngine.reset();
     m_autotileEngine.reset();

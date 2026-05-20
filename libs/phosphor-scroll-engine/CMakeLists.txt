@@ -36,6 +36,7 @@ add_library(PhosphorScrollEngine SHARED
     src/ScrollLayout.cpp
     src/ScrollEngine.cpp
     src/ScrollEngineConfig.cpp
+    src/ScrollEngineNavigation.cpp
 )
 add_library(PhosphorScrollEngine::PhosphorScrollEngine ALIAS PhosphorScrollEngine)
 
@@ -90,8 +91,12 @@ install(DIRECTORY include/PhosphorScrollEngine
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}
 )
 
+# The export header is included as <phosphorscrollengine_export.h> (no
+# subdirectory prefix — generate_export_header convention), so install it to
+# the include root so $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}> resolves
+# the angle-bracket include for an installed consumer.
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/phosphorscrollengine_export.h"
-    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorScrollEngine
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}
 )
 
 install(EXPORT PhosphorScrollEngineTargets

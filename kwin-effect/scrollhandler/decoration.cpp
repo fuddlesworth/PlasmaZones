@@ -49,22 +49,32 @@ void ScrollHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& wi
             qCDebug(lcEffect) << "Scroll: hid title bar for" << windowId;
         }
     } else {
-        // Drop the tracking entry whether or not the window still exists, so a
-        // closed window cannot leak into m_borderlessWindows. setNoBorder is
-        // restored only when we actually hid this window's title bar.
-        if (!m_borderlessWindows.remove(windowId)) {
+        if (!m_borderlessWindows.contains(windowId)) {
+            return; // not borderless to begin with
+        }
+        // Decide what to do about the tracking entry based on identity:
+        //   - w is null: window is genuinely gone; drop the entry so a closed
+        //     window cannot leak into m_borderlessWindows.
+        //   - w resolves to the SAME windowId: drop the entry AND restore the
+        //     title bar — the normal case.
+        //   - w resolves to a DIFFERENT live window of the same app (the
+        //     findWindowById appId fuzzy fallback): leave the entry in place
+        //     so the original window's tracked-borderless state survives, and
+        //     do nothing to the wrong window's decoration. The user can hit
+        //     this path on rapid window-of-same-class churn; clearing the
+        //     entry here would make the still-alive original permanently
+        //     stuck in borderless with nothing to restore it.
+        if (!w) {
+            m_borderlessWindows.remove(windowId);
             return;
         }
-        // Verify identity before touching the decoration: restore-loop callers
-        // resolve w via findWindowById(), whose appId fuzzy fallback can return
-        // a *different* live window of the same app when the exact one is gone.
-        // setNoBorder(false) on that window would wrongly restore a title bar
-        // it never had hidden.
-        if (w && m_effect->getWindowId(w) == windowId) {
-            if (KWin::Window* kw = w->window()) {
-                kw->setNoBorder(false);
-                qCDebug(lcEffect) << "Scroll: restored title bar for" << windowId;
-            }
+        if (m_effect->getWindowId(w) != windowId) {
+            return; // wrong window — leave both entry and decoration alone
+        }
+        m_borderlessWindows.remove(windowId);
+        if (KWin::Window* kw = w->window()) {
+            kw->setNoBorder(false);
+            qCDebug(lcEffect) << "Scroll: restored title bar for" << windowId;
         }
     }
 }
