@@ -80,15 +80,23 @@ bool DaemonController::isEnabled() const
 
 void DaemonController::setEnabled(bool enabled)
 {
-    // Always perform start/stop — the toggle tracks running state which
-    // can diverge from the systemd enabled state (e.g. manually started
-    // while the service is disabled).
-    setAutostart(enabled);
-
+    // setAutostart now does unmask+enable / disable+mask (see the rationale
+    // there). On enable the mask must be lifted BEFORE startDaemon issues
+    // `systemctl start` — start against a still-masked unit fails. Sequence
+    // the start as a tail callback to setAutostart so it runs only after the
+    // followup action (enable) completes. On disable the stop can fire
+    // immediately; mask afterwards just prevents future activation.
     if (enabled) {
-        startDaemon();
+        setAutostart(true, [this]() {
+            startDaemon();
+        });
     } else {
+        // Stop first so the running daemon is gone before we mask. If we
+        // masked first, the subsequent `stop` would still work, but a
+        // concurrent D-Bus client could re-activate between mask-completion
+        // and stop-completion — masking after stop closes that window.
         stopDaemon();
+        setAutostart(false, nullptr);
     }
 
     if (m_enabled != enabled) {
@@ -121,15 +129,45 @@ void DaemonController::refreshEnabledState()
         });
 }
 
-void DaemonController::setAutostart(bool enabled)
+void DaemonController::setAutostart(bool enabled, std::function<void()> onComplete)
 {
-    QString action = enabled ? QStringLiteral("enable") : QStringLiteral("disable");
-    runSystemctl({QStringLiteral("--user"), action, QLatin1String(KCMConstants::SystemdServiceName)},
-                 [this](bool success, const QString& /*output*/) {
-                     if (success) {
-                         refreshEnabledState();
-                     }
-                 });
+    // Disable-only (the historical behavior) is insufficient: the D-Bus
+    // service file `org.plasmazones.service` carries `SystemdService=plasmazones.service`,
+    // so any client D-Bus call to org.plasmazones (e.g. the KWin effect's
+    // per-window-move snapping query) triggers systemd auto-activation
+    // regardless of whether the unit is enabled at login. The user toggled
+    // the daemon off and expected it to stay off; instead it silently
+    // respawned on the first window move (discussion #461 item 4).
+    //
+    // mask makes systemd refuse activation outright — the D-Bus client gets
+    // an activation failure and PlasmaZones stays off until the user
+    // re-enables. unmask+enable on the way back in mirrors that: a previously
+    // masked unit must be unmasked before enable can take effect.
+    const QString primaryAction = enabled ? QStringLiteral("unmask") : QStringLiteral("disable");
+    const QString followupAction = enabled ? QStringLiteral("enable") : QStringLiteral("mask");
+    const QLatin1String unit(KCMConstants::SystemdServiceName);
+    runSystemctl(
+        {QStringLiteral("--user"), primaryAction, unit},
+        [this, followupAction, unit, onComplete = std::move(onComplete)](bool /*success*/, const QString& /*output*/) {
+            // Ignore primaryAction's exit code: unmask on an un-masked
+            // unit and disable on an already-disabled unit are no-ops
+            // (and systemctl reports them as failures with a benign
+            // "Unit not loaded" warning). We chain unconditionally so
+            // the second action always runs; refreshEnabledState then
+            // reconciles whatever the final on-disk state is.
+            runSystemctl({QStringLiteral("--user"), followupAction, unit},
+                         [this, onComplete = std::move(onComplete)](bool success, const QString& /*output*/) {
+                             if (success) {
+                                 refreshEnabledState();
+                             }
+                             // Invoke the caller's tail action AFTER the
+                             // followup action lands so a `start` issued
+                             // here never races a still-pending unmask.
+                             if (onComplete) {
+                                 onComplete();
+                             }
+                         });
+        });
 }
 
 void DaemonController::startDaemon()

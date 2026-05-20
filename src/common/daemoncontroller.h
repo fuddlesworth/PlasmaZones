@@ -45,7 +45,7 @@ Q_SIGNALS:
 private:
     void checkStatus();
     void refreshEnabledState();
-    void setAutostart(bool enabled);
+    void setAutostart(bool enabled, std::function<void()> onComplete = nullptr);
 
     using SystemctlCallback = std::function<void(bool success, const QString& output)>;
     void runSystemctl(const QStringList& args, SystemctlCallback callback = nullptr);
