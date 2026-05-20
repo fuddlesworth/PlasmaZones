@@ -135,6 +135,7 @@ qt_add_qml_module(plasmazones-settings
         qml/VirtualScreensPage.qml
         qml/VirtualScreenPreview.qml
         # Sub-components (copied from KCM)
+        qml/AssignmentMonitorList.qml
         qml/MonitorAssignmentsCard.qml
         qml/ActivityAssignmentsCard.qml
         qml/AppRulesCard.qml

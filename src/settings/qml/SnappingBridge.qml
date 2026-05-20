@@ -7,13 +7,29 @@ import QtQuick
 // Extends SharedBridge with snapping-specific assignment, quick-slot,
 // and app-rule methods.
 SharedBridge {
+    id: bridge
+
     // ─── Screen assignments (snapping) ──────────────────────────────
     // ─── Per-desktop assignments (snapping) ─────────────────────────
     // ─── Per-activity assignments (snapping) ────────────────────────
     // ─── Quick layout slots (snapping) ──────────────────────────────
     // ─── App rules ──────────────────────────────────────────────────
 
-    signal appRulesRefreshed()
+    signal appRulesRefreshed
+
+    // Tick counters bumped from the SharedBridge notify signals so QML
+    // bindings that consult `isMonitorDisabled(name)` etc. (no QML-side
+    // dependency on a mutating property otherwise) re-evaluate when the
+    // settings controller flips a disable list. Kept here in lockstep
+    // with ScrollingBridge / TilingBridge so AssignmentMonitorList can
+    // be wired against any of the three.
+    property int disabledMonitorsTick: 0
+    property int disabledDesktopsTick: 0
+    property int disabledActivitiesTick: 0
+
+    onDisabledMonitorsChanged: bridge.disabledMonitorsTick++
+    onDisabledDesktopsChanged: bridge.disabledDesktopsTick++
+    onDisabledActivitiesChanged: bridge.disabledActivitiesTick++
 
     function assignLayoutToScreen(screen, layout) {
         settingsController.assignLayoutToScreen(screen, layout);

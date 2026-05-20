@@ -9,9 +9,7 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
-    readonly property var
-    settingsBridge: SnappingBridge {
-    }
+    readonly property var settingsBridge: SnappingBridge {}
 
     readonly property int viewMode: 0
 
@@ -43,7 +41,6 @@ SettingsFlickable {
                 appSettings: root.settingsBridge
                 viewMode: root.viewMode
             }
-
         }
 
         // Activity Assignments
@@ -59,7 +56,6 @@ SettingsFlickable {
                 appSettings: root.settingsBridge
                 viewMode: root.viewMode
             }
-
         }
 
         // Info when Activities not available
@@ -70,7 +66,5 @@ SettingsFlickable {
             type: Kirigami.MessageType.Information
             text: i18n("KDE Activities support is not available. Activity-based layout assignments require the KDE Activities service to be running.")
         }
-
     }
-
 }
