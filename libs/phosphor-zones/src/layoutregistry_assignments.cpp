@@ -234,6 +234,128 @@ void LayoutRegistry::setSnappingLayoutPreservingMode(const QString& screenId, in
     saveAssignments();
 }
 
+void LayoutRegistry::clearShadowsForSlot(const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    // Resolve the physical screen so VS variants of the same physical
+    // also get treated as "same screen" — the cascade walks VS → phys
+    // at level 6, so leaving VS entries intact would re-shadow the slot
+    // we're about to promote.
+    const QString targetPhysId = PhosphorIdentity::VirtualScreenId::isVirtual(screenId)
+        ? PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)
+        : screenId;
+    const LayoutAssignmentKey targetKey{screenId, virtualDesktop, activity};
+
+    auto sameScreen = [&](const QString& s) -> bool {
+        if (s == screenId)
+            return true;
+        if (s == targetPhysId)
+            return true;
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(s)
+            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(s) == targetPhysId)
+            return true;
+        return false;
+    };
+
+    // Determine which keys on the same screen would win at a higher (or
+    // equal) cascade level than the target slot for some context the
+    // target slot is meant to cover. Reading bottom-up by slot shape:
+    //   - Monitor row (vd=0, activity=""): the slot is the universal
+    //     fallback for the screen; every other entry on the screen
+    //     shadows it for some context → clear them all.
+    //   - Per-desktop (vd>0, activity=""): the slot is the fallback
+    //     for (this screen, this desktop, *). Per-desktop+activity
+    //     entries with the same desktop (vd, anyActivity!="") shadow
+    //     at L1/L2 → clear them.
+    //   - Per-activity (vd=0, activity!=""): the slot is the fallback
+    //     for (this screen, *, this activity). Per-desktop+activity
+    //     entries with the same activity (anyVd>0, activity) shadow
+    //     at L1 → clear them.
+    //   - Specific (vd>0, activity!=""): no other entry shadows it
+    //     in the cascade, so nothing to clear.
+    auto shouldClear = [&](const LayoutAssignmentKey& key) -> bool {
+        if (key == targetKey)
+            return false;
+        if (!sameScreen(key.screenId))
+            return false;
+
+        if (virtualDesktop == 0 && activity.isEmpty())
+            return true; // Monitor row: clear everything else on screen
+        if (virtualDesktop > 0 && activity.isEmpty())
+            return key.virtualDesktop == virtualDesktop; // Per-desktop scope
+        if (virtualDesktop == 0 && !activity.isEmpty())
+            return key.activity == activity; // Per-activity scope
+        return false; // Specific (vd, activity): no shadow to clear
+    };
+
+    QList<LayoutAssignmentKey> toRemove;
+    for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
+        if (shouldClear(it.key()))
+            toRemove.append(it.key());
+    }
+    for (const auto& key : std::as_const(toRemove)) {
+        m_assignments.remove(key);
+        qCDebug(lcZonesLib) << "clearShadowsForSlot: removed shadow screen=" << key.screenId
+                            << "desktop=" << key.virtualDesktop << "activity=" << key.activity;
+    }
+}
+
+void LayoutRegistry::setSnappingLayoutPromoting(const QString& screenId, int virtualDesktop, const QString& activity,
+                                                const QString& layoutId)
+{
+    clearShadowsForSlot(screenId, virtualDesktop, activity);
+
+    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
+    AssignmentEntry entry;
+    if (auto it = m_assignments.constFind(key); it != m_assignments.constEnd()) {
+        entry = *it;
+    }
+    entry.mode = AssignmentEntry::Snapping;
+    entry.snappingLayout = layoutId;
+
+    if (entry.snappingLayout.isEmpty() && entry.tilingAlgorithm.isEmpty()) {
+        m_assignments.remove(key);
+        qCDebug(lcZonesLib) << "setSnappingLayoutPromoting: removed empty entry screen=" << screenId
+                            << "desktop=" << virtualDesktop << "activity=" << activity;
+    } else {
+        m_assignments[key] = entry;
+        qCDebug(lcZonesLib) << "setSnappingLayoutPromoting: screen=" << screenId << "desktop=" << virtualDesktop
+                            << "activity=" << activity << "mode=" << entry.mode << "snapping=" << entry.snappingLayout
+                            << "tiling=" << entry.tilingAlgorithm;
+    }
+
+    PhosphorZones::Layout* layout = layoutId.isEmpty() ? nullptr : layoutById(QUuid::fromString(layoutId));
+    Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
+    saveAssignments();
+}
+
+void LayoutRegistry::setTilingAlgorithmPromoting(const QString& screenId, int virtualDesktop, const QString& activity,
+                                                 const QString& algorithmId)
+{
+    clearShadowsForSlot(screenId, virtualDesktop, activity);
+
+    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
+    AssignmentEntry entry;
+    if (auto it = m_assignments.constFind(key); it != m_assignments.constEnd()) {
+        entry = *it;
+    }
+    entry.mode = AssignmentEntry::Autotile;
+    entry.tilingAlgorithm = algorithmId;
+
+    if (entry.snappingLayout.isEmpty() && entry.tilingAlgorithm.isEmpty()) {
+        m_assignments.remove(key);
+        qCDebug(lcZonesLib) << "setTilingAlgorithmPromoting: removed empty entry screen=" << screenId
+                            << "desktop=" << virtualDesktop << "activity=" << activity;
+    } else {
+        m_assignments[key] = entry;
+        qCDebug(lcZonesLib) << "setTilingAlgorithmPromoting: screen=" << screenId << "desktop=" << virtualDesktop
+                            << "activity=" << activity << "mode=" << entry.mode << "snapping=" << entry.snappingLayout
+                            << "tiling=" << entry.tilingAlgorithm;
+    }
+
+    Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
+    saveAssignments();
+}
+
 void LayoutRegistry::setTilingAlgorithmPreservingMode(const QString& screenId, int virtualDesktop,
                                                       const QString& activity, const QString& algorithmId)
 {

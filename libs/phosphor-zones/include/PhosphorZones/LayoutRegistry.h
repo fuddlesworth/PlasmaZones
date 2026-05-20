@@ -246,6 +246,32 @@ public:
     void setTilingAlgorithmPreservingMode(const QString& screenId, int virtualDesktop, const QString& activity,
                                           const QString& algorithmId);
 
+    /// "Promote" variant of @ref setSnappingLayoutPreservingMode used
+    /// when the user's current rendered context is already in Snapping
+    /// mode — i.e. the edit matches what's actively rendering. Wipes
+    /// every other assignment entry on the same physical screen (and
+    /// its VS variants) that would shadow this slot in the cascade,
+    /// forces the slot to mode=Snapping with the new layoutId, and
+    /// emits @c layoutAssigned. After this the slot is the cascade
+    /// winner for every context on the screen, so setActiveLayout +
+    /// onLayoutChanged see a real layout change and the resnap path
+    /// actually moves windows. Snap and tile are independent fields
+    /// (the slot's tile is left intact / inherited from the existing
+    /// entry).
+    void setSnappingLayoutPromoting(const QString& screenId, int virtualDesktop, const QString& activity,
+                                    const QString& layoutId);
+
+    /// Symmetric @c promoting variant for the tile field; forces
+    /// mode=Autotile after wiping shadows.
+    void setTilingAlgorithmPromoting(const QString& screenId, int virtualDesktop, const QString& activity,
+                                     const QString& algorithmId);
+
+    /// Remove every assignment entry on @p screenId's physical screen
+    /// (and its VS variants) that would shadow @p (virtualDesktop, activity)
+    /// in the cascade walk. Used by the @c promoting variants above.
+    /// The target slot itself is left intact for the caller to write.
+    void clearShadowsForSlot(const QString& screenId, int virtualDesktop, const QString& activity);
+
     Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const override;
 

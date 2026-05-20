@@ -700,7 +700,24 @@ void LayoutAdaptor::setSnappingLayoutEntry(const QString& screenId, int virtualD
         }
     }
 
-    m_layoutManager->setSnappingLayoutPreservingMode(resolvedId, virtualDesktop, activity, layoutId);
+    // Decide between PROMOTE and PRESERVE based on whether the user's
+    // current rendered context at this screen is already in Snapping
+    // mode. If it is, this edit matches the active mode — promote it
+    // by wiping shadowing entries so the slot becomes the live cascade
+    // winner and the user actually sees their pick (per the
+    // discussion-497 follow-up). If not, the edit is a stored-but-
+    // inactive preference — preserve the slot's existing mode and
+    // don't touch other entries (matches the earlier "editing the
+    // inactive field shouldn't flip context mode" rule).
+    const int curDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const QString curActivity = m_activityManager ? m_activityManager->currentActivity() : QString();
+    const PhosphorZones::AssignmentEntry::Mode currentMode =
+        m_layoutManager->modeForScreen(resolvedId, curDesktop, curActivity);
+    if (currentMode == PhosphorZones::AssignmentEntry::Snapping) {
+        m_layoutManager->setSnappingLayoutPromoting(resolvedId, virtualDesktop, activity, layoutId);
+    } else {
+        m_layoutManager->setSnappingLayoutPreservingMode(resolvedId, virtualDesktop, activity, layoutId);
+    }
     m_changedScreenIds.insert(resolvedId);
     // Field marker "snap" — the OSD decides whether to surface this
     // edit by re-reading the slot's stored entry; the field tag tells
@@ -751,7 +768,20 @@ void LayoutAdaptor::setTilingAlgorithmEntry(const QString& screenId, int virtual
         }
     }
 
-    m_layoutManager->setTilingAlgorithmPreservingMode(resolvedId, virtualDesktop, activity, algorithmId);
+    // PROMOTE vs PRESERVE, symmetric to setSnappingLayoutEntry above:
+    // promote when the user's current rendered context is already in
+    // Autotile mode (this tile edit matches the active mode), preserve
+    // otherwise so a tile change on a snap context lands as a stored
+    // preference without flipping the rendered mode.
+    const int curDesktopT = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const QString curActivityT = m_activityManager ? m_activityManager->currentActivity() : QString();
+    const PhosphorZones::AssignmentEntry::Mode currentModeT =
+        m_layoutManager->modeForScreen(resolvedId, curDesktopT, curActivityT);
+    if (currentModeT == PhosphorZones::AssignmentEntry::Autotile) {
+        m_layoutManager->setTilingAlgorithmPromoting(resolvedId, virtualDesktop, activity, algorithmId);
+    } else {
+        m_layoutManager->setTilingAlgorithmPreservingMode(resolvedId, virtualDesktop, activity, algorithmId);
+    }
     m_changedScreenIds.insert(resolvedId);
     // Field marker "tile" — symmetric to the snap entry above.
     m_changedAssignmentKeys.append(resolvedId + QChar(0x1F) + QString::number(virtualDesktop) + QChar(0x1F) + activity
