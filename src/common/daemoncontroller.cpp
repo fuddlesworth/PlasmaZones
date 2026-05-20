@@ -199,15 +199,14 @@ void DaemonController::setAutostart(bool enabled, std::function<void()> onComple
                                                  "actual on-disk state after refresh";
                                       }
                                       refreshEnabledState();
-                                      // Clear the chain-in-flight flag BEFORE the
-                                      // tail action runs. The systemctl invocations
-                                      // dispatched by startDaemon() / stopDaemon()
-                                      // are independent of the autostart chain — they
-                                      // don't need the guard, and clearing first lets
-                                      // a tail action that itself re-enters
-                                      // setEnabled (cascading state-machine logic
-                                      // a future caller might add) actually proceed
-                                      // rather than self-block at the guard.
+                                      // startDaemon() / stopDaemon() each issue
+                                      // their own runSystemctl call (`start` / `stop`)
+                                      // that is independent of the autostart chain
+                                      // this guard is scoped to (`unmask`+`enable` /
+                                      // `disable`+`mask`). Clearing first releases
+                                      // the guard the moment the chain it covers
+                                      // has finished — the tail action's systemctl
+                                      // does not need to run under it.
                                       m_chainInFlight = false;
                                       // Invoke the caller's tail action AFTER the
                                       // followup action lands so a `start` issued
