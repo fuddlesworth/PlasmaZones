@@ -1097,87 +1097,18 @@ bool Daemon::init()
                 engine->deserializeWindowOrders(orders);
         });
 
-    // Disabled-context filter (discussion #461 item 2). Wrap the autotile
-    // pending-restore JSON on both sides — serialize drops entries on a
-    // monitor/desktop/activity the user has disabled, and deserialize drops
-    // them coming back. Autotile already prunes restores for screens that
-    // leave its active set via pruneStaleRestores(), but that runs against
-    // the autotile-mode disable list specifically; the JSON layer is the
-    // single funnel that sees both modes plus the activity field that
-    // doesn't reach the autotile engine.
-    //
-    // Lifetime: filterAutotilePendingRestores captures `this` (Daemon) and is
-    // copied into both delegate lambdas. The delegates live on
-    // m_windowTrackingAdaptor, which is a Qt child of `this`, so WTA is
-    // destroyed before ~Daemon — no UAF window. saveStateOnShutdown() runs in
-    // stop() ahead of engine teardown, so m_settings and m_screenModeRouter
-    // are still live when the serialize delegate is invoked.
-    auto filterAutotilePendingRestores = [this](const QJsonObject& src) -> QJsonObject {
-        QJsonObject filtered;
-        for (auto it = src.constBegin(); it != src.constEnd(); ++it) {
-            if (!it.value().isArray()) {
-                continue;
-            }
-            QJsonArray kept;
-            for (const QJsonValue& entryVal : it.value().toArray()) {
-                if (!entryVal.isObject()) {
-                    continue;
-                }
-                const QJsonObject entryObj = entryVal.toObject();
-                const QString screen = entryObj[QLatin1String("screen")].toString();
-                // qMax(1, toInt(1)) fully mirrors AutotileEngine::deserialize
-                // PendingRestores: missing-key defaults to 1 and explicit
-                // zero/negative also normalises to 1. With a bare .toInt(0)
-                // an explicit zero would slip the desktop-disabled gate
-                // (it short-circuits on desktop <= 0) while the engine on
-                // the next load would tile that entry into desktop 1.
-                const int desktop = qMax(1, entryObj[QLatin1String("desktop")].toInt(1));
-                const QString activity = entryObj[QLatin1String("activity")].toString();
-                // Lockstep with AutotileEngine::deserializePendingRestores'
-                // inner-entry reject conditions (pos < 0 || screenId.isEmpty()):
-                // entries failing those are dead bytes — drop them here so
-                // we don't persist garbage the next load will discard anyway.
-                // The engine's outer-key rejects (empty appId, appId
-                // containing '|', per-app cap MaxPendingRestoresPerApp) are
-                // NOT mirrored — those are appId-shape invariants the
-                // serializer never violates, so they're unreachable here.
-                const int position = entryObj[QLatin1String("position")].toInt(-1);
-                if (screen.isEmpty() || position < 0) {
-                    continue;
-                }
-                // Defense-in-depth null guard: today the wiring order
-                // guarantees m_screenModeRouter is live before either
-                // delegate fires (constructed earlier in init(), reset
-                // only after saveStateOnShutdown drains the queue). If a
-                // future refactor changes that ordering the lambda would
-                // UAF — cheaper to short-circuit here than to debug later.
-                if (!m_screenModeRouter) {
-                    kept.append(entryObj);
-                    continue;
-                }
-                const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter->modeFor(screen);
-                if (isContextDisabled(m_settings.get(), mode, screen, desktop, activity)) {
-                    continue;
-                }
-                kept.append(entryObj);
-            }
-            if (!kept.isEmpty()) {
-                filtered[it.key()] = kept;
-            }
-        }
-        return filtered;
-    };
-
+    // Autotile pending-restore filtering (discussion #461 item 2) is owned
+    // by AutotileEngine itself via setShouldPersistRestorePredicate, which
+    // WTA wires in setEngines() — same isPersistedContextDisabled funnel as
+    // the snap-side ShouldTrackPredicate. Delegates here are now bare
+    // forwarders; the engine's own serialize/deserialize apply the gate.
     m_windowTrackingAdaptor->setTilingPendingRestoreDelegates(
-        [engine = QPointer(autotileEngine), filterAutotilePendingRestores]() -> QJsonObject {
-            if (!engine) {
-                return QJsonObject{};
-            }
-            return filterAutotilePendingRestores(engine->serializePendingRestores());
+        [engine = QPointer(autotileEngine)]() -> QJsonObject {
+            return engine ? engine->serializePendingRestores() : QJsonObject{};
         },
-        [engine = QPointer(autotileEngine), filterAutotilePendingRestores](const QJsonObject& obj) {
+        [engine = QPointer(autotileEngine)](const QJsonObject& obj) {
             if (engine)
-                engine->deserializePendingRestores(filterAutotilePendingRestores(obj));
+                engine->deserializePendingRestores(obj);
         });
 
     // Trigger WTA save on autotile state changes (window order, split ratio, master count).

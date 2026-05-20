@@ -53,7 +53,8 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
     return result;
 }
 
-bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, int virtualDesktop) const
+bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, int virtualDesktop,
+                                                       const QString& activity) const
 {
     // Empty screen means the entry never carried a usable context tag (legacy
     // snap entries pre-multi-monitor, sticky windows, etc.). Loading and
@@ -63,17 +64,17 @@ bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, 
     // m_screenModeRouter is wired post-construction by the daemon; the very
     // first call site is loadState() (invoked from this adaptor's own ctor
     // before the daemon calls setScreenModeRouter), where it is still null.
-    // The helper only governs snap-side persistence (WindowZoneAssignmentsFull,
-    // PendingRestoreQueues, PreFloat* maps) and the ShouldTrackPredicate the
-    // adaptor injects into WindowTrackingService — every consumer feeds back
-    // into snap-mode storage, so the Snapping fallback is the correct mode,
-    // not an arbitrary default.
+    // Snap-side consumers (WindowZoneAssignmentsFull, PendingRestoreQueues,
+    // PreFloat* maps) and snap's ShouldTrackPredicate route through here and
+    // get the Snapping fallback. Autotile's ShouldPersistRestorePredicate also
+    // routes through here and supplies its own activity tag — `modeFor` picks
+    // up the screen's current Autotile mode whenever the router is wired.
     if (screenId.isEmpty()) {
         return false;
     }
     const PhosphorZones::AssignmentEntry::Mode mode =
         m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
-    return isContextDisabled(m_settings, mode, screenId, virtualDesktop, QString());
+    return isContextDisabled(m_settings, mode, screenId, virtualDesktop, activity);
 }
 
 void WindowTrackingAdaptor::saveState()
