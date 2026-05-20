@@ -101,6 +101,20 @@ public:
     // Cleanup: restore title bars and clear border state for all borderless windows
     void restoreAllBorderless();
 
+    /**
+     * @brief Drain any pending title-bar restores deferred from autotile→snap.
+     *
+     * Called by PlasmaZonesEffect::slotApplyGeometriesBatch once the resnap
+     * D-Bus signal has been dispatched, so windows start animating to their
+     * snap positions BEFORE we incur the per-window Wayland decoration
+     * round-trip cost of setNoBorder(false). Restoring synchronously inside
+     * slotScreensChanged blocked the queued resnap by 250+ ms.
+     *
+     * No-op if there is no pending restore (e.g. on rotate / vs_reconfigure
+     * batches that did not originate from a mode toggle).
+     */
+    void drainPendingBorderlessRestore();
+
     // Settings update: toggle hide-title-bars with border restore on disable
     void updateHideTitleBarsSetting(bool enabled);
     void updateShowBorderSetting(bool enabled);
@@ -374,6 +388,14 @@ private:
     /// minimize/unminimize cycles that KWin emits on tiled windows when
     /// plasmashell notification popups transiently change stacking.
     QHash<QString, QPointer<QTimer>> m_pendingMinimizeFloat;
+    /// Window IDs whose title-bar restore was deferred from
+    /// slotScreensChanged (genuine autotile→snap toggle) until after the
+    /// daemon's queued applyGeometriesBatch("resnap") dispatches. Drained
+    /// by drainPendingBorderlessRestore(); a fallback timer also drains it
+    /// in case the resnap signal never arrives (e.g. autotile disabled with
+    /// no resnappable windows).
+    QSet<QString> m_pendingBorderlessRestore;
+    QPointer<QTimer> m_pendingBorderlessFallback;
     uint64_t m_autotileStaggerGeneration = 0;
     uint64_t m_restoreStaggerGeneration = 0;
     QVector<QPointer<KWin::EffectWindow>> m_savedGlobalStackForResnap; ///< z-order snapshot for resnap restore
