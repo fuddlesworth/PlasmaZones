@@ -135,7 +135,20 @@ void AutotileHandler::drainPendingBorderlessRestore()
             return;
         }
         const QString windowId = pending->takeFirst();
-        restoreWindowBorders(m_effect->findWindowById(windowId), windowId);
+        KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+        // Skip the restore if autotile has been re-enabled on this window's
+        // current screen between stash and chunk-execution time. The new
+        // toggle's setWindowBorderless(true) is now authoritative; clearing
+        // it would flash the title bar and discard tracking the re-tile just
+        // added. Realistic trigger: user rapid-cycles through layouts and
+        // lands back on an autotile layout within the chain's ~300 ms
+        // lifetime. The original synchronous code was immune because no
+        // other slot could interleave between stash and clear.
+        if (w && m_autotileScreens.contains(m_effect->getWindowScreenId(w))) {
+            QTimer::singleShot(0, this, *step);
+            return;
+        }
+        restoreWindowBorders(w, windowId);
         QTimer::singleShot(0, this, *step);
     };
     (*step)();
