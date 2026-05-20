@@ -562,24 +562,51 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     QString zoneId = zoneIds.isEmpty() ? QString() : zoneIds.first();
     // Check floating with full windowId first, fallback to appId
     bool isFloating = isWindowFloating(windowId);
-    if (!zoneId.isEmpty() && !zoneId.startsWith(kZoneSelectorIdPrefix) && !isFloating) {
+    if (!zoneId.isEmpty() && !zoneId.startsWith(kZoneSelectorIdPrefix)
+        && !isFloating
         // A whitespace-only / whitespace-bearing appId is a corrupt window
         // identity (KWin reported a blank class). Persisting a PendingRestore
         // under it pollutes the restore queue with a key no real window
         // matches cleanly — and a blank " " key is then consumed
         // indiscriminately by every later blank-class window. Drop it.
-        if (PhosphorIdentity::WindowId::isValidAppId(appId)) {
+        && PhosphorIdentity::WindowId::isValidAppId(appId)) {
+        const QString screenId = m_snapState->screenForWindow(windowId);
+        // SnapState::desktopForWindow returns 0 (all-desktops / unknown
+        // sentinel) for untracked windows. The disabled-context predicate
+        // short-circuits its desktop-disabled check on desktop <= 0, so
+        // sticky and untracked windows fall through the monitor-disabled
+        // gate only — intentional: a sticky window isn't "on" any one
+        // desktop. The restore path treats 0 as "don't constrain on
+        // desktop" too, so a value of 0 carried into the PendingRestore
+        // entry won't migrate the window to a wrong desktop on reopen.
+        const int desktop = m_snapState->desktopForWindow(windowId);
+
+        // Disabled-context gate (discussion #461 item 2). When the closing
+        // window lives on a monitor/desktop the user disabled snap for,
+        // recording a PendingRestore turns into a delayed footgun: either
+        // the same app reopens on the disabled screen and the snap restore
+        // path (gated on destination only) drags it to the saved zone, or
+        // KWin rehomes the window onto a surviving monitor after the
+        // disabled screen sleeps and the same restore fires there. The fix
+        // is to not record the entry at all — the snap-restore path
+        // already returns noSnap when the queue is empty.
+        //
+        // The predicate only runs when we have a screenId to evaluate. If
+        // SnapState pruned the window's screen before windowClosed ran
+        // (screen disconnect race) the gate cannot apply, so we persist
+        // unconditionally — pre-3.0 behaviour for untracked windows.
+        const bool gateApplies = !screenId.isEmpty() && m_shouldTrackPredicate;
+        if (gateApplies && !m_shouldTrackPredicate(screenId, desktop)) {
+            qCDebug(lcPlacement) << "Skipped PendingRestore for closed window" << appId
+                                 << "-- disabled context, screen:" << screenId << "desktop:" << desktop;
+        } else {
+            if (screenId.isEmpty()) {
+                qCDebug(lcPlacement) << "PendingRestore gate: empty screenId for closed window" << appId
+                                     << "-- persisting unconditionally";
+            }
             PendingRestore entry;
             entry.zoneIds = zoneIds;
-
-            QString screenId = m_snapState->screenForWindow(windowId);
             entry.screenId = screenId;
-
-            // SnapState::desktopForWindow returns 0 (all-desktops / unknown
-            // sentinel) for untracked windows; the restore path treats that
-            // as "don't constrain on desktop" and will not migrate the
-            // window to a wrong desktop on reopen.
-            int desktop = m_snapState->desktopForWindow(windowId);
             entry.virtualDesktop = desktop;
 
             // Save the layout ID to ensure we only restore if the same layout is active
