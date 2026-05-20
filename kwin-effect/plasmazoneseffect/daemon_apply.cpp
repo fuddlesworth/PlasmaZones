@@ -322,6 +322,16 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                     }
                 }
             }
+            // Drain any title-bar restores deferred from autotile→snap mode
+            // toggle. slotScreensChanged stashes window IDs instead of
+            // running the slow Wayland decoration round-trips synchronously;
+            // by the time onComplete fires here, animations for all
+            // resnapped windows are already in flight via the animation
+            // framework, so borders return mid-animation rather than after
+            // a 250+ ms stall before motion begins. Unconditional — for
+            // non-mode-toggle batches (rotate, vs_reconfigure, snap_all)
+            // the pending set is empty and the call is a no-op.
+            m_autotileHandler->drainPendingBorderlessRestore();
             // Show snap assist after resnap if applicable
             if (action == QLatin1String("resnap") && m_snapAssistHandler->isEnabled()) {
                 KWin::EffectWindow* activeWin = getActiveWindow();
