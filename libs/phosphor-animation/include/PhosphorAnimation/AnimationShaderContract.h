@@ -264,6 +264,21 @@ inline constexpr const char* kIAnchorSize = "iAnchorSize";
 /// expansion PR would push (padW, padH) instead.
 inline constexpr const char* kIAnchorPosInFbo = "iAnchorPosInFbo";
 
+/// `vec4 iAnchorRectInTexture` — the anchor's UV sub-rect within
+/// `uTexture0`, as `(x, y, width, height)` in the texture's [0, 1]
+/// space. KWin-effect path ONLY: KWin's `OffscreenEffect` redirects the
+/// whole window item (decoration + shadow included), so `uTexture0`
+/// always covers the EXPANDED geometry, not the bare frame.
+/// `surfaceColor()` folds this rect in so a surface-extent shader, which
+/// samples in the anchor's own [0, 1] space, addresses the frame's
+/// sub-region of that shadow-padded texture instead of stretching the
+/// whole texture across the frame (the "window animates smaller than it
+/// lands" artefact). Anchor-extent transitions push the `(0, 0, 1, 1)`
+/// identity. The daemon needs no equivalent — its `uTexture0` is the
+/// anchor texture itself — so this name resolves only on the kwin path
+/// and is absent from the daemon UBO contract.
+inline constexpr const char* kIAnchorRectInTexture = "iAnchorRectInTexture";
+
 /// Maximum number of user-declared textures per animation effect.
 ///
 /// Each declared texture binds to one of the canonical samplers

@@ -344,53 +344,54 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                           "transition.frameCount must stay `int` to match GLSL `uniform int iFrame;`");
             const int iFrameValue = transition.frameCount++;
             const QRectF geo = w->frameGeometry();
-            // Anchor uniforms: anchor-extent transitions render 1:1 over
-            // the window; surface-extent transitions (fboExtent:
-            // "surface") render over the whole output, with the window
-            // placed at iAnchorPosInFbo. See ShaderInternal::computeAnchorUniforms.
+            // Three rects feed the shader's geometry uniforms. They are
+            // NOT interchangeable on the surface-extent path:
             //
-            // The "anchor" rect is the screen rect KWin's redirected
-            // texture (uTexture0) covers. For surface-extent transitions
-            // that is the window's EXPANDED geometry (frame + decoration
-            // + shadow): KWin's OffscreenEffect redirects the whole
-            // window item, shadow included, so the texture's [0,1] UV
-            // span maps the expanded rect. iAnchorSize / iAnchorPosInFbo
-            // must describe that same rect — describing the frame
-            // instead crams the expanded texture into a frame-sized
-            // region and the window renders slightly smaller for the
-            // duration of the animation. expandedGeometry is empty for a
-            // window with no decoration or shadow extents; fall back to
-            // the frame there.
-            // Anchor uniforms describe the (anchor, texture) pair:
-            //   • anchor = the captured window = frame geometry
-            //   • texture = whatever the shader's vTexCoord [0,1] covers
-            //     - anchor-extent: the redirected FBO. On the daemon that
-            //       equals the frame; on KWin it is the EXPANDED rect
-            //       (frame + decoration + shadow), so iAnchorPosInFbo is
-            //       the shadow inset and iResolution the expanded size.
-            //       `anchorRemap` folds those back so the shader's [0,1]
-            //       UV still spans the frame on both runtimes.
-            //     - surface-extent: the output, since apply() places an
-            //       output-spanning quad with vTexCoord 0..1 over the
-            //       output. iAnchorPosInFbo locates the frame within
-            //       the output, matching the daemon's surface-sized FBO
-            //       path.
+            //   • anchorGeo   — the captured window = frame geometry. The
+            //     "anchor" the shader's effect-space math is rigid about
+            //     (bounce lifts THIS, fly-in slides THIS).
+            //   • textureGeo  — the rect the shader's vTexCoord [0,1]
+            //     spans. anchor-extent: KWin's redirected FBO (= the
+            //     expanded rect). surface-extent: the whole output, since
+            //     apply() lays an output-spanning quad.
+            //   • expandedGeo — the rect uTexture0 itself covers. KWin's
+            //     OffscreenEffect always redirects the whole window item
+            //     INCLUDING decoration + shadow, so uTexture0 is the
+            //     expanded rect, never the bare frame.
+            //
+            // computeAnchorUniforms(anchorGeo, textureGeo) drives
+            // iResolution / iAnchorSize / iAnchorPosInFbo — the shader
+            // uses those to convert vTexCoord into anchor [0,1] space
+            // (anchorRemap).
+            //
+            // iAnchorRectInTexture is a SEPARATE uniform: it tells
+            // surfaceColor() where the anchor sits inside uTexture0.
+            // Surface-extent shaders sample with anchor-space [0,1]
+            // coordinates, but uTexture0 spans the shadow-padded expanded
+            // rect — sampling it at anchor [0,1] without this remap
+            // stretches frame+shadow into the frame's screen region and
+            // the window content animates smaller than it lands. Anchor-
+            // extent shaders sample uTexture0 directly, so they get the
+            // (0,0,1,1) identity.
+            //
             // expandedGeometry is empty for a window with no decoration
-            // / shadow extents; fall back to the frame so the anchor=
-            // texture identity holds.
-            QRectF anchorGeo = geo;
-            QRectF textureGeo = w->expandedGeometry();
-            if (textureGeo.isEmpty()) {
-                textureGeo = geo;
+            // or shadow extents; fall back to the frame there.
+            const QRectF anchorGeo = geo;
+            QRectF expandedGeo = w->expandedGeometry();
+            if (expandedGeo.isEmpty()) {
+                expandedGeo = geo;
             }
+            QRectF textureGeo = expandedGeo;
             if (transition.surfaceExtent) {
                 if (const auto* output = w->screen()) {
-                    const QRect outRect = output->geometry();
-                    textureGeo = QRectF(outRect);
+                    textureGeo = QRectF(output->geometry());
                 }
             }
             const ShaderInternal::AnchorUniforms anchorUniforms =
                 ShaderInternal::computeAnchorUniforms(anchorGeo, textureGeo);
+            const QVector4D anchorRectInTexture = transition.surfaceExtent
+                ? ShaderInternal::computeTextureSubRect(anchorGeo, expandedGeo)
+                : QVector4D(0.0f, 0.0f, 1.0f, 1.0f);
             {
                 KWin::ShaderBinder binder(shader);
                 if (cached->iTimeLoc >= 0) {
@@ -545,11 +546,23 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // target. (0, 0) for anchor-extent transitions, where
                     // the FBO covers the window 1:1 and `anchorRemap`
                     // collapses to identity. For surface-extent transitions
-                    // (broken-glass, fly-in, morph) it is the window's
-                    // offset within its output, so `anchorRemap` converts
-                    // surface-UV back to anchor-space — matching the
-                    // daemon's surface-sized-FBO path.
+                    // (bounce, fly-in, broken-glass, morph) it is the
+                    // window's offset within its output, so `anchorRemap`
+                    // converts surface-UV back to anchor-space — matching
+                    // the daemon's surface-sized-FBO path.
                     shader->setUniform(cached->iAnchorPosInFboLoc, anchorUniforms.anchorPosInFbo);
+                }
+                if (cached->iAnchorRectInTextureLoc >= 0) {
+                    // The anchor's UV sub-rect within uTexture0 (KWin's
+                    // redirected expanded-geometry FBO). surfaceColor()
+                    // maps the shader's anchor-space sample coordinate
+                    // through this, so a surface-extent transition samples
+                    // the frame's sub-region of the shadow-padded texture
+                    // instead of the whole texture (which would render the
+                    // window smaller than its frame). For anchor-extent
+                    // transitions the value is (0, 0, 1, 1) — set above —
+                    // and surfaceColor() is an identity passthrough.
+                    shader->setUniform(cached->iAnchorRectInTextureLoc, anchorRectInTexture);
                 }
                 for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
                     const int loc = cached->customParamsLoc[slot];

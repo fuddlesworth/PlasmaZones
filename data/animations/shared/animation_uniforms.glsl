@@ -127,11 +127,25 @@ uniform vec2 iAnchorSize;
 // This generalises the previous `customParams[7].x` ring-padding remap
 // (morph, broken-glass) and the surface-extent vertex remap (fly-in)
 // onto one contract that works for any FBO size the runtime allocates.
-// On the kwin-effect path the value is (0, 0); the quad-side texCoord
-// remap done by `PlasmaZonesEffect::apply()` already delivers
-// `vTexCoord` in anchor-space coordinates, so the math collapses to
-// identity on that runtime.
+// On the kwin-effect path the value is the captured window's offset
+// within whatever rect `vTexCoord` spans: the shadow inset for an
+// anchor-extent transition, the window's position within the output for
+// a surface-extent transition. `anchorRemap` (anchor_remap.glsl)
+// consumes it.
 uniform vec2 iAnchorPosInFbo;
+
+// Anchor's UV sub-rect within `uTexture0`, as (x, y, width, height) in
+// the texture's [0, 1] space. KWin's OffscreenEffect redirects the whole
+// window item — decoration and shadow included — so `uTexture0` always
+// covers the EXPANDED geometry, never the bare frame. `surfaceColor()`
+// folds this rect in so a surface-extent shader, which samples in the
+// anchor's own [0, 1] space, addresses the frame's sub-region of that
+// shadow-padded texture rather than stretching the whole texture across
+// the frame. Anchor-extent transitions carry the (0, 0, 1, 1) identity.
+// kwin-effect path only — the daemon's `uTexture0` is the anchor texture
+// itself, so its `surfaceColor()` branch (below) needs no remap and this
+// uniform is absent from the UBO branch.
+uniform vec4 iAnchorRectInTexture;
 
 // uTexture0 — redirected window content (the surface the shader is
 // transitioning). Auto-bound by the runtime: KWin's OffscreenEffect
@@ -264,7 +278,17 @@ layout(binding = 10) uniform sampler2D uTexture3;
 // texture's physical layout.
 vec4 surfaceColor(vec2 uv) {
 #ifdef PLASMAZONES_KWIN
-    return texture(uTexture0, vec2(uv.x, 1.0 - uv.y));
+    // `uTexture0` is KWin's redirected OffscreenEffect FBO, which always
+    // covers the window's EXPANDED geometry (frame + decoration +
+    // shadow). `iAnchorRectInTexture` is the anchor's UV sub-rect within
+    // that FBO: surface-extent shaders hand this helper anchor-space
+    // [0, 1] coordinates, and without the remap they would address the
+    // whole shadow-padded texture — the window would render smaller than
+    // its frame. Anchor-extent transitions carry the (0, 0, 1, 1)
+    // identity, so the remap is a passthrough there. The Y flip is
+    // applied last — KWin's FBO is bottom-origin (Y-up).
+    vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
+    return texture(uTexture0, vec2(t.x, 1.0 - t.y));
 #else
     return texture(uTexture0, uv);
 #endif

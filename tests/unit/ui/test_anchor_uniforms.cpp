@@ -20,11 +20,13 @@
 
 #include <QTest>
 #include <QVector2D>
+#include <QVector4D>
 
 #include <plasmazoneseffect/shader_internal.h>
 
 using PlasmaZones::ShaderInternal::AnchorUniforms;
 using PlasmaZones::ShaderInternal::computeAnchorUniforms;
+using PlasmaZones::ShaderInternal::computeTextureSubRect;
 
 class TestAnchorUniforms : public QObject
 {
@@ -130,6 +132,42 @@ private Q_SLOTS:
         QCOMPARE(u.resolution, QVector2D(1920.0f, 1080.0f));
         QCOMPARE(u.anchorSize, QVector2D(800.5f, 600.75f));
         QCOMPARE(u.anchorPosInFbo, QVector2D(100.5f, 200.25f));
+    }
+
+    // computeTextureSubRect — iAnchorRectInTexture. Anchor-extent
+    // transitions pass (expanded, expanded): inner == outer collapses to
+    // the (0, 0, 1, 1) identity surfaceColor() treats as a passthrough.
+    void testTextureSubRectIdentityWhenInnerEqualsOuter()
+    {
+        const QRectF rect(100.0, 200.0, 800.0, 600.0);
+        QCOMPARE(computeTextureSubRect(rect, /*outer=*/rect), QVector4D(0.0f, 0.0f, 1.0f, 1.0f));
+    }
+
+    // Surface-extent transitions pass (frame, expanded): the frame's UV
+    // sub-rect within the shadow-padded redirected FBO. surfaceColor()
+    // folds this in so anchor-[0,1] samples land on the frame's region
+    // of uTexture0 instead of stretching frame+shadow across the frame.
+    void testTextureSubRectFrameWithinExpandedFbo()
+    {
+        const QRectF frame(140.0, 120.0, 1600.0, 900.0);
+        const QRectF expanded(100.0, 100.0, 2000.0, 1000.0); // 40px left, 20px top shadow inset
+        QCOMPARE(computeTextureSubRect(frame, expanded), QVector4D(0.02f, 0.02f, 0.8f, 0.9f));
+    }
+
+    // A window with no decoration or shadow extents reports an expanded
+    // rect equal to its frame, so the sub-rect is again the identity.
+    void testTextureSubRectNoShadowIsIdentity()
+    {
+        const QRectF frame(0.0, 0.0, 1280.0, 720.0);
+        QCOMPARE(computeTextureSubRect(frame, /*outer=*/frame), QVector4D(0.0f, 0.0f, 1.0f, 1.0f));
+    }
+
+    // Degenerate zero-size outer: width/height clamp to 1.0 so the
+    // divisions stay finite rather than producing inf/NaN.
+    void testTextureSubRectClampsDegenerateOuter()
+    {
+        const QVector4D r = computeTextureSubRect(QRectF(50.0, 50.0, 0.0, 0.0), QRectF(50.0, 50.0, 0.0, 0.0));
+        QCOMPARE(r, QVector4D(0.0f, 0.0f, 0.0f, 0.0f));
     }
 };
 

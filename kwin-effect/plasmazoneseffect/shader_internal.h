@@ -7,6 +7,7 @@
 
 #include <QRectF>
 #include <QVector2D>
+#include <QVector4D>
 #include <QtGlobal>
 
 #include <array>
@@ -67,6 +68,25 @@ inline AnchorUniforms computeAnchorUniforms(const QRectF& anchor, const QRectF& 
     const QVector2D anchorPos(static_cast<float>(anchor.x() - texture.x()),
                               static_cast<float>(anchor.y() - texture.y()));
     return {textureSize, anchorSize, anchorPos};
+}
+
+/// UV sub-rect of `inner` within `outer`, as `(x, y, width, height)` in
+/// `outer`'s [0,1] space. Drives the `iAnchorRectInTexture` uniform:
+/// `outer` is uTexture0's backing rect — on KWin always the redirected
+/// expanded-geometry FBO (frame + decoration + shadow) — and `inner` is
+/// the rect the shader's `surfaceColor()` argument addresses. Surface-
+/// extent transitions pass `(frame, expanded)` so `surfaceColor()` maps
+/// an anchor-[0,1] coordinate onto the frame's sub-region of the shadow-
+/// padded texture; anchor-extent transitions pass `(expanded, expanded)`
+/// for the `(0, 0, 1, 1)` identity. Widths/heights are clamped at 1.0 to
+/// keep the divisions safe on a degenerate zero-size window.
+inline QVector4D computeTextureSubRect(const QRectF& inner, const QRectF& outer)
+{
+    const float outerW = static_cast<float>(qMax(outer.width(), 1.0));
+    const float outerH = static_cast<float>(qMax(outer.height(), 1.0));
+    return QVector4D(static_cast<float>(inner.x() - outer.x()) / outerW,
+                     static_cast<float>(inner.y() - outer.y()) / outerH, static_cast<float>(inner.width()) / outerW,
+                     static_cast<float>(inner.height()) / outerH);
 }
 
 /// Pre-baked uniform / param key strings for the hot paths.
