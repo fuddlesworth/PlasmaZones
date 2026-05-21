@@ -25,6 +25,12 @@ import org.kde.kirigami as Kirigami
  * MouseArea is NOT included — each parent provides its own dismiss/absorb logic.
  */
 Item {
+    // Shader-transition capture target. SurfaceAnimator walks the visual
+    // tree for `shaderAnchor: true`; selector_update.cpp looks the same
+    // Item up by objectName. Centred on root and larger than it by
+    // glowMargin, so it owns the card AND its glow while the consumer
+    // still treats the PopupFrame root as the bare card.
+
     id: root
 
     property color backgroundColor: Kirigami.Theme.backgroundColor
@@ -41,16 +47,16 @@ Item {
     default property alias contentData: frame.data
 
     QtObject {
+        // Capture margin around the visible frame. The drop-shadow glow
+        // blurs roughly this far past the frame; captureItem extends the
+        // same distance on every side so the SurfaceAnimator FBO grab
+        // includes the glow. Matches the OSD cards' osdCard margin.
+
         id: style
 
         readonly property real backgroundAlpha: 0.95
         readonly property real borderAlpha: 0.2
         readonly property real shadowAlpha: 0.5
-        // Capture margin around the visible frame. The drop-shadow glow
-        // blurs roughly this far past the frame; captureItem extends the
-        // same distance on every side so the SurfaceAnimator FBO grab
-        // includes the glow. Matches the OSD cards' osdCard margin.
-        //
         // Math.ceil rounds the gridUnit-derived value up to an integer
         // pixel on fractional-DPI outputs (e.g. 1.25 * 18 = 22.5 →
         // 23 px), so a consumer that pipes the published `root.glowMargin`
@@ -60,27 +66,29 @@ Item {
         readonly property real glowMargin: Math.ceil(Kirigami.Units.gridUnit * 1.25)
     }
 
-    // Shader-transition capture target. SurfaceAnimator walks the visual
-    // tree for `shaderAnchor: true`; selector_update.cpp looks the same
-    // Item up by objectName. Centred on root and larger than it by
-    // glowMargin, so it owns the card AND its glow while the consumer
-    // still treats the PopupFrame root as the bare card.
+    // `shaderContentRect` tells SurfaceAnimator where the visible card
+    // sits inside this oversized capture item (anchor-local coords). The
+    // animator folds it into iAnchorRectInTexture so animation shaders
+    // operate in card space — the glow margin lands outside their [0,1]
+    // and generative effects (fire, incinerate) stay confined to the
+    // card instead of spilling into the transparent margin.
     Item {
+        // Soft theme-tinted glow — same MultiEffect parameters as the
+        // layout and navigation OSD cards (see LayoutOsdContent.qml) so
+        // every popup overlay reads as the same surface family. The
+        // "shadow" is tinted with the theme background rather than
+        // black: a pale halo on light themes, a soft dark one on dark.
+
         id: captureItem
 
         property bool shaderAnchor: true
+        property rect shaderContentRect: Qt.rect(frame.x, frame.y, frame.width, frame.height)
 
         objectName: "shaderAnchor"
         anchors.centerIn: parent
         width: root.width + root.glowMargin * 2
         height: root.height + root.glowMargin * 2
 
-        // Soft theme-tinted glow — same MultiEffect parameters as the
-        // layout and navigation OSD cards (see LayoutOsdContent.qml) so
-        // every popup overlay reads as the same surface family. The
-        // "shadow" is tinted with the theme background rather than
-        // black: a pale halo on light themes, a soft dark one on dark.
-        //
         // Sizing: `anchors.fill: frame` keeps the effect rect matched to
         // the source's natural geometry so the card chrome (background,
         // rounded corners, 1px border) is rendered 1:1 with no scaling

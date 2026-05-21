@@ -42,6 +42,7 @@ pa_add_test(pa_test_curveloader test_curveloader.cpp)
 pa_add_test(pa_test_profileloader test_profileloader.cpp)
 pa_add_test(pa_test_staggertimer test_staggertimer.cpp)
 pa_add_test(pa_test_loader_integration test_loader_integration.cpp)
+pa_add_test(pa_test_animationuniformextension test_animationuniformextension.cpp)
 
 # QtQuickClock test gated on the same CMake flag that gates the class.
 if(PHOSPHOR_ANIMATION_QUICK)

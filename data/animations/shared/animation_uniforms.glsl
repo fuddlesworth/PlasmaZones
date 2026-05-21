@@ -141,27 +141,27 @@ uniform vec2 iAnchorSize;
 // consumes it.
 uniform vec2 iAnchorPosInFbo;
 
-// Anchor's UV sub-rect within `uTexture0`, as (x, y, width, height) in
-// the texture's [0, 1] space. KWin's OffscreenEffect redirects the whole
-// window item — decoration and shadow included — so `uTexture0` always
-// covers the EXPANDED geometry, never the bare frame. `surfaceColor()`
-// folds this rect in so a surface-extent shader, which samples in the
-// anchor's own [0, 1] space, addresses the frame's sub-region of that
-// shadow-padded texture rather than stretching the whole texture across
-// the frame. Anchor-extent transitions carry the (0, 0, 1, 1) identity.
-// kwin-effect path only — the daemon's `uTexture0` is the anchor texture
-// itself, so its `surfaceColor()` branch (below) needs no remap and this
-// uniform is absent from the UBO branch.
+// Card's UV sub-rect within `uTexture0`, as (x, y, width, height) in
+// the texture's [0, 1] space. Both runtimes capture more than the bare
+// card: KWin's OffscreenEffect redirects the whole window item —
+// decoration and shadow included — so `uTexture0` covers the EXPANDED
+// geometry; the daemon captures the shader anchor, which a PopupFrame
+// enlarges by a glow margin so the glow animates with the card.
+// `surfaceColor()` folds this rect in so a card-space [0, 1] sample
+// addresses the card's sub-region of that padded texture rather than
+// stretching the whole texture across the card. A bare card-sized
+// anchor carries the (0, 0, 1, 1) identity.
 //
 // Lifecycle: populated on every leg attach (alongside `iAnchorPosInFbo`
-// / `iAnchorSize`) and on every geometry change while the leg is live —
-// see `paint_pipeline.cpp::paintWindow`'s `cached->iAnchorRectInTextureLoc`
-// setUniform site, which writes the value computed by
-// `ShaderInternal::computeTextureSubRect(frameGeo, expandedGeo)`. The
-// kwin-effect's leg-attach path stamps the value before the first
-// `drawWindow` reaches the fragment shader, so a fragment never sees the
-// GL default `vec4(0)` — `surfaceColor` would otherwise sample the
-// corner texel for every pixel and flash a one-frame solid colour.
+// / `iAnchorSize`) and on every geometry change while the leg is live.
+// kwin-effect: `paint_pipeline.cpp::paintWindow`'s
+// `cached->iAnchorRectInTextureLoc` setUniform site writes the value
+// computed by `ShaderInternal::computeTextureSubRect(frameGeo,
+// expandedGeo)`. Daemon: `SurfaceAnimator::syncShaderGeometryNow` pushes
+// it through `AnimationUniformExtension`. Both stamp the value before
+// the first painted frame, so a fragment never sees the GL default
+// `vec4(0)` — `surfaceColor` would otherwise sample the corner texel
+// for every pixel and flash a one-frame solid colour.
 uniform vec4 iAnchorRectInTexture;
 
 // uTexture0 — redirected window content (the surface the shader is
@@ -263,9 +263,27 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              the anchor's UV region for vTexCoord
                                  //              -> anchor-space remap (replaces the
                                  //              old customParams[7].x ring-padding
-                                 //              fraction). Total struct size 704 bytes;
-                                 //              std140 trailing pad is now zero bytes
-                                 //              because the field fills it exactly.
+                                 //              fraction).
+    vec4 iAnchorRectInTexture;   // offset 704 (16 bytes) — card's UV sub-rect within
+                                 //              uTexture0, as (x, y, width, height) in
+                                 //              the captured texture's [0,1] space.
+                                 //              iAnchorPosInFbo ends at 704 which is
+                                 //              already 16-aligned, so std140 inserts
+                                 //              no pad. Total struct size 720 bytes,
+                                 //              zero trailing pad. The daemon captures
+                                 //              the shader anchor into uTexture0; when
+                                 //              the anchor is larger than the visible
+                                 //              card (a PopupFrame capture item that
+                                 //              bundles the glow margin), this is the
+                                 //              card's region within that texture.
+                                 //              `animation.vert` divides texCoord by it
+                                 //              so anchor-extent shaders see vTexCoord
+                                 //              as [0,1] over the card; `surfaceColor`
+                                 //              multiplies by it when sampling. A bare
+                                 //              card-sized anchor carries the
+                                 //              (0,0,1,1) identity. Populated by
+                                 //              SurfaceAnimator per leg attach + on
+                                 //              every geometry change.
 };
 
 layout(binding = 7) uniform sampler2D uTexture0;
@@ -293,21 +311,24 @@ layout(binding = 10) uniform sampler2D uTexture3;
 // texel is upright on both runtimes — keeping effect-space math, which
 // uses the Y-down `vTexCoord` directly, decoupled from the surface
 // texture's physical layout.
+//
+// Both runtimes capture more than the bare card into `uTexture0`: KWin
+// redirects the EXPANDED window geometry (frame + decoration + shadow);
+// the daemon captures the shader anchor, which a PopupFrame enlarges by
+// a glow margin so the glow animates with the card. `iAnchorRectInTexture`
+// is the card's UV sub-rect within that texture on both paths, so this
+// helper folds the same remap regardless of runtime — a card-space
+// `uv` addresses the card's region of `uTexture0`. A bare card-sized
+// anchor carries the (0, 0, 1, 1) identity and the remap is a
+// passthrough.
 vec4 surfaceColor(vec2 uv) {
-#ifdef PLASMAZONES_KWIN
-    // `uTexture0` is KWin's redirected OffscreenEffect FBO, which always
-    // covers the window's EXPANDED geometry (frame + decoration +
-    // shadow). `iAnchorRectInTexture` is the anchor's UV sub-rect within
-    // that FBO: surface-extent shaders hand this helper anchor-space
-    // [0, 1] coordinates, and without the remap they would address the
-    // whole shadow-padded texture — the window would render smaller than
-    // its frame. Anchor-extent transitions carry the (0, 0, 1, 1)
-    // identity, so the remap is a passthrough there. The Y flip is
-    // applied last — KWin's FBO is bottom-origin (Y-up).
     vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
+#ifdef PLASMAZONES_KWIN
+    // KWin's FBO is bottom-origin (Y-up) — flip last.
     return texture(uTexture0, vec2(t.x, 1.0 - t.y));
 #else
-    return texture(uTexture0, uv);
+    // The daemon's Qt-RHI texture is top-origin (Y-down) — no flip.
+    return texture(uTexture0, t);
 #endif
 }
 
