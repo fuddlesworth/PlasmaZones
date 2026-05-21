@@ -55,6 +55,27 @@ Item {
     property int containerPaddingSide: 18
     property int containerTopMargin: 10
     property int containerSideMargin: 10
+    /// Effective edge margins for corner / edge selector positions. The
+    /// captureItem inside QFZCommon.PopupFrame extends `container.glowMargin`
+    /// past the visible card on every side; if `containerTopMargin` or
+    /// `containerSideMargin` is smaller than that, the glow ring is pushed
+    /// off the slot edge and clipped, leaving an empty halo on the
+    /// SurfaceAnimator FBO grab. Clamp to at least the glowMargin so the
+    /// ring stays on-screen at every position state.
+    ///
+    /// Use the Kirigami literal directly (not `container.glowMargin`)
+    /// because `container` (the QFZCommon.PopupFrame instance) is
+    /// declared later in this file and would resolve to `undefined`
+    /// during initial construction — `Math.max(int, undefined) === NaN`,
+    /// which silently coerces to 0 when assigned to anchors.topMargin /
+    /// leftMargin etc. and produces a one-frame flash with the selector
+    /// flush against the screen edge before the binding re-evaluates.
+    /// PopupFrame's `glowMargin` is exactly this same expression
+    /// (`Kirigami.Units.gridUnit * 1.25`), so the literal is always in
+    /// sync with the source of truth.
+    readonly property real _glowMargin: Math.ceil(Kirigami.Units.gridUnit * 1.25)
+    readonly property real effectiveTopMargin: Math.max(containerTopMargin, _glowMargin)
+    readonly property real effectiveSideMargin: Math.max(containerSideMargin, _glowMargin)
     property int containerRadius: 12
     property int labelTopMargin: 8
     property int labelHeight: 20
@@ -220,8 +241,8 @@ Item {
 
                 PropertyChanges {
                     target: container
-                    anchors.topMargin: root.containerTopMargin
-                    anchors.leftMargin: root.containerSideMargin
+                    anchors.topMargin: root.effectiveTopMargin
+                    anchors.leftMargin: root.effectiveSideMargin
                 }
 
             },
@@ -240,7 +261,7 @@ Item {
 
                 PropertyChanges {
                     target: container
-                    anchors.topMargin: root.containerTopMargin
+                    anchors.topMargin: root.effectiveTopMargin
                 }
 
             },
@@ -259,8 +280,8 @@ Item {
 
                 PropertyChanges {
                     target: container
-                    anchors.topMargin: root.containerTopMargin
-                    anchors.rightMargin: root.containerSideMargin
+                    anchors.topMargin: root.effectiveTopMargin
+                    anchors.rightMargin: root.effectiveSideMargin
                 }
 
             },
@@ -279,7 +300,7 @@ Item {
 
                 PropertyChanges {
                     target: container
-                    anchors.leftMargin: root.containerSideMargin
+                    anchors.leftMargin: root.effectiveSideMargin
                 }
 
             },
@@ -312,7 +333,7 @@ Item {
 
                 PropertyChanges {
                     target: container
-                    anchors.rightMargin: root.containerSideMargin
+                    anchors.rightMargin: root.effectiveSideMargin
                 }
 
             },
@@ -331,8 +352,8 @@ Item {
 
                 PropertyChanges {
                     target: container
-                    anchors.bottomMargin: root.containerTopMargin
-                    anchors.leftMargin: root.containerSideMargin
+                    anchors.bottomMargin: root.effectiveTopMargin
+                    anchors.leftMargin: root.effectiveSideMargin
                 }
 
             },
@@ -351,7 +372,7 @@ Item {
 
                 PropertyChanges {
                     target: container
-                    anchors.bottomMargin: root.containerTopMargin
+                    anchors.bottomMargin: root.effectiveTopMargin
                 }
 
             },
@@ -370,8 +391,8 @@ Item {
 
                 PropertyChanges {
                     target: container
-                    anchors.bottomMargin: root.containerTopMargin
-                    anchors.rightMargin: root.containerSideMargin
+                    anchors.bottomMargin: root.effectiveTopMargin
+                    anchors.rightMargin: root.effectiveSideMargin
                 }
 
             }

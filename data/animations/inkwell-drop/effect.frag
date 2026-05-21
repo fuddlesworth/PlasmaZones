@@ -45,7 +45,17 @@ void main() {
 
     vec2 impact = vec2(impactX, impactY);
     vec2 c = uv - impact;
-    c.x *= iAnchorSize.x / max(iAnchorSize.y, 0.0001);
+    // Aspect-correct horizontal distance so `length(c)` is pixel-isotropic
+    // (the impact point reads as a true circle, not an ellipse). Use
+    // `iResolution` — the rect that `vTexCoord` actually spans — rather
+    // than `iAnchorSize`. On the daemon's anchor-extent path the two are
+    // identical (FBO covers the anchor 1:1). On KWin's anchor-extent path
+    // the rasterised quad covers the EXPANDED rect (frame + decoration
+    // shadow), so `vTexCoord ∈ [0,1]` is over the expanded rect, and the
+    // aspect ratio that makes length(c) circular in pixel space is the
+    // expanded rect's, not the bare frame's. Mismatch was a slight
+    // ellipticity scaling with shadow padding.
+    c.x *= iResolution.x / max(iResolution.y, 0.0001);
     float d = length(c);
     float front = p * frontSpeed;
     float ring1 = sin((d - front) * 80.0) * exp(-abs(d - front) * 6.0);
@@ -55,20 +65,11 @@ void main() {
     vec2 dir = (d > 0.001) ? normalize(c) : vec2(0.0);
     vec2 distorted = uv + dir * ripple;
 
-    // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
+    // boundaryMask: see noise.glsl. Crops off-window samples to transparent
+    // — `distorted` is `uv + dir * ripple` where `ripple` can swing past the
+    // anchor edges as the ring sweeps, so the mask is load-bearing here.
     vec4 win = surfaceColor(distorted) * boundaryMask(distorted);
 
     float reveal = smoothstep(0.05, -0.02, d - front);
-    vec4 mixed = win * reveal;
-
-    // `in_bounds` crops the FINAL fragment to the [0,1] anchor sub-rect.
-    // Load-bearing on the kwin anchor-extent path where `vTexCoord` may
-    // cover slightly more than the bare frame and the rasterizer's edge
-    // pixels would otherwise paint shadow texels in the outside-the-frame
-    // band. Cheap (four steps + product). Earlier "dead code" removal
-    // assumed the rasterizer never extrapolates `vTexCoord` past [0,1] —
-    // true within the quad, but the aspect-corrected reveal can still
-    // bleed into the shadow region without this final crop.
-    float in_bounds = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
-    fragColor = mixed * in_bounds;
+    fragColor = win * reveal;
 }
