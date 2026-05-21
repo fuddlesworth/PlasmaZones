@@ -1,6 +1,21 @@
 {
     "releases": [
         {
+            "version": "3.0.7",
+            "date": "2026-05-21",
+            "highlights": [
+                "Window open and close animations (bounce, fly-in) no longer render as ghosted, multi-copy trails on KWin (#475)",
+                "New windows no longer flash at their spawn position before animating into their zone or tile (#475)",
+                "Snap-restored windows now play their open animation into the resolved zone instead of from the screen center (#475)",
+                "The soft glow behind the OSDs now animates with the card instead of popping in when the transition ends (#475)",
+                "Fixed a faint grey halo painted around OSDs during the bounce and fly-in transitions (#475)",
+                "bounce now drops the window in from above its frame, matching niri's original motion (#475)",
+                "The layout OSD, navigation OSD, layout picker, and zone selector now share one card style with a consistent soft glow (#475)",
+                "Removed the crosswarp transition — its front-speed control is now a frontSpeed parameter on wave-warp (#475)",
+                "Removed the plasma-flow transition, which duplicated soft-warp-fade (#475)"
+            ]
+        },
+        {
             "version": "3.0.6",
             "date": "2026-05-20",
             "highlights": [

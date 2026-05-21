@@ -7,6 +7,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.7] - 2026-05-21
+
+### Changed
+
+- **`bounce` drops the window in from above its frame** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): `bounce` previously revealed the window from its own top edge downward, clipped to the window box. Animation shaders can now opt into a full-surface render mode that gives them room to draw past the window, and `bounce` uses it to play niri's original drop-from-above motion — the window travels in from above its frame.
+- **Overlay cards unified on one shared frame** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): the layout OSD, navigation OSD, layout picker, and zone selector each hand-rolled their card background, border, and glow. They now share a single `PopupFrame` component, so all four read as the same surface and the soft glow is captured into the transition and animates with the card rather than being clipped away for the duration. The layout picker and zone selector pick up the same glow the OSDs use.
+- **`wave-warp` gained a `frontSpeed` parameter** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): `wave-warp` and the former `crosswarp` ran the identical moving-edge warp, differing only in a front-speed dial. That dial is now `wave-warp`'s `frontSpeed` parameter (default `1.0`).
+
+### Removed
+
+- **`crosswarp` transition** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): it was `wave-warp` with a fixed front speed. Use `wave-warp` with its new `frontSpeed` parameter instead.
+- **`plasma-flow` transition** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): it was a re-skin of `soft-warp-fade` — the same noise-driven UV warp and fade, differing only in trivial constants.
+
+### Fixed
+
+- **Window open / close animations rendered as ghosted, multi-copy trails on KWin** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): translation transitions (`bounce`, `fly-in`) drew several overlapping copies of the window during an open or close. `paintWindow` called `OffscreenEffect::drawWindow` directly, leaving KWin's shared draw-window iterator parked at the start, so the offscreen capture re-entered the effect and drew the window's own texture into itself. The transition now routes through `effects->drawWindow` so the capture reaches the real draw stage, and KWin's stock fade / scale / slide builtins are held off the window so they no longer render a second concurrent copy.
+- **New windows flashed at their spawn position before animating into place** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): KWin places a new window (centered or smart) before the effect sees it, and the reposition into a zone or tile is asynchronous on Wayland, so a snap-restored or autotiled window visibly flickered at the centered spawn position for one to three frames. New-window pixels are now withheld until the reposition lands (with a 250 ms safety deadline), so the window first becomes visible already animating into its zone.
+- **Snap-restored windows played their open animation from the screen center** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): a snap-restored window ran its `bounce` / `fly-in` open animation from the centered spawn position and then jumped to the zone once KWin's asynchronous move landed. The in-flight open transition is now pinned to the resolved zone, so the effect plays into the zone from the first frame.
+- **OSD glow popped in at the end of a transition** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): the soft glow behind the layout and navigation OSDs was clipped away for the duration of a show / hide animation and snapped back into place when the animation ended. The glow is now captured together with the card so it scales and moves with it throughout the transition.
+- **Faint grey halo around daemon OSDs during `bounce` / `fly-in`** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): both effects painted a faint grey border around the OSD while animating — the effect's edge feather fell just outside the captured texture and tinted its clamped edge pixels. The edge crop is now a sub-pixel, edge-aligned antialias band, so the border is gone and the edge stays crisp.
+
 ## [3.0.6] - 2026-05-20
 
 ### Fixed
@@ -1352,7 +1373,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.6...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.7...HEAD
+[3.0.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.6...v3.0.7
 [3.0.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.5...v3.0.6
 [3.0.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.4...v3.0.5
 [3.0.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.3...v3.0.4
