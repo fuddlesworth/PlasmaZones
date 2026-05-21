@@ -64,8 +64,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
     // single-digit counts.
     m_windowAnimator->advanceAnimations();
 
-    if (m_windowAnimator->hasActiveAnimations() || !m_shaderManager.m_shaderTransitions.empty()
-        || !m_restoreSuppress.empty()) {
+    if (m_windowAnimator->hasActiveAnimations() || !m_shaderManager.m_shaderTransitions.empty()) {
         // Windows have translation transforms that move them outside their
         // frame geometry bounds — force full compositing mode. Shader
         // transitions also need this: without
@@ -73,6 +72,16 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
         // our paintWindow override on stable, undamaged windows (focus,
         // open after the fade settles, minimise, etc.), which means
         // the shader installs and silently expires unrendered.
+        //
+        // First-frame open suppression does NOT need the screen-level
+        // flag: prePaintWindow already calls `data.setTransformed()` for
+        // every suppressed window via the same predicate
+        // (`m_restoreSuppress.contains(w)`), and the postPaintScreen
+        // suppression damage loop schedules per-output repaints to keep
+        // the deadline check ticking. Adding the screen-level flag here
+        // would force every other window on every output through the
+        // transformed-windows paint path while ANY window is suppressed
+        // (up to 250 ms per opened window) — pure overhead.
         data.mask |= PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS;
     }
 
@@ -172,15 +181,30 @@ void PlasmaZonesEffect::postPaintScreen()
     // paintWindow draws nothing for them, so without an explicit repaint a
     // suppressed window with no open-shader transition driving damage
     // would never get another paintWindow call — its deadline check and
-    // settle detection would stall. Schedule a layer repaint per entry.
+    // settle detection would stall.
+    //
+    // Use `effects->addRepaint(output)` (screen-level damage), NOT
+    // `sw->addLayerRepaint(output)` — `addLayerRepaint` runs `mapFromScene`
+    // and feeds the result to `WindowItem::scheduleRepaint`, which the
+    // scene CLIPS to the window-item's bounding rect (the documented
+    // failure mode for surface-extent transitions in the loop above).
+    // For a centred-placement-suppressed window on a 4K output, the
+    // window's bounding rect is much smaller than the output, so the
+    // clip would shrink the damage to the centred placement region. That
+    // is technically enough to keep paintWindow ticking the deadline, but
+    // it also means a co-installed surface-extent open shader's off-frame
+    // band sweeps would not be marked dirty (the shader-transition loop
+    // above only iterates `m_shaderManager.m_shaderTransitions`, so
+    // suppression-active-but-shader-active windows would lose their
+    // surface-extent damage). Screen-level damage avoids the clip entirely.
     for (auto it = m_restoreSuppress.cbegin(); it != m_restoreSuppress.cend(); ++it) {
         KWin::EffectWindow* sw = it.key();
-        if (!sw || sw->isDeleted()) {
+        if (!sw || sw->isDeleted() || !KWin::effects) {
             continue;
         }
         if (const auto* output = sw->screen()) {
-            sw->addLayerRepaint(output->geometry());
-        } else if (KWin::effects) {
+            KWin::effects->addRepaint(output->geometry());
+        } else {
             KWin::effects->addRepaintFull();
         }
     }
@@ -236,8 +260,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // progress — visible as staggered ghost copies of the in-flight
     // window. Fall back to a live read if prePaintScreen hasn't pinned
     // the clock yet (test harness, defensive bootstrap path).
-    const qint64 frameNowMs = m_shaderManager.currentFrameClockMs() > 0 ? m_shaderManager.currentFrameClockMs()
-                                                                        : ShaderInternal::shaderClockNowMs();
+    //
+    // Sentinel for "not pinned" is -1, established at construction
+    // (ShaderTransitionManager::m_currentFrameClockMs default). 0 is a
+    // legitimate (if astronomically unlikely) pinned value — the
+    // initial steady_clock tick on a fresh process — so we admit it as
+    // pinned. Anything strictly negative is the unpinned sentinel.
+    const qint64 pinnedNow = m_shaderManager.currentFrameClockMs();
+    const qint64 frameNowMs = pinnedNow >= 0 ? pinnedNow : ShaderInternal::shaderClockNowMs();
 
     // First-frame open suppression: a window repositioned on open
     // (snap-restore / autotile) is withheld from compositing until its
@@ -246,10 +276,37 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // — if the reposition never lands, release and paint normally rather
     // than risk a permanently invisible window.
     if (auto supIt = m_restoreSuppress.find(w); supIt != m_restoreSuppress.end()) {
-        if (frameNowMs <= supIt->deadlineMs) {
+        // Tick per-frame book-keeping for any in-flight transition so the
+        // first post-suppression paint doesn't see a stale clock. Open
+        // shaders (window.open: bounce, fly-in) are installed in
+        // slotWindowAdded BEFORE beginRestoreSuppression, so their
+        // `startTimeMs` is stamped at install time. While suppressed,
+        // `paintWindow` returns without rendering — but if `startTimeMs`
+        // were left at install time, `progress = (frameNowMs -
+        // startTimeMs) / durationMs` would already be 0..1 (or beyond) by
+        // the time suppression releases, and the surface-extent open
+        // animation would play its entire timeline INVISIBLY. Stamp
+        // `startTimeMs = frameNowMs` every suppressed frame so the
+        // progress baseline tracks the moment the window first becomes
+        // visible. Reset `lastPaintTimeMs = -1` for the same reason —
+        // the first visible paint computes iTimeDelta = 0 ("first frame"
+        // semantics), avoiding a 250ms-stale spike.
+        if (auto sit = m_shaderManager.m_shaderTransitions.find(w); sit != m_shaderManager.m_shaderTransitions.end()) {
+            if (sit->second.durationMs > 0) {
+                sit->second.startTimeMs = frameNowMs;
+            }
+            sit->second.lastPaintTimeMs = -1;
+        }
+        if (frameNowMs < supIt->deadlineMs) {
             return;
         }
-        endRestoreSuppression(w);
+        // Release in-place: erase the entry so the rest of paintWindow
+        // proceeds normally. Calling endRestoreSuppression here would
+        // re-enter compositing via addRepaintFull from inside the paint
+        // loop — fragile on some KWin versions. The next natural repaint
+        // (driven by transition damage or the postPaintScreen suppression
+        // loop's already-scheduled layer repaint) brings the window back.
+        m_restoreSuppress.erase(supIt);
     }
 
     m_windowAnimator->applyTransform(w, data);
@@ -719,7 +776,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // generation check the lambda would call
             // `endShaderTransition` on the successor and kill it before
             // it ever paints. Mirrors the timer-driven teardown pattern
-            // in `tryBeginShaderForEvent` (~line 5744).
+            // in `tryBeginShaderForEvent`'s post-install QTimer::singleShot.
             // Iterator `sit` was obtained earlier in this function and no
             // intervening code mutates m_shaderManager.m_shaderTransitions, so the read is
             // safe. The assertion documents that contract for future edits.

@@ -451,6 +451,19 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // m_shaderManager.m_lastFullyMaximized is a raw-pointer-keyed QHash so we explicitly
         // erase here to keep it bounded across long sessions.
         m_shaderManager.m_lastFullyMaximized.remove(w);
+        // Drop the queued-expiry guard for this raw pointer. KWin reuses
+        // EffectWindow heap addresses freely, so a stale entry surviving
+        // past windowDeleted would cause the next window allocated at the
+        // same address to skip its first expiry queue (paint_pipeline.cpp's
+        // `m_pendingShaderExpiryEnd.contains(w)` check would see the stale
+        // entry and decline to insert a fresh one), leaking that window's
+        // first lifecycle-event teardown. endShaderTransition above also
+        // removes this entry as defence-in-depth, but if a teardown ran
+        // earlier in the session and the queued lambda was still pending
+        // when windowDeleted fires, the lambda's safeWindow QPointer
+        // catches deletion — the bare set entry then needs explicit
+        // cleanup here.
+        m_shaderManager.m_pendingShaderExpiryEnd.remove(w);
     });
 
     connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &PlasmaZonesEffect::slotWindowActivated);
@@ -596,6 +609,17 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         m_daemonReadyRestoresDone = false;
         m_daemonReadyWindowStateProcessed = false;
         m_snapRestoreCache.clear();
+        // Release any pending first-frame open suppression. Without the
+        // daemon there is no `resolveWindowRestore` reply coming and no
+        // autotile reposition either, so the suppression entry would just
+        // hold the window invisible until its 250ms deadline. Releasing
+        // each entry through endRestoreSuppression also schedules the
+        // per-window repaint so the windows become visible immediately
+        // rather than at the next natural compositor cycle.
+        const auto suppressedWindows = m_restoreSuppress.keys();
+        for (KWin::EffectWindow* sw : suppressedWindows) {
+            endRestoreSuppression(sw);
+        }
 
         // Restore borderless and monocle-maximized windows — daemon state is gone
         m_autotileHandler->restoreAllBorderless();

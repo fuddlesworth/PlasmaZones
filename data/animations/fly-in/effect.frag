@@ -65,18 +65,25 @@ void main() {
     // for windows on secondary monitors. `iAnchorSize` is the window
     // pixel size (NOT iResolution, which is the surface-sized FBO under
     // fboExtent=surface).
-    float screenW = max(iResolution.x, 1.0);
+    //
+    // `fboW` rather than "screenW" because the value is the FBO width by
+    // contract — the surface-extent path happens to size its FBO to the
+    // host output, so screen and FBO coincide here, but the variable
+    // tracks the uniform's actual semantic so a future reader doesn't
+    // "fix" this to `iSurfaceScreenPos.z` (the comment block above
+    // explicitly bans that uniform from this calculation).
+    float fboW = max(iResolution.x, 1.0);
     vec2 cardSize = vec2(max(iAnchorSize.x, 1.0), max(iAnchorSize.y, 1.0));
     float cardLeft = iAnchorPosInFbo.x;
     float cardCenterX = cardLeft + cardSize.x * 0.5;
-    float dirSign = (cardCenterX < screenW - cardCenterX) ? -1.0 : 1.0;
+    float dirSign = (cardCenterX < fboW - cardCenterX) ? -1.0 : 1.0;
 
     // Pixels needed to push the window fully clear of the nearer edge:
     // its full on-screen extent toward that edge. `max(.., 1.0)` guards
     // a first frame before the runtime has populated the geometry.
     float clearancePx = (dirSign < 0.0)
         ? max(cardLeft + cardSize.x, 1.0)
-        : max(screenW - cardLeft, 1.0);
+        : max(fboW - cardLeft, 1.0);
 
     // Screen-space horizontal translation, shrinking 1→0 over the leg,
     // expressed in window-widths so it applies directly in anchor space.

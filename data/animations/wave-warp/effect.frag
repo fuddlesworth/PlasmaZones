@@ -57,15 +57,12 @@ void main() {
     float d = v.x * 0.5 + v.y * 0.5;
     float m = 1.0 - smoothstep(-waveSmoothness, 0.0, v.x * uv.x + v.y * uv.y - (d - 0.5 + p * (1.0 + waveSmoothness)));
 
-    // niri's `clamp(warped, 0, 1)` was the bug: pinning off-window UVs
-    // to the edge texel via clamp-to-edge produced a smeared border
-    // around the contracted silhouette. Drop the clamp and crop
-    // sampled texels via boundaryMask (see noise.glsl) instead — same
-    // shape wave-warp wants (off-surface = transparent), but without
-    // the edge-pixel bleed.
+    // The contraction is bounded: `m ∈ [0, 1]` (smoothstep-clamped) and
+    // `uv ∈ [0, 1]` give `warped = (uv - 0.5) * m + 0.5 ∈ [0, 1]`, so
+    // sampling `warped` cannot reach off-anchor texels. niri's original
+    // `clamp(warped, 0, 1)` was a no-op for this reason and is dropped;
+    // no boundary mask is needed either. The `m` multiply on the final
+    // colour fades the contracted silhouette out as the wipe completes.
     vec2 warped = (uv - 0.5) * m + 0.5;
-    vec4 win = surfaceColor(warped) * boundaryMask(warped);
-
-    float in_bounds = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
-    fragColor = win * m * in_bounds;
+    fragColor = surfaceColor(warped) * m;
 }

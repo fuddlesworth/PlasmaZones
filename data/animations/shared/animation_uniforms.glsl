@@ -95,6 +95,13 @@ uniform vec4 customColors[16];
 // kwin path. (The UBO branch keeps both fields for std140 layout
 // parity with `PhosphorShaders::BaseUniforms`; see static_asserts in
 // `<PhosphorShaders/BaseUniforms.h>`.)
+// `iTextureResolution[4]` IS populated on the kwin path: the per-effect
+// uTexture<N> setter loop in `paint_pipeline.cpp::paintWindow` writes the
+// pixel size of each user texture into this uniform array before
+// `drawWindow`. Listed here distinct from the "absent on kwin" set above
+// (iChannelResolution, iAudioSpectrumSize) so a future reader doesn't
+// mistake the active declaration for an undocumented "compile-but-zero"
+// hazard.
 uniform vec4 iTextureResolution[4];
 uniform float iTimeHi;
 // 1 when the runtime is driving this leg in the "reverse" direction
@@ -145,6 +152,16 @@ uniform vec2 iAnchorPosInFbo;
 // kwin-effect path only — the daemon's `uTexture0` is the anchor texture
 // itself, so its `surfaceColor()` branch (below) needs no remap and this
 // uniform is absent from the UBO branch.
+//
+// Lifecycle: populated on every leg attach (alongside `iAnchorPosInFbo`
+// / `iAnchorSize`) and on every geometry change while the leg is live —
+// see `paint_pipeline.cpp::paintWindow`'s `cached->iAnchorRectInTextureLoc`
+// setUniform site, which writes the value computed by
+// `ShaderInternal::computeTextureSubRect(frameGeo, expandedGeo)`. The
+// kwin-effect's leg-attach path stamps the value before the first
+// `drawWindow` reaches the fragment shader, so a fragment never sees the
+// GL default `vec4(0)` — `surfaceColor` would otherwise sample the
+// corner texel for every pixel and flash a one-frame solid colour.
 uniform vec4 iAnchorRectInTexture;
 
 // uTexture0 — redirected window content (the surface the shader is

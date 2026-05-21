@@ -47,7 +47,14 @@ public:
     // Integration points (called by PlasmaZonesEffect)
     // ═══════════════════════════════════════════════════════════════════
 
-    void notifyWindowAdded(KWin::EffectWindow* w);
+    /// Returns true when the window was on an autotile screen and a
+    /// `windowOpened` D-Bus call was issued (i.e. the daemon is expected
+    /// to tile it, producing a moveResize). Returns false when the call
+    /// was filtered out locally (ineligible window, non-autotile screen,
+    /// already-notified) — callers that depend on a follow-up tile must
+    /// not wait for one in that case (used by the first-frame open
+    /// suppression path to release suppression immediately on a no-op).
+    bool notifyWindowAdded(KWin::EffectWindow* w);
 
     /**
      * @brief Batch-notify windows added to autotile screens

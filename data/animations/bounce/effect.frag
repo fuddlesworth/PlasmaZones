@@ -53,7 +53,7 @@ layout(location = 0) out vec4 fragColor;
 
 void main() {
     float t = clamp(iTime, 0.0, 1.0);
-    const float PI = 3.14159265358;
+    const float PI = 3.14159265358979;
 
     // vTexCoord spans the whole surface; map it into the window's
     // ("anchor") own [0,1] space. Fragments outside the window map

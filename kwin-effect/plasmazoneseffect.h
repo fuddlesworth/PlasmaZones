@@ -556,7 +556,32 @@ private:
 
     // Shader transition methods — implementations in shader_transitions.cpp,
     // operating on m_shaderManager state.
-    void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
+    /// Returns true when a fresh leg was installed (or the prior leg was
+    /// replaced); false otherwise. Two distinct failure modes share the
+    /// `false` return:
+    ///
+    ///   (a) Same-effect short-circuit — a transition with the same
+    ///       effectId, direction, and timing mode is already in flight
+    ///       on this window. The prior leg is untouched; its own
+    ///       teardown timer (or animator-completion callback) owns the
+    ///       teardown. Callers MUST NOT schedule a fresh per-leg timer
+    ///       in this case — a new timer would carry the prior leg's
+    ///       generation and fire on the new (likely shorter) duration,
+    ///       cutting the still-running animation short.
+    ///
+    ///   (b) Pre-commit short-circuit — install short-circuited before
+    ///       any state was committed: empty effectId / null window,
+    ///       global animations toggle off, collapsed/minimised surface,
+    ///       registry miss, shader file open / read / include-expansion
+    ///       failure, or shader compile failure. Nothing was installed,
+    ///       so there is nothing to schedule a teardown for either.
+    ///
+    /// Both cases are correctly handled by `tryBeginShaderForEvent`'s
+    /// "skip the timer" branch. A future caller writing a manual install
+    /// path that needs to distinguish the two should compare the
+    /// pre-call `m_shaderTransitions.find(window)` result against the
+    /// post-call result to detect case (a).
+    bool beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
                                bool holdAddedGrab = false);
     void endShaderTransition(KWin::EffectWindow* window);

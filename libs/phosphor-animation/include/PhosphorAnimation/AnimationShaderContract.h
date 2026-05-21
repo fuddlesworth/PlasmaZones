@@ -140,6 +140,28 @@ namespace PhosphorAnimationShaders {
 ///     bound (bindings 7-10)
 ///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`
 ///
+/// @par Kwin-only extensions
+/// These fields exist only on the kwin-effect path and are absent from
+/// the daemon's UBO contract. Shaders that read them must guard with
+/// `#ifdef PLASMAZONES_KWIN` or accept the daemon-side fallback noted:
+///
+///   • `iAnchorSize` — captured frame's pixel size. Daemon equivalent:
+///     `iResolution` (the daemon's anchor-extent FBO covers the frame
+///     1:1, so the two are identical there).
+///   • `iAnchorPosInFbo` — frame's top-left within the redirected FBO,
+///     in logical pixels. Daemon equivalent: implicit (0, 0) — the
+///     daemon's anchor texture is the frame itself, so `anchorRemap`
+///     reduces to identity.
+///   • `iAnchorRectInTexture` — frame's UV sub-rect within `uTexture0`
+///     (KWin's redirected FBO covers the EXPANDED rect). Daemon
+///     equivalent: implicit (0, 0, 1, 1) identity — the daemon's
+///     `surfaceColor` branch samples `uTexture0` directly.
+///   • `iSurfaceScreenPos` — global screen origin + screen size of the
+///     captured surface. Daemon equivalent: same name + same semantics
+///     are populated on both paths, so this is a shared field, NOT
+///     kwin-only — listed here for cross-reference because edge-distance
+///     math (fly-in's nearest-edge pick) typically uses it.
+///
 /// `iFlipBufferY`, `qt_Matrix`, `qt_Opacity`, `_appField0` /
 /// `_appField1` are daemon-only and absent from the canonical header's
 /// `#ifdef PLASMAZONES_KWIN` branch entirely.

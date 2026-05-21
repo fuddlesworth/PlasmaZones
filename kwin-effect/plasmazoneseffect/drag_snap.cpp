@@ -370,8 +370,20 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     // (float → unfloat, rotate → rotate back) legitimately targets the same
     // committed geometry and must NOT be skipped, because the animation needs
     // to play from the current visual position to that target.
-    if (QRectF(geo) == window->frameGeometry() && !m_windowAnimator->hasAnimation(window)) {
+    // Compare integer-aligned rects: `frameGeometry()` carries qreal
+    // precision and on fractional-scale outputs may keep sub-pixel residue
+    // from prior moveResize commits, so a float-bit-exact equality against
+    // an integer `geo` would silently miss and run a redundant moveResize.
+    if (QRectF(geo) == window->frameGeometry().toRect() && !m_windowAnimator->hasAnimation(window)) {
         qCDebug(lcEffect) << "moveResize: window already at target geometry, skipping:" << geo;
+        // Release first-frame open suppression here. The settle-detection
+        // hook on windowFrameGeometryChanged would otherwise wait forever
+        // for a configure that never fires (the resolved zone equals the
+        // spawn position — happens on KWin session restore where the
+        // saved geometry already matches a snap zone). Hold-suppression
+        // exists only to mask the placement→reposition flash; with no
+        // reposition coming, the window must paint immediately.
+        endRestoreSuppression(window);
         return;
     }
 

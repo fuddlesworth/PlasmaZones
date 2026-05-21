@@ -17,6 +17,7 @@
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 
 #include <effect/effecthandler.h>
@@ -267,6 +268,36 @@ inline GLenum wrapStringToEnum(const QString& wrap)
     return GL_CLAMP_TO_EDGE;
 }
 
+/// Parse a D-Bus setting variant containing a JSON-encoded string and
+/// dispatch to one of two callers based on the document's top-level
+/// shape. Used by the four `load*FromDbus` setting fetchers in
+/// `shader_transitions.cpp` — each loader differs only in (a) which
+/// shape it expects and (b) what it does with the parsed JSON, so
+/// every other piece (UTF-8 decode, document-shape check, malformed-
+/// payload warning text) collapses into a single helper call. The
+/// `name` argument feeds the warning so the failure site is identifiable
+/// in journals; pass the same `SettingProperty` constant the loader
+/// requested.
+///
+/// `objectSink` runs when the document is a top-level JSON object;
+/// `arraySink` runs when it is a top-level JSON array. Pass a
+/// no-op (empty std::function) for the shape the caller doesn't
+/// expect — a payload of the wrong shape logs and is dropped.
+inline void dispatchJsonSetting(QLatin1String name, const QVariant& v,
+                                std::function<void(const QJsonObject&)> objectSink,
+                                std::function<void(const QJsonArray&)> arraySink)
+{
+    const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+    if (doc.isObject() && objectSink) {
+        objectSink(doc.object());
+    } else if (doc.isArray() && arraySink) {
+        arraySink(doc.array());
+    } else {
+        qCWarning(lcEffect) << "Failed to parse" << name << "from D-Bus — payload is not a JSON"
+                            << (objectSink ? "object" : "array");
+    }
+}
+
 } // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -465,13 +496,13 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
     m_shaderManager.m_textureLoaderPool.start(loader);
 }
 
-void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
+bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                                               const PhosphorAnimationShaders::ShaderProfile& profile, int durationMs,
                                               bool reverse, bool holdCloseGrab, bool holdAddedGrab)
 {
     const QString effectId = profile.effectiveEffectId();
     if (effectId.isEmpty() || !window)
-        return;
+        return false;
 
     // Global animations toggle. Mirrors the daemon's
     // `SurfaceAnimator::beginShow/beginHide` early-out when
@@ -483,7 +514,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // this gate the zone.* path would still install shader transitions
     // even with global animations off.
     if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
-        return;
+        return false;
     }
 
     // OffscreenEffect's `redirect()` allocates an FBO sized to the
@@ -504,14 +535,14 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         qCDebug(lcEffect) << "beginShaderTransition: skipping collapsed surface" << effectId
                           << "window=" << window->windowClass() << "geo=" << geo
                           << "isMinimized=" << window->isMinimized();
-        return;
+        return false;
     }
 
     auto eff = m_shaderManager.m_animationShaderRegistry.effect(effectId);
     if (!eff.isValid()) {
         qCWarning(lcEffect) << "beginShaderTransition: registry has no effect" << effectId << "— registry effect count="
                             << m_shaderManager.m_animationShaderRegistry.availableEffects().size();
-        return;
+        return false;
     }
 
     // KWin-specific default vertex stage. Hardcoded here rather than
@@ -598,12 +629,12 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         QFile shaderFile(eff.fragmentShaderPath);
         if (!shaderFile.open(QIODevice::ReadOnly)) {
             qCWarning(lcEffect) << "Failed to open shader file" << eff.fragmentShaderPath;
-            return;
+            return false;
         }
         const QString rawSource = QString::fromUtf8(shaderFile.readAll());
         if (rawSource.isEmpty()) {
             qCWarning(lcEffect) << "Shader file is empty" << eff.fragmentShaderPath;
-            return;
+            return false;
         }
         QStringList animIncludePaths;
         for (const QString& sp : m_shaderManager.m_animationShaderRegistry.searchPaths()) {
@@ -618,7 +649,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             rawSource, currentDir, animIncludePaths, &includeError);
         if (expanded.isEmpty()) {
             qCWarning(lcEffect) << "Failed to expand shader includes for" << effectId << ":" << includeError;
-            return;
+            return false;
         }
 
         // Selects the default-block branch in `animation_uniforms.glsl`.
@@ -663,7 +694,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                                                                             vertWithKwinDefine, fragWithKwinDefine);
         if (!shader || !shader->isValid()) {
             qCWarning(lcEffect) << "Failed to compile shader transition" << effectId;
-            return;
+            return false;
         }
 
         CachedShader cached;
@@ -752,7 +783,13 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // still supersedes correctly.
     if (isSameWindowSupersession && existingIt->second.cached == &cacheIt->second
         && existingIt->second.reverse == reverse && ((existingIt->second.durationMs > 0) == (durationMs > 0))) {
-        return;
+        // Same-effect short-circuit: prior leg is intact and continues
+        // running. Caller (`tryBeginShaderForEvent`) MUST NOT schedule a
+        // fresh teardown timer — the prior leg's own timer (or animator
+        // completion) owns the teardown, and a new timer carrying the
+        // SAME generation as that prior leg would fire on a shorter
+        // duration and cut its animation short.
+        return false;
     }
     // Carry the prior transition's closeGrabHeld through supersession so
     // ref/unref stay balanced. If the prior transition refWindow'd the
@@ -1029,7 +1066,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         if (emplaceCommitted) {
             return;
         }
-        // The supersession path at line ~5509 erased the prior
+        // The same-window supersession path above erased the prior
         // transition entry directly (no endShaderTransition call →
         // no grab release), and the new transition inherited that
         // grab via `transition.closeGrabHeld = holdCloseGrab ||
@@ -1058,7 +1095,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             // role clear is a courtesy for other effects.
             window->setData(KWin::WindowClosedGrabRole, QVariant());
             // Defer unrefWindow to the next event-loop iteration —
-            // matches endShaderTransition's reasoning at line ~5806.
+            // matches endShaderTransition's deferred-unref reasoning.
             // beginShaderTransition is reachable from paintWindow
             // via tryBeginShaderForEvent → animator callbacks, and
             // a synchronous unref here could destroy the
@@ -1112,9 +1149,26 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // from it — covers everything the shader draws. A frame-sized repaint
     // would leave the off-frame band the shader sweeps showing stale
     // pixels. See postPaintScreen for the full rationale.
+    //
+    // If `screen()` returns null (transient/popup at install time, monitor
+    // unplug mid-attach), the surface-extent contract cannot be honoured
+    // with a frame-sized fallback: paint_pipeline.cpp's apply() and the
+    // anchor-uniform feed already rely on the same `output` and would also
+    // degrade. Fall back to a full repaint so the shader's first paint is
+    // not silently clipped to the frame, and log so the missing screen is
+    // visible in support traces.
     if (eff.fboExtentKind == PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind::Surface) {
         if (const auto* output = window->screen()) {
             repaintRect = output->geometry();
+        } else {
+            // No screen — surface-extent contract cannot be honoured with a
+            // frame-sized fallback (paint_pipeline.cpp's apply() and the
+            // anchor-uniform feed both depend on the same output). The
+            // unconditional `effects->addRepaintFull()` immediately below
+            // covers this case — log and fall through.
+            qCWarning(lcEffect) << "Surface-extent transition" << effectId
+                                << "installed on window with no screen() — relying on the unconditional"
+                                << "addRepaintFull below to mark first-frame damage";
         }
     }
     window->addLayerRepaint(repaintRect);
@@ -1127,6 +1181,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // KWin::effects null.
         KWin::effects->addRepaintFull();
     }
+    return true;
 }
 
 void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
@@ -1153,19 +1208,26 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
     // "glitch that only clears when you move the window" symptom. Capture
     // the output rect now, while `it` and `window` are valid, and force
     // one output-level repaint once teardown is complete.
-    QRect surfaceExtentRepaint;
-    if (it->second.surfaceExtent) {
-        if (const auto* output = window->screen()) {
-            surfaceExtentRepaint = output->geometry();
-        }
-    }
     // Guard against teardown on a window that's already been destroyed
     // (windowDeleted may have raced our timer). setShader / unredirect on a
     // deleted EffectWindow is undefined behaviour in KWin's offscreen-effect
     // pipeline; just drop our bookkeeping. The windowDeleted handler at the
     // KWin::effects connection erases m_shaderManager.m_shaderTransitions for the same
     // window, so this is a defence-in-depth against ordering races.
+    //
+    // The surface-extent post-teardown repaint capture lives INSIDE this
+    // guard for the same reason: `window->screen()` on a deleted
+    // EffectWindow is the same UB class as `setShader`/`unredirect`. A
+    // deleted window can't sweep off-frame pixels anyway — the windowDeleted
+    // handler has already erased our bookkeeping and the redirected FBO is
+    // gone — so skipping the repaint is correct.
+    QRect surfaceExtentRepaint;
     if (!window->isDeleted()) {
+        if (it->second.surfaceExtent) {
+            if (const auto* output = window->screen()) {
+                surfaceExtentRepaint = output->geometry();
+            }
+        }
         setShader(window, nullptr);
         unredirect(window);
     }
@@ -1189,7 +1251,7 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
         window->setData(KWin::WindowClosedGrabRole, QVariant());
         // Defer unrefWindow to the next event-loop iteration. This is
         // CRITICAL because endShaderTransition is reachable from
-        // paintWindow's expired-transition fall-through (line ~4782),
+        // paintWindow's expired-transition fall-through path,
         // and a synchronous unrefWindow there would destroy the
         // EffectWindow while paintWindow still holds it as `w`. The
         // caller would then deref a freed pointer when it falls
@@ -1284,12 +1346,29 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     {
         const auto& motionTree = m_shaderManager.motionProfileTree();
         bool hasChainOverride = false;
-        for (QString cursor = profilePath; !cursor.isEmpty();
-             cursor = PhosphorAnimation::ProfilePaths::parentPath(cursor)) {
+        // Hard cap on ancestor-walk iterations as a defensive guard
+        // against a malformed `profilePath` whose `parentPath` returns
+        // the input unchanged (would otherwise loop forever on the
+        // compositor thread). Real profile paths are dot-separated like
+        // `window.open` / `window` / `Global` — three to four segments
+        // at most across the project's path dictionary, so 16 is a
+        // generous ceiling that costs nothing on the happy path.
+        constexpr int kMaxAncestorDepth = 16;
+        QString cursor = profilePath;
+        for (int depth = 0; !cursor.isEmpty() && depth < kMaxAncestorDepth; ++depth) {
             if (motionTree.hasOverride(cursor)) {
                 hasChainOverride = true;
                 break;
             }
+            const QString parent = PhosphorAnimation::ProfilePaths::parentPath(cursor);
+            if (parent == cursor) {
+                // parentPath did not advance — malformed input. Bail
+                // rather than spin: the chain-override search is best-
+                // effort, and the caller falls through to `durationMs`
+                // when no override is found.
+                break;
+            }
+            cursor = parent;
         }
         if (hasChainOverride) {
             baseDurationMs = qRound(motionTree.resolve(profilePath).effectiveDuration());
@@ -1299,8 +1378,21 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // the same (class, event) bumps the per-event base. A rule with
     // durationMs == 0 is the inherit sentinel and falls through to the
     // per-event base resolved above.
-    const int effectiveDurationMs =
+    //
+    // Clamp the resolved value to the upstream `durationMs` floor: if
+    // the cascade collapses to <= 0 (corrupt persisted rule, missing
+    // tree node), the QTimer::singleShot below would fire on the next
+    // event-loop tick and tear down the just-installed transition before
+    // its first paint. The input `durationMs` was already clamped by
+    // the daemon-bringup loader to [MinAnimationDurationMs,
+    // MaxAnimationDurationMs], and the `durationMs <= 0` guard at the
+    // top of `tryBeginShaderForEvent` rejects non-positive inputs, so
+    // `durationMs` here is a safe positive floor.
+    int effectiveDurationMs =
         PhosphorAnimationShaders::resolveAnimationDuration(appRules, windowClass, profilePath, baseDurationMs);
+    if (effectiveDurationMs <= 0) {
+        effectiveDurationMs = durationMs;
+    }
     if (profile.effectiveEffectId().isEmpty()) {
         // Default-state path: a fresh user with no shader overrides
         // anywhere in the tree resolves every event to empty effectId,
@@ -1320,7 +1412,19 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         }
         return;
     }
-    beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab, holdAddedGrab);
+    const bool installed =
+        beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab, holdAddedGrab);
+    if (!installed) {
+        // Either beginShaderTransition no-op'd (compile fail, invalid id,
+        // collapsed surface, animations disabled) and there is nothing
+        // to teardown, OR the same-effect short-circuit kept the prior
+        // leg in flight — in which case the prior leg's own teardown
+        // timer (or animator-completion callback) owns the teardown.
+        // Scheduling a fresh timer here would carry the prior leg's
+        // generation and fire on this event's (likely shorter) duration,
+        // cutting the still-running animation short.
+        return;
+    }
     // Capture the just-installed transition's generation so the deferred
     // teardown bails if a successor has replaced us by the time the timer
     // fires. Without this, two events overlapping on the same window
@@ -1329,7 +1433,9 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // when its own timer hasn't fired yet.
     auto it = m_shaderManager.m_shaderTransitions.find(window);
     if (it == m_shaderManager.m_shaderTransitions.end()) {
-        return; // beginShaderTransition no-op'd (compile fail / invalid id)
+        // Defensive: beginShaderTransition reported true but the entry
+        // is gone (synchronous teardown raced us). Nothing to time.
+        return;
     }
     const quint64 myGeneration = it->second.generation;
     QPointer<KWin::EffectWindow> safeWindow(window);
@@ -1350,57 +1456,55 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
 
 void PlasmaZonesEffect::loadShaderProfileFromDbus()
 {
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(
-        this, QStringLiteral("shaderProfileTree"), [this](const QVariant& v) {
-            const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
-            if (doc.isObject()) {
-                auto& tree = m_shaderManager.profileTree();
-                tree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
-                qCDebug(lcEffect) << "loadShaderProfileFromDbus: tree loaded with" << tree.overriddenPaths().size()
-                                  << "overrides — paths=" << tree.overriddenPaths();
-            } else {
-                qCWarning(lcEffect) << "Failed to parse shaderProfileTree from D-Bus — not a JSON object";
-            }
-        });
+    constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::ShaderProfileTree;
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this](const QVariant& v) {
+        dispatchJsonSetting(kName, v,
+                            [this](const QJsonObject& obj) {
+                                auto& tree = m_shaderManager.profileTree();
+                                tree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(obj);
+                                qCDebug(lcEffect)
+                                    << "loadShaderProfileFromDbus: tree loaded with" << tree.overriddenPaths().size()
+                                    << "overrides — paths=" << tree.overriddenPaths();
+                            },
+                            /*arraySink=*/{});
+    });
 }
 
 void PlasmaZonesEffect::loadAnimationAppRulesFromDbus()
 {
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(
-        this, QStringLiteral("animationAppRules"), [this](const QVariant& v) {
-            const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
-            if (doc.isArray()) {
-                auto& rules = m_shaderManager.appRules();
-                rules = PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array());
-                qCDebug(lcEffect) << "loadAnimationAppRulesFromDbus: loaded" << rules.size() << "rules";
-            } else {
-                qCWarning(lcEffect) << "Failed to parse animationAppRules from D-Bus — not a JSON array";
-            }
-        });
+    constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::AnimationAppRules;
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this](const QVariant& v) {
+        dispatchJsonSetting(kName, v,
+                            /*objectSink=*/{}, [this](const QJsonArray& arr) {
+                                auto& rules = m_shaderManager.appRules();
+                                rules = PhosphorAnimationShaders::AnimationAppRuleList::fromJson(arr);
+                                qCDebug(lcEffect) << "loadAnimationAppRulesFromDbus: loaded" << rules.size() << "rules";
+                            });
+    });
 }
 
 void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
 {
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(
-        this, QStringLiteral("motionProfileTree"), [this](const QVariant& v) {
-            const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
-            if (doc.isObject()) {
-                // ProfileTree::fromJson resolves the optional `curve`
-                // field through a CurveRegistry. The effect resolves
-                // ONLY per-event durations from this tree (it never
-                // animates with the motion curve — shader effects carry
-                // their own timing), so a throwaway empty registry is
-                // sufficient: an unresolved curve simply stays null,
-                // and effectiveDuration() reads `duration` directly.
-                PhosphorAnimation::CurveRegistry curves;
-                auto& tree = m_shaderManager.motionProfileTree();
-                tree = PhosphorAnimation::ProfileTree::fromJson(doc.object(), curves);
-                qCDebug(lcEffect) << "loadMotionProfileTreeFromDbus: tree loaded with" << tree.overriddenPaths().size()
-                                  << "per-event overrides — paths=" << tree.overriddenPaths();
-            } else {
-                qCWarning(lcEffect) << "Failed to parse motionProfileTree from D-Bus — not a JSON object";
-            }
-        });
+    constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::MotionProfileTree;
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this](const QVariant& v) {
+        dispatchJsonSetting(kName, v,
+                            [this](const QJsonObject& obj) {
+                                // ProfileTree::fromJson resolves the optional `curve`
+                                // field through a CurveRegistry. The effect resolves
+                                // ONLY per-event durations from this tree (it never
+                                // animates with the motion curve — shader effects carry
+                                // their own timing), so a throwaway empty registry is
+                                // sufficient: an unresolved curve simply stays null,
+                                // and effectiveDuration() reads `duration` directly.
+                                PhosphorAnimation::CurveRegistry curves;
+                                auto& tree = m_shaderManager.motionProfileTree();
+                                tree = PhosphorAnimation::ProfileTree::fromJson(obj, curves);
+                                qCDebug(lcEffect) << "loadMotionProfileTreeFromDbus: tree loaded with"
+                                                  << tree.overriddenPaths().size()
+                                                  << "per-event overrides — paths=" << tree.overriddenPaths();
+                            },
+                            /*arraySink=*/{});
+    });
 }
 
 void PlasmaZonesEffect::slotMotionProfileTreeChanged()
@@ -1415,23 +1519,24 @@ void PlasmaZonesEffect::slotMotionProfileTreeChanged()
 
 void PlasmaZonesEffect::loadShaderRegistryFromDbus()
 {
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(
-        this, QStringLiteral("animationShaderSearchPaths"), [this](const QVariant& v) {
-            const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
-            if (!doc.isArray())
-                return;
-            QStringList paths;
-            for (const auto& entry : doc.array()) {
-                if (entry.isString())
-                    paths.append(entry.toString());
-            }
-            if (!paths.isEmpty()) {
-                m_shaderManager.m_animationShaderRegistry.addSearchPaths(paths);
-            }
-            qCDebug(lcEffect) << "loadShaderRegistryFromDbus: added" << paths.size()
-                              << "search paths — registry effect count="
-                              << m_shaderManager.m_animationShaderRegistry.availableEffects().size();
-        });
+    constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths;
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this](const QVariant& v) {
+        dispatchJsonSetting(kName, v,
+                            /*objectSink=*/{}, [this](const QJsonArray& arr) {
+                                QStringList paths;
+                                for (const auto& entry : arr) {
+                                    if (entry.isString())
+                                        paths.append(entry.toString());
+                                }
+                                if (!paths.isEmpty()) {
+                                    m_shaderManager.m_animationShaderRegistry.addSearchPaths(paths);
+                                }
+                                qCDebug(lcEffect)
+                                    << "loadShaderRegistryFromDbus: added" << paths.size()
+                                    << "search paths — registry effect count="
+                                    << m_shaderManager.m_animationShaderRegistry.availableEffects().size();
+                            });
+    });
 }
 
 } // namespace PlasmaZones

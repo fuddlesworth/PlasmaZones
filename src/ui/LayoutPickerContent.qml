@@ -238,9 +238,22 @@ Item {
         textColor: root.textColor
         containerRadius: metrics.containerRadius
 
-        // Absorb clicks inside container to prevent backdrop dismiss
+        // Absorb clicks inside container so they do not reach the
+        // backdrop MouseArea (which would dismiss the picker). QML
+        // MouseArea has no propagation chain across siblings — winning
+        // a press is purely z-order, and the backdrop and container
+        // overlap geometrically: the inner one wins because the picker
+        // root declares the backdrop FIRST and the container LAST, so
+        // the container's children paint on top. This MouseArea fills
+        // the container's gaps (between the layout cards' own
+        // MouseAreas) and grabs presses there so they never reach the
+        // backdrop. `Accessible.ignored: true` keeps this transparent
+        // absorber out of the a11y tree — only the backdrop's
+        // "Dismiss layout picker" button (line 218-223) should be
+        // announced as the dismiss control.
         MouseArea {
             anchors.fill: parent
+            Accessible.ignored: true
             onClicked: function(mouse) {
                 mouse.accepted = true;
             }

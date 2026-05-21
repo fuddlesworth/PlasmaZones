@@ -171,6 +171,15 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Access the in-flight shader transition map (for paintWindow).
+    ///
+    /// @note The raw map exposure is a transitional shim. Prefer the
+    /// focused accessors below (`hasTransition`, `findTransition`,
+    /// `eraseTransition`) for new call sites — they preserve the
+    /// option of adding generation gating, instrumentation, or
+    /// invariant assertions in the manager without touching every
+    /// caller. Existing direct uses live in `shader_transitions.cpp`
+    /// (via `friend class PlasmaZonesEffect`) and migrate as those
+    /// sites are touched.
     std::unordered_map<KWin::EffectWindow*, ShaderTransition>& shaderTransitions()
     {
         return m_shaderTransitions;
@@ -178,6 +187,35 @@ public:
     const std::unordered_map<KWin::EffectWindow*, ShaderTransition>& shaderTransitions() const
     {
         return m_shaderTransitions;
+    }
+
+    /// Focused accessors. Each is a thin wrapper over the underlying
+    /// `std::unordered_map` so call sites that don't need raw iterator
+    /// access can express their intent at the manager API level. New
+    /// code should prefer these.
+    bool hasTransition(KWin::EffectWindow* window) const
+    {
+        return m_shaderTransitions.find(window) != m_shaderTransitions.end();
+    }
+    /// Returns nullptr when the window has no in-flight transition.
+    /// The pointer is stable until the next `eraseTransition` /
+    /// `insertTransition` call for THAT window — the underlying
+    /// `unordered_map` does not invalidate other entries' pointers
+    /// on insertion or erasure.
+    ShaderTransition* findTransition(KWin::EffectWindow* window)
+    {
+        auto it = m_shaderTransitions.find(window);
+        return it != m_shaderTransitions.end() ? &it->second : nullptr;
+    }
+    const ShaderTransition* findTransition(KWin::EffectWindow* window) const
+    {
+        auto it = m_shaderTransitions.find(window);
+        return it != m_shaderTransitions.end() ? &it->second : nullptr;
+    }
+    /// Returns true when an entry was actually erased.
+    bool eraseTransition(KWin::EffectWindow* window)
+    {
+        return m_shaderTransitions.erase(window) > 0;
     }
 
     /// Windows with a pending deferred endShaderTransition queued.

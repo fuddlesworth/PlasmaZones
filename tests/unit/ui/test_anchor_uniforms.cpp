@@ -124,7 +124,10 @@ private Q_SLOTS:
 
     // Fractional geometry: fractional-scale outputs hand frameGeometry
     // sub-pixel coordinates. The float conversions and the offset
-    // subtraction stay exact for representable fractions.
+    // subtraction stay exact for representable fractions. Values chosen
+    // (0.5 / 0.25 / 0.75) are exact in IEEE-754 single precision so the
+    // strict QCOMPARE equality is intentional; non-power-of-two fractions
+    // (e.g. 100.1) would need qFuzzyCompare instead.
     void testSurfaceExtentFractionalGeometry()
     {
         const AnchorUniforms u =
@@ -164,10 +167,46 @@ private Q_SLOTS:
 
     // Degenerate zero-size outer: width/height clamp to 1.0 so the
     // divisions stay finite rather than producing inf/NaN.
-    void testTextureSubRectClampsDegenerateOuter()
+    //
+    // The original symmetric inner==outer==zero case happened to pass
+    // even without the clamp (0/0 -> NaN, but the test compared 0==0 as
+    // a coincidence of both numerator and denominator being zero).
+    // Asymmetric case below — non-zero inner, zero outer — is what
+    // actually exercises the `qMax(outer.width(), 1.0)` clamp: without
+    // it we get a divide-by-zero; with it the result is finite and
+    // equals `inner.width / 1.0 = inner.width` straight through.
+    void testTextureSubRectClampsDegenerateOuterDenominator()
     {
-        const QVector4D r = computeTextureSubRect(QRectF(50.0, 50.0, 0.0, 0.0), QRectF(50.0, 50.0, 0.0, 0.0));
-        QCOMPARE(r, QVector4D(0.0f, 0.0f, 0.0f, 0.0f));
+        const QVector4D r = computeTextureSubRect(QRectF(50.0, 50.0, 800.0, 600.0), QRectF(50.0, 50.0, 0.0, 0.0));
+        QCOMPARE(r, QVector4D(0.0f, 0.0f, 800.0f, 600.0f));
+    }
+
+    // Pin the symmetric clamp on `computeAnchorUniforms` for a
+    // zero-size TEXTURE (degenerate render-target — runtime race during
+    // attach). resolution clamps to (1.0, 1.0) so anchorRemap's division
+    // by `iResolution` stays finite. anchorSize is preserved at its
+    // unclamped value (anchor=window can be normal even if texture is
+    // mid-resize). The companion `testDegenerateZeroSizeWindowClampsAnchorSize`
+    // pins the window-clamp branch; this one pins the texture-clamp branch.
+    void testDegenerateZeroSizeTextureClampsResolution()
+    {
+        const AnchorUniforms u = computeAnchorUniforms(QRectF(100.0, 200.0, 800.0, 600.0), QRectF(0.0, 0.0, 0.0, 0.0));
+        QCOMPARE(u.resolution, QVector2D(1.0f, 1.0f));
+        QCOMPARE(u.anchorSize, QVector2D(800.0f, 600.0f));
+        QCOMPARE(u.anchorPosInFbo, QVector2D(100.0f, 200.0f));
+    }
+
+    // Anchor wider/taller than texture (window straddles output edge,
+    // or anchor-extent transition with anchor exceeding texture for
+    // some reason). The helper does NOT clamp width/height ratio above
+    // 1.0 — surface-extent shaders are responsible for handling
+    // `iAnchorRectInTexture` components > 1. Pinning the no-clamp
+    // contract here so a future "defensive" clamp wouldn't silently
+    // clip windows.
+    void testTextureSubRectInnerExceedsOuter()
+    {
+        const QVector4D r = computeTextureSubRect(QRectF(0.0, 0.0, 2000.0, 1500.0), QRectF(0.0, 0.0, 1000.0, 1000.0));
+        QCOMPARE(r, QVector4D(0.0f, 0.0f, 2.0f, 1.5f));
     }
 };
 
