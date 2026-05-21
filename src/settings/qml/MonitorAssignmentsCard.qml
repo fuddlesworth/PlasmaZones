@@ -20,6 +20,12 @@ SettingsCard {
     // Revision counter — incremented when lock state changes externally,
     // forcing lock-dependent bindings to re-evaluate.
     property int _lockRevision: 0
+    // Same pattern for disabled-desktop changes. Drives desktopActive
+    // bindings on every per-desktop row so the Switch's `checked` binding
+    // stays live (imperative writes to bound properties sever the binding,
+    // which previously left rows stuck in the off state — discussion #461
+    // item 12).
+    property int _disabledRevision: 0
 
     headerText: root.viewMode === 1 ? i18n("Monitor Tiling Assignments") : i18n("Monitor Assignments")
     collapsible: true
@@ -27,6 +33,9 @@ SettingsCard {
     Connections {
         function onLockedScreensChanged() {
             root._lockRevision++;
+        }
+        function onDisabledDesktopsChanged() {
+            root._disabledRevision++;
         }
 
         target: root.appSettings
@@ -304,7 +313,13 @@ SettingsCard {
                                 required property int index
                                 property int desktopNumber: index + 1
                                 property string desktopName: root.appSettings.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
-                                property bool desktopActive: !root.appSettings.isDesktopDisabled(monitorDelegate.screenName, desktopNumber)
+                                // Touch _disabledRevision so this binding re-evaluates whenever
+                                // the controller emits disabledDesktopsChanged. Imperative
+                                // writes (the prior approach) severed the binding chain.
+                                property bool desktopActive: {
+                                    void (root._disabledRevision);
+                                    return !root.appSettings.isDesktopDisabled(monitorDelegate.screenName, desktopNumber);
+                                }
 
                                 Layout.fillWidth: true
                                 spacing: Kirigami.Units.smallSpacing
@@ -365,22 +380,19 @@ SettingsCard {
                                     middleContent: Component {
                                         Switch {
                                             enabled: true
+                                            // Read-only binding to desktopActive; do NOT write to
+                                            // desktopActive in onToggled — assigning a value to the
+                                            // bound `checked` property severs this binding, leaving
+                                            // the Switch visually stuck after the first toggle.
+                                            // The Connections handler below re-evaluates desktopActive
+                                            // when disabledDesktopsChanged fires from the controller,
+                                            // which keeps the binding live.
                                             checked: desktopRowContainer.desktopActive
                                             onToggled: {
                                                 root.appSettings.setDesktopDisabled(monitorDelegate.screenName, desktopRowContainer.desktopNumber, !checked);
-                                                desktopRowContainer.desktopActive = checked;
                                             }
                                             ToolTip.visible: hovered
                                             ToolTip.text: checked ? i18n("Disable PlasmaZones on %1", desktopRowContainer.desktopName) : i18n("Enable PlasmaZones on %1", desktopRowContainer.desktopName)
-
-                                            Connections {
-                                                function onDisabledDesktopsChanged() {
-                                                    desktopRowContainer.desktopActive = !root.appSettings.isDesktopDisabled(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
-                                                }
-
-                                                target: root.appSettings
-                                            }
-
                                         }
 
                                     }

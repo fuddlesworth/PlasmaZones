@@ -29,6 +29,7 @@ public:
         QKeySequence defaultSeq;
         QKeySequence currentSeq;
         QString description;
+        bool persistent = true;
     };
     struct UpdateCall
     {
@@ -40,9 +41,9 @@ public:
     using IBackend::IBackend;
 
     void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
-                          const QString& description) override
+                          const QString& description, bool persistent = true) override
     {
-        registers.push_back({id, defaultSeq, currentSeq, description});
+        registers.push_back({id, defaultSeq, currentSeq, description, persistent});
     }
 
     void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override
@@ -513,6 +514,40 @@ private Q_SLOTS:
         QCOMPARE(backend.registers.size(), 0);
         QCOMPARE(backend.updates.size(), 1);
         QCOMPARE(backend.updates[0].newTrigger, QKeySequence(QStringLiteral("Meta+2")));
+    }
+
+    void registerForwardsPersistentFlag_toBackend()
+    {
+        // Regression: the persistent flag must reach the backend, not just
+        // gate the bindings() filter. KGlobalAccelBackend uses it to decide
+        // whether to purge kglobalshortcutsrc on destruction; sending only
+        // `true` would have left the cancel-overlay Escape grab persisting
+        // across daemon crashes (discussion #461 item 14).
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.user"), QKeySequence(QStringLiteral("Meta+U")), QStringLiteral("User"), {},
+                      /*persistent=*/true);
+        registry.bind(QStringLiteral("pz.adhoc"), QKeySequence(QStringLiteral("Esc")), QStringLiteral("Adhoc"), {},
+                      /*persistent=*/false);
+        registry.flush();
+
+        QCOMPARE(backend.registers.size(), 2);
+        // QHash iteration order is unspecified — locate by id rather than
+        // index.
+        bool sawUserPersistent = false;
+        bool sawAdhocTransient = false;
+        for (const auto& call : backend.registers) {
+            if (call.id == QStringLiteral("pz.user")) {
+                QVERIFY(call.persistent);
+                sawUserPersistent = true;
+            } else if (call.id == QStringLiteral("pz.adhoc")) {
+                QVERIFY(!call.persistent);
+                sawAdhocTransient = true;
+            }
+        }
+        QVERIFY(sawUserPersistent);
+        QVERIFY(sawAdhocTransient);
     }
 
     void bindings_persistentOnly_filtersTransient()
