@@ -45,6 +45,10 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
         return;
     }
 
+    // The disabled-context gate lives inside resolveWindowRestore so the
+    // direct D-Bus path (SnapAdaptor::resolveWindowRestore, used by the
+    // KWin effect's per-window restore call) is covered by the same check
+    // — see the predicate gate near the top of resolveWindowRestore below.
     SnapResult result = resolveWindowRestore(windowId, screenId, false);
     if (!result.shouldSnap) {
         return;
@@ -120,6 +124,30 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         m_windowTracker->consumePendingAssignment(windowId);
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
             << "resolveWindowRestore:" << windowId << "already has assignment, skipping";
+        return SnapResult::noSnap();
+    }
+
+    // Disabled-context gate: refuse auto-snap onto a (screen, virtualDesktop,
+    // activity) the user has disabled snap for. Catches BOTH windowOpened
+    // and the direct D-Bus resolveWindowRestore path the KWin effect uses,
+    // so a PendingRestore authored before the toggle can no longer drag a
+    // freshly opened window into a zone the user told us to stay out of.
+    // Without this gate the only fix was a daemon restart — the
+    // `isPersistedContextDisabled` filter on disk load fired only once per
+    // session, leaving any in-memory entry recorded earlier free to leak
+    // through. Discussion #461 item 7.
+    //
+    // Placed AFTER the isWindowSnapped/consume guard so windows that are
+    // already snapped still consume their appId pending entry; placed
+    // BEFORE the exclusion lookup and the calculate* chain so app rules,
+    // session restore, empty-zone, and last-zone fallbacks are all gated
+    // by the same predicate.
+    //
+    // Predicate is daemon-injected; absence means "no gating" — the
+    // historical default that unit tests rely on.
+    if (m_shouldRestorePredicate && !m_shouldRestorePredicate(screenId)) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore: skipping" << windowId << "on" << screenId
+                                                  << "— disabled-context gate rejected restore";
         return SnapResult::noSnap();
     }
 

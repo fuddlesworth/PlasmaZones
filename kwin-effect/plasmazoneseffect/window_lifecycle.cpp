@@ -742,9 +742,20 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     if (isPlasmaShellSurface(windowClass)) {
         return;
     }
+    // Rejection set must stay in lockstep with shouldHandleWindow's structural
+    // filter (window_filtering.cpp). If a window type can never legitimately be
+    // a snap/autotile target, reporting it as the active window pollutes the
+    // daemon's focus tracking — m_lastActiveWindowId / m_lastActiveScreenId get
+    // pinned to a popup, and downstream paths (moveNewWindowsToLastZone,
+    // shortcut screen resolution, snap fallbacks) then route real windows to
+    // the popup's zone. Discussion #461 item 11: Steam image popups (Electron
+    // child surfaces with transient_for set but isPopupWindow false) leaked
+    // through the older shorter list and ended up driving snap geometry on
+    // their parents.
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()
         || w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isCriticalNotification()
-        || w->isOnScreenDisplay() || w->isModal() || w->isPopupWindow()) {
+        || w->isOnScreenDisplay() || w->isModal() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
+        || w->isMenu() || w->isTooltip() || w->transientFor()) {
         return;
     }
 

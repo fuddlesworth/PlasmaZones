@@ -384,9 +384,10 @@ SettingsCard {
                                             // desktopActive in onToggled — assigning a value to the
                                             // bound `checked` property severs this binding, leaving
                                             // the Switch visually stuck after the first toggle.
-                                            // The Connections handler below re-evaluates desktopActive
-                                            // when disabledDesktopsChanged fires from the controller,
-                                            // which keeps the binding live.
+                                            // The root-level _disabledRevision counter re-evaluates
+                                            // desktopActive whenever the controller emits
+                                            // disabledDesktopsChanged, keeping the binding live
+                                            // (discussion #461 item 12).
                                             checked: desktopRowContainer.desktopActive
                                             onToggled: {
                                                 root.appSettings.setDesktopDisabled(monitorDelegate.screenName, desktopRowContainer.desktopNumber, !checked);
@@ -440,18 +441,17 @@ SettingsCard {
                             }
 
                             Layout.fillWidth: true
-                            visible: allDesktopsDisabledOnScreen()
+                            // Touch _disabledRevision so this binding re-evaluates whenever
+                            // the controller emits disabledDesktopsChanged. The previous
+                            // imperative `parent.visible = ...` write would have severed
+                            // the binding the same way the desktopActive write did
+                            // (discussion #461 item 12).
+                            visible: {
+                                void (root._disabledRevision);
+                                return allDesktopsDisabledOnScreen();
+                            }
                             type: Kirigami.MessageType.Warning
                             text: i18n("All desktops are disabled on this monitor.")
-
-                            Connections {
-                                function onDisabledDesktopsChanged() {
-                                    parent.visible = parent.allDesktopsDisabledOnScreen();
-                                }
-
-                                target: root.appSettings
-                            }
-
                         }
 
                     }
