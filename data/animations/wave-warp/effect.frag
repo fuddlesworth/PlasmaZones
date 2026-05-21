@@ -57,12 +57,28 @@ void main() {
     float d = v.x * 0.5 + v.y * 0.5;
     float m = 1.0 - smoothstep(-waveSmoothness, 0.0, v.x * uv.x + v.y * uv.y - (d - 0.5 + p * (1.0 + waveSmoothness)));
 
-    // The contraction is bounded: `m ∈ [0, 1]` (smoothstep-clamped) and
-    // `uv ∈ [0, 1]` give `warped = (uv - 0.5) * m + 0.5 ∈ [0, 1]`, so
-    // sampling `warped` cannot reach off-anchor texels. niri's original
-    // `clamp(warped, 0, 1)` was a no-op for this reason and is dropped;
-    // no boundary mask is needed either. The `m` multiply on the final
-    // colour fades the contracted silhouette out as the wipe completes.
+    // niri's `clamp(warped, 0, 1)` was the bug: pinning off-window UVs
+    // to the edge texel via clamp-to-edge produced a smeared border
+    // around the contracted silhouette. Drop the clamp and crop
+    // sampled texels via boundaryMask (see noise.glsl) instead — same
+    // shape wave-warp wants (off-surface = transparent), but without
+    // the edge-pixel bleed.
+    //
+    // The mask is load-bearing: an earlier "dead code" removal observed
+    // that with `m, uv ∈ [0,1]` the warped coordinate is bounded to
+    // [0,1], but that holds only on the daemon path where `vTexCoord`
+    // spans the bare anchor. On the kwin anchor-extent path
+    // `vTexCoord` covers the EXPANDED rect (frame + decoration shadow),
+    // so unmasked sampling at `warped ∈ [0,1]` reaches into the shadow
+    // region and the user sees a faint shadow ring around the
+    // contracting card.
     vec2 warped = (uv - 0.5) * m + 0.5;
-    fragColor = surfaceColor(warped) * m;
+    vec4 win = surfaceColor(warped) * boundaryMask(warped);
+
+    // `in_bounds` similarly crops the FINAL fragment to the [0,1] anchor
+    // sub-rect — keeps the wipe from drawing shadow texels in the
+    // outside-the-frame band on kwin. Cheap (four steps + product) and
+    // lets the rasterizer over-cover the quad without bleed.
+    float in_bounds = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+    fragColor = win * m * in_bounds;
 }
