@@ -31,8 +31,9 @@
 // sizes the render target to the whole surface so the window can
 // genuinely travel above its frame. `anchorRemap` (see anchor_remap.glsl)
 // converts each fragment's surface-UV into the window's own [0,1]
-// space; the window is then rigidly translated and `boundaryMask` (see
-// noise.glsl) crops the part still off the frame.
+// space; the window is then rigidly translated and `boundaryMaskAA`
+// (see noise.glsl) antialiases the crop one device pixel wide so the
+// daemon's anchor-sized texture leaves no clamp-to-edge halo.
 //
 // PlasmaZones flips iTime on reverse legs (0→1 on open, 1→0 on close),
 // so the close leg plays this motion in reverse automatically — no
@@ -56,7 +57,7 @@ void main() {
 
     // vTexCoord spans the whole surface; map it into the window's
     // ("anchor") own [0,1] space. Fragments outside the window map
-    // outside [0,1] and are cropped by boundaryMask below.
+    // outside [0,1] and are cropped by boundaryMaskAA below.
     vec2 uv = anchorRemap(vTexCoord);
 
     // Decaying bounce: one window-height above the frame at t=0,
@@ -70,5 +71,5 @@ void main() {
     // sampling) at rest.
     vec2 sample_uv = uv;
     sample_uv.y = uv.y + offset;
-    fragColor = surfaceColor(sample_uv) * boundaryMask(sample_uv);
+    fragColor = surfaceColor(sample_uv) * boundaryMaskAA(sample_uv);
 }

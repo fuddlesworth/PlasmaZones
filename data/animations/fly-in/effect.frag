@@ -11,8 +11,9 @@
 // override) so the window can genuinely travel off its frame.
 // `anchorRemap` (see anchor_remap.glsl) converts each fragment's
 // surface-UV into the window's own [0,1] space; the window is then
-// rigidly translated horizontally and `boundaryMask` (see noise.glsl)
-// crops the part still off the frame.
+// rigidly translated horizontally and `boundaryMaskAA` (see noise.glsl)
+// antialiases the crop one device pixel wide so the daemon's anchor-
+// sized texture leaves no clamp-to-edge halo.
 //
 // The earlier fly-in translated the quad geometry in the vertex stage.
 // That worked on the daemon but not the kwin-effect: apply() expands
@@ -52,7 +53,7 @@ void main() {
 
     // Surface-spanning UV → the window's own ("anchor") [0,1] space.
     // Fragments outside the window map outside [0,1] and are cropped by
-    // boundaryMask below.
+    // boundaryMaskAA below.
     vec2 uv = anchorRemap(vTexCoord);
 
     // Decide the fly-in edge from the window's position within its
@@ -85,5 +86,5 @@ void main() {
     // is sampled further toward -x in its own texture.
     vec2 sample_uv = uv;
     sample_uv.x = uv.x - offsetUv;
-    fragColor = surfaceColor(sample_uv) * boundaryMask(sample_uv);
+    fragColor = surfaceColor(sample_uv) * boundaryMaskAA(sample_uv);
 }
