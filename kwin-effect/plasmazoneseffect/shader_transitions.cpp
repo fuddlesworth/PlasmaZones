@@ -467,7 +467,7 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
 
 void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                                               const PhosphorAnimationShaders::ShaderProfile& profile, int durationMs,
-                                              bool reverse, bool holdCloseGrab)
+                                              bool reverse, bool holdCloseGrab, bool holdAddedGrab)
 {
     const QString effectId = profile.effectiveEffectId();
     if (effectId.isEmpty() || !window)
@@ -732,6 +732,26 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // otherwise pay that cost every frame.
     const auto existingIt = m_shaderManager.m_shaderTransitions.find(window);
     const bool isSameWindowSupersession = existingIt != m_shaderManager.m_shaderTransitions.end();
+    // Same-effect short-circuit. KWin fires multiple lifecycle events for
+    // a freshly-opened window in quick succession (windowAdded →
+    // windowActivated, and windowMaximizedStateChanged if it opens
+    // maximized). If the user has the SAME shader bound to several of
+    // these events (a common case for window.open + window.focus =
+    // fly-in), each event lands here with the same `cacheIt` entry, and
+    // without this guard the supersession path erases the in-flight
+    // transition and re-inserts a fresh one with startTimeMs = now —
+    // restarting the animation from t=0 every time. With a 2 s open
+    // duration the user sees multiple staggered copies of the window
+    // sliding in (one per restart). Pointer-compare cached entries:
+    // m_shaderCache is keyed by effectId, so equal pointers means same
+    // effectId. Skip when direction (reverse) and timing mode
+    // (durationMs > 0) also match — a true "second trigger of the same
+    // already-playing transition" — so a reverse leg or a mode flip
+    // still supersedes correctly.
+    if (isSameWindowSupersession && existingIt->second.cached == &cacheIt->second
+        && existingIt->second.reverse == reverse && ((existingIt->second.durationMs > 0) == (durationMs > 0))) {
+        return;
+    }
     // Carry the prior transition's closeGrabHeld through supersession so
     // ref/unref stay balanced. If the prior transition refWindow'd the
     // closing window, the ref must stay held (the new transition takes
@@ -928,6 +948,8 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // EITHER the prior or new install wants the grab, we treat it as
     // held — the new transition's endShaderTransition will balance.
     transition.closeGrabHeld = holdCloseGrab || existingHeldGrab;
+    const bool existingAddedHeldGrab = isSameWindowSupersession ? existingIt->second.addedGrabHeld : false;
+    transition.addedGrabHeld = holdAddedGrab || existingAddedHeldGrab;
     if (durationMs > 0) {
         transition.durationMs = durationMs;
         transition.startTimeMs = shaderClockNowMs();
@@ -976,6 +998,23 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         window->setData(KWin::WindowClosedGrabRole, QVariant::fromValue(static_cast<void*>(this)));
     }
 
+    // WindowAddedGrabRole tells every OTHER effect in the chain
+    // ("isFadeWindow" style checks in KWin's stock fade / scale / slide /
+    // glide built-ins) to ignore this window for the window-added
+    // animation. Without it, KWin's stock fade-in renders the window at
+    // its natural position while our shader simultaneously animates the
+    // same window at the UV-shifted position; both renders end up in
+    // the framebuffer and the user sees multiple visible copies. The
+    // role only matters for the duration of the install — we clear it
+    // in endShaderTransition. No refWindow needed (the window isn't
+    // being torn down; it just opened). `existingAddedHeldGrab` is
+    // computed at the transition.addedGrabHeld stamp above; we only
+    // need to call setData when this install is acquiring the grab
+    // fresh (the supersession path inherits via the flag).
+    if (holdAddedGrab && !existingAddedHeldGrab) {
+        window->setData(KWin::WindowAddedGrabRole, QVariant::fromValue(static_cast<void*>(this)));
+    }
+
     // Emplace the transition entry FIRST, before redirect/setShader. If
     // either of those throws — or if we hit a later failure path — we
     // need a transition entry to tear down so the window doesn't end up
@@ -1006,6 +1045,11 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // map contains no prior entry for this window because the
         // supersession branch above erased it).
         const bool releaseCloseGrab = emplaceResult.first->second.closeGrabHeld;
+        const bool releaseAddedGrab = emplaceResult.first->second.addedGrabHeld;
+        if (releaseAddedGrab && window) {
+            // Symmetric WindowAddedGrabRole rollback. No ref to release.
+            window->setData(KWin::WindowAddedGrabRole, QVariant());
+        }
         if (releaseCloseGrab && window) {
             // Clear WindowClosedGrabRole synchronously while the
             // ref we hold guarantees `window` is still alive. The
@@ -1035,9 +1079,11 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (!isSameWindowSupersession) {
         redirect(window);
     }
-    // setShader is unconditional — it replaces any prior shader pointer
-    // (idempotent for the same shader, so even a same-effect
-    // supersession is correct here).
+    // setShader replaces any prior shader pointer (idempotent for the
+    // same shader, so same-effect supersession is correct here). Vertex-
+    // deform transitions go through KWin's default texture shader so
+    // `OffscreenData::paint` samples uTexture0 at the natural quad
+    // texcoords; the translate happens at the vertices in `apply()`.
     setShader(window, cachedEntry.shader.get());
     emplaceCommitted = true;
 
@@ -1096,6 +1142,7 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
         return;
     }
     const bool releaseCloseGrab = it->second.closeGrabHeld;
+    const bool releaseAddedGrab = it->second.addedGrabHeld;
     // Surface-extent transitions paint across the whole output, far past
     // the window's own geometry. On teardown KWin only damages the
     // window's frame as it unredirects, so the off-frame pixels the
@@ -1123,6 +1170,13 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
     m_shaderManager.m_shaderTransitions.erase(it);
     if (!surfaceExtentRepaint.isEmpty() && KWin::effects) {
         KWin::effects->addRepaint(surfaceExtentRepaint);
+    }
+    if (releaseAddedGrab && !window->isDeleted()) {
+        // Clear WindowAddedGrabRole now that the open transition is
+        // done. Symmetric with the install-side setData; no refcount
+        // change because we didn't refWindow on the install side
+        // (the window opened, it's already live without our ref).
+        window->setData(KWin::WindowAddedGrabRole, QVariant());
     }
     if (releaseCloseGrab) {
         // Clear WindowClosedGrabRole while `window` is still alive
@@ -1163,7 +1217,7 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
 }
 
 void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
-                                               bool reverse, bool holdCloseGrab)
+                                               bool reverse, bool holdCloseGrab, bool holdAddedGrab)
 {
     if (!window || durationMs <= 0) {
         // Defensive guard. The current call sites all pass
@@ -1264,7 +1318,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         }
         return;
     }
-    beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab);
+    beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab, holdAddedGrab);
     // Capture the just-installed transition's generation so the deferred
     // teardown bails if a successor has replaced us by the time the timer
     // fires. Without this, two events overlapping on the same window

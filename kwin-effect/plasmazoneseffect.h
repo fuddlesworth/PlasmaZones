@@ -557,7 +557,8 @@ private:
     // Shader transition methods — implementations in shader_transitions.cpp,
     // operating on m_shaderManager state.
     void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
-                               int durationMs = 0, bool reverse = false, bool holdCloseGrab = false);
+                               int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
+                               bool holdAddedGrab = false);
     void endShaderTransition(KWin::EffectWindow* window);
 
     // First-frame open suppression — implementations in window_lifecycle.cpp.
@@ -572,7 +573,7 @@ private:
     void loadMotionProfileTreeFromDbus();
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
-                                bool reverse = false, bool holdCloseGrab = false);
+                                bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false);
     void evictLruTextureIfOverBound();
     void warmUserTextureAsync(const QString& absolutePath);
 

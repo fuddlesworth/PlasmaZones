@@ -78,11 +78,28 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized() && !hasOtherWindowOfClassWithDifferentPid(w);
 
     // window.open shader transition: fires once for every newly-mapped
-    // window we handle. KWin's stock fade-in handles the *motion* (alpha
-    // fade-in over a few frames), so the shader leg layers a transition
-    // effect on top. tryBeginShaderForEvent silently no-ops when the user
-    // hasn't assigned a shader to window.open in their tree.
-    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowOpen, animationDurationMs());
+    // normal top-level window we handle. Gate by the same filter as the
+    // snap-restore candidate check so the shader DOESN'T fire on the
+    // child surfaces an app spawns alongside its main window (popup
+    // menus, dropdowns, tooltips, dialogs, transient utility windows).
+    // Without this gate, a single app open like Discord triggers a
+    // fly-in on every sub-surface — main window sliding in slowly while
+    // sidebar / popup surfaces slide in moments behind it from t=0,
+    // producing the "main slow + copies fast" visual artifact users
+    // describe as "multiple ghosted copies of the animation". KWin's
+    // stock fade-in still handles the cosmetic motion for the filtered-
+    // out surfaces; we just skip the user's surface-extent shader leg.
+    const bool canRunOpenShader = shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized();
+    if (canRunOpenShader) {
+        // holdAddedGrab=true: take KWin::WindowAddedGrabRole so KWin's
+        // stock window-open built-ins (fade / scale / slide / glide)
+        // skip this window. Without it, KWin's stock fade-in renders
+        // the window at its natural position concurrently with our
+        // shader's UV-shifted animation, producing the visible
+        // multi-copy ghost trail.
+        tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowOpen, animationDurationMs(),
+                               /*reverse=*/false, /*holdCloseGrab=*/false, /*holdAddedGrab=*/true);
+    }
 
     // Populate the daemon's WindowRegistry with this window's initial metadata.
     // Runs before any other daemon notification so consumers querying the
@@ -141,24 +158,14 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
             if (cached.geometry.isValid() && !savedScreenNowAutotile) {
                 qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached.geometry
                                  << "screen:" << cached.screenId;
-                // Pin the in-flight window.open shader (started above) to
-                // the resolved zone so a surface-extent open animation
-                // (bounce / fly-in) plays into the zone from the first
-                // frame. Without the pin the shader anchors to the
-                // window's spawn position until KWin's async moveResize
-                // lands, and the animation visibly drops / flies in from
-                // the screen centre before snapping to the zone.
-                auto sit = m_shaderManager.m_shaderTransitions.find(w);
-                if (sit != m_shaderManager.m_shaderTransitions.end()) {
-                    sit->second.anchorOverride = cached.geometry;
-                }
                 // skipAnimation=true: teleport straight into the zone.
-                // The animated morph path tweens the window from its
-                // spawn position — that reads as "KDE opened the window,
-                // then we moved it" and its translate+scale collides with
-                // the output-spanning quad of the surface-extent open
-                // shader. Placing the window directly lets the open
-                // shader play cleanly into the pinned zone anchor.
+                // First-frame open suppression (beginRestoreSuppression
+                // above in slotWindowAdded) withholds the window from
+                // compositing until KWin's async moveResize commits, so
+                // by the time paintWindow runs the live frameGeometry()
+                // already reports the resolved zone — the surface-extent
+                // open shader (bounce, fly-in) plays into the zone from
+                // the first painted frame without any anchor pinning.
                 applySnapGeometry(w, cached.geometry, false, /*skipAnimation=*/true);
                 m_snapRestoreCache.erase(cacheIt);
                 // Re-evaluate screen after teleport — cross-VS/cross-monitor

@@ -85,6 +85,22 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
         m_shaderManager.m_cachedCursorGlobal = KWin::effects->cursorPos();
     }
 
+    // Frame-pin the shader clock. KWin can invoke `paintWindow` more than
+    // once per compositor cycle (multi-output, multi-pass, back-to-back
+    // paint cycles scheduled by our own `effects->addRepaint` calls in
+    // postPaintScreen). If every paintWindow call re-sampled
+    // `shaderClockNowMs()`, each call would see a slightly later
+    // timestamp and compute a slightly different `progress`, painting
+    // the surface-extent quad at a slightly different position. With
+    // back-to-back paint cycles spaced milliseconds apart the
+    // accumulated framebuffer holds several visibly offset copies of
+    // the in-flight window — the staggered "main one slow + copies
+    // fast" ghosting symptom. Sampling once here and reading the cached
+    // value from paintWindow pins every paint within this cycle to the
+    // same timestamp.
+    const qint64 frameClockMs = ShaderInternal::shaderClockNowMs();
+    m_shaderManager.setCurrentFrameClockMs(frameClockMs);
+
     KWin::effects->prePaintScreen(data, presentTime);
 }
 
@@ -111,37 +127,44 @@ void PlasmaZonesEffect::postPaintScreen()
             if (transition.surfaceExtent) {
                 // Surface-extent transitions paint the window translated
                 // far past its frame (bounce lifts it a full window-
-                // height above). KWin derives each window's PRESENT /
-                // buffer-copy region from THAT window's own damage — not
-                // from the output-sized quad apply() builds. addRepaintFull()
-                // dirties the SCREEN, but it never widens this window's
-                // damage, so the band the shader sweeps above the frame
-                // is composited into the back buffer yet never copied
-                // forward to the presented buffer: prior frames' pixels
-                // survive there as a stacked, garbled trail (worst at the
-                // top, where the dropping window dwells longest).
-                // addLayerRepaint over the whole output widens the
-                // window's OWN damage so its present region covers
-                // everything the shader draws. Runs for animator-driven
-                // (durationMs == 0) transitions too.
+                // height above). The damage region MUST cover every
+                // screen pixel the shader sweeps, otherwise prior frames'
+                // pixels survive in the back buffer as a stacked, ghosted
+                // trail (worst with longer durations — 2 s fly-ins showed
+                // 5+ overlapping copies of the window).
+                //
+                // `w->addLayerRepaint(r)` is the wrong primitive here:
+                // it does `mapFromScene(r)` and feeds the result to
+                // `WindowItem::scheduleRepaint`, which the scene clips
+                // to the window-item's bounding rect. The OUTSIDE-the-
+                // frame band the shader paints is never marked dirty,
+                // so the compositor's incremental present skips it.
+                // Use `effects->addRepaint(output)` — screen-level
+                // damage with no per-window clip — to mark the whole
+                // output as dirty every frame the transition is live.
                 if ((timeBasedActive || transition.durationMs == 0) && KWin::effects) {
                     if (const auto* output = w->screen()) {
-                        w->addLayerRepaint(output->geometry());
+                        KWin::effects->addRepaint(output->geometry());
                     } else {
                         KWin::effects->addRepaintFull();
                     }
                 }
             } else if (timeBasedActive) {
-                // Fall back to frameGeometry when expanded is empty
-                // — a window with no shadow / decoration extents
-                // reports an empty expanded rect, and `addLayerRepaint`
-                // on an empty rect is a silent no-op that would stall
-                // the time-based shader's iTime advance.
-                QRect repaintRect = w->expandedGeometry().toAlignedRect();
-                if (repaintRect.isEmpty()) {
-                    repaintRect = w->frameGeometry().toAlignedRect();
+                // Damage the whole output every frame an anchor-extent
+                // time-based shader is live. The vertex stage translates
+                // the redirected quad past the window's natural rect
+                // (bounce drops it in from above, fly-in slides it from
+                // the edge); the band it sweeps — both the off-frame
+                // destination and the vacated origin — must be marked
+                // dirty so the compositor recomposites it each frame.
+                // Without this the swept band keeps stale pixels.
+                if (KWin::effects) {
+                    if (const auto* output = w->screen()) {
+                        KWin::effects->addRepaint(output->geometry());
+                    } else {
+                        KWin::effects->addRepaintFull();
+                    }
                 }
-                w->addLayerRepaint(repaintRect);
             }
         }
     }
@@ -205,6 +228,17 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                                     KWin::WindowPaintData& data)
 {
+    // Read the cached per-frame clock pinned by prePaintScreen. Multiple
+    // paintWindow calls within one compositor cycle (multi-output,
+    // multi-pass, back-to-back paint cycles driven by our addRepaint)
+    // would otherwise each see a slightly later `shaderClockNowMs()`
+    // and paint the surface-extent quad at a slightly different
+    // progress — visible as staggered ghost copies of the in-flight
+    // window. Fall back to a live read if prePaintScreen hasn't pinned
+    // the clock yet (test harness, defensive bootstrap path).
+    const qint64 frameNowMs = m_shaderManager.currentFrameClockMs() > 0 ? m_shaderManager.currentFrameClockMs()
+                                                                        : ShaderInternal::shaderClockNowMs();
+
     // First-frame open suppression: a window repositioned on open
     // (snap-restore / autotile) is withheld from compositing until its
     // moveResize configure lands, so it never flashes at KWin's centred
@@ -212,7 +246,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // — if the reposition never lands, release and paint normally rather
     // than risk a permanently invisible window.
     if (auto supIt = m_restoreSuppress.find(w); supIt != m_restoreSuppress.end()) {
-        if (shaderClockNowMs() <= supIt->deadlineMs) {
+        if (frameNowMs <= supIt->deadlineMs) {
             return;
         }
         endRestoreSuppression(w);
@@ -237,8 +271,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         qreal progress = 0.0;
         bool active = false;
         if (transition.durationMs > 0) {
-            const qint64 now = shaderClockNowMs();
-            const qint64 elapsed = now - transition.startTimeMs;
+            const qint64 elapsed = frameNowMs - transition.startTimeMs;
             if (elapsed >= 0 && elapsed <= transition.durationMs) {
                 progress = qreal(elapsed) / qreal(transition.durationMs);
                 active = true;
@@ -295,7 +328,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // iTimeDelta + iFrame are book-keeping that must advance every
             // tick regardless of whether the shader declares the
             // uniforms — they're inputs to the per-leg state machine.
-            const qint64 nowMs = shaderClockNowMs();
+            // `nowMs` is pinned to the frame clock (see frameNowMs at
+            // the top of paintWindow) so multiple paint passes within
+            // one cycle agree on the timestamp.
+            const qint64 nowMs = frameNowMs;
             const float iTimeDelta = (transition.lastPaintTimeMs < 0)
                 ? 0.0f
                 : static_cast<float>(nowMs - transition.lastPaintTimeMs) / 1000.0f;
@@ -325,38 +361,36 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // duration of the animation. expandedGeometry is empty for a
             // window with no decoration or shadow extents; fall back to
             // the frame there.
+            // Anchor uniforms describe the (anchor, texture) pair:
+            //   • anchor = the captured window = frame geometry
+            //   • texture = whatever the shader's vTexCoord [0,1] covers
+            //     - anchor-extent: the redirected FBO. On the daemon that
+            //       equals the frame; on KWin it is the EXPANDED rect
+            //       (frame + decoration + shadow), so iAnchorPosInFbo is
+            //       the shadow inset and iResolution the expanded size.
+            //       `anchorRemap` folds those back so the shader's [0,1]
+            //       UV still spans the frame on both runtimes.
+            //     - surface-extent: the output, since apply() places an
+            //       output-spanning quad with vTexCoord 0..1 over the
+            //       output. iAnchorPosInFbo locates the frame within
+            //       the output, matching the daemon's surface-sized FBO
+            //       path.
+            // expandedGeometry is empty for a window with no decoration
+            // / shadow extents; fall back to the frame so the anchor=
+            // texture identity holds.
             QRectF anchorGeo = geo;
-            if (transition.surfaceExtent) {
-                const QRectF expanded = w->expandedGeometry();
-                anchorGeo = expanded.isEmpty() ? geo : expanded;
+            QRectF textureGeo = w->expandedGeometry();
+            if (textureGeo.isEmpty()) {
+                textureGeo = geo;
             }
-            // Snap-restore pins the open shader's anchor to the resolved
-            // zone. KWin's moveResize is async, so for several frames
-            // after a restore frameGeometry() still reports the window's
-            // spawn position; a surface-extent open shader (bounce,
-            // fly-in) anchored to that live geometry plays into the spawn
-            // centre and jumps to the zone only once the configure lands.
-            // The override is a frame rect — re-apply the live shadow /
-            // decoration margins so it still describes the EXPANDED
-            // redirected texture the anchor uniforms must match.
-            if (transition.anchorOverride.isValid()) {
-                anchorGeo = transition.anchorOverride;
-                if (transition.surfaceExtent) {
-                    const QRectF expanded = w->expandedGeometry();
-                    if (!expanded.isEmpty() && geo.isValid()) {
-                        anchorGeo = transition.anchorOverride.adjusted(
-                            expanded.left() - geo.left(), expanded.top() - geo.top(), expanded.right() - geo.right(),
-                            expanded.bottom() - geo.bottom());
-                    }
+            if (transition.surfaceExtent) {
+                if (const auto* output = w->screen()) {
+                    const QRect outRect = output->geometry();
+                    textureGeo = QRectF(outRect);
                 }
             }
-            QRectF outputGeo = anchorGeo;
-            if (const auto* output = w->screen()) {
-                const QRect outRect = output->geometry();
-                outputGeo = outRect;
-            }
             const ShaderInternal::AnchorUniforms anchorUniforms =
-                ShaderInternal::computeAnchorUniforms(anchorGeo, outputGeo, transition.surfaceExtent);
+                ShaderInternal::computeAnchorUniforms(anchorGeo, textureGeo);
             {
                 KWin::ShaderBinder binder(shader);
                 if (cached->iTimeLoc >= 0) {
@@ -583,7 +617,43 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 // without a preceding glActiveTexture).
                 glActiveTexture(GL_TEXTURE0);
             }
-            OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+            // Surface-extent transitions paint an output-spanning quad in
+            // `apply()`. `OffscreenData::paint` enables GL_SCISSOR_TEST
+            // when `deviceRegion != Region::infinite()`, and the
+            // deviceRegion KWin hands us is the intersection of the
+            // viewport and the window's expanded bounds — i.e. the
+            // natural window rect. That scissor would clip the
+            // output-spanning quad back to the window's frame, hiding
+            // everything the surface-extent fragment shader paints in the
+            // off-frame band (bounce dropping in from above, fly-in
+            // sliding in from the edge). Pass Region::infinite() to
+            // bypass the scissor for surface-extent transitions; the
+            // spanning quad is already bounded by the output's clip
+            // space. Anchor-extent transitions keep KWin's natural
+            // deviceRegion since their quad sits inside the window.
+            const KWin::Region drawRegion = transition.surfaceExtent ? KWin::Region::infinite() : deviceRegion;
+            // Enter the draw chain via `effects->drawWindow` rather than
+            // calling `OffscreenEffect::drawWindow` directly. KWin's
+            // `EffectsHandler::drawWindow` advances the shared
+            // `m_currentDrawWindowIterator` as it walks the chain; a
+            // direct base-class call leaves that iterator parked at
+            // `begin()`. Then `OffscreenData::maybeRender` (inside
+            // OffscreenEffect::drawWindow) calls `effects->drawWindow`
+            // to capture the window into its FBO — and with the iterator
+            // still at `begin()` that capture restarts the chain from
+            // the top and RE-ENTERS our own OffscreenEffect::drawWindow.
+            // The re-entrant call draws the offscreen texture back into
+            // itself (the FBO is the bound render target during capture)
+            // translated by the vertex stage: a feedback loop that
+            // produced the ghost trails and the creeping black band.
+            // Routing through `effects->drawWindow` leaves the iterator
+            // positioned past us, so `maybeRender`'s capture continues
+            // to `finalDrawWindow` (the real window) exactly as it does
+            // for a normally-chained OffscreenEffect. The redirected
+            // window is bound to this effect via `redirect()`/`setShader()`,
+            // so the chain still reaches our OffscreenEffect::drawWindow
+            // override — just once, with the iterator correct.
+            KWin::effects->drawWindow(renderTarget, viewport, w, mask, drawRegion, data);
             // Hygiene: unbind our user textures from TEXTURE1+. Each
             // effect in the chain assumes TEXTURE0 is the only active
             // unit; leaving stale binds risks the next effect inheriting
@@ -668,7 +738,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         }
     }
 
-    OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+    // Route through the draw chain (not a direct OffscreenEffect::drawWindow
+    // call) so KWin's `m_currentDrawWindowIterator` is advanced past us
+    // before any redirected window's `OffscreenData::maybeRender` re-enters
+    // the chain to capture — see the detailed rationale at the shader-branch
+    // drawWindow call above. This path also covers redirected windows in
+    // their post-transition expiry frame, which are still offscreen-backed.
+    KWin::effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
 void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data,

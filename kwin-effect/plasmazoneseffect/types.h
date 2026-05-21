@@ -153,11 +153,12 @@ struct ShaderTransition
     /// the corresponding `disappear` event.
     bool reverse = false;
     /// True when the active animation declares `fboExtent: "surface"` in
-    /// its metadata. Surface-extent shaders (broken-glass, fly-in, morph)
-    /// paint past the window bounds, so `apply()` expands the drawn quad
-    /// to the window's output and paintWindow feeds output-relative
-    /// `iResolution` / `iAnchorPosInFbo` / `iAnchorSize`. Anchor-extent
-    /// transitions (the default) keep the window-sized quad and uniforms.
+    /// its metadata. Surface-extent shaders (bounce, fly-in, broken-glass,
+    /// morph) paint past the window bounds, so `apply()` expands the
+    /// drawn quad to the window's output and paintWindow feeds
+    /// output-relative `iResolution` / `iAnchorPosInFbo` / `iAnchorSize`.
+    /// Anchor-extent transitions (the default) keep the window-sized
+    /// quad and uniforms.
     bool surfaceExtent = false;
     /// Per-leg frame counter. Bumped each paintWindow tick where this
     /// transition feeds the shader; reset to 0 on every fresh
@@ -216,21 +217,23 @@ struct ShaderTransition
     /// no-op, and clearing it on a deleted window lets KWin proceed with
     /// final destruction.
     bool closeGrabHeld = false;
-    /// Optional fixed anchor rect (window frame geometry, logical pixels).
-    /// When valid, paintWindow derives the surface-extent anchor uniforms
-    /// (iResolution / iAnchorSize / iAnchorPosInFbo) from this rect instead
-    /// of the window's live frameGeometry().
+    /// True when this transition holds @c KWin::WindowAddedGrabRole on the
+    /// window. The grab role tells every OTHER effect in the chain to
+    /// ignore this window for built-in window-open animations (KWin's
+    /// stock fade / scale / slide / glide on windowAdded). Without it,
+    /// those built-in effects render the window concurrently with our
+    /// fly-in / bounce shader — KWin's fade paints the window at its
+    /// natural position with its own progress while our shader paints
+    /// the same window at the UV-shifted position. Both end up in the
+    /// same framebuffer and the user sees multiple visible copies of
+    /// the window, each animating on a different timeline.
     ///
-    /// Snap-restore pins this to the resolved zone geometry. KWin's
-    /// moveResize is asynchronous: after a restore the window's
-    /// frameGeometry() keeps reporting the spawn position for several
-    /// frames until the configure lands. A surface-extent open shader
-    /// (bounce, fly-in) anchored to that live geometry plays into the
-    /// spawn position and only jumps to the zone once the configure
-    /// commits. Pinning the anchor makes the open animation play into the
-    /// final zone from the first frame. Invalid (default) means "use the
-    /// live geometry" — every non-restore transition.
-    QRectF anchorOverride;
+    /// Set true only by the @c slotWindowAdded → @c tryBeginShaderForEvent
+    /// path (via the @c holdAddedGrab parameter threaded through
+    /// @c beginShaderTransition). Released in @c endShaderTransition
+    /// unconditionally — clearing the role on a window with no
+    /// pending built-in open animation is a no-op.
+    bool addedGrabHeld = false;
 };
 
 /// Pre-computed snap restore target for a pending app

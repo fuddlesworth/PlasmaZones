@@ -7,14 +7,15 @@
  *
  * The kwin-effect feeds animation shaders three anchor uniforms —
  * iResolution, iAnchorSize, iAnchorPosInFbo — that tell a shader where the
- * captured window sits inside its render target. Anchor-extent transitions
- * render 1:1 over the window; surface-extent transitions (metadata
- * `fboExtent: "surface"`: broken-glass, fly-in, morph) render over the
- * whole output with the window placed at a sub-region.
+ * captured window sits inside its render target. The helper takes
+ * `(anchor, texture)` and returns `{texture.size, anchor.size, anchor -
+ * texture.topLeft}`; callers choose what the `texture` rect is per extent
+ * mode (anchor-extent: the redirected FBO, frame-sized on the daemon and
+ * expanded-sized on KWin; surface-extent: the output).
  *
- * This pins the branch math so a regression in the helper can't silently
- * mis-place a surface-extent effect (or break the anchor-extent identity
- * case that every other animation depends on).
+ * This pins the math so a regression in the helper can't silently
+ * mis-place a surface-extent effect or break the anchor-extent identity
+ * case that every other animation depends on.
  */
 
 #include <QTest>
@@ -31,29 +32,31 @@ class TestAnchorUniforms : public QObject
 
 private Q_SLOTS:
 
-    // Anchor extent: the render target covers the window 1:1.
-    // iResolution == iAnchorSize == window size, anchor at the origin.
-    // The output geometry is ignored in this mode.
-    void testAnchorExtentIsWindowIdentity()
+    // Anchor extent on the daemon: texture == anchor (FBO covers the
+    // window 1:1), so iResolution == iAnchorSize and the anchor sits at
+    // the origin.
+    void testAnchorExtentIdentityWhenTextureEqualsAnchor()
     {
-        const AnchorUniforms u =
-            computeAnchorUniforms(QRectF(100.0, 200.0, 800.0, 600.0), QRectF(0.0, 0.0, 1920.0, 1080.0),
-                                  /*surfaceExtent=*/false);
+        const QRectF anchor(100.0, 200.0, 800.0, 600.0);
+        const AnchorUniforms u = computeAnchorUniforms(anchor, /*texture=*/anchor);
         QCOMPARE(u.resolution, QVector2D(800.0f, 600.0f));
         QCOMPARE(u.anchorSize, QVector2D(800.0f, 600.0f));
         QCOMPARE(u.anchorPosInFbo, QVector2D(0.0f, 0.0f));
     }
 
-    // Anchor extent ignores the output even when the window sits away
-    // from the output origin — anchorPosInFbo stays (0, 0).
-    void testAnchorExtentIgnoresOutputOrigin()
+    // Anchor extent on KWin: the redirected FBO covers the EXPANDED rect
+    // (frame + shadow), so iResolution grows to the expanded size,
+    // iAnchorSize stays the frame size, and iAnchorPosInFbo is the
+    // shadow inset. Shaders fold these back via anchorRemap so their
+    // [0,1] UV spans the frame, not the shadow edge.
+    void testAnchorExtentExpandedFboHasShadowInset()
     {
-        const AnchorUniforms u =
-            computeAnchorUniforms(QRectF(2000.0, 150.0, 400.0, 300.0), QRectF(1920.0, 0.0, 2560.0, 1440.0),
-                                  /*surfaceExtent=*/false);
-        QCOMPARE(u.resolution, QVector2D(400.0f, 300.0f));
-        QCOMPARE(u.anchorSize, QVector2D(400.0f, 300.0f));
-        QCOMPARE(u.anchorPosInFbo, QVector2D(0.0f, 0.0f));
+        const QRectF frame(1604.0, 894.0, 1588.0, 846.0);
+        const QRectF expanded(1590.0, 880.0, 1616.0, 874.0); // 14px shadow each side, top, bottom
+        const AnchorUniforms u = computeAnchorUniforms(frame, expanded);
+        QCOMPARE(u.resolution, QVector2D(1616.0f, 874.0f));
+        QCOMPARE(u.anchorSize, QVector2D(1588.0f, 846.0f));
+        QCOMPARE(u.anchorPosInFbo, QVector2D(14.0f, 14.0f));
     }
 
     // Surface extent: iResolution grows to the output, iAnchorSize stays
@@ -62,8 +65,7 @@ private Q_SLOTS:
     void testSurfaceExtentPlacesWindowInOutput()
     {
         const AnchorUniforms u =
-            computeAnchorUniforms(QRectF(100.0, 200.0, 800.0, 600.0), QRectF(0.0, 0.0, 1920.0, 1080.0),
-                                  /*surfaceExtent=*/true);
+            computeAnchorUniforms(QRectF(100.0, 200.0, 800.0, 600.0), QRectF(0.0, 0.0, 1920.0, 1080.0));
         QCOMPARE(u.resolution, QVector2D(1920.0f, 1080.0f));
         QCOMPARE(u.anchorSize, QVector2D(800.0f, 600.0f));
         QCOMPARE(u.anchorPosInFbo, QVector2D(100.0f, 200.0f));
@@ -74,8 +76,7 @@ private Q_SLOTS:
     void testSurfaceExtentAnchorRelativeToOutput()
     {
         const AnchorUniforms u =
-            computeAnchorUniforms(QRectF(2000.0, 150.0, 400.0, 300.0), QRectF(1920.0, 0.0, 2560.0, 1440.0),
-                                  /*surfaceExtent=*/true);
+            computeAnchorUniforms(QRectF(2000.0, 150.0, 400.0, 300.0), QRectF(1920.0, 0.0, 2560.0, 1440.0));
         QCOMPARE(u.resolution, QVector2D(2560.0f, 1440.0f));
         QCOMPARE(u.anchorSize, QVector2D(400.0f, 300.0f));
         QCOMPARE(u.anchorPosInFbo, QVector2D(80.0f, 150.0f));
@@ -87,8 +88,7 @@ private Q_SLOTS:
     void testSurfaceExtentWindowAtOutputOrigin()
     {
         const AnchorUniforms u =
-            computeAnchorUniforms(QRectF(1920.0, 0.0, 1280.0, 720.0), QRectF(1920.0, 0.0, 2560.0, 1440.0),
-                                  /*surfaceExtent=*/true);
+            computeAnchorUniforms(QRectF(1920.0, 0.0, 1280.0, 720.0), QRectF(1920.0, 0.0, 2560.0, 1440.0));
         QCOMPARE(u.resolution, QVector2D(2560.0f, 1440.0f));
         QCOMPARE(u.anchorSize, QVector2D(1280.0f, 720.0f));
         QCOMPARE(u.anchorPosInFbo, QVector2D(0.0f, 0.0f));
@@ -101,23 +101,22 @@ private Q_SLOTS:
     void testSurfaceExtentNegativeAnchorOffset()
     {
         const AnchorUniforms u =
-            computeAnchorUniforms(QRectF(-30.0, -20.0, 800.0, 600.0), QRectF(0.0, 0.0, 1920.0, 1080.0),
-                                  /*surfaceExtent=*/true);
+            computeAnchorUniforms(QRectF(-30.0, -20.0, 800.0, 600.0), QRectF(0.0, 0.0, 1920.0, 1080.0));
         QCOMPARE(u.resolution, QVector2D(1920.0f, 1080.0f));
         QCOMPARE(u.anchorSize, QVector2D(800.0f, 600.0f));
         QCOMPARE(u.anchorPosInFbo, QVector2D(-30.0f, -20.0f));
     }
 
-    // Degenerate zero-size window: the helper passes the geometry through
-    // without clamping. Pins that contract. Callers (beginShaderTransition)
-    // guard against collapsed surfaces upstream, so the helper itself
-    // stays a pure, branch-free transform.
-    void testDegenerateZeroSizeWindow()
+    // Degenerate zero-size window: anchorSize clamps up to 1.0 to keep
+    // shader divisions safe (anchorRemap divides by iAnchorSize). The
+    // anchor offset still flows through unmodified so callers see the
+    // original placement.
+    void testDegenerateZeroSizeWindowClampsAnchorSize()
     {
-        const AnchorUniforms u = computeAnchorUniforms(QRectF(100.0, 200.0, 0.0, 0.0), QRectF(0.0, 0.0, 1920.0, 1080.0),
-                                                       /*surfaceExtent=*/true);
+        const AnchorUniforms u =
+            computeAnchorUniforms(QRectF(100.0, 200.0, 0.0, 0.0), QRectF(0.0, 0.0, 1920.0, 1080.0));
         QCOMPARE(u.resolution, QVector2D(1920.0f, 1080.0f));
-        QCOMPARE(u.anchorSize, QVector2D(0.0f, 0.0f));
+        QCOMPARE(u.anchorSize, QVector2D(1.0f, 1.0f));
         QCOMPARE(u.anchorPosInFbo, QVector2D(100.0f, 200.0f));
     }
 
@@ -127,8 +126,7 @@ private Q_SLOTS:
     void testSurfaceExtentFractionalGeometry()
     {
         const AnchorUniforms u =
-            computeAnchorUniforms(QRectF(100.5, 200.25, 800.5, 600.75), QRectF(0.0, 0.0, 1920.0, 1080.0),
-                                  /*surfaceExtent=*/true);
+            computeAnchorUniforms(QRectF(100.5, 200.25, 800.5, 600.75), QRectF(0.0, 0.0, 1920.0, 1080.0));
         QCOMPARE(u.resolution, QVector2D(1920.0f, 1080.0f));
         QCOMPARE(u.anchorSize, QVector2D(800.5f, 600.75f));
         QCOMPARE(u.anchorPosInFbo, QVector2D(100.5f, 200.25f));

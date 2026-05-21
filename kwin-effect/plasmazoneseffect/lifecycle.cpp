@@ -62,6 +62,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 {
     PhosphorProtocol::registerWireTypes();
 
+    // Sub-pixel vertex precision. KWin's default snapping rounds quad
+    // vertex positions to integer pixels before rasterising, which is
+    // fine for static / pixel-aligned windows but quantises smooth
+    // animations into 1px steps — visible judder at low translate
+    // velocities (the end of a bounce as it eases to rest, slow drag
+    // snaps). MagicLamp uses the same setting for its quad deformation.
+    setVertexSnappingMode(KWin::RenderGeometry::VertexSnappingMode::None);
+
     // Single-worker pool for off-loading user-texture loads. See the
     // header docstring for `m_shaderManager.m_textureLoaderPool` for the rationale —
     // serialised loads keep the dedupe cheap and avoid duplicate GPU

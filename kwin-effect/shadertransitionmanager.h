@@ -144,6 +144,28 @@ public:
         m_cachedIDate = v;
     }
 
+    /// Frame-pinned shader clock. `prePaintScreen` samples
+    /// `shaderClockNowMs()` once and stores it here; every `paintWindow`
+    /// call within that compositor cycle reads this value instead of
+    /// re-sampling steady_clock. Without this pin, KWin invoking
+    /// `paintWindow` more than once per cycle (back-to-back paint cycles
+    /// scheduled by our own `effects->addRepaint`, multi-output passes,
+    /// etc.) would cause each call to compute a slightly different
+    /// `progress` from a fresh `shaderClockNowMs()`, painting the
+    /// surface-extent quad at a different position each call — visible
+    /// as staggered ghost copies of the in-flight window.
+    /// `-1` means "no cycle in progress; fall back to live read"
+    /// (paintWindow happening before prePaintScreen on this effect
+    /// instance, e.g. test paths).
+    qint64 currentFrameClockMs() const
+    {
+        return m_currentFrameClockMs;
+    }
+    void setCurrentFrameClockMs(qint64 ms)
+    {
+        m_currentFrameClockMs = ms;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-window State
     // ═══════════════════════════════════════════════════════════════════════════
@@ -263,6 +285,7 @@ private:
     qint64 m_lastIDateRefreshMs = 0;
     QVector4D m_cachedIDate{};
     QPointF m_cachedCursorGlobal;
+    qint64 m_currentFrameClockMs = -1;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Generation + Edge-detection

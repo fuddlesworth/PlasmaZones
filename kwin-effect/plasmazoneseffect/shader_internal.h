@@ -30,13 +30,18 @@ inline qint64 shaderClockNowMs()
 /// Animation-shader anchor uniforms: where the captured window ("anchor")
 /// sits inside the shader's render target ("FBO").
 ///
-///   • Anchor extent (default): the render target covers the window 1:1,
-///     so `resolution == anchorSize` and the anchor sits at the origin.
+///   • Anchor extent (default): the FBO covers the anchor (frame). The
+///     anchor sits at the origin and `resolution == anchorSize`.
+///     EXCEPT on the kwin path the redirected FBO covers the EXPANDED
+///     geometry (frame + decoration + shadow), so `resolution` is the
+///     expanded size and `anchorPosInFbo` is the shadow inset. A shader
+///     sampling the FBO directly would otherwise treat the shadow edge
+///     as the window edge; shaders fold the FBO back into the window's
+///     own [0,1] space via `anchorRemap`.
 ///   • Surface extent (`fboExtent: "surface"`): the shader paints over the
 ///     whole output, so `resolution` is the output size, `anchorSize`
 ///     stays the window size, and `anchorPosInFbo` locates the window's
-///     top-left within the output. Surface-extent shaders read these (via
-///     `anchorRemap`) to composite the window into its sub-region.
+///     top-left within the output.
 struct AnchorUniforms
 {
     QVector2D resolution; ///< iResolution
@@ -45,19 +50,23 @@ struct AnchorUniforms
 };
 
 /// Compute the anchor uniforms for a paintWindow tick. Pure geometry:
-/// `windowFrame` and `outputGeometry` are logical-pixel rects at 1:1
+/// `anchor` is the captured-window rect (frame), `texture` is the rect
+/// the shader's vTexCoord [0,1] covers, both in logical pixels at 1:1
 /// scale (quad-list space and screen space coincide on the kwin path).
-/// See `AnchorUniforms` for the two extent modes.
-inline AnchorUniforms computeAnchorUniforms(const QRectF& windowFrame, const QRectF& outputGeometry, bool surfaceExtent)
+/// `iResolution` is the texture size, `iAnchorSize` is the anchor size,
+/// and `iAnchorPosInFbo` locates the anchor's top-left within the
+/// texture in logical pixels. When the texture equals the anchor (the
+/// daemon's anchor-extent path), the uniforms collapse to
+/// `{anchor, anchor, 0}` and `anchorRemap` reduces to identity.
+inline AnchorUniforms computeAnchorUniforms(const QRectF& anchor, const QRectF& texture)
 {
-    const QVector2D windowSize(static_cast<float>(windowFrame.width()), static_cast<float>(windowFrame.height()));
-    if (!surfaceExtent) {
-        return {windowSize, windowSize, QVector2D(0.0f, 0.0f)};
-    }
-    const QVector2D outputSize(static_cast<float>(outputGeometry.width()), static_cast<float>(outputGeometry.height()));
-    const QVector2D anchorPos(static_cast<float>(windowFrame.x() - outputGeometry.x()),
-                              static_cast<float>(windowFrame.y() - outputGeometry.y()));
-    return {outputSize, windowSize, anchorPos};
+    const QVector2D textureSize(static_cast<float>(qMax(texture.width(), 1.0)),
+                                static_cast<float>(qMax(texture.height(), 1.0)));
+    const QVector2D anchorSize(static_cast<float>(qMax(anchor.width(), 1.0)),
+                               static_cast<float>(qMax(anchor.height(), 1.0)));
+    const QVector2D anchorPos(static_cast<float>(anchor.x() - texture.x()),
+                              static_cast<float>(anchor.y() - texture.y()));
+    return {textureSize, anchorSize, anchorPos};
 }
 
 /// Pre-baked uniform / param key strings for the hot paths.
