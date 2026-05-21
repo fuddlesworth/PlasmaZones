@@ -14,6 +14,14 @@ class ISnapSettings
 public:
     virtual ~ISnapSettings() = default;
 
+    // Global snapping master toggle. When false the user has turned snapping
+    // off entirely: no window may be auto-snapped on open via any path (app
+    // rule, session restore, empty-zone auto-assign, last-used-zone).
+    // SnapEngine::resolveWindowRestore gates on this so the engine-internal
+    // auto-snap path and the daemon-side D-Bus gate (SnapAdaptor::applySnapResult)
+    // stay in lockstep.
+    virtual bool snappingEnabled() const = 0;
+
     virtual QStringList excludedApplications() const = 0;
     virtual QStringList excludedWindowClasses() const = 0;
     virtual StickyWindowHandling stickyWindowHandling() const = 0;

@@ -211,6 +211,28 @@ QHash<QString, int> buildZonePositionMap(Layout* layout)
     return map;
 }
 
+QHash<QString, int> buildGlobalZonePositionMap(const QList<Layout*>& layouts)
+{
+    QHash<QString, int> map;
+    for (Layout* layout : layouts) {
+        const QHash<QString, int> layoutMap = buildZonePositionMap(layout);
+        for (auto it = layoutMap.constBegin(); it != layoutMap.constEnd(); ++it) {
+            // The merge assumes zone UUIDs are unique across all layouts
+            // — break that invariant and the resnap path silently uses
+            // whatever position the later layout assigned, which can
+            // place windows into the wrong zone. Assert in debug builds
+            // so a future change (e.g. layout import / cloning that
+            // duplicates IDs) is caught immediately. Release builds
+            // accept the last-write-wins semantic to avoid crashing on
+            // legitimate-but-degenerate state.
+            Q_ASSERT_X(!map.contains(it.key()) || map.value(it.key()) == it.value(), "buildGlobalZonePositionMap",
+                       "duplicate zone UUID across layouts");
+            map[it.key()] = it.value();
+        }
+    }
+    return map;
+}
+
 } // namespace LayoutUtils
 
 } // namespace PhosphorZones

@@ -53,6 +53,15 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
         layoutManager, zoneDetector, screenManager, virtualDesktopManager, m_geometryResolver,
         PhosphorPlacement::PlacementConfig{settings->keepWindowsInZonesOnResolutionChange()}, this);
 
+    // Wire the disabled-context gate consulted before recording a snap-side
+    // PendingRestore on windowClosed. The placement library has no settings
+    // dependency, so the gate is injected from here — single funnel via
+    // isPersistedContextDisabled() so the predicate and the load/save filters
+    // share one decision implementation. See discussion #461.
+    m_service->setShouldTrackPredicate([this](const QString& screenId, int virtualDesktop) -> bool {
+        return !isPersistedContextDisabled(screenId, virtualDesktop);
+    });
+
     // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
     // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on
     // first navigation call; setZoneDetectionAdaptor is forwarded to
@@ -245,6 +254,19 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_autotileEngine) {
         connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this,
                 &WindowTrackingAdaptor::navigationFeedback);
+
+        // Disabled-context gate for autotile pending restores (discussion
+        // #461 item 2). Mirror of the snap-side ShouldTrackPredicate wired
+        // in the constructor — both routes share isPersistedContextDisabled
+        // so the live, save-time, and load-time gates can never drift.
+        // Activity is threaded through because autotile entries carry it
+        // (snap entries do not). See AutotileEngine::ShouldPersistRestorePredicate.
+        if (auto* autotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(autotileEngine)) {
+            autotile->setShouldPersistRestorePredicate(
+                [this](const QString& screenId, int desktop, const QString& activity) -> bool {
+                    return !isPersistedContextDisabled(screenId, desktop, activity);
+                });
+        }
     }
 }
 

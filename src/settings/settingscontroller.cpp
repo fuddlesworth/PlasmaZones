@@ -1270,9 +1270,16 @@ void SettingsController::assignTilingLayoutToScreenActivity(const QString& scree
     setNeedsSave(true);
 }
 
+// "Clear" on the per-page Assignment dropdowns means "clear this slot's
+// preference" — NOT "remove the entire (screen, desktop, activity) entry."
+// Snap-page clears route through stageSnapping(empty) so the flush
+// emits `setSnappingLayoutEntry(..., "")` which wipes only the snap
+// field on the daemon side; the tile preference and the rendered mode
+// at that context are preserved. Tile-page clears are symmetric via
+// stageTilingClear → `setTilingAlgorithmEntry(..., "")`.
 void SettingsController::clearScreenAssignment(const QString& screenName)
 {
-    m_staging.stageFullClear(screenName, 0, QString());
+    m_staging.stageSnapping(screenName, 0, QString(), QString());
     setNeedsSave(true);
 }
 
@@ -1284,13 +1291,13 @@ void SettingsController::clearTilingScreenAssignment(const QString& screenName)
 
 void SettingsController::clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
 {
-    m_staging.stageFullClear(screenName, virtualDesktop, QString());
+    m_staging.stageSnapping(screenName, virtualDesktop, QString(), QString());
     setNeedsSave(true);
 }
 
 void SettingsController::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
 {
-    m_staging.stageFullClear(screenName, 0, activityId);
+    m_staging.stageSnapping(screenName, 0, activityId, QString());
     setNeedsSave(true);
 }
 
@@ -1323,8 +1330,16 @@ QString SettingsController::getLayoutForScreen(const QString& screenName) const
     QString staged;
     if (m_staging.stagedSnappingLayout(screenName, 0, QString(), staged))
         return staged;
+    // Query the SCREEN-LEVEL snap slot (desktop=0, activity=""), not the
+    // daemon's contextual `getLayoutForScreen`. The latter walks the
+    // current-desktop / current-activity cascade — so when the user edits
+    // the Monitor row on the Snapping Assignments page (which writes the
+    // screen-level entry), the page's own re-read picks up the higher-
+    // priority per-desktop / per-activity entry instead and renders as
+    // "the save didn't stick". Mirrors `getTilingLayoutForScreen`, which
+    // already queries `getTilingAlgorithmForScreenDesktop(screen, 0)`.
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayoutForScreen"), {screenName});
+                                                QStringLiteral("getSnappingLayoutForScreenDesktop"), {screenName, 0});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
@@ -1337,8 +1352,14 @@ QString SettingsController::getTilingLayoutForScreen(const QString& screenName) 
         return staged;
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, 0});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        // Daemon returns the raw algorithm name (e.g. "cluster"); the
+        // LayoutComboBox model uses the prefixed "autotile:<algo>" form.
+        // Match the staged path (stagedTilingLayout already prefixes) so
+        // saved values resolve to a model entry instead of falling through
+        // to "Default".
+        return PhosphorLayout::LayoutId::normalizeAlgorithmId(reply.arguments().first().toString());
+    }
     return {};
 }
 
@@ -1398,11 +1419,8 @@ QString SettingsController::getTilingLayoutForScreenDesktop(const QString& scree
     QDBusMessage reply =
         DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, virtualDesktop});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString algo = reply.arguments().first().toString();
-        if (!algo.isEmpty())
-            return PhosphorLayout::LayoutId::makeAutotileId(algo);
-    }
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        return PhosphorLayout::LayoutId::normalizeAlgorithmId(reply.arguments().first().toString());
     return {};
 }
 
@@ -1438,13 +1456,18 @@ QString SettingsController::getSnappingLayoutForScreenActivity(const QString& sc
     QString staged;
     if (m_staging.stagedSnappingLayout(screenName, 0, activityId, staged))
         return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString layoutId = reply.arguments().first().toString();
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId))
-            return layoutId;
-    }
+    // Read the per-field snap slot at (screen, 0, activity), not the
+    // mode-resolved active-layout id. Mirrors
+    // SettingsController::getLayoutForScreen (commit 0bee42ee) — the legacy
+    // `getLayoutForScreenActivity` reply is mode-filtered and would hide a
+    // stored-but-inactive snap preference when the activity slot's mode is
+    // Autotile (per the partial-update / preserve-mode semantics added in
+    // c5d909034).
+    QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("getSnappingLayoutForScreenActivity"), {screenName, activityId});
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        return reply.arguments().first().toString();
     return {};
 }
 
@@ -1473,13 +1496,17 @@ QString SettingsController::getTilingLayoutForScreenActivity(const QString& scre
     QString staged;
     if (m_staging.stagedTilingLayout(screenName, 0, activityId, staged))
         return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString layoutId = reply.arguments().first().toString();
-        if (PhosphorLayout::LayoutId::isAutotile(layoutId))
-            return layoutId;
-    }
+    // Mirrors SettingsController::getTilingLayoutForScreen (commit d5cc4936):
+    // read the per-field tile slot via `getTilingAlgorithmForScreenActivity`
+    // and prefix the raw algo to the `autotile:<algo>` form so it matches
+    // LayoutComboBox model entries. The legacy `getLayoutForScreenActivity`
+    // path was mode-filtered and would silently hide a stored-but-inactive
+    // tile preference (Snapping-mode slot with a tile field set).
+    QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("getTilingAlgorithmForScreenActivity"), {screenName, activityId});
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        return PhosphorLayout::LayoutId::normalizeAlgorithmId(reply.arguments().first().toString());
     return {};
 }
 
@@ -1703,21 +1730,62 @@ bool SettingsController::isDesktopDisabled(int viewMode, const QString& screenNa
     return m_settings.isDesktopDisabled(modeFromViewMode(viewMode), screenName, desktop);
 }
 
+namespace {
+
+// Strip every connector-name ↔ resolved-id variant of `screenName + suffix`
+// from `entries`. Mirrors the read-side resolution that
+// Settings::isDesktopDisabled / isActivityDisabled apply via
+// ScreenIdentity::variantsFor so a stored entry in any form gets removed
+// regardless of which form the caller supplies. Discussion #461 item 12.
+void removeDisabledKeyVariants(QStringList& entries, const QString& screenName, const QString& suffix)
+{
+    for (const QString& variant : Phosphor::Screens::ScreenIdentity::variantsFor(screenName)) {
+        entries.removeAll(variant + suffix);
+    }
+}
+
+} // namespace
+
 void SettingsController::setDesktopDisabled(int viewMode, const QString& screenName, int desktop, bool disabled)
 {
+    // desktop <= 0 is nonsensical (QML supplies 1-based desktop numbers; the
+    // read-side isDesktopDisabled fast-paths to "not disabled" on this input).
+    // Without the guard, repeated toggles with desktop=0 would unboundedly
+    // append "<screen>/0" entries because the dedup check below also
+    // fast-paths to "not disabled".
+    if (screenName.isEmpty() || desktop <= 0) {
+        return;
+    }
     // The disabledDesktopsChanged(viewMode) signal is fired by the
     // m_settings → controller forward in the constructor — no manual emit
     // needed here.
     const auto mode = modeFromViewMode(viewMode);
-    QString key = screenName + QLatin1Char('/') + QString::number(desktop);
+    const QString desktopSuffix = QLatin1Char('/') + QString::number(desktop);
     QStringList entries = m_settings.disabledDesktops(mode);
-    if (disabled && !entries.contains(key)) {
-        entries.append(key);
-        m_settings.setDisabledDesktops(mode, entries);
-        setNeedsSave(true);
-    } else if (!disabled && entries.removeAll(key) > 0) {
-        m_settings.setDisabledDesktops(mode, entries);
-        setNeedsSave(true);
+    if (disabled) {
+        // isDesktopDisabled probes the stored list under both connector-name
+        // and resolved-id forms (settings.cpp builds `namesToCheck` with the
+        // variant set), so its `false` return structurally implies "no
+        // matching variant in entries" — an additional entries.contains()
+        // would be re-validating the same invariant.
+        if (!m_settings.isDesktopDisabled(mode, screenName, desktop)) {
+            entries.append(screenName + desktopSuffix);
+            m_settings.setDisabledDesktops(mode, entries);
+            setNeedsSave(true);
+        }
+    } else {
+        // Strip every variant of `<screen>/<desktop>`. The CLAUDE rule
+        // "only emit signals when value actually changes" extends to the
+        // dirty flag: if the variant strip is a no-op (the entry was
+        // already absent — possible when a stale QML view toggles a
+        // checkbox off for a screen that was never in the list), skip
+        // both the writeback and the dirty mark.
+        const QStringList before = entries;
+        removeDisabledKeyVariants(entries, screenName, desktopSuffix);
+        if (entries != before) {
+            m_settings.setDisabledDesktops(mode, entries);
+            setNeedsSave(true);
+        }
     }
 }
 
@@ -1729,18 +1797,36 @@ bool SettingsController::isActivityDisabled(int viewMode, const QString& screenN
 void SettingsController::setActivityDisabled(int viewMode, const QString& screenName, const QString& activityId,
                                              bool disabled)
 {
+    // Empty activityId is nonsensical (no activity is being addressed; the
+    // read-side isActivityDisabled fast-paths to "not disabled" on this
+    // input). Same unbounded-append regression as setDesktopDisabled's
+    // desktop<=0 case without this guard.
+    if (screenName.isEmpty() || activityId.isEmpty()) {
+        return;
+    }
     // See setDesktopDisabled — the per-mode signal is forwarded from
     // m_settings via the connect set up in the constructor.
     const auto mode = modeFromViewMode(viewMode);
-    QString key = screenName + QLatin1Char('/') + activityId;
+    const QString activitySuffix = QLatin1Char('/') + activityId;
     QStringList entries = m_settings.disabledActivities(mode);
-    if (disabled && !entries.contains(key)) {
-        entries.append(key);
-        m_settings.setDisabledActivities(mode, entries);
-        setNeedsSave(true);
-    } else if (!disabled && entries.removeAll(key) > 0) {
-        m_settings.setDisabledActivities(mode, entries);
-        setNeedsSave(true);
+    if (disabled) {
+        // See setDesktopDisabled — isActivityDisabled probes every screen-name
+        // variant against the stored entries, so a false return implies no
+        // match in any form.
+        if (!m_settings.isActivityDisabled(mode, screenName, activityId)) {
+            entries.append(screenName + activitySuffix);
+            m_settings.setDisabledActivities(mode, entries);
+            setNeedsSave(true);
+        }
+    } else {
+        // See setDesktopDisabled — strip every variant, but only write
+        // and mark dirty when something actually changed.
+        const QStringList before = entries;
+        removeDisabledKeyVariants(entries, screenName, activitySuffix);
+        if (entries != before) {
+            m_settings.setDisabledActivities(mode, entries);
+            setNeedsSave(true);
+        }
     }
 }
 

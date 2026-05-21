@@ -14,6 +14,7 @@
 #include <PhosphorIdentity/ScreenId.h>
 
 #include <QString>
+#include <QStringList>
 
 class QScreen;
 
@@ -154,6 +155,45 @@ PHOSPHORSCREENSCORE_EXPORT QString idForName(const QString& connectorName);
 
 /// Convert a screen identifier back to its current connector name.
 PHOSPHORSCREENSCORE_EXPORT QString nameForId(const QString& screenId);
+
+/**
+ * @brief Return every equivalent form of @p screenIdOrName.
+ *
+ * Given a screen identifier in either connector-name (e.g. "DP-2") or
+ * resolved-id (e.g. "Dell:U2722D:115107") form, returns a list containing
+ * the input plus the alternate form when it resolves to a different string.
+ * The input is always the first element so callers can rely on its position
+ * when picking a canonical key form on write.
+ *
+ * Returns an empty list when @p screenIdOrName is empty — callers iterating
+ * the result then run their loop body zero times, which is the correct
+ * "nothing to match" behavior for disable-list and lookup paths.
+ *
+ * Used by callers that need to match a stored screen-keyed entry regardless
+ * of which form was originally written (settings disable-lists, persisted
+ * snap-state, etc.). Consolidates the connector ↔ id variant-build logic
+ * that would otherwise be duplicated across every such caller.
+ */
+inline QStringList variantsFor(const QString& screenIdOrName)
+{
+    QStringList variants;
+    if (screenIdOrName.isEmpty()) {
+        return variants;
+    }
+    variants.append(screenIdOrName);
+    if (isConnectorName(screenIdOrName)) {
+        const QString resolved = idForName(screenIdOrName);
+        if (!resolved.isEmpty() && resolved != screenIdOrName) {
+            variants.append(resolved);
+        }
+    } else {
+        const QString connector = nameForId(screenIdOrName);
+        if (!connector.isEmpty() && connector != screenIdOrName) {
+            variants.append(connector);
+        }
+    }
+    return variants;
+}
 
 /**
  * @brief Tolerance-aware equality between two screen identifiers.

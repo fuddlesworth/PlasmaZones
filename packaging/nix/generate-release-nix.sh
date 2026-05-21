@@ -69,10 +69,37 @@ awk -v version="$VERSION" -v hash="$SRI_HASH" '
     !started && /^#/ { next }
     !started && /^$/ { next }
     /^\{/ { started = 1 }
-    started && /^  src,$/ { print "  fetchFromGitHub,"; next }
+    # Track whether fetchFromGitHub is already declared in the args set.
+    # The pre-flake-rewrite package.nix only took `src,` and we injected
+    # `fetchFromGitHub,` in its place. The current layout already declares
+    # `fetchFromGitHub,` alongside `src,` (for nixpkgs use), so we just drop
+    # `src,` instead of duplicating the argument (which is a Nix parse error).
+    started && /^  fetchFromGitHub,/ { has_fetch = 1; print; next }
+    started && /^  src,$/ {
+        if (!has_fetch) print "  fetchFromGitHub,"
+        next
+    }
     /^let$/ { in_let = 1; next }
     in_let && /^in$/ { in_let = 0; next }
     in_let { next }
+    # Current package.nix derives the version dynamically from a multi-line
+    # `version = let ... readFile ${src}/CMakeLists.txt ... in match` block.
+    # Replace the whole block with a hardcoded version line for release.
+    /^[[:space:]]*version = let$/ {
+        print "  version = \"" version "\";"
+        consuming_version = 1
+        next
+    }
+    consuming_version {
+        # The block ends with the `else throw "..."` line whose terminating `;`
+        # closes the `version = let ... in ...` assignment.
+        if (/else throw "Could not parse version from CMakeLists\.txt";/) {
+            consuming_version = 0
+        }
+        next
+    }
+    # Legacy single-line form. Kept so the script still works if someone
+    # reverts the inline readFile approach to a helper function.
     /version = extractVersion src;/ {
         print "  version = \"" version "\";"
         next

@@ -13,6 +13,10 @@
 
 #include <QLoggingCategory>
 #include <QStringList>
+#include <QTimer>
+
+#include <functional>
+#include <memory>
 
 namespace PlasmaZones {
 
@@ -97,6 +101,59 @@ void AutotileHandler::restoreAllBorderless()
     m_border.zoneGeometries.clear();
 }
 
+void AutotileHandler::drainPendingBorderlessRestore()
+{
+    if (m_pendingBorderlessRestore.isEmpty()) {
+        return;
+    }
+    if (m_pendingBorderlessFallback) {
+        m_pendingBorderlessFallback->stop();
+        m_pendingBorderlessFallback->deleteLater();
+        m_pendingBorderlessFallback = nullptr;
+    }
+    // Snapshot and clear first so reentrant drain calls (fallback timer
+    // racing with onComplete, or a second mode toggle mid-drain) start a
+    // fresh chain instead of mutating the one in flight.
+    auto pending = std::make_shared<QList<QString>>(m_pendingBorderlessRestore.values());
+    m_pendingBorderlessRestore.clear();
+
+    // Process one window per event-loop tick. setNoBorder(false) blocks the
+    // main thread for 30-120 ms per window (Wayland decoration round-trip);
+    // doing all four in a tight loop here drops frames from the concurrent
+    // OSD show animation (500 ms) and snap animation (300 ms) that started
+    // when applyGeometriesBatch dispatched. Yielding between calls lets kwin
+    // render frames in between — total wall time goes up (~300 ms vs ~64 ms
+    // batched) but the user-visible animations stay smooth.
+    //
+    // shared_ptr<function> + self-capture forms a chain that holds itself
+    // alive across QTimer reschedules; on the empty branch we stop
+    // rescheduling and the captures naturally unwind.
+    auto step = std::make_shared<std::function<void()>>();
+    *step = [this, pending, step]() {
+        if (pending->isEmpty()) {
+            m_effect->updateAllBorders();
+            return;
+        }
+        const QString windowId = pending->takeFirst();
+        KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+        // Skip the restore if autotile has been re-enabled on this window's
+        // current screen between stash and chunk-execution time. The new
+        // toggle's setWindowBorderless(true) is now authoritative; clearing
+        // it would flash the title bar and discard tracking the re-tile just
+        // added. Realistic trigger: user rapid-cycles through layouts and
+        // lands back on an autotile layout within the chain's ~300 ms
+        // lifetime. The original synchronous code was immune because no
+        // other slot could interleave between stash and clear.
+        if (w && m_autotileScreens.contains(m_effect->getWindowScreenId(w))) {
+            QTimer::singleShot(0, this, *step);
+            return;
+        }
+        restoreWindowBorders(w, windowId);
+        QTimer::singleShot(0, this, *step);
+    };
+    (*step)();
+}
+
 void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
 {
     const bool wasEnabled = m_border.hideTitleBars;
@@ -131,9 +188,6 @@ void AutotileHandler::updateShowBorderSetting(bool enabled)
 void AutotileHandler::setFocusFollowsMouse(bool enabled)
 {
     m_focusFollowsMouse = enabled;
-    if (!enabled) {
-        m_lastFocusFollowsMouseWindowId.clear();
-    }
 }
 
 bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId,
