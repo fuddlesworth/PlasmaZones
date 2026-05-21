@@ -3,7 +3,6 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Effects
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
 
@@ -116,36 +115,21 @@ Item {
         onRequest: root.dismissRequested()
     }
 
-    // Shadow effect
-    MultiEffect {
-        source: container
-        anchors.fill: container
-        shadowEnabled: true
-        shadowColor: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
-        shadowBlur: 1
-        shadowVerticalOffset: 4
-        shadowHorizontalOffset: 0
-    }
-
-    // Main container
-    Rectangle {
+    // The OSD card. QFZCommon.PopupFrame owns the background, border,
+    // soft glow, and the SurfaceAnimator shader anchor — the same chrome
+    // the layout-picker and zone-selector popups use. PopupFrame's
+    // internal captureItem extends past the frame so the glow is part of
+    // the captured texture and travels with the card through bounce /
+    // fly-in / etc. instead of snapping in when the leg ends.
+    QFZCommon.PopupFrame {
         id: container
-
-        // Shader-anchor opt-in: SurfaceAnimator's transition shader leg
-        // walks the visual tree for a `shaderAnchor: true` property tag
-        // and parents the transition shader (sized to this item, layer-
-        // enabled here) so pixelate / dissolve / glitch / etc. operate
-        // on this card's pixels rather than the fullscreen wayland
-        // surface backing the OSD host.
-        property bool shaderAnchor: true
 
         anchors.centerIn: parent
         width: previewContainer.width + Kirigami.Units.gridUnit * 3
         height: previewContainer.height + nameLabelRow.height + Kirigami.Units.gridUnit * 3
-        color: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, 0.95)
-        radius: Kirigami.Units.gridUnit * 1.5
-        border.color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.15)
-        border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+        backgroundColor: root.backgroundColor
+        textColor: root.textColor
+        containerRadius: Kirigami.Units.gridUnit * 1.5
 
         // Layout preview
         Item {
