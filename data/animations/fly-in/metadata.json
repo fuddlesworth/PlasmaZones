@@ -1,7 +1,7 @@
 {
     "id": "fly-in",
     "name": "Fly-In",
-    "description": "Translates the surface in from the closest horizontal screen edge — vertex-shader-driven.",
+    "description": "Translates the surface in from the closest horizontal screen edge.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Slide",

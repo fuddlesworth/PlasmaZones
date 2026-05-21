@@ -51,6 +51,16 @@ private Q_SLOTS:
                 any = true;
             }
         }
+        // The shared default vertex stage — auto-assigned by SurfaceAnimator
+        // to every anchor-extent effect that ships no effect.vert — is a
+        // real compilable shader, not an include fragment. The shared/
+        // directory is skipped wholesale above, so bake it explicitly:
+        // a GLSL error here breaks every daemon anchor-extent transition.
+        const QString sharedVert = animationsDir + QStringLiteral("/shared/animation.vert");
+        if (QFileInfo::exists(sharedVert)) {
+            QTest::newRow("shared/animation:vert") << sharedVert;
+            any = true;
+        }
         if (!any) {
             QSKIP("no animation shaders found to bake-check");
         }

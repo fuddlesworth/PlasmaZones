@@ -423,6 +423,16 @@ target_link_libraries(test_animation_shader_param_wiring PRIVATE Qt6::Test Qt6::
 target_compile_definitions(test_animation_shader_param_wiring PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_param_wiring COMMAND test_animation_shader_param_wiring)
 
+# Pure-geometry test for the kwin-effect's anchor-uniform branch
+# (ShaderInternal::computeAnchorUniforms) — pins anchor-extent vs
+# surface-extent (fboExtent: "surface") iResolution/iAnchorPosInFbo math.
+add_executable(test_anchor_uniforms ui/test_anchor_uniforms.cpp)
+target_link_libraries(test_anchor_uniforms PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation)
+# Resolve <plasmazoneseffect/shader_internal.h> without a brittle relative
+# path, and let CMake track the header as a dependency of the test.
+target_include_directories(test_anchor_uniforms PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+add_test(NAME test_anchor_uniforms COMMAND test_anchor_uniforms)
+
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently
 # drift from the GLSL wallpaperUv helper it mirrors.

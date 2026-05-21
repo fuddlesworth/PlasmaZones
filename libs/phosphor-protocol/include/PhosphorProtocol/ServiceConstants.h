@@ -37,6 +37,19 @@ inline constexpr QLatin1String Busy("org.plasmazones.Error.Busy");
 inline constexpr QLatin1String Shutdown("org.plasmazones.Error.Shutdown");
 }
 
+/// Property names exposed by the Settings interface's runtime D-Bus surface
+/// (distinct from the persisted-config keys served by `ConfigDefaults` —
+/// these names live on the wire only). Centralised so the daemon's
+/// `SettingsAdaptor` getter/setter map and remote consumers
+/// (`ClientHelpers::loadSettingAsync`) reference the same constant rather
+/// than duplicating string literals on both ends of the bus.
+namespace SettingProperty {
+inline constexpr QLatin1String ShaderProfileTree("shaderProfileTree");
+inline constexpr QLatin1String AnimationAppRules("animationAppRules");
+inline constexpr QLatin1String MotionProfileTree("motionProfileTree");
+inline constexpr QLatin1String AnimationShaderSearchPaths("animationShaderSearchPaths");
+}
+
 /// Single-instance app identities. Each PlasmaZones sub-process (settings,
 /// editor) advertises its own service name and a small controller object so
 /// the launcher can detect "already running" without scanning the bus.

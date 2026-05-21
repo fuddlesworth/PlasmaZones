@@ -1,11 +1,13 @@
 {
     "id": "bounce",
     "name": "Bounce",
-    "description": "Vertical bounce-down reveal — the surface drops in with bouncing oscillation.",
+    "description": "Vertical bounce-in — the window drops in from above the frame with a decaying bouncing oscillation.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Slide",
     "fragmentShader": "effect.frag",
+    "vertexShader": "effect.vert",
+    "fboExtent": "surface",
     "parameters": [
         {
             "id": "bounces",

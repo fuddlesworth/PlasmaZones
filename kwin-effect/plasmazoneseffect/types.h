@@ -74,6 +74,7 @@ struct CachedShader
     int iSurfaceScreenPosLoc = -1;
     int iAnchorSizeLoc = -1;
     int iAnchorPosInFboLoc = -1;
+    int iAnchorRectInTextureLoc = -1;
     // Slot counts sourced from AnimationShaderContract so a future change to
     // the contract (e.g. growing the customParams budget) can't silently
     // desync this cache from the translation + upload sites in
@@ -152,6 +153,14 @@ struct ShaderTransition
     /// "fully revealed", which is exactly the semantic users expect for
     /// the corresponding `disappear` event.
     bool reverse = false;
+    /// True when the active animation declares `fboExtent: "surface"` in
+    /// its metadata. Surface-extent shaders (bounce, fly-in, broken-glass,
+    /// morph) paint past the window bounds, so `apply()` expands the
+    /// drawn quad to the window's output and paintWindow feeds
+    /// output-relative `iResolution` / `iAnchorPosInFbo` / `iAnchorSize`.
+    /// Anchor-extent transitions (the default) keep the window-sized
+    /// quad and uniforms.
+    bool surfaceExtent = false;
     /// Per-leg frame counter. Bumped each paintWindow tick where this
     /// transition feeds the shader; reset to 0 on every fresh
     /// beginShaderTransition install (or supersession). Mirrors the daemon's
@@ -209,6 +218,23 @@ struct ShaderTransition
     /// no-op, and clearing it on a deleted window lets KWin proceed with
     /// final destruction.
     bool closeGrabHeld = false;
+    /// True when this transition holds @c KWin::WindowAddedGrabRole on the
+    /// window. The grab role tells every OTHER effect in the chain to
+    /// ignore this window for built-in window-open animations (KWin's
+    /// stock fade / scale / slide / glide on windowAdded). Without it,
+    /// those built-in effects render the window concurrently with our
+    /// fly-in / bounce shader — KWin's fade paints the window at its
+    /// natural position with its own progress while our shader paints
+    /// the same window at the UV-shifted position. Both end up in the
+    /// same framebuffer and the user sees multiple visible copies of
+    /// the window, each animating on a different timeline.
+    ///
+    /// Set true only by the @c slotWindowAdded → @c tryBeginShaderForEvent
+    /// path (via the @c holdAddedGrab parameter threaded through
+    /// @c beginShaderTransition). Released in @c endShaderTransition
+    /// unconditionally — clearing the role on a window with no
+    /// pending built-in open animation is a no-op.
+    bool addedGrabHeld = false;
 };
 
 /// Pre-computed snap restore target for a pending app
@@ -222,6 +248,38 @@ struct CachedSnapRestore
 {
     QRect geometry;
     QString screenId;
+};
+
+/// First-frame suppression bookkeeping for a window that is about to be
+/// repositioned on open (snap-restore or autotile).
+///
+/// KWin places a new window at its centred placement geometry and
+/// composites it there BEFORE the effect's `windowAdded` handler can move
+/// it into a zone / tile — `windowAdded` is the earliest hook an effect
+/// gets, and it fires post-placement. The effect's `moveResize` is an
+/// asynchronous Wayland configure, so without suppression the window
+/// visibly flashes at screen centre for the 1-N frames the configure
+/// takes to round-trip (longer for the autotile / async-resolve D-Bus
+/// paths). While a `RestoreSuppression` entry exists for a window,
+/// `paintWindow` draws nothing for it — the window is invisible until it
+/// has settled into its destination.
+struct RestoreSuppression
+{
+    /// frameGeometry at `windowAdded`. The window is released once its
+    /// live geometry leaves this point — i.e. the repositioning configure
+    /// has landed.
+    QRectF spawnGeometry;
+    /// The resolved snap / tile rect, stamped by `applySnapGeometry` once
+    /// the window is actually being repositioned. Invalid until then:
+    /// while invalid a geometry change is NOT treated as "settled" — it is
+    /// just the client's own initial size negotiation — so suppression
+    /// holds until the real reposition target is known.
+    QRectF targetGeometry;
+    /// `shaderClockNowMs()` hard deadline. If the window is never
+    /// repositioned (it floats, all zones are full, the daemon is
+    /// unreachable) suppression is released unconditionally here so a
+    /// window can never be lost behind a stuck suppression.
+    qint64 deadlineMs = 0;
 };
 
 /// A single virtual screen subdivision within a physical monitor.

@@ -126,4 +126,31 @@ float boundaryMask(vec2 uv) {
     return lo.x * lo.y * hi.x * hi.y;
 }
 
+// Pixel-accurate variant of boundaryMask for rigid-translation shaders
+// (bounce, fly-in). Returns 1.0 inside the [0, 1] anchor and antialiases
+// each edge across a band ONE device pixel wide, centred on the edge.
+//
+// boundaryMask places its fixed 0.005-of-UV feather band ENTIRELY
+// outside [0, 1]. When the sampled texture has real content past its
+// border that is fine — the kwin path's redirected FBO carries the
+// window's shadow there, so the band fades into the shadow. But the
+// daemon captures the anchor into an exactly anchor-sized,
+// clamp-to-edge texture: there is nothing past the border, so the band
+// multiplies a fading alpha onto the clamped OPAQUE edge texel and
+// paints a visible halo of edge colour — the "grey border" around a
+// translating OSD. Worse, the band is 0.005 of the anchor, so it widens
+// with the surface (5 px on a 1000 px card).
+//
+// fwidth() makes the band exactly one pixel wide regardless of anchor
+// size, and centring it on the geometric edge makes this a true
+// antialiased crop: fully-covered interior pixels stay at 1.0 (no
+// inner-edge fade), the edge pixel gets its real fractional coverage,
+// and the sub-pixel outside half is ordinary edge AA, not a halo.
+float boundaryMaskAA(vec2 uv) {
+    vec2 fw = max(fwidth(uv), vec2(1.0e-5));
+    vec2 lo = smoothstep(-0.5 * fw, 0.5 * fw, uv);
+    vec2 hi = smoothstep(-0.5 * fw, 0.5 * fw, vec2(1.0) - uv);
+    return lo.x * lo.y * hi.x * hi.y;
+}
+
 #endif

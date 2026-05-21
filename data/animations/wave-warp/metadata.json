@@ -1,7 +1,7 @@
 {
     "id": "wave-warp",
     "name": "Wave Warp",
-    "description": "Soft directional wave wipe with scale-warp — the surface contracts inward as it sweeps across.",
+    "description": "Soft directional wave wipe with scale-warp — the surface contracts inward as it sweeps across. Front Speed >= 1 lets the wipe complete early and hold revealed (subsumes the former crosswarp shader).",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Slide",
@@ -22,6 +22,15 @@
             "default": 0.0,
             "min": 0.0,
             "max": 6.28318
+        },
+        {
+            "id": "frontSpeed",
+            "name": "Front Speed",
+            "description": "1.0 holds niri's original timing; values above 1.0 complete the wipe early and hold the surface fully revealed for the rest of the leg. The lower bound is 1.0 — there is no slow-front mode below that.",
+            "type": "float",
+            "default": 1.0,
+            "min": 1.0,
+            "max": 4.0
         }
     ]
 }

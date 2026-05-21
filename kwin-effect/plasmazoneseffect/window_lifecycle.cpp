@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../plasmazoneseffect.h"
+#include "shader_internal.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -25,17 +26,82 @@ namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
+namespace {
+// Hard upper bound on first-frame open suppression. A window we expect to
+// reposition is held invisible until its configure lands; if it never
+// does (window floats, all zones full, daemon unreachable) the deadline
+// releases it so a window can never be lost behind a stuck suppression.
+// Sized to comfortably cover a daemon resolve + a Wayland configure
+// round-trip, while a mis-suppressed floating window only ever waits this
+// long — within the envelope of KWin's own window-open fade.
+constexpr qint64 kRestoreSuppressDeadlineMs = 250;
+} // namespace
+
+// Withhold a freshly-opened window from compositing until its snap-restore
+// / autotile reposition lands. See RestoreSuppression in types.h for why
+// this is necessary (KWin paints the window at its centred placement
+// before the effect can move it).
+void PlasmaZonesEffect::beginRestoreSuppression(KWin::EffectWindow* window)
+{
+    if (!window) {
+        return;
+    }
+    RestoreSuppression sup;
+    sup.spawnGeometry = window->frameGeometry();
+    sup.deadlineMs = ShaderInternal::shaderClockNowMs() + kRestoreSuppressDeadlineMs;
+    m_restoreSuppress.insert(window, sup);
+}
+
+// Release a window from first-frame suppression and repaint it so the now-
+// settled window (and any open-shader transition) becomes visible. No-op
+// if the window was not suppressed.
+void PlasmaZonesEffect::endRestoreSuppression(KWin::EffectWindow* window)
+{
+    if (!window || m_restoreSuppress.remove(window) == 0) {
+        return;
+    }
+    if (!window->isDeleted()) {
+        window->addRepaintFull();
+    }
+}
+
 void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 {
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
+    // Whether this window is a snap-restore candidate — it may be
+    // teleported into a saved zone moments after opening (instantly from
+    // cache, or after an async daemon resolve). Stricter filter — only
+    // normal application windows, NOT dialogs / utilities.
+    const bool canSnapRestore =
+        shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized() && !hasOtherWindowOfClassWithDifferentPid(w);
+
     // window.open shader transition: fires once for every newly-mapped
-    // window we handle. KWin's stock fade-in handles the *motion* (alpha
-    // fade-in over a few frames), so the shader leg layers a transition
-    // effect on top. tryBeginShaderForEvent silently no-ops when the user
-    // hasn't assigned a shader to window.open in their tree.
-    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowOpen, animationDurationMs());
+    // normal top-level window we handle. Gate by the same filter as the
+    // snap-restore candidate check so the shader DOESN'T fire on the
+    // child surfaces an app spawns alongside its main window (popup
+    // menus, dropdowns, tooltips, dialogs, transient utility windows).
+    // Without this gate, a single app open like Discord triggers a
+    // fly-in on every sub-surface — main window sliding in slowly while
+    // sidebar / popup surfaces slide in moments behind it from t=0,
+    // producing the "main slow + copies fast" visual artifact users
+    // describe as "multiple ghosted copies of the animation". KWin's
+    // stock fade-in still handles the cosmetic motion for the filtered-
+    // out surfaces; we just skip the user's surface-extent shader leg.
+    // Same predicate gates both the user-assigned open shader and the
+    // first-frame suppression decision below. Compute once.
+    const bool tileableAppWindow = shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized();
+    if (tileableAppWindow) {
+        // holdAddedGrab=true: take KWin::WindowAddedGrabRole so KWin's
+        // stock window-open built-ins (fade / scale / slide / glide)
+        // skip this window. Without it, KWin's stock fade-in renders
+        // the window at its natural position concurrently with our
+        // shader's UV-shifted animation, producing the visible
+        // multi-copy ghost trail.
+        tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowOpen, animationDurationMs(),
+                               /*reverse=*/false, /*holdCloseGrab=*/false, /*holdAddedGrab=*/true);
+    }
 
     // Populate the daemon's WindowRegistry with this window's initial metadata.
     // Runs before any other daemon notification so consumers querying the
@@ -50,15 +116,25 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 
     bool onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
 
-    // Check if this window is a candidate for snap restore
-    // Use stricter filter - only normal application windows, NOT dialogs/utilities
-    bool canSnapRestore =
-        shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized() && !hasOtherWindowOfClassWithDifferentPid(w);
+    // First-frame suppression: KWin places a new window at its centred
+    // placement geometry and composites it there before this handler can
+    // move it into a zone / tile. Withhold the window from compositing
+    // until its repositioning configure lands (see RestoreSuppression) so
+    // it never flashes at the screen centre. Applies to every window we
+    // are about to reposition on open: snap-restore candidates (which
+    // always run resolveWindowRestore below) and tileable windows on an
+    // autotile screen (which the autotile engine tiles). The window is
+    // released by endRestoreSuppression on geometry-settle, on a negative
+    // resolve, or on the hard deadline.
+    if (canSnapRestore || (tileableAppWindow && onAutotileScreen)) {
+        beginRestoreSuppression(w);
+    }
 
     // Instant snap restore: if we have a cached zone geometry for this app,
-    // teleport the window immediately — no D-Bus round-trip, no visible flash.
-    // The async callResolveWindowRestore still runs to register the zone assignment
-    // in the daemon; this just eliminates the visual lag.
+    // restore the window immediately — no D-Bus round-trip — so it animates
+    // into its zone without waiting for the async resolve. The async
+    // callResolveWindowRestore still runs to register the zone assignment in
+    // the daemon; this just eliminates the visual lag.
     //
     // The cache is authoritative about the target SCREEN, not the window's current
     // placement. Each entry carries the screenId of the saved zone; the daemon
@@ -73,6 +149,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Rare race: the saved screen may have flipped from snap→autotile between
     // when the cache was populated and when the window opens. Re-check the
     // entry's screen mode via the autotile handler before applying.
+    bool instantRestoreApplied = false;
     if (canSnapRestore && !m_snapRestoreCache.isEmpty()) {
         QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
         auto cacheIt = m_snapRestoreCache.find(appId);
@@ -83,8 +160,16 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
             if (cached.geometry.isValid() && !savedScreenNowAutotile) {
                 qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached.geometry
                                  << "screen:" << cached.screenId;
+                instantRestoreApplied = true;
+                // skipAnimation=true: teleport straight into the zone.
+                // First-frame open suppression (beginRestoreSuppression
+                // above in slotWindowAdded) withholds the window from
+                // compositing until KWin's async moveResize commits, so
+                // by the time paintWindow runs the live frameGeometry()
+                // already reports the resolved zone — the surface-extent
+                // open shader (bounce, fly-in) plays into the zone from
+                // the first painted frame without any anchor pinning.
                 applySnapGeometry(w, cached.geometry, false, /*skipAnimation=*/true);
-                m_snapRestoreCache.erase(cacheIt);
                 // Re-evaluate screen after teleport — cross-VS/cross-monitor
                 // moveResize updates KWin's output assignment, so the window
                 // may no longer be on an autotile screen.
@@ -92,12 +177,24 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
             } else if (savedScreenNowAutotile) {
                 qCDebug(lcEffect) << "Skipping instant snap restore for" << appId
                                   << "- saved screen now autotile:" << cached.screenId;
-                m_snapRestoreCache.erase(cacheIt);
+            } else {
+                // Cached geometry is invalid (corrupt / zero-size persisted
+                // rect on a snap-mode screen). The cache is single-shot
+                // per app-open: any entry seen here has been considered
+                // for routing, regardless of whether it was actually
+                // applied. Drop it so the next open of the same appId
+                // doesn't re-evaluate this same dead entry forever.
+                qCDebug(lcEffect) << "Discarding instant snap restore entry for" << appId
+                                  << "- geometry invalid:" << cached.geometry << "screen:" << cached.screenId;
             }
+            // Single-shot semantics: the entry is consumed regardless of
+            // which branch ran, so erase unconditionally once we've
+            // looked at it.
+            m_snapRestoreCache.erase(cacheIt);
         }
     }
 
-    if (onAutotileScreen && canSnapRestore) {
+    if (onAutotileScreen && canSnapRestore && !instantRestoreApplied) {
         // Window landed on an autotile screen, but may have a pending snap restore
         // to a non-autotile screen. KWin's session restore places windows at their
         // saved geometry, which may be a pre-snap floating position in the autotile
@@ -105,24 +202,122 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // before logout. Try snap restore FIRST: if it moves the window off the
         // autotile screen, we avoid the autotile add→float→remove→resnap dance
         // that causes visible flickering and repeated resizing.
+        //
+        // Skip when `instantRestoreApplied` is true: the window was already
+        // teleported by the instant-restore branch above, the cache entry
+        // is consumed, and a second daemon round-trip would just confirm
+        // "no zone" (cache cleared) or — worse — re-stamp `targetGeometry`
+        // on the still-active suppression entry on a redundant moveResize.
         QPointer<KWin::EffectWindow> safeW = w;
-        callResolveWindowRestore(w, [this, safeW]() {
-            if (!safeW || safeW->isDeleted()) {
-                return;
-            }
-            // Snap restore either moved the window to a snap screen (no-op for
-            // autotile) or didn't apply (window genuinely belongs on autotile).
-            m_autotileHandler->notifyWindowAdded(safeW);
-        });
+        // releaseSuppressionOnMiss=false: if snap-restore finds no zone, the
+        // onComplete autotile path may still reposition the window — keep it
+        // suppressed until that reposition's geometry settles. If autotile
+        // ALSO declines to act (notifyWindowAdded returns false: ineligible
+        // window, daemon decided not to tile, already-notified), nothing
+        // further will move the window, so release suppression immediately
+        // rather than waiting for the 250ms deadline.
+        callResolveWindowRestore(
+            w,
+            [this, safeW]() {
+                if (!safeW || safeW->isDeleted()) {
+                    return;
+                }
+                // Snap restore either moved the window to a snap screen (no-op for
+                // autotile) or didn't apply (window genuinely belongs on autotile).
+                if (!m_autotileHandler->notifyWindowAdded(safeW)) {
+                    endRestoreSuppression(safeW.data());
+                }
+            },
+            /*releaseSuppressionOnMiss=*/false);
         return;
     }
 
-    // Standard path: notify autotile first, then try snap restore
-    m_autotileHandler->notifyWindowAdded(w);
-
-    if (!onAutotileScreen && canSnapRestore) {
-        callResolveWindowRestore(w);
+    // Standard path: notify autotile first, then try snap restore. If
+    // autotile is on this screen but doesn't actually act (daemon-side
+    // filter, already-notified, etc.), and snap-restore won't run either
+    // (the !onAutotileScreen guard below), nothing will move the window —
+    // release suppression so it doesn't wait out the deadline.
+    const bool autotileTookOver = m_autotileHandler->notifyWindowAdded(w);
+    if (!autotileTookOver && onAutotileScreen) {
+        endRestoreSuppression(w);
     }
+
+    if (!onAutotileScreen && canSnapRestore && !instantRestoreApplied) {
+        // Skip when `instantRestoreApplied` is true: the cache entry was
+        // consumed and the daemon would just answer "no zone".
+        callResolveWindowRestore(w);
+    } else if (instantRestoreApplied) {
+        // Instant-restore already moved the window into its zone, but
+        // first-frame suppression is still active waiting for a settle
+        // signal. The settle hook (windowFrameGeometryChanged) already
+        // fires once moveResize commits, so suppression releases on its
+        // own — no extra work here.
+    }
+}
+
+// Window-restore-on-open: when a window we handle is mapped, ask the daemon
+// whether it has a saved zone to restore it into, and apply it. This is the
+// async counterpart of slotWindowAdded's instant cache restore. It lives
+// here, next to slotWindowAdded (its only caller), rather than in
+// drag_snap.cpp — it has nothing to do with drag-to-snap; it only happens to
+// build on the shared applySnapGeometry / tryAsyncSnapCall machinery.
+void PlasmaZonesEffect::callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete,
+                                                 bool releaseSuppressionOnMiss)
+{
+    if (!window) {
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
+
+    if (!isDaemonReady("resolve window restore")) {
+        // No daemon means no snap-restore (and no autotile either — it
+        // needs the daemon too). Release first-frame suppression so the
+        // window is not held invisible waiting on a reposition that will
+        // never come.
+        endRestoreSuppression(window);
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
+
+    QPointer<KWin::EffectWindow> safeWindow = window;
+    QString windowId = getWindowId(window);
+    QString screenId = getWindowScreenId(window);
+    bool sticky = isWindowSticky(window);
+
+    // On a resolve miss (daemon found no zone) release first-frame
+    // suppression — unless the caller says another path will still
+    // reposition the window (autotile-screen path), in which case the
+    // suppression must hold until that reposition's geometry settles.
+    std::function<void()> onMiss;
+    if (releaseSuppressionOnMiss) {
+        onMiss = [this, safeWindow]() {
+            if (safeWindow) {
+                endRestoreSuppression(safeWindow);
+            }
+        };
+    }
+
+    // Single D-Bus call — daemon runs the full appRule → persisted → emptyZone → lastZone chain.
+    //
+    // skipAnimation=true: teleport the window straight into the resolved
+    // zone. The animated morph path tweens the window from its spawn
+    // position, which both reads as "KDE opened the window, then we moved
+    // it" and collides with any in-flight surface-extent window.open
+    // shader (bounce / fly-in) — the morph translates the output-spanning
+    // shader quad. Placing the window directly lets the open shader play
+    // cleanly into the zone.
+    //
+    // storePreSnap=false: the window is already at its snap/zone position (from before
+    // daemon restart or from KWin session restore), so its current frameGeometry is the
+    // zone geometry — NOT the free-floating geometry. Storing it as pre-tile would cause
+    // float toggle to restore to the zone geometry instead of the original free-floating position.
+    tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
+                     {windowId, screenId, sticky}, safeWindow, windowId, false, onMiss, nullptr,
+                     /*skipAnimation=*/true, onComplete);
 }
 
 void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
@@ -184,6 +379,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_windowIdCache.remove(w);
     m_windowIdReverse.remove(closedWindowId);
     m_trackedScreenPerWindow.remove(w);
+    m_restoreSuppress.remove(w);
 }
 
 void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
@@ -443,14 +639,43 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowFrameGeometryChanged);
 
-    // Frame-geometry shadow: push the latest geometry to the daemon so
-    // daemon-local shortcut handlers (float toggle, etc.) can read fresh
-    // geometry without round-tripping. Debounced at ~50ms per window via
-    // m_frameGeometryFlushTimer so rapid move/resize sequences collapse
-    // into at most one D-Bus push.
+    // Single windowFrameGeometryChanged lambda combining the effect-side
+    // per-tick work — first-frame open suppression release AND debounced
+    // daemon push — into one connection. Keeping these as two separate
+    // connections (which they were originally) doubled the per-geometry-
+    // tick lambda dispatch cost without functional benefit; the bodies
+    // are independent so collapsing them just runs one capture+vtable
+    // hop per tick instead of two. The autotile-handler connection
+    // immediately above is kept separate because it dispatches to a slot
+    // on a different receiver (`m_autotileHandler.get()`).
+    //
+    // Body 1 — first-frame open suppression release: a window withheld
+    // from compositing on open (see RestoreSuppression) is released the
+    // moment its reposition configure lands — detected as the live
+    // geometry leaving the spawn point once applySnapGeometry has
+    // stamped the resolved target. Before the target is known a
+    // geometry change is just the client's own initial size negotiation
+    // and is ignored. Full-rect compare (not just topLeft) catches
+    // size-only configures whose origin coincidentally matches the
+    // spawn point.
+    //
+    // Body 2 — frame-geometry shadow: push the latest geometry to the
+    // daemon so daemon-local shortcut handlers (float toggle, etc.) can
+    // read fresh geometry without round-tripping. Debounced at ~50 ms
+    // per window via m_frameGeometryFlushTimer so rapid move/resize
+    // sequences collapse into at most one D-Bus push.
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
             [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
-                if (!safeW || !shouldHandleWindow(safeW)) {
+                if (!safeW) {
+                    return;
+                }
+                // Body 1 — suppression release
+                if (auto it = m_restoreSuppress.find(safeW.data()); it != m_restoreSuppress.end()
+                    && it->targetGeometry.isValid() && safeW->frameGeometry() != it->spawnGeometry) {
+                    endRestoreSuppression(safeW.data());
+                }
+                // Body 2 — debounced daemon shadow
+                if (!shouldHandleWindow(safeW)) {
                     return;
                 }
                 const QString windowId = getWindowId(safeW);
