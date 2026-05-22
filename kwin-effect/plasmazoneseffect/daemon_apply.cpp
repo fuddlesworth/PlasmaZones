@@ -332,12 +332,22 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // non-mode-toggle batches (rotate, vs_reconfigure, snap_all)
             // the pending set is empty and the call is a no-op.
             m_autotileHandler->drainPendingBorderlessRestore();
-            // Show snap assist after resnap if applicable
+            // Show snap assist after resnap if applicable.
+            //
+            // A resnap is a bulk operation (autotile→snap toggle, rotate,
+            // vs-reconfigure) — not a per-window snap — so the continuation is
+            // anchored to the active window: snap assist shows ONLY if the
+            // resnap actually placed the active window in a zone. Passing its
+            // windowId as the anchor makes showContinuationIfNeeded gate on
+            // "this window is snapped", which also guarantees at least one
+            // zone is occupied. Without the anchor, a resnap that snapped
+            // nothing (e.g. toggling to snap mode with no prior assignments)
+            // left every zone empty and popped snap assist for all of them.
             if (action == QLatin1String("resnap") && m_snapAssistHandler->isEnabled()) {
                 KWin::EffectWindow* activeWin = getActiveWindow();
                 QString activeScreenId = activeWin ? getWindowScreenId(activeWin) : QString();
-                if (!activeScreenId.isEmpty() && !m_autotileHandler->isAutotileScreen(activeScreenId)) {
-                    m_snapAssistHandler->showContinuationIfNeeded(activeScreenId);
+                if (activeWin && !activeScreenId.isEmpty() && !m_autotileHandler->isAutotileScreen(activeScreenId)) {
+                    m_snapAssistHandler->showContinuationIfNeeded(activeScreenId, getWindowId(activeWin));
                 }
             }
         });
