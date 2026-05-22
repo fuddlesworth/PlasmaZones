@@ -322,6 +322,7 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
     // are never eligible for autotile notification. KWin's InternalWindow::minSize()
     // segfaults when the backing QWindow is null. See discussion #511.
     if (w && w->window() && w->window()->isInternal()) {
+        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (internal window)" << m_effect->getWindowId(w);
         return false;
     }
     if (!w || !m_effect->shouldHandleWindow(w)) {
