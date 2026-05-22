@@ -318,6 +318,13 @@ void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId, con
 
 bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
 {
+    // Early-out: KWin internal surfaces (overlay QQuickViews, zone overlays, etc.)
+    // are never eligible for autotile notification. KWin's InternalWindow::minSize()
+    // segfaults when the backing QWindow is null. See discussion #511.
+    if (w && w->window() && w->window()->isInternal()) {
+        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (internal window)" << m_effect->getWindowId(w);
+        return false;
+    }
     if (!w || !m_effect->shouldHandleWindow(w)) {
         qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (not handleable)"
                           << (w ? m_effect->getWindowId(w) : QStringLiteral("null"));

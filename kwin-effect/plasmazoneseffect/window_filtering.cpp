@@ -389,7 +389,7 @@ void PlasmaZonesEffect::logWindowDiagnostics(KWin::EffectWindow* w, const char* 
                           << "onCurrentActivity:" << w->isOnCurrentActivity()
                           << "onAllDesktops:" << w->isOnAllDesktops();
     qCDebug(lcEffectDiag) << "[window-diag]   geometry — frame:" << w->frameGeometry()
-                          << "minSize:" << (kw ? kw->minSize() : QSizeF());
+                          << "minSize:" << (kw && !kw->isInternal() ? kw->minSize() : QSizeF());
 
     if (KWin::EffectWindow* parent = w->transientFor()) {
         qCDebug(lcEffectDiag) << "[window-diag]   transientFor — YES — parent class:" << parent->windowClass()

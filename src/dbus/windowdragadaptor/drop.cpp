@@ -85,6 +85,32 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const QRect capturedOriginalGeometry = m_originalGeometry;
     const bool capturedSnapCancelled = m_snapCancelled;
     const bool capturedZoneSelectorShown = m_zoneSelectorShown;
+
+    // Cross-screen stale-geometry guard. capturedZoneGeometry / capturedMultiZoneGeometry
+    // come from the last dragMoved tick, which may have resolved a zone on a different
+    // output than this release. Applying that rect would place the window on the wrong
+    // screen while commitSnap below records it on releaseScreenId. Resolve the captured
+    // rect's own physical screen and require it to match the release screen; on a
+    // mismatch the snap is declined and the window float-drops at its release position.
+    // See discussion #511.
+    bool capturedGeometryMatchesReleaseScreen = true;
+    {
+        const QRect activeCapturedGeometry = (capturedIsMultiZoneMode && capturedMultiZoneGeometry.isValid())
+            ? capturedMultiZoneGeometry
+            : capturedZoneGeometry;
+        if (activeCapturedGeometry.isValid()) {
+            const QString geometryPhysicalId = resolveScreenAt(QPointF(activeCapturedGeometry.center())).physicalId;
+            if (!geometryPhysicalId.isEmpty() && !releaseResolved.physicalId.isEmpty()
+                && geometryPhysicalId != releaseResolved.physicalId) {
+                capturedGeometryMatchesReleaseScreen = false;
+                qCWarning(lcDbusWindow) << "dragStopped: captured zone geometry" << activeCapturedGeometry
+                                        << "is on screen" << geometryPhysicalId << "but window released on"
+                                        << releaseResolved.physicalId << "- declining cross-screen stale snap for"
+                                        << windowId;
+            }
+        }
+    }
+
     // Release on a disabled context: do not snap to overlay zone
     bool useOverlayZone = true;
     int curDesktopDrop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
@@ -274,7 +300,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Use captured values to avoid race condition with concurrent drags
     // Do not snap to overlay zone when releasing on a disabled monitor
     if (!usedZoneSelector && !capturedSnapCancelled && !capturedZoneId.isEmpty() && useOverlayZone) {
-        if (capturedIsMultiZoneMode && capturedMultiZoneGeometry.isValid()) {
+        if (capturedIsMultiZoneMode && capturedMultiZoneGeometry.isValid() && capturedGeometryMatchesReleaseScreen) {
             snapX = capturedMultiZoneGeometry.x();
             snapY = capturedMultiZoneGeometry.y();
             snapWidth = capturedMultiZoneGeometry.width();
@@ -300,7 +326,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 // Record user-initiated snap (not auto-snap)
                 m_windowTracking->service()->recordSnapIntent(windowId, true);
             }
-        } else if (capturedZoneGeometry.isValid()) {
+        } else if (capturedZoneGeometry.isValid() && capturedGeometryMatchesReleaseScreen) {
             snapX = capturedZoneGeometry.x();
             snapY = capturedZoneGeometry.y();
             snapWidth = capturedZoneGeometry.width();
