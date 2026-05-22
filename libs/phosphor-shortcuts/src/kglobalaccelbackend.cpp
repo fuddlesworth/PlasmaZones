@@ -36,17 +36,6 @@ public:
         // means "nothing sent yet".
         QKeySequence lastDefault;
         QKeySequence lastCurrent;
-        // True for transient/ad-hoc shortcuts (e.g. the cancel-overlay
-        // Escape grab bound only while a drag or overlay is up). The
-        // backend has to purge these from kglobalshortcutsrc on
-        // destruction — otherwise an unexpected daemon exit (crash, kill,
-        // segfault) leaves the entry visible in System Settings AND with
-        // KGlobalAccel still grabbing the key system-wide on next login,
-        // including over fullscreen games (discussion #461 item 14).
-        // Persistent (false) entries always go through removeAllShortcuts
-        // on unregisterShortcut, so the only leak window is unexpected
-        // process exit.
-        bool persistent = true;
     };
     QHash<QString, Entry> entries;
 };
@@ -74,31 +63,14 @@ KGlobalAccelBackend::KGlobalAccelBackend(QObject* parent)
 
 KGlobalAccelBackend::~KGlobalAccelBackend()
 {
-    // IMPORTANT: do NOT call KGlobalAccel::removeAllShortcuts on PERSISTENT
-    // shortcuts here.
+    // IMPORTANT: do NOT call KGlobalAccel::removeAllShortcuts here.
     //
     // removeAllShortcuts purges the binding from the persistent on-disk
     // registry (kglobalshortcutsrc). On a normal daemon shutdown that would
     // wipe every user-customised shortcut — users would reset to defaults
     // on each restart. KGlobalAccel cleans up its in-memory action table
     // automatically when the QAction is destroyed, so a plain delete is the
-    // correct teardown path for persistent ids.
-    //
-    // For NON-PERSISTENT (transient) shortcuts the situation is the
-    // opposite: they're only ever supposed to be active while a specific
-    // UI state is up (drag in progress, overlay visible, layout picker
-    // open). On a normal shutdown the consumer has already called
-    // unregisterShortcut. On an UNEXPECTED exit (crash, SIGKILL, segfault
-    // mid-drag) the entry would otherwise survive — KGlobalAccel keeps
-    // the persistent record AND keeps grabbing the key on next login,
-    // routing it to a daemon action that no longer exists. End-user
-    // surface: a stale "Esc" grab in System Settings that disables the
-    // Escape key in fullscreen games even when no drag is happening
-    // (discussion #461 item 14).
-    //
-    // Purge the on-disk entry for transient ids here so even an abnormal
-    // exit can't outlive the daemon. Persistent ids skip the purge so
-    // user customisations survive the shutdown.
+    // correct teardown path.
     //
     // The QActions are parented to `this`, so Qt's ~QObject cleanup would
     // destroy them anyway. We delete explicitly to clear the hash table's
@@ -114,9 +86,6 @@ KGlobalAccelBackend::~KGlobalAccelBackend()
     for (auto& entry : m_impl->entries) {
         if (entry.action) {
             entry.action->disconnect();
-            if (!entry.persistent) {
-                KGlobalAccel::self()->removeAllShortcuts(entry.action);
-            }
             delete entry.action;
             entry.action = nullptr;
         }
@@ -124,11 +93,10 @@ KGlobalAccelBackend::~KGlobalAccelBackend()
 }
 
 void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence& defaultSeq,
-                                           const QKeySequence& currentSeq, const QString& description, bool persistent)
+                                           const QKeySequence& currentSeq, const QString& description)
 {
     auto& entry = m_impl->entries[id];
-    const bool firstRegistration = !entry.action;
-    if (firstRegistration) {
+    if (!entry.action) {
         entry.action = new QAction(description, this);
         entry.action->setObjectName(id);
         entry.action->setProperty("componentName", QCoreApplication::applicationName());
@@ -136,26 +104,9 @@ void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence
         connect(entry.action, &QAction::triggered, this, [this, idCopy] {
             Q_EMIT activated(idCopy);
         });
-        // For TRANSIENT shortcuts, scrub any stale on-disk record left by a
-        // prior daemon process that exited abnormally before its destructor
-        // ran. Without this, KGlobalAccel autoloads the orphan entry on the
-        // next setShortcut call below, the user-visible "Cancel Zone Overlay
-        // = Esc" registration in System Settings persists, and Esc keeps
-        // being grabbed compositor-side outside any drag/overlay context —
-        // including over fullscreen games (discussion #461 item 14).
-        // Persistent ids deliberately keep their on-disk record; that's
-        // where user customisations live.
-        if (!persistent) {
-            KGlobalAccel::self()->removeAllShortcuts(entry.action);
-        }
     } else if (!description.isEmpty() && entry.action->text() != description) {
         entry.action->setText(description);
     }
-    // Latest persistent flag wins. A re-bind that escalates a transient
-    // grab to persistent (or vice versa) updates the destructor-time
-    // purge decision accordingly. Same-id rebinds with a different flag
-    // are uncommon but not forbidden by the IBackend contract.
-    entry.persistent = persistent;
 
     // setDefaultShortcut establishes the "reset to default" binding shown in
     // System Settings. Must be called with the compiled-in default (NOT the

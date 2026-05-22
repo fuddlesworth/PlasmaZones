@@ -25,15 +25,11 @@ DBusTriggerBackend::DBusTriggerBackend(QObject* parent)
                                 << "org.Phosphor.Shortcuts.TriggerAction string:\"<id>\"";
 }
 
-void DBusTriggerBackend::registerShortcut(const QString& id, const QKeySequence& defaultSeq,
-                                          const QKeySequence& currentSeq, const QString& description, bool persistent)
+void DBusTriggerBackend::registerShortcut(const QString& id, const QKeySequence& /*defaultSeq*/,
+                                          const QKeySequence& /*currentSeq*/, const QString& description)
 {
     // DBusTrigger doesn't grab keys — the compositor binds them to dbus-send
-    // calls externally — so both sequences are ignored. The persistent flag
-    // is irrelevant: this backend has no on-disk registry to leak into.
-    Q_UNUSED(defaultSeq);
-    Q_UNUSED(currentSeq);
-    Q_UNUSED(persistent);
+    // calls externally — so both sequences are ignored.
     m_descriptions.insert(id, description);
 }
 

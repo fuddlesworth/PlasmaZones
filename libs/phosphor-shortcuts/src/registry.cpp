@@ -123,7 +123,7 @@ void Registry::flush()
             // "reset to default" target — KGlobalAccelBackend and
             // PortalBackend both handle this idempotently.
             m_backend->registerShortcut(entry.binding.id, entry.binding.defaultSeq, entry.binding.currentSeq,
-                                        entry.binding.description, entry.persistent);
+                                        entry.binding.description);
             entry.registered = true;
             entry.lastSentDefault = entry.binding.defaultSeq;
             entry.lastSentCurrent = entry.binding.currentSeq;

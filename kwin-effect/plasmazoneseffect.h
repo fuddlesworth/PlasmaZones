@@ -236,39 +236,8 @@ private:
      */
     void pushWindowMetadata(KWin::EffectWindow* w);
 
-    /**
-     * @brief Snapping/zone-management window filter.
-     *
-     * @param w            window to classify.
-     * @param rejectReason when non-null, set to a human-readable description
-     *                     of the first failing clause on a false return, and
-     *                     cleared on a true return. Default nullptr — hot-loop
-     *                     callers pay nothing. Used by logWindowDiagnostics()
-     *                     so the rejection reason has a single source of truth
-     *                     (this function) and cannot drift from the filter.
-     */
-    bool shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
-
-    /**
-     * @brief Autotile-tree eligibility filter. @see shouldHandleWindow for the
-     *        @p rejectReason out-parameter contract.
-     */
-    bool isTileableWindow(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
-
-    /**
-     * @brief Emit a full info-level dump of a window's KWin properties plus the
-     *        snap and autotile filter verdicts.
-     *
-     * One call per window-open (slotWindowAdded) and per class/metadata change,
-     * so the volume is bounded by how often windows actually appear or mutate —
-     * safe at info level. Exists to diagnose apps whose windows KWin
-     * mis-classifies: Steam and other CEF/Electron clients report inconsistent
-     * window-type flags and reparent surfaces mid-session, so the only reliable
-     * way to fix their tiling behaviour is to see every flag the filters
-     * consult. The dump lists each flag and the exact clause that rejected the
-     * window.
-     */
-    void logWindowDiagnostics(KWin::EffectWindow* w, const char* context) const;
+    bool shouldHandleWindow(KWin::EffectWindow* w) const;
+    bool isTileableWindow(KWin::EffectWindow* w) const;
 
     /**
      * @brief Animation-side window filter.

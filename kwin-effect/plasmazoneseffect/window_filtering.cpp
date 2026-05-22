@@ -17,21 +17,6 @@ namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
-namespace {
-// Record a filter rejection: when @p out is non-null, store @p reason into it.
-// Lets each filter early-exit read as a single `return rejectedBecause(out,
-// "...");`, keeping the reason text co-located with the clause that produced
-// it — so logWindowDiagnostics never has to re-derive (and risk drifting from)
-// the filter logic.
-bool rejectedBecause(QString* out, const char* reason)
-{
-    if (out) {
-        *out = QString::fromLatin1(reason);
-    }
-    return false;
-}
-} // namespace
-
 void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
                                                     const QRectF& preCapturedGeometry)
 {
@@ -98,31 +83,27 @@ bool PlasmaZonesEffect::isWindowFloating(const QString& windowId) const
     return m_navigationHandler->isWindowFloating(windowId);
 }
 
-bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason) const
+bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
 {
-    if (rejectReason) {
-        rejectReason->clear();
-    }
-
     if (!w) {
-        return rejectedBecause(rejectReason, "null window");
+        return false;
     }
 
     // Never snap our own overlay/editor windows (but allow the settings app)
     const QString windowClass = w->windowClass();
     if (windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
         || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive)) {
-        return rejectedBecause(rejectReason, "own overlay/editor window class");
+        return false;
     }
 
     // Exclude XDG desktop portal windows (file dialogs, color pickers, etc.)
     if (windowClass.contains(QLatin1String("xdg-desktop-portal"), Qt::CaseInsensitive)) {
-        return rejectedBecause(rejectReason, "xdg-desktop-portal window class");
+        return false;
     }
 
     // Plasma shell layer-shell surfaces — see isPlasmaShellSurface() for rationale.
     if (isPlasmaShellSurface(windowClass)) {
-        return rejectedBecause(rejectReason, "Plasma shell layer-shell surface");
+        return false;
     }
 
     // Check user-configured exclusion lists (needed for drag gating — daemon also enforces
@@ -131,13 +112,13 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         KWin::Window* kw = w->window();
         const QString appName = kw ? kw->desktopFileName() : QString();
         if (matchesExclusionLists(appName, windowClass, m_excludedApplications, m_excludedWindowClasses)) {
-            return rejectedBecause(rejectReason, "user exclusion list match (app/class)");
+            return false;
         }
     }
 
     // Skip special / non-manageable window types (inherently effect-side — KWin metadata)
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()) {
-        return rejectedBecause(rejectReason, "special/desktop/dock/fullscreen/skipSwitcher window type");
+        return false;
     }
 
     // Skip transient/dialog/menu windows unconditionally. Dialogs, utilities,
@@ -167,17 +148,14 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     if (w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isCriticalNotification()
         || w->isOnScreenDisplay() || w->isModal() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
         || w->isMenu() || w->isTooltip() || w->transientFor()) {
-        // Coarse reason — logWindowDiagnostics() dumps every flag in this
-        // clause individually, so the caller can pinpoint which one fired.
-        return rejectedBecause(rejectReason,
-                               "transient/dialog/utility/splash/notification/osd/modal/popup/menu/tooltip window type");
+        return false;
     }
 
     // Keep-above overlays (Spectacle, color pickers, screen rulers, screenshot
     // tools that linger after capture) shouldn't be snapped to a zone — same
     // rationale as isTileableWindow's keep-above gate.
     if (w->keepAbove()) {
-        return rejectedBecause(rejectReason, "keep-above window");
+        return false;
     }
 
     return true;
@@ -297,81 +275,24 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     return true;
 }
 
-bool PlasmaZonesEffect::isTileableWindow(KWin::EffectWindow* w, QString* rejectReason) const
+bool PlasmaZonesEffect::isTileableWindow(KWin::EffectWindow* w) const
 {
-    if (rejectReason) {
-        rejectReason->clear();
-    }
-
-    if (!w) {
-        return rejectedBecause(rejectReason, "null window");
-    }
-
     // Reject menus, popups, tooltips, modals, and transient children.
     // Electron apps (Vesktop, VS Code, Discord) create separate windows
     // for context menus and dropdowns that pass shouldHandleWindow() but
     // must never enter the autotile tree.
     if (!w->isNormalWindow() || w->isModal() || w->isPopupWindow() || w->isDropdownMenu() || w->isPopupMenu()
         || w->isTooltip() || w->isMenu() || w->transientFor()) {
-        // Coarse reason — logWindowDiagnostics() dumps every flag individually.
-        return rejectedBecause(rejectReason, "non-normal/modal/popup/dropdown/menu/tooltip/transient window type");
+        return false;
     }
     // Reject keep-above windows — overlay/utility tools (Spectacle, color
     // pickers, screen rulers, etc.) set keep-above and should not enter the
     // autotile tree or receive auto-focus. Without this guard, opening
     // Spectacle while focusNewWindows is enabled disrupts the tiled layout.
     if (w->keepAbove()) {
-        return rejectedBecause(rejectReason, "keep-above window");
+        return false;
     }
     return true;
-}
-
-void PlasmaZonesEffect::logWindowDiagnostics(KWin::EffectWindow* w, const char* context) const
-{
-    if (!w) {
-        qCInfo(lcEffect) << "[window-diag]" << context << "— null window";
-        return;
-    }
-
-    QString handleReason;
-    QString tileReason;
-    const bool handle = shouldHandleWindow(w, &handleReason);
-    const bool tileable = isTileableWindow(w, &tileReason);
-
-    KWin::Window* kw = w->window();
-
-    qCInfo(lcEffect) << "[window-diag]" << context << "— class:" << w->windowClass() << "role:" << w->windowRole()
-                     << "caption:" << w->caption() << "desktopFile:" << (kw ? kw->desktopFileName() : QString())
-                     << "pid:" << w->pid();
-    qCInfo(lcEffect) << "[window-diag]   verdict — shouldHandleWindow:" << handle
-                     << (handle ? QString() : QStringLiteral("[rejected: %1]").arg(handleReason))
-                     << "| isTileableWindow:" << tileable
-                     << (tileable ? QString() : QStringLiteral("[rejected: %1]").arg(tileReason));
-    qCInfo(lcEffect) << "[window-diag]   type — normal:" << w->isNormalWindow() << "special:" << w->isSpecialWindow()
-                     << "dialog:" << w->isDialog() << "utility:" << w->isUtility() << "splash:" << w->isSplash()
-                     << "modal:" << w->isModal() << "toolbar:" << w->isToolbar() << "menu:" << w->isMenu()
-                     << "popupWindow:" << w->isPopupWindow() << "popupMenu:" << w->isPopupMenu()
-                     << "dropdownMenu:" << w->isDropdownMenu() << "tooltip:" << w->isTooltip()
-                     << "notification:" << w->isNotification() << "criticalNotification:" << w->isCriticalNotification()
-                     << "onScreenDisplay:" << w->isOnScreenDisplay() << "appletPopup:" << w->isAppletPopup()
-                     << "desktop:" << w->isDesktop() << "dock:" << w->isDock();
-    qCInfo(lcEffect) << "[window-diag]   state — managed:" << w->isManaged() << "x11:" << w->isX11Client()
-                     << "wayland:" << w->isWaylandClient() << "fullScreen:" << w->isFullScreen()
-                     << "minimized:" << w->isMinimized() << "skipSwitcher:" << w->isSkipSwitcher()
-                     << "keepAbove:" << w->keepAbove() << "hasDecoration:" << w->hasDecoration()
-                     << "onCurrentDesktop:" << w->isOnCurrentDesktop()
-                     << "onCurrentActivity:" << w->isOnCurrentActivity() << "onAllDesktops:" << w->isOnAllDesktops();
-    qCInfo(lcEffect) << "[window-diag]   geometry — frame:" << w->frameGeometry()
-                     << "minSize:" << (kw ? kw->minSize() : QSizeF());
-
-    if (KWin::EffectWindow* parent = w->transientFor()) {
-        qCInfo(lcEffect) << "[window-diag]   transientFor — YES — parent class:" << parent->windowClass()
-                         << "caption:" << parent->caption() << "normal:" << parent->isNormalWindow()
-                         << "special:" << parent->isSpecialWindow() << "pid:" << parent->pid()
-                         << "frame:" << parent->frameGeometry();
-    } else {
-        qCInfo(lcEffect) << "[window-diag]   transientFor — none";
-    }
 }
 
 bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const
