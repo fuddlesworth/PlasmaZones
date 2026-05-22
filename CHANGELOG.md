@@ -7,6 +7,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.8] - 2026-05-22
+
+### Fixed
+
+- **KWin crashed (SIGSEGV) when snapping a window to a zone on certain monitors** ([#511](https://github.com/fuddlesworth/PlasmaZones/discussions/511), [#513](https://github.com/fuddlesworth/PlasmaZones/pull/513)): PlasmaZones' own overlay surfaces (zone overlays, snap-assist) are KWin internal windows, and `KWin::InternalWindow::minSize()` dereferences its backing `QWindow` with no null check. When that window was not yet realised the call faulted on a null pointer inside Qt and took down the whole compositor, closing every open application. Every `minSize()` call site in the KWin effect now skips internal windows, and internal windows are rejected before they can enter the autotile pipeline.
+- **A window snapped near a monitor boundary could jump onto the wrong screen** ([#513](https://github.com/fuddlesworth/PlasmaZones/pull/513)): the drop handler paired the zone rectangle from the last drag tick with the screen resolved at the release point without checking that the two referred to the same monitor. A fast drag across a monitor boundary could therefore apply one monitor's zone rectangle to a window committed on another. The drop path now resolves the captured rectangle's own physical screen and declines the snap on a mismatch, leaving the window at its drop position instead of teleporting it.
+- **The "Cancel Zone Overlay" Escape shortcut grabbed Esc system-wide** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#510](https://github.com/fuddlesworth/PlasmaZones/pull/510)): the transient drag-overlay cancel shortcut was written to `kglobalshortcutsrc` like a user-customisable binding, so after an unexpected daemon exit the stale entry survived and KGlobalAccel kept routing Escape to a dead action, including over fullscreen games. Transient shortcuts now carry their non-persistent flag all the way to the backend, which scrubs stale on-disk records on registration and removes them on shutdown.
+- **Per-monitor virtual-desktop and activity disable toggles got stuck off** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#510](https://github.com/fuddlesworth/PlasmaZones/pull/510)): disabling a virtual desktop or activity on a monitor assignment row left the switch frozen in the off position, because an imperative property write had severed its QML binding, and re-enabling never re-drove it. The switches are now read-only consumers of a revision-counter binding, so they track the underlying state correctly.
+- **Windows opened on monitors or desktops with snapping disabled were still auto-snapped** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#510](https://github.com/fuddlesworth/PlasmaZones/pull/510)): pending-restore entries already held in memory when a context was disabled leaked through on the next window open, so a window could snap to a zone on a screen the user had turned snapping off for, until the daemon was restarted. Snap restore now runs through the same disabled-context gate as the load, save, and close paths, and the effect's instant-restore cache funnels through it too.
+- **Electron child popups such as Steam image previews polluted focus tracking** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#510](https://github.com/fuddlesworth/PlasmaZones/pull/510)): transient popups that KWin does not flag with a reliable popup window type still set a transient parent, so the focus-tracking filter recorded them as the active window and downstream placement routed real windows into the popup's zone. The activation filter now rejects the same structural window types as the snap filter, including any window with a transient parent.
+- **Session-restored windows were missing from zone-occupancy tracking** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#510](https://github.com/fuddlesworth/PlasmaZones/pull/510)): when the effect's instant-restore cache placed a window it skipped the daemon round-trip that registers the window in the snap state, so the window sat visibly in its zone but counted as unoccupied, and snap assist and empty-zone placement treated the filled zone as free. Instant-restored windows are now registered with the daemon.
+- **Snap assist appeared after a bulk resnap that placed nothing** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#510](https://github.com/fuddlesworth/PlasmaZones/pull/510)): a resnap triggered by an autotile or snap toggle, a rotation, or a virtual-screen reconfigure fired the snap-assist continuation unconditionally, so it popped for every empty zone even though no per-window snap had happened. The continuation is now anchored to the active window and shows only when the resnap actually snapped it.
+
 ## [3.0.7] - 2026-05-21
 
 ### Changed
@@ -1373,7 +1386,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.7...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.8...HEAD
+[3.0.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.7...v3.0.8
 [3.0.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.6...v3.0.7
 [3.0.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.5...v3.0.6
 [3.0.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.4...v3.0.5
