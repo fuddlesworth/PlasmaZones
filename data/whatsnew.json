@@ -1,6 +1,13 @@
 {
     "releases": [
         {
+            "version": "3.0.9",
+            "date": "2026-05-22",
+            "highlights": [
+                "Fixed per-virtual-desktop and per-activity assignment toggles being unable to re-enable once turned off — the row's disabled state was cascading to the nested switch (#461, #514)"
+            ]
+        },
+        {
             "version": "3.0.8",
             "date": "2026-05-22",
             "highlights": [

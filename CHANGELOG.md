@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.9] - 2026-05-22
+
+### Fixed
+
+- **Per-virtual-desktop and per-activity assignment toggles could not be re-enabled once disabled** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#514](https://github.com/fuddlesworth/PlasmaZones/pull/514)): the 3.0.8 fix kept the per-desktop and per-activity disable Switch's `checked` binding live across controller emissions, but the Switch was declared inside `AssignmentRow.middleContent` and Qt's `Item.enabled` cascade carried the row's disabled state down to the nested Switch — leaving no clickable control to flip the context back on. `AssignmentRow` now exposes a `contentEnabled` property that gates only the combo and clear button, so the Switch in `middleContent` stays clickable while the assignment controls grey out as before. The top-monitor Switch was unaffected because it had always been a sibling of its combo rather than a descendant.
+
 ## [3.0.8] - 2026-05-22
 
 ### Fixed
@@ -1386,7 +1392,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.8...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.9...HEAD
+[3.0.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.8...v3.0.9
 [3.0.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.7...v3.0.8
 [3.0.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.6...v3.0.7
 [3.0.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.5...v3.0.6
