@@ -209,9 +209,31 @@ QString WindowTrackingAdaptor::getPendingRestoreGeometries()
         return QStringLiteral("{}");
     }
 
+    // Disabled-context gate (discussion #461 item 7). The KWin effect's
+    // instant-restore fast path teleports a window straight into target.geometry
+    // from this cache, BEFORE the daemon's resolveWindowRestore predicate gate
+    // runs — so an entry left here for a disabled monitor would be snapped onto
+    // it regardless of the engine-side ShouldRestorePredicate, leaving a window
+    // visually placed on a disabled context but absent from SnapState (the
+    // "ghost" the instant-restore registration fix otherwise eliminates).
+    // Funnel this read through the same isPersistedContextDisabled check that
+    // guards saveState, loadState and the engine restore path so all four
+    // paths can never drift.
+    //
+    // resolveWindowRestore carries no per-restore desktop, so the current
+    // virtual desktop is used — consistent with the snap-side
+    // setShouldRestorePredicate gate. Activity is left unset: snap-mode storage
+    // carries no per-window activity tag (see isPersistedContextDisabled).
+    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+
     QJsonObject result;
     for (auto it = targets.constBegin(); it != targets.constEnd(); ++it) {
         const auto& target = it.value();
+        if (isPersistedContextDisabled(target.screenId, currentDesktop)) {
+            qCDebug(lcDbusWindow) << "getPendingRestoreGeometries: skipping" << it.key()
+                                  << "— disabled context on screen" << target.screenId;
+            continue;
+        }
         QJsonObject geoObj;
         geoObj[QLatin1String("x")] = target.geometry.x();
         geoObj[QLatin1String("y")] = target.geometry.y();

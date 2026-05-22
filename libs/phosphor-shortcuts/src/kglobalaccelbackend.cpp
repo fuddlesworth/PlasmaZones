@@ -145,6 +145,15 @@ void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence
         // including over fullscreen games (discussion #461 item 14).
         // Persistent ids deliberately keep their on-disk record; that's
         // where user customisations live.
+        //
+        // Note this is the FIRST-registration scrub, so after an abnormal
+        // exit a leaked transient entry is only cleared the next time that
+        // transient shortcut is registered again (i.e. the next drag/overlay
+        // that needs it). That is the self-heal path; the destructor below is
+        // the clean-shutdown path. The only uncovered window is "crashed and
+        // the transient shortcut is never registered again" — acceptable, as
+        // the grab is harmless until the key is actually pressed and the next
+        // use scrubs it.
         if (!persistent) {
             KGlobalAccel::self()->removeAllShortcuts(entry.action);
         }

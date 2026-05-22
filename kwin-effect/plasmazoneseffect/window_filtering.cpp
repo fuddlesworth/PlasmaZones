@@ -16,6 +16,7 @@
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+Q_DECLARE_LOGGING_CATEGORY(lcEffectDiag)
 
 namespace {
 // Record a filter rejection: when @p out is non-null, store @p reason into it.
@@ -98,6 +99,52 @@ bool PlasmaZonesEffect::isWindowFloating(const QString& windowId) const
     return m_navigationHandler->isWindowFloating(windowId);
 }
 
+bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason) const
+{
+    // Single source of truth for the window-TYPE rejection set shared by
+    // shouldHandleWindow() (snap/zone filter) and notifyWindowActivated()
+    // (focus-tracking filter). Both must reject the exact same structural
+    // types: a window kind that can never legitimately be a snap/autotile
+    // target must also never be reported as the active window, or the daemon's
+    // focus tracking gets pinned to a popup. Discussion #461 item 11 (Steam
+    // image popups) was a missed sync between two hand-maintained copies of
+    // this list — keeping it in one function makes that class of drift
+    // unrepresentable.
+    //
+    // isTileableWindow() deliberately keeps its own, narrower list (it gates
+    // on !isNormalWindow()) and is NOT folded in here.
+    //
+    // @p w must be non-null — both callers null-check before reaching here.
+
+    // Special / non-manageable window types (inherently effect-side — KWin metadata).
+    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()) {
+        if (rejectReason) {
+            *rejectReason = QStringLiteral("special/desktop/dock/fullscreen/skipSwitcher window type");
+        }
+        return true;
+    }
+
+    // Transient / dialog / menu family. transientFor() catches child surfaces
+    // that Electron/CEF apps (Steam, Discord, VS Code) spawn for image
+    // previews, context menus and popups: these frequently fail to report an
+    // accurate KWin window type (isDialog/isPopupWindow stay false) but always
+    // set the transient-parent relationship. Without this the popup passes the
+    // filter and gets snapped to a zone (discussion #461 item 11).
+    if (w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isCriticalNotification()
+        || w->isOnScreenDisplay() || w->isModal() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
+        || w->isMenu() || w->isTooltip() || w->transientFor()) {
+        if (rejectReason) {
+            // Coarse reason — logWindowDiagnostics() dumps every flag in this
+            // clause individually, so the caller can pinpoint which one fired.
+            *rejectReason =
+                QStringLiteral("transient/dialog/utility/splash/notification/osd/modal/popup/menu/tooltip window type");
+        }
+        return true;
+    }
+
+    return false;
+}
+
 bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason) const
 {
     if (rejectReason) {
@@ -135,42 +182,11 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         }
     }
 
-    // Skip special / non-manageable window types (inherently effect-side — KWin metadata)
-    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()) {
-        return rejectedBecause(rejectReason, "special/desktop/dock/fullscreen/skipSwitcher window type");
-    }
-
-    // Skip transient/dialog/menu windows unconditionally. Dialogs, utilities,
-    // tooltips, menus, notifications, etc. should never be zone-managed.
-    // User-configured exclusion lists and minimum size checks are handled by
-    // the daemon.
-    //
-    // transientFor() catches child surfaces that Electron/CEF apps (Steam, Discord,
-    // VS Code) spawn for image previews, context menus and popups: these frequently
-    // fail to report an accurate KWin window type (isDialog/isPopupWindow stay
-    // false) but always set the transient-parent relationship. Without this the
-    // popup passes the filter and gets snapped to a zone (discussion #461 item 11).
-    //
-    // Relationship with isTileableWindow(): the autotile filter starts with
-    // `!isNormalWindow()`, which structurally catches every flag enumerated here
-    // (KWin marks Dialog/Utility/Splash/Notification/etc. as non-Normal types).
-    // We enumerate them explicitly on the snap side because the snap path runs
-    // before isNormalWindow() classification in some KWin versions, and the
-    // explicit list documents which window kinds the snap filter rejects.
-    // Anything in this block that ALSO appears verbatim in isTileableWindow
-    // (isModal, isPopupWindow, isPopupMenu, isDropdownMenu, isMenu, isTooltip,
-    // transientFor) must stay in lockstep with that filter — the Steam image-
-    // popup regression (#461 item 11) came from a missed sync of exactly that
-    // intersection. The flags isTileableWindow does NOT enumerate (isDialog,
-    // isUtility, isSplash, isNotification, isCriticalNotification,
-    // isOnScreenDisplay) are caught there by !isNormalWindow().
-    if (w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isCriticalNotification()
-        || w->isOnScreenDisplay() || w->isModal() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
-        || w->isMenu() || w->isTooltip() || w->transientFor()) {
-        // Coarse reason — logWindowDiagnostics() dumps every flag in this
-        // clause individually, so the caller can pinpoint which one fired.
-        return rejectedBecause(rejectReason,
-                               "transient/dialog/utility/splash/notification/osd/modal/popup/menu/tooltip window type");
+    // Skip structural / transient / dialog / menu window types. The predicate
+    // is shared verbatim with notifyWindowActivated() so the two filters can
+    // never drift — see isStructurallyUnmanageableWindowType().
+    if (isStructurallyUnmanageableWindowType(w, rejectReason)) {
+        return false;
     }
 
     // Keep-above overlays (Spectacle, color pickers, screen rulers, screenshot
@@ -329,7 +345,7 @@ bool PlasmaZonesEffect::isTileableWindow(KWin::EffectWindow* w, QString* rejectR
 void PlasmaZonesEffect::logWindowDiagnostics(KWin::EffectWindow* w, const char* context) const
 {
     if (!w) {
-        qCInfo(lcEffect) << "[window-diag]" << context << "— null window";
+        qCDebug(lcEffectDiag) << "[window-diag]" << context << "— null window";
         return;
     }
 
@@ -340,37 +356,40 @@ void PlasmaZonesEffect::logWindowDiagnostics(KWin::EffectWindow* w, const char* 
 
     KWin::Window* kw = w->window();
 
-    qCInfo(lcEffect) << "[window-diag]" << context << "— class:" << w->windowClass() << "role:" << w->windowRole()
-                     << "caption:" << w->caption() << "desktopFile:" << (kw ? kw->desktopFileName() : QString())
-                     << "pid:" << w->pid();
-    qCInfo(lcEffect) << "[window-diag]   verdict — shouldHandleWindow:" << handle
-                     << (handle ? QString() : QStringLiteral("[rejected: %1]").arg(handleReason))
-                     << "| isTileableWindow:" << tileable
-                     << (tileable ? QString() : QStringLiteral("[rejected: %1]").arg(tileReason));
-    qCInfo(lcEffect) << "[window-diag]   type — normal:" << w->isNormalWindow() << "special:" << w->isSpecialWindow()
-                     << "dialog:" << w->isDialog() << "utility:" << w->isUtility() << "splash:" << w->isSplash()
-                     << "modal:" << w->isModal() << "toolbar:" << w->isToolbar() << "menu:" << w->isMenu()
-                     << "popupWindow:" << w->isPopupWindow() << "popupMenu:" << w->isPopupMenu()
-                     << "dropdownMenu:" << w->isDropdownMenu() << "tooltip:" << w->isTooltip()
-                     << "notification:" << w->isNotification() << "criticalNotification:" << w->isCriticalNotification()
-                     << "onScreenDisplay:" << w->isOnScreenDisplay() << "appletPopup:" << w->isAppletPopup()
-                     << "desktop:" << w->isDesktop() << "dock:" << w->isDock();
-    qCInfo(lcEffect) << "[window-diag]   state — managed:" << w->isManaged() << "x11:" << w->isX11Client()
-                     << "wayland:" << w->isWaylandClient() << "fullScreen:" << w->isFullScreen()
-                     << "minimized:" << w->isMinimized() << "skipSwitcher:" << w->isSkipSwitcher()
-                     << "keepAbove:" << w->keepAbove() << "hasDecoration:" << w->hasDecoration()
-                     << "onCurrentDesktop:" << w->isOnCurrentDesktop()
-                     << "onCurrentActivity:" << w->isOnCurrentActivity() << "onAllDesktops:" << w->isOnAllDesktops();
-    qCInfo(lcEffect) << "[window-diag]   geometry — frame:" << w->frameGeometry()
-                     << "minSize:" << (kw ? kw->minSize() : QSizeF());
+    qCDebug(lcEffectDiag) << "[window-diag]" << context << "— class:" << w->windowClass() << "role:" << w->windowRole()
+                          << "caption:" << w->caption() << "desktopFile:" << (kw ? kw->desktopFileName() : QString())
+                          << "pid:" << w->pid();
+    qCDebug(lcEffectDiag) << "[window-diag]   verdict — shouldHandleWindow:" << handle
+                          << (handle ? QString() : QStringLiteral("[rejected: %1]").arg(handleReason))
+                          << "| isTileableWindow:" << tileable
+                          << (tileable ? QString() : QStringLiteral("[rejected: %1]").arg(tileReason));
+    qCDebug(lcEffectDiag) << "[window-diag]   type — normal:" << w->isNormalWindow()
+                          << "special:" << w->isSpecialWindow() << "dialog:" << w->isDialog()
+                          << "utility:" << w->isUtility() << "splash:" << w->isSplash() << "modal:" << w->isModal()
+                          << "toolbar:" << w->isToolbar() << "menu:" << w->isMenu()
+                          << "popupWindow:" << w->isPopupWindow() << "popupMenu:" << w->isPopupMenu()
+                          << "dropdownMenu:" << w->isDropdownMenu() << "tooltip:" << w->isTooltip()
+                          << "notification:" << w->isNotification()
+                          << "criticalNotification:" << w->isCriticalNotification()
+                          << "onScreenDisplay:" << w->isOnScreenDisplay() << "appletPopup:" << w->isAppletPopup()
+                          << "desktop:" << w->isDesktop() << "dock:" << w->isDock();
+    qCDebug(lcEffectDiag) << "[window-diag]   state — managed:" << w->isManaged() << "x11:" << w->isX11Client()
+                          << "wayland:" << w->isWaylandClient() << "fullScreen:" << w->isFullScreen()
+                          << "minimized:" << w->isMinimized() << "skipSwitcher:" << w->isSkipSwitcher()
+                          << "keepAbove:" << w->keepAbove() << "hasDecoration:" << w->hasDecoration()
+                          << "onCurrentDesktop:" << w->isOnCurrentDesktop()
+                          << "onCurrentActivity:" << w->isOnCurrentActivity()
+                          << "onAllDesktops:" << w->isOnAllDesktops();
+    qCDebug(lcEffectDiag) << "[window-diag]   geometry — frame:" << w->frameGeometry()
+                          << "minSize:" << (kw ? kw->minSize() : QSizeF());
 
     if (KWin::EffectWindow* parent = w->transientFor()) {
-        qCInfo(lcEffect) << "[window-diag]   transientFor — YES — parent class:" << parent->windowClass()
-                         << "caption:" << parent->caption() << "normal:" << parent->isNormalWindow()
-                         << "special:" << parent->isSpecialWindow() << "pid:" << parent->pid()
-                         << "frame:" << parent->frameGeometry();
+        qCDebug(lcEffectDiag) << "[window-diag]   transientFor — YES — parent class:" << parent->windowClass()
+                              << "caption:" << parent->caption() << "normal:" << parent->isNormalWindow()
+                              << "special:" << parent->isSpecialWindow() << "pid:" << parent->pid()
+                              << "frame:" << parent->frameGeometry();
     } else {
-        qCInfo(lcEffect) << "[window-diag]   transientFor — none";
+        qCDebug(lcEffectDiag) << "[window-diag]   transientFor — none";
     }
 }
 

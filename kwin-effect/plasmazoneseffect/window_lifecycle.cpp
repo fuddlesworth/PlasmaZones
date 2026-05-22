@@ -67,9 +67,10 @@ void PlasmaZonesEffect::endRestoreSuppression(KWin::EffectWindow* window)
 
 void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 {
-    // Full property + filter-verdict dump for every window as it opens. Bounded
-    // by window-open frequency, so it is safe at info level; gives the data
-    // needed to fix apps KWin mis-classifies (Steam / CEF child surfaces).
+    // Full property + filter-verdict dump for every window as it opens. Silent
+    // unless the opt-in plasmazones.effect.diag category is enabled (see
+    // logWindowDiagnostics) — gives the data needed to fix apps KWin
+    // mis-classifies (Steam / CEF child surfaces) without journal noise.
     logWindowDiagnostics(w, "windowAdded");
 
     setupWindowConnections(w);
@@ -769,20 +770,18 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     if (isPlasmaShellSurface(windowClass)) {
         return;
     }
-    // Rejection set must stay in lockstep with shouldHandleWindow's structural
-    // filter (window_filtering.cpp). If a window type can never legitimately be
-    // a snap/autotile target, reporting it as the active window pollutes the
-    // daemon's focus tracking — m_lastActiveWindowId / m_lastActiveScreenId get
-    // pinned to a popup, and downstream paths (moveNewWindowsToLastZone,
-    // shortcut screen resolution, snap fallbacks) then route real windows to
-    // the popup's zone. Discussion #461 item 11: Steam image popups (Electron
-    // child surfaces with transient_for set but isPopupWindow false) leaked
-    // through the older shorter list and ended up driving snap geometry on
-    // their parents.
-    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()
-        || w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isCriticalNotification()
-        || w->isOnScreenDisplay() || w->isModal() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
-        || w->isMenu() || w->isTooltip() || w->transientFor()) {
+    // Reject structurally unmanageable window types via the predicate shared
+    // verbatim with shouldHandleWindow() — see isStructurallyUnmanageableWindowType().
+    // If a window type can never legitimately be a snap/autotile target,
+    // reporting it as the active window pollutes the daemon's focus tracking:
+    // m_lastActiveWindowId / m_lastActiveScreenId get pinned to a popup, and
+    // downstream paths (moveNewWindowsToLastZone, shortcut screen resolution,
+    // snap fallbacks) then route real windows to the popup's zone. Discussion
+    // #461 item 11: Steam image popups (Electron child surfaces with
+    // transient_for set but isPopupWindow false) leaked through an older
+    // hand-maintained copy of this list — the shared predicate makes that
+    // drift impossible.
+    if (isStructurallyUnmanageableWindowType(w)) {
         return;
     }
 

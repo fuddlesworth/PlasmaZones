@@ -256,17 +256,34 @@ private:
     bool isTileableWindow(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
 
     /**
-     * @brief Emit a full info-level dump of a window's KWin properties plus the
-     *        snap and autotile filter verdicts.
+     * @brief Shared window-TYPE rejection predicate.
      *
-     * One call per window-open (slotWindowAdded) and per class/metadata change,
-     * so the volume is bounded by how often windows actually appear or mutate —
-     * safe at info level. Exists to diagnose apps whose windows KWin
-     * mis-classifies: Steam and other CEF/Electron clients report inconsistent
-     * window-type flags and reparent surfaces mid-session, so the only reliable
-     * way to fix their tiling behaviour is to see every flag the filters
-     * consult. The dump lists each flag and the exact clause that rejected the
-     * window.
+     * Returns true when @p w is a structurally unmanageable window kind
+     * (special/desktop/dock/fullscreen/skipSwitcher, or the transient/dialog/
+     * menu/popup/tooltip family). Single source of truth behind both
+     * shouldHandleWindow()'s structural clause and notifyWindowActivated()'s
+     * focus-tracking filter, so the two can never drift (discussion #461
+     * item 11).
+     *
+     * @param w            window to classify; must be non-null.
+     * @param rejectReason when non-null, set to a human-readable reason on a
+     *                     true return. @see shouldHandleWindow.
+     */
+    bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
+
+    /**
+     * @brief Emit a full dump of a window's KWin properties plus the snap and
+     *        autotile filter verdicts.
+     *
+     * One call per window-open (slotWindowAdded) and per class/metadata change.
+     * Logged under the opt-in `plasmazones.effect.diag` category at debug
+     * level, so it is silent by default and never floods the journal; enable
+     * it on demand with QT_LOGGING_RULES="plasmazones.effect.diag.debug=true".
+     * Exists to diagnose apps whose windows KWin mis-classifies: Steam and
+     * other CEF/Electron clients report inconsistent window-type flags and
+     * reparent surfaces mid-session, so the only reliable way to fix their
+     * tiling behaviour is to see every flag the filters consult. The dump
+     * lists each flag and the exact clause that rejected the window.
      */
     void logWindowDiagnostics(KWin::EffectWindow* w, const char* context) const;
 
