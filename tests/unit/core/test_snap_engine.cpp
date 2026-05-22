@@ -936,7 +936,13 @@ private Q_SLOTS:
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|uuid-gate-on"), QStringLiteral("DP-1"), &result);
 
-        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate")),
+        QVERIFY2(!result.shouldSnap,
+                 "guiless fixture has no layout/app-rule/session entry — restore resolves to noSnap");
+        // Match the exact top-level gate line, not the broader "disabled-context
+        // gate" substring (the appRule/session re-checks log a different
+        // phrasing) — so the assertion fails only if the caller-screen gate
+        // actually rejected an enabled context.
+        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate rejected restore")),
                  "an enabled context must pass the disabled-context gate");
         m_wts->setSnapState(nullptr);
     }
@@ -953,7 +959,9 @@ private Q_SLOTS:
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|uuid-no-pred"), QStringLiteral("DP-1"), &result);
 
-        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate")),
+        QVERIFY2(!result.shouldSnap,
+                 "guiless fixture has no layout/app-rule/session entry — restore resolves to noSnap");
+        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate rejected restore")),
                  "with no predicate the disabled-context gate must never fire");
         m_wts->setSnapState(nullptr);
     }

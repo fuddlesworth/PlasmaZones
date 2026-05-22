@@ -550,6 +550,35 @@ private Q_SLOTS:
         QVERIFY(sawAdhocTransient);
     }
 
+    void rebindWithFlippedPersistentFlag_reReachesBackend()
+    {
+        // Regression: a re-bind() that flips `persistent` without changing the
+        // key must still reach the backend. flush()'s change-detection keys off
+        // the sequences AND the persistent flag — without the persistent term a
+        // same-key/same-default re-bind would be treated as a no-op, the
+        // backend would never learn the new flag, and KGlobalAccelBackend's
+        // crash-purge decision would be stale (discussion #461 item 14).
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.flip"), QKeySequence(QStringLiteral("Meta+F")), QStringLiteral("Flip"), {},
+                      /*persistent=*/true);
+        registry.flush();
+        QCOMPARE(backend.registers.size(), 1);
+        QVERIFY(backend.registers[0].persistent);
+
+        // Same id, same key, persistent flipped to false.
+        registry.bind(QStringLiteral("pz.flip"), QKeySequence(QStringLiteral("Meta+F")), QStringLiteral("Flip"), {},
+                      /*persistent=*/false);
+        registry.flush();
+        QCOMPARE(backend.registers.size(), 2);
+        QVERIFY(!backend.registers[1].persistent);
+
+        // A further flush with nothing changed must NOT re-register.
+        registry.flush();
+        QCOMPARE(backend.registers.size(), 2);
+    }
+
     void bindings_persistentOnly_filtersTransient()
     {
         // Adhoc / transient bindings (persistent=false) must not surface in

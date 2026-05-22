@@ -111,22 +111,25 @@ void Registry::flush()
             continue;
         }
 
-        const bool needsRegister = !entry.registered || entry.lastSentDefault != entry.binding.defaultSeq;
+        const bool needsRegister = !entry.registered || entry.lastSentDefault != entry.binding.defaultSeq
+            || entry.lastSentPersistent != entry.persistent;
         if (needsRegister) {
-            // First flush for this id, OR the compiled-in default has changed
-            // since the last send. Call registerShortcut in both cases: on the
-            // first flush it's the only way to hand both the compiled-in
-            // default (for KGlobalAccel's setDefaultShortcut / portal's
-            // preferred_trigger) and the current user value (what actually
-            // gets grabbed) to the backend in one shot. On a default change,
-            // re-calling registerShortcut lets the backend refresh its
-            // "reset to default" target — KGlobalAccelBackend and
-            // PortalBackend both handle this idempotently.
+            // First flush for this id, the compiled-in default changed, OR the
+            // persistent flag flipped since the last send. Call registerShortcut
+            // in all cases: on the first flush it's the only way to hand both
+            // the compiled-in default (for KGlobalAccel's setDefaultShortcut /
+            // portal's preferred_trigger) and the current user value (what
+            // actually gets grabbed) to the backend in one shot. On a default
+            // or persistent-flag change, re-calling registerShortcut lets the
+            // backend refresh its "reset to default" target and its crash-purge
+            // decision — KGlobalAccelBackend and PortalBackend both handle this
+            // idempotently.
             m_backend->registerShortcut(entry.binding.id, entry.binding.defaultSeq, entry.binding.currentSeq,
                                         entry.binding.description, entry.persistent);
             entry.registered = true;
             entry.lastSentDefault = entry.binding.defaultSeq;
             entry.lastSentCurrent = entry.binding.currentSeq;
+            entry.lastSentPersistent = entry.persistent;
         } else if (entry.lastSentCurrent != entry.binding.currentSeq) {
             m_backend->updateShortcut(entry.binding.id, entry.binding.defaultSeq, entry.binding.currentSeq);
             entry.lastSentCurrent = entry.binding.currentSeq;

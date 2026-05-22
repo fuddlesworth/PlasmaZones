@@ -113,8 +113,16 @@ bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow*
     //
     // isTileableWindow() deliberately keeps its own, narrower list (it gates
     // on !isNormalWindow()) and is NOT folded in here.
-    //
-    // @p w must be non-null — both callers null-check before reaching here.
+
+    // Null is structurally unmanageable. Both current callers null-check before
+    // reaching here, so this is a defensive guard that keeps the precondition
+    // enforced rather than merely documented for any future caller.
+    if (!w) {
+        if (rejectReason) {
+            *rejectReason = QStringLiteral("null window");
+        }
+        return true;
+    }
 
     // Special / non-manageable window types (inherently effect-side — KWin metadata).
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()) {
