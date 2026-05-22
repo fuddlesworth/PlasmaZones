@@ -219,6 +219,26 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
             snap->setAutotileEngine(autotile);
         }
 
+        // Disabled-context gate for snap auto-restore (discussion #461 item 7).
+        // The persist-on-close gate (setShouldTrackPredicate above) blocks NEW
+        // PendingRestore entries on disabled contexts, but pre-existing
+        // in-memory entries (recorded before the user toggled the disable, or
+        // before the disable propagated through settingsChanged) would still
+        // restore the window when it reopens. This gate fires on the open
+        // path, so the same isPersistedContextDisabled rule that filters reads
+        // and writes also covers the window-arrives-during-running-session
+        // case. Resolves the user-visible "windows tracked even on disabled
+        // monitor — restarting the service fixes it" symptom: a restart
+        // re-loaded from disk, where the read-time filter dropped the same
+        // entries; this gate makes the running session match.
+        //
+        // Activity is left unset — SnapState carries no per-window activity
+        // tag, mirroring isPersistedContextDisabled's snap-side default.
+        snap->setShouldRestorePredicate([this](const QString& screenId) -> bool {
+            const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+            return !isPersistedContextDisabled(screenId, desktop);
+        });
+
         // Snap-specific signal: carries PhosphorProtocol::WindowStateEntry which is snap-mode-only.
         // Connected via qobject_cast since the member type is PlacementEngineBase.
         connect(snap, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this,

@@ -20,6 +20,12 @@ SettingsCard {
     // Revision counter — incremented when lock state changes externally,
     // forcing lock-dependent bindings to re-evaluate.
     property int _lockRevision: 0
+    // Same pattern for disabled-context changes (per-desktop and per-monitor).
+    // Drives the desktopActive and monitorActive bindings so each Switch's
+    // `checked` binding stays live (imperative writes to bound properties
+    // sever the binding, which previously left toggles stuck in the off
+    // state — discussion #461 item 12).
+    property int _disabledRevision: 0
 
     headerText: root.viewMode === 1 ? i18n("Monitor Tiling Assignments") : i18n("Monitor Assignments")
     collapsible: true
@@ -27,6 +33,14 @@ SettingsCard {
     Connections {
         function onLockedScreensChanged() {
             root._lockRevision++;
+        }
+
+        function onDisabledDesktopsChanged() {
+            root._disabledRevision++;
+        }
+
+        function onDisabledMonitorsChanged() {
+            root._disabledRevision++;
         }
 
         target: root.appSettings
@@ -136,24 +150,23 @@ SettingsCard {
                         Switch {
                             id: monitorEnableSwitch
 
-                            property bool monitorActive: !root.appSettings.isMonitorDisabled(monitorDelegate.screenName)
+                            // Touch _disabledRevision so this binding re-evaluates
+                            // whenever the controller emits disabledMonitorsChanged,
+                            // keeping the `checked` binding live. Assigning
+                            // monitorActive in onToggled would sever the binding,
+                            // leaving the Switch visually stuck after the first
+                            // toggle — discussion #461 item 12.
+                            property bool monitorActive: {
+                                void (root._disabledRevision);
+                                return !root.appSettings.isMonitorDisabled(monitorDelegate.screenName);
+                            }
 
                             checked: monitorActive
                             onToggled: {
                                 root.appSettings.setMonitorDisabled(monitorDelegate.screenName, !checked);
-                                monitorActive = checked;
                             }
                             ToolTip.visible: hovered
                             ToolTip.text: checked ? i18n("Disable PlasmaZones on this monitor") : i18n("Enable PlasmaZones on this monitor")
-
-                            Connections {
-                                function onDisabledMonitorsChanged() {
-                                    monitorEnableSwitch.monitorActive = !root.appSettings.isMonitorDisabled(monitorDelegate.screenName);
-                                }
-
-                                target: root.appSettings
-                            }
-
                         }
 
                         Label {
@@ -304,7 +317,13 @@ SettingsCard {
                                 required property int index
                                 property int desktopNumber: index + 1
                                 property string desktopName: root.appSettings.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
-                                property bool desktopActive: !root.appSettings.isDesktopDisabled(monitorDelegate.screenName, desktopNumber)
+                                // Touch _disabledRevision so this binding re-evaluates whenever
+                                // the controller emits disabledDesktopsChanged. Imperative
+                                // writes (the prior approach) severed the binding chain.
+                                property bool desktopActive: {
+                                    void (root._disabledRevision);
+                                    return !root.appSettings.isDesktopDisabled(monitorDelegate.screenName, desktopNumber);
+                                }
 
                                 Layout.fillWidth: true
                                 spacing: Kirigami.Units.smallSpacing
@@ -365,22 +384,20 @@ SettingsCard {
                                     middleContent: Component {
                                         Switch {
                                             enabled: true
+                                            // Read-only binding to desktopActive; do NOT write to
+                                            // desktopActive in onToggled — assigning a value to the
+                                            // bound `checked` property severs this binding, leaving
+                                            // the Switch visually stuck after the first toggle.
+                                            // The root-level _disabledRevision counter re-evaluates
+                                            // desktopActive whenever the controller emits
+                                            // disabledDesktopsChanged, keeping the binding live
+                                            // (discussion #461 item 12).
                                             checked: desktopRowContainer.desktopActive
                                             onToggled: {
                                                 root.appSettings.setDesktopDisabled(monitorDelegate.screenName, desktopRowContainer.desktopNumber, !checked);
-                                                desktopRowContainer.desktopActive = checked;
                                             }
                                             ToolTip.visible: hovered
                                             ToolTip.text: checked ? i18n("Disable PlasmaZones on %1", desktopRowContainer.desktopName) : i18n("Enable PlasmaZones on %1", desktopRowContainer.desktopName)
-
-                                            Connections {
-                                                function onDisabledDesktopsChanged() {
-                                                    desktopRowContainer.desktopActive = !root.appSettings.isDesktopDisabled(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
-                                                }
-
-                                                target: root.appSettings
-                                            }
-
                                         }
 
                                     }
@@ -428,18 +445,17 @@ SettingsCard {
                             }
 
                             Layout.fillWidth: true
-                            visible: allDesktopsDisabledOnScreen()
+                            // Touch _disabledRevision so this binding re-evaluates whenever
+                            // the controller emits disabledDesktopsChanged. The previous
+                            // imperative `parent.visible = ...` write would have severed
+                            // the binding the same way the desktopActive write did
+                            // (discussion #461 item 12).
+                            visible: {
+                                void (root._disabledRevision);
+                                return allDesktopsDisabledOnScreen();
+                            }
                             type: Kirigami.MessageType.Warning
                             text: i18n("All desktops are disabled on this monitor.")
-
-                            Connections {
-                                function onDisabledDesktopsChanged() {
-                                    parent.visible = parent.allDesktopsDisabledOnScreen();
-                                }
-
-                                target: root.appSettings
-                            }
-
                         }
 
                     }
