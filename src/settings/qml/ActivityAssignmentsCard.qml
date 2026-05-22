@@ -159,6 +159,30 @@ SettingsCard {
                             Layout.leftMargin: Kirigami.Units.gridUnit * 2
                             spacing: Kirigami.Units.smallSpacing
 
+                            // Enable/disable switch as a SIBLING of AssignmentRow,
+                            // not a descendant. Item.enabled cascades through the
+                            // QML parent chain, so when AssignmentRow.enabled goes
+                            // false (because activityActive is false) every child —
+                            // including a Switch nested in middleContent — also
+                            // becomes disabled and can't be toggled back on. Keeping
+                            // the Switch as a sibling matches the top-monitor row
+                            // (discussion #461 item 12 follow-up).
+                            Switch {
+                                // Read-only binding to activityActive; do NOT write
+                                // to activityActive in onToggled. Assigning a value
+                                // to a bound `checked` would sever this binding,
+                                // re-introducing the stuck-toggle bug. The
+                                // _disabledRevision counter on root re-evaluates
+                                // activityActive whenever the controller emits
+                                // disabledActivitiesChanged, keeping the binding live.
+                                checked: activityScreenContainer.activityActive
+                                onToggled: {
+                                    root.appSettings.setActivityDisabled(activityScreenContainer.screenName, activityDelegate.activityId, !checked);
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: checked ? i18n("Disable PlasmaZones for %1 on %2", activityDelegate.activityName, activityScreenContainer.screenName) : i18n("Enable PlasmaZones for %1 on %2", activityDelegate.activityName, activityScreenContainer.screenName)
+                            }
+
                             AssignmentRow {
                                 id: screenRow
 
@@ -222,25 +246,6 @@ SettingsCard {
                                     }
 
                                     target: root.appSettings
-                                }
-
-                                middleContent: Component {
-                                    Switch {
-                                        enabled: true
-                                        // Read-only binding to activityActive; do NOT write to
-                                        // activityActive in onToggled. Assigning to a bound
-                                        // property severs the binding, leaving the Switch
-                                        // stuck. The root-level _disabledRevision counter
-                                        // re-evaluates activityActive on every controller
-                                        // change (discussion #461 item 12).
-                                        checked: activityScreenContainer.activityActive
-                                        onToggled: {
-                                            root.appSettings.setActivityDisabled(activityScreenContainer.screenName, activityDelegate.activityId, !checked);
-                                        }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: checked ? i18n("Disable PlasmaZones for %1 on %2", activityDelegate.activityName, activityScreenContainer.screenName) : i18n("Enable PlasmaZones for %1 on %2", activityDelegate.activityName, activityScreenContainer.screenName)
-                                    }
-
                                 }
 
                             }
