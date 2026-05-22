@@ -154,7 +154,6 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Rare race: the saved screen may have flipped from snap→autotile between
     // when the cache was populated and when the window opens. Re-check the
     // entry's screen mode via the autotile handler before applying.
-    bool instantRestoreApplied = false;
     if (canSnapRestore && !m_snapRestoreCache.isEmpty()) {
         QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
         auto cacheIt = m_snapRestoreCache.find(appId);
@@ -165,7 +164,6 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
             if (cached.geometry.isValid() && !savedScreenNowAutotile) {
                 qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached.geometry
                                  << "screen:" << cached.screenId;
-                instantRestoreApplied = true;
                 // skipAnimation=true: teleport straight into the zone.
                 // First-frame open suppression (beginRestoreSuppression
                 // above in slotWindowAdded) withholds the window from
@@ -199,7 +197,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         }
     }
 
-    if (onAutotileScreen && canSnapRestore && !instantRestoreApplied) {
+    if (onAutotileScreen && canSnapRestore) {
         // Window landed on an autotile screen, but may have a pending snap restore
         // to a non-autotile screen. KWin's session restore places windows at their
         // saved geometry, which may be a pre-snap floating position in the autotile
@@ -207,12 +205,6 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // before logout. Try snap restore FIRST: if it moves the window off the
         // autotile screen, we avoid the autotile add→float→remove→resnap dance
         // that causes visible flickering and repeated resizing.
-        //
-        // Skip when `instantRestoreApplied` is true: the window was already
-        // teleported by the instant-restore branch above, the cache entry
-        // is consumed, and a second daemon round-trip would just confirm
-        // "no zone" (cache cleared) or — worse — re-stamp `targetGeometry`
-        // on the still-active suppression entry on a redundant moveResize.
         QPointer<KWin::EffectWindow> safeW = w;
         // releaseSuppressionOnMiss=false: if snap-restore finds no zone, the
         // onComplete autotile path may still reposition the window — keep it
@@ -260,9 +252,9 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // instant-restore cache serves nearly every window at once, so almost
         // nothing got registered (zones=1 of 7 in the field logs).
         //
-        // The earlier `!instantRestoreApplied` skip assumed the daemon "would
-        // just answer no zone" once the effect's m_snapRestoreCache entry was
-        // consumed. That is false: m_snapRestoreCache is an effect-side
+        // The earlier skip of this call after an instant restore assumed the
+        // daemon "would just answer no zone" once the effect's m_snapRestoreCache
+        // entry was consumed. That is false: m_snapRestoreCache is an effect-side
         // latency cache, separate from the daemon's pending-restore queue.
         // pendingRestoreGeometries() (which populates the cache) is a const
         // read and does NOT consume the daemon queue, so resolveWindowRestore

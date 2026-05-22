@@ -20,11 +20,11 @@ SettingsCard {
     // Revision counter — incremented when lock state changes externally,
     // forcing lock-dependent bindings to re-evaluate.
     property int _lockRevision: 0
-    // Same pattern for disabled-desktop changes. Drives desktopActive
-    // bindings on every per-desktop row so the Switch's `checked` binding
-    // stays live (imperative writes to bound properties sever the binding,
-    // which previously left rows stuck in the off state — discussion #461
-    // item 12).
+    // Same pattern for disabled-context changes (per-desktop and per-monitor).
+    // Drives the desktopActive and monitorActive bindings so each Switch's
+    // `checked` binding stays live (imperative writes to bound properties
+    // sever the binding, which previously left toggles stuck in the off
+    // state — discussion #461 item 12).
     property int _disabledRevision: 0
 
     headerText: root.viewMode === 1 ? i18n("Monitor Tiling Assignments") : i18n("Monitor Assignments")
@@ -34,7 +34,12 @@ SettingsCard {
         function onLockedScreensChanged() {
             root._lockRevision++;
         }
+
         function onDisabledDesktopsChanged() {
+            root._disabledRevision++;
+        }
+
+        function onDisabledMonitorsChanged() {
             root._disabledRevision++;
         }
 
@@ -145,24 +150,23 @@ SettingsCard {
                         Switch {
                             id: monitorEnableSwitch
 
-                            property bool monitorActive: !root.appSettings.isMonitorDisabled(monitorDelegate.screenName)
+                            // Touch _disabledRevision so this binding re-evaluates
+                            // whenever the controller emits disabledMonitorsChanged,
+                            // keeping the `checked` binding live. Assigning
+                            // monitorActive in onToggled would sever the binding,
+                            // leaving the Switch visually stuck after the first
+                            // toggle — discussion #461 item 12.
+                            property bool monitorActive: {
+                                void (root._disabledRevision);
+                                return !root.appSettings.isMonitorDisabled(monitorDelegate.screenName);
+                            }
 
                             checked: monitorActive
                             onToggled: {
                                 root.appSettings.setMonitorDisabled(monitorDelegate.screenName, !checked);
-                                monitorActive = checked;
                             }
                             ToolTip.visible: hovered
                             ToolTip.text: checked ? i18n("Disable PlasmaZones on this monitor") : i18n("Enable PlasmaZones on this monitor")
-
-                            Connections {
-                                function onDisabledMonitorsChanged() {
-                                    monitorEnableSwitch.monitorActive = !root.appSettings.isMonitorDisabled(monitorDelegate.screenName);
-                                }
-
-                                target: root.appSettings
-                            }
-
                         }
 
                         Label {

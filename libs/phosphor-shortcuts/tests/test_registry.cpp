@@ -41,7 +41,7 @@ public:
     using IBackend::IBackend;
 
     void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
-                          const QString& description, bool persistent = true) override
+                          const QString& description, bool persistent) override
     {
         registers.push_back({id, defaultSeq, currentSeq, description, persistent});
     }

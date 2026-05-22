@@ -192,6 +192,16 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     {
         SnapResult result = calculateSnapToAppRule(windowId, screenId, sticky);
         if (result.shouldSnap) {
+            // An app rule may target a screen other than the caller's. The
+            // disabled-context gate above validated only the caller's screenId,
+            // so re-check the predicate against the result's destination
+            // screen. An app rule must not route a window onto a context the
+            // user disabled.
+            if (m_shouldRestorePredicate && !m_shouldRestorePredicate(result.screenId)) {
+                qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "appRule target"
+                                                          << result.screenId << "rejected by disabled-context gate";
+                return SnapResult::noSnap();
+            }
             qCInfo(PhosphorSnapEngine::lcSnapEngine)
                 << "resolveWindowRestore: appRule matched for" << windowId << "zone=" << result.zoneId;
             return result;
@@ -205,6 +215,17 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     if (s && s->restoreWindowsToZonesOnLogin()) {
         SnapResult result = calculateRestoreFromSession(windowId, screenId, sticky);
         if (result.shouldSnap) {
+            // Session restore may cross-screen migrate: the PendingRestore
+            // records its own saved screen. Re-check the predicate against the
+            // destination before consuming the pending entry. A restore onto a
+            // disabled screen is refused, and the pending entry is left intact
+            // so the window can restore once the user re-enables the context.
+            if (m_shouldRestorePredicate && !m_shouldRestorePredicate(result.screenId)) {
+                qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                    << "resolveWindowRestore:" << windowId << "persisted restore target" << result.screenId
+                    << "rejected by disabled-context gate";
+                return SnapResult::noSnap();
+            }
             m_windowTracker->consumePendingAssignment(windowId);
             qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore: persisted matched for" << windowId
                                                      << "zone=" << result.zoneId << "screen=" << result.screenId;
