@@ -31,26 +31,12 @@ class SnapAssistHandler : public QObject
 public:
     explicit SnapAssistHandler(PlasmaZonesEffect* effect, QObject* parent = nullptr);
 
-    /// Show snap assist continuation for a screen (checks enabled, queries empty zones).
-    ///
-    /// @param requireSnappedWindowId when non-empty, the continuation is gated:
-    ///   snap assist is shown only if this window is actually snapped into a
-    ///   zone on the daemon side, and the window is also excluded from the
-    ///   candidate list (it is already placed). Used by the resnap-completion
-    ///   path — a bulk resnap (autotile→snap toggle, rotate, vs-reconfigure)
-    ///   is not a per-window snap, so it must not pop snap assist for every
-    ///   empty zone when it happened to place nothing. The anchor window
-    ///   stands in for "the window the user just snapped"; if it did not land
-    ///   in a zone, there is no continuation to offer.
-    void showContinuationIfNeeded(const QString& screenId, const QString& requireSnappedWindowId = QString());
+    /// Show snap assist continuation for a screen (checks enabled, queries empty zones)
+    void showContinuationIfNeeded(const QString& screenId);
 
-    /// Full async snap assist: get snapped windows, build candidates, show overlay.
-    ///
-    /// @param requireSnappedWindowId when non-empty, abort if this window is
-    ///   not among the daemon's snapped windows. @see showContinuationIfNeeded.
+    /// Full async snap assist: get snapped windows, build candidates, show overlay
     void asyncShow(const QString& excludeWindowId, const QString& screenId,
-                   const PhosphorProtocol::EmptyZoneList& emptyZones,
-                   const QString& requireSnappedWindowId = QString());
+                   const PhosphorProtocol::EmptyZoneList& emptyZones);
 
     /// Update the enabled flag (from loadCachedSettings)
     void setEnabled(bool enabled)

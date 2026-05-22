@@ -124,20 +124,13 @@ PortalBackend::~PortalBackend()
     QDBusConnection::sessionBus().asyncCall(msg);
 }
 
-void PortalBackend::registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
-                                     const QString& description, bool persistent)
+void PortalBackend::registerShortcut(const QString& id, const QKeySequence& defaultSeq,
+                                     const QKeySequence& /*currentSeq*/, const QString& description)
 {
     // Portal: preferred_trigger is advisory and the compositor assigns the
     // actual binding via its own settings UI. Send the compiled-in default
     // as the app's preferred key rather than the consumer's current value —
     // if the user re-binds, they do so compositor-side, not in our config.
-    //
-    // The persistent flag is irrelevant for this backend: portal-bound
-    // shortcuts only live for the duration of the GlobalShortcuts session
-    // (see ~PortalBackend), so there is no on-disk leak hazard like the one
-    // KGlobalAccelBackend has to defend against.
-    Q_UNUSED(currentSeq);
-    Q_UNUSED(persistent);
     m_pending.insert(id, {defaultSeq, description});
     m_descriptions.insert(id, description);
 }

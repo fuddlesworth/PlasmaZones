@@ -56,22 +56,11 @@ public:
      *                    defaultSeq on a fresh install. May be empty (no grab).
      * @param description Human-readable label surfaced in portal settings
      *                    UIs and kglobalaccel listings.
-     * @param persistent  When false, the binding is transient — the backend
-     *                    must avoid leaving an entry in any user-visible
-     *                    persistent registry (e.g. KGlobalAccel's
-     *                    kglobalshortcutsrc) that would survive an
-     *                    unexpected daemon exit. The backend is responsible
-     *                    for purging the entry on destruction so a crash
-     *                    cannot leak a global key grab into the user's
-     *                    System Settings (discussion #461 item 14).
-     *                    Persistent (true) is the historical default and
-     *                    the only correct value for user-customizable
-     *                    shortcuts.
      *
      * Registration is queued until flush() is called.
      */
     virtual void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
-                                  const QString& description, bool persistent = true) = 0;
+                                  const QString& description) = 0;
 
     /**
      * Change the active binding for an already-registered id. Takes both

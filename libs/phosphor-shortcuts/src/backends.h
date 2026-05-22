@@ -29,7 +29,7 @@ public:
     explicit DBusTriggerBackend(QObject* parent = nullptr);
 
     void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
-                          const QString& description, bool persistent) override;
+                          const QString& description) override;
     void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;
@@ -51,7 +51,7 @@ public:
     ~PortalBackend() override;
 
     void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
-                          const QString& description, bool persistent) override;
+                          const QString& description) override;
     void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;
@@ -145,7 +145,7 @@ public:
     ~KGlobalAccelBackend() override;
 
     void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
-                          const QString& description, bool persistent) override;
+                          const QString& description) override;
     void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;
