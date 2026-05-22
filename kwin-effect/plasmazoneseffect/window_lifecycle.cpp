@@ -67,6 +67,12 @@ void PlasmaZonesEffect::endRestoreSuppression(KWin::EffectWindow* window)
 
 void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 {
+    // Full property + filter-verdict dump for every window as it opens. Silent
+    // unless the opt-in plasmazones.effect.diag category is enabled (see
+    // logWindowDiagnostics) — gives the data needed to fix apps KWin
+    // mis-classifies (Steam / CEF child surfaces) without journal noise.
+    logWindowDiagnostics(w, "windowAdded");
+
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
@@ -149,7 +155,6 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Rare race: the saved screen may have flipped from snap→autotile between
     // when the cache was populated and when the window opens. Re-check the
     // entry's screen mode via the autotile handler before applying.
-    bool instantRestoreApplied = false;
     if (canSnapRestore && !m_snapRestoreCache.isEmpty()) {
         QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
         auto cacheIt = m_snapRestoreCache.find(appId);
@@ -160,7 +165,6 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
             if (cached.geometry.isValid() && !savedScreenNowAutotile) {
                 qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached.geometry
                                  << "screen:" << cached.screenId;
-                instantRestoreApplied = true;
                 // skipAnimation=true: teleport straight into the zone.
                 // First-frame open suppression (beginRestoreSuppression
                 // above in slotWindowAdded) withholds the window from
@@ -194,7 +198,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         }
     }
 
-    if (onAutotileScreen && canSnapRestore && !instantRestoreApplied) {
+    if (onAutotileScreen && canSnapRestore) {
         // Window landed on an autotile screen, but may have a pending snap restore
         // to a non-autotile screen. KWin's session restore places windows at their
         // saved geometry, which may be a pre-snap floating position in the autotile
@@ -202,12 +206,6 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // before logout. Try snap restore FIRST: if it moves the window off the
         // autotile screen, we avoid the autotile add→float→remove→resnap dance
         // that causes visible flickering and repeated resizing.
-        //
-        // Skip when `instantRestoreApplied` is true: the window was already
-        // teleported by the instant-restore branch above, the cache entry
-        // is consumed, and a second daemon round-trip would just confirm
-        // "no zone" (cache cleared) or — worse — re-stamp `targetGeometry`
-        // on the still-active suppression entry on a redundant moveResize.
         QPointer<KWin::EffectWindow> safeW = w;
         // releaseSuppressionOnMiss=false: if snap-restore finds no zone, the
         // onComplete autotile path may still reposition the window — keep it
@@ -242,16 +240,30 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         endRestoreSuppression(w);
     }
 
-    if (!onAutotileScreen && canSnapRestore && !instantRestoreApplied) {
-        // Skip when `instantRestoreApplied` is true: the cache entry was
-        // consumed and the daemon would just answer "no zone".
+    if (!onAutotileScreen && canSnapRestore) {
+        // Always run the daemon round-trip — INCLUDING after an instant
+        // restore. Instant restore only teleports the window to the cached
+        // zone geometry; it does NOT register the window in the daemon's
+        // SnapState. Zone registration happens exclusively via the daemon's
+        // resolveWindowRestore → commitSnap path, so skipping this call left
+        // every instant-restored window a "ghost": visually in its zone but
+        // absent from SnapState::zoneAssignments. buildOccupiedZoneSet() then
+        // reported the occupied zone as free, so getEmptyZones / snap-assist
+        // / empty-zone auto-placement all treated it as empty. On login the
+        // instant-restore cache serves nearly every window at once, so almost
+        // nothing got registered (zones=1 of 7 in the field logs).
+        //
+        // The earlier skip of this call after an instant restore assumed the
+        // daemon "would just answer no zone" once the effect's m_snapRestoreCache
+        // entry was consumed. That is false: m_snapRestoreCache is an effect-side
+        // latency cache, separate from the daemon's pending-restore queue.
+        // pendingRestoreGeometries() (which populates the cache) is a const
+        // read and does NOT consume the daemon queue, so resolveWindowRestore
+        // still matches the pending entry, consumes it, and commits. When
+        // instant restore already placed the window the daemon returns the
+        // same zone rect, so the re-apply is a no-op moveResize to the
+        // current geometry — the price of correct registration.
         callResolveWindowRestore(w);
-    } else if (instantRestoreApplied) {
-        // Instant-restore already moved the window into its zone, but
-        // first-frame suppression is still active waiting for a settle
-        // signal. The settle hook (windowFrameGeometryChanged) already
-        // fires once moveResize commits, so suppression releases on its
-        // own — no extra work here.
     }
 }
 
@@ -565,6 +577,22 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);
         connect(kw, &KWin::Window::desktopFileNameChanged, this, pushLatest);
         connect(kw, &KWin::Window::captionChanged, this, pushLatest);
+
+        // Diagnostic dump on identity change — but ONLY for class / desktop-file,
+        // never caption. CEF/Electron apps (Steam included) map with a
+        // placeholder class and swap in the real one here, so re-dumping on
+        // those catches the final classification the filters act on. Caption
+        // is deliberately excluded: it feeds no filter, and terminals /
+        // browsers (and this very tool's progress spinner) rewrite their title
+        // every frame — dumping on captionChanged floods the journal with
+        // identical blocks. See logWindowDiagnostics().
+        auto logIdentityChange = [this, safeW]() {
+            if (safeW && !safeW->isDeleted()) {
+                logWindowDiagnostics(safeW, "identityChanged");
+            }
+        };
+        connect(kw, &KWin::Window::windowClassChanged, this, logIdentityChange);
+        connect(kw, &KWin::Window::desktopFileNameChanged, this, logIdentityChange);
     }
 
     // Detect drag start/end via KWin's per-window signals instead of polling.
@@ -742,9 +770,18 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     if (isPlasmaShellSurface(windowClass)) {
         return;
     }
-    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()
-        || w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isCriticalNotification()
-        || w->isOnScreenDisplay() || w->isModal() || w->isPopupWindow()) {
+    // Reject structurally unmanageable window types via the predicate shared
+    // verbatim with shouldHandleWindow() — see isStructurallyUnmanageableWindowType().
+    // If a window type can never legitimately be a snap/autotile target,
+    // reporting it as the active window pollutes the daemon's focus tracking:
+    // m_lastActiveWindowId / m_lastActiveScreenId get pinned to a popup, and
+    // downstream paths (moveNewWindowsToLastZone, shortcut screen resolution,
+    // snap fallbacks) then route real windows to the popup's zone. Discussion
+    // #461 item 11: Steam image popups (Electron child surfaces with
+    // transient_for set but isPopupWindow false) leaked through an older
+    // hand-maintained copy of this list — the shared predicate makes that
+    // drift impossible.
+    if (isStructurallyUnmanageableWindowType(w)) {
         return;
     }
 
