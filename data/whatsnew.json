@@ -1,6 +1,20 @@
 {
     "releases": [
         {
+            "version": "3.0.8",
+            "date": "2026-05-22",
+            "highlights": [
+                "Fixed a KWin crash (SIGSEGV) that could take down the whole compositor, closing every open application, when snapping a window to a zone on certain monitors (#511, #513)",
+                "Fixed a window snapped near a monitor boundary jumping onto the wrong screen after a fast cross-monitor drag (#513)",
+                "Fixed the \"Cancel Zone Overlay\" Escape shortcut grabbing Esc system-wide, including over fullscreen games, after an unexpected daemon exit (#461, #510)",
+                "Fixed per-monitor virtual-desktop and activity disable toggles getting stuck in the off position (#461, #510)",
+                "Fixed windows opened on monitors or desktops with snapping disabled still being auto-snapped until the daemon was restarted (#461, #510)",
+                "Fixed Electron child popups such as Steam image previews polluting focus tracking and routing real windows into the popup's zone (#461, #510)",
+                "Fixed session-restored windows being missing from zone-occupancy tracking, so snap assist and empty-zone placement treated filled zones as free (#461, #510)",
+                "Fixed snap assist appearing for every empty zone after a bulk resnap that placed nothing (#461, #510)"
+            ]
+        },
+        {
             "version": "3.0.7",
             "date": "2026-05-21",
             "highlights": [
