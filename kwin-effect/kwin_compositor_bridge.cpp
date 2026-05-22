@@ -94,7 +94,7 @@ QSizeF KWinCompositorBridge::minSize(WindowHandle w) const
     // InternalWindows (zone overlays) may have a non-null KWin::Window* whose
     // backing QWindow is not yet initialised; calling minSize() on them segfaults
     // inside QWindowPrivate on KWin 6.6.5 (introduced in 3.0.x rewrite).
-    return (kw && !ew->isInternal()) ? kw->minSize() : QSizeF();
+    return (kw && !kw->isInternal()) ? kw->minSize() : QSizeF();
 }
 
 bool KWinCompositorBridge::isMinimized(WindowHandle w) const
@@ -147,7 +147,7 @@ WindowInfo KWinCompositorBridge::windowInfo(WindowHandle w) const
     info.hasDecoration = ew->hasDecoration();
 
     auto* kw = ew->window();
-    if (kw && !ew->isInternal()) {
+    if (kw && !kw->isInternal()) {
         info.minSize = kw->minSize();
     }
 

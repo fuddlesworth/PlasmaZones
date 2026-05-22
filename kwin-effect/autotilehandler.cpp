@@ -139,7 +139,7 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
         int minWidth = 0;
         int minHeight = 0;
         KWin::Window* kw = w->window();
-        if (kw && !w->isInternal()) {
+        if (kw && !kw->isInternal()) {
             const QSizeF minSize = kw->minSize();
             if (minSize.isValid()) {
                 minWidth = qCeil(minSize.width());
@@ -221,7 +221,7 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         int minWidth = 0;
         int minHeight = 0;
         KWin::Window* kw = w->window();
-        if (kw && !w->isInternal()) {
+        if (kw && !kw->isInternal()) {
             const QSizeF minSize = kw->minSize();
             if (minSize.isValid()) {
                 minWidth = qCeil(minSize.width());
