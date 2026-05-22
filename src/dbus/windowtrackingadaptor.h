@@ -823,6 +823,13 @@ private:
     bool isPersistedContextDisabled(const QString& screenId, int virtualDesktop,
                                     const QString& activity = QString()) const;
 
+    /**
+     * @brief Current virtual desktop index, or 0 when no VirtualDesktopManager
+     *        is wired. Centralises the null-guarded read shared by the
+     *        disabled-context gates and last-used-zone tracking.
+     */
+    int currentDesktop() const;
+
     // clearFloatingStateForSnap was removed — PhosphorPlacement::WindowTrackingService::commitSnap
     // now handles floating-state clearing internally (and emits
     // windowFloatingClearedForSnap which the adaptor relays to its own

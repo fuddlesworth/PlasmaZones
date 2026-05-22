@@ -188,86 +188,13 @@ PhosphorSnapEngine::SnapEngine* WindowTrackingAdaptor::snapEngine() const
     return m_cachedSnapEngine;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Engine wiring — cross-references and shared navigation feedback
-//
-// Signal relay is handled by dedicated adaptors (SnapAdaptor, AutotileAdaptor).
-// This method only wires cross-engine references and the shared OSD path.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snapEngine,
-                                       PhosphorEngine::PlacementEngineBase* autotileEngine)
+// Current virtual desktop, with a safe fallback of 0 when no
+// VirtualDesktopManager is wired (guiless tests, minimal sessions).
+// Centralises the null-guarded read shared by the disabled-context gates and
+// last-used-zone tracking. setEngines() lives in enginewiring.cpp.
+int WindowTrackingAdaptor::currentDesktop() const
 {
-    // Disconnect previous autotile engine nav feedback (the only signal connected here)
-    if (m_autotileEngine) {
-        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);
-    }
-
-    m_snapEngine = snapEngine;
-    m_autotileEngine = autotileEngine;
-    m_cachedSnapEngine = qobject_cast<PhosphorSnapEngine::SnapEngine*>(snapEngine);
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Cross-engine references — SnapEngine needs AutotileEngine for
-    // isActiveOnScreen() routing and ZoneDetectionAdaptor for adjacency queries.
-    // When clearing (nullptr, nullptr), we also clear stale cross-references
-    // to prevent dangling pointer access.
-    // ═══════════════════════════════════════════════════════════════════════════
-    if (auto* snap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(snapEngine)) {
-        snap->setZoneAdjacencyResolver(m_zoneDetectionAdaptor);
-        if (auto* autotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(autotileEngine)) {
-            snap->setAutotileEngine(autotile);
-        }
-
-        // Snap-specific signal: carries PhosphorProtocol::WindowStateEntry which is snap-mode-only.
-        // Connected via qobject_cast since the member type is PlacementEngineBase.
-        connect(snap, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this,
-                &WindowTrackingAdaptor::windowStateChanged);
-        connect(snap, &PhosphorSnapEngine::SnapEngine::windowFloatingClearedForSnap, this,
-                [this](const QString& windowId, const QString& screenId) {
-                    Q_EMIT windowFloatingChanged(windowId, false, screenId);
-                });
-    } else if (snapEngine) {
-        // Snap-mode window state signals are critical for WTS correctness.
-        // A non-SnapEngine in the snap slot means state notifications are lost.
-        Q_ASSERT_X(false, "WindowTrackingAdaptor::setEngines",
-                   "snapEngine must be a SnapEngine — snap-specific signals not connected");
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // AutotileEngine navigation feedback — shared OSD path
-    //
-    // Both engines' navigation feedback routes through this adaptor's
-    // navigationFeedback signal because the KWin effect listens for OSD
-    // data on org.plasmazones.WindowTracking regardless of engine mode.
-    //
-    // SnapEngine's navigation feedback is connected by SnapAdaptor (mirrors
-    // AutotileAdaptor's constructor pattern). This single connection is the
-    // only autotile signal that routes through WTA — all other autotile
-    // signals go through AutotileAdaptor on org.plasmazones.Autotile.
-    //
-    // NOTE: AutotileEngine::windowFloatingChanged is NOT relayed here.
-    // The daemon intercepts it with a lambda (signals.cpp) for cross-mode
-    // state management (autotile-float markers, snap-float preservation,
-    // geometry application). See ADR docs/adr-snapengine-migration.md.
-    // ═══════════════════════════════════════════════════════════════════════════
-    if (m_autotileEngine) {
-        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this,
-                &WindowTrackingAdaptor::navigationFeedback);
-
-        // Disabled-context gate for autotile pending restores (discussion
-        // #461 item 2). Mirror of the snap-side ShouldTrackPredicate wired
-        // in the constructor — both routes share isPersistedContextDisabled
-        // so the live, save-time, and load-time gates can never drift.
-        // Activity is threaded through because autotile entries carry it
-        // (snap entries do not). See AutotileEngine::ShouldPersistRestorePredicate.
-        if (auto* autotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(autotileEngine)) {
-            autotile->setShouldPersistRestorePredicate(
-                [this](const QString& screenId, int desktop, const QString& activity) -> bool {
-                    return !isPersistedContextDisabled(screenId, desktop, activity);
-                });
-        }
-    }
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
 }
 
 void WindowTrackingAdaptor::setScreenModeRouter(ScreenModeRouter* router)
@@ -666,8 +593,7 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     if (!zoneId.isEmpty() && m_settings && m_settings->moveNewWindowsToLastZone()
         && !m_service->isAutoSnapped(windowId)) {
         QString windowClass = m_service->currentAppIdFor(windowId);
-        int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-        m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktop);
+        m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktop());
     }
 }
 

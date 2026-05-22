@@ -78,6 +78,46 @@ public:
     bool isEnabled() const noexcept override;
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
+
+    /**
+     * @brief Predicate consulted on the auto-snap entry path to suppress
+     *        zone restores onto a context the user disabled.
+     *
+     * Returns true if the screenId is currently active for snap mode, false
+     * if disabled. The engine library is intentionally settings-agnostic
+     * (LGPL boundary) so the daemon adaptor injects the predicate; SnapEngine
+     * itself has no notion of disabled contexts. The daemon-side closure is
+     * responsible for resolving the current virtual desktop / activity at
+     * call time — SnapState does not track those.
+     *
+     * Applied inside `resolveWindowRestore` so BOTH the engine's own
+     * `windowOpened` path AND the D-Bus `SnapAdaptor::resolveWindowRestore`
+     * path (used by the KWin effect for per-window restores) hit the same
+     * gate. A PendingRestore authored before the user disabled the context
+     * can no longer drag a freshly opened window into a zone the user told
+     * us to stay out of (discussion #461 item 7). Without this gate,
+     * restarting the daemon was the only way to evict stale in-memory
+     * entries — the `isPersistedContextDisabled` filter on disk load only
+     * fires on startup, so any restore queued during the running session
+     * leaked through.
+     *
+     * When unset (default), the engine behaves as if every context is
+     * active — the historical default that unit tests rely on.
+     */
+    using ShouldRestorePredicate = std::function<bool(const QString& screenId)>;
+
+    /**
+     * @brief Inject the auto-snap-restore gate. See ShouldRestorePredicate.
+     *
+     * Ownership: the caller keeps any captured state valid for the engine's
+     * lifetime. To detach safely, clear via `setShouldRestorePredicate({})`
+     * before destroying the captured object.
+     */
+    void setShouldRestorePredicate(ShouldRestorePredicate predicate)
+    {
+        m_shouldRestorePredicate = std::move(predicate);
+    }
+
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
@@ -537,6 +577,12 @@ private:
 
     // Last-focused screen (updated by windowFocused)
     QString m_lastActiveScreenId;
+
+    // Auto-snap entry gate. Empty until the daemon wires it; while empty
+    // the engine treats every (screen, desktop) as active — preserving the
+    // historical default that unit tests rely on. See ShouldRestorePredicate
+    // doc above and discussion #461 item 7.
+    ShouldRestorePredicate m_shouldRestorePredicate{};
 };
 
 } // namespace PhosphorSnapEngine

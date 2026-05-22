@@ -48,7 +48,12 @@ void AutotileHandler::slotEnabledChanged(bool enabled)
 {
     qCInfo(lcEffect) << "Autotile enabled state changed:" << enabled;
     if (!enabled) {
-        restoreAllBorderless();
+        // Internal-state cleanup only — fast, no compositor round-trips.
+        // Title-bar restores are NOT done here: slotScreensChanged (which
+        // always fires alongside this signal, both originating from the same
+        // setActiveScreens(QSet()) call in the engine) handles them via a
+        // delayed defer so the resnap dispatch can land first. Doing it here
+        // would race with that defer and block applyGeometriesBatch.
         restoreAllMonocleMaximized();
         m_savedSnapStackingOrder.clear();
         m_savedAutotileStackingOrder.clear();
@@ -250,11 +255,35 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 m_notifiedWindowScreens.remove(wid);
             }
 
-            // Restore title bars and clear tiled tracking for windows on removed screens
-            for (const QString& windowId : std::as_const(windowsOnRemovedScreens)) {
-                restoreWindowBorders(m_effect->findWindowById(windowId), windowId);
+            // Defer title-bar restores until slotApplyGeometriesBatch
+            // dispatches the daemon's resnap signal. Each restoreWindowBorders
+            // → setNoBorder(false) is a per-window Wayland decoration
+            // round-trip; running the loop here — or via any singleShot delay
+            // — blocks kwin's event loop and serializes ahead of the queued
+            // applyGeometriesBatch, producing a 250+ ms stall before windows
+            // start moving. Delaying with QTimer doesn't fix it: Qt picks up
+            // pending timer events before draining the D-Bus socket queue.
+            //
+            // Stash the IDs; PlasmaZonesEffect::slotApplyGeometriesBatch
+            // calls drainPendingBorderlessRestore() once the resnap signal
+            // has been dispatched, so windows start animating to their snap
+            // positions first and borders return during the animation.
+            //
+            // Fallback timer covers the case where no resnap arrives at all
+            // (e.g. autotile disabled with nothing to resnap, or a daemon
+            // path that suppresses the signal). 500 ms is well past the
+            // worst-case daemon→effect signal latency we've observed.
+            m_pendingBorderlessRestore.unite(windowsOnRemovedScreens);
+            if (m_pendingBorderlessFallback) {
+                m_pendingBorderlessFallback->stop();
+                m_pendingBorderlessFallback->deleteLater();
             }
-            m_effect->updateAllBorders();
+            m_pendingBorderlessFallback = new QTimer(this);
+            m_pendingBorderlessFallback->setSingleShot(true);
+            connect(m_pendingBorderlessFallback, &QTimer::timeout, this, [this]() {
+                drainPendingBorderlessRestore();
+            });
+            m_pendingBorderlessFallback->start(500);
 
             // Save autotile stacking order before restoring snap-mode order.
             // This allows restoring the user's autotile z-order (e.g. floated

@@ -18,6 +18,11 @@ SettingsCard {
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
     property int _lockRevision: 0
+    // Same pattern: re-evaluate activityActive bindings on
+    // disabledActivitiesChanged without imperatively writing to bound
+    // properties (which severs Switch.checked → activityActive).
+    // Discussion #461 item 12.
+    property int _disabledRevision: 0
 
     function getScreenLayout(screenName) {
         return viewMode === 1 ? (appSettings.getTilingLayoutForScreen(screenName) || "") : (appSettings.getLayoutForScreen(screenName) || "");
@@ -51,6 +56,9 @@ SettingsCard {
     Connections {
         function onLockedScreensChanged() {
             root._lockRevision++;
+        }
+        function onDisabledActivitiesChanged() {
+            root._disabledRevision++;
         }
 
         target: root.appSettings
@@ -139,7 +147,13 @@ SettingsCard {
                             required property var modelData
                             required property int index
                             property string screenName: modelData.name || ""
-                            property bool activityActive: !root.appSettings.isActivityDisabled(screenName, activityDelegate.activityId)
+                            // Touch _disabledRevision so this binding re-evaluates whenever
+                            // the controller emits disabledActivitiesChanged. Imperative
+                            // writes severed the binding, leaving the Switch stuck.
+                            property bool activityActive: {
+                                void (root._disabledRevision);
+                                return !root.appSettings.isActivityDisabled(screenName, activityDelegate.activityId);
+                            }
 
                             Layout.fillWidth: true
                             Layout.leftMargin: Kirigami.Units.gridUnit * 2
@@ -154,7 +168,12 @@ SettingsCard {
                                 }
 
                                 Layout.fillWidth: true
-                                enabled: {
+                                // Drive contentEnabled, not enabled, so the
+                                // disabled cascade only reaches the combo and
+                                // clear button — the Switch in middleContent
+                                // stays clickable so the user can flip
+                                // activityActive back on (discussion #461 item 12).
+                                contentEnabled: {
                                     void (activityDelegate._activityRevision);
                                     void (root._lockRevision);
                                     return activityScreenContainer.activityActive && !root.appSettings.isContextLocked(activityScreenContainer.screenName, 0, activityDelegate.activityId, root.viewMode);
@@ -212,23 +231,22 @@ SettingsCard {
 
                                 middleContent: Component {
                                     Switch {
-                                        enabled: true
+                                        // Read-only binding to activityActive; do NOT
+                                        // write to activityActive in onToggled. Assigning
+                                        // to a bound `checked` would sever this binding.
+                                        // The _disabledRevision counter on root
+                                        // re-evaluates activityActive whenever the
+                                        // controller emits disabledActivitiesChanged.
+                                        // AssignmentRow.contentEnabled (not enabled)
+                                        // gates the combo and clear button so this
+                                        // Switch stays clickable when the row is
+                                        // disabled (discussion #461 item 12).
                                         checked: activityScreenContainer.activityActive
                                         onToggled: {
                                             root.appSettings.setActivityDisabled(activityScreenContainer.screenName, activityDelegate.activityId, !checked);
-                                            activityScreenContainer.activityActive = checked;
                                         }
                                         ToolTip.visible: hovered
                                         ToolTip.text: checked ? i18n("Disable PlasmaZones for %1 on %2", activityDelegate.activityName, activityScreenContainer.screenName) : i18n("Enable PlasmaZones for %1 on %2", activityDelegate.activityName, activityScreenContainer.screenName)
-
-                                        Connections {
-                                            function onDisabledActivitiesChanged() {
-                                                activityScreenContainer.activityActive = !root.appSettings.isActivityDisabled(activityScreenContainer.screenName, activityDelegate.activityId);
-                                            }
-
-                                            target: root.appSettings
-                                        }
-
                                     }
 
                                 }

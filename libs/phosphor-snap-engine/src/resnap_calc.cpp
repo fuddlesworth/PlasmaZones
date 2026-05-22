@@ -242,15 +242,6 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
     const int zoneCount = zones.size();
     const int windowCount = autotileWindowOrder.size();
 
-    // Cap at zoneCount: excess windows beyond available zones would stack on top of each
-    // other with cycling. Instead, leave them unassigned (they stay where they are).
-    if (windowCount > zoneCount) {
-        qCWarning(PhosphorSnapEngine::lcSnapEngine)
-            << "calculateResnapFromAutotileOrder:" << windowCount << "windows but only" << zoneCount
-            << "zones on screen" << screenId << "- excess" << (windowCount - zoneCount)
-            << "windows will not be resnapped";
-    }
-
     // Build a lookup from zone ID → zone pointer for original-zone restoration
     QHash<QString, PhosphorZones::Zone*> zoneById;
     for (PhosphorZones::Zone* z : zones) {
@@ -267,9 +258,11 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
 
     // First pass: restore windows to their ORIGINAL zone assignment (pre-autotile).
     // m_windowZoneAssignments preserves zone IDs from before autotile was activated.
-    // This ensures a window in zone 3 returns to zone 3, not whatever autotile
-    // position it ended up in.
-    for (int i = 0; i < std::min(windowCount, zoneCount); ++i) {
+    // Iterate ALL windows (not min(windowCount, zoneCount)) — a window past the
+    // zoneCount cutoff in autotile order can still have a saved zone that is
+    // unique in the new layout, and capping the loop would silently drop its
+    // restoration. The claimedZoneIndices set still prevents double-booking.
+    for (int i = 0; i < windowCount; ++i) {
         const QString& windowId = autotileWindowOrder.at(i);
         const QStringList& savedZones = zoneAssignments.value(windowId);
 
@@ -312,8 +305,13 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
     }
 
     // Second pass: windows without a valid original zone get positional fallback
-    // (autotile order position → first unclaimed zone).
-    for (int i = 0; i < std::min(windowCount, zoneCount); ++i) {
+    // (autotile order → next unclaimed zone). Iterate all windows and break when
+    // zones are exhausted — capping at zoneCount would skip windows past that
+    // position even if pass 1 left some zones unclaimed for them to use.
+    for (int i = 0; i < windowCount; ++i) {
+        if (claimedZoneIndices.size() >= zoneCount)
+            break;
+
         const QString& windowId = autotileWindowOrder.at(i);
 
         // Skip if already placed by original-zone restoration
@@ -343,6 +341,12 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
             result.append(entry);
             claimedZoneIndices.insert(zoneIdx);
         }
+    }
+
+    if (windowCount > result.size()) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "calculateResnapFromAutotileOrder:" << windowCount << "windows," << zoneCount << "zones, resnapped"
+            << result.size() << "on screen" << screenId << "—" << (windowCount - result.size()) << "left unassigned";
     }
 
     qCInfo(PhosphorSnapEngine::lcSnapEngine)

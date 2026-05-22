@@ -110,21 +110,21 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
 // Integration points
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
+bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
 {
     if (!m_effect->isEligibleForTilingNotify(w)) {
-        return;
+        return false;
     }
 
     const QString windowId = m_effect->getWindowId(w);
 
     // Window was already closed before we could notify open — skip (D-Bus ordering race)
     if (m_pendingCloses.remove(windowId)) {
-        return;
+        return false;
     }
 
     if (m_notifiedWindows.contains(windowId)) {
-        return;
+        return false;
     }
     m_notifiedWindows.insert(windowId);
 
@@ -149,7 +149,8 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
         int minWidth = 0;
         int minHeight = 0;
         KWin::Window* kw = w->window();
-        if (kw) {
+        // Internal windows (our own overlays) crash on minSize(); see discussion #511.
+        if (kw && !kw->isInternal()) {
             const QSizeF minSize = kw->minSize();
             if (minSize.isValid()) {
                 minWidth = qCeil(minSize.width());
@@ -177,11 +178,23 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
                         }
                         m_notifiedWindows.remove(windowId);
                         m_notifiedWindowScreens.remove(windowId);
+                        // notifyWindowAdded() returned true on the synchronous
+                        // path, so the caller (PlasmaZonesEffect::slotWindowAdded)
+                        // left first-frame open suppression engaged expecting a
+                        // moveResize from the daemon's tile decision. The D-Bus
+                        // call failed — no moveResize is coming — so release
+                        // suppression here rather than letting the window sit
+                        // invisible until the 250 ms deadline.
+                        if (KWin::EffectWindow* effectWindow = m_effect->findWindowById(windowId)) {
+                            m_effect->endRestoreSuppression(effectWindow);
+                        }
                     }
                 });
         qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenId
                           << "minSize:" << minWidth << "x" << minHeight;
+        return true;
     }
+    return false;
 }
 
 void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows,
@@ -228,7 +241,8 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         int minWidth = 0;
         int minHeight = 0;
         KWin::Window* kw = w->window();
-        if (kw) {
+        // Internal windows (our own overlays) crash on minSize(); see discussion #511.
+        if (kw && !kw->isInternal()) {
             const QSizeF minSize = kw->minSize();
             if (minSize.isValid()) {
                 minWidth = qCeil(minSize.width());

@@ -6,6 +6,8 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 
 #include <QRectF>
+#include <QVector2D>
+#include <QVector4D>
 #include <QtGlobal>
 
 #include <array>
@@ -24,6 +26,67 @@ inline qint64 shaderClockNowMs()
 {
     using namespace std::chrono;
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
+/// Animation-shader anchor uniforms: where the captured window ("anchor")
+/// sits inside the shader's render target ("FBO").
+///
+///   • Anchor extent (default): the FBO covers the anchor (frame). The
+///     anchor sits at the origin and `resolution == anchorSize`.
+///     EXCEPT on the kwin path the redirected FBO covers the EXPANDED
+///     geometry (frame + decoration + shadow), so `resolution` is the
+///     expanded size and `anchorPosInFbo` is the shadow inset. A shader
+///     sampling the FBO directly would otherwise treat the shadow edge
+///     as the window edge; shaders fold the FBO back into the window's
+///     own [0,1] space via `anchorRemap`.
+///   • Surface extent (`fboExtent: "surface"`): the shader paints over the
+///     whole output, so `resolution` is the output size, `anchorSize`
+///     stays the window size, and `anchorPosInFbo` locates the window's
+///     top-left within the output.
+struct AnchorUniforms
+{
+    QVector2D resolution; ///< iResolution
+    QVector2D anchorSize; ///< iAnchorSize
+    QVector2D anchorPosInFbo; ///< iAnchorPosInFbo
+};
+
+/// Compute the anchor uniforms for a paintWindow tick. Pure geometry:
+/// `anchor` is the captured-window rect (frame), `texture` is the rect
+/// the shader's vTexCoord [0,1] covers, both in logical pixels at 1:1
+/// scale (quad-list space and screen space coincide on the kwin path).
+/// `iResolution` is the texture size, `iAnchorSize` is the anchor size,
+/// and `iAnchorPosInFbo` locates the anchor's top-left within the
+/// texture in logical pixels. When the texture equals the anchor (the
+/// daemon's anchor-extent path), the uniforms collapse to
+/// `{anchor, anchor, 0}` and `anchorRemap` reduces to identity.
+inline AnchorUniforms computeAnchorUniforms(const QRectF& anchor, const QRectF& texture)
+{
+    const QVector2D textureSize(static_cast<float>(qMax(texture.width(), 1.0)),
+                                static_cast<float>(qMax(texture.height(), 1.0)));
+    const QVector2D anchorSize(static_cast<float>(qMax(anchor.width(), 1.0)),
+                               static_cast<float>(qMax(anchor.height(), 1.0)));
+    const QVector2D anchorPos(static_cast<float>(anchor.x() - texture.x()),
+                              static_cast<float>(anchor.y() - texture.y()));
+    return {textureSize, anchorSize, anchorPos};
+}
+
+/// UV sub-rect of `inner` within `outer`, as `(x, y, width, height)` in
+/// `outer`'s [0,1] space. Drives the `iAnchorRectInTexture` uniform:
+/// `outer` is uTexture0's backing rect — on KWin always the redirected
+/// expanded-geometry FBO (frame + decoration + shadow) — and `inner` is
+/// the rect the shader's `surfaceColor()` argument addresses. Surface-
+/// extent transitions pass `(frame, expanded)` so `surfaceColor()` maps
+/// an anchor-[0,1] coordinate onto the frame's sub-region of the shadow-
+/// padded texture; anchor-extent transitions pass `(expanded, expanded)`
+/// for the `(0, 0, 1, 1)` identity. Widths/heights are clamped at 1.0 to
+/// keep the divisions safe on a degenerate zero-size window.
+inline QVector4D computeTextureSubRect(const QRectF& inner, const QRectF& outer)
+{
+    const float outerW = static_cast<float>(qMax(outer.width(), 1.0));
+    const float outerH = static_cast<float>(qMax(outer.height(), 1.0));
+    return QVector4D(static_cast<float>(inner.x() - outer.x()) / outerW,
+                     static_cast<float>(inner.y() - outer.y()) / outerH, static_cast<float>(inner.width()) / outerW,
+                     static_cast<float>(inner.height()) / outerH);
 }
 
 /// Pre-baked uniform / param key strings for the hot paths.

@@ -140,6 +140,31 @@ namespace PhosphorAnimationShaders {
 ///     bound (bindings 7-10)
 ///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`
 ///
+/// @par Spatial uniforms — per-runtime capture geometry
+/// These four fields describe where the captured card sits inside the
+/// texture / FBO the shader renders into. Both runtimes populate all
+/// four — KWin via classic-GL `setUniform`, the daemon via
+/// `AnimationUniformExtension` — so none are guarded by
+/// `#ifdef PLASMAZONES_KWIN`. They matter because neither runtime
+/// captures the bare card: KWin redirects the EXPANDED window geometry
+/// (frame + decoration + shadow); the daemon captures the shader
+/// anchor, which a PopupFrame enlarges past the card by a glow margin
+/// so the glow animates with the card.
+///
+///   • `iAnchorSize` — the visible card's pixel size, logical pixels.
+///   • `iAnchorPosInFbo` — the card's top-left within the FBO the
+///     shader rasterises, logical pixels. `anchorRemap` consumes it to
+///     fold surface-extent `vTexCoord` into card space; (0, 0) for
+///     anchor-extent, where the vertex stage already delivers card-
+///     space `vTexCoord`.
+///   • `iAnchorRectInTexture` — the card's UV sub-rect within
+///     `uTexture0`. `surfaceColor()` folds it in so a card-space [0, 1]
+///     sample addresses the card's region of the padded texture. A
+///     bare card-sized anchor carries the (0, 0, 1, 1) identity.
+///   • `iSurfaceScreenPos` — the surface's global screen origin (.xy)
+///     plus host screen size (.zw). Edge-distance math (fly-in's
+///     nearest-edge pick) reads this.
+///
 /// `iFlipBufferY`, `qt_Matrix`, `qt_Opacity`, `_appField0` /
 /// `_appField1` are daemon-only and absent from the canonical header's
 /// `#ifdef PLASMAZONES_KWIN` branch entirely.
@@ -263,6 +288,25 @@ inline constexpr const char* kIAnchorSize = "iAnchorSize";
 /// fallback that morph documented as the kwin path. A future actor-
 /// expansion PR would push (padW, padH) instead.
 inline constexpr const char* kIAnchorPosInFbo = "iAnchorPosInFbo";
+
+/// `vec4 iAnchorRectInTexture` — the card's UV sub-rect within
+/// `uTexture0`, as `(x, y, width, height)` in the texture's [0, 1]
+/// space. Populated on BOTH runtimes: each captures more than the bare
+/// card into `uTexture0`. KWin's `OffscreenEffect` redirects the whole
+/// window item (decoration + shadow included), so `uTexture0` covers
+/// the EXPANDED geometry. The daemon renders the shader anchor into
+/// `uTexture0`, and a PopupFrame enlarges that anchor past the card by
+/// a glow margin so the glow animates with the card. `surfaceColor()`
+/// folds this rect in so a card-space [0, 1] sample addresses the
+/// card's sub-region instead of stretching the whole texture across the
+/// card (the "card animates smaller than it lands" artefact); on the
+/// daemon `animation.vert` also divides `texCoord` by it so anchor-
+/// extent shaders receive card-space `vTexCoord` in the first place. A
+/// bare card-sized anchor with no capture margin carries the
+/// `(0, 0, 1, 1)` identity. Daemon: written through
+/// `AnimationUniformExtension` (UBO offset 704). kwin-effect: pushed
+/// via classic-GL `setUniform`.
+inline constexpr const char* kIAnchorRectInTexture = "iAnchorRectInTexture";
 
 /// Maximum number of user-declared textures per animation effect.
 ///

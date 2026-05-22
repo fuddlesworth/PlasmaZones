@@ -140,6 +140,12 @@ private:
         QKeySequence lastSentDefault;
         QKeySequence lastSentCurrent;
         bool registered = false; // has registerShortcut been sent yet?
+        // Persistent flag last forwarded to the backend. flush() re-registers
+        // when this drifts from `persistent` so a re-bind() that flips the flag
+        // without changing the key still reaches the backend — the backend's
+        // crash-purge decision (KGlobalAccelBackend) depends on the latest
+        // value. Only meaningful once `registered` is true.
+        bool lastSentPersistent = true;
         bool persistent = true; // surfaces in bindings(persistentOnly=true)
     };
 

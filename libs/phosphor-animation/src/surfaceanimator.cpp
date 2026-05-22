@@ -104,6 +104,28 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
     if (w <= 0.0 || h <= 0.0) {
         return;
     }
+    // The shader anchor can be larger than the visible card. PopupFrame
+    // wraps its frame + glow in a capture item and tags THAT as the
+    // anchor, so the soft glow is inside the captured texture and
+    // animates with the card through a transition. The anchor publishes
+    // the card's rect (anchor-local coords) via the `shaderContentRect`
+    // property; an absent / empty value means the anchor IS the card.
+    // QRectF::isEmpty() is true for a null variant (toRectF default),
+    // a zero rect, or a negative one — every "no usable value" case.
+    QRectF contentRect = anchor->property("shaderContentRect").toRectF();
+    if (contentRect.isEmpty()) {
+        contentRect = QRectF(0.0, 0.0, w, h);
+    }
+    const qreal cardW = contentRect.width();
+    const qreal cardH = contentRect.height();
+    // Card's UV sub-rect within the captured anchor texture. animation.vert
+    // divides texCoord by it (so anchor-extent shaders get card-space
+    // vTexCoord) and `surfaceColor` folds it back in when sampling. The
+    // (0,0,1,1) identity falls out when the anchor is the card. `w`/`h`
+    // are > 0 here (guarded above), so the divisions are safe.
+    const QVector4D anchorRectInTexture(static_cast<float>(contentRect.x() / w),
+                                        static_cast<float>(contentRect.y() / h), static_cast<float>(cardW / w),
+                                        static_cast<float>(cardH / h));
     // Two-mode extent model — the `fboExtent` JSON key (see
     // AnimationShaderEffect.h) picks the shader item's geometry:
     //
@@ -155,13 +177,20 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
             shaderItem->setIResolution(QSizeF(w, h));
         }
     } else {
-        // Anchor mode (default) — no expansion. Shader item exactly
-        // covers the captured anchor.
+        // Anchor mode (default) — the shader item covers the captured
+        // anchor 1:1, so a PopupFrame's glow margin (folded into the
+        // anchor) is rasterised too and the glow animates with the
+        // card. iResolution reports the CARD size, not the anchor
+        // size: animation.vert remaps vTexCoord into card space, so a
+        // shader pairing [0,1] vTexCoord with iResolution for pixel /
+        // aspect math must see the card. setIResolution runs AFTER
+        // setWidth/setHeight so it wins over ShaderEffect::geometryChange's
+        // auto-reset of iResolution to the item bounds.
         shaderItem->setX(anchor->x());
         shaderItem->setY(anchor->y());
         shaderItem->setWidth(w);
         shaderItem->setHeight(h);
-        shaderItem->setIResolution(QSizeF(w, h));
+        shaderItem->setIResolution(QSizeF(cardW, cardH));
     }
     if (shaderSource) {
         shaderSource->setWidth(w);
@@ -182,32 +211,36 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
     // `uSize`, tv-glitch's row offsets) want the logical value because
     // the magic-constant tuning was done against logical dimensions.
     if (auto* ext = animExtensionFor(shaderItem)) {
-        ext->setIAnchorSize(QSizeF(w, h));
+        ext->setIAnchorSize(QSizeF(cardW, cardH));
 
-        // iAnchorPosInFbo: anchor's top-left position inside the shader
-        // item's FBO. shaderItem is parented to `anchor->parentItem()`
-        // (see attachShaderToAnchor), so anchor->x()/y() and
-        // shaderItem->x()/y() are both in the parent's coord system;
-        // the subtraction gives anchor's position relative to
-        // shaderItem's top-left, which IS the FBO origin (the FBO
-        // covers shaderItem's bounds 1:1 via QQuickShaderEffectSource).
+        // iAnchorPosInFbo: the CARD's top-left inside the shader item's
+        // FBO, in logical pixels. shaderItem is parented to
+        // `anchor->parentItem()` (see attachShaderToAnchor), so
+        // anchor->x()/y() and shaderItem->x()/y() share the parent's
+        // coord system; their difference is the anchor's top-left in
+        // the FBO, and `contentRect` offsets that to the card.
         //
-        // Resolves identically across both extent modes:
-        //   Anchor: shaderItem at (anchor.x, anchor.y), diff = (0, 0).
-        //     Anchor fills the FBO.
-        //   Surface: shaderItem repositioned so its (0,0) corner sits
-        //     at the scene root in parentItem-local coords, diff =
-        //     (anchor.x, anchor.y) in parentItem's coords. For OSD /
-        //     popup chains with anchors.fill ancestors, parent's
-        //     coords == scene coords, so this matches the legacy
-        //     mapToScene value.
-        //
-        // Shaders that need to remap vTexCoord into anchor-space UV:
-        //   anchorUv = (vTexCoord - iAnchorPosInFbo/iResolution)
-        //            * (iResolution/iAnchorSize)
-        // collapses to identity when iAnchorPosInFbo = 0 and
-        // iAnchorSize = iResolution (default Anchor-extent case).
-        ext->setIAnchorPosInFbo(QPointF(anchor->x() - shaderItem->x(), anchor->y() - shaderItem->y()));
+        //   Anchor extent: the shaderItem covers the anchor, so the
+        //     anchor diff is (0, 0). animation.vert has already remapped
+        //     vTexCoord into card space, so the card sits at the origin
+        //     of that space — push (0, 0) and `anchorRemap` collapses
+        //     to identity.
+        //   Surface extent: the diff is the anchor's position within
+        //     the surface FBO; adding contentRect's offset yields the
+        //     card's position. `anchorRemap` consumes this to fold
+        //     surface-UV into card space.
+        if (extent == PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind::Surface) {
+            ext->setIAnchorPosInFbo(QPointF(anchor->x() - shaderItem->x() + contentRect.x(),
+                                            anchor->y() - shaderItem->y() + contentRect.y()));
+        } else {
+            ext->setIAnchorPosInFbo(QPointF(0.0, 0.0));
+        }
+
+        // iAnchorRectInTexture: the card's UV sub-rect within the
+        // captured anchor texture. animation.vert and `surfaceColor`
+        // fold it so anchor-extent shaders see card-space [0, 1] even
+        // though the FBO captured the card plus its glow margin.
+        ext->setIAnchorRectInTexture(anchorRectInTexture);
 
         // iSurfaceScreenPos describes where the card sits within its
         // *playing field* and how big that field is. The "playing field"
@@ -621,8 +654,8 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // applyEffectStaticConfig may end up calling node-side load paths whose
     // SPIR-V expects the extension to land at offset sizeof(BaseUniforms);
     // installing later would cause the first prepare() to allocate the UBO
-    // without the extension's 32 trailing bytes and the shader would read
-    // garbage at offsets 672/688 until the next allocation cycle.
+    // without the extension's 48 trailing bytes and the shader would read
+    // garbage at offsets 672-720 until the next allocation cycle.
     //
     // Lifetime: the shared_ptr is captured by `ShaderEffect::m_uniformExtension`
     // and lives for the shaderItem's lifetime. `syncShaderGeometryNow` pulls

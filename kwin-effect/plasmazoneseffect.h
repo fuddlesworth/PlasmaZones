@@ -125,6 +125,15 @@ public:
                      KWin::WindowPaintData& data) override;
     void grabbedKeyboardEvent(QKeyEvent* e) override;
 
+protected:
+    // OffscreenEffect hook: deform the redirected window's quad list.
+    // For surface-extent shader transitions (metadata `fboExtent:
+    // "surface"`) this replaces the window quad with one spanning the
+    // window's output, so the shader can paint past the window bounds.
+    // Every other redirected window is left untouched (drawn 1:1 over
+    // its own geometry).
+    void apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data, KWin::WindowQuadList& quads) override;
+
 private Q_SLOTS:
     void slotWindowAdded(KWin::EffectWindow* w);
     void slotWindowClosed(KWin::EffectWindow* w);
@@ -228,8 +237,56 @@ private:
      */
     void pushWindowMetadata(KWin::EffectWindow* w);
 
-    bool shouldHandleWindow(KWin::EffectWindow* w) const;
-    bool isTileableWindow(KWin::EffectWindow* w) const;
+    /**
+     * @brief Snapping/zone-management window filter.
+     *
+     * @param w            window to classify.
+     * @param rejectReason when non-null, set to a human-readable description
+     *                     of the first failing clause on a false return, and
+     *                     cleared on a true return. Default nullptr — hot-loop
+     *                     callers pay nothing. Used by logWindowDiagnostics()
+     *                     so the rejection reason has a single source of truth
+     *                     (this function) and cannot drift from the filter.
+     */
+    bool shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
+
+    /**
+     * @brief Autotile-tree eligibility filter. @see shouldHandleWindow for the
+     *        @p rejectReason out-parameter contract.
+     */
+    bool isTileableWindow(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
+
+    /**
+     * @brief Shared window-TYPE rejection predicate.
+     *
+     * Returns true when @p w is a structurally unmanageable window kind
+     * (special/desktop/dock/fullscreen/skipSwitcher, or the transient/dialog/
+     * menu/popup/tooltip family). Single source of truth behind both
+     * shouldHandleWindow()'s structural clause and notifyWindowActivated()'s
+     * focus-tracking filter, so the two can never drift (discussion #461
+     * item 11).
+     *
+     * @param w            window to classify; must be non-null.
+     * @param rejectReason when non-null, set to a human-readable reason on a
+     *                     true return. @see shouldHandleWindow.
+     */
+    bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
+
+    /**
+     * @brief Emit a full dump of a window's KWin properties plus the snap and
+     *        autotile filter verdicts.
+     *
+     * One call per window-open (slotWindowAdded) and per class/metadata change.
+     * Logged under the opt-in `plasmazones.effect.diag` category at debug
+     * level, so it is silent by default and never floods the journal; enable
+     * it on demand with QT_LOGGING_RULES="plasmazones.effect.diag.debug=true".
+     * Exists to diagnose apps whose windows KWin mis-classifies: Steam and
+     * other CEF/Electron clients report inconsistent window-type flags and
+     * reparent surfaces mid-session, so the only reliable way to fix their
+     * tiling behaviour is to see every flag the filters consult. The dump
+     * lists each flag and the exact clause that rejected the window.
+     */
+    void logWindowDiagnostics(KWin::EffectWindow* w, const char* context) const;
 
     /**
      * @brief Whether @p w should be reported to a tiling engine on open.
@@ -308,7 +365,13 @@ private:
      */
     void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
     void callCancelSnap();
-    void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr);
+    // releaseSuppressionOnMiss: when the daemon resolves no zone for the
+    // window, release its first-frame suppression (see RestoreSuppression).
+    // Pass false when something else will still reposition the window on a
+    // miss (the autotile-screen path tiles it via onComplete) — there the
+    // suppression must hold through that reposition instead.
+    void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr,
+                                  bool releaseSuppressionOnMiss = true);
     void connectNavigationSignals();
     void syncFloatingWindowsFromDaemon();
 
@@ -558,15 +621,49 @@ private:
 
     // Shader transition methods — implementations in shader_transitions.cpp,
     // operating on m_shaderManager state.
-    void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
-                               int durationMs = 0, bool reverse = false, bool holdCloseGrab = false);
+    /// Returns true when a fresh leg was installed (or the prior leg was
+    /// replaced); false otherwise. Two distinct failure modes share the
+    /// `false` return:
+    ///
+    ///   (a) Same-effect short-circuit — a transition with the same
+    ///       effectId, direction, and timing mode is already in flight
+    ///       on this window. The prior leg is untouched; its own
+    ///       teardown timer (or animator-completion callback) owns the
+    ///       teardown. Callers MUST NOT schedule a fresh per-leg timer
+    ///       in this case — a new timer would carry the prior leg's
+    ///       generation and fire on the new (likely shorter) duration,
+    ///       cutting the still-running animation short.
+    ///
+    ///   (b) Pre-commit short-circuit — install short-circuited before
+    ///       any state was committed: empty effectId / null window,
+    ///       global animations toggle off, collapsed/minimised surface,
+    ///       registry miss, shader file open / read / include-expansion
+    ///       failure, or shader compile failure. Nothing was installed,
+    ///       so there is nothing to schedule a teardown for either.
+    ///
+    /// Both cases are correctly handled by `tryBeginShaderForEvent`'s
+    /// "skip the timer" branch. A future caller writing a manual install
+    /// path that needs to distinguish the two should compare the
+    /// pre-call `m_shaderTransitions.find(window)` result against the
+    /// post-call result to detect case (a).
+    bool beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
+                               int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
+                               bool holdAddedGrab = false);
     void endShaderTransition(KWin::EffectWindow* window);
+
+    // First-frame open suppression — implementations in window_lifecycle.cpp.
+    // beginRestoreSuppression withholds a window from compositing the moment
+    // it opens; endRestoreSuppression releases it once it has settled into
+    // its zone / tile (or on the hard deadline). See RestoreSuppression.
+    void beginRestoreSuppression(KWin::EffectWindow* window);
+    void endRestoreSuppression(KWin::EffectWindow* window);
+
     void loadShaderProfileFromDbus();
     void loadAnimationAppRulesFromDbus();
     void loadMotionProfileTreeFromDbus();
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
-                                bool reverse = false, bool holdCloseGrab = false);
+                                bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false);
     void evictLruTextureIfOverBound();
     void warmUserTextureAsync(const QString& absolutePath);
 
@@ -790,6 +887,13 @@ private:
     // Per-window tracked screen ID for cross-screen move detection.
     // Replaces the per-window `new QString` heap allocation that was leaked.
     QHash<KWin::EffectWindow*, QString> m_trackedScreenPerWindow;
+
+    // Windows withheld from compositing between windowAdded and the frame
+    // their snap-restore / autotile reposition lands — see RestoreSuppression.
+    // paintWindow draws nothing for a window present here. Entries are
+    // erased on settle, on a negative resolve, on the deadline, and on
+    // window close/delete.
+    QHash<KWin::EffectWindow*, RestoreSuppression> m_restoreSuppress;
 
     // Cursor output tracking (for daemon shortcut screen detection on Wayland)
     // Stores the connector name of the last output the cursor was on.

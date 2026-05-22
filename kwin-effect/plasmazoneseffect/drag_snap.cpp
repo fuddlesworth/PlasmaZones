@@ -50,38 +50,6 @@ bool PlasmaZonesEffect::borderActivated(KWin::ElectricBorder border)
     return false;
 }
 
-void PlasmaZonesEffect::callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete)
-{
-    if (!window) {
-        if (onComplete)
-            onComplete();
-        return;
-    }
-
-    if (!isDaemonReady("resolve window restore")) {
-        if (onComplete)
-            onComplete();
-        return;
-    }
-
-    QString windowId = getWindowId(window);
-    QString screenId = getWindowScreenId(window);
-    bool sticky = isWindowSticky(window);
-
-    QPointer<KWin::EffectWindow> safeWindow = window;
-
-    // Single D-Bus call — daemon runs the full appRule → persisted → emptyZone → lastZone chain
-    // skipAnimation=true: window is being restored to its snap position on startup/reopen,
-    // so teleport directly instead of sliding from KWin's saved position.
-    // storePreSnap=false: the window is already at its snap/zone position (from before
-    // daemon restart or from KWin session restore), so its current frameGeometry is the
-    // zone geometry — NOT the free-floating geometry. Storing it as pre-tile would cause
-    // float toggle to restore to the zone geometry instead of the original free-floating position.
-    tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
-                     {windowId, screenId, sticky}, safeWindow, windowId, false, nullptr, nullptr,
-                     /*skipAnimation=*/true, onComplete);
-}
-
 // The kwin-effect no longer calls the legacy dragStarted D-Bus method;
 // beginDrag sets up snap-path state internally on the daemon side, so
 // there's only one code path into the drag state machine.
@@ -382,6 +350,15 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         }
     }
 
+    // If this window is held invisible until it is repositioned on open
+    // (first-frame suppression — see RestoreSuppression), stamp the
+    // resolved rect as its settle target. The windowFrameGeometryChanged
+    // handler treats the next geometry change as the real reposition (not
+    // the client's own initial sizing) only once this target is set.
+    if (auto supIt = m_restoreSuppress.find(window); supIt != m_restoreSuppress.end()) {
+        supIt->targetGeometry = geo;
+    }
+
     // Skip no-op: if window is already at the target geometry AND there is
     // no in-flight animation, calling moveResize() is redundant and can have
     // subtle stacking side effects on some KWin versions (e.g. during daemon
@@ -393,8 +370,20 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     // (float → unfloat, rotate → rotate back) legitimately targets the same
     // committed geometry and must NOT be skipped, because the animation needs
     // to play from the current visual position to that target.
-    if (QRectF(geo) == window->frameGeometry() && !m_windowAnimator->hasAnimation(window)) {
+    // Compare integer-aligned rects: `frameGeometry()` carries qreal
+    // precision and on fractional-scale outputs may keep sub-pixel residue
+    // from prior moveResize commits, so a float-bit-exact equality against
+    // an integer `geo` would silently miss and run a redundant moveResize.
+    if (QRectF(geo) == window->frameGeometry().toRect() && !m_windowAnimator->hasAnimation(window)) {
         qCDebug(lcEffect) << "moveResize: window already at target geometry, skipping:" << geo;
+        // Release first-frame open suppression here. The settle-detection
+        // hook on windowFrameGeometryChanged would otherwise wait forever
+        // for a configure that never fires (the resolved zone equals the
+        // spawn position — happens on KWin session restore where the
+        // saved geometry already matches a snap zone). Hold-suppression
+        // exists only to mask the placement→reposition flash; with no
+        // reposition coming, the window must paint immediately.
+        endRestoreSuppression(window);
         return;
     }
 

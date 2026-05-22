@@ -3,8 +3,8 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Effects
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 /**
  * Navigation OSD content — Item-rooted body for use inside the unified
@@ -248,42 +248,23 @@ Item {
         onRequest: root.dismissRequested()
     }
 
-    // Shadow effect
-    MultiEffect {
-        source: container
-        anchors.fill: container
-        shadowEnabled: true
-        shadowColor: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
-        shadowBlur: 1
-        shadowVerticalOffset: 4
-        shadowHorizontalOffset: 0
-    }
-
-    // Main container - matches LayoutOsd format exactly
-    // Accessible.name / .description live on the root Item so a screen
-    // reader sees the same a11y labels as LayoutOsdContent (which puts
-    // them on its root). Pre-fix the labels lived on this inner
-    // Rectangle, which was inconsistent with LayoutOsdContent and
-    // unreachable to anything walking the QObject tree from above.
-    Rectangle {
+    // The OSD card. QFZCommon.PopupFrame owns the background, border,
+    // soft glow, and the SurfaceAnimator shader anchor — the same chrome
+    // the layout-picker and zone-selector popups use. PopupFrame's
+    // internal captureItem extends past the frame so the glow is part of
+    // the captured texture and travels with the card through bounce /
+    // fly-in / etc. instead of snapping in when the leg ends. Matches
+    // LayoutOsdContent; the a11y labels live on the root Item.
+    QFZCommon.PopupFrame {
         id: container
-
-        // Shader-anchor opt-in: SurfaceAnimator's transition shader leg
-        // walks the visual tree for a `shaderAnchor: true` property tag
-        // and parents the transition shader (sized to this item, layer-
-        // enabled here) so pixelate / dissolve / glitch / etc. operate
-        // on this card's pixels rather than the fullscreen wayland
-        // surface backing the OSD host.
-        property bool shaderAnchor: true
 
         anchors.centerIn: parent
         // Text-only: size based on message content
         width: Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, Kirigami.Units.gridUnit * 10)
         height: messageLabel.implicitHeight + Kirigami.Units.gridUnit * 2.5
-        color: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, 0.95)
-        radius: Kirigami.Units.gridUnit * 1.5
-        border.color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.15)
-        border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+        backgroundColor: root.backgroundColor
+        textColor: root.textColor
+        containerRadius: Kirigami.Units.gridUnit * 1.5
 
         // Message label - informative text-based feedback
         Label {
