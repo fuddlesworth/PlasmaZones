@@ -34,7 +34,7 @@ SnapAssistHandler::SnapAssistHandler(PlasmaZonesEffect* effect, QObject* parent)
 {
 }
 
-void SnapAssistHandler::showContinuationIfNeeded(const QString& screenId)
+void SnapAssistHandler::showContinuationIfNeeded(const QString& screenId, const QString& requireSnappedWindowId)
 {
     if (screenId.isEmpty()) {
         qCInfo(lcSnapAssist) << "Snap assist continuation skipped: empty screen name";
@@ -51,21 +51,25 @@ void SnapAssistHandler::showContinuationIfNeeded(const QString& screenId)
     QDBusPendingCall emptyCall = PhosphorProtocol::ClientHelpers::asyncCall(
         PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getEmptyZones"), {screenId});
     auto* watcher = new QDBusPendingCallWatcher(emptyCall, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, screenId](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<PhosphorProtocol::EmptyZoneList> reply = *w;
-        if (!reply.isValid() || reply.value().isEmpty()) {
-            qCInfo(lcSnapAssist) << "Snap assist continuation: no empty zones"
-                                 << (reply.isValid() ? QStringLiteral("(empty list)")
-                                                     : QStringLiteral("(invalid reply)"));
-            return;
-        }
-        asyncShow(QString(), screenId, reply.value());
-    });
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, screenId, requireSnappedWindowId](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<PhosphorProtocol::EmptyZoneList> reply = *w;
+                if (!reply.isValid() || reply.value().isEmpty()) {
+                    qCInfo(lcSnapAssist) << "Snap assist continuation: no empty zones"
+                                         << (reply.isValid() ? QStringLiteral("(empty list)")
+                                                             : QStringLiteral("(invalid reply)"));
+                    return;
+                }
+                // When an anchor window is required, it is also the window to
+                // exclude from candidates — it is already placed in a zone.
+                asyncShow(requireSnappedWindowId, screenId, reply.value(), requireSnappedWindowId);
+            });
 }
 
 void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString& screenId,
-                                  const PhosphorProtocol::EmptyZoneList& emptyZones)
+                                  const PhosphorProtocol::EmptyZoneList& emptyZones,
+                                  const QString& requireSnappedWindowId)
 {
     if (!m_effect->isDaemonReady("snap assist snapped windows")) {
         return;
@@ -74,7 +78,7 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
         PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
     auto* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
     connect(snapWatcher, &QDBusPendingCallWatcher::finished, this,
-            [this, excludeWindowId, screenId, emptyZones](QDBusPendingCallWatcher* w) {
+            [this, excludeWindowId, screenId, emptyZones, requireSnappedWindowId](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
                 QDBusPendingReply<QStringList> reply = *w;
                 QSet<QString> snappedWindowIds;
@@ -82,6 +86,19 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                     for (const QString& id : reply.value()) {
                         snappedWindowIds.insert(id);
                     }
+                }
+                // Resnap anchor gate: the resnap-completion path keys the
+                // continuation to the active window. If that window is not
+                // among the daemon's snapped windows, the resnap placed
+                // nothing meaningful in a zone (e.g. an autotile→snap toggle
+                // with no prior snap assignments) — every zone is empty and a
+                // "continuation" would just be snap assist for the whole
+                // layout. Bail. Empty requireSnappedWindowId (drag-snap and
+                // overlay-driven continuations) skips the gate entirely.
+                if (!requireSnappedWindowId.isEmpty() && !snappedWindowIds.contains(requireSnappedWindowId)) {
+                    qCInfo(lcSnapAssist) << "Snap assist skipped: anchor window" << requireSnappedWindowId
+                                         << "is not snapped — resnap placed nothing in a zone on" << screenId;
+                    return;
                 }
                 PhosphorProtocol::SnapAssistCandidateList candidates =
                     buildCandidates(excludeWindowId, screenId, snappedWindowIds);

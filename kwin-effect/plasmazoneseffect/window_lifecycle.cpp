@@ -67,6 +67,11 @@ void PlasmaZonesEffect::endRestoreSuppression(KWin::EffectWindow* window)
 
 void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 {
+    // Full property + filter-verdict dump for every window as it opens. Bounded
+    // by window-open frequency, so it is safe at info level; gives the data
+    // needed to fix apps KWin mis-classifies (Steam / CEF child surfaces).
+    logWindowDiagnostics(w, "windowAdded");
+
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
@@ -242,16 +247,30 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         endRestoreSuppression(w);
     }
 
-    if (!onAutotileScreen && canSnapRestore && !instantRestoreApplied) {
-        // Skip when `instantRestoreApplied` is true: the cache entry was
-        // consumed and the daemon would just answer "no zone".
+    if (!onAutotileScreen && canSnapRestore) {
+        // Always run the daemon round-trip — INCLUDING after an instant
+        // restore. Instant restore only teleports the window to the cached
+        // zone geometry; it does NOT register the window in the daemon's
+        // SnapState. Zone registration happens exclusively via the daemon's
+        // resolveWindowRestore → commitSnap path, so skipping this call left
+        // every instant-restored window a "ghost": visually in its zone but
+        // absent from SnapState::zoneAssignments. buildOccupiedZoneSet() then
+        // reported the occupied zone as free, so getEmptyZones / snap-assist
+        // / empty-zone auto-placement all treated it as empty. On login the
+        // instant-restore cache serves nearly every window at once, so almost
+        // nothing got registered (zones=1 of 7 in the field logs).
+        //
+        // The earlier `!instantRestoreApplied` skip assumed the daemon "would
+        // just answer no zone" once the effect's m_snapRestoreCache entry was
+        // consumed. That is false: m_snapRestoreCache is an effect-side
+        // latency cache, separate from the daemon's pending-restore queue.
+        // pendingRestoreGeometries() (which populates the cache) is a const
+        // read and does NOT consume the daemon queue, so resolveWindowRestore
+        // still matches the pending entry, consumes it, and commits. When
+        // instant restore already placed the window the daemon returns the
+        // same zone rect, so the re-apply is a no-op moveResize to the
+        // current geometry — the price of correct registration.
         callResolveWindowRestore(w);
-    } else if (instantRestoreApplied) {
-        // Instant-restore already moved the window into its zone, but
-        // first-frame suppression is still active waiting for a settle
-        // signal. The settle hook (windowFrameGeometryChanged) already
-        // fires once moveResize commits, so suppression releases on its
-        // own — no extra work here.
     }
 }
 
@@ -565,6 +584,22 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);
         connect(kw, &KWin::Window::desktopFileNameChanged, this, pushLatest);
         connect(kw, &KWin::Window::captionChanged, this, pushLatest);
+
+        // Diagnostic dump on identity change — but ONLY for class / desktop-file,
+        // never caption. CEF/Electron apps (Steam included) map with a
+        // placeholder class and swap in the real one here, so re-dumping on
+        // those catches the final classification the filters act on. Caption
+        // is deliberately excluded: it feeds no filter, and terminals /
+        // browsers (and this very tool's progress spinner) rewrite their title
+        // every frame — dumping on captionChanged floods the journal with
+        // identical blocks. See logWindowDiagnostics().
+        auto logIdentityChange = [this, safeW]() {
+            if (safeW && !safeW->isDeleted()) {
+                logWindowDiagnostics(safeW, "identityChanged");
+            }
+        };
+        connect(kw, &KWin::Window::windowClassChanged, this, logIdentityChange);
+        connect(kw, &KWin::Window::desktopFileNameChanged, this, logIdentityChange);
     }
 
     // Detect drag start/end via KWin's per-window signals instead of polling.
