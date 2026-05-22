@@ -168,7 +168,12 @@ SettingsCard {
                                 }
 
                                 Layout.fillWidth: true
-                                enabled: {
+                                // Drive contentEnabled, not enabled, so the
+                                // disabled cascade only reaches the combo and
+                                // clear button — the Switch in middleContent
+                                // stays clickable so the user can flip
+                                // activityActive back on (discussion #461 item 12).
+                                contentEnabled: {
                                     void (activityDelegate._activityRevision);
                                     void (root._lockRevision);
                                     return activityScreenContainer.activityActive && !root.appSettings.isContextLocked(activityScreenContainer.screenName, 0, activityDelegate.activityId, root.viewMode);
@@ -226,13 +231,16 @@ SettingsCard {
 
                                 middleContent: Component {
                                     Switch {
-                                        enabled: true
-                                        // Read-only binding to activityActive; do NOT write to
-                                        // activityActive in onToggled. Assigning to a bound
-                                        // property severs the binding, leaving the Switch
-                                        // stuck. The root-level _disabledRevision counter
-                                        // re-evaluates activityActive on every controller
-                                        // change (discussion #461 item 12).
+                                        // Read-only binding to activityActive; do NOT
+                                        // write to activityActive in onToggled. Assigning
+                                        // to a bound `checked` would sever this binding.
+                                        // The _disabledRevision counter on root
+                                        // re-evaluates activityActive whenever the
+                                        // controller emits disabledActivitiesChanged.
+                                        // AssignmentRow.contentEnabled (not enabled)
+                                        // gates the combo and clear button so this
+                                        // Switch stays clickable when the row is
+                                        // disabled (discussion #461 item 12).
                                         checked: activityScreenContainer.activityActive
                                         onToggled: {
                                             root.appSettings.setActivityDisabled(activityScreenContainer.screenName, activityDelegate.activityId, !checked);

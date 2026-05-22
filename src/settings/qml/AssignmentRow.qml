@@ -33,6 +33,13 @@ RowLayout {
     property string currentLayoutId: ""
     // Optional component injected between label and combo (e.g. enable Switch)
     property Component middleContent: null
+    // Gates only the combo and clear button, not the row's `Item.enabled`.
+    // Callers that need to grey out the assignment controls (e.g. when the
+    // context is disabled) MUST drive this instead of `enabled` — `enabled`
+    // cascades through the QML parent chain and would also disable any
+    // Switch the caller injected via middleContent, leaving no clickable
+    // control to flip the disabled state back on (discussion #461 item 12).
+    property bool contentEnabled: true
 
     // Signals for assignment changes
     signal assignmentSelected(string layoutId)
@@ -70,6 +77,7 @@ RowLayout {
         id: layoutCombo
 
         Layout.preferredWidth: root.comboWidth
+        enabled: root.contentEnabled
         appSettings: root.appSettings
         noneText: root.noneText
         showPreview: root.showPreview
@@ -87,6 +95,7 @@ RowLayout {
 
     ToolButton {
         icon.name: "edit-clear"
+        enabled: root.contentEnabled
         onClicked: {
             root.assignmentCleared();
             layoutCombo.clearSelection();

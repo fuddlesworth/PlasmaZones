@@ -338,7 +338,12 @@ SettingsCard {
                                     }
 
                                     Layout.fillWidth: true
-                                    enabled: {
+                                    // Drive contentEnabled, not enabled, so the
+                                    // disabled cascade only reaches the combo and
+                                    // clear button — the Switch in middleContent
+                                    // stays clickable so the user can flip
+                                    // desktopActive back on (discussion #461 item 12).
+                                    contentEnabled: {
                                         void (monitorDelegate._assignmentRevision);
                                         void (root._lockRevision);
                                         return desktopRowContainer.desktopActive && !root.appSettings.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode);
@@ -383,15 +388,16 @@ SettingsCard {
 
                                     middleContent: Component {
                                         Switch {
-                                            enabled: true
-                                            // Read-only binding to desktopActive; do NOT write to
-                                            // desktopActive in onToggled — assigning a value to the
-                                            // bound `checked` property severs this binding, leaving
-                                            // the Switch visually stuck after the first toggle.
-                                            // The root-level _disabledRevision counter re-evaluates
-                                            // desktopActive whenever the controller emits
-                                            // disabledDesktopsChanged, keeping the binding live
-                                            // (discussion #461 item 12).
+                                            // Read-only binding to desktopActive; do NOT
+                                            // write to desktopActive in onToggled. Assigning
+                                            // to a bound `checked` would sever this binding.
+                                            // The _disabledRevision counter on root
+                                            // re-evaluates desktopActive whenever the
+                                            // controller emits disabledDesktopsChanged.
+                                            // AssignmentRow.contentEnabled (not enabled)
+                                            // gates the combo and clear button so this
+                                            // Switch stays clickable when the row is
+                                            // disabled (discussion #461 item 12).
                                             checked: desktopRowContainer.desktopActive
                                             onToggled: {
                                                 root.appSettings.setDesktopDisabled(monitorDelegate.screenName, desktopRowContainer.desktopNumber, !checked);
