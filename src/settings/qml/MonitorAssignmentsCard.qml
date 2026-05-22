@@ -328,32 +328,6 @@ SettingsCard {
                                 Layout.fillWidth: true
                                 spacing: Kirigami.Units.smallSpacing
 
-                                // Enable/disable switch as a SIBLING of AssignmentRow,
-                                // not a descendant. Item.enabled cascades through the
-                                // QML parent chain, so when AssignmentRow.enabled goes
-                                // false (because desktopActive is false) every child —
-                                // including a Switch nested in middleContent — also
-                                // becomes disabled and can't be toggled back on. The
-                                // top-monitor row puts the Switch beside the combo for
-                                // exactly this reason; mirror that layout here so the
-                                // re-enable click is never gated by the row's own
-                                // disabled state (discussion #461 item 12).
-                                Switch {
-                                    // Read-only binding to desktopActive; do NOT write
-                                    // to desktopActive in onToggled. Assigning a value
-                                    // to a bound `checked` would sever this binding,
-                                    // re-introducing the stuck-toggle bug. The
-                                    // _disabledRevision counter on root re-evaluates
-                                    // desktopActive whenever the controller emits
-                                    // disabledDesktopsChanged, keeping the binding live.
-                                    checked: desktopRowContainer.desktopActive
-                                    onToggled: {
-                                        root.appSettings.setDesktopDisabled(monitorDelegate.screenName, desktopRowContainer.desktopNumber, !checked);
-                                    }
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: checked ? i18n("Disable PlasmaZones on %1", desktopRowContainer.desktopName) : i18n("Enable PlasmaZones on %1", desktopRowContainer.desktopName)
-                                }
-
                                 AssignmentRow {
                                     id: desktopRow
 
@@ -364,7 +338,12 @@ SettingsCard {
                                     }
 
                                     Layout.fillWidth: true
-                                    enabled: {
+                                    // Drive contentEnabled, not enabled, so the
+                                    // disabled cascade only reaches the combo and
+                                    // clear button — the Switch in middleContent
+                                    // stays clickable so the user can flip
+                                    // desktopActive back on (discussion #461 item 12).
+                                    contentEnabled: {
                                         void (monitorDelegate._assignmentRevision);
                                         void (root._lockRevision);
                                         return desktopRowContainer.desktopActive && !root.appSettings.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode);
@@ -405,6 +384,28 @@ SettingsCard {
                                             root.appSettings.clearTilingScreenDesktopAssignment(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
                                         else
                                             root.appSettings.clearScreenDesktopAssignment(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
+                                    }
+
+                                    middleContent: Component {
+                                        Switch {
+                                            // Read-only binding to desktopActive; do NOT
+                                            // write to desktopActive in onToggled. Assigning
+                                            // to a bound `checked` would sever this binding.
+                                            // The _disabledRevision counter on root
+                                            // re-evaluates desktopActive whenever the
+                                            // controller emits disabledDesktopsChanged.
+                                            // AssignmentRow.contentEnabled (not enabled)
+                                            // gates the combo and clear button so this
+                                            // Switch stays clickable when the row is
+                                            // disabled (discussion #461 item 12).
+                                            checked: desktopRowContainer.desktopActive
+                                            onToggled: {
+                                                root.appSettings.setDesktopDisabled(monitorDelegate.screenName, desktopRowContainer.desktopNumber, !checked);
+                                            }
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: checked ? i18n("Disable PlasmaZones on %1", desktopRowContainer.desktopName) : i18n("Enable PlasmaZones on %1", desktopRowContainer.desktopName)
+                                        }
+
                                     }
 
                                 }
