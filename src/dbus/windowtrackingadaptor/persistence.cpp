@@ -224,12 +224,12 @@ QString WindowTrackingAdaptor::getPendingRestoreGeometries()
     // virtual desktop is used — consistent with the snap-side
     // setShouldRestorePredicate gate. Activity is left unset: snap-mode storage
     // carries no per-window activity tag (see isPersistedContextDisabled).
-    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const int desktop = currentDesktop();
 
     QJsonObject result;
     for (auto it = targets.constBegin(); it != targets.constEnd(); ++it) {
         const auto& target = it.value();
-        if (isPersistedContextDisabled(target.screenId, currentDesktop)) {
+        if (isPersistedContextDisabled(target.screenId, desktop)) {
             qCDebug(lcDbusWindow) << "getPendingRestoreGeometries: skipping" << it.key()
                                   << "— disabled context on screen" << target.screenId;
             continue;
@@ -309,7 +309,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
         return QString();
     }
 
-    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const int desktop = currentDesktop();
 
     // Search per-screen layouts to find which screen's layout contains this zone.
     // This correctly handles multi-monitor setups where each screen has a different layout.
@@ -318,7 +318,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
         (m_service->screenManager() ? m_service->screenManager()->effectiveScreenIds() : QStringList());
     for (const QString& sid : effectiveIds) {
         PhosphorZones::Layout* layout =
-            m_layoutManager->layoutForScreen(sid, currentDesktop, m_layoutManager->currentActivity());
+            m_layoutManager->layoutForScreen(sid, desktop, m_layoutManager->currentActivity());
         if (layout && layout->zoneById(*zoneUuid)) {
             return sid;
         }
