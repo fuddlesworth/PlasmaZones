@@ -14,6 +14,7 @@
 #include <PhosphorScreens/Manager.h>
 #include "../core/supportreport.h"
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <QDBusConnection>
@@ -78,17 +79,31 @@ void ControlAdaptor::toggleAutotileForScreen(const QString& screenId)
         return;
     }
 
-    // Determine current mode and toggle
-    bool isAutotile = m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId);
-    int newMode = isAutotile ? 0 : 1; // 0=Snapping, 1=Autotile
+    // Cycle order matches the daemon's keyboard-shortcut cycle handler:
+    // Snapping (0) → Autotile (1) → Scroll (2) → Snapping. Determine the
+    // current mode from the persisted assignment id rather than a single
+    // engine flag — the autotile engine's isActiveOnScreen does not
+    // distinguish Scroll from Snapping, both of which return false. Using
+    // the assignment id keeps this adaptor in sync with how the daemon
+    // resolves mode everywhere else (assignmentIdForScreen / ScreenModeRouter).
+    int newMode = 1; // default Snapping → Autotile when no assignment exists
+    if (m_layoutManager) {
+        const QString currentAssignment = m_layoutManager->assignmentIdForScreen(screenId, 0, QString());
+        if (PhosphorLayout::LayoutId::isAutotile(currentAssignment)) {
+            newMode = 2; // Autotile → Scroll
+        } else if (PhosphorLayout::LayoutId::isScroll(currentAssignment)) {
+            newMode = 0; // Scroll → Snapping
+        }
+    }
 
-    // Use the LayoutAdaptor's assignment system to toggle mode
-    // This is a simplified toggle — uses current desktop/activity context
-    qCInfo(lcDbusWindow) << "toggleAutotileForScreen:" << screenId << "from" << (isAutotile ? "autotile" : "snapping")
-                         << "to" << (newMode == 1 ? "autotile" : "snapping");
+    // Use the LayoutAdaptor's assignment system to apply the next mode.
+    // setAssignmentEntry(screenId, desktop=0 (current), activity="" (current),
+    // mode, layout, algorithm). Empty layout/algorithm preserves whatever
+    // payload fields the entry already carried for the target mode (the
+    // assignment cascade re-resolves them on apply).
+    qCInfo(lcDbusWindow) << "toggleAutotileForScreen:" << screenId << "to mode=" << newMode;
 
     if (m_layoutAdaptor) {
-        // setAssignmentEntry(screenId, desktop=0 (current), activity="" (current), mode, layout, algorithm)
         m_layoutAdaptor->setAssignmentEntry(screenId, 0, QString(), newMode, QString(), QString());
         m_layoutAdaptor->applyAssignmentChanges();
     } else {

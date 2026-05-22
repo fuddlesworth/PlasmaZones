@@ -20,12 +20,17 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorEngine/IScrollEngine.h>
+#include <PhosphorScrollEngine/ScrollScreenState.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include "../config/settings.h"
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QScreen>
 #include <QTimer>
+
+#include <algorithm>
 #include "pz_i18n.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -319,6 +324,84 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             qCWarning(lcDaemon) << "Overlay service not available for preview OSD";
         }
         break;
+    }
+}
+
+void Daemon::showLayoutOsdForScroll(const QString& screenId)
+{
+    if (shouldSuppressOsd()) {
+        return;
+    }
+
+    OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+    const QString displayName = PzI18n::tr("Scrolling");
+
+    switch (style) {
+    case OsdStyle::None:
+        qCInfo(lcDaemon) << "OSD disabled, skipping scroll OSD";
+        return;
+
+    case OsdStyle::Text:
+        showKdeTextOsd(QStringLiteral("plasmazones"), displayName);
+        qCInfo(lcDaemon) << "Showing text OSD for scroll mode";
+        return;
+
+    case OsdStyle::Preview: {
+        if (!m_overlayService) {
+            qCWarning(lcDaemon) << "Overlay service not available for scroll OSD";
+            return;
+        }
+
+        // Column count comes from the live strip when populated; an empty
+        // strip uses a fallback so the preview has something to render.
+        // Three columns is a balanced shape that hints at the niri-style
+        // horizontal flow without implying a specific layout.
+        constexpr int kFallbackColumns = 3;
+        constexpr int kMaxPreviewColumns = 8;
+        int columnCount = kFallbackColumns;
+        if (auto* scroll = scrollEngine()) {
+            const auto* state = scroll->scrollStateForScreen(screenId);
+            if (state && state->columnCount() > 0) {
+                columnCount = std::min(state->columnCount(), kMaxPreviewColumns);
+            }
+        }
+
+        // Build N equal-width column rects in the [0..1] relative space the
+        // OSD preview renderer expects. Same shape as the autotile preview
+        // path so LayoutOsdContent renders without changes.
+        QVariantList zones;
+        zones.reserve(columnCount);
+        const qreal columnWidth = 1.0 / static_cast<qreal>(columnCount);
+        for (int i = 0; i < columnCount; ++i) {
+            QVariantMap relGeo;
+            relGeo[QLatin1String("x")] = static_cast<qreal>(i) * columnWidth;
+            relGeo[QLatin1String("y")] = 0.0;
+            relGeo[QLatin1String("width")] = columnWidth;
+            relGeo[QLatin1String("height")] = 1.0;
+
+            QVariantMap zoneMap;
+            zoneMap[QLatin1String("zoneNumber")] = i + 1;
+            zoneMap[QLatin1String("relativeGeometry")] = relGeo;
+            zoneMap[QLatin1String("id")] = QString::number(i);
+            zoneMap[QLatin1String("name")] = QString();
+            zoneMap[QLatin1String("useCustomColors")] = false;
+            zones.append(zoneMap);
+        }
+
+        // No selectable scroll presets exist, so the OSD id is the bare
+        // scroll prefix — the same id applyLayoutById receives for a
+        // mode-only scroll entry. Category=Autotile drives the "Dynamic"
+        // badge (see CategoryBadge.qml); zoneNumberDisplay="none" hides
+        // numerals, leaving a clean column strip.
+        const QString layoutId = PhosphorLayout::LayoutId::makeScrollId(QString());
+        m_overlayService->showLayoutOsd(layoutId, displayName, zones,
+                                        static_cast<int>(PhosphorZones::LayoutCategory::Autotile),
+                                        /*autoAssign=*/false, screenId,
+                                        /*showMasterDot=*/false, /*producesOverlappingZones=*/false,
+                                        /*zoneNumberDisplay=*/QStringLiteral("none"), /*masterCount=*/0);
+        qCInfo(lcDaemon) << "Preview OSD: scroll columns=" << columnCount << "screen=" << screenId;
+        break;
+    }
     }
 }
 

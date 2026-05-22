@@ -191,6 +191,19 @@ private:
      * responsibility. The osdStyle setting controls visual style.
      */
     void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId);
+
+    /**
+     * @brief Show layout OSD for scroll mode (column-strip preview).
+     *
+     * Mirrors @ref showLayoutOsdForAlgorithm: builds a synthetic preview of
+     * N equal-width columns from the live scroll strip's columnCount() (or a
+     * sensible fallback when the strip is empty), then routes through
+     * OverlayService::showLayoutOsd. The category is reported as Autotile so
+     * the Dynamic badge appears — there is no dedicated Scroll category, and
+     * users perceive scroll as a dynamic mode like autotile.
+     */
+    void showLayoutOsdForScroll(const QString& screenId);
+
     void clearHighlight();
 
     /**

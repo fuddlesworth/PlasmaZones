@@ -213,26 +213,56 @@ void Daemon::initializeAutotile()
             // correct exclusive filter for the new mode.
             m_unifiedLayoutController->setLayoutFilter(true, true);
 
-            QString currentAssignment = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+            const QString currentAssignment = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+            const bool wasAutotile = PhosphorLayout::LayoutId::isAutotile(currentAssignment);
+            const bool wasScroll = PhosphorLayout::LayoutId::isScroll(currentAssignment);
+            using Mode = PhosphorZones::AssignmentEntry::Mode;
+            const Mode currentModeFor3Cycle =
+                wasAutotile ? Mode::Autotile : (wasScroll ? Mode::Scroll : Mode::Snapping);
+            qCInfo(lcDaemon) << "Mode toggle: currentAssignment=" << currentAssignment
+                             << "currentMode=" << static_cast<int>(currentModeFor3Cycle);
+
+            // Cycle order: Snap → Autotile → Scroll → Snap. Skip targets whose
+            // master feature gate is off so disabling a mode in the KCM removes
+            // it from the cycle entirely (rather than silently leaving the
+            // mode unreachable / half-active).
+            auto modeEnabled = [this](Mode m) -> bool {
+                switch (m) {
+                case Mode::Snapping:
+                    return m_settings->snappingEnabled();
+                case Mode::Autotile:
+                    return m_settings->autotileEnabled();
+                case Mode::Scroll:
+                    return m_settings->scrollingEnabled();
+                }
+                return false;
+            };
+            auto nextMode = [](Mode m) -> Mode {
+                switch (m) {
+                case Mode::Snapping:
+                    return Mode::Autotile;
+                case Mode::Autotile:
+                    return Mode::Scroll;
+                case Mode::Scroll:
+                    return Mode::Snapping;
+                }
+                return Mode::Snapping;
+            };
+
+            Mode targetMode = nextMode(currentModeFor3Cycle);
+            int hops = 0;
+            while (!modeEnabled(targetMode) && targetMode != currentModeFor3Cycle && hops < 3) {
+                targetMode = nextMode(targetMode);
+                ++hops;
+            }
+            if (targetMode == currentModeFor3Cycle) {
+                qCInfo(lcDaemon) << "Mode toggle: ignored — no other enabled mode to cycle to";
+                updateLayoutFilter();
+                return;
+            }
+            qCInfo(lcDaemon) << "Mode toggle: target=" << static_cast<int>(targetMode);
 
             bool applied = false;
-            const bool wasAutotile = PhosphorLayout::LayoutId::isAutotile(currentAssignment);
-            qCInfo(lcDaemon) << "Mode toggle: currentAssignment=" << currentAssignment << "wasAutotile=" << wasAutotile;
-
-            // Feature gate: only allow toggling INTO a mode whose feature flag is enabled.
-            // Without this, disabling snapping in the KCM while autotile remains on still
-            // lets the user toggle back into snapping — and vice versa.
-            const bool targetAutotile = !wasAutotile;
-            if (targetAutotile && !m_settings->autotileEnabled()) {
-                qCInfo(lcDaemon) << "Mode toggle: ignored — autotile disabled in settings";
-                updateLayoutFilter();
-                return;
-            }
-            if (!targetAutotile && !m_settings->snappingEnabled()) {
-                qCInfo(lcDaemon) << "Mode toggle: ignored — snapping disabled in settings";
-                updateLayoutFilter();
-                return;
-            }
 
             // Capture autotile window order BEFORE layout switch destroys PhosphorTiles::TilingState.
             // Merge (not replace) into m_lastAutotileOrders so other desktops' saved
@@ -244,12 +274,13 @@ void Daemon::initializeAutotile()
                 }
             }
 
-            if (wasAutotile) {
-                // Autotile → Snapping: restore this context's snappingLayout
-                // from the PhosphorZones::AssignmentEntry (preserved even when mode is Autotile).
-                // Try current context first; fall back to broader scopes when the
-                // context-specific entry has no snappingLayout (e.g., fresh KCM
-                // autotile entry that never had a manual layout assigned).
+            if (targetMode == Mode::Snapping) {
+                // → Snapping: restore this context's snappingLayout from the
+                // AssignmentEntry (preserved even when mode is Autotile/Scroll).
+                // Try current context first; fall back to broader scopes when
+                // the context-specific entry has no snappingLayout (e.g., a
+                // fresh KCM autotile entry that never had a manual layout
+                // assigned).
                 QString layoutId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
                 if (layoutId.isEmpty() && !activity.isEmpty()) {
                     layoutId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
@@ -268,7 +299,7 @@ void Daemon::initializeAutotile()
                         applied = m_unifiedLayoutController->applyLayoutById(fallback->id().toString());
                     }
                 }
-            } else {
+            } else if (targetMode == Mode::Autotile) {
                 // Pre-save snap-float state before autotile entry so rapid
                 // toggles don't lose snap-mode floats. Scoped to the toggled
                 // screen — windows floating on other screens are unaffected.
@@ -280,8 +311,8 @@ void Daemon::initializeAutotile()
                 seedAutotileOrderForScreen(screenId);
 
                 // Resolve algorithm from the AssignmentEntry's tilingAlgorithm
-                // (preserved even when mode is Snapping), then fall back to broader
-                // scopes, then to the user's configured default (settings).
+                // (preserved even when mode is Snapping/Scroll), then fall back to
+                // broader scopes, then to the user's configured default (settings).
                 QString algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
                 if (algoId.isEmpty() && !activity.isEmpty()) {
                     algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, QString());
@@ -296,11 +327,30 @@ void Daemon::initializeAutotile()
                     applied =
                         m_unifiedLayoutController->applyLayoutById(PhosphorLayout::LayoutId::makeAutotileId(algoId));
                 }
+            } else {
+                // → Scroll: preserve any prior scrollSetting on the assignment
+                // entry. There is no per-mode equivalent of snappingLayoutForScreen
+                // for scroll yet, so read the AssignmentEntry's scrollSetting field
+                // directly via assignmentEntryForScreen — empty means "engine
+                // defaults", which is what fresh entries get.
+                const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
+                applied = m_unifiedLayoutController->applyLayoutById(
+                    PhosphorLayout::LayoutId::makeScrollId(entry.scrollSetting));
             }
 
             // If apply failed (e.g. layout was deleted), restore the correct filter
             if (!applied) {
                 updateLayoutFilter();
+            }
+
+            // Scroll has no `applied` signal that drives the OSD path (cf.
+            // autotileApplied / layoutApplied), so the cycle handler fires the
+            // OSD itself for any →Scroll transition. Gated on
+            // showOsdOnLayoutSwitch to match the Snap/Autotile OSD policy
+            // (an explicit user action still gets feedback when the toggle
+            // is on; users who silenced layout-switch OSDs stay silent).
+            if (applied && targetMode == Mode::Scroll && m_settings->showOsdOnLayoutSwitch()) {
+                showLayoutOsdForScroll(screenId);
             }
 
             // Resnap autotiled windows into the new manual layout's zones using
@@ -311,12 +361,15 @@ void Daemon::initializeAutotile()
             // to share the same screen, producing wrong results.
             // Windows that were autotile-only (never zone-snapped) get their
             // pre-autotile floating geometry restored by restoreAutotileOnlyGeometries.
+            // Only runs on Autotile→Snap; Autotile→Scroll and Scroll→* don't need
+            // zone-occupancy reconciliation.
+            const bool needAutotileToSnapResnap = wasAutotile && targetMode == Mode::Snapping;
             auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get());
-            if (applied && wasAutotile && !concreteSnap) {
+            if (applied && needAutotileToSnapResnap && !concreteSnap) {
                 if (m_snapEngine) {
                     qCWarning(lcDaemon) << "Snap engine is not a SnapEngine — autotile→snap resnap skipped";
                 }
-            } else if (applied && wasAutotile && concreteSnap) {
+            } else if (applied && needAutotileToSnapResnap && concreteSnap) {
                 // Build exclusion set: windows that fit into the target layout's zones
                 // will be zone-snapped by the resnap D-Bus signal. Without excluding them,
                 // restoreAutotileOnlyGeometries sends float-geometry D-Bus calls that
