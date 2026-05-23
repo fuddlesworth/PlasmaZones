@@ -58,6 +58,20 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
         if (!w->frameGeometry().contains(pos)) {
             continue;
         }
+        // Our own daemon overlay / editor layer-shell surfaces are full-screen
+        // and always topmost on the autotile monitor — without this exemption,
+        // FFM would see them as the topmost-under-cursor window on every move
+        // and bail forever (discussion #461 #3). Look through them to the real
+        // window beneath. The shouldHandleWindow rejection reason for these is
+        // "own overlay/editor window class"; we match that here directly to
+        // avoid a string round-trip via the rejectReason out-param.
+        {
+            const QString cls = w->windowClass();
+            if (cls.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
+                || cls.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive)) {
+                continue;
+            }
+        }
         // A non-autotile window (excluded app, keep-above overlay, popup, dialog,
         // Spectacle, etc.) occludes the cursor — don't look through it to focus a
         // tiled window beneath. This prevents focus-stealing from emoji pickers,
