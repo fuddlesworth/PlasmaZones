@@ -140,12 +140,17 @@ public:
     /// the consumer's view of what's live on this screen.
     ///
     /// @p anyVisible - true when at least one slot wants the surface
-    /// mapped (driven by the consumer's slot-visibility check). Brings
-    /// the surface up on the first transition from never-shown → live;
-    /// subsequent visibility transitions toggle the input flag directly
-    /// without re-entering Surface::show()/hide() (the keep-mapped hide
-    /// path cancels per-surface animator tracking, which would wipe
-    /// in-flight beginShow's on OTHER slots on the same shell).
+    /// mapped (driven by the consumer's slot-visibility check). Drives
+    /// the Surface state machine in both directions: show() on
+    /// false→true, hide() on true→false. The behavior of hide() is
+    /// governed by the SurfaceConfig the consumer registered:
+    /// keepMappedOnHide=true keeps the wl_surface mapped (animator
+    /// drives root opacity to 0); keepMappedOnHide=false unmaps the
+    /// wl_surface synchronously so the shell stops being composited
+    /// when idle. The shell surface's role typically has no animator
+    /// Config registered, so per-surface cancel/beginHide collapse
+    /// to no-ops and do not interfere with per-slot animator state
+    /// (which lives on different keys).
     ///
     /// @p anyInputGrabbing - true when at least one modal slot
     /// (consumer-defined; PZ today: snap-assist + layout picker) wants
