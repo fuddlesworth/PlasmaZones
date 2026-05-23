@@ -136,6 +136,7 @@ pz_add_test(test_autotile_engine_retry autotile/test_autotile_engine_retry.cpp)
 pz_add_test(test_autotile_engine_order_cycling autotile/test_autotile_engine_order_cycling.cpp)
 target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_engine_class_mutation autotile/test_autotile_engine_class_mutation.cpp)
+pz_add_test(test_autotile_engine_pending_restore_filter autotile/test_autotile_engine_pending_restore_filter.cpp)
 pz_add_test(test_autotile_drag_insert autotile/test_autotile_drag_insert.cpp)
 target_compile_definitions(test_autotile_drag_insert PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_handoff autotile/test_autotile_handoff.cpp)
@@ -440,6 +441,16 @@ add_executable(test_animation_shader_param_wiring ui/test_animation_shader_param
 target_link_libraries(test_animation_shader_param_wiring PRIVATE Qt6::Test Qt6::Core)
 target_compile_definitions(test_animation_shader_param_wiring PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_param_wiring COMMAND test_animation_shader_param_wiring)
+
+# Pure-geometry test for the kwin-effect's anchor-uniform branch
+# (ShaderInternal::computeAnchorUniforms) — pins anchor-extent vs
+# surface-extent (fboExtent: "surface") iResolution/iAnchorPosInFbo math.
+add_executable(test_anchor_uniforms ui/test_anchor_uniforms.cpp)
+target_link_libraries(test_anchor_uniforms PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation)
+# Resolve <plasmazoneseffect/shader_internal.h> without a brittle relative
+# path, and let CMake track the header as a dependency of the test.
+target_include_directories(test_anchor_uniforms PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+add_test(NAME test_anchor_uniforms COMMAND test_anchor_uniforms)
 
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently

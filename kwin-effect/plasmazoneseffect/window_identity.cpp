@@ -124,17 +124,10 @@ QString PlasmaZonesEffect::getWindowAppId(KWin::EffectWindow* w) const
     if (!window) {
         return QString();
     }
-    // Prefer desktopFileName (stable cross-session identifier when available).
-    QString appId = window->desktopFileName();
-    if (appId.isEmpty()) {
-        // Fallback: normalize windowClass
-        //   X11: "resourceName resourceClass" → extract resourceClass
-        //   Wayland: app_id as-is
-        QString wc = w->windowClass();
-        int spaceIdx = wc.indexOf(QLatin1Char(' '));
-        appId = (spaceIdx > 0) ? wc.mid(spaceIdx + 1) : wc;
-    }
-    return appId.toLower();
+    // Canonical appId derivation lives in PhosphorIdentity so the daemon and
+    // effect spell it identically. A blank / whitespace-only window class
+    // yields an empty appId (never " ") — see normalizeAppId.
+    return ::PhosphorIdentity::WindowId::normalizeAppId(window->desktopFileName(), w->windowClass());
 }
 
 void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w)
@@ -207,6 +200,27 @@ bool PlasmaZonesEffect::isPlasmaShellSurface(const QString& windowClass)
         || windowClass.contains(QLatin1String("org.kde.plasma.emojier"), Qt::CaseInsensitive)
         || windowClass.contains(QLatin1String("org.kde.plasma.notifications"), Qt::CaseInsensitive)
         || windowClass.contains(QLatin1String("org.kde.krunner"), Qt::CaseInsensitive);
+}
+
+bool PlasmaZonesEffect::isOwnOverlayClass(const QString& windowClass)
+{
+    // Match the same substrings the shouldHandleWindow filter uses for its
+    // "own overlay/editor window class" rejection. The settings app is
+    // deliberately NOT here — it is a real user window the snap/tile pipeline
+    // should treat normally.
+    return windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
+        || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive);
+}
+
+PhosphorEngine::WindowKind PlasmaZonesEffect::classifyWindowKind(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return PhosphorEngine::WindowKind::Unknown;
+    }
+    if (isStructurallyUnmanageableWindowType(w) || !w->isNormalWindow()) {
+        return PhosphorEngine::WindowKind::Transient;
+    }
+    return PhosphorEngine::WindowKind::Normal;
 }
 
 } // namespace PlasmaZones

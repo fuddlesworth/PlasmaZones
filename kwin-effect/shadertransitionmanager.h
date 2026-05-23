@@ -167,11 +167,42 @@ public:
         m_cachedIDate = v;
     }
 
+    /// Frame-pinned shader clock. `prePaintScreen` samples
+    /// `shaderClockNowMs()` once and stores it here; every `paintWindow`
+    /// call within that compositor cycle reads this value instead of
+    /// re-sampling steady_clock. Without this pin, KWin invoking
+    /// `paintWindow` more than once per cycle (back-to-back paint cycles
+    /// scheduled by our own `effects->addRepaint`, multi-output passes,
+    /// etc.) would cause each call to compute a slightly different
+    /// `progress` from a fresh `shaderClockNowMs()`, painting the
+    /// surface-extent quad at a different position each call — visible
+    /// as staggered ghost copies of the in-flight window.
+    /// `-1` means "no cycle in progress; fall back to live read"
+    /// (paintWindow happening before prePaintScreen on this effect
+    /// instance, e.g. test paths).
+    qint64 currentFrameClockMs() const
+    {
+        return m_currentFrameClockMs;
+    }
+    void setCurrentFrameClockMs(qint64 ms)
+    {
+        m_currentFrameClockMs = ms;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-window State
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Access the in-flight shader transition map (for paintWindow).
+    ///
+    /// @note The raw map exposure is a transitional shim. Prefer the
+    /// focused accessors below (`hasTransition`, `findTransition`,
+    /// `eraseTransition`) for new call sites — they preserve the
+    /// option of adding generation gating, instrumentation, or
+    /// invariant assertions in the manager without touching every
+    /// caller. Existing direct uses live in `shader_transitions.cpp`
+    /// (via `friend class PlasmaZonesEffect`) and migrate as those
+    /// sites are touched.
     std::unordered_map<KWin::EffectWindow*, ShaderTransition>& shaderTransitions()
     {
         return m_shaderTransitions;
@@ -179,6 +210,35 @@ public:
     const std::unordered_map<KWin::EffectWindow*, ShaderTransition>& shaderTransitions() const
     {
         return m_shaderTransitions;
+    }
+
+    /// Focused accessors. Each is a thin wrapper over the underlying
+    /// `std::unordered_map` so call sites that don't need raw iterator
+    /// access can express their intent at the manager API level. New
+    /// code should prefer these.
+    bool hasTransition(KWin::EffectWindow* window) const
+    {
+        return m_shaderTransitions.find(window) != m_shaderTransitions.end();
+    }
+    /// Returns nullptr when the window has no in-flight transition.
+    /// The pointer is stable until the next `eraseTransition` /
+    /// `insertTransition` call for THAT window — the underlying
+    /// `unordered_map` does not invalidate other entries' pointers
+    /// on insertion or erasure.
+    ShaderTransition* findTransition(KWin::EffectWindow* window)
+    {
+        auto it = m_shaderTransitions.find(window);
+        return it != m_shaderTransitions.end() ? &it->second : nullptr;
+    }
+    const ShaderTransition* findTransition(KWin::EffectWindow* window) const
+    {
+        auto it = m_shaderTransitions.find(window);
+        return it != m_shaderTransitions.end() ? &it->second : nullptr;
+    }
+    /// Returns true when an entry was actually erased.
+    bool eraseTransition(KWin::EffectWindow* window)
+    {
+        return m_shaderTransitions.erase(window) > 0;
     }
 
     /// Windows with a pending deferred endShaderTransition queued.
@@ -297,6 +357,7 @@ private:
     qint64 m_lastIDateRefreshMs = 0;
     QVector4D m_cachedIDate{};
     QPointF m_cachedCursorGlobal;
+    qint64 m_currentFrameClockMs = -1;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Generation + Edge-detection

@@ -91,7 +91,11 @@ QSizeF KWinCompositorBridge::minSize(WindowHandle w) const
     if (!ew)
         return QSizeF();
     auto* kw = ew->window();
-    return kw ? kw->minSize() : QSizeF();
+    // KWin internal windows (our own zone overlays / snap-assist surfaces) can
+    // carry a non-null KWin::Window* whose backing QWindow is null; KWin's
+    // InternalWindow::minSize() dereferences it unconditionally and segfaults.
+    // See discussion #511.
+    return (kw && !kw->isInternal()) ? kw->minSize() : QSizeF();
 }
 
 bool KWinCompositorBridge::isMinimized(WindowHandle w) const
@@ -144,7 +148,8 @@ WindowInfo KWinCompositorBridge::windowInfo(WindowHandle w) const
     info.hasDecoration = ew->hasDecoration();
 
     auto* kw = ew->window();
-    if (kw) {
+    // Skip InternalWindows; see minSize() above (discussion #511).
+    if (kw && !kw->isInternal()) {
         info.minSize = kw->minSize();
     }
 

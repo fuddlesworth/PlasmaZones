@@ -119,6 +119,7 @@ set(plasmazones_core_SRCS
     dbus/windowruleadaptor.h
     # snapnavigationtargets moved to libs/phosphor-snap-engine/
     dbus/windowtrackingadaptor.cpp
+    dbus/windowtrackingadaptor/enginewiring.cpp
     dbus/windowtrackingadaptor/navigation.cpp
     dbus/windowtrackingadaptor/float.cpp
     dbus/windowtrackingadaptor/persistence.cpp

@@ -470,6 +470,46 @@ public:
      */
     void deserializePendingRestores(const QJsonObject& obj) override;
 
+    /**
+     * @brief Predicate consulted before persisting or honoring a pending restore.
+     *
+     * Returns true to keep the entry, false to drop it. Mirrors the snap-side
+     * PhosphorPlacement::WindowTrackingService::ShouldTrackPredicate but adds
+     * an activity parameter because autotile pending-restore entries carry an
+     * activity tag (snap does not — see SnapState).
+     *
+     * Applied at three points:
+     *   1. removeWindow() — live write gate: a closed window on a disabled
+     *      context is never appended to m_pendingAutotileRestores in the first
+     *      place. Matches snap's gate in WindowTrackingService::windowClosed.
+     *   2. serializePendingRestores() — drops in-memory entries that became
+     *      disabled mid-session before they reach disk.
+     *   3. deserializePendingRestores() — drops on-disk entries authored under
+     *      an older config or by a daemon that didn't have the gate.
+     *
+     * The engine library is intentionally settings-agnostic (LGPL boundary),
+     * so the daemon adaptor injects the predicate. When unset the engine
+     * behaves as if every context is active — the historical default that
+     * unit tests rely on.
+     */
+    using ShouldPersistRestorePredicate =
+        std::function<bool(const QString& screenId, int desktop, const QString& activity)>;
+
+    /**
+     * @brief Inject the persist-restore gate. See ShouldPersistRestorePredicate.
+     *
+     * Ownership: the caller is responsible for keeping any captured state
+     * (e.g. `this` pointers to a settings adaptor) valid for the lifetime of
+     * this AutotileEngine. If the captured object is destroyed before the
+     * engine, clear the predicate first (`setShouldPersistRestorePredicate({})`)
+     * — otherwise a subsequent removeWindow()/serialize()/deserialize() call
+     * dereferences freed memory.
+     */
+    void setShouldPersistRestorePredicate(ShouldPersistRestorePredicate predicate)
+    {
+        m_shouldPersistRestorePredicate = std::move(predicate);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1358,6 +1398,12 @@ private:
     // support multi-instance apps; consumed FIFO by insertWindow().
     // Analogous to snapping's PendingRestoreQueues.
     QHash<QString, QList<PendingAutotileRestore>> m_pendingAutotileRestores;
+
+    // Disabled-context gate injected by the daemon adaptor. See
+    // ShouldPersistRestorePredicate. Empty until the daemon wires it; while
+    // empty every (screen, desktop, activity) tuple is treated as active —
+    // the behaviour unit tests rely on.
+    ShouldPersistRestorePredicate m_shouldPersistRestorePredicate{};
 
     // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
     // simultaneous desktop+activity switches. Without coalescing, the first

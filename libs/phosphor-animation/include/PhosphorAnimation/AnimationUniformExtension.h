@@ -20,10 +20,12 @@ namespace PhosphorAnimation {
 
 /// IUniformExtension that appends animation-shader spatial uniforms after
 /// `PhosphorShaders::BaseUniforms` in the UBO. Carries the surface-on-
-/// screen rect (`iSurfaceScreenPos`) and the captured anchor's pixel
-/// size (`iAnchorSize`) — both read by vertex shaders that translate the
-/// rendered card across the screen (fly-in, slide) and by fragment
-/// shaders that want screen-relative noise / edge fades.
+/// screen rect (`iSurfaceScreenPos`), the captured card's pixel size
+/// (`iAnchorSize`), its top-left within the FBO (`iAnchorPosInFbo`), and
+/// its UV sub-rect within the captured texture (`iAnchorRectInTexture`)
+/// — read by vertex shaders that map the FBO quad onto the card and by
+/// fragment shaders that want card-space sampling and screen-relative
+/// noise / edge fades.
 ///
 /// Why an extension and not a BaseUniforms member: the zone-shader path
 /// (`ZoneShaderItem` via `ZoneUniformExtension`) shares `BaseUniforms`
@@ -36,12 +38,11 @@ namespace PhosphorAnimation {
 /// fields through this extension isolates the two pipelines: zone
 /// shaders attach `ZoneUniformExtension` (4096 bytes after base) and
 /// never observe these fields at all; animation shaders attach
-/// `AnimationUniformExtension` (32 bytes after base) and the fields
-/// land at the same std140 offsets the pre-isolation layout used
-/// (`iSurfaceScreenPos` at offset 672, `iAnchorSize` at offset 688)
-/// — so `data/animations/shared/animation_uniforms.glsl`'s UBO
-/// declaration is byte-for-byte unchanged from the pre-isolation
-/// version.
+/// `AnimationUniformExtension` (48 bytes after base) — `iSurfaceScreenPos`
+/// at offset 672, `iAnchorSize` at 688, `iAnchorPosInFbo` at 696,
+/// `iAnchorRectInTexture` at 704 — matching the trailing-field layout
+/// `data/animations/shared/animation_uniforms.glsl`'s UBO branch
+/// declares.
 ///
 /// Cross-runtime parity: the kwin-effect path uses classic GL
 /// `setUniform` lookups for these names (see `paint_pipeline.cpp`
@@ -69,6 +70,14 @@ public:
     AnimationUniformExtension()
     {
         std::memset(&m_data, 0, sizeof(m_data));
+        // iAnchorRectInTexture defaults to the (0, 0, 1, 1) identity —
+        // a card-sized anchor with no capture margin. memset leaves it
+        // (0, 0, 0, 0); a zero width/height would collapse every
+        // surfaceColor sample to the texture's corner texel (and divide
+        // animation.vert's remap by zero) before the first geometry
+        // sync lands a real value.
+        m_data.iAnchorRectInTexture[2] = 1.0f;
+        m_data.iAnchorRectInTexture[3] = 1.0f;
     }
 
     int extensionSize() const override
@@ -193,13 +202,42 @@ public:
         m_dirty.store(true, std::memory_order_release);
     }
 
+    /// Card's UV sub-rect within `uTexture0`, as `(x, y, width, height)`
+    /// in the captured texture's [0, 1] space. The daemon renders the
+    /// shader anchor into `uTexture0`; when the anchor is larger than
+    /// the visible card — a PopupFrame capture item that bundles the
+    /// glow margin so the glow animates with the card — this rect is
+    /// the card's region within that texture. `animation.vert` divides
+    /// `texCoord` by it so anchor-extent shaders see `vTexCoord` as
+    /// [0, 1] over the card (the glow margin falls outside [0, 1]), and
+    /// `surfaceColor()` multiplies by it so card-space samples address
+    /// the card region of the texture. A bare card-sized anchor carries
+    /// the `(0, 0, 1, 1)` identity, which makes both folds a passthrough.
+    /// Pushed by `syncShaderGeometryNow` alongside `iAnchorSize`. Mirrors
+    /// the kwin-effect's same-named uniform (frame's sub-rect within
+    /// KWin's shadow-padded redirected FBO).
+    void setIAnchorRectInTexture(const QVector4D& rect)
+    {
+        QMutexLocker lock(&m_mutex);
+        if (m_data.iAnchorRectInTexture[0] == rect.x() && m_data.iAnchorRectInTexture[1] == rect.y()
+            && m_data.iAnchorRectInTexture[2] == rect.z() && m_data.iAnchorRectInTexture[3] == rect.w()) {
+            return;
+        }
+        m_data.iAnchorRectInTexture[0] = static_cast<float>(rect.x());
+        m_data.iAnchorRectInTexture[1] = static_cast<float>(rect.y());
+        m_data.iAnchorRectInTexture[2] = static_cast<float>(rect.z());
+        m_data.iAnchorRectInTexture[3] = static_cast<float>(rect.w());
+        m_dirty.store(true, std::memory_order_release);
+    }
+
 private:
     /// Std140 layout — appended after BaseUniforms at offset
     /// `sizeof(PhosphorShaders::BaseUniforms)`. Mirror of the trailing
     /// fields in `data/animations/shared/animation_uniforms.glsl`'s UBO
-    /// branch. Fields land at the same std140 offsets (672, 688) the
-    /// pre-isolation in-BaseUniforms layout used, so the GLSL author
-    /// view is unchanged.
+    /// branch. `iSurfaceScreenPos` / `iAnchorSize` land at the same
+    /// std140 offsets (672, 688) the pre-isolation in-BaseUniforms
+    /// layout used; `iAnchorPosInFbo` (696) and `iAnchorRectInTexture`
+    /// (704) extend the trailing region.
     struct alignas(16) AnimationExtensionData
     {
         float iSurfaceScreenPos[4]; // offset 0  (16 bytes), UBO offset 672 = 0 + sizeof(BaseUniforms)
@@ -208,12 +246,16 @@ private:
                                   //   position inside the shader item's FBO, in logical pixels.
                                   //   See setIAnchorPosInFbo's docstring for the per-extent math
                                   //   contract this enables.
+        float iAnchorRectInTexture[4]; // offset 32 (16 bytes), UBO offset 704. Card's UV sub-rect
+                                       //   within uTexture0. offset 32 is already 16-aligned, so
+                                       //   std140 inserts no pad before it. See
+                                       //   setIAnchorRectInTexture's docstring.
     };
-    static_assert(sizeof(AnimationExtensionData) == 32,
-                  "AnimationExtensionData must be exactly 32 bytes — std140 trailing pad to 16-aligned");
-    static_assert(sizeof(PhosphorShaders::BaseUniforms) + sizeof(AnimationExtensionData) == 704,
-                  "BaseUniforms + AnimationExtensionData must total 704 bytes — matches the pre-isolation "
-                  "in-BaseUniforms layout that animation_uniforms.glsl declares");
+    static_assert(sizeof(AnimationExtensionData) == 48,
+                  "AnimationExtensionData must be exactly 48 bytes — std140 vec4-aligned, no trailing pad");
+    static_assert(sizeof(PhosphorShaders::BaseUniforms) + sizeof(AnimationExtensionData) == 720,
+                  "BaseUniforms + AnimationExtensionData must total 720 bytes — matches the trailing-field "
+                  "layout declared in data/animations/shared/animation_uniforms.glsl");
     static_assert(sizeof(PhosphorShaders::BaseUniforms) == 672,
                   "BaseUniforms must remain at 672 bytes — growing it shifts ZoneUniformExtension's "
                   "zoneRects offset and breaks every zone shader compiled against `data/shaders/shared/"

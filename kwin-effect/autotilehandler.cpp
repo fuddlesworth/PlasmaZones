@@ -58,6 +58,12 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
         if (!w->frameGeometry().contains(pos)) {
             continue;
         }
+        // Look through our own overlay/editor layer-shell surfaces — they are
+        // full-screen and always topmost on the autotile monitor, so the bail
+        // below would otherwise kill FFM forever (discussion #461 #3).
+        if (PlasmaZonesEffect::isOwnOverlayClass(w->windowClass())) {
+            continue;
+        }
         // A non-autotile window (excluded app, keep-above overlay, popup, dialog,
         // Spectacle, etc.) occludes the cursor — don't look through it to focus a
         // tiled window beneath. This prevents focus-stealing from emoji pickers,
@@ -76,15 +82,20 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
                 return;
             }
         }
-        const QString windowId = m_effect->getWindowId(w);
-        if (windowId == m_lastFocusFollowsMouseWindowId) {
+        // Skip the activateWindow call when the window under the cursor
+        // already holds compositor focus. The live activeWindow() read is
+        // load-bearing: a local "last auto-focused window" cache would go
+        // stale every time focus moved through another path (keyboard
+        // shortcut, click, daemon-driven activate, focus-stealing window),
+        // and the next cursor pass over the originally-cached window would
+        // short-circuit without re-focusing it. See discussion #461 item 13.
+        if (w == KWin::effects->activeWindow()) {
             return; // Already focused — no-op
         }
         // Only focus windows on autotile screens
         if (!m_autotileScreens.contains(m_effect->getWindowScreenId(w))) {
             return;
         }
-        m_lastFocusFollowsMouseWindowId = windowId;
         KWin::effects->activateWindow(w);
         return;
     }
@@ -96,21 +107,21 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
 // Integration points
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
+bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
 {
     if (!isEligibleForAutotileNotify(w)) {
-        return;
+        return false;
     }
 
     const QString windowId = m_effect->getWindowId(w);
 
     // Window was already closed before we could notify open — skip (D-Bus ordering race)
     if (m_pendingCloses.remove(windowId)) {
-        return;
+        return false;
     }
 
     if (m_notifiedWindows.contains(windowId)) {
-        return;
+        return false;
     }
     m_notifiedWindows.insert(windowId);
 
@@ -134,7 +145,8 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
         int minWidth = 0;
         int minHeight = 0;
         KWin::Window* kw = w->window();
-        if (kw) {
+        // Internal windows (our own overlays) crash on minSize(); see discussion #511.
+        if (kw && !kw->isInternal()) {
             const QSizeF minSize = kw->minSize();
             if (minSize.isValid()) {
                 minWidth = qCeil(minSize.width());
@@ -153,11 +165,23 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
                 qCWarning(lcEffect) << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
                 m_notifiedWindows.remove(windowId);
                 m_notifiedWindowScreens.remove(windowId);
+                // notifyWindowAdded() returned true on the synchronous
+                // path, so the caller (PlasmaZonesEffect::slotWindowAdded)
+                // left first-frame open suppression engaged expecting a
+                // moveResize from the daemon's tile decision. The D-Bus
+                // call failed — no moveResize is coming — so release
+                // suppression here rather than letting the window sit
+                // invisible until the 250 ms deadline.
+                if (KWin::EffectWindow* effectWindow = m_effect->findWindowById(windowId)) {
+                    m_effect->endRestoreSuppression(effectWindow);
+                }
             }
         });
         qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenId
                           << "minSize:" << minWidth << "x" << minHeight;
+        return true;
     }
+    return false;
 }
 
 void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows,
@@ -204,7 +228,8 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         int minWidth = 0;
         int minHeight = 0;
         KWin::Window* kw = w->window();
-        if (kw) {
+        // Internal windows (our own overlays) crash on minSize(); see discussion #511.
+        if (kw && !kw->isInternal()) {
             const QSizeF minSize = kw->minSize();
             if (minSize.isValid()) {
                 minWidth = qCeil(minSize.width());
@@ -453,9 +478,6 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     // KWin-specific cleanup not covered by the shared helper
     m_savedNotifiedForDesktopReturn.remove(windowId);
     m_savedPreAutotileForDesktopMove.remove(windowId);
-    if (m_lastFocusFollowsMouseWindowId == windowId) {
-        m_lastFocusFollowsMouseWindowId.clear();
-    }
     auto pendingConn = m_pendingCrossScreenRestore.find(windowId);
     if (pendingConn != m_pendingCrossScreenRestore.end()) {
         QObject::disconnect(pendingConn.value());

@@ -23,6 +23,7 @@
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QScopeGuard>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -47,7 +48,12 @@ void AutotileHandler::slotEnabledChanged(bool enabled)
 {
     qCInfo(lcEffect) << "Autotile enabled state changed:" << enabled;
     if (!enabled) {
-        restoreAllBorderless();
+        // Internal-state cleanup only — fast, no compositor round-trips.
+        // Title-bar restores are NOT done here: slotScreensChanged (which
+        // always fires alongside this signal, both originating from the same
+        // setActiveScreens(QSet()) call in the engine) handles them via a
+        // delayed defer so the resnap dispatch can land first. Doing it here
+        // would race with that defer and block applyGeometriesBatch.
         restoreAllMonocleMaximized();
         m_savedSnapStackingOrder.clear();
         m_savedAutotileStackingOrder.clear();
@@ -83,6 +89,30 @@ void AutotileHandler::clearAllPendingMinimizeFloats()
     m_pendingMinimizeFloat.clear();
 }
 
+void AutotileHandler::restoreWindowBorders(KWin::EffectWindow* w, const QString& windowId)
+{
+    // Find every screen whose borderless bucket still tracks this window —
+    // stale entries can span multiple screens if the window transferred
+    // between autotile screens during the session — and clear each. When the
+    // EffectWindow is gone (screen-removal path), drop the per-screen border
+    // state directly since setNoBorder needs a live window.
+    QStringList screensHoldingBorderless;
+    for (auto it = m_border.borderlessWindowsByScreen.constBegin(); it != m_border.borderlessWindowsByScreen.constEnd();
+         ++it) {
+        if (it.value().contains(windowId)) {
+            screensHoldingBorderless.append(it.key());
+        }
+    }
+    for (const QString& sid : std::as_const(screensHoldingBorderless)) {
+        if (w) {
+            setWindowBorderless(w, windowId, false, sid);
+        } else {
+            AutotileStateHelpers::removeBorderlessOnScreen(m_border, sid, windowId);
+        }
+    }
+    AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+}
+
 void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
 {
     // Invalidate in-flight stagger timers from prior autotile/restore operations.
@@ -99,18 +129,14 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
 
     if (!removed.isEmpty()) {
         if (isDesktopSwitch) {
-            qCInfo(lcEffect) << "slotScreensChanged: desktop switch detected, skipping"
-                             << "restore for removed screens:" << removed;
-            // Only update m_notifiedWindows — windows on removed screens are no
-            // longer autotiled on this desktop. Don't touch pre-autotile geometries,
-            // stacking orders, or borderless state — they belong to the other desktop.
-            // Save which windows we're removing from tracking — needed by the
-            // added path to distinguish "daemon already has this window" from
-            // "genuinely new window opened while desktop was not active".
+            qCInfo(lcEffect) << "slotScreensChanged: desktop switch, removed screens:" << removed;
+            // Pass 1: windows on the desktop just LEFT. They are no longer
+            // autotiled on this desktop; demote their tracking and remember
+            // them for the desktop-return `added` branch. Do NOT restore —
+            // their borderless / geometry state belongs to the other
+            // desktop's still-live autotile session.
             for (KWin::EffectWindow* w : windows) {
                 if (w && removed.contains(m_effect->getWindowScreenId(w))) {
-                    // Only remove from notified if the window is on the OLD desktop
-                    // (not current). Desktop 2's windows were never notified.
                     if (!w->isOnCurrentDesktop()) {
                         const QString wid = m_effect->getWindowId(w);
                         if (m_notifiedWindows.remove(wid)) {
@@ -120,6 +146,89 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     }
                 }
             }
+            // Pass 2 (discussion #461): windows on the desktop just ARRIVED
+            // AT, on a screen no longer autotiled here — the user switched
+            // onto an autotile-disabled desktop. The daemon emits no
+            // windowsReleased / resnap for a desktop switch (it deliberately
+            // suppresses both), so these windows are stuck at their tiled
+            // frame, borderless. Run the per-window restore — borders,
+            // monocle, pre-autotile geometry, tracking — WITHOUT the
+            // per-screen state clearing the genuine-toggle branch does: that
+            // state belongs to the desktop we left. Every step below is a
+            // no-op for a window that was never autotiled, so this is inert
+            // on a healthy desktop switch.
+            for (KWin::EffectWindow* w : windows) {
+                if (!w || !w->isOnCurrentDesktop()) {
+                    continue;
+                }
+                const QString screenId = m_effect->getWindowScreenId(w);
+                if (!removed.contains(screenId)) {
+                    continue;
+                }
+                // setNoBorder() is a global KWin property — skip sticky
+                // windows while other screens still autotile (mirrors the
+                // genuine-toggle guard below).
+                if (w->isOnAllDesktops() && !newScreens.isEmpty()) {
+                    continue;
+                }
+                const QString windowId = m_effect->getWindowId(w);
+                if (m_notifiedWindows.remove(windowId)) {
+                    m_notifiedWindowScreens.remove(windowId);
+                }
+                restoreWindowBorders(w, windowId);
+                unmaximizeMonocleWindow(windowId);
+                // Drop stale zone-centering tracking so a later
+                // frameGeometryChanged does not re-snap the window into an
+                // old autotile zone.
+                m_autotileTargetZones.remove(windowId);
+                m_centeredWaylandZones.remove(windowId);
+                // Apply the pre-autotile geometry — the ONLY thing that
+                // un-tiles the window, since the daemon does not resnap on a
+                // desktop switch. m_preAutotileGeometries is read non-
+                // destructively (the entry stays for the next genuine toggle).
+                // Scan every screen's bucket for this window's saved rect — a
+                // window that transferred between autotile screens during the
+                // session may have its pre-autotile geometry stored under a
+                // screen key other than its current one.
+                for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd();
+                     ++sgIt) {
+                    const QString geoKey = AutotileStateHelpers::findSavedGeometryKey(sgIt.value(), windowId);
+                    if (geoKey.isEmpty()) {
+                        continue;
+                    }
+                    const QRectF savedGeo = sgIt.value().value(geoKey);
+                    if (savedGeo.isValid()) {
+                        // applySnapGeometry's moveResize, and the maximize-state
+                        // clear below, emit windowFrameGeometryChanged
+                        // synchronously; suppress the VS-crossing detectors
+                        // (autotile slotWindowFrameGeometryChanged and the
+                        // snapping windowFrameGeometryChanged handler) so this
+                        // same-screen restore is not mistaken for a virtual-
+                        // screen crossing — the genuine retile path guards the
+                        // same way (tiling.cpp).
+                        m_effect->m_inDaemonGeometryApply = true;
+                        const auto geomGuard = qScopeGuard([this] {
+                            m_effect->m_inDaemonGeometryApply = false;
+                        });
+                        // Clear any lingering KWin maximize flag before restoring
+                        // the pre-autotile geometry: a still-maximized window
+                        // makes KWin re-assert the maximize-area rect and defeat
+                        // the restore — the tile-request path clears it for the
+                        // same reason (discussion #461).
+                        if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                            ++m_suppressMaximizeChanged;
+                            kw->maximize(KWin::MaximizeRestore);
+                            --m_suppressMaximizeChanged;
+                        }
+                        m_effect->applySnapGeometry(w, savedGeo.toRect());
+                        break;
+                    }
+                    // Found-but-invalid entry: keep scanning. A valid rect may
+                    // still be stored under another screen's bucket from a
+                    // mid-session autotile-screen transfer.
+                }
+            }
+            m_effect->updateAllBorders();
         } else {
             QSet<QString> windowsOnRemovedScreens;
             for (KWin::EffectWindow* w : windows) {
@@ -146,31 +255,35 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 m_notifiedWindowScreens.remove(wid);
             }
 
-            // Restore title bars and clear tiled tracking for windows on removed screens
-            for (const QString& windowId : std::as_const(windowsOnRemovedScreens)) {
-                // Find every screen that currently tracks this window and
-                // remove it from each. We don't know which specific screen
-                // the window "belongs to" in our buckets at this point —
-                // there may be stale entries across multiple screens if the
-                // window ever transferred. Clean them all.
-                QStringList screensHoldingBorderless;
-                for (auto it = m_border.borderlessWindowsByScreen.constBegin();
-                     it != m_border.borderlessWindowsByScreen.constEnd(); ++it) {
-                    if (it.value().contains(windowId)) {
-                        screensHoldingBorderless.append(it.key());
-                    }
-                }
-                KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-                for (const QString& sid : std::as_const(screensHoldingBorderless)) {
-                    if (w) {
-                        setWindowBorderless(w, windowId, false, sid);
-                    } else {
-                        AutotileStateHelpers::removeBorderlessOnScreen(m_border, sid, windowId);
-                    }
-                }
-                AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+            // Defer title-bar restores until slotApplyGeometriesBatch
+            // dispatches the daemon's resnap signal. Each restoreWindowBorders
+            // → setNoBorder(false) is a per-window Wayland decoration
+            // round-trip; running the loop here — or via any singleShot delay
+            // — blocks kwin's event loop and serializes ahead of the queued
+            // applyGeometriesBatch, producing a 250+ ms stall before windows
+            // start moving. Delaying with QTimer doesn't fix it: Qt picks up
+            // pending timer events before draining the D-Bus socket queue.
+            //
+            // Stash the IDs; PlasmaZonesEffect::slotApplyGeometriesBatch
+            // calls drainPendingBorderlessRestore() once the resnap signal
+            // has been dispatched, so windows start animating to their snap
+            // positions first and borders return during the animation.
+            //
+            // Fallback timer covers the case where no resnap arrives at all
+            // (e.g. autotile disabled with nothing to resnap, or a daemon
+            // path that suppresses the signal). 500 ms is well past the
+            // worst-case daemon→effect signal latency we've observed.
+            m_pendingBorderlessRestore.unite(windowsOnRemovedScreens);
+            if (m_pendingBorderlessFallback) {
+                m_pendingBorderlessFallback->stop();
+                m_pendingBorderlessFallback->deleteLater();
             }
-            m_effect->updateAllBorders();
+            m_pendingBorderlessFallback = new QTimer(this);
+            m_pendingBorderlessFallback->setSingleShot(true);
+            connect(m_pendingBorderlessFallback, &QTimer::timeout, this, [this]() {
+                drainPendingBorderlessRestore();
+            });
+            m_pendingBorderlessFallback->start(500);
 
             // Save autotile stacking order before restoring snap-mode order.
             // This allows restoring the user's autotile z-order (e.g. floated
@@ -228,7 +341,6 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
     }
 
     m_autotileScreens = newScreens;
-    m_lastFocusFollowsMouseWindowId.clear();
 
     if (!added.isEmpty()) {
         if (isDesktopSwitch) {

@@ -44,6 +44,7 @@ SettingsFlickable {
 
                 SettingsSwitch {
                     checked: settingsController.daemonRunning
+                    enabled: !settingsController.daemonController.busy
                     onToggled: function(newValue) {
                         settingsController.daemonController.setEnabled(newValue);
                     }

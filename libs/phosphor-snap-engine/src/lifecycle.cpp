@@ -44,6 +44,10 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
         return;
     }
 
+    // The disabled-context gate lives inside resolveWindowRestore so the
+    // direct D-Bus path (SnapAdaptor::resolveWindowRestore, used by the
+    // KWin effect's per-window restore call) is covered by the same check
+    // — see the predicate gate near the top of resolveWindowRestore below.
     SnapResult result = resolveWindowRestore(windowId, screenId, false);
     if (!result.shouldSnap) {
         return;
@@ -93,9 +97,22 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 //     snap zones on a now-autotile screen must not bleed into placement.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky)
+SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky,
+                                            PhosphorEngine::WindowKind kind)
 {
     if (windowId.isEmpty() || screenId.isEmpty()) {
+        return SnapResult::noSnap();
+    }
+
+    // Global snapping kill-switch. When the user turns snapping off entirely,
+    // no window may be auto-snapped on open — not via app rules, session
+    // restore, empty-zone auto-assign, or last-used-zone. The screen-mode gate
+    // below only covers autotile-mode screens; a screen still carrying a
+    // Snapping-mode layout assignment would otherwise keep auto-snapping new
+    // windows even with snapping globally disabled (discussion #461 item 2).
+    if (!isEnabled()) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "resolveWindowRestore:" << windowId << "snapping globally disabled, skipping";
         return SnapResult::noSnap();
     }
 
@@ -107,6 +124,30 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         m_windowTracker->consumePendingAssignment(windowId);
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
             << "resolveWindowRestore:" << windowId << "already has assignment, skipping";
+        return SnapResult::noSnap();
+    }
+
+    // Disabled-context gate: refuse auto-snap onto a (screen, virtualDesktop,
+    // activity) the user has disabled snap for. Catches BOTH windowOpened
+    // and the direct D-Bus resolveWindowRestore path the KWin effect uses,
+    // so a PendingRestore authored before the toggle can no longer drag a
+    // freshly opened window into a zone the user told us to stay out of.
+    // Without this gate the only fix was a daemon restart — the
+    // `isPersistedContextDisabled` filter on disk load fired only once per
+    // session, leaving any in-memory entry recorded earlier free to leak
+    // through. Discussion #461 item 7.
+    //
+    // Placed AFTER the isWindowSnapped/consume guard so windows that are
+    // already snapped still consume their appId pending entry; placed
+    // BEFORE the exclusion lookup and the calculate* chain so app rules,
+    // session restore, empty-zone, and last-zone fallbacks are all gated
+    // by the same predicate.
+    //
+    // Predicate is daemon-injected; absence means "no gating" — the
+    // historical default that unit tests rely on.
+    if (m_shouldRestorePredicate && !m_shouldRestorePredicate(screenId)) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore: skipping" << windowId << "on" << screenId
+                                                  << "— disabled-context gate rejected restore";
         return SnapResult::noSnap();
     }
 
@@ -140,6 +181,16 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     {
         SnapResult result = calculateSnapToAppRule(windowId, screenId, sticky);
         if (result.shouldSnap) {
+            // An app rule may target a screen other than the caller's. The
+            // disabled-context gate above validated only the caller's screenId,
+            // so re-check the predicate against the result's destination
+            // screen. An app rule must not route a window onto a context the
+            // user disabled.
+            if (m_shouldRestorePredicate && !m_shouldRestorePredicate(result.screenId)) {
+                qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "appRule target"
+                                                          << result.screenId << "rejected by disabled-context gate";
+                return SnapResult::noSnap();
+            }
             qCInfo(PhosphorSnapEngine::lcSnapEngine)
                 << "resolveWindowRestore: appRule matched for" << windowId << "zone=" << result.zoneId;
             return result;
@@ -151,8 +202,19 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // calculateRestoreFromSession returns noSnap if that screen is now in
     // autotile mode (letting the autotile engine own it).
     if (s && s->restoreWindowsToZonesOnLogin()) {
-        SnapResult result = calculateRestoreFromSession(windowId, screenId, sticky);
+        SnapResult result = calculateRestoreFromSession(windowId, screenId, sticky, kind);
         if (result.shouldSnap) {
+            // Session restore may cross-screen migrate: the PendingRestore
+            // records its own saved screen. Re-check the predicate against the
+            // destination before consuming the pending entry. A restore onto a
+            // disabled screen is refused, and the pending entry is left intact
+            // so the window can restore once the user re-enables the context.
+            if (m_shouldRestorePredicate && !m_shouldRestorePredicate(result.screenId)) {
+                qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                    << "resolveWindowRestore:" << windowId << "persisted restore target" << result.screenId
+                    << "rejected by disabled-context gate";
+                return SnapResult::noSnap();
+            }
             m_windowTracker->consumePendingAssignment(windowId);
             qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore: persisted matched for" << windowId
                                                      << "zone=" << result.zoneId << "screen=" << result.screenId;
@@ -166,8 +228,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // on an autotile screen must not be auto-assigned, autotile owns
     // placement there.
     if (m_layoutManager) {
-        int dt = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-        if (m_layoutManager->modeForScreen(screenId, dt, m_layoutManager->currentActivity())
+        const int dt = currentVirtualDesktop();
+        if (m_layoutManager->modeForScreen(screenId, dt, currentActivity())
             != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "caller screen"
                                                       << screenId << "is autotile — skipping empty/last zone fallbacks";
@@ -196,6 +258,26 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     }
 
     return SnapResult::noSnap();
+}
+
+int SnapEngine::currentVirtualDesktop() const
+{
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+}
+
+QString SnapEngine::currentActivity() const
+{
+    return m_layoutManager ? m_layoutManager->currentActivity() : QString();
+}
+
+bool SnapEngine::isEnabled() const noexcept
+{
+    // Snapping's global master toggle is the engine's enabled state — there is
+    // no per-screen "is snapping active here" notion (that is the layout-mode
+    // router's job). When false, the whole snap subsystem is off, mirroring
+    // AutotileEngine::isEnabled() reporting autotile's effective state.
+    auto* s = snapSettings();
+    return s && s->snappingEnabled();
 }
 
 } // namespace PhosphorSnapEngine

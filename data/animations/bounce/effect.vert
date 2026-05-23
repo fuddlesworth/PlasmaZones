@@ -1,0 +1,44 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Bounce vertex shader — pass-through. The rasterised quad covers the
+// entire surface FBO (sized to the QQuickWindow's contentItem by the
+// daemon's surface-extent geometry, or to the window's output by the
+// kwin-effect's apply() override). The fragment shader uses
+// `anchorRemap` to convert each fragment's surface-UV into anchor-
+// relative coords, then rigidly translates the window for the drop.
+//
+// Pass-through here means: no clip-space remap. Qt's QSG geometry for
+// a surface-sized QQuickShaderEffect is already a (-1..1) quad
+// covering the FBO, and `texCoord` (and the kwin-effect's `texCoord`
+// attribute) interpolates 0..1 over that quad — exactly the contract
+// the fragment shader expects. gl_Position differs per runtime: KWin
+// needs the modelViewProjectionMatrix to place the redirected quad,
+// the daemon emits clip space directly.
+
+#version 450
+
+#include <animation_uniforms.glsl>
+
+layout(location = 0) in vec2 position;
+layout(location = 1) in vec2 texCoord;
+
+layout(location = 0) out vec2 vTexCoord;
+
+#ifdef PLASMAZONES_KWIN
+uniform mat4 modelViewProjectionMatrix;
+#endif
+
+void main() {
+    // texCoord -> Y-down screen UV. The daemon's Qt-RHI quad delivers
+    // it Y-down already; KWin's offscreen FBO is Y-up, so flip on that
+    // path. Mirrors `kKwinDefaultVertexSource` and the canonical
+    // header's vertex-stage contract.
+#ifdef PLASMAZONES_KWIN
+    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);
+    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);
+#else
+    vTexCoord = texCoord;
+    gl_Position = vec4(position, 0.0, 1.0);
+#endif
+}

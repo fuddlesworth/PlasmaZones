@@ -786,6 +786,26 @@ private:
         return gateLogSink();
     }
 
+    /// Run resolveWindowRestore while capturing snap-engine debug logs, so a
+    /// test can assert WHICH branch produced the result — the disabled-context
+    /// gate logs a distinctive line. Mirrors runGate()'s capture pattern.
+    QStringList captureResolveLogs(SnapEngine& engine, const QString& windowId, const QString& screenId,
+                                   PhosphorEngine::SnapResult* outResult)
+    {
+        QLoggingCategory::setFilterRules(QStringLiteral("org.phosphor.snap-engine.debug=true"));
+        gateLogSink().clear();
+        QtMessageHandler prev = qInstallMessageHandler(&TestSnapEngine::gateLogHandler);
+
+        const PhosphorEngine::SnapResult result = engine.resolveWindowRestore(windowId, screenId, /*sticky*/ false);
+        if (outResult) {
+            *outResult = result;
+        }
+
+        qInstallMessageHandler(prev);
+        QLoggingCategory::setFilterRules(QString());
+        return gateLogSink();
+    }
+
 private Q_SLOTS:
 
     void testCalculateSnapToEmptyZone_gate_globalOff_perLayoutOff_blocks()
@@ -862,6 +882,87 @@ private Q_SLOTS:
         const QString joined = lines.join(QLatin1Char('\n'));
         QVERIFY2(!joined.contains(QStringLiteral("autoAssign=false")),
                  "both inputs true must pass the gate (no autoAssign=false log)");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // resolveWindowRestore — disabled-context gate (ShouldRestorePredicate,
+    // discussion #461 item 7)
+    //
+    // The daemon injects a predicate that returns false for a screen the user
+    // disabled snapping on. resolveWindowRestore must then refuse the restore —
+    // and it must be that GATE that refuses, which the log capture asserts via
+    // the distinctive debug line. With no predicate the engine behaves as if
+    // every context is active (the historical default the rest of this suite
+    // relies on).
+    // =========================================================================
+
+    void testResolveWindowRestore_disabledContextGate_rejectsDisabledScreen()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // Predicate marks DP-OFF as a disabled context, every other screen active.
+        engine.setShouldRestorePredicate([](const QString& screenId) {
+            return screenId != QStringLiteral("DP-OFF");
+        });
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|uuid-gate-off"), QStringLiteral("DP-OFF"), &result);
+
+        QVERIFY2(!result.shouldSnap, "a restore onto a disabled context must be refused");
+        QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate rejected restore")),
+                 "the disabled-context gate must be the branch that refused the restore");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_disabledContextGate_allowsEnabledScreen()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        engine.setShouldRestorePredicate([](const QString& screenId) {
+            return screenId != QStringLiteral("DP-OFF");
+        });
+
+        // DP-1 is active — the gate must not be the branch that fires. The
+        // restore still resolves to noSnap in this guiless fixture (no app
+        // rules / pending session entries / ScreenManager); this asserts only
+        // that the GATE did not reject it.
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|uuid-gate-on"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!result.shouldSnap,
+                 "guiless fixture has no layout/app-rule/session entry — restore resolves to noSnap");
+        // Match the exact top-level gate line, not the broader "disabled-context
+        // gate" substring (the appRule/session re-checks log a different
+        // phrasing) — so the assertion fails only if the caller-screen gate
+        // actually rejected an enabled context.
+        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate rejected restore")),
+                 "an enabled context must pass the disabled-context gate");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_noPredicate_gateInactive()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // No predicate injected — the engine must behave as if every context
+        // is active (the historical default the rest of the suite relies on).
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|uuid-no-pred"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!result.shouldSnap,
+                 "guiless fixture has no layout/app-rule/session entry — restore resolves to noSnap");
+        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate rejected restore")),
+                 "with no predicate the disabled-context gate must never fire");
         m_wts->setSnapState(nullptr);
     }
 };

@@ -52,8 +52,6 @@ using PhosphorEngine::ZoneAssignmentEntry;
 using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
-using StubSettingsLifecycle = StubSettings;
-
 // =========================================================================
 // Test Class
 // =========================================================================
@@ -68,7 +66,7 @@ private Q_SLOTS:
         m_guard = std::make_unique<IsolatedConfigGuard>();
         // Pass nullptr as parent to avoid double-delete: cleanup() deletes manually
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
-        m_settings = new StubSettingsLifecycle(nullptr);
+        m_settings = new StubSettings(nullptr);
         m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
@@ -183,6 +181,113 @@ private Q_SLOTS:
         QVERIFY(spy.count() >= 1);
     }
 
+    void testWindowClosed_skipsPendingRestoreWhenPredicateRejects()
+    {
+        // Discussion #461 item 2: a window closing on a monitor/desktop the
+        // user has disabled snapping for must not record a PendingRestore.
+        // Without the gate, the entry resurfaces when the same app reopens
+        // anywhere — yanking the window into a zone the user told us to
+        // leave alone. The predicate returns false for the disabled screen
+        // AND asserts the argument tuple so a future signature reshuffle
+        // (swapping screenId/desktop, etc.) trips this test rather than
+        // silently passing.
+        const QString disabledScreen = QStringLiteral("AOC:24B2W1G5:116");
+        int predicateCallCount = 0;
+        QString lastScreenId;
+        int lastDesktop = -1;
+        m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop) {
+            ++predicateCallCount;
+            lastScreenId = screenId;
+            lastDesktop = desktop;
+            return false;
+        });
+
+        const QString windowId = QStringLiteral("vesktop|deadbeef-0000-0000-0000-000000000001");
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+
+        // Plain snapped setup — predicate gate behaviour holds without
+        // depending on incidental float churn. Float-clearing on close has
+        // its own dedicated test (testWindowClosed_floatStateClearedOnClose).
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], disabledScreen, 1);
+        QVERIFY(m_service->isWindowSnapped(windowId));
+
+        QSignalSpy stateSpy(m_service, &PhosphorPlacement::WindowTrackingService::stateChanged);
+        m_service->windowClosed(windowId);
+
+        // Predicate-argument contract: exactly one invocation, and the
+        // tuple it received matches what the placement library promised
+        // to pass (current screen, current desktop). Comparing fields
+        // individually gives a useful failure message — "Expected DP-1
+        // got DP-2" instead of "everyCallMatched was false".
+        QCOMPARE(predicateCallCount, 1);
+        QCOMPARE(lastScreenId, disabledScreen);
+        QCOMPARE(lastDesktop, 1);
+
+        // The rest of windowClosed's cleanup must still run even when the
+        // pending-restore write is suppressed: zone unassigned, floating
+        // state cleared (both windowId and appId keys), stateChanged
+        // emitted. A silent regression in any of these would leak just as
+        // badly as the original bug.
+        QVERIFY(!m_service->isWindowSnapped(windowId));
+        QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
+        QVERIFY(!m_service->isWindowFloating(windowId));
+        QVERIFY(!m_service->isWindowFloating(appId));
+        QVERIFY(stateSpy.count() >= 1);
+    }
+
+    void testWindowClosed_predicateAcceptsEnabledContext()
+    {
+        // Sanity counterpart: when the predicate accepts the closing context,
+        // the historical persist-on-close behavior is preserved. Same
+        // accumulator pattern — a regression that fires the predicate
+        // with the wrong tuple, or fires it more than once with mismatched
+        // arguments, is caught.
+        int predicateCallCount = 0;
+        QString lastScreenId;
+        int lastDesktop = -1;
+        m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop) {
+            ++predicateCallCount;
+            lastScreenId = screenId;
+            lastDesktop = desktop;
+            return true;
+        });
+
+        const QString windowId = QStringLiteral("firefox|cafef00d-0000-0000-0000-000000000001");
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
+        m_service->windowClosed(windowId);
+
+        QCOMPARE(predicateCallCount, 1);
+        QCOMPARE(lastScreenId, QStringLiteral("DP-1"));
+        QCOMPARE(lastDesktop, 1);
+        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
+    }
+
+    void testWindowClosed_persistsWhenPredicateUnset()
+    {
+        // Production daemons always wire a predicate via WTA, but unit tests
+        // and library consumers may construct WTS without one. The header's
+        // ShouldTrackPredicate contract promises "When unset, the service
+        // behaves as if every context is active." Lock that explicitly with
+        // a round-trip: install a rejecting predicate then clear it, and
+        // confirm the unset-equivalent persist-everything behaviour is
+        // restored. Catches a future bug where the setter only stores
+        // non-empty functions, or where clearing leaks the prior predicate.
+        m_service->setShouldTrackPredicate([](const QString&, int) {
+            return false;
+        });
+        m_service->setShouldTrackPredicate({});
+
+        const QString windowId = QStringLiteral("alacritty|11112222-3333-4444-5555-666677778888");
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
+        m_service->windowClosed(windowId);
+
+        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
+    }
+
     void testWindowClosed_persistsZoneToPending_virtualScreen()
     {
         // Same as testWindowClosed_persistsZoneToPending but using a virtual screen ID.
@@ -272,7 +377,7 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    StubSettingsLifecycle* m_settings = nullptr;
+    StubSettings* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;
     SnapEngine* m_engine = nullptr;

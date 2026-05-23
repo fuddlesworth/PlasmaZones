@@ -365,6 +365,9 @@
             <arg name="sticky" type="b" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
             </arg>
+            <arg name="windowKind" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient). The daemon compares this against the kind recorded for the matching PendingRestore entry and refuses to restore when both sides are concrete and disagree. Pass 0 to opt out of the gate (legacy callers)."/>
+            </arg>
             <arg name="snapX" type="i" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Snap X (if shouldSnap)."/>
             </arg>
@@ -564,9 +567,12 @@
             </arg>
         </method>
         <method name="windowClosed">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was closed (cleanup)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was closed (cleanup). The window's structural kind is captured into the PendingRestore entry if one is recorded, so the consume path can refuse to assign that entry to a window of a different kind on reopen."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="windowKind" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Structural kind of the closing window (0=Unknown, 1=Normal, 2=Transient). Recorded on the PendingRestore entry if one is enqueued. Pass 0 to opt out of the gate (legacy callers)."/>
             </arg>
         </method>
         <method name="windowActivated">

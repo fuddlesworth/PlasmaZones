@@ -322,12 +322,32 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                     }
                 }
             }
-            // Show snap assist after resnap if applicable
+            // Drain any title-bar restores deferred from autotile→snap mode
+            // toggle. slotScreensChanged stashes window IDs instead of
+            // running the slow Wayland decoration round-trips synchronously;
+            // by the time onComplete fires here, animations for all
+            // resnapped windows are already in flight via the animation
+            // framework, so borders return mid-animation rather than after
+            // a 250+ ms stall before motion begins. Unconditional — for
+            // non-mode-toggle batches (rotate, vs_reconfigure, snap_all)
+            // the pending set is empty and the call is a no-op.
+            m_autotileHandler->drainPendingBorderlessRestore();
+            // Show snap assist after resnap if applicable.
+            //
+            // A resnap is a bulk operation (autotile→snap toggle, rotate,
+            // vs-reconfigure) — not a per-window snap — so the continuation is
+            // anchored to the active window: snap assist shows ONLY if the
+            // resnap actually placed the active window in a zone. Passing its
+            // windowId as the anchor makes showContinuationIfNeeded gate on
+            // "this window is snapped", which also guarantees at least one
+            // zone is occupied. Without the anchor, a resnap that snapped
+            // nothing (e.g. toggling to snap mode with no prior assignments)
+            // left every zone empty and popped snap assist for all of them.
             if (action == QLatin1String("resnap") && m_snapAssistHandler->isEnabled()) {
                 KWin::EffectWindow* activeWin = getActiveWindow();
                 QString activeScreenId = activeWin ? getWindowScreenId(activeWin) : QString();
-                if (!activeScreenId.isEmpty() && !m_autotileHandler->isAutotileScreen(activeScreenId)) {
-                    m_snapAssistHandler->showContinuationIfNeeded(activeScreenId);
+                if (activeWin && !activeScreenId.isEmpty() && !m_autotileHandler->isAutotileScreen(activeScreenId)) {
+                    m_snapAssistHandler->showContinuationIfNeeded(activeScreenId, getWindowId(activeWin));
                 }
             }
         });
@@ -634,9 +654,12 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
             continue;
         }
 
-        // Include all normal, non-special windows (relaxed filter for the picker)
+        // Include all normal, non-special windows (relaxed filter for the picker).
+        // isCriticalNotification is a distinct KWin window type from isNotification,
+        // so both must be rejected — a window flagged only critical-notification
+        // would otherwise show up in the app picker.
         if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isSkipSwitcher() || w->isNotification()
-            || w->isOnScreenDisplay() || w->isPopupWindow()) {
+            || w->isCriticalNotification() || w->isOnScreenDisplay() || w->isPopupWindow()) {
             continue;
         }
 

@@ -87,7 +87,19 @@ static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* 
     if (!router) {
         return nullptr;
     }
-    return router->engineFor(outCtx.screenId);
+    PhosphorEngine::IPlacementEngine* nav = router->engineFor(outCtx.screenId);
+    // Global feature-toggle gate. engineFor() routes purely on the screen's
+    // layout mode; it does not consult whether that mode's master toggle is
+    // on. isEnabled() reports the effective on/off state for both engines
+    // (SnapEngine → snappingEnabled, AutotileEngine → any-screen autotiling),
+    // so one check here suppresses every snap- and autotile-mode shortcut
+    // when its feature is globally disabled — the keyboard-nav counterpart of
+    // the auto-snap-on-open kill-switch in SnapEngine::resolveWindowRestore.
+    if (nav && !nav->isEnabled()) {
+        qCDebug(lcDaemon) << shortcutName << "shortcut: ignored — engine disabled for screen" << outCtx.screenId;
+        return nullptr;
+    }
+    return nav;
 }
 
 void Daemon::handleRotate(bool clockwise)
@@ -111,6 +123,15 @@ void Daemon::handleFloat()
     // reaching back into WTA state.
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Float")) {
+        // Honor the per-context disable lists, same as handleSnap. Un-floating
+        // a window re-runs commitSnap; without this gate that re-snaps the
+        // window on a monitor / desktop / activity the user disabled
+        // (discussion #461 — observed re-snapping on a disabled desktop).
+        const auto mode =
+            m_screenModeRouter ? m_screenModeRouter->modeFor(ctx.screenId) : PhosphorZones::AssignmentEntry::Snapping;
+        if (isContextDisabled(m_settings.get(), mode, ctx.screenId, currentDesktop(), currentActivity())) {
+            return;
+        }
         nav->toggleFocusedFloat(ctx);
     }
 }
@@ -185,6 +206,17 @@ void Daemon::handleSnap(int zoneNumber)
 {
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "SnapToZone")) {
+        // Honor the per-context disable lists. engineFor() routes purely on
+        // mode and never consults them, so a keyboard snap-to-zone would
+        // otherwise place a window on a monitor / desktop / activity the user
+        // disabled (discussion #461). Take the screen's mode from the router
+        // (the single source of truth) rather than inferring it from the
+        // engine-id string, which a future third engine would misroute.
+        const auto mode =
+            m_screenModeRouter ? m_screenModeRouter->modeFor(ctx.screenId) : PhosphorZones::AssignmentEntry::Snapping;
+        if (isContextDisabled(m_settings.get(), mode, ctx.screenId, currentDesktop(), currentActivity())) {
+            return;
+        }
         nav->moveFocusedToPosition(zoneNumber, ctx);
     }
 }

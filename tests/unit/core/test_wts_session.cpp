@@ -390,6 +390,77 @@ private Q_SLOTS:
     }
 
     // =====================================================================
+    // P0: WindowKind gate on PendingRestore consume
+    // =====================================================================
+
+    void testKindGate_rejectsMismatch_entryPreserved()
+    {
+        QString appId = QStringLiteral("steam");
+        QString windowId = QStringLiteral("steam|12345");
+
+        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
+        entry.zoneIds = {m_zoneIds[0]};
+        entry.layoutId = m_testLayout->id().toString();
+        entry.zoneNumbers = {1};
+        entry.windowKind = PhosphorEngine::WindowKind::Normal;
+
+        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
+        queues[appId] = {entry};
+        m_service->setPendingRestoreQueues(queues);
+
+        SnapResult result =
+            m_engine->calculateRestoreFromSession(windowId, QString(), false, PhosphorEngine::WindowKind::Transient);
+        QVERIFY(!result.shouldSnap);
+        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
+        QCOMPARE(m_service->pendingRestoreQueues().value(appId).size(), 1);
+        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().windowKind, PhosphorEngine::WindowKind::Normal);
+    }
+
+    void testKindGate_acceptsMatch_doesNotShortCircuit()
+    {
+        QString appId = QStringLiteral("firefox");
+        QString windowId = QStringLiteral("firefox|12345");
+
+        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
+        entry.zoneIds = {m_zoneIds[0]};
+        entry.layoutId = m_testLayout->id().toString();
+        entry.zoneNumbers = {1};
+        entry.windowKind = PhosphorEngine::WindowKind::Normal;
+
+        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
+        queues[appId] = {entry};
+        m_service->setPendingRestoreQueues(queues);
+
+        SnapResult result =
+            m_engine->calculateRestoreFromSession(windowId, QString(), false, PhosphorEngine::WindowKind::Normal);
+        Q_UNUSED(result);
+        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
+    }
+
+    void testKindGate_unknownEntry_doesNotShortCircuit()
+    {
+        QString appId = QStringLiteral("legacy-app");
+        QString windowId = QStringLiteral("legacy-app|12345");
+
+        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
+        entry.zoneIds = {m_zoneIds[0]};
+        entry.layoutId = m_testLayout->id().toString();
+        entry.zoneNumbers = {1};
+        QCOMPARE(entry.windowKind, PhosphorEngine::WindowKind::Unknown);
+
+        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
+        queues[appId] = {entry};
+        m_service->setPendingRestoreQueues(queues);
+
+        SnapResult result =
+            m_engine->calculateRestoreFromSession(windowId, QString(), false, PhosphorEngine::WindowKind::Transient);
+        Q_UNUSED(result);
+        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
+        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().windowKind,
+                 PhosphorEngine::WindowKind::Unknown);
+    }
+
+    // =====================================================================
     // P0: PhosphorZones::Layout Import UUID Collision
     // =====================================================================
 

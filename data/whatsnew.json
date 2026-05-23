@@ -1,6 +1,84 @@
 {
     "releases": [
         {
+            "version": "3.0.9",
+            "date": "2026-05-22",
+            "highlights": [
+                "Fixed per-virtual-desktop and per-activity assignment toggles being unable to re-enable once turned off — the row's disabled state was cascading to the nested switch (#461, #514)"
+            ]
+        },
+        {
+            "version": "3.0.8",
+            "date": "2026-05-22",
+            "highlights": [
+                "Fixed a KWin crash (SIGSEGV) that could take down the whole compositor, closing every open application, when snapping a window to a zone on certain monitors (#511, #513)",
+                "Fixed a window snapped near a monitor boundary jumping onto the wrong screen after a fast cross-monitor drag (#513)",
+                "Fixed the \"Cancel Zone Overlay\" Escape shortcut grabbing Esc system-wide, including over fullscreen games, after an unexpected daemon exit (#461, #510)",
+                "Fixed per-monitor virtual-desktop and activity disable toggles getting stuck in the off position (#461, #510)",
+                "Fixed windows opened on monitors or desktops with snapping disabled still being auto-snapped until the daemon was restarted (#461, #510)",
+                "Fixed Electron child popups such as Steam image previews polluting focus tracking and routing real windows into the popup's zone (#461, #510)",
+                "Fixed session-restored windows being missing from zone-occupancy tracking, so snap assist and empty-zone placement treated filled zones as free (#461, #510)",
+                "Fixed snap assist appearing for every empty zone after a bulk resnap that placed nothing (#461, #510)"
+            ]
+        },
+        {
+            "version": "3.0.7",
+            "date": "2026-05-21",
+            "highlights": [
+                "Window open and close animations (bounce, fly-in) no longer render as ghosted, multi-copy trails on KWin (#475)",
+                "New windows no longer flash at their spawn position before animating into their zone or tile (#475)",
+                "Snap-restored windows now play their open animation into the resolved zone instead of from the screen center (#475)",
+                "The soft glow behind the OSDs now animates with the card instead of popping in when the transition ends (#475)",
+                "Fixed a faint grey halo painted around OSDs during the bounce and fly-in transitions (#475)",
+                "bounce now drops the window in from above its frame, matching niri's original motion (#475)",
+                "The layout OSD, navigation OSD, layout picker, and zone selector now share one card style with a consistent soft glow (#475)",
+                "Removed the crosswarp transition — its front-speed control is now a frontSpeed parameter on wave-warp (#475)",
+                "Removed the plasma-flow transition, which duplicated soft-warp-fade (#475)"
+            ]
+        },
+        {
+            "version": "3.0.6",
+            "date": "2026-05-20",
+            "highlights": [
+                "Fixed the settings window (and any 5th+ window) being left tiled when toggling autotile → snapping with more autotiled windows than zones in the manual layout (#504)",
+                "Fixed the 250 ms+ stall before windows start moving on autotile → snap — windows now animate to their snap positions within ~2 ms of the toggle (#504)",
+                "Fixed focus-follows-mouse not re-focusing a window after focus was stolen by a keyboard shortcut, click, or new window (#461)",
+                "Fixed tiling assignments saved on the settings page silently dropping — the dropdown selection now persists across navigation (#497)",
+                "Fixed the daemon toggle re-enabling itself after disable — the unit is now masked so window-lifecycle D-Bus calls can't reactivate it (#497)",
+                "Fixed the Snapping Assignments Monitor row reverting to its old value after Save when a per-desktop or per-activity entry masked the screen-level slot (#497)",
+                "Fixed the OSD announcing the wrong layout name after editing a non-current-context assignment slot (#497)",
+                "Fixed windows on disabled monitors / desktops still being tracked and resurrected after restart (#461)",
+                "Fixed re-enabling a disabled virtual desktop sometimes silently failing after a screen redetect (#461)",
+                "Fixed popup menus and Steam image previews being snapped to weird zones (#461)",
+                "Fixed stale snap assignments from deleted layouts lingering across first-launch (and dangling zone IDs in multi-zone windows) (#461)",
+                "Fixed critical-notification windows triggering focus tracking and appearing in the app picker (#461)"
+            ]
+        },
+        {
+            "version": "3.0.5",
+            "date": "2026-05-19",
+            "highlights": [
+                "Fixed the shader picker dropdown being disabled in the layout editor after enabling shader effects (#494)",
+                "Fixed newly-opened windows still auto-snapping to zones when snapping was turned off globally (#461)",
+                "Fixed keyboard snap-to-zone shortcuts still firing when snapping was turned off globally — Snapping.Enabled=false is now a total kill-switch at parity with autotiling (#461)",
+                "Fixed Electron/CEF child surfaces (Steam image previews, Discord popups, VS Code dialogs) being snapped to zones (#461)",
+                "KWin effect-load failures now name the exact build-vs-running KWin version and the remediation, instead of a generic 'effect not running' message (#481)",
+                "Nix flake hardened: new overlays.default output, and module/install docs explicitly steer users toward the NixOS/Home Manager modules and away from the unsafe `nix profile install` path (#481)"
+            ]
+        },
+        {
+            "version": "3.0.4",
+            "date": "2026-05-18",
+            "highlights": [
+                "Fixed maximized windows ballooning in size when autotiled (#461)",
+                "Fixed snapping and keyboard snap-to-zone ignoring the per-monitor, per-desktop, and per-activity disable settings (#461)",
+                "Fixed windows with a blank window class restoring into each other's saved zones (#461)",
+                "Fixed windows staying tiled after switching onto a desktop where autotiling is disabled (#461)",
+                "Fixed the KWin desktop effect not appearing on NixOS — the flake now builds PlasmaZones against your system's KWin so the effect always matches the running compositor (#481)",
+                "Fixed support report generation crashing on Qt 6.11+ — plasmazones-report and the bug-report instructions now use busctl, which is unaffected (#481)"
+            ]
+        },
+        {
             "version": "3.0.3",
             "date": "2026-05-17",
             "highlights": [

@@ -21,6 +21,13 @@ namespace PlasmaZones {
 // emitting its own definition.
 Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
 
+// Opt-in window-classification diagnostics. Defaults to QtWarningMsg so the
+// per-window property dump (logWindowDiagnostics) is silent unless explicitly
+// enabled with QT_LOGGING_RULES="plasmazones.effect.diag.debug=true" — keeps
+// the journal clean by default while still letting users reproduce Steam/CEF
+// mis-classification on request.
+Q_LOGGING_CATEGORY(lcEffectDiag, "plasmazones.effect.diag", QtWarningMsg)
+
 bool PlasmaZonesEffect::supported()
 {
     // This effect is a compositor plugin that works in KWin on Wayland

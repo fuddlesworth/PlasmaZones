@@ -146,9 +146,11 @@ public Q_SLOTS:
 
     /**
      * @brief Run the full 4-level snap-restore fallback chain in one call
+     * @param windowKind Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient).
+     *                   Forwarded to SnapEngine for the kind-match gate.
      */
-    void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int& snapX, int& snapY,
-                              int& snapWidth, int& snapHeight, bool& shouldSnap);
+    void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind, int& snapX,
+                              int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Resnap / snap-all D-Bus slots
@@ -313,8 +315,13 @@ private:
     /**
      * @brief Apply a successful SnapResult: assign outputs, mark auto-snapped,
      *        clear floating state, and track the zone assignment.
+     *
+     * Returns false (and leaves the out-params at 0 / false) when the snap is
+     * refused — missing dependencies, or the target context is disabled. A
+     * false return means no commit happened; callers must skip any post-snap
+     * work (e.g. consumePendingAssignment, success logging).
      */
-    void applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY, int& snapWidth,
+    bool applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY, int& snapWidth,
                          int& snapHeight, bool& shouldSnap);
 
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;

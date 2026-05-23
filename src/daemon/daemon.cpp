@@ -18,6 +18,8 @@
 #include <QDBusError>
 #include <QDir>
 #include <QFile>
+#include <QPluginLoader>
+#include <QRegularExpression>
 #include <QSet>
 #include <QThread>
 
@@ -38,6 +40,7 @@
 #include "modetracker.h"
 #include "shortcutmanager.h"
 #include "rendering/zoneshadernoderhi.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../config/configbackends.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -104,6 +107,35 @@ constexpr int GEOMETRY_UPDATE_DEBOUNCE_MS = 400;
 // even when the daemon starts before KWin during login — so a timeout means
 // a genuine failure, not a race.
 constexpr int BRIDGE_WATCHDOG_TIMEOUT_MS = 20000;
+
+// Locate the installed PlasmaZones KWin effect plugin and read the KWin
+// version embedded in its plugin interface ID. The KWin effect is a compiled
+// C++ plugin; KWin bakes its exact version into the IID it accepts
+// (EffectPluginFactory_iid = "org.kde.kwin.EffectPluginFactory" + the KWin
+// version string), and silently rejects any plugin built against a different
+// KWin. metaData() reads only the static metadata section — no dlopen — so it
+// works even on the version-mismatched plugin KWin itself refuses to load.
+// `installed` is set to whether the plugin file was found at all. Returns the
+// KWin version the effect was built against, or empty when the plugin is
+// missing or its IID is not a recognizable KWin effect IID.
+QString probeEffectKWinVersion(bool& installed)
+{
+    static const QLatin1String iidPrefix("org.kde.kwin.EffectPluginFactory");
+    const QString effectRelPath = QStringLiteral("kwin/effects/plugins/kwin_effect_plasmazones.so");
+
+    installed = false;
+    const QStringList libraryPaths = QCoreApplication::libraryPaths();
+    for (const QString& base : libraryPaths) {
+        const QString candidate = base + QLatin1Char('/') + effectRelPath;
+        if (!QFile::exists(candidate)) {
+            continue;
+        }
+        installed = true;
+        const QString iid = QPluginLoader(candidate).metaData().value(QLatin1String("IID")).toString();
+        return iid.startsWith(iidPrefix) ? iid.mid(iidPrefix.size()) : QString();
+    }
+    return QString();
+}
 } // anonymous namespace
 
 Daemon::Daemon(QObject* parent)
@@ -269,11 +301,9 @@ void Daemon::setupAnimationProfiles()
     using namespace PhosphorAnimation;
 
     // Wipe any entries left over from prior wiring on this same daemon
-    // instance. The registry is a daemon-owned member, so a fresh
-    // Daemon construction always starts with an empty registry — but
-    // setupAnimationProfiles is also called on configure-reload paths
-    // where prior loaders may have populated the partitions; clearing
-    // here keeps the post-condition uniform.
+    // instance. setupAnimationProfiles is called exactly once per
+    // Daemon::init() today, so the registry is always empty when we get
+    // here — the narrow-clear is a no-op in current code paths.
     //
     // Narrow the clear to the two partitions we publish under: the
     // loader-owned user-JSON partition (clearOwner by tag) and each
@@ -281,8 +311,7 @@ void Daemon::setupAnimationProfiles()
     // Wholesale `clear()` would also evict any other consumer's
     // entries if they happened to register before us — not a concern
     // in production today but the narrower scope is the correct
-    // contract for a registry that may be shared with other consumers
-    // in future multi-publisher configurations.
+    // contract for a registry that may be shared with other consumers.
     PhosphorProfileRegistry& registry = m_profileRegistry;
     registry.clearOwner(kPlasmaZonesUserProfilesOwnerTag);
     registry.clearOwner(QString(kShellAnimationFamilySeedsOwnerTag));
@@ -856,6 +885,7 @@ bool Daemon::init()
         new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), m_screenManager.get(), this);
     m_layoutAdaptor->setActivityManager(m_activityManager.get());
     m_layoutAdaptor->setSettings(m_settings.get());
+    m_layoutAdaptor->setAlgorithmRegistry(m_algorithmRegistry.get());
     m_layoutAdaptor->setLayoutSource(m_layoutSources.composite());
     // Thread the bundle-owned autotile source through the adaptor's
     // buildUnifiedLayoutList path so its preview cache survives across
@@ -1078,6 +1108,11 @@ bool Daemon::init()
                 engine->deserializeWindowOrders(orders);
         });
 
+    // Autotile pending-restore filtering (discussion #461 item 2) is owned
+    // by AutotileEngine itself via setShouldPersistRestorePredicate, which
+    // WTA wires in setEngines() — same isPersistedContextDisabled funnel as
+    // the snap-side ShouldTrackPredicate. Delegates here are now bare
+    // forwarders; the engine's own serialize/deserialize apply the gate.
     m_windowTrackingAdaptor->setTilingPendingRestoreDelegates(
         [engine = QPointer(autotileEngine)]() -> QJsonObject {
             return engine ? engine->serializePendingRestores() : QJsonObject{};
@@ -1124,44 +1159,210 @@ bool Daemon::init()
     // handler to avoid feedback loops with autotile/snapping transitions.
     connect(
         m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this,
-        [this](const QStringList& changedScreenIdsList) {
+        [this](const QStringList& changedScreenIdsList, const QStringList& changedAssignmentKeys) {
             const QSet<QString> changedScreenIds(changedScreenIdsList.begin(), changedScreenIdsList.end());
             if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
                 return;
 
-            const int desktop = currentDesktop();
-            const QString activity = currentActivity();
+            const int curDesktop = currentDesktop();
+            const QString curActivity = currentActivity();
 
-            // Collect autotile screens and per-screen OSD data in one pass
+            // Decode the (screenId, desktop, activity, field) tuples from
+            // the batched changedAssignmentKeys. Encoded format matches
+            // `encodeChangedKey` in src/dbus/layoutadaptor/assignment.cpp:
+            // "screenId<US>desktop<US>activity<US>field" with US=0x1F and
+            // field one of "snap", "tile", or "entry".
+            enum class ChangedField {
+                Snap,
+                Tile,
+                Entry
+            };
+            struct ChangedKey
+            {
+                QString screenId;
+                int virtualDesktop;
+                QString activity;
+                ChangedField field;
+            };
+            QVector<ChangedKey> changedKeys;
+            changedKeys.reserve(changedAssignmentKeys.size());
+            for (const QString& enc : changedAssignmentKeys) {
+                const QStringList parts = enc.split(QChar(0x1F));
+                if (parts.size() != 4) {
+                    qCWarning(lcDaemon) << "assignmentChangesApplied: malformed key (expected 4 parts):" << enc;
+                    continue;
+                }
+                bool ok = false;
+                int vd = parts[1].toInt(&ok);
+                if (!ok) {
+                    qCWarning(lcDaemon) << "assignmentChangesApplied: non-numeric desktop in key:" << enc;
+                    continue;
+                }
+                ChangedField field;
+                if (parts[3] == QLatin1String("snap")) {
+                    field = ChangedField::Snap;
+                } else if (parts[3] == QLatin1String("tile")) {
+                    field = ChangedField::Tile;
+                } else if (parts[3] == QLatin1String("entry")) {
+                    field = ChangedField::Entry;
+                } else {
+                    qCWarning(lcDaemon) << "assignmentChangesApplied: unknown field tag" << parts[3] << "in key:" << enc
+                                        << "— treating as entry";
+                    field = ChangedField::Entry;
+                }
+                changedKeys.append({parts[0], vd, parts[2], field});
+            }
+
+            // Walk effective screens to classify which screens are
+            // currently autotile-mode (used by the resnap buffer below).
             QSet<QString> autotileScreens;
+            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+            for (const QString& screenId : effectiveIds) {
+                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, curDesktop, curActivity);
+                if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+                    autotileScreens.insert(screenId);
+                }
+            }
+
+            // Build the OSD list from the changed keys (one OSD per
+            // modified slot). The OSD should reflect *what the user
+            // edited*, not the cascade-resolved layout at the slot:
+            //
+            //   - field == Snap: show the snap layout the user just set
+            //     — but only when the slot's preserved mode is Snapping.
+            //     A snap edit on an Autotile-mode slot is a stored-but-
+            //     inactive preference; surfacing it would announce a
+            //     layout the user can't see, since the slot still
+            //     renders autotile.
+            //   - field == Tile: symmetric — only show when mode is
+            //     Autotile at the slot. Cleared fields are also
+            //     suppressed since there's nothing meaningful to
+            //     preview.
+            //   - field == Entry: legacy / full-entry edits (Overview,
+            //     assignLayoutToScreen*, clear-whole-entry). Resolve via
+            //     the slot's active layout id as before; mode is set
+            //     by the caller in this path so we always show.
             struct ScreenOsd
             {
                 QString screenId;
                 bool isAutotile;
                 QString algoId;
+                QString snappingLayoutId; // empty unless isAutotile=false and field-specific
+                int virtualDesktop;
+                QString activity;
+                bool suppress; // edit doesn't affect this slot's rendering (or field cleared)
             };
             QVector<ScreenOsd> osdEntries;
-            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-            for (const QString& screenId : effectiveIds) {
-                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-                if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
-                    autotileScreens.insert(screenId);
-                }
-                // Only show OSD for screens that actually changed
-                if (changedScreenIds.isEmpty() || changedScreenIds.contains(screenId)) {
-                    if (autotileScreens.contains(screenId)) {
-                        osdEntries.append({screenId, true, PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId)});
-                    } else {
-                        osdEntries.append({screenId, false, {}});
+            if (!changedKeys.isEmpty()) {
+                for (const auto& key : std::as_const(changedKeys)) {
+                    // For partial-field edits (snap / tile), read the
+                    // stored entry directly rather than via the cascade
+                    // so the OSD reflects exactly what the user wrote at
+                    // that key. The cascade can hide a freshly-cleared
+                    // empty slot behind a higher-priority entry, which
+                    // would show a stale layout in the OSD.
+                    PhosphorZones::AssignmentEntry entry;
+                    if (m_layoutManager->hasExplicitAssignment(key.screenId, key.virtualDesktop, key.activity)) {
+                        entry =
+                            m_layoutManager->assignmentEntryForScreen(key.screenId, key.virtualDesktop, key.activity);
                     }
+                    // ^ when no entry exists, `entry` is default-constructed
+                    //   (mode=Snapping, snap="", tile=""): a "cleared" view.
+
+                    if (key.field == ChangedField::Snap) {
+                        const bool modeMatches = (entry.mode == PhosphorZones::AssignmentEntry::Snapping);
+                        const bool cleared = entry.snappingLayout.isEmpty();
+                        osdEntries.append({key.screenId,
+                                           false,
+                                           {},
+                                           entry.snappingLayout,
+                                           key.virtualDesktop,
+                                           key.activity,
+                                           !modeMatches || cleared});
+                    } else if (key.field == ChangedField::Tile) {
+                        const bool modeMatches = (entry.mode == PhosphorZones::AssignmentEntry::Autotile);
+                        const bool cleared = entry.tilingAlgorithm.isEmpty();
+                        osdEntries.append({key.screenId,
+                                           true,
+                                           entry.tilingAlgorithm,
+                                           {},
+                                           key.virtualDesktop,
+                                           key.activity,
+                                           !modeMatches || cleared});
+                    } else {
+                        // Entry-level: use the slot's active layout id
+                        const QString assignmentId =
+                            m_layoutManager->assignmentIdForScreen(key.screenId, key.virtualDesktop, key.activity);
+                        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+                            osdEntries.append({key.screenId,
+                                               true,
+                                               PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId),
+                                               {},
+                                               key.virtualDesktop,
+                                               key.activity,
+                                               false});
+                        } else {
+                            osdEntries.append(
+                                {key.screenId, false, {}, assignmentId, key.virtualDesktop, key.activity, false});
+                        }
+                    }
+                }
+            } else {
+                for (const QString& screenId : effectiveIds) {
+                    if (!changedScreenIds.isEmpty() && !changedScreenIds.contains(screenId))
+                        continue;
+                    const bool isAutotile = autotileScreens.contains(screenId);
+                    QString algoId;
+                    if (isAutotile) {
+                        const QString assignmentId =
+                            m_layoutManager->assignmentIdForScreen(screenId, curDesktop, curActivity);
+                        algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
+                    }
+                    osdEntries.append({screenId, isAutotile, algoId, {}, curDesktop, curActivity, false});
+                }
+            }
+
+            // Re-derive the autotile engine's active screens + per-screen
+            // overrides from the new assignments. The partial-update path
+            // (`setSnappingLayoutPreservingMode` /
+            // `setTilingAlgorithmPreservingMode`) emits `layoutAssigned`
+            // which already triggers `updateAutotileScreens` via the
+            // signal hookup in `connectLayoutSignals`, but explicit-mode
+            // and entry-level edits also need it to be called and
+            // depending on emit ordering across the batch the signal
+            // path can land after this lambda runs — call it here so
+            // retile is unconditionally driven once per batch.
+            updateAutotileScreens();
+            updateLayoutFilter();
+
+            // Expand changedScreenIds with the virtual-screen children of
+            // every changed physical screen. The resnap buffer's
+            // includeScreens filter compares against the snap state's
+            // recorded screen-id per window — those IDs are VS IDs
+            // (`physId/vs:N`) when the user is on a virtual screen, so
+            // an edit at the physical slot (e.g. Monitor row writes
+            // `(physId, 0, "")`) leaves the include filter holding only
+            // the physical id and silently drops every VS-resident
+            // window from the buffer. The cascade itself already routes
+            // a VS lookup through to its physical parent (walkCascade
+            // level 6), so the expansion here mirrors that fallback —
+            // any VS whose cascade winner is the changed physical slot
+            // needs its windows resnapped.
+            QSet<QString> expandedScreenIds = changedScreenIds;
+            for (const QString& screenId : effectiveIds) {
+                if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId))
+                    continue;
+                const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+                if (changedScreenIds.contains(physId)) {
+                    expandedScreenIds.insert(screenId);
                 }
             }
 
             // Resnap only the snapping-mode screens whose assignments actually changed.
-            // changedScreenIds scopes the resnap to avoid spurious geometry-set on
+            // expandedScreenIds scopes the resnap to avoid spurious geometry-set on
             // screens whose layout didn't change (prevents flicker on unrelated VS).
             m_suppressResnapOsd = osdEntries.size();
-            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
+            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, expandedScreenIds);
             m_snapAdaptor->resnapToNewLayout();
 
             // Show OSD for changed screens — use locked OSD variant when context is locked.
@@ -1177,11 +1378,35 @@ bool Daemon::init()
                     showLockedPreviewOsd(osd.screenId);
                 } else if (!osdEnabled) {
                     continue;
+                } else if (osd.suppress) {
+                    // Edit was a stored-but-inactive preference (the
+                    // partial-update path preserved mode and the edited
+                    // field isn't the active one), OR the edited field
+                    // was cleared. In either case there's no visible
+                    // change to announce — showing an OSD would either
+                    // misrepresent the rendering or chase the cascade
+                    // winner. Skip.
+                    continue;
                 } else if (osd.isAutotile) {
+                    // Skip when algoId is empty — happens for a tile
+                    // entry that resolved to "autotile:" (algo missing).
                     if (!osd.algoId.isEmpty())
                         showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
                 } else {
-                    PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
+                    // Prefer the field-specific snap id supplied by the
+                    // partial-update path: it's the exact value the
+                    // user edited. Falling back to layoutForScreen is
+                    // for legacy / entry-level edits where the encoder
+                    // didn't set snappingLayoutId.
+                    PhosphorZones::Layout* layout = nullptr;
+                    if (!osd.snappingLayoutId.isEmpty()) {
+                        const QUuid uuid = QUuid::fromString(osd.snappingLayoutId);
+                        if (!uuid.isNull())
+                            layout = m_layoutManager->layoutById(uuid);
+                    }
+                    if (!layout) {
+                        layout = m_layoutManager->layoutForScreen(osd.screenId, osd.virtualDesktop, osd.activity);
+                    }
                     if (layout)
                         showLayoutOsd(layout, osd.screenId);
                 }
@@ -1270,6 +1495,15 @@ void Daemon::start()
         return;
     }
 
+    // Reset the shutdown latch — stop() sets it true and nothing else clears
+    // it, so a stop()→start() cycle (tests, programmatic restart) would
+    // permanently silence every shutdown-guarded code path
+    // (warnCompositorBridgeMissing, late-arrival reply guards, OSD
+    // suppression in daemon/osd.cpp) on the second run. m_aboutToQuitConnected
+    // already contemplates this cycle to avoid stacking the aboutToQuit
+    // handler; this is the matching reset on the value side.
+    m_shuttingDown = false;
+
     // Suppress OSDs once Qt begins shutdown (SIGTERM, programmatic quit).
     // Connected once — m_aboutToQuitConnected prevents stacking on stop()→start().
     if (qGuiApp && !m_aboutToQuitConnected) {
@@ -1344,12 +1578,88 @@ void Daemon::warnCompositorBridgeMissing()
         return;
     }
 
-    qCWarning(lcDaemon) << "Compositor bridge did not register within" << (BRIDGE_WATCHDOG_TIMEOUT_MS / 1000)
-                        << "s of startup — the PlasmaZones KWin effect is not running or"
-                        << "failed to register. Window dragging, keyboard shortcuts, and"
-                        << "snapping will not work. Enable the PlasmaZones effect in System"
-                        << "Settings > Desktop Effects, then restart the Plasma session so"
-                        << "KWin loads it.";
+    // Inspect the installed effect plugin (synchronous, cheap). The most common
+    // silent failure is a stale effect build whose IID no longer matches the
+    // running KWin, so KWin's effect loader rejects it without surfacing an
+    // error and the effect never registers.
+    bool effectInstalled = false;
+    const QString effectKWinVersion = probeEffectKWinVersion(effectInstalled);
+
+    if (!effectInstalled) {
+        emitBridgeMissingWarning(
+            PzI18n::tr("The PlasmaZones KWin effect plugin is not installed where KWin can find it. "
+                       "Reinstall PlasmaZones."));
+        return;
+    }
+    if (effectKWinVersion.isEmpty()) {
+        // Plugin present but its IID is not a recognizable KWin effect IID —
+        // nothing specific to report, fall back to the generic guidance.
+        emitBridgeMissingWarning(QString());
+        return;
+    }
+
+    // Compare the effect's build-time KWin version against the running KWin.
+    // supportInformation() is the only reliable D-Bus source for KWin's
+    // version; query it asynchronously so this degraded startup path never
+    // blocks the daemon's event loop (mirrors the fire-and-forget notification
+    // call in emitBridgeMissingWarning).
+    QDBusMessage req =
+        QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
+                                       QStringLiteral("org.kde.KWin"), QStringLiteral("supportInformation"));
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(req, 3000), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, effectKWinVersion](QDBusPendingCallWatcher* call) {
+                call->deleteLater();
+
+                // The 3s round-trip widens the window in which a late effect
+                // registration can land; stay silent if shutdown began or the
+                // bridge registered after all.
+                if (m_shuttingDown || (m_compositorBridge && m_compositorBridge->isBridgeRegistered())) {
+                    return;
+                }
+
+                QString diagnosis;
+                const QDBusPendingReply<QString> reply = *call;
+                if (!reply.isError()) {
+                    const QRegularExpressionMatch match =
+                        QRegularExpression(QStringLiteral("KWin version:\\s*(\\S+)")).match(reply.value());
+                    if (match.hasMatch()) {
+                        const QString runningKWinVersion = match.captured(1);
+                        if (runningKWinVersion != effectKWinVersion) {
+                            diagnosis = PzI18n::tr(
+                                            "The PlasmaZones KWin effect was built for KWin %1 but "
+                                            "KWin %2 is running, so KWin will not load it. Rebuild and "
+                                            "reinstall PlasmaZones against the running KWin. On NixOS, "
+                                            "install via the flake's nixosModules or overlay (not "
+                                            "packages.default).")
+                                            .arg(effectKWinVersion, runningKWinVersion);
+                        }
+                    }
+                }
+                emitBridgeMissingWarning(diagnosis);
+            });
+}
+
+void Daemon::emitBridgeMissingWarning(const QString& diagnosis)
+{
+    if (diagnosis.isEmpty()) {
+        qCWarning(lcDaemon) << "Compositor bridge did not register within" << (BRIDGE_WATCHDOG_TIMEOUT_MS / 1000)
+                            << "s of startup — the PlasmaZones KWin effect is not running or"
+                            << "failed to register. Window dragging, keyboard shortcuts, and"
+                            << "snapping will not work. Enable the PlasmaZones effect in System"
+                            << "Settings > Desktop Effects, then restart the Plasma session so"
+                            << "KWin loads it.";
+    } else {
+        qCWarning(lcDaemon) << "Compositor bridge did not register within" << (BRIDGE_WATCHDOG_TIMEOUT_MS / 1000)
+                            << "s of startup — window control is dead." << diagnosis;
+    }
+
+    const QString body = diagnosis.isEmpty()
+        ? PzI18n::tr(
+              "The PlasmaZones KWin effect has not registered with the daemon, so window "
+              "dragging and shortcuts will not work. Make sure it is enabled in System "
+              "Settings > Desktop Effects, then restart the Plasma session.")
+        : diagnosis;
 
     // Raise a desktop notification via the freedesktop spec so the user sees
     // the problem without having to read the journal. A direct method call
@@ -1365,10 +1675,7 @@ void Daemon::warnCompositorBridgeMissing()
            << 0u // replaces_id
            << QStringLiteral("plasmazones") // app_icon
            << PzI18n::tr("PlasmaZones: window manager integration inactive") // summary
-           << PzI18n::tr(
-                  "The PlasmaZones KWin effect has not registered with the daemon, so window "
-                  "dragging and shortcuts will not work. Make sure it is enabled in System "
-                  "Settings > Desktop Effects, then restart the Plasma session.") // body
+           << body // body
            << QStringList() // actions
            << QVariantMap() // hints
            << -1; // timeout (server default)

@@ -24,6 +24,27 @@ namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
+namespace {
+// Human-readable KWin maximize mode for the tile-request log. The autotile
+// "ballooning" feedback loop (discussion #461) hinges on a window still
+// carrying a maximize flag when it is tiled, so the tile-request log records
+// this to keep a future report diagnosable without a reproduction.
+const char* maximizeModeName(KWin::MaximizeMode mode)
+{
+    switch (mode) {
+    case KWin::MaximizeRestore:
+        return "restore";
+    case KWin::MaximizeVertical:
+        return "vertical";
+    case KWin::MaximizeHorizontal:
+        return "horizontal";
+    case KWin::MaximizeFull:
+        return "full";
+    }
+    return "unknown";
+}
+} // namespace
+
 void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests)
 {
     if (tileRequests.isEmpty()) {
@@ -319,7 +340,10 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                 m_effect->m_inDaemonGeometryApply = false;
             });
             saveAndRecordPreAutotileGeometry(snap.windowId, snap.screenId, snap.window->frameGeometry());
-            qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry;
+            KWin::Window* kwForLog = snap.window->window();
+            qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry
+                             << "monocle=" << snap.isMonocle << "maximizeMode="
+                             << (kwForLog ? maximizeModeName(kwForLog->maximizeMode()) : "no-window");
             // A window can only be tile-managed by one screen at a time.
             // If this is a cross-screen transfer, strip the stale tracking
             // from any other screen before recording the new owner. This
@@ -354,6 +378,27 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                 }
             } else {
                 unmaximizeMonocleWindow(snap.windowId);
+                // Clear any KWin maximize state before tiling. A user-
+                // maximized window keeps its MaximizeFull flag through
+                // moveResize; KWin then re-asserts the maximize-area
+                // geometry and the reactive centering in
+                // slotWindowFrameGeometryChanged re-applies — the two
+                // authorities never converge and compound into the
+                // "ballooning" growth (discussion #461). unmaximizeMonocleWindow
+                // above only restores windows PlasmaZones itself maximized
+                // for monocle; a user-maximized window is never in that set.
+                //
+                // The MaximizeRestore call resizes the window to its pre-
+                // maximize restore geometry before applySnapGeometry below
+                // overwrites it; that intermediate frameGeometryChanged is
+                // intentionally absorbed by the m_inDaemonGeometryApply guard
+                // set at the top of this lambda — a refactor that moves or
+                // narrows that guard reintroduces the ballooning re-entry.
+                if (KWin::Window* kw = snap.window->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                    ++m_suppressMaximizeChanged;
+                    kw->maximize(KWin::MaximizeRestore);
+                    --m_suppressMaximizeChanged;
+                }
                 QRect geo = snap.geometry;
 
                 // For Wayland windows being retiled to the same zone, skip the
@@ -575,7 +620,11 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // get min-size enforcement from this path. They still get the initial
     // min-size from the windowOpened D-Bus call (kw->minSize() at open time),
     // and the centering code handles the visual placement correctly.
-    if (dw < -MinCenteringDelta || dh < -MinCenteringDelta) {
+    // !isInternal() guards KWin's InternalWindow::minSize() against a null
+    // backing QWindow (see discussion #511). Internal windows never reach the
+    // autotile-centering pipeline, but the guard keeps the call site safe
+    // independently of the upstream eligibility filter.
+    if ((dw < -MinCenteringDelta || dh < -MinCenteringDelta) && !kw->isInternal()) {
         const QSizeF declaredMin = kw->minSize();
         int discoveredMinW = 0;
         int discoveredMinH = 0;
