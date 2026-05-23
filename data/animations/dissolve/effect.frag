@@ -18,7 +18,7 @@
 #include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
-#define grain    customParams[0].x  // noise cell size in normalised UV units
+#define grain    customParams[0].x  // cell edge as fraction of the screen
 #define softness customParams[0].y  // edge softness
 
 layout(location = 0) in vec2 vTexCoord;
@@ -30,7 +30,13 @@ void main()
     // by DPR on high-DPI displays.
     vec2 uv = vTexCoord;
     float cellSize = max(grain, 0.01);
-    vec2 cell = floor(uv / cellSize);
+    // `grain` means cell edge as a fraction of the screen — the
+    // iAnchorSize / iSurfaceScreenPos.zw factor converts "fraction of
+    // the screen" into "fraction of the surface" so cell pixel size
+    // stays constant across popup vs. maximized windows. Floors guard
+    // against the pre-first-frame (0,0) state of either uniform.
+    vec2 cell = floor(uv * max(iAnchorSize, vec2(1.0))
+                         / (cellSize * max(iSurfaceScreenPos.zw, vec2(1.0))));
     float noise = niriHash(cell);
 
     // iTime is the per-leg [0,1] progress driven by SurfaceAnimator's

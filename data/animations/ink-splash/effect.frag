@@ -48,8 +48,15 @@ void main() {
     vec2 uv = vTexCoord;
     vec4 win = surfaceColor(uv);
 
-    float blob = is_fbm(uv * blobScale);
-    float fingers = is_fbm(uv * fingerScale);
+    // `blobScale` / `fingerScale` mean "fbm cycles across the screen":
+    // multiplying by iAnchorSize/iSurfaceScreenPos.zw scales the cycle
+    // count to the fraction of the screen this surface covers, so
+    // ink-blob and finger feature pixel size stays constant across
+    // popup vs. maximized windows. Matches niri's reference on full-
+    // screen (multiplier = 1.0 there).
+    vec2 screenScale = max(iAnchorSize, vec2(1.0)) / max(iSurfaceScreenPos.zw, vec2(1.0));
+    float blob = is_fbm(uv * blobScale * screenScale);
+    float fingers = is_fbm(uv * fingerScale * screenScale);
     float distortion = (blob - 0.5) * 0.5 + (fingers - 0.5) * 0.18;
     vec2 c = uv - vec2(0.5);
     c.x *= iAnchorSize.x / max(iAnchorSize.y, 0.0001);

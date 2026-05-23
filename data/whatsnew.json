@@ -1,6 +1,16 @@
 {
     "releases": [
         {
+            "version": "3.0.10",
+            "date": "2026-05-23",
+            "highlights": [
+                "Fixed focus-follows-mouse stopping after any OSD, snap preview, or layout picker was shown on an autotile monitor (#461, #517)",
+                "Fixed popups and dialogs consuming the main window's saved zone on reopen — snap-restore now matches structural window kind (#461, #518)",
+                "Fixed the passive overlay shell staying mapped and prewarmed even with effects disabled (#515, #519)",
+                "Fixed animation shader pattern features (sparkle, streak, smoke) scaling inconsistently across different monitor sizes (#520)"
+            ]
+        },
+        {
             "version": "3.0.9",
             "date": "2026-05-22",
             "highlights": [

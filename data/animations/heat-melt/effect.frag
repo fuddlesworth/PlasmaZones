@@ -63,7 +63,16 @@ void main() {
     vec4 win = surfaceColor(uv);
 
     vec2 center = vec2(meltOriginX, meltOriginY);
-    float dist = distance(center, uv) - p * exp(hm_snoise(vec2(uv.x * meltNoiseScale, 0.0)) * meltAggressiveness);
+    // `meltNoiseScale` means "noise cycles across the screen WIDTH":
+    // multiplying by iAnchorSize.x/iSurfaceScreenPos.z scales the cycle
+    // count to the fraction of the screen this surface covers, so
+    // melt-front wobble pixel size stays constant across popup vs.
+    // maximized windows. Matches niri's reference on full-screen
+    // (multiplier = 1.0 there). Floor guards against the pre-first-
+    // frame iSurfaceScreenPos = (0,0,0,0) state.
+    float perScreenScaleX = meltNoiseScale * max(iAnchorSize.x, 1.0)
+                                           / max(iSurfaceScreenPos.z, 1.0);
+    float dist = distance(center, uv) - p * exp(hm_snoise(vec2(uv.x * perScreenScaleX, 0.0)) * meltAggressiveness);
     float r = p - hm_rand(vec2(uv.x, 0.1));
     float reveal = (dist <= r) ? 1.0 : (p * p * p);
 

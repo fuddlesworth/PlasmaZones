@@ -27,7 +27,15 @@
 //                                             binding 7)
 //   niri_geo_to_tex        →  identity       (vTexCoord is already in
 //                                             tex space)
-//   size_geo               →  iResolution    (used only for aspect)
+//   size_geo               →  iAnchorSize    (visible card; used for the
+//                                             aspect ratio. The hexSize
+//                                             rescale below anchors to
+//                                             iSurfaceScreenPos.w
+//                                             (screen height) so hex
+//                                             pitch stays constant on
+//                                             popup vs. maximized
+//                                             windows of a given
+//                                             display)
 //
 // Niri's collection ships open + close as separate shaders that differ
 // only by `progress` vs `1 - progress`. SurfaceAnimator already runs
@@ -41,16 +49,22 @@
 #define ROOT_THREE 1.73205080757
 
 // metadata.json declaration order → customParams[0] sub-slots.
-//   .x = hexSize  — cell radius in aspect-corrected normalised UV
-//                   units. Default 0.15 produces ~6 hexes vertically
-//                   on a popup, matching niri's reference look.
-//                   Niri's `0.02 + random/20` (~0.02..0.07) is tuned
-//                   for fullscreen windows and renders as sub-pixel
-//                   cells on a layout-picker popup.
+//   .x = hexSize  — hex cell circumradius as a fraction of the screen
+//                   HEIGHT (default 0.15 → 15% of screen height per
+//                   hex). The main() rescale (screen.y / anchor.y)
+//                   converts this into the aspect-corrected-normalised
+//                   unit that getAxialCoords / getHexCenter consume,
+//                   so on a given display the hex pitch is the same
+//                   whether the surface is a small popup or a
+//                   maximized window. Matches niri's reference look
+//                   when surface == screen.
 //   .y = softEdge — smoothstep-band width at the wave front, in the
-//                   same normalised units as hexSize. Default 0.15
-//                   matches niri's hard-coded value so the per-cell
-//                   reveal cadence reads identically.
+//                   aspect-corrected normalised units that hexDist
+//                   uses (NOT screen-anchored — the softness knob
+//                   describes "how soft is the wave front" as a
+//                   fraction of card span, not a hex feature size).
+//                   Default 0.15 matches niri's hard-coded value so
+//                   the per-cell reveal cadence reads identically.
 #define hexSize  customParams[0].x
 #define softEdge customParams[0].y
 
@@ -117,25 +131,32 @@ void main()
 {
     float progress = clamp(iTime, 0.0, 1.0);
 
-    // Aspect-correct so cells stay regular on non-square surfaces.
-    // iResolution is in LOGICAL units per
-    // shared/animation_uniforms.glsl; the 1.0 floor guards against
-    // first-frame `iResolution = (0, 0)` and matches the rest of the
-    // suite's defensive pattern (matrix/hexagon/pixelate). A
-    // sub-pixel y of 0.001 would explode the aspectRatio to ~1000
-    // and warp the hex cells into thin slivers. Floor the numerator
-    // too so a first-frame iResolution.x of 0 doesn't collapse the
-    // ratio to 0 and warp the hex grid for one paint.
-    vec2 flooredResolution = max(iResolution, vec2(1.0));
-    float aspectRatio = flooredResolution.x / flooredResolution.y;
+    // Aspect-correct so cells stay regular on non-square surfaces. Use
+    // iAnchorSize (the visible card) rather than iResolution (FBO with
+    // glow margin) so the aspect matches what the user actually sees on
+    // popup cards with a captured glow margin. The 1.0 floor guards
+    // against first-frame `iAnchorSize = (0, 0)` and matches the rest
+    // of the suite's defensive pattern (matrix/hexagon/pixelate). A
+    // sub-pixel y of 0.001 would explode the aspectRatio to ~1000 and
+    // warp the hex cells into thin slivers.
+    vec2 flooredAnchor = max(iAnchorSize, vec2(1.0));
+    float aspectRatio = flooredAnchor.x / flooredAnchor.y;
 
     vec2 normalizedCoords = vec2(vTexCoord.x * aspectRatio, vTexCoord.y);
     vec2 normalizedCenter = vec2(0.5 * aspectRatio, 0.5);
 
     // Floor matches metadata.json `min: 0.04` so a host that bypasses
     // metadata validation can't drive the cells below the advertised
-    // range.
-    float unitSize = max(hexSize, 0.04);
+    // range. The screenHeight / iAnchorSize.y multiply converts hexSize
+    // from "fraction of screen height" into the aspect-corrected-
+    // normalised circumradius that getAxialCoords / getHexCenter
+    // consume — so hex pixel-size stays constant across popup vs.
+    // maximized windows of a given display (on full-screen the
+    // multiplier collapses to 1.0 and the math matches niri's
+    // reference). Floor guards against the pre-first-frame
+    // iSurfaceScreenPos = (0,0) state.
+    float screenHeight = max(iSurfaceScreenPos.w, 1.0);
+    float unitSize = max(hexSize, 0.04) * screenHeight / flooredAnchor.y;
     float softEdgeWidth = max(softEdge, 0.001);
 
     // Snap the fragment to the centre of its enclosing hex cell, then
