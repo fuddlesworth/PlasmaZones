@@ -58,6 +58,12 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
         if (!w->frameGeometry().contains(pos)) {
             continue;
         }
+        // Look through our own overlay/editor layer-shell surfaces — they are
+        // full-screen and always topmost on the autotile monitor, so the bail
+        // below would otherwise kill FFM forever (discussion #461 #3).
+        if (PlasmaZonesEffect::isOwnOverlayClass(w->windowClass())) {
+            continue;
+        }
         // A non-autotile window (excluded app, keep-above overlay, popup, dialog,
         // Spectacle, etc.) occludes the cursor — don't look through it to focus a
         // tiled window beneath. This prevents focus-stealing from emoji pickers,
