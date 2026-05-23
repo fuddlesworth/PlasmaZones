@@ -165,17 +165,37 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     }
     auto& s = *it.value();
 
-    // Bring the surface up on the first transition from never-shown →
-    // any-slot-visible. The first show() call goes through the Surface
-    // state machine (maps the wl_surface, warms the RHI, fires animator
-    // attach callbacks); subsequent input-region toggles flip
-    // Qt::WindowTransparentForInput directly without re-entering the
-    // Surface::show()/hide() path - that path's `animator().cancel(...)`
-    // would wipe per-slot tracking and `beginHide(animatorTarget())`
-    // would animate the shell root opacity, both of which we want to
-    // avoid for a pure click-through toggle.
+    // Show/hide are driven through the Surface state machine on every
+    // anyVisible transition. The behavior in each direction depends on
+    // the SurfaceConfig the consumer registered:
+    //
+    //   show()  - maps the wl_surface, warms the RHI, fires the
+    //             animator's attach callbacks. Always runs on
+    //             false→true.
+    //
+    //   hide()  - under keepMappedOnHide=true the wl_surface stays
+    //             mapped (the animator drives root opacity to 0 and
+    //             the window goes click-through); under
+    //             keepMappedOnHide=false the wl_surface is unmapped
+    //             synchronously. Consumers that need the shell to
+    //             stop being composited every frame when idle opt
+    //             into the latter at creation time.
+    //
+    // The shell surface's role typically has no registered animator
+    // Config, so the animator's cancel / beginHide calls inside
+    // Surface::hide() collapse to no-ops on this surface. Per-slot
+    // tracking lives on slot animator targets (different keys), so
+    // hiding the shell surface does not interfere with slot state.
+    //
+    // The Qt::WindowTransparentForInput toggle below is independent
+    // of show/hide and flips directly on every input-grab transition
+    // (modal slot in / out) - this keeps non-modal slot dismissals
+    // from re-entering the surface state machine for a pure
+    // click-through change.
     if (anyVisible && !s.m_shellSurface->isLogicallyShown()) {
         s.m_shellSurface->show();
+    } else if (!anyVisible && s.m_shellSurface->isLogicallyShown()) {
+        s.m_shellSurface->hide();
     }
 
     // Drive the Qt input flag based purely on whether a modal slot is
