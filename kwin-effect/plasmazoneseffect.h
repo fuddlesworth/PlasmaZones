@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <PhosphorCompositor/ICompositorBridge.h>
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
@@ -270,6 +271,24 @@ private:
      *                     true return. @see shouldHandleWindow.
      */
     bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
+
+    /**
+     * @brief Classify a window's structural kind for the snap-restore gate.
+     *
+     * Returns one of:
+     *   - `WindowKind::Normal`    plain user top-level window
+     *   - `WindowKind::Transient` popup / dialog / menu / utility / tooltip
+     *   - `WindowKind::Unknown`   null window or pre-classification failure
+     *
+     * The result is forwarded to the daemon on `windowClosed` and
+     * `resolveWindowRestore` so the PendingRestore consume path can refuse
+     * to assign a saved-zone entry recorded for one kind to a window of
+     * a different kind. Steam-style classes that share `windowClass()`
+     * between the main client and popups are NOT distinguished here —
+     * KWin's structural flags don't separate them and a heuristic catch
+     * lives in a follow-up. See discussion #461 follow-up.
+     */
+    PhosphorEngine::WindowKind classifyWindowKind(KWin::EffectWindow* w) const;
 
     /**
      * @brief Emit a full dump of a window's KWin properties plus the snap and

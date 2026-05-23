@@ -34,6 +34,29 @@ enum class SnapIntent {
     AutoRestored,
 };
 
+/**
+ * @brief Coarse classification of a window's KWin structural type.
+ *
+ * Carried alongside `PendingRestore` so the snap-restore consume path can
+ * refuse to assign a saved-zone entry to a window that doesn't match the
+ * kind the entry was recorded for. Discussion #461 follow-up: Steam (and
+ * other Electron / CEF clients) reuse `windowClass()` between their main
+ * client and short-lived popup surfaces; without a kind discriminator the
+ * appId-keyed `pendingRestoreQueues` FIFO is consumed indiscriminately by
+ * whichever window of that class opens first.
+ *
+ * `Unknown` is the migration / wire-default: legacy on-disk entries and
+ * unmodified call sites carry it, and the consume path treats it as a
+ * permissive match (the pre-fix behaviour). Once the effect and daemon
+ * both classify reliably, every fresh entry carries a concrete kind and
+ * the gate engages.
+ */
+enum class WindowKind : int {
+    Unknown = 0, ///< Unset / legacy entry — does not gate restore.
+    Normal = 1, ///< Plain top-level window the user manages directly.
+    Transient = 2, ///< Popup / dialog / menu / tooltip / utility child surface.
+};
+
 struct ResnapEntry
 {
     QString windowId;
@@ -50,6 +73,12 @@ struct PendingRestore
     int virtualDesktop = 0;
     QString layoutId;
     QList<int> zoneNumbers;
+    /// Structural kind of the window when this entry was recorded. The
+    /// consume path (`SnapEngine::calculateRestoreFromSession`) compares
+    /// the new window's kind against this and skips the restore when the
+    /// two are concrete and different. `Unknown` is permissive on both
+    /// sides — see WindowKind.
+    WindowKind windowKind = WindowKind::Unknown;
 };
 
 struct SnapResult

@@ -544,7 +544,7 @@ WindowTrackingService::physicalScreensWithStaleVirtualAssignments(const QSet<QSt
 // Window Lifecycle
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::windowClosed(const QString& windowId)
+void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine::WindowKind kind)
 {
     if (!m_snapState)
         return;
@@ -608,6 +608,14 @@ void WindowTrackingService::windowClosed(const QString& windowId)
             entry.zoneIds = zoneIds;
             entry.screenId = screenId;
             entry.virtualDesktop = desktop;
+            // Capture the closing window's kind so the consume path can refuse
+            // to assign this saved zone to a popup / dialog masquerading as
+            // the main client on reopen. Steam-style class reuse is the
+            // motivating case (discussion #461 follow-up). `Unknown` (the
+            // default from legacy callers) is permissive on consume, so this
+            // stays a no-op until the effect side classifies and forwards
+            // the kind through the D-Bus surface.
+            entry.windowKind = kind;
 
             // Save the layout ID to ensure we only restore if the same layout is active
             // This prevents restoring windows to wrong zones when layouts have been changed

@@ -219,9 +219,16 @@ public:
      * @param windowId Window identifier
      * @param screenId Screen where the window appeared
      * @param sticky Whether the window is on all desktops
+     * @param kind Structural kind of the opening window. Compared against the
+     *             kind recorded on the matching PendingRestore entry; when
+     *             both sides are concrete and disagree, the restore is
+     *             refused and the entry is left intact for the next-opening
+     *             window of the right kind. Default `Unknown` is permissive.
      * @return PhosphorEngine::SnapResult with geometry and zone info, or PhosphorEngine::SnapResult::noSnap()
      */
-    PhosphorEngine::SnapResult resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky);
+    PhosphorEngine::SnapResult
+    resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky,
+                         PhosphorEngine::WindowKind kind = PhosphorEngine::WindowKind::Unknown);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotile engine reference (for isActiveOnScreen routing)
@@ -366,8 +373,9 @@ public:
                                                        bool isSticky) const;
     PhosphorEngine::SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenId,
                                                         bool isSticky) const;
-    PhosphorEngine::SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenId,
-                                                           bool isSticky) const;
+    PhosphorEngine::SnapResult
+    calculateRestoreFromSession(const QString& windowId, const QString& screenId, bool isSticky,
+                                PhosphorEngine::WindowKind kind = PhosphorEngine::WindowKind::Unknown) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Resnap / rotation calculations (moved from WTS)

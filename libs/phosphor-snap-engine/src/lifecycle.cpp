@@ -98,7 +98,8 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 //     snap zones on a now-autotile screen must not bleed into placement.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky)
+SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky,
+                                            PhosphorEngine::WindowKind kind)
 {
     if (windowId.isEmpty() || screenId.isEmpty()) {
         return SnapResult::noSnap();
@@ -213,7 +214,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // calculateRestoreFromSession returns noSnap if that screen is now in
     // autotile mode (letting the autotile engine own it).
     if (s && s->restoreWindowsToZonesOnLogin()) {
-        SnapResult result = calculateRestoreFromSession(windowId, screenId, sticky);
+        SnapResult result = calculateRestoreFromSession(windowId, screenId, sticky, kind);
         if (result.shouldSnap) {
             // Session restore may cross-screen migrate: the PendingRestore
             // records its own saved screen. Re-check the predicate against the

@@ -294,8 +294,8 @@ SnapResult SnapEngine::calculateSnapToEmptyZone(const QString& windowId, const Q
     return {true, geo, emptyZoneId, {emptyZoneId}, windowScreenId};
 }
 
-SnapResult SnapEngine::calculateRestoreFromSession(const QString& windowId, const QString& screenId,
-                                                   bool isSticky) const
+SnapResult SnapEngine::calculateRestoreFromSession(const QString& windowId, const QString& screenId, bool isSticky,
+                                                   PhosphorEngine::WindowKind kind) const
 {
     QString appId = m_windowTracker->currentAppIdFor(windowId);
 
@@ -343,6 +343,22 @@ SnapResult SnapEngine::calculateRestoreFromSession(const QString& windowId, cons
 
     // Take the first entry (FIFO — mirrors KWin's takeSessionInfo pattern)
     const PendingRestore& entry = queueIt->first();
+
+    // Kind-match gate (discussion #461 follow-up). When both sides report a
+    // concrete kind, refuse to assign a saved entry to a window of a
+    // different structural kind on reopen. The entry is left intact so the
+    // next-opening window of the right kind can consume it. `Unknown` on
+    // either side is permissive — legacy entries that lack a stored kind
+    // (loaded from a pre-fix on-disk session) and callers that have not
+    // yet been wired to forward a kind fall through to the original
+    // appId-only matching.
+    if (kind != PhosphorEngine::WindowKind::Unknown && entry.windowKind != PhosphorEngine::WindowKind::Unknown
+        && kind != entry.windowKind) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "sessionRestore:" << appId << "kind mismatch — saved kind:" << static_cast<int>(entry.windowKind)
+            << "live kind:" << static_cast<int>(kind) << "— refusing restore, entry preserved";
+        return SnapResult::noSnap();
+    }
 
     QStringList zoneIds = entry.zoneIds;
     if (zoneIds.isEmpty()) {

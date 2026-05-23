@@ -327,8 +327,9 @@ void PlasmaZonesEffect::callResolveWindowRestore(KWin::EffectWindow* window, std
     // daemon restart or from KWin session restore), so its current frameGeometry is the
     // zone geometry — NOT the free-floating geometry. Storing it as pre-tile would cause
     // float toggle to restore to the zone geometry instead of the original free-floating position.
+    const int kindInt = static_cast<int>(classifyWindowKind(window));
     tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
-                     {windowId, screenId, sticky}, safeWindow, windowId, false, onMiss, nullptr,
+                     {windowId, screenId, sticky, kindInt}, safeWindow, windowId, false, onMiss, nullptr,
                      /*skipAnimation=*/true, onComplete);
 }
 
@@ -740,9 +741,10 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
         return;
     }
 
-    qCInfo(lcEffect) << "Notifying daemon: windowClosed" << windowId;
+    const int kindInt = static_cast<int>(classifyWindowKind(w));
+    qCInfo(lcEffect) << "Notifying daemon: windowClosed" << windowId << "kind=" << kindInt;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
-                                                   QStringLiteral("windowClosed"), {windowId});
+                                                   QStringLiteral("windowClosed"), {windowId, kindInt});
 }
 
 void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
