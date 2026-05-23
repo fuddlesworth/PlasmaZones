@@ -141,19 +141,7 @@ PhosphorEngine::WindowKind PlasmaZonesEffect::classifyWindowKind(KWin::EffectWin
     if (!w) {
         return PhosphorEngine::WindowKind::Unknown;
     }
-    // Structurally unmanageable types — popups, dialogs, menus, tooltips,
-    // splash screens, transient children — are all Transient. The predicate
-    // is the shared single source of truth used by shouldHandleWindow and
-    // notifyWindowActivated, so the classifier picks up future additions for
-    // free.
-    if (isStructurallyUnmanageableWindowType(w)) {
-        return PhosphorEngine::WindowKind::Transient;
-    }
-    // KWin's `isNormalWindow` is false for several types not caught above
-    // (toolbars, docks, etc.). Treat anything that is not a normal top-level
-    // as Transient on the gate — restoring a saved zone to a toolbar is
-    // never what the user wanted.
-    if (!w->isNormalWindow()) {
+    if (isStructurallyUnmanageableWindowType(w) || !w->isNormalWindow()) {
         return PhosphorEngine::WindowKind::Transient;
     }
     return PhosphorEngine::WindowKind::Normal;

@@ -99,6 +99,9 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     Qt6::Quick
     Qt6::Svg
     PhosphorCompositor::PhosphorCompositor
+    # `plasmazoneseffect.h` directly includes `<PhosphorEngine/EngineTypes.h>`
+    # for the WindowKind enum used by classifyWindowKind. Direct include →
+    # direct link, matching the PhosphorAnimation rationale below.
     PhosphorEngine::PhosphorEngine
     PhosphorProtocol::PhosphorProtocol
     # Explicit link: `compositorclock.h` and `windowanimator.h` directly

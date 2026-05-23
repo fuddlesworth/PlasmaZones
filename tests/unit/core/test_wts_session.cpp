@@ -390,13 +390,13 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: WindowKind gate on PendingRestore consume (discussion #461 follow-up)
+    // P0: WindowKind gate on PendingRestore consume
     // =====================================================================
 
     void testKindGate_rejectsMismatch_entryPreserved()
     {
         QString appId = QStringLiteral("steam");
-        QString windowId = appId + QStringLiteral("|") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QString windowId = QStringLiteral("steam|12345");
 
         PhosphorPlacement::WindowTrackingService::PendingRestore entry;
         entry.zoneIds = {m_zoneIds[0]};
@@ -408,8 +408,6 @@ private Q_SLOTS:
         queues[appId] = {entry};
         m_service->setPendingRestoreQueues(queues);
 
-        // Opening window is a Transient (Steam image popup analogue) and must
-        // NOT consume the saved-zone entry recorded for the Normal main window.
         SnapResult result =
             m_engine->calculateRestoreFromSession(windowId, QString(), false, PhosphorEngine::WindowKind::Transient);
         QVERIFY(!result.shouldSnap);
@@ -418,10 +416,10 @@ private Q_SLOTS:
         QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().windowKind, PhosphorEngine::WindowKind::Normal);
     }
 
-    void testKindGate_acceptsMatch_returnsSnap()
+    void testKindGate_acceptsMatch_doesNotShortCircuit()
     {
         QString appId = QStringLiteral("firefox");
-        QString windowId = appId + QStringLiteral("|") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QString windowId = QStringLiteral("firefox|12345");
 
         PhosphorPlacement::WindowTrackingService::PendingRestore entry;
         entry.zoneIds = {m_zoneIds[0]};
@@ -433,34 +431,21 @@ private Q_SLOTS:
         queues[appId] = {entry};
         m_service->setPendingRestoreQueues(queues);
 
-        // Live window kind matches the saved entry — gate passes, deeper layout
-        // checks may still bail (no current layout context), but the gate at
-        // least does not short-circuit. We assert the kind comparison
-        // specifically by leaving the queue untouched on a downstream skip.
         SnapResult result =
             m_engine->calculateRestoreFromSession(windowId, QString(), false, PhosphorEngine::WindowKind::Normal);
         Q_UNUSED(result);
-        // The entry remains either way (calculate* does not consume). If the
-        // kind gate had wrongly rejected, the dedicated rejection log would
-        // have fired but we still see the entry — what we really verify is
-        // that the alternate path in testKindGate_rejectsMismatch fails.
         QVERIFY(m_service->pendingRestoreQueues().contains(appId));
     }
 
-    void testKindGate_unknownIsPermissive_legacyEntries()
+    void testKindGate_unknownEntry_doesNotShortCircuit()
     {
         QString appId = QStringLiteral("legacy-app");
-        QString windowId = appId + QStringLiteral("|") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QString windowId = QStringLiteral("legacy-app|12345");
 
-        // Legacy on-disk entries (loaded from a pre-fix session) have no
-        // windowKind set — the field defaults to WindowKind::Unknown. The
-        // gate MUST stay permissive in that case so the upgrade does not
-        // silently drop every saved-zone restore.
         PhosphorPlacement::WindowTrackingService::PendingRestore entry;
         entry.zoneIds = {m_zoneIds[0]};
         entry.layoutId = m_testLayout->id().toString();
         entry.zoneNumbers = {1};
-        // windowKind left at default (Unknown)
         QCOMPARE(entry.windowKind, PhosphorEngine::WindowKind::Unknown);
 
         QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
@@ -469,10 +454,6 @@ private Q_SLOTS:
 
         SnapResult result =
             m_engine->calculateRestoreFromSession(windowId, QString(), false, PhosphorEngine::WindowKind::Transient);
-        // We do not assert shouldSnap here (downstream layout / context
-        // checks can refuse for unrelated reasons). What matters is that
-        // the kind-mismatch path did NOT fire — the entry is left intact
-        // by the gate's own logic, exactly like the legacy behaviour.
         Q_UNUSED(result);
         QVERIFY(m_service->pendingRestoreQueues().contains(appId));
         QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().windowKind,
