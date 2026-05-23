@@ -39,7 +39,16 @@ void main() {
     vec4 win = surfaceColor(uv);
 
     vec2 center = vec2(centerX, centerY);
-    float reveal = step(distance(fract(uv * dotCount), vec2(0.5, 0.5)), p / max(distance(uv, center), 0.0001));
+    // `dotCount` means "dots across the screen": multiplying by
+    // iAnchorSize/iSurfaceScreenPos.zw scales the count down to the
+    // fraction of the screen the captured surface covers, so dot pitch
+    // (in logical pixels) stays the same on popup vs. maximized windows
+    // of a given display. Matches niri's reference when surface = screen
+    // (the multiplier collapses to 1.0 there). Floors guard against the
+    // pre-first-frame (0,0) state of either uniform.
+    vec2 dotsAcross = vec2(dotCount) * max(iAnchorSize, vec2(1.0))
+                                     / max(iSurfaceScreenPos.zw, vec2(1.0));
+    float reveal = step(distance(fract(uv * dotsAcross), vec2(0.5, 0.5)), p / max(distance(uv, center), 0.0001));
 
     fragColor = win * reveal;
 }

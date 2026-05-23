@@ -41,7 +41,13 @@ void main() {
     vec2 uv = vTexCoord;
     vec4 win = surfaceColor(uv);
 
-    float scale = cellDensity;
+    // `cellDensity` means "Voronoi cells across the screen": multiplying
+    // by iAnchorSize/iSurfaceScreenPos.zw scales the cell count to the
+    // fraction of the screen this surface covers, so shard pixel size
+    // stays constant across popup vs. maximized windows. Matches niri's
+    // reference on full-screen (multiplier = 1.0 there).
+    vec2 scale = vec2(cellDensity) * max(iAnchorSize, vec2(1.0))
+                                   / max(iSurfaceScreenPos.zw, vec2(1.0));
     vec2 q = uv * scale;
     vec2 g = floor(q);
     vec2 f = fract(q);

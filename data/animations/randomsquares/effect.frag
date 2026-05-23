@@ -39,7 +39,13 @@ void main() {
     vec2 uv = vTexCoord;
     vec4 win = surfaceColor(uv);
 
-    vec2 sz = vec2(gridDensity);
+    // `gridDensity` means "cells across the screen": multiplying by
+    // iAnchorSize/iSurfaceScreenPos.zw scales the count to the
+    // fraction of the screen this surface covers, so cell pixel size
+    // stays constant across popup vs. maximized windows. Floors guard
+    // against the pre-first-frame (0,0) state of either uniform.
+    vec2 sz = vec2(gridDensity) * max(iAnchorSize, vec2(1.0))
+                                / max(iSurfaceScreenPos.zw, vec2(1.0));
     float r = rs_rand(floor(sz * uv));
     float reveal = smoothstep(0.0, -cellSmoothness, r - (p * (1.0 + cellSmoothness)));
 

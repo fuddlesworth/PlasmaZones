@@ -51,8 +51,14 @@ void main()
         return;
     }
 
+    // `blockSize` means block edge as a fraction of the screen — the
+    // iAnchorSize / iSurfaceScreenPos.zw factor converts "fraction of
+    // the screen" into "fraction of the surface" so block pixel size
+    // stays constant across popup vs. maximized windows. Floors guard
+    // against the pre-first-frame (0,0) state of either uniform.
     float bs = max(blockSize, 0.01);
-    vec2 block = floor(uv / bs);
+    vec2 block = floor(uv * max(iAnchorSize, vec2(1.0))
+                          / (bs * max(iSurfaceScreenPos.zw, vec2(1.0))));
     // Quantise the jitter to per-leg-frame buckets that bump every ~10
     // frames (at 60 Hz, ~6 buckets per second of leg time). Drive off
     // `iFrame` rather than `iTime` because iFrame is monotonically

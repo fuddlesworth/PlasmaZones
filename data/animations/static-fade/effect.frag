@@ -54,8 +54,19 @@ void main() {
     vec2 uv = vTexCoord;
     vec4 win = surfaceColor(uv);
 
-    vec2 uvStatic = floor(uv * pixelGrid) / pixelGrid;
-    vec4 staticColor = sf_static(uvStatic, p, staticBrightness);
+    // `pixelGrid` means "static cells across the screen": multiplying
+    // by iAnchorSize/iSurfaceScreenPos.zw scales the cell count to the
+    // fraction of the screen this surface covers, so cell pixel size
+    // stays constant across popup vs. maximized windows. Matches niri's
+    // reference on full-screen (multiplier = 1.0 there).
+    vec2 cellsAcross = vec2(pixelGrid) * max(iAnchorSize, vec2(1.0))
+                                       / max(iSurfaceScreenPos.zw, vec2(1.0));
+    vec2 uvStatic = floor(uv * cellsAcross) / cellsAcross;
+    // Gate the procedural static by the captured card alpha so it cannot
+    // paint the rounded-corner / transparent margin opaque. Without this
+    // the sf_static() opacity-1 vec4 wins through the mix() below and
+    // emits opaque RGB outside the visible card silhouette.
+    vec4 staticColor = sf_static(uvStatic, p, staticBrightness) * win.a;
     float staticThresh = sf_intensity(p);
     float staticMix = step(sf_rnd(uvStatic), staticThresh);
 
