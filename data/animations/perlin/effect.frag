@@ -31,6 +31,13 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
+// Reference card edge length for pixel-constant `noiseScale` scaling.
+// `noiseScale` is interpreted as "noise cycles across an 800-pixel
+// card"; the iAnchorSize multiply keeps the noise blob pixel size
+// constant on larger / smaller surfaces instead of stretching the
+// pattern with the window.
+const float kReferenceCardSize = 800.0;
+
 // File-scope helpers kept verbatim from niri's source rather than
 // substituted with `<noise.glsl>`'s `hash22` / `simplex2D`. Niri's
 // `perlin_random` uses `mod(dt, 3.14)` (a low-precision pi) before the
@@ -68,7 +75,8 @@ void main() {
     vec2 uv = vTexCoord;
     vec4 win = surfaceColor(uv);
 
-    float n = perlin_noise(uv * noiseScale);
+    vec2 perCardScale = noiseScale * max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
+    float n = perlin_noise(uv * perCardScale);
     float p = mix(-edgeSoftness, 1.0 + edgeSoftness, pr);
     float lower = p - edgeSoftness;
     float higher = p + edgeSoftness;

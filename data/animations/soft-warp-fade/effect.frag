@@ -32,15 +32,23 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
+// Reference card edge length for pixel-constant `noiseScale` scaling.
+// `noiseScale` is interpreted as "noise cycles across an 800-pixel
+// card"; the iAnchorSize multiply keeps warp-noise blob pixel size
+// constant on larger / smaller surfaces instead of stretching the
+// pattern with the window.
+const float kReferenceCardSize = 800.0;
+
 void main() {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
     vec2 uv = vTexCoord;
 
     float strength = sin(p * 3.14159) * warpStrength;
+    vec2 perCardScale = noiseScale * max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
     vec2 warp = vec2(
-        niriNoise(uv * noiseScale + vec2(0.0, p * 0.5)),
-        niriNoise(uv * noiseScale + vec2(p * 0.5, 0.0))
+        niriNoise(uv * perCardScale + vec2(0.0, p * 0.5)),
+        niriNoise(uv * perCardScale + vec2(p * 0.5, 0.0))
     ) - 0.5;
     vec2 warped = uv + warp * strength;
 

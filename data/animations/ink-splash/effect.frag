@@ -42,14 +42,22 @@ float is_fbm(vec2 p) {
     return v;
 }
 
+// Reference card edge length for pixel-constant `blobScale` /
+// `fingerScale` scaling. Both params are interpreted as "fbm cycles
+// across an 800-pixel card"; the iAnchorSize multiply keeps ink-blob
+// and finger feature pixel size constant on larger / smaller surfaces
+// instead of stretching the splash with the window.
+const float kReferenceCardSize = 800.0;
+
 void main() {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
     vec2 uv = vTexCoord;
     vec4 win = surfaceColor(uv);
 
-    float blob = is_fbm(uv * blobScale);
-    float fingers = is_fbm(uv * fingerScale);
+    vec2 cardScale = max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
+    float blob = is_fbm(uv * blobScale * cardScale);
+    float fingers = is_fbm(uv * fingerScale * cardScale);
     float distortion = (blob - 0.5) * 0.5 + (fingers - 0.5) * 0.18;
     vec2 c = uv - vec2(0.5);
     c.x *= iAnchorSize.x / max(iAnchorSize.y, 0.0001);

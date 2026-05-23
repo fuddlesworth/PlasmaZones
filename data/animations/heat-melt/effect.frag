@@ -56,6 +56,13 @@ float hm_snoise(vec2 v) {
     return 130.0 * dot(m, g);
 }
 
+// Reference card edge length for pixel-constant `meltNoiseScale`
+// scaling. `meltNoiseScale` is interpreted as "noise cycles across an
+// 800-pixel-wide card"; the iAnchorSize.x multiply keeps the melt-front
+// wobble pixel size constant on larger / smaller surfaces instead of
+// stretching wobbles with the window width.
+const float kReferenceCardSize = 800.0;
+
 void main() {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
@@ -63,7 +70,8 @@ void main() {
     vec4 win = surfaceColor(uv);
 
     vec2 center = vec2(meltOriginX, meltOriginY);
-    float dist = distance(center, uv) - p * exp(hm_snoise(vec2(uv.x * meltNoiseScale, 0.0)) * meltAggressiveness);
+    float perCardScaleX = meltNoiseScale * max(iAnchorSize.x, 1.0) / kReferenceCardSize;
+    float dist = distance(center, uv) - p * exp(hm_snoise(vec2(uv.x * perCardScaleX, 0.0)) * meltAggressiveness);
     float r = p - hm_rand(vec2(uv.x, 0.1));
     float reveal = (dist <= r) ? 1.0 : (p * p * p);
 

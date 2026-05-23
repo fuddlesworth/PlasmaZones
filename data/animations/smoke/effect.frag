@@ -40,6 +40,13 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
+// Reference card edge length for pixel-constant `smokeNoiseScale`
+// scaling. `smokeNoiseScale` is interpreted as "fbm noise cycles across
+// an 800-pixel card"; the iAnchorSize multiply keeps swirl/curl pixel
+// size constant on larger / smaller surfaces instead of stretching
+// smoke features with the window.
+const float kReferenceCardSize = 800.0;
+
 float sm_fbm(vec2 p) {
     float v = 0.0;
     float amp = 0.5;
@@ -74,7 +81,8 @@ void main() {
 
         float t = p * smokeSwirlSpeed + seed;
 
-        float fluid = sm_warpedFbm(uv * smokeNoiseScale + seed, t);
+        vec2 perCardScale = smokeNoiseScale * max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
+        float fluid = sm_warpedFbm(uv * perCardScale + seed, t);
 
         vec2 center = uv - 0.5;
         float dist = length(center * vec2(1.0, smokeVerticalSquish));
@@ -102,7 +110,8 @@ void main() {
 
         float t = p * smokeSwirlSpeed + seed;
 
-        float fluid = sm_warpedFbm(uv * smokeNoiseScale + seed, t);
+        vec2 perCardScale = smokeNoiseScale * max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
+        float fluid = sm_warpedFbm(uv * perCardScale + seed, t);
 
         vec2 center = uv - 0.5;
         float dist = length(center * vec2(1.0, smokeVerticalSquish));

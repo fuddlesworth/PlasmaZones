@@ -113,29 +113,40 @@ vec2 getHexCenter(vec2 axial, float size)
     return vec2(x, y);
 }
 
+// Reference card edge length for pixel-constant `hexSize` scaling.
+// `hexSize` is interpreted as hex cell circumradius as a fraction of an
+// 800-pixel-tall reference card (default 0.15 → ~120-pixel hex radius);
+// the iAnchorSize.y scaling below keeps per-cell pixel size constant on
+// larger / smaller surfaces instead of yielding ~6 hexes per popup
+// regardless of size.
+const float kReferenceCardSize = 800.0;
+
 void main()
 {
     float progress = clamp(iTime, 0.0, 1.0);
 
-    // Aspect-correct so cells stay regular on non-square surfaces.
-    // iResolution is in LOGICAL units per
-    // shared/animation_uniforms.glsl; the 1.0 floor guards against
-    // first-frame `iResolution = (0, 0)` and matches the rest of the
-    // suite's defensive pattern (matrix/hexagon/pixelate). A
-    // sub-pixel y of 0.001 would explode the aspectRatio to ~1000
-    // and warp the hex cells into thin slivers. Floor the numerator
-    // too so a first-frame iResolution.x of 0 doesn't collapse the
-    // ratio to 0 and warp the hex grid for one paint.
-    vec2 flooredResolution = max(iResolution, vec2(1.0));
-    float aspectRatio = flooredResolution.x / flooredResolution.y;
+    // Aspect-correct so cells stay regular on non-square surfaces. Use
+    // iAnchorSize (the visible card) rather than iResolution (FBO with
+    // glow margin) so the aspect matches what the user actually sees on
+    // popup cards with a captured glow margin. The 1.0 floor guards
+    // against first-frame `iAnchorSize = (0, 0)` and matches the rest
+    // of the suite's defensive pattern (matrix/hexagon/pixelate). A
+    // sub-pixel y of 0.001 would explode the aspectRatio to ~1000 and
+    // warp the hex cells into thin slivers.
+    vec2 flooredAnchor = max(iAnchorSize, vec2(1.0));
+    float aspectRatio = flooredAnchor.x / flooredAnchor.y;
 
     vec2 normalizedCoords = vec2(vTexCoord.x * aspectRatio, vTexCoord.y);
     vec2 normalizedCenter = vec2(0.5 * aspectRatio, 0.5);
 
     // Floor matches metadata.json `min: 0.04` so a host that bypasses
     // metadata validation can't drive the cells below the advertised
-    // range.
-    float unitSize = max(hexSize, 0.04);
+    // range. The kReferenceCardSize / iAnchorSize.y multiply converts
+    // hexSize from "fraction of a reference 800-pixel card" into the
+    // aspect-corrected-normalised circumradius that getAxialCoords /
+    // getHexCenter consume — so the hex pixel-size stays constant
+    // across surface dimensions instead of scaling with iAnchorSize.y.
+    float unitSize = max(hexSize, 0.04) * kReferenceCardSize / flooredAnchor.y;
     float softEdgeWidth = max(softEdge, 0.001);
 
     // Snap the fragment to the centre of its enclosing hex cell, then

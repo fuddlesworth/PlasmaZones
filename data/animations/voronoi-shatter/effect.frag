@@ -35,13 +35,20 @@ vec2 vs_hash2(vec2 p) {
                            dot(p, vec2(269.5, 183.3)))) * 43758.5453);
 }
 
+// Reference card edge length for pixel-constant `cellDensity` scaling.
+// `cellDensity` is interpreted as "Voronoi cells across an 800-pixel
+// card"; the iAnchorSize multiply keeps shard pixel size constant on
+// larger / smaller surfaces instead of giving huge shards on wide
+// windows and tiny shards on small popups.
+const float kReferenceCardSize = 800.0;
+
 void main() {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
     vec2 uv = vTexCoord;
     vec4 win = surfaceColor(uv);
 
-    float scale = cellDensity;
+    vec2 scale = vec2(cellDensity) * max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
     vec2 q = uv * scale;
     vec2 g = floor(q);
     vec2 f = fract(q);

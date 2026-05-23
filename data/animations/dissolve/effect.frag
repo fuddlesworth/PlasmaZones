@@ -24,13 +24,19 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
+// Reference card edge length for pixel-constant `grain` scaling. `grain`
+// is interpreted as cell edge as a fraction of an 800-pixel reference
+// card (default 0.05 → 40px); the iAnchorSize multiply keeps the
+// per-cell pixel size constant on larger / smaller surfaces.
+const float kReferenceCardSize = 800.0;
+
 void main()
 {
     // UV from the vertex stage; gl_FragCoord/iResolution overshoots [0,1]
     // by DPR on high-DPI displays.
     vec2 uv = vTexCoord;
     float cellSize = max(grain, 0.01);
-    vec2 cell = floor(uv / cellSize);
+    vec2 cell = floor(uv * max(iAnchorSize, vec2(1.0)) / (cellSize * kReferenceCardSize));
     float noise = niriHash(cell);
 
     // iTime is the per-leg [0,1] progress driven by SurfaceAnimator's

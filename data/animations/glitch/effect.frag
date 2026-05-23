@@ -51,8 +51,13 @@ void main()
         return;
     }
 
+    // `blockSize` is interpreted as block edge as a fraction of an
+    // 800-pixel reference card (default 0.05 → 40-pixel blocks); the
+    // iAnchorSize multiply keeps per-block pixel size constant across
+    // surfaces instead of stretching blocks with the window.
+    const float kReferenceCardSize = 800.0;
     float bs = max(blockSize, 0.01);
-    vec2 block = floor(uv / bs);
+    vec2 block = floor(uv * max(iAnchorSize, vec2(1.0)) / (bs * kReferenceCardSize));
     // Quantise the jitter to per-leg-frame buckets that bump every ~10
     // frames (at 60 Hz, ~6 buckets per second of leg time). Drive off
     // `iFrame` rather than `iTime` because iFrame is monotonically

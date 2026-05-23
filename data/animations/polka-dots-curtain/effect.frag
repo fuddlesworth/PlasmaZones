@@ -32,6 +32,13 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
+// Reference card edge length for pixel-constant `dotCount` scaling.
+// `dotCount` is interpreted as "dots across an 800-pixel card"; on
+// larger or smaller cards the iAnchorSize multiply keeps the dot pitch
+// (~40px at the default dotCount=20) constant in pixels instead of
+// stretching the dots with the surface.
+const float kReferenceCardSize = 800.0;
+
 void main() {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
@@ -39,7 +46,8 @@ void main() {
     vec4 win = surfaceColor(uv);
 
     vec2 center = vec2(centerX, centerY);
-    float reveal = step(distance(fract(uv * dotCount), vec2(0.5, 0.5)), p / max(distance(uv, center), 0.0001));
+    vec2 dotsAcross = vec2(dotCount) * max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
+    float reveal = step(distance(fract(uv * dotsAcross), vec2(0.5, 0.5)), p / max(distance(uv, center), 0.0001));
 
     fragColor = win * reveal;
 }
