@@ -18,17 +18,11 @@
 #include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
-#define grain    customParams[0].x  // cell edge as fraction of an 800-pixel reference card
+#define grain    customParams[0].x  // cell edge as fraction of the screen
 #define softness customParams[0].y  // edge softness
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
-
-// Reference card edge length for pixel-constant `grain` scaling. `grain`
-// is interpreted as cell edge as a fraction of an 800-pixel reference
-// card (default 0.05 → 40px); the iAnchorSize multiply keeps the
-// per-cell pixel size constant on larger / smaller surfaces.
-const float kReferenceCardSize = 800.0;
 
 void main()
 {
@@ -36,7 +30,13 @@ void main()
     // by DPR on high-DPI displays.
     vec2 uv = vTexCoord;
     float cellSize = max(grain, 0.01);
-    vec2 cell = floor(uv * max(iAnchorSize, vec2(1.0)) / (cellSize * kReferenceCardSize));
+    // `grain` means cell edge as a fraction of the screen — the
+    // iAnchorSize / iSurfaceScreenPos.zw factor converts "fraction of
+    // the screen" into "fraction of the surface" so cell pixel size
+    // stays constant across popup vs. maximized windows. Floors guard
+    // against the pre-first-frame (0,0) state of either uniform.
+    vec2 cell = floor(uv * max(iAnchorSize, vec2(1.0))
+                         / (cellSize * max(iSurfaceScreenPos.zw, vec2(1.0))));
     float noise = niriHash(cell);
 
     // iTime is the per-leg [0,1] progress driven by SurfaceAnimator's

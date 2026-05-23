@@ -29,12 +29,6 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-// Reference card edge length for pixel-constant `gridDensity` scaling.
-// `gridDensity` is interpreted as "cells across an 800-pixel card"; the
-// iAnchorSize multiply keeps per-cell pixel size constant across
-// surfaces (~80px at the default gridDensity=10).
-const float kReferenceCardSize = 800.0;
-
 float rs_rand(vec2 co) {
     return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
@@ -45,7 +39,13 @@ void main() {
     vec2 uv = vTexCoord;
     vec4 win = surfaceColor(uv);
 
-    vec2 sz = vec2(gridDensity) * max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
+    // `gridDensity` means "cells across the screen": multiplying by
+    // iAnchorSize/iSurfaceScreenPos.zw scales the count to the
+    // fraction of the screen this surface covers, so cell pixel size
+    // stays constant across popup vs. maximized windows. Floors guard
+    // against the pre-first-frame (0,0) state of either uniform.
+    vec2 sz = vec2(gridDensity) * max(iAnchorSize, vec2(1.0))
+                                / max(iSurfaceScreenPos.zw, vec2(1.0));
     float r = rs_rand(floor(sz * uv));
     float reveal = smoothstep(0.0, -cellSmoothness, r - (p * (1.0 + cellSmoothness)));
 

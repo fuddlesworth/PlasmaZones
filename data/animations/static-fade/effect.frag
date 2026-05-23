@@ -48,19 +48,19 @@ float sf_intensity(float t) {
     return min(1.0, 1.2 * (1.0 - tp) - 0.1);
 }
 
-// Reference card edge length for pixel-constant `pixelGrid` scaling.
-// `pixelGrid` is interpreted as "static cells across an 800-pixel card";
-// the iAnchorSize multiply below makes the per-cell pixel size stay
-// constant regardless of surface dimensions.
-const float kReferenceCardSize = 800.0;
-
 void main() {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
     vec2 uv = vTexCoord;
     vec4 win = surfaceColor(uv);
 
-    vec2 cellsAcross = vec2(pixelGrid) * max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
+    // `pixelGrid` means "static cells across the screen": multiplying
+    // by iAnchorSize/iSurfaceScreenPos.zw scales the cell count to the
+    // fraction of the screen this surface covers, so cell pixel size
+    // stays constant across popup vs. maximized windows. Matches niri's
+    // reference on full-screen (multiplier = 1.0 there).
+    vec2 cellsAcross = vec2(pixelGrid) * max(iAnchorSize, vec2(1.0))
+                                       / max(iSurfaceScreenPos.zw, vec2(1.0));
     vec2 uvStatic = floor(uv * cellsAcross) / cellsAcross;
     // Gate the procedural static by the captured card alpha so it cannot
     // paint the rounded-corner / transparent margin opaque. Without this

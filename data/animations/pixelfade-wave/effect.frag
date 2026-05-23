@@ -36,14 +36,6 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-// Reference card edge length for pixel-constant `peakBlocks` /
-// `baselineBlocks` scaling. Both params are interpreted as "blocks
-// across an 800-pixel reference card"; the iAnchorSize multiply keeps
-// per-block pixel size constant on larger / smaller surfaces (default
-// peakBlocks=8 → 100-pixel block chunks at the wave crest, regardless
-// of window size).
-const float kReferenceCardSize = 800.0;
-
 void main() {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
@@ -52,8 +44,14 @@ void main() {
     float wave_x = (uv.x + uv.y) * 0.5;
     float wave_p = smoothstep(0.0, 1.0, p * 1.6 - wave_x * waveSlope);
     float bump = sin(wave_p * 3.14159);
+    // `peakBlocks` / `baselineBlocks` mean "blocks across the screen":
+    // multiplying by iAnchorSize/iSurfaceScreenPos.zw scales the count
+    // to the fraction of the screen this surface covers, so block
+    // pixel size stays constant across popup vs. maximized windows.
+    // Matches niri's reference on full-screen (multiplier = 1.0 there).
     float blocksRef = mix(baselineBlocks, peakBlocks, bump);
-    vec2 blocks = vec2(blocksRef) * max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
+    vec2 blocks = vec2(blocksRef) * max(iAnchorSize, vec2(1.0))
+                                  / max(iSurfaceScreenPos.zw, vec2(1.0));
     vec2 q = floor(uv * blocks) / blocks + 0.5 / blocks;
 
     // boundaryMask (see noise.glsl) crops the right/bottom-edge cell

@@ -40,13 +40,6 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-// Reference card edge length for pixel-constant `smokeNoiseScale`
-// scaling. `smokeNoiseScale` is interpreted as "fbm noise cycles across
-// an 800-pixel card"; the iAnchorSize multiply keeps swirl/curl pixel
-// size constant on larger / smaller surfaces instead of stretching
-// smoke features with the window.
-const float kReferenceCardSize = 800.0;
-
 float sm_fbm(vec2 p) {
     float v = 0.0;
     float amp = 0.5;
@@ -81,8 +74,14 @@ void main() {
 
         float t = p * smokeSwirlSpeed + seed;
 
-        vec2 cardScale = max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
-        vec2 perCardScale = smokeNoiseScale * cardScale;
+        // `smokeNoiseScale` means "fbm cycles across the screen":
+        // multiplying by iAnchorSize/iSurfaceScreenPos.zw scales the
+        // cycle count to the fraction of the screen this surface
+        // covers, so smoke feature pixel size stays constant across
+        // popup vs. maximized windows. Matches niri's reference on
+        // full-screen (multiplier = 1.0 there).
+        vec2 screenScale = max(iAnchorSize, vec2(1.0)) / max(iSurfaceScreenPos.zw, vec2(1.0));
+        vec2 perCardScale = smokeNoiseScale * screenScale;
         float fluid = sm_warpedFbm(uv * perCardScale + seed, t);
 
         vec2 center = uv - 0.5;
@@ -91,14 +90,15 @@ void main() {
         float dissolve = (1.0 - dist) * 1.2 + fluid * 0.7;
         float remain = smoothstep(dissolve + 0.5, dissolve - 0.5, p * 1.8);
 
-        // Secondary domain-warp fbm also feeds the cardScale multiplier so
-        // the displacement noise pattern (wq/wr) keeps a constant feature
-        // pixel size — without it the `uv * 2.0` term produces features that
-        // scale with the surface (one 2.0-cycle pattern = 50% of card width
-        // regardless of pixels), reintroducing the same Bug A the primary
-        // fbm fix above resolved.
+        // Secondary domain-warp fbm also feeds the screen-scale
+        // multiplier so the displacement noise pattern (wq/wr) keeps a
+        // constant feature pixel size — without it the `uv * 2.0` term
+        // produces features that scale with the surface (one 2.0-cycle
+        // pattern = 50% of card width regardless of pixels),
+        // reintroducing the same Bug A the primary fbm fix above
+        // resolved.
         float distort_strength = p * p * smokeDistortion;
-        vec2 secondaryScale = 2.0 * cardScale;
+        vec2 secondaryScale = 2.0 * screenScale;
         vec2 wq = vec2(sm_fbm(uv * secondaryScale + vec2(0.0, t * 0.2)),
                        sm_fbm(uv * secondaryScale + vec2(5.2, t * 0.2)));
         vec2 wr = vec2(sm_fbm(uv * secondaryScale + 4.0 * wq + vec2(1.7, 9.2)),
@@ -118,8 +118,9 @@ void main() {
 
         float t = p * smokeSwirlSpeed + seed;
 
-        vec2 cardScale = max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
-        vec2 perCardScale = smokeNoiseScale * cardScale;
+        // See close-branch comment above on the screen-anchored scaling.
+        vec2 screenScale = max(iAnchorSize, vec2(1.0)) / max(iSurfaceScreenPos.zw, vec2(1.0));
+        vec2 perCardScale = smokeNoiseScale * screenScale;
         float fluid = sm_warpedFbm(uv * perCardScale + seed, t);
 
         vec2 center = uv - 0.5;
@@ -130,7 +131,7 @@ void main() {
 
         // See close-branch comment above on the secondary-warp scaling.
         float distort_strength = (1.0 - p) * (1.0 - p) * (smokeDistortion * 0.875);
-        vec2 secondaryScale = 2.0 * cardScale;
+        vec2 secondaryScale = 2.0 * screenScale;
         vec2 wq = vec2(sm_fbm(uv * secondaryScale + vec2(0.0, t * 0.2)),
                        sm_fbm(uv * secondaryScale + vec2(5.2, t * 0.2)));
         vec2 wr = vec2(sm_fbm(uv * secondaryScale + 4.0 * wq + vec2(1.7, 9.2)),

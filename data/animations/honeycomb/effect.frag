@@ -27,13 +27,15 @@
 //                                             binding 7)
 //   niri_geo_to_tex        →  identity       (vTexCoord is already in
 //                                             tex space)
-//   size_geo               →  iAnchorSize    (visible card; drives
-//                                             both the aspect ratio
-//                                             and the pixel-constant
-//                                             hexSize rescale below.
-//                                             iResolution would over-
-//                                             count by the popup glow
-//                                             margin)
+//   size_geo               →  iAnchorSize    (visible card; used for the
+//                                             aspect ratio. The hexSize
+//                                             rescale below anchors to
+//                                             iSurfaceScreenPos.w
+//                                             (screen height) so hex
+//                                             pitch stays constant on
+//                                             popup vs. maximized
+//                                             windows of a given
+//                                             display)
 //
 // Niri's collection ships open + close as separate shaders that differ
 // only by `progress` vs `1 - progress`. SurfaceAnimator already runs
@@ -47,25 +49,22 @@
 #define ROOT_THREE 1.73205080757
 
 // metadata.json declaration order → customParams[0] sub-slots.
-//   .x = hexSize  — hex cell circumradius as a fraction of an
-//                   800-pixel reference card (default 0.15 → ~120-pixel
-//                   hex radius, regardless of surface size). The
-//                   main() rescale below converts this into the
-//                   aspect-corrected-normalised unit that
-//                   getAxialCoords / getHexCenter consume so the
-//                   pixel-size stays constant instead of yielding
-//                   ~6 hexes per surface like niri's original.
-//                   Niri's `0.02 + random/20` (~0.02..0.07) is tuned
-//                   for fullscreen windows and renders as sub-pixel
-//                   cells on a layout-picker popup.
+//   .x = hexSize  — hex cell circumradius as a fraction of the screen
+//                   HEIGHT (default 0.15 → 15% of screen height per
+//                   hex). The main() rescale (screen.y / anchor.y)
+//                   converts this into the aspect-corrected-normalised
+//                   unit that getAxialCoords / getHexCenter consume,
+//                   so on a given display the hex pitch is the same
+//                   whether the surface is a small popup or a
+//                   maximized window. Matches niri's reference look
+//                   when surface == screen.
 //   .y = softEdge — smoothstep-band width at the wave front, in the
 //                   aspect-corrected normalised units that hexDist
-//                   uses (NOT rescaled by kReferenceCardSize — the
-//                   softness knob describes "how soft is the wave
-//                   front" as a fraction of card span, not a hex
-//                   feature size). Default 0.15 matches niri's
-//                   hard-coded value so the per-cell reveal cadence
-//                   reads identically.
+//                   uses (NOT screen-anchored — the softness knob
+//                   describes "how soft is the wave front" as a
+//                   fraction of card span, not a hex feature size).
+//                   Default 0.15 matches niri's hard-coded value so
+//                   the per-cell reveal cadence reads identically.
 #define hexSize  customParams[0].x
 #define softEdge customParams[0].y
 
@@ -128,14 +127,6 @@ vec2 getHexCenter(vec2 axial, float size)
     return vec2(x, y);
 }
 
-// Reference card edge length for pixel-constant `hexSize` scaling.
-// `hexSize` is interpreted as hex cell circumradius as a fraction of an
-// 800-pixel-tall reference card (default 0.15 → ~120-pixel hex radius);
-// the iAnchorSize.y scaling below keeps per-cell pixel size constant on
-// larger / smaller surfaces instead of yielding ~6 hexes per popup
-// regardless of size.
-const float kReferenceCardSize = 800.0;
-
 void main()
 {
     float progress = clamp(iTime, 0.0, 1.0);
@@ -156,12 +147,16 @@ void main()
 
     // Floor matches metadata.json `min: 0.04` so a host that bypasses
     // metadata validation can't drive the cells below the advertised
-    // range. The kReferenceCardSize / iAnchorSize.y multiply converts
-    // hexSize from "fraction of a reference 800-pixel card" into the
-    // aspect-corrected-normalised circumradius that getAxialCoords /
-    // getHexCenter consume — so the hex pixel-size stays constant
-    // across surface dimensions instead of scaling with iAnchorSize.y.
-    float unitSize = max(hexSize, 0.04) * kReferenceCardSize / flooredAnchor.y;
+    // range. The screenHeight / iAnchorSize.y multiply converts hexSize
+    // from "fraction of screen height" into the aspect-corrected-
+    // normalised circumradius that getAxialCoords / getHexCenter
+    // consume — so hex pixel-size stays constant across popup vs.
+    // maximized windows of a given display (on full-screen the
+    // multiplier collapses to 1.0 and the math matches niri's
+    // reference). Floor guards against the pre-first-frame
+    // iSurfaceScreenPos = (0,0) state.
+    float screenHeight = max(iSurfaceScreenPos.w, 1.0);
+    float unitSize = max(hexSize, 0.04) * screenHeight / flooredAnchor.y;
     float softEdgeWidth = max(softEdge, 0.001);
 
     // Snap the fragment to the centre of its enclosing hex cell, then
