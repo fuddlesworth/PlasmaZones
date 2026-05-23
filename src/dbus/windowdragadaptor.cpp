@@ -23,6 +23,7 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../core/constants.h"
 #include "../config/settings.h"
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -302,9 +303,13 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
         m_currentDragPolicy = {};
     }
 
-    // Delegate tracking cleanup to WindowTrackingAdaptor
+    // Delegate tracking cleanup to WindowTrackingAdaptor. We do not know the
+    // window's structural kind from this internal drag path — pass `Unknown`
+    // so the PendingRestore kind gate stays permissive for these entries.
+    // The kwin-effect's notifyWindowClosed path is the canonical kind source
+    // and runs alongside this for compositor-driven closes.
     if (m_windowTracking) {
-        m_windowTracking->windowClosed(windowId);
+        m_windowTracking->windowClosed(windowId, static_cast<int>(PhosphorEngine::WindowKind::Unknown));
     }
 }
 

@@ -544,7 +544,7 @@ WindowTrackingService::physicalScreensWithStaleVirtualAssignments(const QSet<QSt
 // Window Lifecycle
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::windowClosed(const QString& windowId)
+void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine::WindowKind kind)
 {
     if (!m_snapState)
         return;
@@ -608,6 +608,7 @@ void WindowTrackingService::windowClosed(const QString& windowId)
             entry.zoneIds = zoneIds;
             entry.screenId = screenId;
             entry.virtualDesktop = desktop;
+            entry.windowKind = kind;
 
             // Save the layout ID to ensure we only restore if the same layout is active
             // This prevents restoring windows to wrong zones when layouts have been changed

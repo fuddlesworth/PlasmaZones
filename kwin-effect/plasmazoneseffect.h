@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <PhosphorCompositor/ICompositorBridge.h>
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
@@ -270,6 +271,9 @@ private:
      *                     true return. @see shouldHandleWindow.
      */
     bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
+
+    /// Classify a window's structural kind for the snap-restore consume gate.
+    PhosphorEngine::WindowKind classifyWindowKind(KWin::EffectWindow* w) const;
 
     /**
      * @brief Emit a full dump of a window's KWin properties plus the snap and

@@ -380,7 +380,7 @@ void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky
 // Window Lifecycle - Delegate to Service
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingAdaptor::windowClosed(const QString& windowId)
+void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind)
 {
     if (!validateWindowId(windowId, QStringLiteral("clean up closed window"))) {
         return;
@@ -396,7 +396,14 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
     // Drop frame-geometry shadow entry for this window.
     m_frameGeometry.remove(windowId);
 
-    m_service->windowClosed(windowId);
+    // Clamp unknown wire values to WindowKind::Unknown rather than
+    // reinterpret_cast'ing a possibly-corrupt int into the enum.
+    const PhosphorEngine::WindowKind kind = (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Normal))
+        ? PhosphorEngine::WindowKind::Normal
+        : (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Transient))
+        ? PhosphorEngine::WindowKind::Transient
+        : PhosphorEngine::WindowKind::Unknown;
+    m_service->windowClosed(windowId, kind);
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
     // rely on other WTS state still being present during their cleanup. The

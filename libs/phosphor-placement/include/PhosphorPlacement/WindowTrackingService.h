@@ -667,8 +667,13 @@ public:
     /**
      * @brief Clean up all tracking data for a closed window
      * @param windowId Full window ID
+     * @param kind Structural kind of the closing window. When a PendingRestore
+     *             entry is enqueued for this close, the kind is stamped onto
+     *             the entry so the consume path can refuse to assign it to a
+     *             window of a different kind on reopen. Defaults to
+     *             `WindowKind::Unknown` (the pre-fix behaviour: no kind gate).
      */
-    void windowClosed(const QString& windowId);
+    void windowClosed(const QString& windowId, PhosphorEngine::WindowKind kind = PhosphorEngine::WindowKind::Unknown);
 
     /**
      * @brief Handle layout change - validate/clear stale zone assignments

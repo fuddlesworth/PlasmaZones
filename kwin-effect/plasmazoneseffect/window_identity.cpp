@@ -136,4 +136,15 @@ bool PlasmaZonesEffect::isOwnOverlayClass(const QString& windowClass)
         || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive);
 }
 
+PhosphorEngine::WindowKind PlasmaZonesEffect::classifyWindowKind(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return PhosphorEngine::WindowKind::Unknown;
+    }
+    if (isStructurallyUnmanageableWindowType(w) || !w->isNormalWindow()) {
+        return PhosphorEngine::WindowKind::Transient;
+    }
+    return PhosphorEngine::WindowKind::Normal;
+}
+
 } // namespace PlasmaZones

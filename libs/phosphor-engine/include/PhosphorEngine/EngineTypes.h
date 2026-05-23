@@ -34,6 +34,14 @@ enum class SnapIntent {
     AutoRestored,
 };
 
+/// Coarse structural classification for the snap-restore consume gate.
+/// Wire/JSON encoding is `int`; `Unknown` is the permissive default.
+enum class WindowKind : int {
+    Unknown = 0,
+    Normal = 1,
+    Transient = 2,
+};
+
 struct ResnapEntry
 {
     QString windowId;
@@ -50,6 +58,8 @@ struct PendingRestore
     int virtualDesktop = 0;
     QString layoutId;
     QList<int> zoneNumbers;
+    /// Closing window's kind; the consume gate refuses when both sides are concrete and disagree.
+    WindowKind windowKind = WindowKind::Unknown;
 };
 
 struct SnapResult

@@ -301,7 +301,7 @@ public Q_SLOTS:
      * @param windowId Window ID that was closed
      * @note Call this when KWin reports a window has been closed to prevent memory leaks
      */
-    void windowClosed(const QString& windowId);
+    void windowClosed(const QString& windowId, int windowKind);
 
     /**
      * Notify daemon that a window was activated/focused
