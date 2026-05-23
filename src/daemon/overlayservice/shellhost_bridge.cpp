@@ -39,7 +39,9 @@ namespace PlasmaZones {
 // the OSD path is ready by the time the user fires their first
 // hot-plug-induced shortcut. The m_notificationsWarmed flag gates
 // whether new screens get a per-screen passive overlay shell after
-// the initial warm-up.
+// the initial warm-up. The effects-disabled gate (Discussion #515)
+// also applies here - if shaders + animations are both off, hot-plug
+// follows the same lazy-create rule as initial warm-up.
 void OverlayService::ensureOsdScreenAddedConnected()
 {
     if (m_screenAddedConnected) {
@@ -47,6 +49,11 @@ void OverlayService::ensureOsdScreenAddedConnected()
     }
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
         if (!m_notificationsWarmed) {
+            return;
+        }
+        const bool shadersOn = m_shaderRegistry && m_shaderRegistry->shadersEnabled();
+        const bool animationsOn = m_settings && m_settings->animationsEnabled();
+        if (!shadersOn && !animationsOn) {
             return;
         }
         auto* mgr2 = m_screenManager;
@@ -188,23 +195,46 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
 // Pre-create the per-screen passive overlay shell for every effective
 // screen the manager knows about, then mark notifications warmed and ensure
 // the screenAdded hot-plug hook is installed.
+//
+// Effects-disabled gate (Discussion #515): the sole purpose of the
+// prewarm is to prime the wl_surface map + RHI swapchain so the first
+// user-triggered slot show doesn't race the FBO capture used by
+// shader-exclusive transitions. When both shaders and animations are
+// disabled there is no transition to race - so we skip the prewarm
+// (and the screenAdded hot-plug hook follows the same skip rule).
+// Each slot consumer (snapassist / selector / osd / overlay) already
+// calls ensurePassiveShellFor on its show path, so the shell is still
+// created lazily on first use - it just isn't sitting on the wlr
+// OVERLAY layer composited over every frame for users who never wanted
+// the effects in the first place.
 void OverlayService::warmUpNotifications()
 {
+    const bool shadersOn = m_shaderRegistry && m_shaderRegistry->shadersEnabled();
+    const bool animationsOn = m_settings && m_settings->animationsEnabled();
+    const bool effectsEnabled = shadersOn || animationsOn;
+
     const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
     int createdCount = 0;
-    for (const QString& sid : effectiveIds) {
-        QScreen* physScreen = m_screenManager ? m_screenManager->physicalScreenFor(sid).qscreen
-                                              : Utils::findScreenAtPosition(QPoint(0, 0));
-        if (physScreen) {
-            auto* state = ensurePassiveShellFor(sid, physScreen);
-            if (state && state->shell && state->shell->shellSurface()) {
-                ++createdCount;
+    if (effectsEnabled) {
+        for (const QString& sid : effectiveIds) {
+            QScreen* physScreen = m_screenManager ? m_screenManager->physicalScreenFor(sid).qscreen
+                                                  : Utils::findScreenAtPosition(QPoint(0, 0));
+            if (physScreen) {
+                auto* state = ensurePassiveShellFor(sid, physScreen);
+                if (state && state->shell && state->shell->shellSurface()) {
+                    ++createdCount;
+                }
             }
         }
     }
     m_notificationsWarmed = true;
-    qCInfo(lcOverlay) << "Pre-warmed passive overlay shell windows for" << createdCount << "of" << effectiveIds.size()
-                      << "effective screens";
+    if (effectsEnabled) {
+        qCInfo(lcOverlay) << "Pre-warmed passive overlay shell windows for" << createdCount << "of"
+                          << effectiveIds.size() << "effective screens";
+    } else {
+        qCInfo(lcOverlay) << "Skipping passive overlay shell prewarm: shaders and animations both disabled"
+                          << "(" << effectiveIds.size() << "effective screens; lazy-create on first slot show)";
+    }
     ensureOsdScreenAddedConnected();
 }
 
