@@ -81,7 +81,7 @@ struct PHOSPHORWINDOWRULE_EXPORT ActionDescriptor
     /// carries any key outside this set. An **empty** set disables the
     /// strict-key check — used for free-form / future-extensible action
     /// types whose params payload is deliberately open.
-    QStringList allowedKeys;
+    QStringList allowedKeys{};
 };
 
 /**
