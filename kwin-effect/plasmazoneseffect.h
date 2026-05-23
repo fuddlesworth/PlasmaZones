@@ -337,6 +337,20 @@ private:
      * (discussion #271).
      */
     static bool isPlasmaShellSurface(const QString& windowClass);
+
+    /**
+     * @brief Recognise the daemon's own overlay / editor layer-shell surfaces
+     *        by window class.
+     *
+     * The shouldHandleWindow filter rejects these as "own overlay/editor
+     * window class" so the snap/tile pipeline never targets them. Other paths
+     * (focus-follows-mouse stacking-order walks) need to *look through* them
+     * to the real user window beneath, rather than treating them as legitimate
+     * occluders the way they'd treat an emoji picker or xdg-desktop-portal
+     * surface. Sharing one substring match keeps both call sites in lockstep.
+     */
+    static bool isOwnOverlayClass(const QString& windowClass);
+
     bool hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const;
     bool isWindowSticky(KWin::EffectWindow* w) const;
     void updateWindowStickyState(KWin::EffectWindow* w);

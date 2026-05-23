@@ -163,10 +163,10 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         return rejectedBecause(rejectReason, "null window");
     }
 
-    // Never snap our own overlay/editor windows (but allow the settings app)
+    // Never snap our own overlay/editor windows (but allow the settings app).
+    // Shared with the FFM stacking-order walk — see isOwnOverlayClass().
     const QString windowClass = w->windowClass();
-    if (windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
-        || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive)) {
+    if (isOwnOverlayClass(windowClass)) {
         return rejectedBecause(rejectReason, "own overlay/editor window class");
     }
 

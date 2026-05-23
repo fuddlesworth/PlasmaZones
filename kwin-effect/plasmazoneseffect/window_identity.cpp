@@ -126,4 +126,14 @@ bool PlasmaZonesEffect::isPlasmaShellSurface(const QString& windowClass)
         || windowClass.contains(QLatin1String("org.kde.krunner"), Qt::CaseInsensitive);
 }
 
+bool PlasmaZonesEffect::isOwnOverlayClass(const QString& windowClass)
+{
+    // Match the same substrings the shouldHandleWindow filter uses for its
+    // "own overlay/editor window class" rejection. The settings app is
+    // deliberately NOT here — it is a real user window the snap/tile pipeline
+    // should treat normally.
+    return windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
+        || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive);
+}
+
 } // namespace PlasmaZones
