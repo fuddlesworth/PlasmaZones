@@ -27,7 +27,13 @@
 //                                             binding 7)
 //   niri_geo_to_tex        →  identity       (vTexCoord is already in
 //                                             tex space)
-//   size_geo               →  iResolution    (used only for aspect)
+//   size_geo               →  iAnchorSize    (visible card; drives
+//                                             both the aspect ratio
+//                                             and the pixel-constant
+//                                             hexSize rescale below.
+//                                             iResolution would over-
+//                                             count by the popup glow
+//                                             margin)
 //
 // Niri's collection ships open + close as separate shaders that differ
 // only by `progress` vs `1 - progress`. SurfaceAnimator already runs
@@ -41,16 +47,25 @@
 #define ROOT_THREE 1.73205080757
 
 // metadata.json declaration order → customParams[0] sub-slots.
-//   .x = hexSize  — cell radius in aspect-corrected normalised UV
-//                   units. Default 0.15 produces ~6 hexes vertically
-//                   on a popup, matching niri's reference look.
+//   .x = hexSize  — hex cell circumradius as a fraction of an
+//                   800-pixel reference card (default 0.15 → ~120-pixel
+//                   hex radius, regardless of surface size). The
+//                   main() rescale below converts this into the
+//                   aspect-corrected-normalised unit that
+//                   getAxialCoords / getHexCenter consume so the
+//                   pixel-size stays constant instead of yielding
+//                   ~6 hexes per surface like niri's original.
 //                   Niri's `0.02 + random/20` (~0.02..0.07) is tuned
 //                   for fullscreen windows and renders as sub-pixel
 //                   cells on a layout-picker popup.
 //   .y = softEdge — smoothstep-band width at the wave front, in the
-//                   same normalised units as hexSize. Default 0.15
-//                   matches niri's hard-coded value so the per-cell
-//                   reveal cadence reads identically.
+//                   aspect-corrected normalised units that hexDist
+//                   uses (NOT rescaled by kReferenceCardSize — the
+//                   softness knob describes "how soft is the wave
+//                   front" as a fraction of card span, not a hex
+//                   feature size). Default 0.15 matches niri's
+//                   hard-coded value so the per-cell reveal cadence
+//                   reads identically.
 #define hexSize  customParams[0].x
 #define softEdge customParams[0].y
 

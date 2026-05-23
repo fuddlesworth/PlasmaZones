@@ -81,7 +81,8 @@ void main() {
 
         float t = p * smokeSwirlSpeed + seed;
 
-        vec2 perCardScale = smokeNoiseScale * max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
+        vec2 cardScale = max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
+        vec2 perCardScale = smokeNoiseScale * cardScale;
         float fluid = sm_warpedFbm(uv * perCardScale + seed, t);
 
         vec2 center = uv - 0.5;
@@ -90,11 +91,18 @@ void main() {
         float dissolve = (1.0 - dist) * 1.2 + fluid * 0.7;
         float remain = smoothstep(dissolve + 0.5, dissolve - 0.5, p * 1.8);
 
+        // Secondary domain-warp fbm also feeds the cardScale multiplier so
+        // the displacement noise pattern (wq/wr) keeps a constant feature
+        // pixel size — without it the `uv * 2.0` term produces features that
+        // scale with the surface (one 2.0-cycle pattern = 50% of card width
+        // regardless of pixels), reintroducing the same Bug A the primary
+        // fbm fix above resolved.
         float distort_strength = p * p * smokeDistortion;
-        vec2 wq = vec2(sm_fbm(uv * 2.0 + vec2(0.0, t * 0.2)),
-                       sm_fbm(uv * 2.0 + vec2(5.2, t * 0.2)));
-        vec2 wr = vec2(sm_fbm(uv * 2.0 + 4.0 * wq + vec2(1.7, 9.2)),
-                       sm_fbm(uv * 2.0 + 4.0 * wq + vec2(8.3, 2.8)));
+        vec2 secondaryScale = 2.0 * cardScale;
+        vec2 wq = vec2(sm_fbm(uv * secondaryScale + vec2(0.0, t * 0.2)),
+                       sm_fbm(uv * secondaryScale + vec2(5.2, t * 0.2)));
+        vec2 wr = vec2(sm_fbm(uv * secondaryScale + 4.0 * wq + vec2(1.7, 9.2)),
+                       sm_fbm(uv * secondaryScale + 4.0 * wq + vec2(8.3, 2.8)));
         vec2 warped_uv = uv + (wr - 0.5) * distort_strength;
 
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
@@ -110,7 +118,8 @@ void main() {
 
         float t = p * smokeSwirlSpeed + seed;
 
-        vec2 perCardScale = smokeNoiseScale * max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
+        vec2 cardScale = max(iAnchorSize, vec2(1.0)) / kReferenceCardSize;
+        vec2 perCardScale = smokeNoiseScale * cardScale;
         float fluid = sm_warpedFbm(uv * perCardScale + seed, t);
 
         vec2 center = uv - 0.5;
@@ -119,11 +128,13 @@ void main() {
         float appear = (1.0 - dist * 1.2) + (1.0 - fluid) * 0.7;
         float reveal = smoothstep(appear + 0.5, appear - 0.5, (1.0 - p) * 1.8);
 
+        // See close-branch comment above on the secondary-warp scaling.
         float distort_strength = (1.0 - p) * (1.0 - p) * (smokeDistortion * 0.875);
-        vec2 wq = vec2(sm_fbm(uv * 2.0 + vec2(0.0, t * 0.2)),
-                       sm_fbm(uv * 2.0 + vec2(5.2, t * 0.2)));
-        vec2 wr = vec2(sm_fbm(uv * 2.0 + 4.0 * wq + vec2(1.7, 9.2)),
-                       sm_fbm(uv * 2.0 + 4.0 * wq + vec2(8.3, 2.8)));
+        vec2 secondaryScale = 2.0 * cardScale;
+        vec2 wq = vec2(sm_fbm(uv * secondaryScale + vec2(0.0, t * 0.2)),
+                       sm_fbm(uv * secondaryScale + vec2(5.2, t * 0.2)));
+        vec2 wr = vec2(sm_fbm(uv * secondaryScale + 4.0 * wq + vec2(1.7, 9.2)),
+                       sm_fbm(uv * secondaryScale + 4.0 * wq + vec2(8.3, 2.8)));
         vec2 warped_uv = uv + (wr - 0.5) * distort_strength;
 
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.

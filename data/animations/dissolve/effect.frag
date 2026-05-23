@@ -18,7 +18,7 @@
 #include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
-#define grain    customParams[0].x  // noise cell size in normalised UV units
+#define grain    customParams[0].x  // cell edge as fraction of an 800-pixel reference card
 #define softness customParams[0].y  // edge softness
 
 layout(location = 0) in vec2 vTexCoord;
