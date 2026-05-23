@@ -39,9 +39,10 @@ namespace PlasmaZones {
 // the OSD path is ready by the time the user fires their first
 // hot-plug-induced shortcut. The m_notificationsWarmed flag gates
 // whether new screens get a per-screen passive overlay shell after
-// the initial warm-up. The effects-disabled gate (Discussion #515)
-// also applies here - if shaders + animations are both off, hot-plug
-// follows the same lazy-create rule as initial warm-up.
+// the initial warm-up; the effects-enabled predicate (shaders ||
+// animations) applies the same lazy-create rule as the warm-up
+// sweep, so hot-plug never proactively creates an always-on overlay
+// surface when no transition needs the warm cache.
 void OverlayService::ensureOsdScreenAddedConnected()
 {
     if (m_screenAddedConnected) {
@@ -193,20 +194,19 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
 }
 
 // Pre-create the per-screen passive overlay shell for every effective
-// screen the manager knows about, then mark notifications warmed and ensure
-// the screenAdded hot-plug hook is installed.
+// screen the manager knows about, then mark notifications warmed and
+// ensure the screenAdded hot-plug hook is installed.
 //
-// Effects-disabled gate (Discussion #515): the sole purpose of the
-// prewarm is to prime the wl_surface map + RHI swapchain so the first
-// user-triggered slot show doesn't race the FBO capture used by
-// shader-exclusive transitions. When both shaders and animations are
-// disabled there is no transition to race - so we skip the prewarm
-// (and the screenAdded hot-plug hook follows the same skip rule).
-// Each slot consumer (snapassist / selector / osd / overlay) already
-// calls ensurePassiveShellFor on its show path, so the shell is still
+// Effects-enabled gate: the sole purpose of the prewarm is to prime
+// the wl_surface map + RHI swapchain so the first user-triggered slot
+// show does not race the FBO capture used by shader-exclusive
+// transitions. When both shaders and animations are disabled there is
+// no transition to race, so the prewarm sweep is skipped (the
+// screenAdded hot-plug hook follows the same rule). Each slot
+// consumer (snapassist / selector / osd / overlay) calls
+// ensurePassiveShellFor on its show path, so the shell is still
 // created lazily on first use - it just isn't sitting on the wlr
-// OVERLAY layer composited over every frame for users who never wanted
-// the effects in the first place.
+// OVERLAY layer composited over every frame when no slot is up.
 void OverlayService::warmUpNotifications()
 {
     const bool shadersOn = m_shaderRegistry && m_shaderRegistry->shadersEnabled();
@@ -304,21 +304,16 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     auto isVisible = [](QQuickItem* item) {
         return item != nullptr && item->isVisible();
     };
-    // Main overlay slot stays setVisible(true) across drag-pause idles
-    // (setIdleForDragPause / applyIdleStateForCursor) so the warm RHI
-    // pipeline survives mid-drag trigger thrashing. During those idles
-    // the slot's `_idled` property is true and the inner content's
-    // `visible: !root._idled` binding makes the rendered subtree invisible
-    // - but the slot Item itself stays Qt-visible. Treat `_idled` slots
-    // as not visible for the surface-show predicate.
-    auto isMainOverlayLive = [](QQuickItem* slot) {
-        if (!slot || !slot->isVisible()) {
-            return false;
-        }
-        return !slot->property("_idled").toBool();
-    };
+    // anyVisible drives the wl_surface map/unmap edge. The main overlay
+    // slot stays setVisible(true) for the entire drag (even across
+    // modifier-trigger drag pauses set by setIdleForDragPause, which
+    // only flip the slot's `_idled` property to blank the rendered
+    // content) so a mid-drag trigger thrash does not churn the shell's
+    // wl_surface map state. The slot transitions to !isVisible only on
+    // real drag-end via dismissOverlayWindow - that is the right edge
+    // for the shell to actually unmap when no other slot is up.
     const bool anyVisible = isVisible(s.osdSlot()) || isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot())
-        || isVisible(s.zoneSelectorSlot()) || isMainOverlayLive(s.mainOverlaySlot());
+        || isVisible(s.zoneSelectorSlot()) || isVisible(s.mainOverlaySlot());
     const bool anyInputGrabbing = isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot());
 
     m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing);

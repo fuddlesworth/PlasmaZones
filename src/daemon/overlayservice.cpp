@@ -439,19 +439,17 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
         }
     }
 
-    // keepMappedOnHide gate (Discussion #515): the Phase-5 keep-mapped
-    // lifecycle exists so shader / animation transitions don't pay the
-    // wl_surface unmap + RHI swapchain teardown cost on every dismiss.
-    // For users with both shaders and animations disabled there are no
-    // transitions that need that headroom, and keeping the shell mapped
-    // means a fullscreen wlr OVERLAY layer surface is composited above
-    // every normal toplevel for the daemon's lifetime - which masks
-    // KWin's Translucency-while-moving effect and exposes hybrid-GPU
-    // composition bugs in the reporter's NVIDIA 595 + Intel setup.
-    // Effects-on path keeps the warm cache (callers paying for shaders
-    // get the perf they signed up for); effects-off path lets the next
-    // ShellHost::syncSurfaceState !anyVisible transition unmap the
-    // wl_surface cleanly.
+    // keepMappedOnHide is gated on whether any visual effect is enabled.
+    // The keep-mapped lifecycle exists so shader / animation transitions
+    // do not pay the wl_surface unmap + RHI swapchain teardown cost on
+    // every dismiss; with both shaders and animations disabled there is
+    // no transition to amortize, and keeping the shell mapped means a
+    // fullscreen wlr OVERLAY layer surface is composited above every
+    // normal toplevel for the daemon's lifetime - which masks the
+    // compositor's own translucency-while-moving effect and exposes
+    // composition-pipeline bugs on hybrid-GPU setups. Effects-on path
+    // keeps the warm cache; effects-off path lets the next
+    // syncSurfaceState !anyVisible transition unmap the wl_surface.
     const bool shadersOn = m_shaderRegistry && m_shaderRegistry->shadersEnabled();
     const bool animationsOn = m_settings && m_settings->animationsEnabled();
     const bool keepMapped = shadersOn || animationsOn;
