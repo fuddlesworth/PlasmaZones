@@ -129,10 +129,10 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         // animates the slot back up.
         //
         // Note: this is a DIFFERENT question from
-        // syncPassiveShellSurfaceState's isMainOverlayLive predicate
-        // (which asks "is the slot rendering content the user sees"
-        // for the surface input-region decision). Both checks are
-        // intentional; do not merge them.
+        // syncPassiveShellSurfaceState's anyVisible predicate (which
+        // asks "should the shell wl_surface be mapped at all" using
+        // raw slot Item visibility). Both checks are intentional; do
+        // not merge them.
         QQuickItem* cursorMainOverlay = cursorVsHasWindow ? cursorIt->mainOverlaySlot() : nullptr;
         const bool cursorSlotVisible =
             cursorMainOverlay != nullptr && !qFuzzyCompare(cursorMainOverlay->opacity(), 0.0);
@@ -234,16 +234,12 @@ void OverlayService::setIdleForDragPause()
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedCount), 0);
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneId), QString());
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
-        // Re-evaluate the shell surface's input region now that this
-        // screen's main overlay slot is idled. The slot Item stays
-        // setVisible(true) (warm RHI pipeline) but
-        // `syncPassiveShellSurfaceState`'s isMainOverlayLive predicate
-        // treats `_idled` slots as not-blocking-input, so the shell
-        // releases its input region for click-through if no other slot
-        // (OSD, snap-assist, picker, zone-selector) is up. Without this
-        // call the previous show()'s input grab persists for the
-        // surface's lifetime even though the user has released the
-        // activation trigger.
+        // Defensive resync of the shell's input region + mapped state
+        // after the _idled flip. The slot Item stays setVisible(true)
+        // across drag-pause idles (warm RHI pipeline), so anyVisible
+        // does not change; the call is a no-op in the steady state
+        // but guards against any path that left input-region state out
+        // of sync with what anyInputGrabbing reports.
         syncPassiveShellSurfaceState(it.key());
         // NOTE: labelsTextureHash is intentionally NOT cleared here. The QML
         // side's labelsTexture property still holds the previously-built image
@@ -315,14 +311,12 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
         const bool shouldBeActive =
             showOnAllMonitors || (it.key() == activeEffectiveId && !activeEffectiveId.isEmpty());
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Idled), !shouldBeActive);
-        // Re-evaluate the shell surface's input region after every
-        // _idled flip. In single-monitor mode, the cursor's VS gets
-        // _idled=false (live, grabs input) and every other VS gets
-        // _idled=true (idled, releases input via the
-        // isMainOverlayLive predicate in syncPassiveShellSurfaceState).
-        // Cross-VS cursor moves during a drag flow through this path,
-        // so without the per-flip resync the inactive VS's shell would
-        // keep grabbing clicks even though it should be transparent.
+        // Defensive resync of every per-VS shell after the _idled
+        // flip. Slot Items stay setVisible(true) across _idled toggles
+        // so anyVisible does not change; the call guards against any
+        // path that left input-region state out of sync with what
+        // anyInputGrabbing reports for cross-VS modal slots during a
+        // drag.
         syncPassiveShellSurfaceState(it.key());
     }
 }
