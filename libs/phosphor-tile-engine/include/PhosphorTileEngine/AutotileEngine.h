@@ -480,19 +480,21 @@ public:
      * so the disk-pruning verdict here matches what the runtime would already do.
      *
      * The existing ShouldPersistRestorePredicate filters entries by disabled
-     * (screen, desktop, activity) context but is blind to the exclusion-list
-     * axis, so entries authored before the user excluded an app remain on disk
-     * and bloat AutotilePendingRestores until the next save with this method
-     * called in between.
+     * context across screen, desktop, and activity but is blind to the
+     * exclusion-list axis. Entries authored before the user excluded an app
+     * remain on disk and bloat AutotilePendingRestores until this method
+     * runs at the next save.
      *
-     * Settings-agnostic by design (LGPL boundary): the engine takes plain
-     * patterns and does NOT mark dirty. The WTA caller wraps this and calls
-     * service()->markDirty(DirtyAutotilePending) when the return value is > 0
-     * so the next debounced save persists the prune.
+     * The engine is settings-agnostic by design to keep the LGPL boundary
+     * clean. It takes plain patterns and does NOT mark dirty. The WTA caller
+     * wraps this and calls service()->markDirty(DirtyAutotilePending) when
+     * the return value is greater than zero, so the next debounced save
+     * persists the prune.
      *
      * @param exclusionPatterns combined list of excludedApplications and
-     *                          excludedWindowClasses entries; empty patterns
-     *                          are skipped, an empty list is a no-op.
+     *                          excludedWindowClasses entries. Empty
+     *                          patterns are skipped. An empty list is a
+     *                          no-op.
      * @return number of appId entries fully removed.
      */
     int pruneExcludedPendingRestores(const QStringList& exclusionPatterns);

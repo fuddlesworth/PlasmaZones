@@ -558,7 +558,7 @@ public Q_SLOTS:
     void loadState();
 
     /**
-     * @brief Drop pending-restore queues (snap + autotile) for excluded appIds.
+     * @brief Drop snap and autotile pending-restore queues for excluded appIds.
      *
      * Reads the current snap-side exclusion lists from m_settings, combines
      * them, and asks both engines to walk their pending-restore queues and

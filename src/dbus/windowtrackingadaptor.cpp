@@ -171,8 +171,8 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // exclusion list. Snap-engine's resolveWindowRestore already refuses to
     // honor them at runtime, but they live on disk until pruned and spam one
     // "pending snap:" log line per entry at every startup. One-shot at boot
-    // catches entries authored before the user added the class to exclusions;
-    // the signal hookups cover live additions for the running session. The
+    // catches entries authored before the user added the class to exclusions.
+    // The signal hookups cover live additions for the running session. The
     // autotile-side prune happens again from the daemon's finalizeStartup
     // after AutotileEngine::loadState populates m_pendingAutotileRestores.
     pruneExcludedPendingRestoresFromSettings();
