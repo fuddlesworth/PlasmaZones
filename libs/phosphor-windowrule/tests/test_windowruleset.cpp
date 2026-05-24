@@ -234,6 +234,40 @@ private Q_SLOTS:
         QVERIFY(fb.open(QIODevice::ReadOnly));
         QCOMPARE(fa.readAll(), fb.readAll());
     }
+
+    void testJson_keepsRuleWithSemanticValidationIssue()
+    {
+        // Manually-edited config safety net: a context-domain action paired
+        // with a window-property match (the silently-never-fires combination)
+        // is kept on load, not silently dropped. The settings UI uses the
+        // same WindowRule::validationIssues() walk to badge the offending
+        // rule so the user can see why it never fires and fix it.
+        const WindowRule bad =
+            makeRule(QStringLiteral("hand-edited bad rule"), 200,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
+                     {engineMode(QStringLiteral("autotile"))});
+        QVERIFY(bad.isValid()); // structurally valid — the issue is semantic
+        QCOMPARE(bad.validationIssues().size(), 1);
+
+        QJsonObject o;
+        o.insert(QStringLiteral("_version"), 4);
+        QJsonArray rules;
+        rules.append(bad.toJson());
+        rules.append(simpleRule(QStringLiteral("ok")).toJson());
+        o.insert(QStringLiteral("rules"), rules);
+
+        const auto reloaded = WindowRuleSet::fromJson(o);
+        QVERIFY(reloaded.has_value());
+        // Both rules survive — the semantic check warns but does not drop.
+        QCOMPARE(reloaded->count(), 2);
+        const auto loadedBad = reloaded->ruleById(bad.id);
+        QVERIFY(loadedBad.has_value());
+        // The flagged combination is still observable on the loaded rule, so
+        // a UI consumer can re-run the same check to badge it.
+        const auto issues = loadedBad->validationIssues();
+        QCOMPARE(issues.size(), 1);
+        QCOMPARE(issues.first().code, ValidationIssue::Code::ContextActionWithWindowMatch);
+    }
 };
 
 QTEST_MAIN(TestWindowRuleSet)

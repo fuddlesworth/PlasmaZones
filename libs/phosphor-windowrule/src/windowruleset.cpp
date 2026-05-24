@@ -165,6 +165,17 @@ std::optional<WindowRuleSet> WindowRuleSet::fromJson(const QJsonObject& obj)
                                     << rule->id.toString();
             continue;
         }
+        // Semantic compatibility check — distinct from `WindowRule::fromJson`'s
+        // structural validation. The rule is kept even on issue: a hand-edited
+        // store can legitimately carry an action/match mismatch the user wants
+        // to see (and fix from the settings UI) rather than have silently
+        // dropped. Settings re-runs the same check to badge the offending rule.
+        for (const ValidationIssue& issue : rule->validationIssues()) {
+            qCWarning(lcWindowRule).nospace()
+                << "WindowRuleSet::fromJson: rule has a validation issue — keeping the rule. id: "
+                << rule->id.toString() << " action index: " << issue.actionIndex << " action type: " << issue.actionType
+                << " message: " << issue.message;
+        }
         set.m_rules.append(*rule);
     }
     // A freshly loaded set starts at revision 0 — the load is the baseline.
