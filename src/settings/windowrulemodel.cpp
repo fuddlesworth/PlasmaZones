@@ -212,6 +212,7 @@ QHash<int, QByteArray> WindowRuleModel::roleNames() const
         {ActionCountRole, "actionCount"},
         {IsCompositeRole, "isComposite"},
         {ScreenIdsRole, "screenIds"},
+        {ValidationIssueCountRole, "validationIssueCount"},
     };
 }
 
@@ -244,6 +245,11 @@ QVariant WindowRuleModel::data(const QModelIndex& index, int role) const
         return !matchIsSimpleConjunction(rule.match);
     case ScreenIdsRole:
         return screenIdsOf(rule.match);
+    case ValidationIssueCountRole:
+        // Recomputed per query — the validator is cheap (one tree walk) and a
+        // model-side cache would have to be invalidated on every rule edit, so
+        // pay the trivial cost over keeping the staleness guard.
+        return rule.validationIssues().size();
     default:
         return {};
     }

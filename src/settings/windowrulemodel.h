@@ -79,6 +79,11 @@ public:
         ActionCountRole, ///< number of actions
         IsCompositeRole, ///< true if the match is a non-trivial composite
         ScreenIdsRole, ///< QStringList of ScreenId leaf values in the match
+        ValidationIssueCountRole, ///< int — number of semantic validation
+                                  ///< issues the rule carries (a context-domain
+                                  ///< action paired with a window-property match,
+                                  ///< etc). The row delegate shows a warning
+                                  ///< badge when this is non-zero.
     };
 
     explicit WindowRuleModel(QObject* parent = nullptr);

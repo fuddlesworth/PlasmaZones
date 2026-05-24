@@ -53,9 +53,15 @@ Kirigami.OverlaySheet {
     /// here and thread the cached lists down to the child editors.
     readonly property var _actionTypeOptions: sheet.controller.actionTypes()
     readonly property var _matchFieldOptions: sheet.controller.matchFields()
-    /// Save is allowed only when the rule has at least one action and every
-    /// match leaf has a non-empty value.
-    readonly property bool _canSave: sheet._workingRule.actions !== undefined && sheet._workingRule.actions.length > 0 && sheet._matchHasFilledLeaves(sheet._workingRule.match)
+    /// Live semantic-validation pass over the working rule. Surfaced as an
+    /// inline message and as a save gate so the user can't author a rule
+    /// the picker would have prevented (e.g. by mutating the match after
+    /// picking a context action). Recomputed on every working-rule patch.
+    readonly property var _validationIssues: sheet.controller.validationIssuesForJson(sheet._workingRule)
+    /// Save is allowed only when the rule has at least one action, every
+    /// match leaf has a non-empty value, AND the semantic-validation pass
+    /// found no action/match domain mismatches.
+    readonly property bool _canSave: sheet._workingRule.actions !== undefined && sheet._workingRule.actions.length > 0 && sheet._matchHasFilledLeaves(sheet._workingRule.match) && sheet._validationIssues.length === 0
 
     signal ruleSaved(var ruleJson)
 
@@ -262,8 +268,33 @@ Kirigami.OverlaySheet {
                 // column's explicit `implicitWidth` governs alone.
                 Layout.preferredWidth: 0
                 type: Kirigami.MessageType.Information
-                visible: !sheet._canSave
+                visible: !sheet._canSave && sheet._validationIssues.length === 0
                 text: !sheet._workingRule.actions || sheet._workingRule.actions.length === 0 ? i18n("Add at least one action before saving.") : i18n("Every condition needs a value before this rule can be saved.")
+            }
+
+            // Semantic-validation surface: when an action/match domain mismatch
+            // is detected, lift it from the qCWarning log into the editor so
+            // the user sees exactly why the rule is rejected. The save button
+            // is also gated on this list (see _canSave above), so the message
+            // doubles as the explanation for the disabled Save.
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 0
+                type: Kirigami.MessageType.Warning
+                visible: sheet._validationIssues.length > 0
+                // Join every issue message into a single bullet list — typical
+                // rule has at most one or two issues, so a multi-line wrap
+                // stays readable inside the sheet.
+                text: {
+                    if (sheet._validationIssues.length === 0)
+                        return "";
+
+                    var lines = [];
+                    for (var i = 0; i < sheet._validationIssues.length; ++i) {
+                        lines.push("• " + sheet._validationIssues[i].message);
+                    }
+                    return i18n("This rule would never fire:") + "\n" + lines.join("\n");
+                }
             }
 
         }

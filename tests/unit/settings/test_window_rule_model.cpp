@@ -105,6 +105,7 @@ private Q_SLOTS:
     void crudByUuid();
     void updateNoOpDoesNotChurn();
     void reorder();
+    void validationIssueCountRole();
 };
 
 void TestWindowRuleModel::rolesExposed()
@@ -225,6 +226,38 @@ void TestWindowRuleModel::reorder()
 
     // An unknown id fails.
     QVERIFY(!model.moveRule(QUuid::createUuid(), QUuid()));
+}
+
+void TestWindowRuleModel::validationIssueCountRole()
+{
+    // A well-formed rule (window-property match + window-domain Float action)
+    // reports zero issues. The monitor rule above is a context-only match +
+    // context action — also zero. Then the silently-never-fires combination
+    // (context-domain SetEngineMode with a window-property match) reports 1.
+    WindowRule cleanWindowRule = applicationRule(QStringLiteral("firefox"), QStringLiteral("clean window rule"));
+    WindowRule cleanContextRule = monitorRule(QStringLiteral("DP-1"), QStringLiteral("clean monitor rule"));
+
+    // Construct the bad combination explicitly — same shape as the rule the
+    // load-time guard warns about.
+    WindowRule badRule;
+    badRule.id = QUuid::createUuid();
+    badRule.name = QStringLiteral("firefox autotile");
+    badRule.priority = 200;
+    badRule.match = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox"));
+    RuleAction engine;
+    engine.type = QString(ActionType::SetEngineMode);
+    engine.params.insert(QLatin1String("mode"), QStringLiteral("autotile"));
+    badRule.actions = {engine};
+
+    WindowRuleModel model;
+    model.setRules({cleanWindowRule, cleanContextRule, badRule});
+
+    QCOMPARE(model.data(model.index(0, 0), WindowRuleModel::ValidationIssueCountRole).toInt(), 0);
+    QCOMPARE(model.data(model.index(1, 0), WindowRuleModel::ValidationIssueCountRole).toInt(), 0);
+    QCOMPARE(model.data(model.index(2, 0), WindowRuleModel::ValidationIssueCountRole).toInt(), 1);
+
+    // The role surfaces via its registered name so QML can bind by string.
+    QVERIFY(model.roleNames().values().contains(QByteArrayLiteral("validationIssueCount")));
 }
 
 QTEST_MAIN(TestWindowRuleModel)

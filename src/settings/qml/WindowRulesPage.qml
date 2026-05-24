@@ -333,6 +333,7 @@ SettingsFlickable {
                             conditionCount: modelData.conditionCount
                             actionCount: modelData.actionCount
                             isComposite: modelData.isComposite
+                            validationIssueCount: modelData.validationIssueCount
                             onToggleRequested: function(en) {
                                 page.controller.setRuleEnabled(ruleId, en);
                             }

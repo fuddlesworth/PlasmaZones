@@ -219,13 +219,37 @@ public:
     Q_INVOKABLE QVariantList operatorsForField(int fieldValue) const;
 
     /// Registered action types for the action-editor dropdown. Each entry:
-    /// `{ value: QString (action type id), label, params: [ ... ] }` where
-    /// each param descriptor is
+    /// `{ value: QString (action type id), label, params: [ ... ],
+    ///   domain: "context"|"window" }` where each param descriptor is
     /// `{ key, kind: "string"|"number"|"enum"|"percent", label }` plus, for
     /// `kind == "enum"`, an `options` string list, and for `kind == "number"`
     /// /`"percent"`, `min`/`max`/`scale` (the value stored is `display * scale`).
-    /// QML drives the per-type editor entirely from this descriptor.
+    /// QML drives the per-type editor entirely from this descriptor; the
+    /// `domain` field lets the picker disable types incompatible with the
+    /// current match expression (a context-domain action against a
+    /// window-property match never fires).
     Q_INVOKABLE QVariantList actionTypes() const;
+
+    /// Semantic validation issues for the rule represented by @p ruleJson —
+    /// the editor sheet's working copy. Same check `WindowRuleSet::fromJson`
+    /// runs at load time and `WindowRuleModel::ValidationIssueCountRole`
+    /// exposes per-row; surfaced live so the editor can show an inline
+    /// message and block save until the user resolves the mismatch.
+    ///
+    /// Each entry: `{ code: int (ValidationIssue::Code),
+    ///   actionIndex: int, actionType: QString, message: QString }`.
+    /// An empty list means no issues. Tolerates a partial working rule (no
+    /// id / no actions yet) — only the @c match and @c actions sub-trees
+    /// drive the check.
+    Q_INVOKABLE QVariantList validationIssuesForJson(const QVariantMap& ruleJson) const;
+
+    /// True iff the @p matchJson sub-tree references only context fields
+    /// (ScreenId / VirtualDesktop / Activity) — i.e. it is compatible with
+    /// every action's domain. The picker uses this to flag context-domain
+    /// action types as incompatible when the current match has a
+    /// window-property leaf. An empty / catch-all match counts as
+    /// context-only.
+    Q_INVOKABLE bool matchIsContextOnly(const QVariantMap& matchJson) const;
 
 Q_SIGNALS:
     void dirtyChanged();

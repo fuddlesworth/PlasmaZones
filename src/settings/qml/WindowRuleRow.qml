@@ -27,6 +27,11 @@ ItemDelegate {
     required property int conditionCount
     required property int actionCount
     required property bool isComposite
+    /// Number of semantic-validation issues the rule carries. A non-zero
+    /// count surfaces a warning icon next to the rule name so the user
+    /// knows the rule never fires (the picker now prevents the combination
+    /// for new rules, but a hand-edited JSON store keeps the offending rule).
+    required property int validationIssueCount
 
     signal editRequested()
     signal deleteRequested()
@@ -60,6 +65,27 @@ ItemDelegate {
                 color: row.ruleEnabled ? Kirigami.Theme.highlightColor : "transparent"
                 border.width: row.ruleEnabled ? 0 : 2
                 border.color: Kirigami.Theme.disabledTextColor
+            }
+
+        }
+
+        // Warning badge — sits before the rule name so it's the first thing
+        // the eye hits when scanning the list. Hovering reveals the count
+        // explanation; the editor sheet itself shows the full per-issue
+        // messages. Hidden when the rule is well-formed.
+        Kirigami.Icon {
+            visible: row.validationIssueCount > 0
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            source: "dialog-warning"
+            Accessible.name: i18np("%n validation issue", "%n validation issues", row.validationIssueCount)
+            ToolTip.visible: warningHover.hovered
+            ToolTip.delay: 300
+            ToolTip.text: i18n("This rule has %1 validation issue(s) — open the editor to see the details. The rule will not fire as written.", row.validationIssueCount)
+
+            HoverHandler {
+                id: warningHover
             }
 
         }

@@ -40,6 +40,9 @@ private Q_SLOTS:
     void moveRuleReorders();
     void authoringMetadata();
     void templatesProduceSeededRules();
+    void actionTypesCarryDomain();
+    void matchIsContextOnlyClassifies();
+    void validationIssuesForJsonFlags();
 };
 
 void TestWindowRuleController::newEmptyRuleShapesBySubject()
@@ -293,6 +296,110 @@ void TestWindowRuleController::templatesProduceSeededRules()
     // otherwise commit a UUID-less rule on a typo in the template id.
     const QVariantMap bogus = controller.newRuleFromTemplate(QStringLiteral("nonexistentTemplate"));
     QVERIFY(bogus.isEmpty());
+}
+
+void TestWindowRuleController::actionTypesCarryDomain()
+{
+    // The picker keys off this field to disable context-domain actions when
+    // the match references window-property leaves — a regression that drops
+    // the domain would silently re-enable the silently-never-fires
+    // combination.
+    WindowRuleController controller;
+    const QVariantList actions = controller.actionTypes();
+    QVERIFY(!actions.isEmpty());
+    QHash<QString, QString> domainOf;
+    for (const QVariant& v : actions) {
+        const QVariantMap m = v.toMap();
+        const QString id = m.value(QStringLiteral("value")).toString();
+        const QString domain = m.value(QStringLiteral("domain")).toString();
+        QVERIFY2(domain == QLatin1String("context") || domain == QLatin1String("window"),
+                 qPrintable(QStringLiteral("action %1 has unexpected domain %2").arg(id, domain)));
+        domainOf.insert(id, domain);
+    }
+    // Spot-check the canonical pairs — the context actions and a sample of
+    // window actions. A typo in the descriptor would flip these.
+    QCOMPARE(domainOf.value(QStringLiteral("setEngineMode")), QStringLiteral("context"));
+    QCOMPARE(domainOf.value(QStringLiteral("setSnappingLayout")), QStringLiteral("context"));
+    QCOMPARE(domainOf.value(QStringLiteral("setTilingAlgorithm")), QStringLiteral("context"));
+    QCOMPARE(domainOf.value(QStringLiteral("disableEngine")), QStringLiteral("context"));
+    QCOMPARE(domainOf.value(QStringLiteral("float")), QStringLiteral("window"));
+    QCOMPARE(domainOf.value(QStringLiteral("exclude")), QStringLiteral("window"));
+}
+
+void TestWindowRuleController::matchIsContextOnlyClassifies()
+{
+    WindowRuleController controller;
+
+    // Empty / catch-all match — context-only by definition (no leaves).
+    QVERIFY(controller.matchIsContextOnly(QVariantMap{}));
+
+    QVariantMap allEmpty;
+    allEmpty[QStringLiteral("all")] = QVariantList{};
+    QVERIFY(controller.matchIsContextOnly(allEmpty));
+
+    // Single context leaf — context-only.
+    QVariantMap screenLeaf;
+    screenLeaf[QStringLiteral("field")] = QStringLiteral("screenId");
+    screenLeaf[QStringLiteral("op")] = QStringLiteral("equals");
+    screenLeaf[QStringLiteral("value")] = QStringLiteral("DP-1");
+    QVERIFY(controller.matchIsContextOnly(screenLeaf));
+
+    // Single window leaf — NOT context-only.
+    QVariantMap appLeaf;
+    appLeaf[QStringLiteral("field")] = QStringLiteral("appId");
+    appLeaf[QStringLiteral("op")] = QStringLiteral("equals");
+    appLeaf[QStringLiteral("value")] = QStringLiteral("firefox");
+    QVERIFY(!controller.matchIsContextOnly(appLeaf));
+
+    // An All{} carrying a window leaf — NOT context-only.
+    QVariantMap mixedAll;
+    QVariantList children;
+    children.append(screenLeaf);
+    children.append(appLeaf);
+    mixedAll[QStringLiteral("all")] = children;
+    QVERIFY(!controller.matchIsContextOnly(mixedAll));
+}
+
+void TestWindowRuleController::validationIssuesForJsonFlags()
+{
+    WindowRuleController controller;
+
+    // Clean rule: window match + Float action → no issues.
+    QVariantMap clean = controller.newEmptyRule(QStringLiteral("application"));
+    clean[QStringLiteral("match")].toMap();
+    QVariantMap appLeaf;
+    appLeaf[QStringLiteral("field")] = QStringLiteral("appId");
+    appLeaf[QStringLiteral("op")] = QStringLiteral("equals");
+    appLeaf[QStringLiteral("value")] = QStringLiteral("firefox");
+    clean[QStringLiteral("match")] = appLeaf;
+    QVariantList cleanActions;
+    QVariantMap floatAction;
+    floatAction[QStringLiteral("type")] = QStringLiteral("float");
+    cleanActions.append(floatAction);
+    clean[QStringLiteral("actions")] = cleanActions;
+    QCOMPARE(controller.validationIssuesForJson(clean).size(), 0);
+
+    // Bad rule: same window match + SetEngineMode action → one issue at
+    // index 0, pointing at the offending action.
+    QVariantMap bad = clean;
+    QVariantList badActions;
+    QVariantMap engine;
+    engine[QStringLiteral("type")] = QStringLiteral("setEngineMode");
+    engine[QStringLiteral("mode")] = QStringLiteral("autotile");
+    badActions.append(engine);
+    bad[QStringLiteral("actions")] = badActions;
+    const QVariantList issues = controller.validationIssuesForJson(bad);
+    QCOMPARE(issues.size(), 1);
+    const QVariantMap issue = issues.first().toMap();
+    QCOMPARE(issue.value(QStringLiteral("actionIndex")).toInt(), 0);
+    QCOMPARE(issue.value(QStringLiteral("actionType")).toString(), QStringLiteral("setEngineMode"));
+    QVERIFY(!issue.value(QStringLiteral("message")).toString().isEmpty());
+
+    // Partial rule (no actions yet) → zero issues; the editor only flags
+    // once the user has picked an action.
+    QVariantMap partial = clean;
+    partial[QStringLiteral("actions")] = QVariantList{};
+    QCOMPARE(controller.validationIssuesForJson(partial).size(), 0);
 }
 
 QTEST_MAIN(TestWindowRuleController)

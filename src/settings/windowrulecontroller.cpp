@@ -730,6 +730,7 @@ QVariantList WindowRuleController::rulesSnapshot() const
         // ScreenIdsRole is computed in the model's data() — no per-row
         // by-id lookup, so the snapshot stays O(n).
         entry[QStringLiteral("screenIds")] = m_model.data(idx, WindowRuleModel::ScreenIdsRole);
+        entry[QStringLiteral("validationIssueCount")] = m_model.data(idx, WindowRuleModel::ValidationIssueCountRole);
         out.append(entry);
     }
     return out;
@@ -952,9 +953,81 @@ QVariantList WindowRuleController::actionTypes() const
         entry[QStringLiteral("value")] = QString::fromLatin1(type);
         entry[QStringLiteral("label")] = actionTypeLabel(type);
         entry[QStringLiteral("params")] = paramsForActionType(type);
+        // Domain wire string drives the picker's compatibility flag — the
+        // QML side disables a context-domain action type when the current
+        // match references window-property fields (the silently-never-fires
+        // combination). Looked up via a probe RuleAction so the descriptor's
+        // own `domain` field stays the single source of truth.
+        RuleAction probe;
+        probe.type = QString::fromLatin1(type);
+        const auto domain = PhosphorWindowRule::ActionRegistry::instance().domainFor(probe);
+        entry[QStringLiteral("domain")] =
+            domain == PhosphorWindowRule::ActionDomain::Context ? QStringLiteral("context") : QStringLiteral("window");
         out.append(entry);
     }
     return out;
+}
+
+QVariantList WindowRuleController::validationIssuesForJson(const QVariantMap& ruleJson) const
+{
+    // Build a partial rule from the variant map — enough to run the semantic
+    // compatibility check without requiring a full `WindowRule::fromJson`
+    // (which would refuse a rule mid-edit: no id, no actions yet). The
+    // validator only consults `match` and `actions`, so reconstruct just those.
+    const QJsonObject obj = QJsonObject::fromVariantMap(ruleJson);
+
+    WindowRule probe;
+    const QJsonValue matchValue = obj.value(QLatin1String("match"));
+    if (matchValue.isObject()) {
+        if (const auto match = MatchExpression::fromJson(matchValue.toObject())) {
+            probe.match = *match;
+        }
+        // A malformed match leaves `probe.match` as the default catch-all,
+        // which is context-only — so the check still works as the user fills
+        // out leaves: the issue only surfaces once a window-property leaf
+        // lands AND a context action is present.
+    }
+    const QJsonValue actionsValue = obj.value(QLatin1String("actions"));
+    if (actionsValue.isArray()) {
+        for (const QJsonValue& v : actionsValue.toArray()) {
+            if (!v.isObject()) {
+                continue;
+            }
+            if (const auto action = RuleAction::fromJson(v.toObject())) {
+                probe.actions.append(*action);
+            }
+            // Malformed actions are silently dropped — the editor will fail
+            // its own structural gates (param fields empty etc.) before save.
+        }
+    }
+
+    QVariantList out;
+    for (const PhosphorWindowRule::ValidationIssue& issue : probe.validationIssues()) {
+        QVariantMap m;
+        m[QStringLiteral("code")] = static_cast<int>(issue.code);
+        m[QStringLiteral("actionIndex")] = issue.actionIndex;
+        m[QStringLiteral("actionType")] = issue.actionType;
+        m[QStringLiteral("message")] = issue.message;
+        out.append(m);
+    }
+    return out;
+}
+
+bool WindowRuleController::matchIsContextOnly(const QVariantMap& matchJson) const
+{
+    // An empty / unparseable match collapses to the default catch-all, which
+    // is context-only by definition (no leaves to fail against a context
+    // query). The picker treats this as "every action type compatible" so the
+    // user can start with any action and add window predicates afterwards.
+    const QJsonObject obj = QJsonObject::fromVariantMap(matchJson);
+    if (obj.isEmpty()) {
+        return true;
+    }
+    const auto match = MatchExpression::fromJson(obj);
+    if (!match) {
+        return true;
+    }
+    return match->isContextOnly();
 }
 
 } // namespace PlasmaZones
