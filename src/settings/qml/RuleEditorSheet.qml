@@ -134,6 +134,13 @@ Kirigami.OverlaySheet {
         implicitHeight: column.implicitHeight
 
         ColumnLayout {
+            // The persistent "first rule wins per slot" helper and the
+            // save-gate / validation messages live in the sheet's `footer`
+            // (defined below), NOT here. The OverlaySheet's footer is pinned
+            // above the action buttons so the messages stay visible without
+            // scrolling — on a smaller window, scroll-to-bottom would
+            // otherwise clip them out of reach.
+
             id: column
 
             anchors.left: parent.left
@@ -249,87 +256,84 @@ Kirigami.OverlaySheet {
                 }
             }
 
-            Label {
-                Layout.fillWidth: true
-                // `Layout.preferredWidth: 0` breaks the implicit-width feedback
-                // chain between this wrap-text Label and the hosting OverlaySheet's
-                // implicitHeight binding — without it the sheet logs a steady
-                // "Binding loop detected for property 'implicitHeight'" because
-                // the label's natural one-line width propagates upward, the sheet
-                // resizes, the label re-wraps, implicitHeight changes, etc.
-                // `Text.implicitWidth` is read-only so this is the canonical hook.
-                Layout.preferredWidth: 0
-                wrapMode: Text.WordWrap
-                font.italic: true
-                opacity: 0.6
-                text: i18n("The first rule (by priority) to fill each action slot wins that slot — actions in different slots stack.")
-            }
-
-            Kirigami.InlineMessage {
-                Layout.fillWidth: true
-                // Same anti-loop guard as the wrap Label above: InlineMessage
-                // wraps its text internally and contributes the same implicit-
-                // width feedback chain to the hosting OverlaySheet's
-                // implicitHeight binding. `Layout.preferredWidth: 0` tells the
-                // layout the message has no natural width preference, so the
-                // column's explicit `implicitWidth` governs alone.
-                Layout.preferredWidth: 0
-                type: Kirigami.MessageType.Information
-                visible: !sheet._canSave && sheet._validationIssues.length === 0
-                text: !sheet._workingRule.actions || sheet._workingRule.actions.length === 0 ? i18n("Add at least one action before saving.") : i18n("Every condition needs a value before this rule can be saved.")
-            }
-
-            // Semantic-validation surface: when an action/match domain mismatch
-            // is detected, lift it from the qCWarning log into the editor so
-            // the user sees exactly why the rule is rejected. The save button
-            // is also gated on this list (see _canSave above), so the message
-            // doubles as the explanation for the disabled Save.
-            Kirigami.InlineMessage {
-                Layout.fillWidth: true
-                Layout.preferredWidth: 0
-                type: Kirigami.MessageType.Warning
-                visible: sheet._validationIssues.length > 0
-                // Join every issue message into a single bullet list — typical
-                // rule has at most one or two issues, so a multi-line wrap
-                // stays readable inside the sheet.
-                text: {
-                    if (sheet._validationIssues.length === 0)
-                        return "";
-
-                    var lines = [];
-                    for (var i = 0; i < sheet._validationIssues.length; ++i) {
-                        lines.push("• " + sheet._validationIssues[i].message);
-                    }
-                    return i18n("This rule would never fire:") + "\n" + lines.join("\n");
-                }
-            }
-
         }
 
     }
 
-    footer: RowLayout {
-        Item {
+    footer: ColumnLayout {
+        spacing: Kirigami.Units.smallSpacing
+
+        // The "first rule wins per slot" helper — moved out of the
+        // scrollable content so a tall rule (many conditions / actions)
+        // can't push it out of view on a small window. Same anti-binding-loop
+        // guard as before: `Layout.preferredWidth: 0` keeps the wrap-text
+        // implicit width from re-entering the OverlaySheet's implicit
+        // height binding chain.
+        Label {
             Layout.fillWidth: true
+            Layout.preferredWidth: 0
+            wrapMode: Text.WordWrap
+            font.italic: true
+            opacity: 0.6
+            text: i18n("The first rule (by priority) to fill each action slot wins that slot — actions in different slots stack.")
         }
 
-        Button {
-            text: i18n("Cancel")
-            Accessible.name: i18n("Cancel and discard changes")
-            onClicked: sheet.close()
+        // Completeness gate — shown when Save is blocked for a reason that
+        // is NOT a semantic validation issue (missing action / empty leaf).
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            Layout.preferredWidth: 0
+            type: Kirigami.MessageType.Information
+            visible: !sheet._canSave && sheet._validationIssues.length === 0
+            text: !sheet._workingRule.actions || sheet._workingRule.actions.length === 0 ? i18n("Add at least one action before saving.") : i18n("Every condition needs a value before this rule can be saved.")
         }
 
-        Button {
-            text: sheet.editing ? i18n("Save") : i18n("Add rule")
-            icon.name: "dialog-ok-apply"
-            // A rule with no actions does nothing, and a rule whose match has
-            // an empty leaf value would match an empty-string id — block both.
-            enabled: sheet._canSave
-            Accessible.name: sheet.editing ? i18n("Save changes to this rule") : i18n("Add this rule")
-            onClicked: {
-                sheet.ruleSaved(sheet._workingRule);
-                sheet.close();
+        // Semantic-validation surface — lifted out of the qCWarning log so
+        // the user sees exactly why the rule would never fire. Save is also
+        // gated on this list (see _canSave above).
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            Layout.preferredWidth: 0
+            type: Kirigami.MessageType.Warning
+            visible: sheet._validationIssues.length > 0
+            text: {
+                if (sheet._validationIssues.length === 0)
+                    return "";
+
+                var lines = [];
+                for (var i = 0; i < sheet._validationIssues.length; ++i) {
+                    lines.push("• " + sheet._validationIssues[i].message);
+                }
+                return i18n("This rule would never fire:") + "\n" + lines.join("\n");
             }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            Button {
+                text: i18n("Cancel")
+                Accessible.name: i18n("Cancel and discard changes")
+                onClicked: sheet.close()
+            }
+
+            Button {
+                text: sheet.editing ? i18n("Save") : i18n("Add rule")
+                icon.name: "dialog-ok-apply"
+                // A rule with no actions does nothing, and a rule whose match has
+                // an empty leaf value would match an empty-string id — block both.
+                enabled: sheet._canSave
+                Accessible.name: sheet.editing ? i18n("Save changes to this rule") : i18n("Add this rule")
+                onClicked: {
+                    sheet.ruleSaved(sheet._workingRule);
+                    sheet.close();
+                }
+            }
+
         }
 
     }
