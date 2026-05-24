@@ -73,7 +73,6 @@ private:
         uint32_t sizeW = 0;
         uint32_t sizeH = 0;
         int exclusiveEdge = 0;
-        bool exclusiveEdgeSent = false; ///< false until we've sent a valid edge at least once
     };
 
     LayerShellIntegration* m_integration = nullptr;
