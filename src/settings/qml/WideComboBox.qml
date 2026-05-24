@@ -21,14 +21,14 @@ ComboBox {
 
     // Cached widest-item width — recalculated only when model or count changes.
     // Using a separate TextMetrics avoids the binding loop caused by the
-    // _longestItemWidth → _metrics.text → advanceWidth → _longestItemWidth cycle.
+    // _longestItemWidth → metrics.text → advanceWidth → _longestItemWidth cycle.
     property real _longestItemWidth: 0
 
     function _recalcLongestWidth() {
         let maxW = 0;
         for (let i = 0; i < root.count; ++i) {
-            _metrics.text = root.textAt(i) || "";
-            maxW = Math.max(maxW, _metrics.advanceWidth);
+            metrics.text = root.textAt(i) || "";
+            maxW = Math.max(maxW, metrics.advanceWidth);
         }
         _longestItemWidth = maxW;
     }
@@ -39,7 +39,7 @@ ComboBox {
     Component.onCompleted: _recalcLongestWidth()
 
     TextMetrics {
-        id: _metrics
+        id: metrics
 
         font: root.font
     }
