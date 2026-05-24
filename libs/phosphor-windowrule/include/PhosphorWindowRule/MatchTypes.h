@@ -211,4 +211,18 @@ inline bool fieldIsBool(Field field)
         || field == Field::IsMaximized;
 }
 
+/// True if @p field describes the **context** a window appears in
+/// (screen / virtual desktop / activity) rather than a property of the
+/// window itself. Context fields are populated on every `WindowQuery`,
+/// including the windowless queries the context-mode evaluator issues;
+/// non-context (window-property) fields are absent on those queries and
+/// any predicate over them evaluates false there. Action/match
+/// compatibility (a `SetEngineMode` rule whose match references only
+/// window properties never fires during context resolution) is computed
+/// off this classification.
+inline bool fieldIsContext(Field field)
+{
+    return field == Field::ScreenId || field == Field::VirtualDesktop || field == Field::Activity;
+}
+
 } // namespace PhosphorWindowRule

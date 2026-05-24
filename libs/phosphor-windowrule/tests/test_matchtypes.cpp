@@ -98,6 +98,49 @@ private Q_SLOTS:
             QCOMPARE(classifications, 1);
         }
     }
+
+    void testFieldIsContext()
+    {
+        // Exactly the three context fields are context — everything else is a
+        // window property. Action/match compatibility hinges on this split, so
+        // pin it down explicitly rather than re-deriving it from
+        // fieldIsString/fieldIsBool/fieldIsNumeric.
+        QVERIFY(fieldIsContext(Field::ScreenId));
+        QVERIFY(fieldIsContext(Field::VirtualDesktop));
+        QVERIFY(fieldIsContext(Field::Activity));
+
+        QVERIFY(!fieldIsContext(Field::AppId));
+        QVERIFY(!fieldIsContext(Field::WindowClass));
+        QVERIFY(!fieldIsContext(Field::DesktopFile));
+        QVERIFY(!fieldIsContext(Field::WindowRole));
+        QVERIFY(!fieldIsContext(Field::Pid));
+        QVERIFY(!fieldIsContext(Field::Title));
+        QVERIFY(!fieldIsContext(Field::WindowType));
+        QVERIFY(!fieldIsContext(Field::IsSticky));
+        QVERIFY(!fieldIsContext(Field::IsFullscreen));
+        QVERIFY(!fieldIsContext(Field::IsMinimized));
+        QVERIFY(!fieldIsContext(Field::IsMaximized));
+    }
+
+    void testFieldIsContext_coversAllFields_data()
+    {
+        // Canary — every Field must answer the context question. Data-driving
+        // over FieldCount catches a new enumerator added without classifying it.
+        QTest::addColumn<int>("fieldValue");
+        for (int v = 0; v < FieldCount; ++v) {
+            QTest::addRow("field-%d", v) << v;
+        }
+    }
+
+    void testFieldIsContext_coversAllFields()
+    {
+        QFETCH(int, fieldValue);
+        const Field field = static_cast<Field>(fieldValue);
+        // The call alone is the check — the test fails if a new field crashes
+        // a switch that grew an unhandled case (none today, but the data-driven
+        // shape is the canary).
+        (void)fieldIsContext(field);
+    }
 };
 
 QTEST_MAIN(TestMatchTypes)

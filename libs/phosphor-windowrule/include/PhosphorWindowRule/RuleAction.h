@@ -16,6 +16,28 @@
 namespace PhosphorWindowRule {
 
 /**
+ * @brief Which evaluation pass an action contributes to.
+ *
+ * The evaluator runs two distinct query shapes against the rule set:
+ *  - **Context queries** (windowless) — issued by the screen/desktop/activity
+ *    resolution paths to ask "what engine mode / layout does this context use?".
+ *    They carry only `ScreenId` / `VirtualDesktop` / `Activity`; every
+ *    window-property predicate evaluates false against them.
+ *  - **Window queries** — issued per window to ask "what per-window behaviour
+ *    applies?". They carry both window properties and the window's context.
+ *
+ * An action's domain selects which query shape can fill its slot. Authoring a
+ * @c Context action with a match that pins window properties produces a rule
+ * that silently never fires (the window predicate fails during context
+ * resolution); the validator (`WindowRule::validationIssues()`) flags exactly
+ * this case so the picker UI and the JSON loader can surface it.
+ */
+enum class ActionDomain : int {
+    Context = 0, ///< fills slots consumed by context (screen/desktop/activity) resolution
+    Window = 1, ///< fills slots consumed by per-window evaluation
+};
+
+/**
  * @brief One action carried by a WindowRule.
  *
  * A RuleAction is a `{ type, params }` pair. The `type` selects an
@@ -82,6 +104,11 @@ struct PHOSPHORWINDOWRULE_EXPORT ActionDescriptor
     /// strict-key check — used for free-form / future-extensible action
     /// types whose params payload is deliberately open.
     QStringList allowedKeys{};
+    /// Which evaluation pass the action contributes to — see @ref ActionDomain.
+    /// The validator combines this with the rule's match expression to detect
+    /// rules that silently never fire (a context action against a match that
+    /// pins window properties).
+    ActionDomain domain = ActionDomain::Window;
 };
 
 /**
@@ -117,6 +144,13 @@ public:
 
     /// True if @p action passes its descriptor's validation.
     bool validate(const RuleAction& action) const;
+
+    /// The evaluation domain @p action contributes to, or @c ActionDomain::Window
+    /// for an unregistered type (the conservative default — window evaluation
+    /// is the broader query shape, so an unknown action gets the looser
+    /// compatibility check rather than being silently flagged as a context
+    /// mismatch).
+    ActionDomain domainFor(const RuleAction& action) const;
 
     /// All registered type ids — for UI enumeration / tests.
     QStringList registeredTypes() const;

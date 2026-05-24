@@ -92,6 +92,69 @@ private Q_SLOTS:
         QVERIFY(engineModeAction(QStringLiteral("autotile")) == engineModeAction(QStringLiteral("autotile")));
         QVERIFY(engineModeAction(QStringLiteral("autotile")) != engineModeAction(QStringLiteral("snapping")));
     }
+
+    void testActionDomain_contextActions()
+    {
+        // The four context-domain actions all fill slots consumed during the
+        // screen/desktop/activity resolution pass. They must report
+        // ActionDomain::Context so the validator can flag mismatched matches.
+        const QList<QLatin1StringView> contextTypes = {
+            ActionType::SetEngineMode,
+            ActionType::SetSnappingLayout,
+            ActionType::SetTilingAlgorithm,
+            ActionType::DisableEngine,
+        };
+        for (const QLatin1StringView type : contextTypes) {
+            const auto descriptor = ActionRegistry::instance().descriptor(QString::fromLatin1(type));
+            QVERIFY2(descriptor.has_value(), type.data());
+            QCOMPARE(descriptor->domain, ActionDomain::Context);
+        }
+    }
+
+    void testActionDomain_windowActions()
+    {
+        // Window-domain actions cover the per-window evaluation pass — exclude,
+        // float, animation overrides, opacity. They run against a WindowQuery
+        // that carries both window and context fields, so any match shape is
+        // valid for them.
+        const QList<QLatin1StringView> windowTypes = {
+            ActionType::Exclude,
+            ActionType::Float,
+            ActionType::OverrideAnimationShader,
+            ActionType::OverrideAnimationTiming,
+            ActionType::OverrideAnimationCurve,
+            ActionType::SetOpacity,
+        };
+        for (const QLatin1StringView type : windowTypes) {
+            const auto descriptor = ActionRegistry::instance().descriptor(QString::fromLatin1(type));
+            QVERIFY2(descriptor.has_value(), type.data());
+            QCOMPARE(descriptor->domain, ActionDomain::Window);
+        }
+    }
+
+    void testActionDomain_unregisteredFallsBackToWindow()
+    {
+        // An unregistered action type is treated as window-domain — the
+        // conservative default so an unknown action gets the looser
+        // compatibility check rather than being incorrectly flagged.
+        RuleAction unknown;
+        unknown.type = QStringLiteral("notARealAction");
+        QCOMPARE(ActionRegistry::instance().domainFor(unknown), ActionDomain::Window);
+    }
+
+    void testActionDomain_allBuiltinsCovered()
+    {
+        // Canary — every registered built-in must be either context or window
+        // domain. The cast-back asserts the enum stayed two-valued; adding a
+        // third domain without updating this test would still pass the
+        // compiler.
+        for (const QString& type : ActionRegistry::instance().registeredTypes()) {
+            const auto descriptor = ActionRegistry::instance().descriptor(type);
+            QVERIFY(descriptor.has_value());
+            const int d = static_cast<int>(descriptor->domain);
+            QVERIFY(d == static_cast<int>(ActionDomain::Context) || d == static_cast<int>(ActionDomain::Window));
+        }
+    }
 };
 
 QTEST_MAIN(TestRuleAction)

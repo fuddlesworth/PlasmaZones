@@ -157,6 +157,15 @@ bool ActionRegistry::validate(const RuleAction& action) const
     return true;
 }
 
+ActionDomain ActionRegistry::domainFor(const RuleAction& action) const
+{
+    const auto it = m_descriptors.constFind(action.type);
+    if (it == m_descriptors.constEnd()) {
+        return ActionDomain::Window;
+    }
+    return it->domain;
+}
+
 QStringList ActionRegistry::registeredTypes() const
 {
     return m_descriptors.keys();
@@ -172,7 +181,7 @@ void ActionRegistry::registerBuiltins()
                                     [](const QJsonObject& p) {
                                         return hasNonEmptyString(p, QLatin1StringView("mode"));
                                     },
-                                    false, QStringList{QStringLiteral("mode")}});
+                                    false, QStringList{QStringLiteral("mode")}, ActionDomain::Context});
 
     // ── layout slot — both layout-shaping actions share it ──
     registerAction(ActionDescriptor{QString(ActionType::SetSnappingLayout),
@@ -182,7 +191,7 @@ void ActionRegistry::registerBuiltins()
                                     [](const QJsonObject& p) {
                                         return hasNonEmptyString(p, QLatin1StringView("layoutId"));
                                     },
-                                    false, QStringList{QStringLiteral("layoutId")}});
+                                    false, QStringList{QStringLiteral("layoutId")}, ActionDomain::Context});
     registerAction(ActionDescriptor{QString(ActionType::SetTilingAlgorithm),
                                     [](const QJsonObject&) {
                                         return QString(ActionSlot::Layout);
@@ -190,7 +199,7 @@ void ActionRegistry::registerBuiltins()
                                     [](const QJsonObject& p) {
                                         return hasNonEmptyString(p, QLatin1StringView("algorithm"));
                                     },
-                                    false, QStringList{QStringLiteral("algorithm")}});
+                                    false, QStringList{QStringLiteral("algorithm")}, ActionDomain::Context});
 
     // ── engine-enable slot ──
     // `mode` records which engine the rule disables. It must be one of the two
@@ -205,7 +214,7 @@ void ActionRegistry::registerBuiltins()
                                         const QString mode = p.value(QLatin1StringView("mode")).toString();
                                         return mode == QLatin1String("snapping") || mode == QLatin1String("autotile");
                                     },
-                                    false, QStringList{QStringLiteral("mode")}});
+                                    false, QStringList{QStringLiteral("mode")}, ActionDomain::Context});
 
     // ── manage slot — terminal. Exclude is intentionally free-form: an empty
     //    `allowedKeys` opts out of the strict-key check so a future Exclude
@@ -214,7 +223,7 @@ void ActionRegistry::registerBuiltins()
                                     [](const QJsonObject&) {
                                         return QString(ActionSlot::Manage);
                                     },
-                                    &acceptAny, true, QStringList{}});
+                                    &acceptAny, true, QStringList{}, ActionDomain::Window});
 
     // ── float slot — intentionally free-form (future float-geometry hints);
     //    empty `allowedKeys` opts out of the strict-key check. ──
@@ -222,7 +231,7 @@ void ActionRegistry::registerBuiltins()
                                     [](const QJsonObject&) {
                                         return QString(ActionSlot::Float);
                                     },
-                                    &acceptAny, false, QStringList{}});
+                                    &acceptAny, false, QStringList{}, ActionDomain::Window});
 
     // ── animation slots — event-scoped: "anim-shader:<event>" ──
     registerAction(ActionDescriptor{
@@ -237,7 +246,8 @@ void ActionRegistry::registerBuiltins()
         [](const QJsonObject& p) {
             return hasNonEmptyString(p, QLatin1StringView("event"));
         },
-        false, QStringList{QStringLiteral("event"), QStringLiteral("effectId"), QStringLiteral("params")}});
+        false, QStringList{QStringLiteral("event"), QStringLiteral("effectId"), QStringLiteral("params")},
+        ActionDomain::Window});
     registerAction(ActionDescriptor{
         QString(ActionType::OverrideAnimationTiming),
         [](const QJsonObject& p) -> QString {
@@ -250,7 +260,8 @@ void ActionRegistry::registerBuiltins()
         [](const QJsonObject& p) {
             return hasNonEmptyString(p, QLatin1StringView("event"));
         },
-        false, QStringList{QStringLiteral("event"), QStringLiteral("curve"), QStringLiteral("durationMs")}});
+        false, QStringList{QStringLiteral("event"), QStringLiteral("curve"), QStringLiteral("durationMs")},
+        ActionDomain::Window});
     // Curve override — own slot so it can be combined with a Timing-slot
     // duration override on the same event without one shadowing the other.
     registerAction(ActionDescriptor{QString(ActionType::OverrideAnimationCurve),
@@ -264,7 +275,8 @@ void ActionRegistry::registerBuiltins()
                                     [](const QJsonObject& p) {
                                         return hasNonEmptyString(p, QLatin1StringView("event"));
                                     },
-                                    false, QStringList{QStringLiteral("event"), QStringLiteral("curve")}});
+                                    false, QStringList{QStringLiteral("event"), QStringLiteral("curve")},
+                                    ActionDomain::Window});
 
     // ── opacity slot ──
     registerAction(ActionDescriptor{QString(ActionType::SetOpacity),
@@ -275,7 +287,7 @@ void ActionRegistry::registerBuiltins()
                                         const QJsonValue v = p.value(QLatin1StringView("value"));
                                         return v.isDouble() && v.toDouble() >= 0.0 && v.toDouble() <= 1.0;
                                     },
-                                    false, QStringList{QStringLiteral("value")}});
+                                    false, QStringList{QStringLiteral("value")}, ActionDomain::Window});
 }
 
 } // namespace PhosphorWindowRule

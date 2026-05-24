@@ -47,6 +47,37 @@ bool WindowRule::hasTerminalAction() const
     return false;
 }
 
+QList<ValidationIssue> WindowRule::validationIssues() const
+{
+    QList<ValidationIssue> issues;
+
+    // Compute the match's domain once — context-only iff every leaf references
+    // a context field (ScreenId / VirtualDesktop / Activity). The catch-all is
+    // context-only by this definition and so is compatible with every action.
+    const bool matchIsContextOnly = match.isContextOnly();
+
+    for (int i = 0; i < actions.size(); ++i) {
+        const RuleAction& action = actions.at(i);
+        const ActionDomain domain = ActionRegistry::instance().domainFor(action);
+        if (domain == ActionDomain::Context && !matchIsContextOnly) {
+            // The action fills a slot consumed during context resolution, but
+            // the match references a window-property field — that leaf
+            // evaluates false on the windowless context query, so the action
+            // silently never fires. Flag the pairing.
+            ValidationIssue issue;
+            issue.code = ValidationIssue::Code::ContextActionWithWindowMatch;
+            issue.actionIndex = i;
+            issue.actionType = action.type;
+            issue.message = QStringLiteral(
+                                "Action `%1` is a context-mode action but the rule's match references window-property "
+                                "fields, so the action never fires during context resolution.")
+                                .arg(action.type);
+            issues.append(issue);
+        }
+    }
+    return issues;
+}
+
 bool WindowRule::operator==(const WindowRule& other) const
 {
     return id == other.id && name == other.name && enabled == other.enabled && priority == other.priority
