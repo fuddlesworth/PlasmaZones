@@ -54,9 +54,8 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
     // FFM activates that tiled window first, sending the just-opened popup
     // straight to the background (discussion #461 item 3 follow-up).
     // Resumes naturally on the next cursor move once a tileable window is
-    // active (e.g. the user clicks one). Scoped to the same screen as the
-    // cursor so an unrelated focused window on another monitor never freezes
-    // FFM here.
+    // active. Scoped to the same screen as the cursor so an unrelated focused
+    // window on another monitor never freezes FFM here.
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
         if (!PlasmaZonesEffect::isOwnOverlayClass(active->windowClass())
             && m_effect->getWindowScreenId(active) == screenId) {

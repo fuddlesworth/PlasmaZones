@@ -562,7 +562,7 @@ public Q_SLOTS:
      *
      * Reads the current snap-side exclusion lists from m_settings, combines
      * them, and asks both engines to walk their pending-restore queues and
-     * remove any appId matching a pattern. Marks DirtyPendingRestores /
+     * remove any appId matching a pattern. Marks DirtyPendingRestores or
      * DirtyAutotilePending as appropriate so the next debounced save persists
      * the pruned state.
      *
