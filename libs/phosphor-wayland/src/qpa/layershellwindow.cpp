@@ -229,24 +229,43 @@ void LayerShellWindow::applyProperties()
 
     QWindow* qwindow = m_waylandWindow->window();
 
+    // Each block computes the field's current value from QWindow properties
+    // and pushes the matching zwlr_layer_surface_v1_set_* request ONLY when
+    // the value differs from the snapshot we last sent (or on the very first
+    // apply, when m_hasAppliedOnce is false). KWin re-emits configure events
+    // on every virtual-desktop switch; the old code re-sent the full state on
+    // every one, generating ~6 redundant protocol messages per surface per
+    // configure. Now we send nothing when nothing changed.
+
     // Anchors — mask against AnchorAll. The property may carry stray
     // bits set via direct `window->setProperty(...)` bypassing
     // LayerSurface::setAnchors, and zwlr_layer_surface.set_anchor
     // raises a protocol error (fatal disconnect) when handed flags
-    // outside the spec.
+    // outside the spec. The mask is also load-bearing for the cache:
+    // without it two QWindow property values that differ only in stray
+    // bits would hash differently here and force a redundant set_anchor.
     int anchors = qwindow->property(LayerSurfaceProps::Anchors).toInt() & static_cast<int>(LayerSurface::AnchorAll);
-    zwlr_layer_surface_v1_set_anchor(m_layerSurface, static_cast<uint32_t>(anchors));
+    if (!m_hasAppliedOnce || anchors != m_lastApplied.anchors) {
+        zwlr_layer_surface_v1_set_anchor(m_layerSurface, static_cast<uint32_t>(anchors));
+        m_lastApplied.anchors = anchors;
+    }
 
     // Layer — set_layer() requires protocol v2+; the initial layer is set at
     // creation time, but this allows changing it after show() (like setScope).
     if (m_integration && m_integration->boundVersion() >= 2) {
         int layer = qwindow->property(LayerSurfaceProps::Layer).toInt();
-        zwlr_layer_surface_v1_set_layer(m_layerSurface, static_cast<uint32_t>(layer));
+        if (!m_hasAppliedOnce || layer != m_lastApplied.layer) {
+            zwlr_layer_surface_v1_set_layer(m_layerSurface, static_cast<uint32_t>(layer));
+            m_lastApplied.layer = layer;
+        }
     }
 
     // Exclusive zone
     int exclusiveZone = qwindow->property(LayerSurfaceProps::ExclusiveZone).toInt();
-    zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, exclusiveZone);
+    if (!m_hasAppliedOnce || exclusiveZone != m_lastApplied.exclusiveZone) {
+        zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, exclusiveZone);
+        m_lastApplied.exclusiveZone = exclusiveZone;
+    }
 
     // Keyboard interactivity — on_demand (value 2) requires protocol v4+.
     // If the compositor only supports v1-v3, fall back to none (value 0) to
@@ -257,14 +276,28 @@ void LayerShellWindow::applyProperties()
                                       << "— on_demand keyboard interactivity requires v4, falling back to none";
         keyboard = 0;
     }
-    zwlr_layer_surface_v1_set_keyboard_interactivity(m_layerSurface, static_cast<uint32_t>(keyboard));
+    if (!m_hasAppliedOnce || keyboard != m_lastApplied.keyboard) {
+        zwlr_layer_surface_v1_set_keyboard_interactivity(m_layerSurface, static_cast<uint32_t>(keyboard));
+        m_lastApplied.keyboard = keyboard;
+    }
 
-    // Margins
+    // Margins — set_margin is one protocol request that carries all four
+    // values, so cache as a group: any single edge changing forces all four
+    // to re-send (which is what the protocol does anyway).
     int marginLeft = qwindow->property(LayerSurfaceProps::MarginsLeft).toInt();
     int marginTop = qwindow->property(LayerSurfaceProps::MarginsTop).toInt();
     int marginRight = qwindow->property(LayerSurfaceProps::MarginsRight).toInt();
     int marginBottom = qwindow->property(LayerSurfaceProps::MarginsBottom).toInt();
-    zwlr_layer_surface_v1_set_margin(m_layerSurface, marginTop, marginRight, marginBottom, marginLeft);
+    const bool marginsChanged = !m_hasAppliedOnce || marginLeft != m_lastApplied.marginLeft
+        || marginTop != m_lastApplied.marginTop || marginRight != m_lastApplied.marginRight
+        || marginBottom != m_lastApplied.marginBottom;
+    if (marginsChanged) {
+        zwlr_layer_surface_v1_set_margin(m_layerSurface, marginTop, marginRight, marginBottom, marginLeft);
+        m_lastApplied.marginLeft = marginLeft;
+        m_lastApplied.marginTop = marginTop;
+        m_lastApplied.marginRight = marginRight;
+        m_lastApplied.marginBottom = marginBottom;
+    }
 
     // Size — use 0 for axes anchored to both edges; clamp to avoid uint32_t wrap on negative.
     //
@@ -285,7 +318,11 @@ void LayerShellWindow::applyProperties()
         sizeForLayerShell.setHeight(desiredH);
     }
     auto [w, h] = LayerSurface::computeLayerSize(LayerSurface::Anchors::fromInt(anchors), sizeForLayerShell);
-    zwlr_layer_surface_v1_set_size(m_layerSurface, w, h);
+    if (!m_hasAppliedOnce || w != m_lastApplied.sizeW || h != m_lastApplied.sizeH) {
+        zwlr_layer_surface_v1_set_size(m_layerSurface, w, h);
+        m_lastApplied.sizeW = w;
+        m_lastApplied.sizeH = h;
+    }
 
     if (m_integration && m_integration->boundVersion() >= 5) {
         const int exclusiveEdge = qwindow->property(LayerSurfaceProps::ExclusiveEdge).toInt();
@@ -296,13 +333,26 @@ void LayerShellWindow::applyProperties()
         const bool isSingleEdge = exclusiveEdge != 0 && (exclusiveEdge & (exclusiveEdge - 1)) == 0;
         const bool isAnchored = (exclusiveEdge == 0) || ((anchors & exclusiveEdge) != 0);
         if (exclusiveEdge == 0 || (isSingleEdge && isAnchored)) {
-            zwlr_layer_surface_v1_set_exclusive_edge(m_layerSurface, static_cast<uint32_t>(exclusiveEdge));
+            // Cache flag is separate (exclusiveEdgeSent) because the v5 gate
+            // can be false on initial applies — m_hasAppliedOnce alone would
+            // miss the first valid send on a session where the v5 protocol
+            // wasn't available at construction but became valid later (the
+            // compositor doesn't actually downgrade like this, but the
+            // flag costs nothing and keeps the field's send-once invariant
+            // local to itself).
+            if (!m_lastApplied.exclusiveEdgeSent || exclusiveEdge != m_lastApplied.exclusiveEdge) {
+                zwlr_layer_surface_v1_set_exclusive_edge(m_layerSurface, static_cast<uint32_t>(exclusiveEdge));
+                m_lastApplied.exclusiveEdge = exclusiveEdge;
+                m_lastApplied.exclusiveEdgeSent = true;
+            }
         } else {
             qCWarning(lcLayerShellWindow) << "Skipping set_exclusive_edge:" << exclusiveEdge
                                           << "isn't a single anchored edge (anchors=" << anchors
                                           << ") — compositor would disconnect on protocol error";
         }
     }
+
+    m_hasAppliedOnce = true;
 }
 
 QSize LayerShellWindow::computeConfigureSize(uint32_t width, uint32_t height) const
