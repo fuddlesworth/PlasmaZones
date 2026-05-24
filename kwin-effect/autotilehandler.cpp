@@ -60,11 +60,16 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
         if (!PlasmaZonesEffect::isOwnOverlayClass(active->windowClass())
             && m_effect->getWindowScreenId(active) == screenId) {
+            // Filter first, size check second — mirrors the under-cursor
+            // guard below so the two predicates stay structurally aligned
+            // and the cheap-to-skip min-size check is only paid when the
+            // active window is otherwise tileable.
+            if (!m_effect->isTileableWindow(active) || !m_effect->shouldHandleWindow(active)) {
+                return;
+            }
             const QRectF aframe = active->frameGeometry();
-            const bool belowMinSize =
-                (m_effect->m_cachedMinWindowWidth > 0 && aframe.width() < m_effect->m_cachedMinWindowWidth)
-                || (m_effect->m_cachedMinWindowHeight > 0 && aframe.height() < m_effect->m_cachedMinWindowHeight);
-            if (!m_effect->isTileableWindow(active) || !m_effect->shouldHandleWindow(active) || belowMinSize) {
+            if ((m_effect->m_cachedMinWindowWidth > 0 && aframe.width() < m_effect->m_cachedMinWindowWidth)
+                || (m_effect->m_cachedMinWindowHeight > 0 && aframe.height() < m_effect->m_cachedMinWindowHeight)) {
                 return;
             }
         }
