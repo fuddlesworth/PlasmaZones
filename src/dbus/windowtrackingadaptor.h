@@ -566,15 +566,17 @@ public Q_SLOTS:
      * DirtyAutotilePending as appropriate so the next debounced save persists
      * the pruned state.
      *
-     * Called from:
-     *   - WTA's own constructor (after loadState — snap queues populated, autotile not yet),
-     *   - the excludedApplicationsChanged / excludedWindowClassesChanged signal handlers wired
-     *     in the constructor,
-     *   - the daemon's finalizeStartup after AutotileEngine::loadState runs, so the
-     *     autotile-side queue (deserialized into the engine inside loadState) is also pruned.
+     * Called from three sites.
+     *   1. WTA's own constructor, right after loadState. The snap queues are
+     *      populated by then but the autotile queue is not.
+     *   2. The excludedApplicationsChanged and excludedWindowClassesChanged signal
+     *      handlers wired in the constructor.
+     *   3. The daemon's finalizeStartup, after AutotileEngine::loadState runs. By
+     *      then the autotile queue has also been deserialized into the engine,
+     *      so it gets pruned too.
      *
-     * Safe to call before either engine is wired — engines that are missing
-     * simply contribute zero removals.
+     * Calling this before either engine is wired is safe. Engines that are
+     * missing contribute zero removals.
      */
     void pruneExcludedPendingRestoresFromSettings();
 

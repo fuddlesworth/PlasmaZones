@@ -475,8 +475,9 @@ public:
      *
      * Mirror of PhosphorPlacement::WindowTrackingService::pruneExcludedPendingRestores
      * for the autotile side. Patterns are compared via
-     * PhosphorIdentity::WindowId::appIdMatches — the same predicate the snap
-     * engine uses to gate runtime restores against the user's exclusion lists.
+     * PhosphorIdentity::WindowId::appIdMatches. The snap engine uses the same
+     * predicate when it gates runtime restores against the user's exclusion lists,
+     * so the disk-pruning verdict here matches what the runtime would already do.
      *
      * The existing ShouldPersistRestorePredicate filters entries by disabled
      * (screen, desktop, activity) context but is blind to the exclusion-list
