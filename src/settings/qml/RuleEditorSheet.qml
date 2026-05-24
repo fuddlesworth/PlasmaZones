@@ -29,13 +29,14 @@ Kirigami.OverlaySheet {
     /// True when editing an existing rule (vs creating a new one).
     property bool editing: false
     /// Working copy of the rule being edited. Set via `openFor`.
-    property var _workingRule: ({})
+    property var _workingRule: ({
+    })
     /// Stable empty-match fallback — a single allocation, so binding
     /// MatchExpressionEditor.node to it does not churn the node identity on
     /// every binding evaluation.
     readonly property var _emptyMatch: ({
-            "all": []
-        })
+        "all": []
+    })
     /// The controller's authoring metadata, cached once. `actionTypes()` and
     /// `matchFields()` are Q_INVOKABLEs that allocate a fresh QVariantList on
     /// every call — binding them directly would re-invoke (and churn the
@@ -87,11 +88,13 @@ Kirigami.OverlaySheet {
             var degenerate = node.any !== undefined ? node.any : node.none;
             if (!degenerate || degenerate.length === 0)
                 return false;
+
         }
         var children = node.all || node.any || node.none || [];
         for (var i = 0; i < children.length; ++i) {
             if (!sheet._matchHasFilledLeaves(children[i]))
                 return false;
+
         }
         return true;
     }
@@ -121,14 +124,46 @@ Kirigami.OverlaySheet {
                 onToggled: sheet._patch("enabled", checked)
             }
 
-            SpinBox {
+            // Priority + band-name hint. Bare integers like "610" are
+            // meaningless without the band scheme; the inline label maps the
+            // current value back to its semantic band so users don't need to
+            // memorise the cutoffs. Bands defined in
+            // `windowrulecontroller.cpp` (`kAnimationBandBase = 100`,
+            // `kApplicationBandBase = 200`, `kContextBandBase = 300`,
+            // `kAdvancedBandBase = 500`).
+            RowLayout {
+                id: priorityRow
+
+                readonly property int _priority: sheet._workingRule.priority || 0
+
                 Kirigami.FormData.label: i18n("Priority:")
-                from: 0
-                to: 100000
-                value: sheet._workingRule.priority || 0
-                Accessible.name: i18n("Rule priority — higher rules are evaluated first")
-                onValueModified: sheet._patch("priority", value)
+                spacing: Kirigami.Units.largeSpacing
+
+                SpinBox {
+                    Accessible.name: i18n("Rule priority — higher rules are evaluated first")
+                    from: 0
+                    to: 100000
+                    value: priorityRow._priority
+                    onValueModified: sheet._patch("priority", value)
+                }
+
+                Label {
+                    Layout.alignment: Qt.AlignVCenter
+                    ToolTip.delay: 500
+                    ToolTip.text: i18n("Priority bands — 100: Animation, 200: Application, 300: Context, 500: Advanced. Higher numbers win within a band.")
+                    ToolTip.visible: bandTip.hovered
+                    font.italic: true
+                    opacity: 0.65
+                    text: priorityRow._priority >= 500 ? i18n("Advanced") : priorityRow._priority >= 300 ? i18n("Context") : priorityRow._priority >= 200 ? i18n("Application") : priorityRow._priority >= 100 ? i18n("Animation") : i18n("Custom")
+
+                    HoverHandler {
+                        id: bandTip
+                    }
+
+                }
+
             }
+
         }
 
         Kirigami.Separator {
@@ -151,7 +186,7 @@ Kirigami.OverlaySheet {
             matchFieldOptions: sheet._matchFieldOptions
             depth: 0
             removable: false
-            onNodeEdited: function (updated) {
+            onNodeEdited: function(updated) {
                 sheet._patch("match", updated);
             }
         }
@@ -166,7 +201,7 @@ Kirigami.OverlaySheet {
             actions: sheet._workingRule.actions || []
             actionTypeOptions: sheet._actionTypeOptions
             appSettings: sheet.appSettings
-            onActionsEdited: function (updated) {
+            onActionsEdited: function(updated) {
                 sheet._patch("actions", updated);
             }
         }
@@ -200,6 +235,7 @@ Kirigami.OverlaySheet {
             visible: !sheet._canSave
             text: !sheet._workingRule.actions || sheet._workingRule.actions.length === 0 ? i18n("Add at least one action before saving.") : i18n("Every condition needs a value before this rule can be saved.")
         }
+
     }
 
     footer: RowLayout {
@@ -225,5 +261,7 @@ Kirigami.OverlaySheet {
                 sheet.close();
             }
         }
+
     }
+
 }
