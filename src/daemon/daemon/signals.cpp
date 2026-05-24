@@ -714,6 +714,16 @@ void Daemon::finalizeStartup()
         m_autotileEngine->loadState();
     }
 
+    // Now that AutotileEngine::loadState has deserialized m_pendingAutotileRestores,
+    // re-run the exclusion-list prune so any persisted entries for apps the user has
+    // since excluded are dropped here too. WTA's constructor already pruned the snap
+    // side. This call also touches the autotile queues that didn't exist at
+    // constructor time. The same prune is invoked live on excludedApplicationsChanged
+    // or excludedWindowClassesChanged via the WTA constructor's signal hookups.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->pruneExcludedPendingRestoresFromSettings();
+    }
+
     // Signal that daemon is fully initialized and ready for queries
     Q_EMIT m_layoutAdaptor->daemonReady();
 
