@@ -71,205 +71,19 @@ ColumnLayout {
     // var modelData` on the inner control wouldn't be initialised — Loader
     // doesn't auto-forward its own modelData into the loaded item's scope.
     property Component _stringParamEditor
-
-    _stringParamEditor: Component {
-        TextField {
-            readonly property var _param: parent.modelData
-
-            text: row.action[_param.key] !== undefined ? String(row.action[_param.key]) : ""
-            placeholderText: _param.label
-            Accessible.name: _param.label
-            onEditingFinished: row.actionEdited(row._withParam(_param.key, text))
-        }
-
-    }
-
     property Component _numberParamEditor
-
-    _numberParamEditor: Component {
-        SpinBox {
-            readonly property var _param: parent.modelData
-            // "percent" stores `display * scale`; "number" stores the raw value.
-            readonly property real _scale: _param.scale !== undefined ? _param.scale : 1
-            readonly property real _stored: row.action[_param.key] !== undefined ? row.action[_param.key] : 0
-
-            from: _param.min !== undefined ? _param.min : 0
-            to: _param.max !== undefined ? _param.max : 999999
-            value: Math.round(_stored / _scale)
-            Accessible.name: _param.label
-            onValueModified: row.actionEdited(row._withParam(_param.key, value * _scale))
-        }
-
-    }
-
     property Component _enumParamEditor
-
-    _enumParamEditor: Component {
-        WideComboBox {
-            readonly property var _param: parent.modelData
-            // Enum options carry `{value, label}` pairs — `value` is the wire
-            // token stored in the rule, `label` is the properly-cased UI
-            // string. `textRole` / `valueRole` make the ComboBox display the
-            // label while `currentValue` reads back the underlying wire token.
-            readonly property var _options: _param.options || []
-
-            model: _options
-            textRole: "label"
-            valueRole: "value"
-            currentIndex: {
-                var target = row.action[_param.key];
-                for (var i = 0; i < _options.length; ++i) {
-                    if (_options[i].value === target)
-                        return i;
-
-                }
-                return -1;
-            }
-            Accessible.name: _param.label
-            onActivated: function(index) {
-                row.actionEdited(row._withParam(_param.key, currentValue));
-            }
-        }
-
-    }
-
     // Flat ComboBox picker — the rich LayoutComboBox uses a `T.Popup` that
     // can't be made to stack above Kirigami's OverlaySheet (its own modal
     // overlay out-z-orders the application Overlay) and `Popup.Window`
     // triggers the sheet's focus-loss auto-close. The basic Qt ComboBox
     // popup escapes the sheet correctly via the default reparenting path.
     property Component _snappingLayoutEditor
-
-    _snappingLayoutEditor: Component {
-        WideComboBox {
-            readonly property var _param: parent.modelData
-            // Snapping layouts only — filter out the autotile entries.
-            readonly property var _layouts: {
-                var all = row.appSettings ? row.appSettings.layouts : [];
-                var out = [];
-                for (var i = 0; i < all.length; ++i) {
-                    if (!all[i].isAutotile)
-                        out.push(all[i]);
-
-                }
-                return out;
-            }
-
-            model: _layouts
-            textRole: "displayName"
-            valueRole: "id"
-            currentIndex: {
-                var target = row.action[_param.key];
-                for (var i = 0; i < _layouts.length; ++i) {
-                    if (_layouts[i].id === target)
-                        return i;
-
-                }
-                return -1;
-            }
-            Accessible.name: _param.label
-            onActivated: function(index) {
-                row.actionEdited(row._withParam(_param.key, currentValue));
-            }
-        }
-
-    }
-
     property Component _tilingAlgorithmEditor
-
-    _tilingAlgorithmEditor: Component {
-        WideComboBox {
-            readonly property var _param: parent.modelData
-            // Tiling algorithms are the autotile entries in the layouts list;
-            // their `id` is the algorithm token (`bsp`, `grid`, …), not a UUID.
-            readonly property var _algorithms: {
-                var all = row.appSettings ? row.appSettings.layouts : [];
-                var out = [];
-                for (var i = 0; i < all.length; ++i) {
-                    if (all[i].isAutotile)
-                        out.push(all[i]);
-
-                }
-                return out;
-            }
-
-            model: _algorithms
-            textRole: "displayName"
-            valueRole: "id"
-            currentIndex: {
-                var target = row.action[_param.key];
-                for (var i = 0; i < _algorithms.length; ++i) {
-                    if (_algorithms[i].id === target)
-                        return i;
-
-                }
-                return -1;
-            }
-            Accessible.name: _param.label
-            onActivated: function(index) {
-                row.actionEdited(row._withParam(_param.key, currentValue));
-            }
-        }
-
-    }
-
     // Animation-event picker — flattens `eventSections()` from the animations
     // controller into a single dropdown of leaf paths (skipping category-only
     // rows). The wire value remains the dotted path (`window.open`).
     property Component _animationEventEditor
-
-    _animationEventEditor: Component {
-        WideComboBox {
-            readonly property var _param: parent.modelData
-            readonly property var _events: {
-                var controller = row.appSettings ? row.appSettings.animationsController : null;
-                if (!controller)
-                    return [];
-
-                var sections = controller.eventSections() || [];
-                var out = [];
-                for (var s = 0; s < sections.length; ++s) {
-                    var section = sections[s];
-                    var paths = section.paths || [];
-                    for (var p = 0; p < paths.length; ++p) {
-                        var entry = paths[p];
-                        // Skip category-only rows — leaf events are the only
-                        // ones a rule can pin to.
-                        if (entry.isCategory)
-                            continue;
-
-                        out.push({
-                            "value": entry.path,
-                            "label": section.label + " · " + entry.label
-                        });
-                    }
-                }
-                return out;
-            }
-
-            model: _events
-            textRole: "label"
-            valueRole: "value"
-            currentIndex: {
-                var target = row.action[_param.key];
-                for (var i = 0; i < _events.length; ++i) {
-                    if (_events[i].value === target)
-                        return i;
-
-                }
-                return -1;
-            }
-            // Fall back to the raw event path so a custom (non-built-in) path
-            // stays visible rather than collapsing the picker to a blank.
-            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose an event…"))
-            Accessible.name: _param.label
-            onActivated: function(index) {
-                row.actionEdited(row._withParam(_param.key, currentValue));
-            }
-        }
-
-    }
-
     // Curve picker — wraps `CurveEditorDialog`, the same dialog the per-event
     // animation card uses. The stored wire value is a single `curve` string:
     //   - named easing (e.g. `out-cubic`)
@@ -278,101 +92,10 @@ ColumnLayout {
     // Parse decides which mode to seed the dialog with; Apply encodes the
     // dialog's working state back into one of those forms.
     property Component _curveEditorEditor
-
-    _curveEditorEditor: Component {
-        Item {
-            id: curveSlot
-
-            readonly property var _param: parent.modelData
-            readonly property string _stored: row.action[_param.key] !== undefined ? String(row.action[_param.key]) : ""
-            readonly property bool _isSpring: _stored.indexOf("spring:") === 0
-            readonly property real _springOmega: {
-                if (!_isSpring)
-                    return CurvePresets.defaultSpringOmega;
-
-                var parts = _stored.substring(7).split(",");
-                var w = parseFloat(parts[0]);
-                return isFinite(w) ? w : CurvePresets.defaultSpringOmega;
-            }
-            readonly property real _springZeta: {
-                if (!_isSpring)
-                    return CurvePresets.defaultSpringZeta;
-
-                var parts = _stored.substring(7).split(",");
-                var z = parseFloat(parts[1]);
-                return isFinite(z) ? z : CurvePresets.defaultSpringZeta;
-            }
-            readonly property string _easingCurve: _isSpring ? CurvePresets.defaultEasingCurve : (_stored || CurvePresets.defaultEasingCurve)
-            readonly property string _displayName: _isSpring ? i18n("Spring (%1, %2)", _springOmega.toFixed(2), _springZeta.toFixed(2)) : CurvePresets.curveDisplayName(_easingCurve)
-
-            implicitHeight: curveButton.implicitHeight
-            implicitWidth: curveButton.implicitWidth
-
-            Button {
-                id: curveButton
-
-                anchors.fill: parent
-                text: curveSlot._displayName
-                Accessible.name: curveSlot._param.label
-                onClicked: curveDialog.open()
-            }
-
-            CurveEditorDialog {
-                id: curveDialog
-
-                parent: curveSlot.Window.window ? curveSlot.Window.window.contentItem : curveSlot
-                eventLabel: row.action.event || ""
-                timingMode: curveSlot._isSpring ? CurvePresets.timingModeSpring : CurvePresets.timingModeEasing
-                easingCurve: curveSlot._easingCurve
-                springOmega: curveSlot._springOmega
-                springZeta: curveSlot._springZeta
-                onCurveApplied: function(curve) {
-                    row.actionEdited(row._withParam(curveSlot._param.key, curve));
-                }
-                onSpringApplied: function(omega, zeta) {
-                    var encoded = "spring:" + omega.toFixed(2) + "," + zeta.toFixed(2);
-                    row.actionEdited(row._withParam(curveSlot._param.key, encoded));
-                }
-            }
-
-        }
-
-    }
-
     // Shader-effect picker — `availableShaderEffects()` returns rows with
     // `{id, name, …}`. Wire value is the effect id; the dropdown shows the
     // friendly name.
     property Component _shaderEffectEditor
-
-    _shaderEffectEditor: Component {
-        WideComboBox {
-            readonly property var _param: parent.modelData
-            readonly property var _effects: {
-                var controller = row.appSettings ? row.appSettings.animationsController : null;
-                return controller ? controller.availableShaderEffects() : [];
-            }
-
-            model: _effects
-            textRole: "name"
-            valueRole: "id"
-            currentIndex: {
-                var target = row.action[_param.key];
-                for (var i = 0; i < _effects.length; ++i) {
-                    if (_effects[i].id === target)
-                        return i;
-
-                }
-                return -1;
-            }
-            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose a shader…"))
-            Accessible.name: _param.label
-            onActivated: function(index) {
-                row.actionEdited(row._withParam(_param.key, currentValue));
-            }
-        }
-
-    }
-
     // Inline shader-uniform editor for OverrideAnimationShader actions. The
     // action stores a nested `params` object (the shader uniform values);
     // changing any value rewrites the whole object. Locks live on the row
@@ -381,48 +104,6 @@ ColumnLayout {
     // writes it back to `action.params`. Image picking is disabled because
     // shader-image uniforms aren't part of the rule wire format here.
     property Component _shaderParamsEditor
-
-    _shaderParamsEditor: Component {
-        PZCommon.ShaderParameterEditor {
-            id: paramEditor
-
-            parameters: row._shaderParamSchema
-            currentValues: row.action.params || row._emptyShaderParams
-            lockedParams: row._shaderParamLocks
-            enableLocking: true
-            enableRandomize: true
-            enableGroups: true
-            enableImage: false
-            compact: true
-            onValueChanged: function(paramId, value) {
-                // Clone the current param map and stamp the new value so the
-                // binding re-evaluates (mutating in place wouldn't trigger).
-                var next = ({
-                });
-                var existing = row.action.params || ({
-                });
-                for (var k in existing) next[k] = existing[k]
-                next[paramId] = value;
-                row.actionEdited(row._withParam("params", next));
-            }
-            onLockToggled: function(paramId, locked) {
-                // Mirror AnimationProfileEditor — the editor's helper computes
-                // the post-toggle map so the same merge logic lives in one
-                // place. Locks are session state, not persisted to the rule.
-                row._shaderParamLocks = paramEditor.lockedAfterToggle(paramId, locked);
-            }
-            onLockAllRequested: function(lock) {
-                row._shaderParamLocks = paramEditor.lockedAfterAllToggle(lock);
-            }
-            onRandomizeRequested: {
-                // computeRandomized respects locks: locked params keep their
-                // current value, the rest are rolled per their schema range.
-                var rolled = paramEditor.computeRandomized();
-                row.actionEdited(row._withParam("params", rolled));
-            }
-        }
-
-    }
 
     // `actionEdited`, not `actionChanged`, because `property var action`
     // auto-generates `actionChanged()` and QML rejects the duplicate signal.
@@ -461,6 +142,7 @@ ColumnLayout {
     }
 
     spacing: Kirigami.Units.smallSpacing
+
     // Reset session locks when the user switches the effect. Tracking via
     // a Connections handler so the reset fires every time the effectId
     // transitions (not just on the initial set).
@@ -470,7 +152,7 @@ ColumnLayout {
             // is still the previous state until the parent re-feeds us.
             if (row.action.type === "overrideAnimationShader" && updated && updated.effectId !== row.action.effectId)
                 row._shaderParamLocks = ({
-                });
+            });
 
         }
 
@@ -575,6 +257,317 @@ ColumnLayout {
         active: row.action.type === "overrideAnimationShader" && row._shaderParamSchema.length > 0
         visible: active
         sourceComponent: row._shaderParamsEditor
+    }
+
+    _stringParamEditor: Component {
+        TextField {
+            readonly property var _param: parent.modelData
+
+            text: row.action[_param.key] !== undefined ? String(row.action[_param.key]) : ""
+            placeholderText: _param.label
+            Accessible.name: _param.label
+            onEditingFinished: row.actionEdited(row._withParam(_param.key, text))
+        }
+
+    }
+
+    _numberParamEditor: Component {
+        SpinBox {
+            readonly property var _param: parent.modelData
+            // "percent" stores `display * scale`; "number" stores the raw value.
+            readonly property real _scale: _param.scale !== undefined ? _param.scale : 1
+            readonly property real _stored: row.action[_param.key] !== undefined ? row.action[_param.key] : 0
+
+            from: _param.min !== undefined ? _param.min : 0
+            to: _param.max !== undefined ? _param.max : 999999
+            value: Math.round(_stored / _scale)
+            Accessible.name: _param.label
+            onValueModified: row.actionEdited(row._withParam(_param.key, value * _scale))
+        }
+
+    }
+
+    _enumParamEditor: Component {
+        WideComboBox {
+            readonly property var _param: parent.modelData
+            // Enum options carry `{value, label}` pairs — `value` is the wire
+            // token stored in the rule, `label` is the properly-cased UI
+            // string. `textRole` / `valueRole` make the ComboBox display the
+            // label while `currentValue` reads back the underlying wire token.
+            readonly property var _options: _param.options || []
+
+            model: _options
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = row.action[_param.key];
+                for (var i = 0; i < _options.length; ++i) {
+                    if (_options[i].value === target)
+                        return i;
+
+                }
+                return -1;
+            }
+            Accessible.name: _param.label
+            onActivated: function(index) {
+                row.actionEdited(row._withParam(_param.key, currentValue));
+            }
+        }
+
+    }
+
+    _snappingLayoutEditor: Component {
+        WideComboBox {
+            readonly property var _param: parent.modelData
+            // Snapping layouts only — filter out the autotile entries.
+            readonly property var _layouts: {
+                var all = row.appSettings ? row.appSettings.layouts : [];
+                var out = [];
+                for (var i = 0; i < all.length; ++i) {
+                    if (!all[i].isAutotile)
+                        out.push(all[i]);
+
+                }
+                return out;
+            }
+
+            model: _layouts
+            textRole: "displayName"
+            valueRole: "id"
+            currentIndex: {
+                var target = row.action[_param.key];
+                for (var i = 0; i < _layouts.length; ++i) {
+                    if (_layouts[i].id === target)
+                        return i;
+
+                }
+                return -1;
+            }
+            Accessible.name: _param.label
+            onActivated: function(index) {
+                row.actionEdited(row._withParam(_param.key, currentValue));
+            }
+        }
+
+    }
+
+    _tilingAlgorithmEditor: Component {
+        WideComboBox {
+            readonly property var _param: parent.modelData
+            // Tiling algorithms are the autotile entries in the layouts list;
+            // their `id` is the algorithm token (`bsp`, `grid`, …), not a UUID.
+            readonly property var _algorithms: {
+                var all = row.appSettings ? row.appSettings.layouts : [];
+                var out = [];
+                for (var i = 0; i < all.length; ++i) {
+                    if (all[i].isAutotile)
+                        out.push(all[i]);
+
+                }
+                return out;
+            }
+
+            model: _algorithms
+            textRole: "displayName"
+            valueRole: "id"
+            currentIndex: {
+                var target = row.action[_param.key];
+                for (var i = 0; i < _algorithms.length; ++i) {
+                    if (_algorithms[i].id === target)
+                        return i;
+
+                }
+                return -1;
+            }
+            Accessible.name: _param.label
+            onActivated: function(index) {
+                row.actionEdited(row._withParam(_param.key, currentValue));
+            }
+        }
+
+    }
+
+    _animationEventEditor: Component {
+        WideComboBox {
+            readonly property var _param: parent.modelData
+            readonly property var _events: {
+                var controller = row.appSettings ? row.appSettings.animationsController : null;
+                if (!controller)
+                    return [];
+
+                var sections = controller.eventSections() || [];
+                var out = [];
+                for (var s = 0; s < sections.length; ++s) {
+                    var section = sections[s];
+                    var paths = section.paths || [];
+                    for (var p = 0; p < paths.length; ++p) {
+                        var entry = paths[p];
+                        // Skip category-only rows — leaf events are the only
+                        // ones a rule can pin to.
+                        if (entry.isCategory)
+                            continue;
+
+                        out.push({
+                            "value": entry.path,
+                            "label": section.label + " · " + entry.label
+                        });
+                    }
+                }
+                return out;
+            }
+
+            model: _events
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = row.action[_param.key];
+                for (var i = 0; i < _events.length; ++i) {
+                    if (_events[i].value === target)
+                        return i;
+
+                }
+                return -1;
+            }
+            // Fall back to the raw event path so a custom (non-built-in) path
+            // stays visible rather than collapsing the picker to a blank.
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose an event…"))
+            Accessible.name: _param.label
+            onActivated: function(index) {
+                row.actionEdited(row._withParam(_param.key, currentValue));
+            }
+        }
+
+    }
+
+    _curveEditorEditor: Component {
+        Item {
+            id: curveSlot
+
+            readonly property var _param: parent.modelData
+            readonly property string _stored: row.action[_param.key] !== undefined ? String(row.action[_param.key]) : ""
+            readonly property bool _isSpring: _stored.indexOf("spring:") === 0
+            readonly property real _springOmega: {
+                if (!_isSpring)
+                    return CurvePresets.defaultSpringOmega;
+
+                var parts = _stored.substring(7).split(",");
+                var w = parseFloat(parts[0]);
+                return isFinite(w) ? w : CurvePresets.defaultSpringOmega;
+            }
+            readonly property real _springZeta: {
+                if (!_isSpring)
+                    return CurvePresets.defaultSpringZeta;
+
+                var parts = _stored.substring(7).split(",");
+                var z = parseFloat(parts[1]);
+                return isFinite(z) ? z : CurvePresets.defaultSpringZeta;
+            }
+            readonly property string _easingCurve: _isSpring ? CurvePresets.defaultEasingCurve : (_stored || CurvePresets.defaultEasingCurve)
+            readonly property string _displayName: _isSpring ? i18n("Spring (%1, %2)", _springOmega.toFixed(2), _springZeta.toFixed(2)) : CurvePresets.curveDisplayName(_easingCurve)
+
+            implicitHeight: curveButton.implicitHeight
+            implicitWidth: curveButton.implicitWidth
+
+            Button {
+                id: curveButton
+
+                anchors.fill: parent
+                text: curveSlot._displayName
+                Accessible.name: curveSlot._param.label
+                onClicked: curveDialog.open()
+            }
+
+            CurveEditorDialog {
+                id: curveDialog
+
+                parent: curveSlot.Window.window ? curveSlot.Window.window.contentItem : curveSlot
+                eventLabel: row.action.event || ""
+                timingMode: curveSlot._isSpring ? CurvePresets.timingModeSpring : CurvePresets.timingModeEasing
+                easingCurve: curveSlot._easingCurve
+                springOmega: curveSlot._springOmega
+                springZeta: curveSlot._springZeta
+                onCurveApplied: function(curve) {
+                    row.actionEdited(row._withParam(curveSlot._param.key, curve));
+                }
+                onSpringApplied: function(omega, zeta) {
+                    var encoded = "spring:" + omega.toFixed(2) + "," + zeta.toFixed(2);
+                    row.actionEdited(row._withParam(curveSlot._param.key, encoded));
+                }
+            }
+
+        }
+
+    }
+
+    _shaderEffectEditor: Component {
+        WideComboBox {
+            readonly property var _param: parent.modelData
+            readonly property var _effects: {
+                var controller = row.appSettings ? row.appSettings.animationsController : null;
+                return controller ? controller.availableShaderEffects() : [];
+            }
+
+            model: _effects
+            textRole: "name"
+            valueRole: "id"
+            currentIndex: {
+                var target = row.action[_param.key];
+                for (var i = 0; i < _effects.length; ++i) {
+                    if (_effects[i].id === target)
+                        return i;
+
+                }
+                return -1;
+            }
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose a shader…"))
+            Accessible.name: _param.label
+            onActivated: function(index) {
+                row.actionEdited(row._withParam(_param.key, currentValue));
+            }
+        }
+
+    }
+
+    _shaderParamsEditor: Component {
+        PZCommon.ShaderParameterEditor {
+            id: paramEditor
+
+            parameters: row._shaderParamSchema
+            currentValues: row.action.params || row._emptyShaderParams
+            lockedParams: row._shaderParamLocks
+            enableLocking: true
+            enableRandomize: true
+            enableGroups: true
+            enableImage: false
+            compact: true
+            onValueChanged: function(paramId, value) {
+                // Clone the current param map and stamp the new value so the
+                // binding re-evaluates (mutating in place wouldn't trigger).
+                var next = ({
+                });
+                var existing = row.action.params || ({
+                });
+                for (var k in existing) next[k] = existing[k]
+                next[paramId] = value;
+                row.actionEdited(row._withParam("params", next));
+            }
+            onLockToggled: function(paramId, locked) {
+                // Mirror AnimationProfileEditor — the editor's helper computes
+                // the post-toggle map so the same merge logic lives in one
+                // place. Locks are session state, not persisted to the rule.
+                row._shaderParamLocks = paramEditor.lockedAfterToggle(paramId, locked);
+            }
+            onLockAllRequested: function(lock) {
+                row._shaderParamLocks = paramEditor.lockedAfterAllToggle(lock);
+            }
+            onRandomizeRequested: {
+                // computeRandomized respects locks: locked params keep their
+                // current value, the rest are rolled per their schema range.
+                var rolled = paramEditor.computeRandomized();
+                row.actionEdited(row._withParam("params", rolled));
+            }
+        }
+
     }
 
 }
