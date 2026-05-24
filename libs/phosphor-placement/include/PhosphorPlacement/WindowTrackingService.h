@@ -479,6 +479,34 @@ public:
      */
     bool consumePendingAssignment(const QString& windowId) override;
 
+    /**
+     * @brief Drop pending-restore queues whose appId matches any exclusion
+     *        pattern.
+     *
+     * The snap engine already refuses to honor a pending restore for an
+     * excluded app at runtime (see resolveWindowRestore in
+     * phosphor-snap-engine/lifecycle.cpp), so the entries are functionally
+     * dead. They still live on disk in PendingRestoreQueues until the next
+     * save cycle, generating one "pending snap:" log line per entry at every
+     * daemon startup and bloating session state with values that can never
+     * be replayed. This method walks the queues, removes appIds that match
+     * any pattern via PhosphorIdentity::WindowId::appIdMatches (the same
+     * predicate the engine uses), and marks DirtyPendingRestores when any
+     * removal happened so the next debounced save persists the pruned set.
+     *
+     * Called from the daemon adaptor at startup (after loadState) and on
+     * every excludedApplicationsChanged / excludedWindowClassesChanged
+     * signal, so freshly excluded apps don't strand their old queues.
+     *
+     * @param exclusionPatterns combined list of excludedApplications and
+     *                          excludedWindowClasses entries; empty
+     *                          patterns and an empty list are no-ops.
+     * @return number of appId entries fully removed (the queue may have
+     *         contained multiple PendingRestores for one appId; one removal
+     *         counts once, mirroring m_pendingRestoreQueues' QHash shape).
+     */
+    int pruneExcludedPendingRestores(const QStringList& exclusionPatterns);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation Helpers
     // ═══════════════════════════════════════════════════════════════════════════

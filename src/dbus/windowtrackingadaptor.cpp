@@ -167,6 +167,20 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // Load persisted window tracking state from previous session
     loadState();
 
+    // Prune any pending-restore queues for appIds that are now on the user's
+    // exclusion list. Snap-engine's resolveWindowRestore already refuses to
+    // honor them at runtime, but they live on disk until pruned and spam one
+    // "pending snap:" log line per entry at every startup. One-shot at boot
+    // catches entries authored before the user added the class to exclusions;
+    // the signal hookups cover live additions for the running session. The
+    // autotile-side prune happens again from the daemon's finalizeStartup
+    // after AutotileEngine::loadState populates m_pendingAutotileRestores.
+    pruneExcludedPendingRestoresFromSettings();
+    connect(m_settings, &ISettings::excludedApplicationsChanged, this,
+            &WindowTrackingAdaptor::pruneExcludedPendingRestoresFromSettings);
+    connect(m_settings, &ISettings::excludedWindowClassesChanged, this,
+            &WindowTrackingAdaptor::pruneExcludedPendingRestoresFromSettings);
+
     // If we have pending restores but missed activeLayoutChanged (layout was set before we
     // connected), set the flag so tryEmitPendingRestoresAvailable will emit when panel
     // geometry is ready. Fixes daemon restart: windows that were snapped before stop
@@ -223,6 +237,40 @@ void WindowTrackingAdaptor::setTilingPendingRestoreDelegates(std::function<QJson
 {
     m_serializePendingRestoresFn = std::move(serializeFn);
     m_deserializePendingRestoresFn = std::move(deserializeFn);
+}
+
+void WindowTrackingAdaptor::pruneExcludedPendingRestoresFromSettings()
+{
+    if (!m_settings) {
+        return;
+    }
+    QStringList patterns = m_settings->excludedApplications();
+    patterns += m_settings->excludedWindowClasses();
+    if (patterns.isEmpty()) {
+        return;
+    }
+
+    int snapRemoved = 0;
+    if (m_service) {
+        snapRemoved = m_service->pruneExcludedPendingRestores(patterns);
+    }
+
+    int autotileRemoved = 0;
+    if (auto* autotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.data())) {
+        autotileRemoved = autotile->pruneExcludedPendingRestores(patterns);
+        // The engine is settings-agnostic and does NOT mark dirty itself —
+        // flip the autotile-pending bit on WTS so the next debounced save
+        // rewrites AutotilePendingRestores. Mirror of what
+        // pruneExcludedPendingRestores does internally on the snap side.
+        if (autotileRemoved > 0 && m_service) {
+            m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyAutotilePending);
+        }
+    }
+
+    if (snapRemoved > 0 || autotileRemoved > 0) {
+        qCInfo(lcDbusWindow) << "Pruned pending-restore queues for excluded apps — snap:" << snapRemoved
+                             << "autotile:" << autotileRemoved;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

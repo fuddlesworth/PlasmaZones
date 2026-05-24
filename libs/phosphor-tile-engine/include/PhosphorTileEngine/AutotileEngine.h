@@ -471,6 +471,32 @@ public:
     void deserializePendingRestores(const QJsonObject& obj) override;
 
     /**
+     * @brief Drop pending-restore queues whose appId matches any exclusion pattern.
+     *
+     * Mirror of PhosphorPlacement::WindowTrackingService::pruneExcludedPendingRestores
+     * for the autotile side. Patterns are compared via
+     * PhosphorIdentity::WindowId::appIdMatches — the same predicate the snap
+     * engine uses to gate runtime restores against the user's exclusion lists.
+     *
+     * The existing ShouldPersistRestorePredicate filters entries by disabled
+     * (screen, desktop, activity) context but is blind to the exclusion-list
+     * axis, so entries authored before the user excluded an app remain on disk
+     * and bloat AutotilePendingRestores until the next save with this method
+     * called in between.
+     *
+     * Settings-agnostic by design (LGPL boundary): the engine takes plain
+     * patterns and does NOT mark dirty. The WTA caller wraps this and calls
+     * service()->markDirty(DirtyAutotilePending) when the return value is > 0
+     * so the next debounced save persists the prune.
+     *
+     * @param exclusionPatterns combined list of excludedApplications and
+     *                          excludedWindowClasses entries; empty patterns
+     *                          are skipped, an empty list is a no-op.
+     * @return number of appId entries fully removed.
+     */
+    int pruneExcludedPendingRestores(const QStringList& exclusionPatterns);
+
+    /**
      * @brief Predicate consulted before persisting or honoring a pending restore.
      *
      * Returns true to keep the entry, false to drop it. Mirrors the snap-side

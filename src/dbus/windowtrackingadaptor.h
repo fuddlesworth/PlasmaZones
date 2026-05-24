@@ -558,6 +558,27 @@ public Q_SLOTS:
     void loadState();
 
     /**
+     * @brief Drop pending-restore queues (snap + autotile) for excluded appIds.
+     *
+     * Reads the current snap-side exclusion lists from m_settings, combines
+     * them, and asks both engines to walk their pending-restore queues and
+     * remove any appId matching a pattern. Marks DirtyPendingRestores /
+     * DirtyAutotilePending as appropriate so the next debounced save persists
+     * the pruned state.
+     *
+     * Called from:
+     *   - WTA's own constructor (after loadState — snap queues populated, autotile not yet),
+     *   - the excludedApplicationsChanged / excludedWindowClassesChanged signal handlers wired
+     *     in the constructor,
+     *   - the daemon's finalizeStartup after AutotileEngine::loadState runs, so the
+     *     autotile-side queue (deserialized into the engine inside loadState) is also pruned.
+     *
+     * Safe to call before either engine is wired — engines that are missing
+     * simply contribute zero removals.
+     */
+    void pruneExcludedPendingRestoresFromSettings();
+
+    /**
      * @brief Emit reapplyWindowGeometriesRequested (called by daemon after geometry settles)
      *
      * Not a D-Bus method; used internally so the daemon timer can trigger the signal.
