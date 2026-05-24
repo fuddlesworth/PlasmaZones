@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
@@ -26,6 +27,14 @@ Kirigami.OverlaySheet {
     // directly on ColumnLayout is silently overwritten — and any spacer
     // trick that re-introduces an implicit width via a child re-enters
     // the recompute loop together with the wrap-text labels below.
+    // ScrollView is the contentItem: gives the editor its own scrollbar so a
+    // tall rule (many conditions / actions) doesn't depend on the
+    // OverlaySheet's internal flickable, which would otherwise clip past the
+    // viewport on a small window. The previous Item wrapper just declared an
+    // `implicitHeight: column.implicitHeight` but had no scroll mechanism of
+    // its own, so when the sheet capped contentItem.height below the column's
+    // implicitHeight the column visually overflowed and the user couldn't
+    // reach the bottom rows ("Add action", etc.).
 
     id: sheet
 
@@ -123,15 +132,25 @@ Kirigami.OverlaySheet {
 
     title: sheet.editing ? i18n("Edit Window Rule") : i18n("New Window Rule")
 
-    // The outer Item's `implicitWidth` is constant (36 gu), and its
-    // `implicitHeight` tracks the column. The column anchors L/R to the
-    // Item so its width is the fixed 36 gu, and its height is whatever
-    // the children sum to — a clean acyclic chain.
-    Item {
+    // The 36 gu implicitWidth still establishes the editor's minimum width;
+    // the column inside binds its width to `availableWidth` (ScrollView's
+    // viewport width minus the scrollbar) so wrap-text widgets compute their
+    // wrapped heights correctly without re-entering an implicit-width
+    // binding loop with the OverlaySheet.
+    ScrollView {
         id: contentRoot
 
         implicitWidth: Kirigami.Units.gridUnit * 36
-        implicitHeight: column.implicitHeight
+        // Cap the implicit height so the OverlaySheet doesn't blindly take
+        // window-height worth of vertical room for a short rule; for a tall
+        // rule the cap kicks in and the ScrollView scrolls. The
+        // window-height fallback handles the brief pre-attach window where
+        // the implicit-parent chain hasn't resolved yet.
+        implicitHeight: Math.min(column.implicitHeight, sheet.Window.window ? sheet.Window.window.height * 0.75 : column.implicitHeight)
+        // Vertical scrollbar is always reachable; horizontal stays off so the
+        // 36 gu width is a true cap rather than a scroll dimension.
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+        ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
         ColumnLayout {
             // The persistent "first rule wins per slot" helper and the
@@ -143,9 +162,13 @@ Kirigami.OverlaySheet {
 
             id: column
 
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
+            // Bind width to the ScrollView's available width so wrap-text
+            // widgets compute their wrapped heights against the actual
+            // viewport width. Using a binding (rather than anchors L/R)
+            // means the column participates in the layout's width
+            // protocol without re-introducing an implicit-width feedback
+            // loop with the sheet.
+            width: contentRoot.availableWidth
             spacing: Kirigami.Units.largeSpacing
 
             // ── Identity ──
