@@ -714,9 +714,9 @@ QVariantList WindowRuleController::matchFields() const
     // Wayland-only (per CLAUDE.md), so exposing a field that's always blank
     // would be a footgun.
     static const QList<Field> kFields = {
-        Field::AppId,       Field::WindowClass, Field::DesktopFile,    Field::Pid,
-        Field::Title,       Field::WindowType,  Field::IsSticky,       Field::IsFullscreen,
-        Field::IsMinimized, Field::ScreenId,    Field::VirtualDesktop, Field::Activity,
+        Field::AppId,      Field::WindowClass,    Field::DesktopFile,  Field::Pid,         Field::Title,
+        Field::WindowType, Field::IsSticky,       Field::IsFullscreen, Field::IsMinimized, Field::IsMaximized,
+        Field::ScreenId,   Field::VirtualDesktop, Field::Activity,
     };
     QVariantList out;
     for (Field f : kFields) {

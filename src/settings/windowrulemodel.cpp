@@ -442,6 +442,8 @@ QString WindowRuleModel::fieldLabel(Field field)
         return PzI18n::tr("Sticky");
     case Field::IsFullscreen:
         return PzI18n::tr("Fullscreen");
+    case Field::IsMaximized:
+        return PzI18n::tr("Maximized");
     case Field::IsMinimized:
         return PzI18n::tr("Minimized");
     case Field::ScreenId:

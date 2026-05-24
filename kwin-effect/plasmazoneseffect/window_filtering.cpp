@@ -85,6 +85,14 @@ PhosphorWindowRule::WindowQuery exclusionQueryFor(KWin::EffectWindow* w)
     query.isMinimized = w->isMinimized();
     query.isFullscreen = w->isFullScreen();
     query.isSticky = w->isOnAllDesktops();
+    // EffectWindow has no direct maximized accessor; the underlying
+    // KWin::Window exposes maximizeMode(). MaximizeFull is what the user
+    // intuits as "maximized" (both axes); horizontal-only / vertical-only
+    // modes are partial states that don't fit a single boolean and would
+    // surprise rules that target "is the window maximized."
+    if (kw) {
+        query.isMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
+    }
     return query;
 }
 

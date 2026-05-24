@@ -34,12 +34,14 @@ enum class Field : int {
     ScreenId = 10,
     VirtualDesktop = 11,
     Activity = 12,
+    // Window state (appended — keeping enum values stable across versions)
+    IsMaximized = 13,
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::Activity) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::IsMaximized) + 1;
 
 /// Match operators. Not every operator is valid against every field —
 /// validity is enforced by Predicate::isValid(), not the parser.
@@ -89,6 +91,8 @@ inline QString fieldToString(Field field)
         return QStringLiteral("virtualDesktop");
     case Field::Activity:
         return QStringLiteral("activity");
+    case Field::IsMaximized:
+        return QStringLiteral("isMaximized");
     }
     return QStringLiteral("appId");
 }
@@ -111,6 +115,7 @@ inline std::optional<Field> fieldFromString(QStringView s)
         {QLatin1StringView("screenId"), Field::ScreenId},
         {QLatin1StringView("virtualDesktop"), Field::VirtualDesktop},
         {QLatin1StringView("activity"), Field::Activity},
+        {QLatin1StringView("isMaximized"), Field::IsMaximized},
     };
     for (const auto& [token, field] : kTable) {
         if (s.compare(token, Qt::CaseInsensitive) == 0) {
@@ -187,6 +192,7 @@ inline bool fieldIsString(Field field)
     case Field::IsSticky:
     case Field::IsFullscreen:
     case Field::IsMinimized:
+    case Field::IsMaximized:
         return false;
     }
     return false;
@@ -198,10 +204,11 @@ inline bool fieldIsNumeric(Field field)
     return field == Field::Pid || field == Field::VirtualDesktop;
 }
 
-/// True if @p field carries a boolean value (the three window-state flags).
+/// True if @p field carries a boolean value (window-state flags).
 inline bool fieldIsBool(Field field)
 {
-    return field == Field::IsSticky || field == Field::IsFullscreen || field == Field::IsMinimized;
+    return field == Field::IsSticky || field == Field::IsFullscreen || field == Field::IsMinimized
+        || field == Field::IsMaximized;
 }
 
 } // namespace PhosphorWindowRule
