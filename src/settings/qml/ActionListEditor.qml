@@ -23,6 +23,28 @@ ColumnLayout {
     /// params (snappingLayout / tilingAlgorithm) can populate their dropdowns
     /// from `settingsController.layouts`.
     required property var appSettings
+    /// True when the current match expression references only context fields.
+    /// When false, every context-domain action (SetEngineMode, layout/tiling,
+    /// DisableEngine) silently never fires — so the type-picker disables those
+    /// entries with a tooltip and the default "Add action" picks the first
+    /// **compatible** entry instead of always index 0.
+    required property bool matchIsContextOnly
+    /// First entry in `actionTypeOptions` whose domain is compatible with the
+    /// current match. Used as the default for a freshly-added action so the
+    /// user is not handed an incompatible type by default. Falls back to the
+    /// first entry when nothing is compatible — that case is impossible today
+    /// (window-domain actions are always compatible) but the fallback keeps
+    /// the picker non-empty if the future schema ever introduces a domain
+    /// that is constrained both ways.
+    readonly property var _firstCompatibleType: {
+        for (var i = 0; i < editor.actionTypeOptions.length; ++i) {
+            var entry = editor.actionTypeOptions[i];
+            if (entry.domain !== "context" || editor.matchIsContextOnly)
+                return entry;
+
+        }
+        return editor.actionTypeOptions.length > 0 ? editor.actionTypeOptions[0] : undefined;
+    }
 
     signal actionsEdited(var updatedActions)
 
@@ -62,14 +84,15 @@ ColumnLayout {
         // Guarded by the Add-action button's enabled state — there is always
         // at least one registered type when this runs. Pre-seed every param
         // declared by the type's descriptor so a freshly-added action carries
-        // a complete (if not yet user-filled) param set.
-        var typeEntry = editor.actionTypeOptions[0];
+        // a complete (if not yet user-filled) param set. The default type is
+        // the first **compatible** entry so a window-property match doesn't
+        // auto-stamp a context action the picker would then flag as invalid.
+        var typeEntry = editor._firstCompatibleType || editor.actionTypeOptions[0];
         var action = {
             "type": typeEntry.value
         };
         var params = typeEntry.params || [];
-        for (var i = 0; i < params.length; ++i)
-            action[params[i].key] = editor._defaultParamValue(params[i]);
+        for (var i = 0; i < params.length; ++i) action[params[i].key] = editor._defaultParamValue(params[i])
         var next = editor.actions.slice();
         next.push(action);
         editor.actionsEdited(next);
@@ -95,11 +118,13 @@ ColumnLayout {
             action: modelData
             actionTypeOptions: editor.actionTypeOptions
             appSettings: editor.appSettings
-            onActionEdited: function (updated) {
+            matchIsContextOnly: editor.matchIsContextOnly
+            onActionEdited: function(updated) {
                 editor._replaceAt(index, updated);
             }
             onRemoveRequested: editor._removeAt(index)
         }
+
     }
 
     Label {
@@ -119,4 +144,5 @@ ColumnLayout {
         Accessible.name: i18n("Add an action to this rule")
         onClicked: editor._append()
     }
+
 }

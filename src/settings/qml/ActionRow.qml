@@ -27,11 +27,31 @@ ColumnLayout {
     /// The action JSON object being edited — `{ type, ...params }`.
     required property var action
     /// Registered action types from `WindowRuleController.actionTypes()` —
-    /// each entry: `{ value, label, params: [{ key, kind, label, ... }] }`.
+    /// each entry: `{ value, label, params: [{ key, kind, label, ... }],
+    /// domain: "context"|"window" }`. The `domain` field is consulted by the
+    /// per-option compatibility flag below.
     required property var actionTypeOptions
     /// The SettingsController — drives the snappingLayout / tilingAlgorithm
     /// picker dropdowns.
     required property var appSettings
+    /// True when the current match references only context fields — passed in
+    /// from ActionListEditor. Drives the type-picker delegate: context-domain
+    /// action types are disabled with a tooltip when this is false, so the
+    /// user sees the picker but cannot pick a combination that silently never
+    /// fires.
+    required property bool matchIsContextOnly
+    /// True when the action's currently-selected type is incompatible with
+    /// the rule's match (a context action against a window-property match).
+    /// Surfaces a small inline warning next to the type combo so the user
+    /// sees the mismatch on the existing action even before opening the
+    /// type dropdown — mirrors the RuleEditorSheet's whole-rule
+    /// InlineMessage but scoped to this single action row.
+    readonly property bool _currentTypeIncompatible: {
+        if (row._typeEntry === undefined)
+            return false;
+
+        return row._typeEntry.domain === "context" && !row.matchIsContextOnly;
+    }
     /// The descriptor for the current action's type, or undefined if unknown.
     readonly property var _typeEntry: row._entryForType(row.action.type)
     /// Parameter descriptors for the current type (empty when none / unknown).
@@ -164,6 +184,10 @@ ColumnLayout {
 
     // ── Top: action-type combo + per-param editors + delete ──────────────
     RowLayout {
+        // `WideComboBox` — popup sizes to fit the widest action-type label
+        // ("Override animation shader" etc.) and the closed combo sizes to
+        // its current label via `implicitContentWidthPolicy`.
+
         Layout.fillWidth: true
         spacing: Kirigami.Units.smallSpacing
 
@@ -174,9 +198,15 @@ ColumnLayout {
             Layout.alignment: Qt.AlignVCenter
         }
 
-        // `WideComboBox` — popup sizes to fit the widest action-type label
-        // ("Override animation shader" etc.) and the closed combo sizes to
-        // its current label via `implicitContentWidthPolicy`.
+        // The delegate is overridden so context-domain entries render as
+        // disabled with an explanatory tooltip when the rule's match
+        // references window-property fields (the silently-never-fires
+        // combination). Selecting an incompatible entry is still possible —
+        // the per-row warning chip and the RuleEditorSheet's InlineMessage
+        // explain the consequence — but the picker visually signals the
+        // mismatch up front. Aligns with the disabled+tooltip UX chosen for
+        // this control (cleaner than hiding entries that change set as the
+        // user edits the match).
         WideComboBox {
             id: typeCombo
 
@@ -192,6 +222,82 @@ ColumnLayout {
                 });
 
             }
+
+            delegate: ItemDelegate {
+                id: optionDelegate
+
+                required property var modelData
+                required property int index
+                readonly property bool isCurrentSelection: typeCombo.currentIndex === index
+                /// Per-option compatibility derived from the action descriptor's
+                /// `domain` and the match-domain prop threaded down from the
+                /// editor sheet. Context-domain entries are incompatible iff
+                /// the match has any window-property leaf.
+                readonly property bool _incompatible: modelData && modelData.domain === "context" && !row.matchIsContextOnly
+
+                width: typeCombo.popup.availableWidth
+                highlighted: typeCombo.highlightedIndex === index
+                // Visually disable the row but DO NOT set `enabled: false`:
+                // a disabled ItemDelegate doesn't trigger the ComboBox's
+                // activation, which would hide the picker UX entirely. The
+                // user is allowed to pick the incompatible entry (the row's
+                // warning chip and the sheet's InlineMessage explain why
+                // it never fires); we just lower the opacity so the
+                // incompatibility is obvious.
+                opacity: _incompatible ? 0.45 : 1
+                ToolTip.delay: 300
+                ToolTip.visible: hovered && _incompatible
+                ToolTip.text: i18n("This action runs during context resolution and cannot match window properties. Remove the window conditions from the rule's match, or pick a different action.")
+
+                background: Rectangle {
+                    color: optionDelegate.highlighted ? Kirigami.Theme.highlightColor : optionDelegate.isCurrentSelection ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : Kirigami.Theme.backgroundColor
+                }
+
+                contentItem: RowLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: optionDelegate.modelData.label
+                        color: optionDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                        font.weight: (optionDelegate.highlighted || optionDelegate.isCurrentSelection) ? Font.DemiBold : Font.Normal
+                        elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    Kirigami.Icon {
+                        visible: optionDelegate._incompatible
+                        source: "dialog-warning"
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                    }
+
+                }
+
+            }
+
+        }
+
+        // Per-row warning chip — surfaces when the action's current type is
+        // incompatible with the rule's match. The full message lives in the
+        // RuleEditorSheet's InlineMessage (which lists every issue across
+        // every action); this chip pins the warning to the offending row so
+        // the user can spot which action to change in a multi-action rule.
+        Kirigami.Icon {
+            visible: row._currentTypeIncompatible
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            source: "dialog-warning"
+            Accessible.name: i18n("Action incompatible with the rule's match")
+            ToolTip.visible: incompatibleHover.hovered
+            ToolTip.delay: 300
+            ToolTip.text: i18n("This action runs during context resolution but the rule's match references window properties — the action would never fire as written.")
+
+            HoverHandler {
+                id: incompatibleHover
+            }
+
         }
 
         // One editor per parameter — the shape comes from the param `kind`,

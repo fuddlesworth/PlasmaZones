@@ -237,6 +237,13 @@ Kirigami.OverlaySheet {
                 actions: sheet._workingRule.actions || []
                 actionTypeOptions: sheet._actionTypeOptions
                 appSettings: sheet.appSettings
+                // True when the current match references only context fields
+                // (ScreenId / VirtualDesktop / Activity) — drives the picker's
+                // per-option compatibility flag so context-domain actions are
+                // disabled with a tooltip when the match would render them
+                // silently inert. Recomputed from the working rule's match on
+                // every patch via the controller's Q_INVOKABLE.
+                matchIsContextOnly: sheet.controller.matchIsContextOnly(sheet._workingRule.match || sheet._emptyMatch)
                 onActionsEdited: function(updated) {
                     sheet._patch("actions", updated);
                 }
