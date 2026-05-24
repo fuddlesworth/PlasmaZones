@@ -58,11 +58,13 @@ ColumnLayout {
     /// The map is reset whenever the selected `effectId` changes so locks
     /// for the previous effect don't leak into the new effect's params
     /// (e.g. `intensity` locked under Smoke shouldn't carry into BMW).
-    property var _shaderParamLocks: ({})
+    property var _shaderParamLocks: ({
+    })
     /// Stable empty-object fallback for the inline shader params editor's
     /// `currentValues` binding — using `({})` inline would allocate a new
     /// object identity per binding evaluation and churn the editor.
-    readonly property var _emptyShaderParams: ({})
+    readonly property var _emptyShaderParams: ({
+    })
     // Param-editor Components — the `modelData` they reference is the
     // **Loader**'s `modelData` (set by Repeater), reached via `parent.modelData`
     // since each loaded item is parented to the Loader. A `required property
@@ -71,11 +73,12 @@ ColumnLayout {
     property Component _stringParamEditor
     property Component _numberParamEditor
     property Component _enumParamEditor
-    // Flat ComboBox picker — the rich LayoutComboBox uses a `T.Popup` that
-    // can't be made to stack above Kirigami's OverlaySheet (its own modal
-    // overlay out-z-orders the application Overlay) and `Popup.Window`
-    // triggers the sheet's focus-loss auto-close. The basic Qt ComboBox
-    // popup escapes the sheet correctly via the default reparenting path.
+    // Rich preview pickers — `LayoutComboBox` shows a mini zone preview +
+    // category / aspect badges per entry, same component the assignment
+    // pages use. LayoutComboBox now follows the WideComboBox stacking
+    // pattern (reparented popup + outside-click catcher) so it works
+    // inside the OverlaySheet host without being out-z-ordered or
+    // triggering a focus-loss auto-close.
     property Component _snappingLayoutEditor
     property Component _tilingAlgorithmEditor
     // Animation-event picker — flattens `eventSections()` from the animations
@@ -106,14 +109,14 @@ ColumnLayout {
     // `actionEdited`, not `actionChanged`, because `property var action`
     // auto-generates `actionChanged()` and QML rejects the duplicate signal.
     signal actionEdited(var updatedAction)
-    signal removeRequested
+    signal removeRequested()
 
     /// Shallow-clone the action so a mutation produces a fresh object QML
     /// rebinds against (mutating in place would not re-trigger bindings).
     function _withParam(key, value) {
-        var next = {};
-        for (var k in row.action)
-            next[k] = row.action[k];
+        var next = {
+        };
+        for (var k in row.action) next[k] = row.action[k]
         next[key] = value;
         return next;
     }
@@ -123,6 +126,7 @@ ColumnLayout {
         for (var i = 0; i < row.actionTypeOptions.length; ++i) {
             if (row.actionTypeOptions[i].value === type)
                 return row.actionTypeOptions[i];
+
         }
         return undefined;
     }
@@ -133,6 +137,7 @@ ColumnLayout {
         for (var i = 0; i < row.actionTypeOptions.length; ++i) {
             if (row.actionTypeOptions[i].value === row.action.type)
                 return i;
+
         }
         return -1;
     }
@@ -141,13 +146,17 @@ ColumnLayout {
 
     // Reset session locks when the user switches the effect. Tracking via
     // a Connections handler so the reset fires every time the effectId
-    // transitions (not just on the initial set).
+    // transitions (not just on the initial set). `target` is declared
+    // BEFORE the signal-handler function — strict QML resolves signal
+    // names against the target's metaobject at parse time.
     Connections {
         function onActionEdited(updated) {
             // Compare against the action BEFORE the edit lands — `row.action`
             // is still the previous state until the parent re-feeds us.
             if (row.action.type === "overrideAnimationShader" && updated && updated.effectId !== row.action.effectId)
-                row._shaderParamLocks = ({});
+                row._shaderParamLocks = ({
+            });
+
         }
 
         target: row
@@ -176,11 +185,12 @@ ColumnLayout {
             model: row.actionTypeOptions
             currentIndex: row._typeIndex()
             Accessible.name: i18n("Action type")
-            onActivated: function (index) {
+            onActivated: function(index) {
                 if (currentValue !== row.action.type)
                     row.actionEdited({
-                        "type": currentValue
-                    });
+                    "type": currentValue
+                });
+
             }
         }
 
@@ -225,6 +235,7 @@ ColumnLayout {
                     return row._stringParamEditor;
                 }
             }
+
         }
 
         ToolButton {
@@ -235,6 +246,7 @@ ColumnLayout {
             Accessible.name: i18n("Remove this action")
             onClicked: row.removeRequested()
         }
+
     }
 
     // ── Bottom: shader-parameter editor for OverrideAnimationShader ──────
@@ -259,6 +271,7 @@ ColumnLayout {
             Accessible.name: _param.label
             onEditingFinished: row.actionEdited(row._withParam(_param.key, text))
         }
+
     }
 
     _numberParamEditor: Component {
@@ -274,6 +287,7 @@ ColumnLayout {
             Accessible.name: _param.label
             onValueModified: row.actionEdited(row._withParam(_param.key, value * _scale))
         }
+
     }
 
     _enumParamEditor: Component {
@@ -293,79 +307,56 @@ ColumnLayout {
                 for (var i = 0; i < _options.length; ++i) {
                     if (_options[i].value === target)
                         return i;
+
                 }
                 return -1;
             }
             Accessible.name: _param.label
-            onActivated: function (index) {
+            onActivated: function(index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
             }
         }
+
     }
 
+    // Both action editors use the rich `LayoutComboBox` — preview tile +
+    // category / aspect badges, same component the assignment pages use.
+    // `layoutFilter` separates the two streams: 0 = manual / snapping
+    // layouts, 1 = autotile algorithms. `showNoneOption: false` because
+    // the action either targets a layout or has no value (no implicit
+    // "Default" fallback inside a rule).
     _snappingLayoutEditor: Component {
-        WideComboBox {
+        LayoutComboBox {
             readonly property var _param: parent.modelData
-            // Snapping layouts only — filter out the autotile entries.
-            readonly property var _layouts: {
-                var all = row.appSettings ? row.appSettings.layouts : [];
-                var out = [];
-                for (var i = 0; i < all.length; ++i) {
-                    if (!all[i].isAutotile)
-                        out.push(all[i]);
-                }
-                return out;
-            }
 
-            model: _layouts
-            textRole: "displayName"
-            valueRole: "id"
-            currentIndex: {
-                var target = row.action[_param.key];
-                for (var i = 0; i < _layouts.length; ++i) {
-                    if (_layouts[i].id === target)
-                        return i;
-                }
-                return -1;
-            }
             Accessible.name: _param.label
-            onActivated: function (index) {
+            appSettings: row.appSettings
+            currentLayoutId: row.action[_param.key] || ""
+            layoutFilter: 0
+            showNoneOption: false
+            showPreview: true
+            onActivated: function(index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
             }
         }
+
     }
 
     _tilingAlgorithmEditor: Component {
-        WideComboBox {
+        LayoutComboBox {
             readonly property var _param: parent.modelData
-            // Tiling algorithms are the autotile entries in the layouts list;
-            // their `id` is the algorithm token (`bsp`, `grid`, …), not a UUID.
-            readonly property var _algorithms: {
-                var all = row.appSettings ? row.appSettings.layouts : [];
-                var out = [];
-                for (var i = 0; i < all.length; ++i) {
-                    if (all[i].isAutotile)
-                        out.push(all[i]);
-                }
-                return out;
-            }
 
-            model: _algorithms
-            textRole: "displayName"
-            valueRole: "id"
-            currentIndex: {
-                var target = row.action[_param.key];
-                for (var i = 0; i < _algorithms.length; ++i) {
-                    if (_algorithms[i].id === target)
-                        return i;
-                }
-                return -1;
-            }
             Accessible.name: _param.label
-            onActivated: function (index) {
+            appSettings: row.appSettings
+            currentLayoutId: row.action[_param.key] || ""
+            layoutFilter: 1
+            showNoneOption: false
+            showPreview: true
+            onActivated: function(index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
             }
         }
+
     }
 
     _animationEventEditor: Component {
@@ -405,6 +396,7 @@ ColumnLayout {
                 for (var i = 0; i < _events.length; ++i) {
                     if (_events[i].value === target)
                         return i;
+
                 }
                 return -1;
             }
@@ -412,10 +404,11 @@ ColumnLayout {
             // stays visible rather than collapsing the picker to a blank.
             displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose an event…"))
             Accessible.name: _param.label
-            onActivated: function (index) {
+            onActivated: function(index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
             }
         }
+
     }
 
     _curveEditorEditor: Component {
@@ -465,15 +458,17 @@ ColumnLayout {
                 easingCurve: curveSlot._easingCurve
                 springOmega: curveSlot._springOmega
                 springZeta: curveSlot._springZeta
-                onCurveApplied: function (curve) {
+                onCurveApplied: function(curve) {
                     row.actionEdited(row._withParam(curveSlot._param.key, curve));
                 }
-                onSpringApplied: function (omega, zeta) {
+                onSpringApplied: function(omega, zeta) {
                     var encoded = "spring:" + omega.toFixed(2) + "," + zeta.toFixed(2);
                     row.actionEdited(row._withParam(curveSlot._param.key, encoded));
                 }
             }
+
         }
+
     }
 
     _shaderEffectEditor: Component {
@@ -492,15 +487,17 @@ ColumnLayout {
                 for (var i = 0; i < _effects.length; ++i) {
                     if (_effects[i].id === target)
                         return i;
+
                 }
                 return -1;
             }
             displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose a shader…"))
             Accessible.name: _param.label
-            onActivated: function (index) {
+            onActivated: function(index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
             }
         }
+
     }
 
     _shaderParamsEditor: Component {
@@ -515,23 +512,24 @@ ColumnLayout {
             enableGroups: true
             enableImage: false
             compact: true
-            onValueChanged: function (paramId, value) {
+            onValueChanged: function(paramId, value) {
                 // Clone the current param map and stamp the new value so the
                 // binding re-evaluates (mutating in place wouldn't trigger).
-                var next = ({});
-                var existing = row.action.params || ({});
-                for (var k in existing)
-                    next[k] = existing[k];
+                var next = ({
+                });
+                var existing = row.action.params || ({
+                });
+                for (var k in existing) next[k] = existing[k]
                 next[paramId] = value;
                 row.actionEdited(row._withParam("params", next));
             }
-            onLockToggled: function (paramId, locked) {
+            onLockToggled: function(paramId, locked) {
                 // Mirror AnimationProfileEditor — the editor's helper computes
                 // the post-toggle map so the same merge logic lives in one
                 // place. Locks are session state, not persisted to the rule.
                 row._shaderParamLocks = paramEditor.lockedAfterToggle(paramId, locked);
             }
-            onLockAllRequested: function (lock) {
+            onLockAllRequested: function(lock) {
                 row._shaderParamLocks = paramEditor.lockedAfterAllToggle(lock);
             }
             onRandomizeRequested: {
@@ -541,5 +539,7 @@ ColumnLayout {
                 row.actionEdited(row._withParam("params", rolled));
             }
         }
+
     }
+
 }

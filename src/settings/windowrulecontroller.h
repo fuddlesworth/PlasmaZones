@@ -133,11 +133,24 @@ public:
 
     /// Build a fresh, never-yet-stored rule for the given guided subject and
     /// return it as a JSON map ready for the editor sheet. @p subject is one
-    /// of "monitor" / "application" / "activity" / "custom". The returned rule
-    /// has a fresh UUID, a sensible starting match for the subject, and an
-    /// empty action list. It is NOT added to the model — the editor sheet
-    /// calls `addRuleFromJson` once the user confirms.
+    /// of "monitor" / "desktop" / "application" / "activity" / "animation" /
+    /// "custom". The returned rule has a fresh UUID, a sensible starting
+    /// match for the subject, and an empty action list. It is NOT added to
+    /// the model — the editor sheet calls `addRuleFromJson` once the user
+    /// confirms.
     Q_INVOKABLE QVariantMap newEmptyRule(const QString& subject) const;
+
+    /// Catalogue of pre-fab rule templates surfaced as quick-starts in the
+    /// AddRuleSheet. Each entry is `{ id, label, description, icon }`.
+    /// Use `newRuleFromTemplate(id)` to materialise the rule.
+    Q_INVOKABLE QVariantList ruleTemplates() const;
+
+    /// Build a fully-seeded rule for @p templateId (one of the ids returned
+    /// by `ruleTemplates()`). Returns an empty map for an unknown id. Like
+    /// `newEmptyRule`, the rule is NOT added — the editor sheet commits it
+    /// after the user fills in the remaining match values (e.g. picks the
+    /// app for a Float template).
+    Q_INVOKABLE QVariantMap newRuleFromTemplate(const QString& templateId) const;
 
     /// Add a rule from its JSON map (the editor sheet's output). Returns the
     /// rule's UUID string on success, or an empty string on failure.

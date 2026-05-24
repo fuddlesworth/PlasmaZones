@@ -35,13 +35,14 @@ RowLayout {
     readonly property string _valueKind: leaf._fieldEntry !== undefined ? leaf._fieldEntry.valueKind : "string"
 
     signal leafChanged(var updatedLeaf)
-    signal removeRequested
+    signal removeRequested()
 
     /// The descriptor in @p options whose `wire` equals @p wire, or undefined.
     function _entryForWire(options, wire) {
         for (var i = 0; i < options.length; ++i) {
             if (options[i].wire === wire)
                 return options[i];
+
         }
         return undefined;
     }
@@ -52,6 +53,7 @@ RowLayout {
         for (var i = 0; i < options.length; ++i) {
             if (options[i].wire === wire)
                 return i;
+
         }
         return -1;
     }
@@ -62,6 +64,73 @@ RowLayout {
             "op": op,
             "value": value
         });
+    }
+
+    /// True when the running-windows picker has a mode that fills @p wire
+    /// — AppId, WindowClass, DesktopFile and Title all have a 1:1 mode in
+    /// the WindowPickerDialog. Other string fields (e.g. WindowRole on a
+    /// rare X11 client) stay freeform.
+    function _fieldIsPickable(wire) {
+        return wire === "appId" || wire === "windowClass" || wire === "desktopFile" || wire === "title";
+    }
+
+    /// Open the running-windows picker on the leaf's behalf in the mode
+    /// that maps to the current field. The picker lives at the page level
+    /// (hosting it inside the OverlaySheet collapsed its content area),
+    /// shared across every leaf in every open rule editor — so we
+    /// dynamically wire a one-shot `picked` handler that fills THIS leaf
+    /// and then disconnects itself, instead of permanently binding the
+    /// dialog's `onPicked`. A matching `closed` listener disconnects the
+    /// handler when the user dismisses the dialog without picking
+    /// (Escape / outside-click) — without it the stale handler would
+    /// still be wired the next time ANY leaf opened the picker, and one
+    /// pick would fan out to every previously-cancelled leaf.
+    function _openWindowPicker() {
+        function pickedHandler(value) {
+            picker.picked.disconnect(pickedHandler);
+            picker.closed.disconnect(closedHandler);
+            leaf._emit(leaf.node.field, leaf.node.op, value);
+        }
+
+        function closedHandler() {
+            // `picked` already fired and self-disconnected before `closed`
+            // runs (Kirigami emits `closed` AFTER the close completes);
+            // disconnecting again is a no-op when the handler is no
+            // longer wired, so this branch handles dismissal without
+            // double-firing on a successful pick.
+            picker.picked.disconnect(pickedHandler);
+            picker.closed.disconnect(closedHandler);
+        }
+
+        var picker = leaf.appSettings ? leaf.appSettings.windowPicker : null;
+        if (!picker)
+            return ;
+
+        picker.picked.connect(pickedHandler);
+        picker.closed.connect(closedHandler);
+        if (leaf.node.field === "appId")
+            picker.openForApps();
+        else if (leaf.node.field === "desktopFile")
+            picker.openForDesktopFiles();
+        else if (leaf.node.field === "title")
+            picker.openForTitles();
+        else
+            picker.openForClasses();
+    }
+
+    /// Short tooltip / accessible-name suffix for the pick button. Saves
+    /// the inline ternary chain from repeating in two places.
+    function _pickTooltip(wire) {
+        if (wire === "appId")
+            return i18n("Pick from running applications");
+
+        if (wire === "desktopFile")
+            return i18n("Pick desktop file from running windows");
+
+        if (wire === "title")
+            return i18n("Pick title from running windows");
+
+        return i18n("Pick from running windows");
     }
 
     spacing: Kirigami.Units.smallSpacing
@@ -89,9 +158,32 @@ RowLayout {
         // silently coercing it to the first field.
         currentIndex: leaf._indexForWire(leaf.fieldOptions, leaf.node.field)
         Accessible.name: i18n("Match field")
-        onActivated: function (index) {
-            if (currentValue !== leaf.node.field)
-                leaf._emit(currentValue, leaf.node.op, leaf.node.value);
+        onActivated: function(index) {
+            if (currentValue === leaf.node.field)
+                return ;
+
+            // Changing the field invalidates the carried-over value and
+            // (often) the carried-over operator. Concrete examples:
+            //   appId "firefox" + field→isFullscreen → predicate
+            //   `isFullscreen == "firefox"` (nonsense).
+            //   appId + AppIdMatches + field→title → AppIdMatches is not a
+            //   valid operator for Title, leaving the rule un-saveable.
+            // So we reset the value to empty and only carry the operator
+            // if the new field's allowed-operator set still includes it.
+            var newFieldEntry = leaf._entryForWire(leaf.fieldOptions, currentValue);
+            var newOps = newFieldEntry !== undefined ? leaf.controller.operatorsForField(newFieldEntry.value) : [];
+            var carryOp = leaf.node.op;
+            var opStillValid = false;
+            for (var i = 0; i < newOps.length; ++i) {
+                if (newOps[i].wire === carryOp) {
+                    opStillValid = true;
+                    break;
+                }
+            }
+            if (!opStillValid)
+                carryOp = newOps.length > 0 ? newOps[0].wire : "";
+
+            leaf._emit(currentValue, carryOp, "");
         }
     }
 
@@ -103,9 +195,10 @@ RowLayout {
         model: leaf._operatorOptions
         currentIndex: leaf._indexForWire(leaf._operatorOptions, leaf.node.op)
         Accessible.name: i18n("Match operator")
-        onActivated: function (index) {
+        onActivated: function(index) {
             if (currentValue !== leaf.node.op)
                 leaf._emit(leaf.node.field, currentValue, leaf.node.value);
+
         }
     }
 
@@ -141,12 +234,35 @@ RowLayout {
     Component {
         id: stringValueEditor
 
-        TextField {
-            text: leaf.node.value !== undefined ? String(leaf.node.value) : ""
-            placeholderText: i18n("Value")
-            Accessible.name: i18n("Match value")
-            onEditingFinished: leaf._emit(leaf.node.field, leaf.node.op, text)
+        // RowLayout root so the Loader sizes the editor to the available
+        // width and the "pick from running windows" button can sit next to
+        // the freeform field. The button only appears for fields where a
+        // live-window lookup makes sense — typing an AppId / windowClass
+        // from memory is the friction the picker existed to solve.
+        RowLayout {
+            spacing: Kirigami.Units.smallSpacing
+
+            TextField {
+                Accessible.name: i18n("Match value")
+                Layout.fillWidth: true
+                placeholderText: i18n("Value")
+                text: leaf.node.value !== undefined ? String(leaf.node.value) : ""
+                onEditingFinished: leaf._emit(leaf.node.field, leaf.node.op, text)
+            }
+
+            ToolButton {
+                Accessible.name: leaf._pickTooltip(leaf.node.field)
+                Layout.alignment: Qt.AlignVCenter
+                ToolTip.delay: 500
+                ToolTip.text: leaf._pickTooltip(leaf.node.field)
+                ToolTip.visible: hovered
+                icon.name: "window-duplicate"
+                visible: leaf._fieldIsPickable(leaf.node.field)
+                onClicked: leaf._openWindowPicker()
+            }
+
         }
+
     }
 
     Component {
@@ -164,6 +280,7 @@ RowLayout {
             Accessible.name: i18n("Match value")
             onValueModified: leaf._emit(leaf.node.field, leaf.node.op, value)
         }
+
     }
 
     Component {
@@ -175,6 +292,7 @@ RowLayout {
             Accessible.name: i18n("Match value")
             onToggled: leaf._emit(leaf.node.field, leaf.node.op, checked)
         }
+
     }
 
     Component {
@@ -196,6 +314,7 @@ RowLayout {
                 for (var i = 0; i < list.length; ++i) {
                     if (list[i].name === target)
                         return i;
+
                 }
                 return -1;
             }
@@ -205,11 +324,13 @@ RowLayout {
             // tell what the rule pins to instead of an empty dropdown.
             displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose a monitor…"))
             Accessible.name: i18n("Monitor")
-            onActivated: function (index) {
+            onActivated: function(index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+
             }
         }
+
     }
 
     Component {
@@ -230,6 +351,7 @@ RowLayout {
                 for (var i = 0; i < list.length; ++i) {
                     if (list[i].id === target)
                         return i;
+
                 }
                 return -1;
             }
@@ -238,10 +360,13 @@ RowLayout {
             // current activity matches.
             displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose an activity…"))
             Accessible.name: i18n("Activity")
-            onActivated: function (index) {
+            onActivated: function(index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+
             }
         }
+
     }
+
 }

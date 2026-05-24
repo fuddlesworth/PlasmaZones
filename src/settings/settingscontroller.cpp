@@ -1496,6 +1496,10 @@ static QVariantList parseRunningWindowsJson(const QString& json)
         item[QStringLiteral("windowClass")] = obj[QLatin1String("windowClass")].toString();
         item[QStringLiteral("appName")] = obj[QLatin1String("appName")].toString();
         item[QStringLiteral("caption")] = obj[QLatin1String("caption")].toString();
+        // `desktopFile` is forwarded verbatim — older effect builds that
+        // don't include the field will produce an empty string, which the
+        // WindowPickerDialog hides from its DesktopFile mode.
+        item[QStringLiteral("desktopFile")] = obj[QLatin1String("desktopFile")].toString();
         result.append(item);
     }
     return result;

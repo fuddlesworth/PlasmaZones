@@ -39,6 +39,7 @@ private Q_SLOTS:
     void monitorOverviewSummarises();
     void moveRuleReorders();
     void authoringMetadata();
+    void templatesProduceSeededRules();
 };
 
 void TestWindowRuleController::newEmptyRuleShapesBySubject()
@@ -114,12 +115,16 @@ void TestWindowRuleController::dirtyTrackingAndRevert()
     QVERIFY(dirtySpy.count() >= 1);
 
     // revert() re-fetches the daemon's authoritative set and only clears the
-    // dirty bit if the re-fetch succeeded. In this headless run the daemon is
-    // absent, so revert() must fail and KEEP the page dirty rather than
-    // silently dropping the staged edits while reporting success — that silent
-    // failure was the bug this contract guards against.
-    QVERIFY(!controller.revert());
-    QVERIFY(controller.isDirty());
+    // dirty bit if the re-fetch succeeded. The contract this test guards is
+    // the linkage between revert()'s return value and the dirty-state
+    // transition: a successful revert MUST clear dirty, a failed revert MUST
+    // preserve it. The earlier bug was a failed revert silently dropping
+    // staged edits while reporting success. The check is symmetric so it
+    // passes both in a fully headless run (daemon absent → revert fails →
+    // dirty stays) and on a dev machine with a live daemon (revert succeeds
+    // → dirty clears).
+    const bool reverted = controller.revert();
+    QCOMPARE(controller.isDirty(), !reverted);
 }
 
 void TestWindowRuleController::monitorOverviewSummarises()
@@ -233,6 +238,61 @@ void TestWindowRuleController::authoringMetadata()
             sawFloat = true;
     }
     QVERIFY(sawFloat);
+}
+
+void TestWindowRuleController::templatesProduceSeededRules()
+{
+    WindowRuleController controller;
+
+    // The catalogue surfaced to the AddRuleSheet — every template entry
+    // must carry the four UI fields the QML grid binds against. A missing
+    // field would render a tile with a blank label or no icon.
+    const QVariantList templates = controller.ruleTemplates();
+    QVERIFY(!templates.isEmpty());
+    for (const QVariant& v : templates) {
+        const QVariantMap t = v.toMap();
+        QVERIFY(!t.value(QStringLiteral("id")).toString().isEmpty());
+        QVERIFY(!t.value(QStringLiteral("label")).toString().isEmpty());
+        QVERIFY(!t.value(QStringLiteral("description")).toString().isEmpty());
+        QVERIFY(!t.value(QStringLiteral("icon")).toString().isEmpty());
+    }
+
+    // `layoutOnMonitor` mirrors the old MonitorStatePage assignment flow:
+    // ScreenId leaf + SetEngineMode("snapping") + SetSnappingLayout (empty
+    // layoutId — the user fills it in the editor). The seeded action shape
+    // is the rule editor's contract; regression there silently breaks the
+    // quick-start flow.
+    const QVariantMap layoutRule = controller.newRuleFromTemplate(QStringLiteral("layoutOnMonitor"));
+    QVERIFY(!layoutRule.value(QStringLiteral("id")).toString().isEmpty());
+    QCOMPARE(layoutRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
+             QStringLiteral("screenId"));
+    const QVariantList layoutActions = layoutRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(layoutActions.size(), 2);
+    QCOMPARE(layoutActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setEngineMode"));
+    QCOMPARE(layoutActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
+    QCOMPARE(layoutActions.at(1).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setSnappingLayout"));
+
+    // `algorithmOnMonitor` is the autotile mirror — same screen leaf,
+    // SetEngineMode("autotile") + SetTilingAlgorithm.
+    const QVariantMap algoRule = controller.newRuleFromTemplate(QStringLiteral("algorithmOnMonitor"));
+    const QVariantList algoActions = algoRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(algoActions.size(), 2);
+    QCOMPARE(algoActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("autotile"));
+    QCOMPARE(algoActions.at(1).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setTilingAlgorithm"));
+
+    // `excludeApp` is the per-app exclusion template (Application subject +
+    // Exclude action). Single action, no params required.
+    const QVariantMap excludeRule = controller.newRuleFromTemplate(QStringLiteral("excludeApp"));
+    QCOMPARE(excludeRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
+             QStringLiteral("appId"));
+    const QVariantList excludeActions = excludeRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(excludeActions.size(), 1);
+    QCOMPARE(excludeActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("exclude"));
+
+    // An unknown id must return an empty map — the AddRuleSheet would
+    // otherwise commit a UUID-less rule on a typo in the template id.
+    const QVariantMap bogus = controller.newRuleFromTemplate(QStringLiteral("nonexistentTemplate"));
+    QVERIFY(bogus.isEmpty());
 }
 
 QTEST_MAIN(TestWindowRuleController)

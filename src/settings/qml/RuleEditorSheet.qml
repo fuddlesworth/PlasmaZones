@@ -18,6 +18,15 @@ import org.kde.kirigami as Kirigami
  * Save emits `ruleSaved(ruleJson)` and the page commits it to the controller.
  */
 Kirigami.OverlaySheet {
+    // Wrap the ColumnLayout in a plain Item with explicit implicit
+    // dimensions: that's the OverlaySheet-friendly way to force a minimum
+    // content width without triggering its `implicitHeight` binding loop.
+    // ColumnLayout overrides `implicitWidth/Height` to compute them from
+    // its children on every layout pass, so setting `implicitWidth`
+    // directly on ColumnLayout is silently overwritten — and any spacer
+    // trick that re-introduces an implicit width via a child re-enters
+    // the recompute loop together with the wrap-text labels below.
+
     id: sheet
 
     /// The WindowRuleController — threaded into the recursive editors.
@@ -81,16 +90,23 @@ Kirigami.OverlaySheet {
             return String(v).length > 0;
         }
         // Composite — recurse into whichever child list is present.
-        // An empty `all` is the legitimate catch-all and stays valid, but an
-        // empty `any` (matches nothing) or empty `none` (matches everything)
-        // is a degenerate group — block saving it.
-        if (node.any !== undefined || node.none !== undefined) {
-            var degenerate = node.any !== undefined ? node.any : node.none;
-            if (!degenerate || degenerate.length === 0)
+        // An empty `all` is the legitimate catch-all (always-true) and stays
+        // valid, but an empty `any` (matches nothing) or empty `none`
+        // (matches everything) is a degenerate group — block saving it.
+        var children;
+        if (node.any !== undefined) {
+            children = node.any;
+            if (!children || children.length === 0)
                 return false;
 
+        } else if (node.none !== undefined) {
+            children = node.none;
+            if (!children || children.length === 0)
+                return false;
+
+        } else {
+            children = node.all || [];
         }
-        var children = node.all || node.any || node.none || [];
         for (var i = 0; i < children.length; ++i) {
             if (!sheet._matchHasFilledLeaves(children[i]))
                 return false;
@@ -101,139 +117,155 @@ Kirigami.OverlaySheet {
 
     title: sheet.editing ? i18n("Edit Window Rule") : i18n("New Window Rule")
 
-    ColumnLayout {
+    // The outer Item's `implicitWidth` is constant (36 gu), and its
+    // `implicitHeight` tracks the column. The column anchors L/R to the
+    // Item so its width is the fixed 36 gu, and its height is whatever
+    // the children sum to — a clean acyclic chain.
+    Item {
+        id: contentRoot
+
         implicitWidth: Kirigami.Units.gridUnit * 36
-        spacing: Kirigami.Units.largeSpacing
+        implicitHeight: column.implicitHeight
 
-        // ── Identity ──
-        Kirigami.FormLayout {
-            Layout.fillWidth: true
+        ColumnLayout {
+            id: column
 
-            TextField {
-                Kirigami.FormData.label: i18n("Name:")
-                text: sheet._workingRule.name || ""
-                placeholderText: i18n("Optional rule name")
-                Accessible.name: i18n("Rule name")
-                onEditingFinished: sheet._patch("name", text)
-            }
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            spacing: Kirigami.Units.largeSpacing
 
-            Switch {
-                Kirigami.FormData.label: i18n("Enabled:")
-                checked: sheet._workingRule.enabled !== false
-                Accessible.name: i18n("Rule enabled")
-                onToggled: sheet._patch("enabled", checked)
-            }
+            // ── Identity ──
+            Kirigami.FormLayout {
+                Layout.fillWidth: true
 
-            // Priority + band-name hint. Bare integers like "610" are
-            // meaningless without the band scheme; the inline label maps the
-            // current value back to its semantic band so users don't need to
-            // memorise the cutoffs. Bands defined in
-            // `windowrulecontroller.cpp` (`kAnimationBandBase = 100`,
-            // `kApplicationBandBase = 200`, `kContextBandBase = 300`,
-            // `kAdvancedBandBase = 500`).
-            RowLayout {
-                id: priorityRow
-
-                readonly property int _priority: sheet._workingRule.priority || 0
-
-                Kirigami.FormData.label: i18n("Priority:")
-                spacing: Kirigami.Units.largeSpacing
-
-                SpinBox {
-                    Accessible.name: i18n("Rule priority — higher rules are evaluated first")
-                    from: 0
-                    to: 100000
-                    value: priorityRow._priority
-                    onValueModified: sheet._patch("priority", value)
+                TextField {
+                    Kirigami.FormData.label: i18n("Name:")
+                    text: sheet._workingRule.name || ""
+                    placeholderText: i18n("Optional rule name")
+                    Accessible.name: i18n("Rule name")
+                    onEditingFinished: sheet._patch("name", text)
                 }
 
-                Label {
-                    Layout.alignment: Qt.AlignVCenter
-                    ToolTip.delay: 500
-                    ToolTip.text: i18n("Priority bands — 100: Animation, 200: Application, 300: Context, 500: Advanced. Higher numbers win within a band.")
-                    ToolTip.visible: bandTip.hovered
-                    font.italic: true
-                    opacity: 0.65
-                    text: priorityRow._priority >= 500 ? i18n("Advanced") : priorityRow._priority >= 300 ? i18n("Context") : priorityRow._priority >= 200 ? i18n("Application") : priorityRow._priority >= 100 ? i18n("Animation") : i18n("Custom")
+                Switch {
+                    Kirigami.FormData.label: i18n("Enabled:")
+                    checked: sheet._workingRule.enabled !== false
+                    Accessible.name: i18n("Rule enabled")
+                    onToggled: sheet._patch("enabled", checked)
+                }
 
-                    HoverHandler {
-                        id: bandTip
+                // Priority + band-name hint. Bare integers like "610" are
+                // meaningless without the band scheme; the inline label maps the
+                // current value back to its semantic band so users don't need to
+                // memorise the cutoffs. Bands defined in
+                // `windowrulecontroller.cpp` (`kAnimationBandBase = 100`,
+                // `kApplicationBandBase = 200`, `kContextBandBase = 300`,
+                // `kAdvancedBandBase = 500`).
+                RowLayout {
+                    id: priorityRow
+
+                    readonly property int _priority: sheet._workingRule.priority || 0
+
+                    Kirigami.FormData.label: i18n("Priority:")
+                    spacing: Kirigami.Units.largeSpacing
+
+                    SpinBox {
+                        Accessible.name: i18n("Rule priority — higher rules are evaluated first")
+                        // The band-name hint explains the number; attach the
+                        // tooltip here (the value the user is editing)
+                        // instead of on the read-only band Label — that's
+                        // where users hover when they want to learn what
+                        // "610" means.
+                        ToolTip.delay: 500
+                        ToolTip.text: i18n("Priority bands — 100: Animation, 200: Application, 300: Context, 500: Advanced. Higher numbers win within a band.")
+                        ToolTip.visible: hovered
+                        from: 0
+                        to: 100000
+                        value: priorityRow._priority
+                        onValueModified: sheet._patch("priority", value)
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignVCenter
+                        font.italic: true
+                        opacity: 0.65
+                        text: priorityRow._priority >= 500 ? i18n("Advanced") : priorityRow._priority >= 300 ? i18n("Context") : priorityRow._priority >= 200 ? i18n("Application") : priorityRow._priority >= 100 ? i18n("Animation") : i18n("Custom")
                     }
 
                 }
 
             }
 
-        }
-
-        Kirigami.Separator {
-            Layout.fillWidth: true
-        }
-
-        // ── WHEN — the match-expression tree ──
-        Label {
-            text: i18n("WHEN")
-            font.bold: true
-            opacity: 0.7
-            font.capitalization: Font.AllUppercase
-        }
-
-        MatchExpressionEditor {
-            Layout.fillWidth: true
-            node: sheet._workingRule.match || sheet._emptyMatch
-            controller: sheet.controller
-            appSettings: sheet.appSettings
-            matchFieldOptions: sheet._matchFieldOptions
-            depth: 0
-            removable: false
-            onNodeEdited: function(updated) {
-                sheet._patch("match", updated);
+            Kirigami.Separator {
+                Layout.fillWidth: true
             }
-        }
 
-        Kirigami.Separator {
-            Layout.fillWidth: true
-        }
-
-        // ── THEN — the action list ──
-        ActionListEditor {
-            Layout.fillWidth: true
-            actions: sheet._workingRule.actions || []
-            actionTypeOptions: sheet._actionTypeOptions
-            appSettings: sheet.appSettings
-            onActionsEdited: function(updated) {
-                sheet._patch("actions", updated);
+            // ── WHEN — the match-expression tree ──
+            Label {
+                text: i18n("WHEN")
+                font.bold: true
+                opacity: 0.7
+                font.capitalization: Font.AllUppercase
             }
-        }
 
-        Label {
-            Layout.fillWidth: true
-            // `Layout.preferredWidth: 0` breaks the implicit-width feedback
-            // chain between this wrap-text Label and the hosting OverlaySheet's
-            // implicitHeight binding — without it the sheet logs a steady
-            // "Binding loop detected for property 'implicitHeight'" because
-            // the label's natural one-line width propagates upward, the sheet
-            // resizes, the label re-wraps, implicitHeight changes, etc.
-            // `Text.implicitWidth` is read-only so this is the canonical hook.
-            Layout.preferredWidth: 0
-            wrapMode: Text.WordWrap
-            font.italic: true
-            opacity: 0.6
-            text: i18n("The first rule (by priority) to fill each action slot wins that slot — actions in different slots stack.")
-        }
+            MatchExpressionEditor {
+                Layout.fillWidth: true
+                node: sheet._workingRule.match || sheet._emptyMatch
+                controller: sheet.controller
+                appSettings: sheet.appSettings
+                matchFieldOptions: sheet._matchFieldOptions
+                depth: 0
+                removable: false
+                onNodeEdited: function(updated) {
+                    sheet._patch("match", updated);
+                }
+            }
 
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            // Same anti-loop guard as the wrap Label above: InlineMessage
-            // wraps its text internally and contributes the same implicit-
-            // width feedback chain to the hosting OverlaySheet's
-            // implicitHeight binding. `Layout.preferredWidth: 0` tells the
-            // layout the message has no natural width preference, so the
-            // column's explicit `implicitWidth` governs alone.
-            Layout.preferredWidth: 0
-            type: Kirigami.MessageType.Information
-            visible: !sheet._canSave
-            text: !sheet._workingRule.actions || sheet._workingRule.actions.length === 0 ? i18n("Add at least one action before saving.") : i18n("Every condition needs a value before this rule can be saved.")
+            Kirigami.Separator {
+                Layout.fillWidth: true
+            }
+
+            // ── THEN — the action list ──
+            ActionListEditor {
+                Layout.fillWidth: true
+                actions: sheet._workingRule.actions || []
+                actionTypeOptions: sheet._actionTypeOptions
+                appSettings: sheet.appSettings
+                onActionsEdited: function(updated) {
+                    sheet._patch("actions", updated);
+                }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                // `Layout.preferredWidth: 0` breaks the implicit-width feedback
+                // chain between this wrap-text Label and the hosting OverlaySheet's
+                // implicitHeight binding — without it the sheet logs a steady
+                // "Binding loop detected for property 'implicitHeight'" because
+                // the label's natural one-line width propagates upward, the sheet
+                // resizes, the label re-wraps, implicitHeight changes, etc.
+                // `Text.implicitWidth` is read-only so this is the canonical hook.
+                Layout.preferredWidth: 0
+                wrapMode: Text.WordWrap
+                font.italic: true
+                opacity: 0.6
+                text: i18n("The first rule (by priority) to fill each action slot wins that slot — actions in different slots stack.")
+            }
+
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                // Same anti-loop guard as the wrap Label above: InlineMessage
+                // wraps its text internally and contributes the same implicit-
+                // width feedback chain to the hosting OverlaySheet's
+                // implicitHeight binding. `Layout.preferredWidth: 0` tells the
+                // layout the message has no natural width preference, so the
+                // column's explicit `implicitWidth` governs alone.
+                Layout.preferredWidth: 0
+                type: Kirigami.MessageType.Information
+                visible: !sheet._canSave
+                text: !sheet._workingRule.actions || sheet._workingRule.actions.length === 0 ? i18n("Add at least one action before saving.") : i18n("Every condition needs a value before this rule can be saved.")
+            }
+
         }
 
     }

@@ -242,7 +242,19 @@ WindowRuleController::WindowRuleController(QObject* parent)
     QTimer::singleShot(0, this, &WindowRuleController::reload);
 }
 
-WindowRuleController::~WindowRuleController() = default;
+WindowRuleController::~WindowRuleController()
+{
+    // Mirror the `connect()` from the constructor so the bus doesn't keep
+    // a slot binding referencing this destroyed instance. Settings-app
+    // lifetime is process-wide today, but the symmetric disconnect makes
+    // the controller safe to instantiate from a transient owner (tests,
+    // future KCM page where the controller is rebuilt on demand) without
+    // leaking dangling slot dispatches.
+    QDBusConnection::sessionBus().disconnect(QString(PhosphorProtocol::Service::Name),
+                                             QString(PhosphorProtocol::Service::ObjectPath),
+                                             QString(PhosphorProtocol::Service::Interface::WindowRules),
+                                             QStringLiteral("rulesChanged"), this, SLOT(reload()));
+}
 
 void WindowRuleController::setScreenLookup(WindowRuleModel::LabelLookup fn)
 {
@@ -427,6 +439,15 @@ void WindowRuleController::renormalizePriorities()
     const int n = rules.size();
     QList<int> priorities;
     priorities.reserve(n);
+    // Bands are spaced 100 apart (Animation=100, Application=200,
+    // Context=300, Advanced=500). Without a per-band offset cap, a band
+    // with >100 rules would have its later entries spill upward into the
+    // next band — e.g. application rule #101 would get priority 200+100 =
+    // 300, colliding with the Context band's base. Clamp the per-rule
+    // offset so it stays strictly inside the 99-slot window owned by
+    // each band; ties at the high end keep list order via the model's
+    // stable sort (insertion order is preserved by `setPriorities`).
+    constexpr int kBandWidth = 100;
     for (int i = 0; i < n; ++i) {
         int base = kAnimationBandBase;
         switch (WindowRuleModel::sectionFor(rules.at(i))) {
@@ -444,8 +465,11 @@ void WindowRuleController::renormalizePriorities()
             base = kAnimationBandBase;
             break;
         }
-        // Earlier list index ⇒ slightly higher priority within the band.
-        priorities.append(base + (n - i));
+        // Earlier list index ⇒ slightly higher priority within the band,
+        // capped at `kBandWidth - 1` so we never spill into the next
+        // band's range.
+        const int offset = qMin(n - i, kBandWidth - 1);
+        priorities.append(base + offset);
     }
     m_model.setPriorities(priorities);
 }
@@ -460,6 +484,13 @@ QVariantMap WindowRuleController::newEmptyRule(const QString& subject) const
         rule.name = PzI18n::tr("New monitor rule");
         rule.priority = kContextBandBase;
         rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
+    } else if (subject == QLatin1String("desktop")) {
+        rule.name = PzI18n::tr("New desktop rule");
+        rule.priority = kContextBandBase;
+        // VirtualDesktop is numeric; seed with 1 (typical first desktop).
+        // Validator rejects 0 because 0 means "all desktops" and is the same
+        // as having no predicate at all.
+        rule.match = MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 1);
     } else if (subject == QLatin1String("application")) {
         rule.name = PzI18n::tr("New application rule");
         rule.priority = kApplicationBandBase;
@@ -468,12 +499,97 @@ QVariantMap WindowRuleController::newEmptyRule(const QString& subject) const
         rule.name = PzI18n::tr("New activity rule");
         rule.priority = kContextBandBase;
         rule.match = MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QString());
+    } else if (subject == QLatin1String("animation")) {
+        rule.name = PzI18n::tr("New animation rule");
+        rule.priority = kAnimationBandBase;
+        // Animation overrides typically apply globally — the action carries
+        // the event scope (see `anim-shader:`/`anim-timing:`/`anim-curve:`
+        // slot prefixes). Start with an always-true match so the user goes
+        // straight to picking event + override in the action editor.
+        rule.match = MatchExpression{};
     } else {
         // "custom" — start from the always-true catch-all so the user builds
         // the tree from scratch in the Advanced editor.
         rule.name = PzI18n::tr("New custom rule");
         rule.priority = kAdvancedBandBase;
         rule.match = MatchExpression{};
+    }
+    return rule.toJson().toVariantMap();
+}
+
+QVariantList WindowRuleController::ruleTemplates() const
+{
+    auto entry = [](QLatin1StringView id, const QString& label, const QString& description, QLatin1StringView icon) {
+        QVariantMap m;
+        m[QStringLiteral("id")] = QString::fromLatin1(id);
+        m[QStringLiteral("label")] = label;
+        m[QStringLiteral("description")] = description;
+        m[QStringLiteral("icon")] = QString::fromLatin1(icon);
+        return m;
+    };
+
+    // Templates mirror the flows the per-settings pages used to author
+    // before the unified rule store: monitor → layout / algorithm
+    // (assignments) and app → exclusion (per-mode disable + animation
+    // exclusion lists). That's where the bulk of real-world rules live, so
+    // these three give one-click starting points for the common cases.
+    QVariantList out;
+    out.append(entry(QLatin1String("layoutOnMonitor"), PzI18n::tr("Set a layout on a monitor"),
+                     PzI18n::tr("Pick a snapping layout to use on one monitor."), QLatin1String("view-grid")));
+    out.append(entry(QLatin1String("algorithmOnMonitor"), PzI18n::tr("Set a tiling algorithm on a monitor"),
+                     PzI18n::tr("Pick an autotile algorithm to use on one monitor."), QLatin1String("view-list-tree")));
+    out.append(entry(QLatin1String("excludeApp"), PzI18n::tr("Exclude an app from tiling"),
+                     PzI18n::tr("Keep one application's windows out of the snap and autotile engines entirely."),
+                     QLatin1String("edit-delete-remove")));
+    return out;
+}
+
+QVariantMap WindowRuleController::newRuleFromTemplate(const QString& templateId) const
+{
+    WindowRule rule;
+    rule.id = QUuid::createUuid();
+    rule.enabled = true;
+
+    if (templateId == QLatin1String("layoutOnMonitor")) {
+        rule.name = PzI18n::tr("Snapping layout on monitor");
+        rule.priority = kContextBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
+        // Two seeded actions — set engine mode AND pick the layout — so the
+        // editor opens with the same shape the old MonitorStatePage
+        // assignment flow produced. The user fills in the screen and layout
+        // pickers; the engine-mode is pre-set to "snapping" because the
+        // template's whole point is the snap layout.
+        RuleAction engineMode;
+        engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
+        engineMode.params.insert(QStringLiteral("mode"), QStringLiteral("snapping"));
+        rule.actions.append(engineMode);
+        RuleAction layoutAction;
+        layoutAction.type = QString::fromLatin1(ActionType::SetSnappingLayout);
+        layoutAction.params.insert(QStringLiteral("layoutId"), QString());
+        rule.actions.append(layoutAction);
+    } else if (templateId == QLatin1String("algorithmOnMonitor")) {
+        rule.name = PzI18n::tr("Tiling algorithm on monitor");
+        rule.priority = kContextBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
+        // Mirror of the layout template, but for the autotile engine + an
+        // algorithm picker. Same rationale: this is the assignment flow.
+        RuleAction engineMode;
+        engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
+        engineMode.params.insert(QStringLiteral("mode"), QStringLiteral("autotile"));
+        rule.actions.append(engineMode);
+        RuleAction algoAction;
+        algoAction.type = QString::fromLatin1(ActionType::SetTilingAlgorithm);
+        algoAction.params.insert(QStringLiteral("algorithm"), QString());
+        rule.actions.append(algoAction);
+    } else if (templateId == QLatin1String("excludeApp")) {
+        rule.name = PzI18n::tr("Exclude an app from tiling");
+        rule.priority = kApplicationBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
+        RuleAction action;
+        action.type = QString::fromLatin1(ActionType::Exclude);
+        rule.actions.append(action);
+    } else {
+        return {};
     }
     return rule.toJson().toVariantMap();
 }
@@ -629,7 +745,14 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
     {
         int ruleCount = 0;
         bool tilingEnabled = true;
-        QString layoutName;
+        QString snappingLayout;
+        QString tilingAlgorithm;
+        // Mode the rule's `SetEngineMode` action selects (if any). Used to
+        // disambiguate which layout name the overview tile should show
+        // when a rule carries BOTH a snapping layout and a tiling
+        // algorithm — the engine mode is the source of truth for which
+        // engine actually runs.
+        QString engineMode;
     };
     QHash<QString, Summary> byScreen;
 
@@ -648,12 +771,12 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
             for (const RuleAction& a : rule.actions) {
                 if (a.type == ActionType::DisableEngine) {
                     s.tilingEnabled = false;
-                }
-                if (a.type == ActionType::SetSnappingLayout && s.layoutName.isEmpty()) {
-                    s.layoutName = a.params.value(QLatin1String("layoutId")).toString();
-                }
-                if (a.type == ActionType::SetTilingAlgorithm && s.layoutName.isEmpty()) {
-                    s.layoutName = a.params.value(QLatin1String("algorithm")).toString();
+                } else if (a.type == ActionType::SetEngineMode && s.engineMode.isEmpty()) {
+                    s.engineMode = a.params.value(QLatin1String("mode")).toString();
+                } else if (a.type == ActionType::SetSnappingLayout && s.snappingLayout.isEmpty()) {
+                    s.snappingLayout = a.params.value(QLatin1String("layoutId")).toString();
+                } else if (a.type == ActionType::SetTilingAlgorithm && s.tilingAlgorithm.isEmpty()) {
+                    s.tilingAlgorithm = a.params.value(QLatin1String("algorithm")).toString();
                 }
             }
         }
@@ -678,11 +801,26 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
 
         QVariantMap tile;
         tile[QStringLiteral("screenId")] = screenId;
-        // The summary's layoutName is the raw layoutId / algorithm token from
-        // the rule's action params — resolve it to the user-facing layout name
-        // when a lookup is wired, so the tile's caption reads "BSP" instead of
-        // "{25828c9b-…}".
-        QString layoutLabel = summary.layoutName;
+        // Pick the layout token that matches the rule's engine mode. When a
+        // rule sets BOTH a snapping layout AND a tiling algorithm (legal —
+        // they live in independent slots) the engine mode decides which
+        // one is actually visible. Without an explicit engine mode we
+        // prefer the snapping layout (the more common case) and fall back
+        // to the algorithm so the tile is never blank when only one is
+        // set.
+        QString layoutLabel;
+        if (summary.engineMode == QLatin1String("autotile") && !summary.tilingAlgorithm.isEmpty()) {
+            layoutLabel = summary.tilingAlgorithm;
+        } else if (summary.engineMode == QLatin1String("snapping") && !summary.snappingLayout.isEmpty()) {
+            layoutLabel = summary.snappingLayout;
+        } else if (!summary.snappingLayout.isEmpty()) {
+            layoutLabel = summary.snappingLayout;
+        } else {
+            layoutLabel = summary.tilingAlgorithm;
+        }
+        // The token is the raw layoutId / algorithm name from the rule's
+        // action params — resolve it to a user-facing label when a lookup
+        // is wired so the tile reads "BSP" instead of "{25828c9b-…}".
         if (m_layoutLookup && !layoutLabel.isEmpty()) {
             const QString resolved = m_layoutLookup(layoutLabel);
             if (!resolved.isEmpty()) {
@@ -709,14 +847,21 @@ QStringList WindowRuleController::ruleScreenIds(const QString& ruleId) const
 
 QVariantList WindowRuleController::matchFields() const
 {
-    // WindowRole is intentionally omitted — it's the X11 WM_WINDOW_ROLE
-    // property, empty for every Wayland-native window. PlasmaZones is
-    // Wayland-only (per CLAUDE.md), so exposing a field that's always blank
-    // would be a footgun.
+    // Pid and WindowRole are intentionally omitted from the picker —
+    // both are footguns in a persistent rule store:
+    //   * Pid is ephemeral. A `Pid equals 12345` predicate matches one
+    //     specific process instance and is dead the moment that process
+    //     restarts. Surfacing it in the picker invites users to author
+    //     rules that silently stop working.
+    //   * WindowRole is the X11 WM_WINDOW_ROLE property, empty for every
+    //     Wayland-native window — PlasmaZones is Wayland-only (per
+    //     CLAUDE.md), so the picker would always read as blank.
+    // The Field enum keeps both values for back-compat with already-saved
+    // rules; only the authoring UI hides them.
     static const QList<Field> kFields = {
-        Field::AppId,      Field::WindowClass,    Field::DesktopFile,  Field::Pid,         Field::Title,
-        Field::WindowType, Field::IsSticky,       Field::IsFullscreen, Field::IsMinimized, Field::IsMaximized,
-        Field::ScreenId,   Field::VirtualDesktop, Field::Activity,
+        Field::AppId,       Field::WindowClass, Field::DesktopFile,    Field::Title,
+        Field::WindowType,  Field::IsSticky,    Field::IsFullscreen,   Field::IsMinimized,
+        Field::IsMaximized, Field::ScreenId,    Field::VirtualDesktop, Field::Activity,
     };
     QVariantList out;
     for (Field f : kFields) {

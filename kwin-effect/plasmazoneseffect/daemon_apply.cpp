@@ -686,10 +686,20 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
             appName = windowClass;
         }
 
+        // Pull the desktop-file basename from the underlying KWin::Window
+        // (EffectWindow doesn't expose desktopFileName directly). Empty
+        // for windows without a registered desktop file — the rule picker
+        // hides the entry from its DesktopFile mode in that case.
+        QString desktopFile;
+        if (KWin::Window* kw = w->window()) {
+            desktopFile = kw->desktopFileName();
+        }
+
         QJsonObject obj;
         obj[QLatin1String("windowClass")] = windowClass;
         obj[QLatin1String("appName")] = appName;
         obj[QLatin1String("caption")] = w->caption();
+        obj[QLatin1String("desktopFile")] = desktopFile;
         windowArray.append(obj);
     }
 
