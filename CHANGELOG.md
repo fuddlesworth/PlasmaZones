@@ -7,6 +7,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.11] - 2026-05-24
+
+### Changed
+
+- **Layer-shell state setters skip unchanged values across configure events** ([#522](https://github.com/fuddlesworth/PlasmaZones/pull/522)): KWin re-emits `zwlr_layer_surface_v1` configure events on every virtual-desktop switch, and `applyProperties` was unconditionally re-sending the full layer-shell state (anchor, layer, exclusive zone, keyboard interactivity, margin, size, exclusive edge) — six to seven protocol messages per surface per configure. The applied state is now cached per surface and each setter only fires when its source property has actually changed.
+
+### Fixed
+
+- **Focus-follows-mouse activated tiled windows underneath an active popup** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#521](https://github.com/fuddlesworth/PlasmaZones/pull/521)): the 3.0.10 FFM fix made auto-focus-follow-mouse consistent for the common case but missed the case where an excluded or untracked window (emoji picker, notification popup, krunner) was active inside a zone. Moving the cursor across the underlying tiled window's visible area still activated that tiled window, sending the just-opened popup straight to the background. `handleCursorMoved` now also checks the currently active window — if it is an excluded app, dialog, popup, keep-above overlay, or below the min-size threshold, FFM pauses on the cursor's screen until a tileable window becomes active.
+- **Stale pending-restore entries for excluded apps grew session.json and logged on every daemon start** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#521](https://github.com/fuddlesworth/PlasmaZones/pull/521)): runtime gates already refused to honor pending restores for excluded apps, but the dead entries persisted on disk in `PendingRestoreQueues` and `AutotilePendingRestores` and reappeared on every restart. Both engines now prune their on-disk queues against the current exclusion lists at startup and whenever the lists change.
+- **Drag artifacts, post-snap flicker, and a gray decoration ring during snap drags** ([#516](https://github.com/fuddlesworth/PlasmaZones/issues/516), [#523](https://github.com/fuddlesworth/PlasmaZones/pull/523)): the zone-preview `PassiveShell` mapped on the Overlay layer fullscreen during a drag, masking KWin's Translucency-while-moving effect. On hybrid Intel+NVIDIA setups (CachyOS, Plasma 6.6.5, NVIDIA 595) this also forced a slower compositional path that produced the visible drag artifacts and post-snap flicker. The PassiveShell role is now downgraded to the Top layer — the same layer KDE's own panels live on — which coexists with the translucency effect. Fullscreen apps on Overlay still draw above the zone preview correctly.
+
 ## [3.0.10] - 2026-05-23
 
 ### Fixed
@@ -1401,7 +1413,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.10...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.11...HEAD
+[3.0.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.10...v3.0.11
 [3.0.10]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.9...v3.0.10
 [3.0.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.8...v3.0.9
 [3.0.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.7...v3.0.8

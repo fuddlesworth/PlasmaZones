@@ -1,6 +1,16 @@
 {
     "releases": [
         {
+            "version": "3.0.11",
+            "date": "2026-05-24",
+            "highlights": [
+                "Fixed focus-follows-mouse activating tiled windows underneath an active emoji picker, notification popup, or krunner — pauses until a tileable window becomes active (#461, #521)",
+                "Fixed stale pending-restore entries for excluded apps growing session.json and logging on every daemon start (#461, #521)",
+                "Fixed drag artifacts, post-snap flicker, and a gray decoration ring during snap drags on hybrid Intel+NVIDIA setups (#516, #523)",
+                "Skip redundant layer-shell setter messages across virtual-desktop switches (#522)"
+            ]
+        },
+        {
             "version": "3.0.10",
             "date": "2026-05-23",
             "highlights": [
