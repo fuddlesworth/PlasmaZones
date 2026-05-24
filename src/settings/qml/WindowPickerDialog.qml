@@ -130,7 +130,7 @@ Kirigami.Dialog {
                 if (filter.length === 0)
                     return dialog.windowList;
 
-                return dialog.windowList.filter(function(w) {
+                return dialog.windowList.filter(function (w) {
                     let primary = dialog.forApps ? (w.appName && w.appName.length > 0 ? w.appName : dialog.deriveAppName(w.windowClass)) : w.windowClass;
                     return primary.toLowerCase().includes(filter) || (w.caption || "").toLowerCase().includes(filter);
                 });
@@ -184,15 +184,9 @@ Kirigami.Dialog {
                             elide: Text.ElideRight
                             visible: (modelData.caption || "").length > 0
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

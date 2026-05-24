@@ -39,9 +39,6 @@ SettingsFlickable {
                 appSettings: settingsController
                 viewMode: root.viewMode
             }
-
         }
-
     }
-
 }

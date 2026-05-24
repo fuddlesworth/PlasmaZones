@@ -29,14 +29,13 @@ Kirigami.OverlaySheet {
     /// True when editing an existing rule (vs creating a new one).
     property bool editing: false
     /// Working copy of the rule being edited. Set via `openFor`.
-    property var _workingRule: ({
-    })
+    property var _workingRule: ({})
     /// Stable empty-match fallback — a single allocation, so binding
     /// MatchExpressionEditor.node to it does not churn the node identity on
     /// every binding evaluation.
     readonly property var _emptyMatch: ({
-        "all": []
-    })
+            "all": []
+        })
     /// The controller's authoring metadata, cached once. `actionTypes()` and
     /// `matchFields()` are Q_INVOKABLEs that allocate a fresh QVariantList on
     /// every call — binding them directly would re-invoke (and churn the
@@ -88,13 +87,11 @@ Kirigami.OverlaySheet {
             var degenerate = node.any !== undefined ? node.any : node.none;
             if (!degenerate || degenerate.length === 0)
                 return false;
-
         }
         var children = node.all || node.any || node.none || [];
         for (var i = 0; i < children.length; ++i) {
             if (!sheet._matchHasFilledLeaves(children[i]))
                 return false;
-
         }
         return true;
     }
@@ -132,7 +129,6 @@ Kirigami.OverlaySheet {
                 Accessible.name: i18n("Rule priority — higher rules are evaluated first")
                 onValueModified: sheet._patch("priority", value)
             }
-
         }
 
         Kirigami.Separator {
@@ -155,7 +151,7 @@ Kirigami.OverlaySheet {
             matchFieldOptions: sheet._matchFieldOptions
             depth: 0
             removable: false
-            onNodeEdited: function(updated) {
+            onNodeEdited: function (updated) {
                 sheet._patch("match", updated);
             }
         }
@@ -170,7 +166,7 @@ Kirigami.OverlaySheet {
             actions: sheet._workingRule.actions || []
             actionTypeOptions: sheet._actionTypeOptions
             appSettings: sheet.appSettings
-            onActionsEdited: function(updated) {
+            onActionsEdited: function (updated) {
                 sheet._patch("actions", updated);
             }
         }
@@ -204,7 +200,6 @@ Kirigami.OverlaySheet {
             visible: !sheet._canSave
             text: !sheet._workingRule.actions || sheet._workingRule.actions.length === 0 ? i18n("Add at least one action before saving.") : i18n("Every condition needs a value before this rule can be saved.")
         }
-
     }
 
     footer: RowLayout {
@@ -230,7 +225,5 @@ Kirigami.OverlaySheet {
                 sheet.close();
             }
         }
-
     }
-
 }

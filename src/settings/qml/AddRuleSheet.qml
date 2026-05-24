@@ -74,11 +74,8 @@ Kirigami.OverlaySheet {
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
-
                 }
-
             }
-
         }
 
         ItemDelegate {
@@ -110,11 +107,8 @@ Kirigami.OverlaySheet {
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
-
                 }
-
             }
-
         }
 
         ItemDelegate {
@@ -146,11 +140,8 @@ Kirigami.OverlaySheet {
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
-
                 }
-
             }
-
         }
 
         ItemDelegate {
@@ -182,13 +173,8 @@ Kirigami.OverlaySheet {
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

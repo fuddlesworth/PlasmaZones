@@ -27,8 +27,7 @@ SettingsFlickable {
     // screen / activity match-leaf editors) all see the same object.
     // LayoutComboBox reads `layouts` + the `default*` ids from this; the leaf
     // pickers read `screens` and `activities`.
-    readonly property QtObject
-    _editorAppSettings: QtObject {
+    readonly property QtObject _editorAppSettings: QtObject {
         readonly property var layouts: settingsController.layouts
         readonly property var screens: settingsController.screens
         readonly property var activities: settingsController.activities
@@ -59,9 +58,9 @@ SettingsFlickable {
         // Touch the revision so the binding re-evaluates on any model change.
         var rev = page.modelRevision;
         var snapshot = page.controller.rulesSnapshot();
-        var buckets = {
-        };
-        for (var s = 0; s < page.sectionDescriptors.length; ++s) buckets[page.sectionDescriptors[s].value] = []
+        var buckets = {};
+        for (var s = 0; s < page.sectionDescriptors.length; ++s)
+            buckets[page.sectionDescriptors[s].value] = [];
         var search = page.searchText.toLowerCase();
         for (var i = 0; i < snapshot.length; ++i) {
             var entry = snapshot[i];
@@ -74,7 +73,6 @@ SettingsFlickable {
                 var hay = (entry.name + " " + entry.matchSummary + " " + entry.actionSummary).toLowerCase();
                 if (hay.indexOf(search) < 0)
                     continue;
-
             }
             // Monitor filter — keep only rules whose ScreenId predicate(s)
             // name the selected monitor (an exact id match, not a substring
@@ -82,11 +80,9 @@ SettingsFlickable {
             if (page.monitorFilter.length > 0) {
                 if (!entry.screenIds || entry.screenIds.indexOf(page.monitorFilter) < 0)
                     continue;
-
             }
             if (buckets[entry.section] !== undefined)
                 buckets[entry.section].push(entry);
-
         }
         var out = [];
         for (var so = 0; so < page.sectionDescriptors.length; ++so) {
@@ -150,7 +146,7 @@ SettingsFlickable {
         id: addRuleSheet
 
         controller: page.controller
-        onSubjectChosen: function(ruleJson) {
+        onSubjectChosen: function (ruleJson) {
             ruleEditorSheet.openFor(ruleJson, false);
         }
     }
@@ -160,7 +156,7 @@ SettingsFlickable {
 
         controller: page.controller
         appSettings: page._editorAppSettings
-        onRuleSaved: function(ruleJson) {
+        onRuleSaved: function (ruleJson) {
             if (editing)
                 page.controller.updateRuleFromJson(ruleJson);
             else
@@ -206,7 +202,7 @@ SettingsFlickable {
                 return page.controller.monitorOverview(settingsController.screens);
             }
             selectedScreenId: page.monitorFilter
-            onMonitorSelected: function(screenId) {
+            onMonitorSelected: function (screenId) {
                 page.monitorFilter = screenId;
             }
         }
@@ -229,7 +225,6 @@ SettingsFlickable {
                 Accessible.name: i18n("Add a new window rule")
                 onClicked: addRuleSheet.open()
             }
-
         }
 
         // ── Filter chips ──
@@ -245,10 +240,12 @@ SettingsFlickable {
             Repeater {
                 // "All" chip prepended to the controller's section list — the
                 // section labels and order come from C++, not hardcoded here.
-                model: [{
-                    "value": -1,
-                    "label": i18n("All")
-                }].concat(page.sectionDescriptors)
+                model: [
+                    {
+                        "value": -1,
+                        "label": i18n("All")
+                    }
+                ].concat(page.sectionDescriptors)
 
                 delegate: Button {
                     required property var modelData
@@ -259,13 +256,11 @@ SettingsFlickable {
                     Accessible.name: i18n("Filter rules: %1", modelData.label)
                     onClicked: page.chipFilter = modelData.value
                 }
-
             }
 
             Item {
                 Layout.fillWidth: true
             }
-
         }
 
         // ── Empty state ──
@@ -317,7 +312,7 @@ SettingsFlickable {
                             conditionCount: modelData.conditionCount
                             actionCount: modelData.actionCount
                             isComposite: modelData.isComposite
-                            onToggleRequested: function(en) {
+                            onToggleRequested: function (en) {
                                 page.controller.setRuleEnabled(ruleId, en);
                             }
                             onEditRequested: {
@@ -327,15 +322,9 @@ SettingsFlickable {
                                 page.controller.removeRule(ruleId);
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

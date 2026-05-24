@@ -28,8 +28,8 @@ ItemDelegate {
     required property int actionCount
     required property bool isComposite
 
-    signal editRequested()
-    signal deleteRequested()
+    signal editRequested
+    signal deleteRequested
     // Parameter named `ruleEnabled` for symmetry with the `ruleEnabled`
     // property — using the bare name `enabled` would shadow the row's own
     // `enabled` in any handler that relies on implicit-argument scope.
@@ -61,7 +61,6 @@ ItemDelegate {
                 border.width: row.ruleEnabled ? 0 : 2
                 border.color: Kirigami.Theme.disabledTextColor
             }
-
         }
 
         ColumnLayout {
@@ -83,7 +82,6 @@ ItemDelegate {
                 elide: Text.ElideRight
                 visible: row.ruleName.length > 0
             }
-
         }
 
         // Condition-count badge for composite rules.
@@ -103,7 +101,6 @@ ItemDelegate {
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 opacity: 0.7
             }
-
         }
 
         // Action-count badge — shown for rules carrying more than one action.
@@ -123,7 +120,6 @@ ItemDelegate {
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 opacity: 0.7
             }
-
         }
 
         Kirigami.Icon {
@@ -160,7 +156,5 @@ ItemDelegate {
             Accessible.name: i18n("Delete rule %1", row.ruleName)
             onClicked: row.deleteRequested()
         }
-
     }
-
 }

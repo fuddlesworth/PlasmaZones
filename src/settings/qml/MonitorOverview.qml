@@ -36,8 +36,7 @@ ColumnLayout {
     /// screen whose tile was keyed by `screenId` would be silently treated
     /// as "Not assigned" when iterated by `name`.
     readonly property var _tilesByScreenId: {
-        var map = {
-        };
+        var map = {};
         // Guard `tiles` itself — the binding can transiently produce
         // `undefined` if a callsite passes an unevaluated expression while
         // the controller is still warming up.
@@ -48,7 +47,6 @@ ColumnLayout {
             var t = overview.tiles[i];
             if (t && t.screenId)
                 map[t.screenId] = t;
-
         }
         return map;
     }
@@ -103,11 +101,7 @@ ColumnLayout {
                         overview.monitorSelected(next);
                     }
                 }
-
             }
-
         }
-
     }
-
 }

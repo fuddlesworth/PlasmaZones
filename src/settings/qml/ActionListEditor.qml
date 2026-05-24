@@ -68,7 +68,8 @@ ColumnLayout {
             "type": typeEntry.value
         };
         var params = typeEntry.params || [];
-        for (var i = 0; i < params.length; ++i) action[params[i].key] = editor._defaultParamValue(params[i])
+        for (var i = 0; i < params.length; ++i)
+            action[params[i].key] = editor._defaultParamValue(params[i]);
         var next = editor.actions.slice();
         next.push(action);
         editor.actionsEdited(next);
@@ -94,12 +95,11 @@ ColumnLayout {
             action: modelData
             actionTypeOptions: editor.actionTypeOptions
             appSettings: editor.appSettings
-            onActionEdited: function(updated) {
+            onActionEdited: function (updated) {
                 editor._replaceAt(index, updated);
             }
             onRemoveRequested: editor._removeAt(index)
         }
-
     }
 
     Label {
@@ -119,5 +119,4 @@ ColumnLayout {
         Accessible.name: i18n("Add an action to this rule")
         onClicked: editor._append()
     }
-
 }

@@ -35,14 +35,13 @@ RowLayout {
     readonly property string _valueKind: leaf._fieldEntry !== undefined ? leaf._fieldEntry.valueKind : "string"
 
     signal leafChanged(var updatedLeaf)
-    signal removeRequested()
+    signal removeRequested
 
     /// The descriptor in @p options whose `wire` equals @p wire, or undefined.
     function _entryForWire(options, wire) {
         for (var i = 0; i < options.length; ++i) {
             if (options[i].wire === wire)
                 return options[i];
-
         }
         return undefined;
     }
@@ -53,7 +52,6 @@ RowLayout {
         for (var i = 0; i < options.length; ++i) {
             if (options[i].wire === wire)
                 return i;
-
         }
         return -1;
     }
@@ -91,10 +89,9 @@ RowLayout {
         // silently coercing it to the first field.
         currentIndex: leaf._indexForWire(leaf.fieldOptions, leaf.node.field)
         Accessible.name: i18n("Match field")
-        onActivated: function(index) {
+        onActivated: function (index) {
             if (currentValue !== leaf.node.field)
                 leaf._emit(currentValue, leaf.node.op, leaf.node.value);
-
         }
     }
 
@@ -106,10 +103,9 @@ RowLayout {
         model: leaf._operatorOptions
         currentIndex: leaf._indexForWire(leaf._operatorOptions, leaf.node.op)
         Accessible.name: i18n("Match operator")
-        onActivated: function(index) {
+        onActivated: function (index) {
             if (currentValue !== leaf.node.op)
                 leaf._emit(leaf.node.field, currentValue, leaf.node.value);
-
         }
     }
 
@@ -151,7 +147,6 @@ RowLayout {
             Accessible.name: i18n("Match value")
             onEditingFinished: leaf._emit(leaf.node.field, leaf.node.op, text)
         }
-
     }
 
     Component {
@@ -169,7 +164,6 @@ RowLayout {
             Accessible.name: i18n("Match value")
             onValueModified: leaf._emit(leaf.node.field, leaf.node.op, value)
         }
-
     }
 
     Component {
@@ -181,7 +175,6 @@ RowLayout {
             Accessible.name: i18n("Match value")
             onToggled: leaf._emit(leaf.node.field, leaf.node.op, checked)
         }
-
     }
 
     Component {
@@ -203,7 +196,6 @@ RowLayout {
                 for (var i = 0; i < list.length; ++i) {
                     if (list[i].name === target)
                         return i;
-
                 }
                 return -1;
             }
@@ -213,13 +205,11 @@ RowLayout {
             // tell what the rule pins to instead of an empty dropdown.
             displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose a monitor…"))
             Accessible.name: i18n("Monitor")
-            onActivated: function(index) {
+            onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);
-
             }
         }
-
     }
 
     Component {
@@ -240,7 +230,6 @@ RowLayout {
                 for (var i = 0; i < list.length; ++i) {
                     if (list[i].id === target)
                         return i;
-
                 }
                 return -1;
             }
@@ -249,13 +238,10 @@ RowLayout {
             // current activity matches.
             displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose an activity…"))
             Accessible.name: i18n("Activity")
-            onActivated: function(index) {
+            onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);
-
             }
         }
-
     }
-
 }

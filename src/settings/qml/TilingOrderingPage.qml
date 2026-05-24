@@ -19,15 +19,16 @@ OrderingPage {
     previewZonesKey: "previewZones"
     zoneCountKey: "defaultMaxWindows"
     hideZeroBadge: true
-    resolveOrder: function() {
+    resolveOrder: function () {
         let items = settingsController.resolvedTilingOrder();
-        for (let i = 0; i < items.length; i++) items[i].previewZones = settingsController.generateAlgorithmDefaultPreview(items[i].id)
+        for (let i = 0; i < items.length; i++)
+            items[i].previewZones = settingsController.generateAlgorithmDefaultPreview(items[i].id);
         return items;
     }
-    moveItem: function(from, to) {
+    moveItem: function (from, to) {
         settingsController.moveTilingAlgorithm(from, to);
     }
-    resetOrder: function() {
+    resetOrder: function () {
         settingsController.resetTilingOrder();
     }
 
@@ -50,5 +51,4 @@ OrderingPage {
 
         target: settingsController
     }
-
 }

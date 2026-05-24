@@ -57,11 +57,10 @@ ColumnLayout {
     // auto-generates a `nodeChanged()` change-signal and QML rejects the
     // duplicate. This signal carries the updated subtree upward to the parent.
     signal nodeEdited(var updatedNode)
-    signal removeRequested()
+    signal removeRequested
 
     function _emitChildren(kind, children) {
-        var next = {
-        };
+        var next = {};
         next[kind] = children;
         matchEditor.nodeEdited(next);
     }
@@ -119,12 +118,11 @@ ColumnLayout {
             controller: matchEditor.controller
             appSettings: matchEditor.appSettings
             fieldOptions: matchEditor.matchFieldOptions
-            onLeafChanged: function(updated) {
+            onLeafChanged: function (updated) {
                 matchEditor.nodeEdited(updated);
             }
             onRemoveRequested: matchEditor.removeRequested()
         }
-
     }
 
     // ── Composite node ──
@@ -151,24 +149,27 @@ ColumnLayout {
                 WideComboBox {
                     id: kindCombo
 
-                    model: [{
-                        "value": "all",
-                        "label": i18nc("match composite — every child must match", "ALL of")
-                    }, {
-                        "value": "any",
-                        "label": i18nc("match composite — at least one child must match", "ANY of")
-                    }, {
-                        "value": "none",
-                        "label": i18nc("match composite — no child may match", "NONE of")
-                    }]
+                    model: [
+                        {
+                            "value": "all",
+                            "label": i18nc("match composite — every child must match", "ALL of")
+                        },
+                        {
+                            "value": "any",
+                            "label": i18nc("match composite — at least one child must match", "ANY of")
+                        },
+                        {
+                            "value": "none",
+                            "label": i18nc("match composite — no child may match", "NONE of")
+                        }
+                    ]
                     textRole: "label"
                     valueRole: "value"
                     currentIndex: ["all", "any", "none"].indexOf(matchEditor._compositeKind)
                     Accessible.name: i18n("Condition group type")
-                    onActivated: function(index) {
+                    onActivated: function (index) {
                         if (currentValue !== matchEditor._compositeKind)
                             matchEditor._changeKind(currentValue);
-
                     }
                 }
 
@@ -184,7 +185,6 @@ ColumnLayout {
                     Accessible.name: i18n("Remove this condition group")
                     onClicked: matchEditor.removeRequested()
                 }
-
             }
 
             // Children — each recursively a MatchExpressionEditor, loaded by
@@ -206,7 +206,7 @@ ColumnLayout {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Component.onCompleted: {
                         setSource("MatchExpressionEditor.qml", {
-                            "node": Qt.binding(function() {
+                            "node": Qt.binding(function () {
                                 return matchEditor._children[childLoader.index];
                             }),
                             "controller": matchEditor.controller,
@@ -228,9 +228,7 @@ ColumnLayout {
 
                         target: childLoader.item
                     }
-
                 }
-
             }
 
             RowLayout {
@@ -255,11 +253,7 @@ ColumnLayout {
                     Accessible.name: i18n("Add a nested condition group")
                     onClicked: matchEditor._addGroupChild()
                 }
-
             }
-
         }
-
     }
-
 }

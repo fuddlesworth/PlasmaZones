@@ -39,7 +39,7 @@ Rectangle {
     readonly property int _ruleCount: (tile.tileData !== undefined && tile.tileData.ruleCount !== undefined ? Number(tile.tileData.ruleCount) : 0) || 0
     readonly property bool _isPrimary: tile.screenData.isPrimary === true
 
-    signal clicked()
+    signal clicked
 
     implicitWidth: content.implicitWidth + Kirigami.Units.largeSpacing * 2
     implicitHeight: content.implicitHeight + Kirigami.Units.largeSpacing
@@ -103,7 +103,6 @@ Rectangle {
                 color: Kirigami.Theme.positiveTextColor
                 opacity: tile._isPrimary ? 1 : 0
             }
-
         }
 
         // Rule-count / assignment caption — small, secondary line beneath the
@@ -142,9 +141,7 @@ Rectangle {
                     return countLabel;
                 }
             }
-
         }
-
     }
 
     MouseArea {
@@ -164,7 +161,6 @@ Rectangle {
             profile: "widget.hover"
             durationOverride: Kirigami.Units.shortDuration
         }
-
     }
 
     Behavior on border.color {
@@ -172,7 +168,5 @@ Rectangle {
             profile: "widget.hover"
             durationOverride: Kirigami.Units.shortDuration
         }
-
     }
-
 }
