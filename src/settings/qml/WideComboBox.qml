@@ -45,7 +45,42 @@ ComboBox {
     }
 
     popup: T.Popup {
-        y: root.height
+        // Re-parent to the application Overlay so the popup escapes any
+        // hosting popup (e.g. Kirigami.OverlaySheet) that would otherwise
+        // out-z-order it. Position is mapped from the ComboBox's local
+        // coordinates into the overlay so the dropdown still anchors under
+        // the combo. The bumped `z` puts us above the sheet's own popup
+        // stack — without it, the sheet's modal layer wins and the dropdown
+        // renders behind the sheet content. Modal stays off so the host
+        // window keeps focus and the sheet doesn't auto-close.
+        // `popupType: Popup.Item` pins the popup to in-scene rendering so the
+        // KDE / Plasma style can't auto-promote it to a top-level OS window
+        // (the promotion behaviour differs between Qt 6.x style versions and
+        // would re-trigger the focus-loss regression that closes the host
+        // OverlaySheet the moment a real window grabs focus).
+        popupType: T.Popup.Item
+        parent: Overlay.overlay
+        z: 999999
+        // `modal: true` is required for close-on-press-outside to fire: the
+        // popup must intercept the outside click for the close heuristic to
+        // see it. The earlier "auto-close-on-focus-loss" regression came
+        // from `popupType: Popup.Window` (which creates a real OS window
+        // that steals focus); plain Popup-item modality keeps focus on the
+        // host window so the hosting OverlaySheet stays open.
+        // `dim: false` avoids painting a darkening rectangle over the rest
+        // of the sheet — modal still blocks input to the sheet while the
+        // dropdown is open, which is the desired ComboBox UX anyway.
+        modal: true
+        dim: false
+        closePolicy: T.Popup.CloseOnEscape | T.Popup.CloseOnPressOutside | T.Popup.CloseOnPressOutsideParent
+        // Guard on `parent` (the popup's effective parent — `Overlay.overlay`
+        // once attached, null during early construction) rather than the
+        // window. `mapToItem(null, …)` is undefined behaviour and can leave
+        // the dropdown stuck at (0,0) on slow startup paths. The fallback
+        // `y: root.height` mirrors the historical default-popup position so
+        // first-frame layout pre-attach lines up under the combo.
+        x: parent ? root.mapToItem(parent, 0, root.height).x : 0
+        y: parent ? root.mapToItem(parent, 0, root.height).y : root.height
         width: Math.max(root.width, root._longestItemWidth + Kirigami.Units.gridUnit * 3)
         height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (root.Window.window ? root.Window.window.height : 600) - topMargin - bottomMargin)
         topMargin: Kirigami.Units.smallSpacing

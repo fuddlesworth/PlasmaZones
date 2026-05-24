@@ -54,6 +54,14 @@ QString timingSlotFor(const QString& eventPath)
     return QString(PhosphorWindowRule::ActionSlot::AnimTimingPrefix) + eventPath;
 }
 
+/// The event-scoped curve-override slot id for @p eventPath. Curve and timing
+/// (duration) are independent overrides — a rule can fill one without the
+/// other so the user can change just the easing or just the duration.
+QString curveSlotFor(const QString& eventPath)
+{
+    return QString(PhosphorWindowRule::ActionSlot::AnimCurvePrefix) + eventPath;
+}
+
 } // namespace
 
 PhosphorAnimationShaders::ShaderProfile
@@ -116,12 +124,19 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
         return base;
     }
     const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolve(animationQuery(windowClass));
-    const auto action = resolved.slot(timingSlotFor(eventPath));
-    if (!action) {
+    const auto curveAction = resolved.slot(curveSlotFor(eventPath));
+    const auto timingAction = resolved.slot(timingSlotFor(eventPath));
+    if (!curveAction && !timingAction) {
         return base;
     }
     PhosphorAnimation::Profile out = base;
-    const QString curve = action->params.value(kKeyCurve).toString();
+    // Curve cascade: prefer the dedicated `anim-curve:` slot. Fall through to
+    // the legacy `anim-timing:` slot's curve field so rules authored before
+    // the curve/timing split (or via the bridge) still resolve.
+    QString curve = curveAction ? curveAction->params.value(kKeyCurve).toString() : QString();
+    if (curve.isEmpty() && timingAction) {
+        curve = timingAction->params.value(kKeyCurve).toString();
+    }
     if (!curve.isEmpty()) {
         // tryCreate (NOT create) — a malformed curve string stays on the
         // base curve rather than silently coercing to OutCubic and swapping
@@ -130,12 +145,14 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
             out.curve = std::move(compiled);
         }
     }
-    const int durationMs = action->params.value(kKeyDurationMs).toInt(0);
-    if (durationMs > 0) {
-        // Same clamp as resolveAnimationDuration so the motion and shader
-        // paths stay in lockstep for the same user-facing rule.
-        out.duration = static_cast<qreal>(qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, durationMs,
-                                                 PhosphorAnimation::Limits::MaxAnimationDurationMs));
+    if (timingAction) {
+        const int durationMs = timingAction->params.value(kKeyDurationMs).toInt(0);
+        if (durationMs > 0) {
+            // Same clamp as resolveAnimationDuration so the motion and shader
+            // paths stay in lockstep for the same user-facing rule.
+            out.duration = static_cast<qreal>(qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, durationMs,
+                                                     PhosphorAnimation::Limits::MaxAnimationDurationMs));
+        }
     }
     return out;
 }

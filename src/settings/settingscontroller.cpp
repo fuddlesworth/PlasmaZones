@@ -366,6 +366,65 @@ SettingsController::SettingsController(QObject* parent)
         endExternalEdit();
     });
 
+    // Wire screen / activity / layout label resolvers so the rule model and
+    // monitor-overview render friendly names instead of raw connector strings,
+    // activity UUIDs and layout UUIDs.
+    //
+    // The closures capture `this` and read live snapshot state on every call,
+    // so they need to be installed exactly ONCE — re-installing on every
+    // upstream change was wasteful (three model-wide `dataChanged` emits per
+    // signal × three signals = nine emits). Upstream changes are now routed
+    // to `WindowRuleModel::refreshLabels()` which emits a single dataChanged
+    // covering every label-derived role.
+    m_windowRulesPage->setScreenLookup([this](const QString& screenId) -> QString {
+        const QVariantList all = screens();
+        for (const QVariant& sv : all) {
+            const QVariantMap m = sv.toMap();
+            // Match against `name` (the connector / virtual-screen id) or
+            // `screenId` (the daemon-stable screen identifier). The screen
+            // payload built by `screenInfoListToVariantList` never emits an
+            // `id` key — comparing against `"id"` would be dead code.
+            if (m.value(QStringLiteral("name")).toString() == screenId
+                || m.value(QStringLiteral("screenId")).toString() == screenId) {
+                const QString label = m.value(QStringLiteral("displayLabel")).toString();
+                return label.isEmpty() ? screenId : label;
+            }
+        }
+        return screenId;
+    });
+    m_windowRulesPage->setActivityLookup([this](const QString& activityId) -> QString {
+        for (const QVariant& av : std::as_const(m_activities)) {
+            const QVariantMap m = av.toMap();
+            if (m.value(QStringLiteral("id")).toString() == activityId) {
+                const QString name = m.value(QStringLiteral("name")).toString();
+                return name.isEmpty() ? activityId : name;
+            }
+        }
+        return activityId;
+    });
+    m_windowRulesPage->setLayoutLookup([this](const QString& layoutId) -> QString {
+        for (const QVariant& lv : std::as_const(m_layouts)) {
+            const QVariantMap m = lv.toMap();
+            if (m.value(QStringLiteral("id")).toString() == layoutId) {
+                // Layouts are serialised via `toVariantMap(LayoutPreview)`
+                // which stamps the friendly label under `displayName`, not
+                // `name`. Reading `name` here would always return an empty
+                // string and the tile caption would show the raw UUID.
+                const QString name = m.value(QStringLiteral("displayName")).toString();
+                return name.isEmpty() ? layoutId : name;
+            }
+        }
+        return layoutId;
+    });
+    auto refreshRuleLabels = [this]() {
+        if (m_windowRulesPage && m_windowRulesPage->model()) {
+            m_windowRulesPage->model()->refreshLabels();
+        }
+    };
+    connect(this, &SettingsController::screensChanged, this, refreshRuleLabels);
+    connect(this, &SettingsController::activitiesChanged, this, refreshRuleLabels);
+    connect(this, &SettingsController::layoutsChanged, this, refreshRuleLabels);
+
     // Overlay shader registry — settings-side mirror of the daemon's. The
     // PlasmaZones::ShaderRegistry subclass auto-wires the standard system
     // + user search paths (`plasmazones/shaders`), so no extra path

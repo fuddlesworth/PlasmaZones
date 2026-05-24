@@ -9,7 +9,7 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief The "THEN" block — the editable action list of a rule.
  *
- * Holds a JS array of action JSON objects. Edits emit `actionsChanged(array)`;
+ * Holds a JS array of action JSON objects. Edits emit `actionsEdited(array)`;
  * the parent (RuleEditorSheet) owns the working rule.
  */
 ColumnLayout {
@@ -19,27 +19,39 @@ ColumnLayout {
     required property var actions
     /// Registered action types from `WindowRuleController.actionTypes()`.
     required property var actionTypeOptions
+    /// The SettingsController — threaded into ActionRow so the picker-kind
+    /// params (snappingLayout / tilingAlgorithm) can populate their dropdowns
+    /// from `settingsController.layouts`.
+    required property var appSettings
 
-    signal actionsChanged(var updatedActions)
+    signal actionsEdited(var updatedActions)
 
     function _replaceAt(index, updated) {
         var next = editor.actions.slice();
         next[index] = updated;
-        editor.actionsChanged(next);
+        editor.actionsEdited(next);
     }
 
     function _removeAt(index) {
         var next = editor.actions.slice();
         next.splice(index, 1);
-        editor.actionsChanged(next);
+        editor.actionsEdited(next);
     }
 
     /// A valid starting value for a parameter descriptor — driven entirely off
     /// its `kind`, so the per-kind defaulting lives in exactly one place.
     function _defaultParamValue(param) {
-        if (param.kind === "enum")
-            return (param.options && param.options.length > 0) ? param.options[0] : "";
+        if (param.kind === "enum") {
+            // Enum options now carry `{value, label}` pairs — the wire form
+            // stored in the action is the `value`. Older callers passed plain
+            // strings; tolerate both shapes so a future free-form enum doesn't
+            // need to coordinate the schema change.
+            if (!param.options || param.options.length === 0)
+                return "";
 
+            var first = param.options[0];
+            return (first && typeof first === "object") ? (first.value || "") : first;
+        }
         if (param.kind === "number" || param.kind === "percent")
             return param.min !== undefined ? param.min : 0;
 
@@ -59,7 +71,7 @@ ColumnLayout {
         for (var i = 0; i < params.length; ++i) action[params[i].key] = editor._defaultParamValue(params[i])
         var next = editor.actions.slice();
         next.push(action);
-        editor.actionsChanged(next);
+        editor.actionsEdited(next);
     }
 
     spacing: Kirigami.Units.smallSpacing
@@ -81,7 +93,8 @@ ColumnLayout {
             Layout.fillWidth: true
             action: modelData
             actionTypeOptions: editor.actionTypeOptions
-            onActionChanged: function(updated) {
+            appSettings: editor.appSettings
+            onActionEdited: function(updated) {
                 editor._replaceAt(index, updated);
             }
             onRemoveRequested: editor._removeAt(index)

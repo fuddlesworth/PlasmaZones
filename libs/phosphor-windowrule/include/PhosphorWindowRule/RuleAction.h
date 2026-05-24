@@ -138,6 +138,12 @@ inline constexpr QLatin1StringView Exclude{"exclude"};
 inline constexpr QLatin1StringView Float{"float"};
 inline constexpr QLatin1StringView OverrideAnimationShader{"overrideAnimationShader"};
 inline constexpr QLatin1StringView OverrideAnimationTiming{"overrideAnimationTiming"};
+/// Curve-only animation override — separate slot from timing so a user can
+/// override the easing/spring curve for an event without committing to a
+/// duration (and vice versa). `OverrideAnimationTiming` still carries both
+/// for backward compatibility with legacy rules; `resolveAnimationMotionProfile`
+/// checks the curve slot first.
+inline constexpr QLatin1StringView OverrideAnimationCurve{"overrideAnimationCurve"};
 inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
 } // namespace ActionType
 
@@ -149,9 +155,13 @@ inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
 inline constexpr QLatin1StringView Manage{"manage"};
 inline constexpr QLatin1StringView Float{"float"};
 inline constexpr QLatin1StringView Opacity{"opacity"};
-// Animation slots are event-scoped: "anim-shader:<event>" / "anim-timing:<event>".
+// Animation slots are event-scoped: "anim-shader:<event>" / "anim-timing:<event>"
+// / "anim-curve:<event>". Curve and timing are split so they can be overridden
+// independently per event — `resolveAnimationMotionProfile` reads the curve
+// slot first and falls back to the timing slot's curve field for legacy rules.
 inline constexpr QLatin1StringView AnimShaderPrefix{"anim-shader:"};
 inline constexpr QLatin1StringView AnimTimingPrefix{"anim-timing:"};
+inline constexpr QLatin1StringView AnimCurvePrefix{"anim-curve:"};
 } // namespace ActionSlot
 
 } // namespace PhosphorWindowRule

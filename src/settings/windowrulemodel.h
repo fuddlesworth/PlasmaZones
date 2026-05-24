@@ -13,6 +13,8 @@
 
 #include <PhosphorWindowRule/WindowRule.h>
 
+#include <functional>
+
 namespace PlasmaZones {
 
 /**
@@ -161,6 +163,39 @@ public:
     /// lives in exactly one place. Returns the raw type id verbatim.
     static QString actionTypeFallbackLabel(const QString& type);
 
+    /// Resolves an opaque identifier (ScreenId, Activity UUID, layoutId) to a
+    /// user-friendly display label. Returns the input unchanged when no
+    /// mapping is known.
+    using LabelLookup = std::function<QString(const QString&)>;
+
+    /// Inject the screen-id → display-label resolver used when rendering
+    /// `ScreenId` leaf predicates. The settings layer wires this from
+    /// `SettingsController::screens()` so the model never reaches into the UI.
+    /// Setting a lookup re-emits `dataChanged` so existing rows re-render.
+    void setScreenLabelLookup(LabelLookup fn);
+
+    /// Inject the activity-uuid → activity-name resolver used when rendering
+    /// `Activity` leaf predicates (and when stripping auto-stamped rule names).
+    void setActivityLabelLookup(LabelLookup fn);
+
+    /// Inject the layoutId / algorithm-token → display-name resolver used by
+    /// the action summary so `SetSnappingLayout` and `SetTilingAlgorithm`
+    /// render "Binary Split" rather than the wire token / UUID.
+    void setLayoutLabelLookup(LabelLookup fn);
+
+    /// Re-emit dataChanged for every row across every label-derived role,
+    /// so the view rebinds resolved screen / activity / layout names. The
+    /// settings layer calls this from `screensChanged` / `activitiesChanged`
+    /// / `layoutsChanged` after the underlying snapshot lists update.
+    void refreshLabels();
+
+    /// Display name for a rule — strips an auto-stamped context-rule name so
+    /// the matchSummary fallback can render with friendly screen/activity
+    /// labels. Public because `WindowRuleController::ruleJson` uses it to
+    /// blank the Name field in the editor when the stored value is an
+    /// auto-stamp rather than something the user typed.
+    QString displayName(const PhosphorWindowRule::WindowRule& rule) const;
+
 Q_SIGNALS:
     void countChanged();
     /// Emitted when an `updateRule()` moved a rule into a different section
@@ -172,14 +207,29 @@ private:
     /// Index of the rule with @p id, or -1.
     int indexOf(const QUuid& id) const;
 
-    /// One-line human summary of a match expression.
-    static QString matchSummary(const PhosphorWindowRule::MatchExpression& match);
-    /// One-line human summary of an action list.
-    static QString actionSummary(const QList<PhosphorWindowRule::RuleAction>& actions);
+    /// One-line human summary of a match expression — instance method because
+    /// it consults the per-instance screen/activity lookups for ScreenId /
+    /// Activity leaves.
+    QString matchSummary(const PhosphorWindowRule::MatchExpression& match) const;
+    /// One-line human summary of an action list — instance method because it
+    /// consults the per-instance layout lookup for `SetSnappingLayout` /
+    /// `SetTilingAlgorithm` actions.
+    QString actionSummary(const QList<PhosphorWindowRule::RuleAction>& actions) const;
     /// Total leaf-predicate count in a match tree.
     static int conditionCount(const PhosphorWindowRule::MatchExpression& match);
-
+    /// The auto-stamped name `LayoutRegistry::upsertAssignmentRule` and the v1
+    /// → context-rule migration historically wrote for context-only rules —
+    /// `<screenId> · Desktop N · Activity`. The display layer treats stored
+    /// names matching this verbatim as "auto" and falls back to the resolved
+    /// match summary so the user never sees raw screen connector strings or
+    /// activity UUIDs as the rule's title. Reproduces the formula from
+    /// `PhosphorZones::RuleHelpers::contextRuleName` rather than depending on
+    /// the private header.
+    static QString autoStampedContextName(const QString& screenId, int virtualDesktop, const QString& activity);
     QList<PhosphorWindowRule::WindowRule> m_rules;
+    LabelLookup m_screenLookup;
+    LabelLookup m_activityLookup;
+    LabelLookup m_layoutLookup;
 };
 
 } // namespace PlasmaZones

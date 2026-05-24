@@ -20,6 +20,8 @@ RowLayout {
     required property var node
     /// The WindowRuleController (for operatorsForField).
     required property var controller
+    /// The SettingsController — populates the screen / activity pickers.
+    required property var appSettings
     // Each entry carries `{ value, wire, label, valueKind }` — the controller
     // owns the enum↔wire-string table; this component never reconstructs it.
     // Cached once at RuleEditorSheet (matchFields() is a Q_INVOKABLE that
@@ -74,10 +76,14 @@ RowLayout {
         color: Kirigami.Theme.highlightColor
     }
 
-    ComboBox {
+    // `WideComboBox` (not plain `ComboBox`) — sizes the popup to fit the
+    // widest item so options like "starts with" / "is one of" don't truncate.
+    // `implicitContentWidthPolicy: WidestTextWhenCompleted` (set on the
+    // WideComboBox base) also widens the closed combo to fit the longest
+    // current label, so we drop the fixed `Layout.preferredWidth` here.
+    WideComboBox {
         id: fieldCombo
 
-        Layout.preferredWidth: Kirigami.Units.gridUnit * 9
         textRole: "label"
         valueRole: "wire"
         model: leaf.fieldOptions
@@ -92,10 +98,9 @@ RowLayout {
         }
     }
 
-    ComboBox {
+    WideComboBox {
         id: opCombo
 
-        Layout.preferredWidth: Kirigami.Units.gridUnit * 9
         textRole: "label"
         valueRole: "wire"
         model: leaf._operatorOptions
@@ -117,6 +122,12 @@ RowLayout {
 
             if (leaf._valueKind === "number")
                 return numberValueEditor;
+
+            if (leaf._valueKind === "screen")
+                return screenValueEditor;
+
+            if (leaf._valueKind === "activity")
+                return activityValueEditor;
 
             return stringValueEditor;
         }
@@ -169,6 +180,80 @@ RowLayout {
             text: checked ? i18n("True") : i18n("False")
             Accessible.name: i18n("Match value")
             onToggled: leaf._emit(leaf.node.field, leaf.node.op, checked)
+        }
+
+    }
+
+    Component {
+        id: screenValueEditor
+
+        WideComboBox {
+            // Drive the picker off `appSettings.screens` so the user picks
+            // "LG Ultra HD · DP-2" while the wire value remains the raw
+            // connector / virtual-screen id.
+            model: leaf.appSettings ? leaf.appSettings.screens : []
+            textRole: "displayLabel"
+            valueRole: "name"
+            currentIndex: {
+                if (!leaf.appSettings)
+                    return -1;
+
+                var target = leaf.node.value;
+                var list = leaf.appSettings.screens;
+                for (var i = 0; i < list.length; ++i) {
+                    if (list[i].name === target)
+                        return i;
+
+                }
+                return -1;
+            }
+            // The rule may reference a screen that isn't currently connected
+            // (e.g. an offline monitor or a virtual-screen id whose physical
+            // monitor is unplugged). Surface the stored id so the user can
+            // tell what the rule pins to instead of an empty dropdown.
+            displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose a monitor…"))
+            Accessible.name: i18n("Monitor")
+            onActivated: function(index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+
+            }
+        }
+
+    }
+
+    Component {
+        id: activityValueEditor
+
+        WideComboBox {
+            // Picker over `appSettings.activities`; the wire value stays the
+            // activity UUID so the rule store format is unchanged.
+            model: leaf.appSettings ? leaf.appSettings.activities : []
+            textRole: "name"
+            valueRole: "id"
+            currentIndex: {
+                if (!leaf.appSettings)
+                    return -1;
+
+                var target = leaf.node.value;
+                var list = leaf.appSettings.activities;
+                for (var i = 0; i < list.length; ++i) {
+                    if (list[i].id === target)
+                        return i;
+
+                }
+                return -1;
+            }
+            // Fall back to the raw activity id (e.g. an activity that has
+            // been removed) so the rule's pin is visible even when no
+            // current activity matches.
+            displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose an activity…"))
+            Accessible.name: i18n("Activity")
+            onActivated: function(index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+
+            }
         }
 
     }

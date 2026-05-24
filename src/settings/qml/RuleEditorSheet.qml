@@ -22,6 +22,10 @@ Kirigami.OverlaySheet {
 
     /// The WindowRuleController — threaded into the recursive editors.
     required property var controller
+    /// The SettingsController — threaded into the leaf and action editors so
+    /// they can offer screen / activity / layout pickers instead of raw text
+    /// fields for opaque ids.
+    required property var appSettings
     /// True when editing an existing rule (vs creating a new one).
     property bool editing: false
     /// Working copy of the rule being edited. Set via `openFor`.
@@ -108,6 +112,7 @@ Kirigami.OverlaySheet {
             TextField {
                 Kirigami.FormData.label: i18n("Name:")
                 text: sheet._workingRule.name || ""
+                placeholderText: i18n("Optional rule name")
                 Accessible.name: i18n("Rule name")
                 onEditingFinished: sheet._patch("name", text)
             }
@@ -146,10 +151,11 @@ Kirigami.OverlaySheet {
             Layout.fillWidth: true
             node: sheet._workingRule.match || sheet._emptyMatch
             controller: sheet.controller
+            appSettings: sheet.appSettings
             matchFieldOptions: sheet._matchFieldOptions
             depth: 0
             removable: false
-            onNodeChanged: function(updated) {
+            onNodeEdited: function(updated) {
                 sheet._patch("match", updated);
             }
         }
@@ -163,13 +169,22 @@ Kirigami.OverlaySheet {
             Layout.fillWidth: true
             actions: sheet._workingRule.actions || []
             actionTypeOptions: sheet._actionTypeOptions
-            onActionsChanged: function(updated) {
+            appSettings: sheet.appSettings
+            onActionsEdited: function(updated) {
                 sheet._patch("actions", updated);
             }
         }
 
         Label {
             Layout.fillWidth: true
+            // `Layout.preferredWidth: 0` breaks the implicit-width feedback
+            // chain between this wrap-text Label and the hosting OverlaySheet's
+            // implicitHeight binding — without it the sheet logs a steady
+            // "Binding loop detected for property 'implicitHeight'" because
+            // the label's natural one-line width propagates upward, the sheet
+            // resizes, the label re-wraps, implicitHeight changes, etc.
+            // `Text.implicitWidth` is read-only so this is the canonical hook.
+            Layout.preferredWidth: 0
             wrapMode: Text.WordWrap
             font.italic: true
             opacity: 0.6
@@ -178,6 +193,13 @@ Kirigami.OverlaySheet {
 
         Kirigami.InlineMessage {
             Layout.fillWidth: true
+            // Same anti-loop guard as the wrap Label above: InlineMessage
+            // wraps its text internally and contributes the same implicit-
+            // width feedback chain to the hosting OverlaySheet's
+            // implicitHeight binding. `Layout.preferredWidth: 0` tells the
+            // layout the message has no natural width preference, so the
+            // column's explicit `implicitWidth` governs alone.
+            Layout.preferredWidth: 0
             type: Kirigami.MessageType.Information
             visible: !sheet._canSave
             text: !sheet._workingRule.actions || sheet._workingRule.actions.length === 0 ? i18n("Add at least one action before saving.") : i18n("Every condition needs a value before this rule can be saved.")

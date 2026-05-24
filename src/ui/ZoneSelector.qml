@@ -69,7 +69,7 @@ Rectangle {
     // Signals
     signal layoutSelected(string layoutId)
     signal layoutHovered(string layoutId)
-    signal selectorStateChanged(string newState)
+    signal selectorStateEdited(string newState)
 
     /**
      * Set the selector state
@@ -78,7 +78,7 @@ Rectangle {
     function setState(newState) {
         if (selectorState !== newState) {
             selectorState = newState;
-            selectorStateChanged(newState);
+            selectorStateEdited(newState);
         }
     }
 

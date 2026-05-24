@@ -9,73 +9,105 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Read-only monitor overview strip at the top of WindowRulesPage.
  *
- * A horizontal row of MonitorOverviewTiles, one per connected monitor.
+ * Iterates `settingsController.screens` so the visual treatment (icon +
+ * displayLabel + Primary badge) matches the canonical `MonitorSelectorSection`
+ * used elsewhere in the app. Per-monitor rule data comes from
+ * `WindowRuleController.monitorOverview()` keyed by screenId.
+ *
  * Clicking a tile sets the page's monitor filter; clicking the active tile
- * again clears it. Preserves the at-a-glance spatial overview the old
- * MonitorAssignmentsCard provided, without being an editor.
+ * again clears it.
  */
 ColumnLayout {
     id: overview
 
-    /// `WindowRuleController.monitorOverview()` output — a list of tile maps.
+    /// The full screen list from `settingsController.screens` — drives the
+    /// list of tiles and supplies the rich metadata (displayLabel,
+    /// connectorName, isPrimary, width/height).
+    required property var screens
+    /// `WindowRuleController.monitorOverview()` output — rule-related summary
+    /// per screen.
     required property var tiles
     /// The currently-selected monitor filter (empty = no filter).
     property string selectedScreenId: ""
+    /// Indexed by screenId for O(1) lookup during tile rendering. The
+    /// controller's `monitorOverview()` keys tiles by whichever identifier
+    /// (`name` / `screenId`) it found first on the input screen list, so
+    /// the lookup at render time has to try both — otherwise a virtual
+    /// screen whose tile was keyed by `screenId` would be silently treated
+    /// as "Not assigned" when iterated by `name`.
+    readonly property var _tilesByScreenId: {
+        var map = {
+        };
+        // Guard `tiles` itself — the binding can transiently produce
+        // `undefined` if a callsite passes an unevaluated expression while
+        // the controller is still warming up.
+        if (!overview.tiles)
+            return map;
+
+        for (var i = 0; i < overview.tiles.length; ++i) {
+            var t = overview.tiles[i];
+            if (t && t.screenId)
+                map[t.screenId] = t;
+
+        }
+        return map;
+    }
 
     signal monitorSelected(string screenId)
 
-    spacing: Kirigami.Units.smallSpacing
+    /// Resolve the tile entry for a given screen, falling back through the
+    /// candidate identifiers the controller may have used as the tile key.
+    function _tileForScreen(screen) {
+        if (!screen)
+            return undefined;
 
-    RowLayout {
-        Layout.fillWidth: true
+        var byName = overview._tilesByScreenId[screen.name];
+        if (byName)
+            return byName;
 
-        Label {
-            text: i18n("MONITORS")
-            font.bold: true
-            opacity: 0.6
-            font.capitalization: Font.AllUppercase
-        }
+        if (screen.screenId)
+            return overview._tilesByScreenId[screen.screenId];
 
-        Item {
-            Layout.fillWidth: true
-        }
-
-        Label {
-            text: i18n("Read-only — click a monitor to filter the list")
-            opacity: 0.5
-            font.italic: true
-        }
-
+        return undefined;
     }
 
-    Flow {
+    spacing: Kirigami.Units.smallSpacing
+
+    // Centered tile row — mirrors MonitorSelectorSection's wrapper-Item +
+    // anchors.horizontalCenter convention so the strip never visually leans
+    // to the left edge when there are only one or two monitors. No section
+    // header or hint label — matches the bare placement of MonitorSelectorSection
+    // on the other pages.
+    Item {
         Layout.fillWidth: true
-        spacing: Kirigami.Units.largeSpacing
+        implicitHeight: tileRow.implicitHeight
 
-        Repeater {
-            model: overview.tiles
+        RowLayout {
+            id: tileRow
 
-            MonitorOverviewTile {
-                required property var modelData
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: Kirigami.Units.largeSpacing
 
-                tileData: modelData
-                selected: overview.selectedScreenId === modelData.screenId
-                onClicked: {
-                    // Click the active tile to clear the filter.
-                    var next = overview.selectedScreenId === modelData.screenId ? "" : modelData.screenId;
-                    overview.monitorSelected(next);
+            Repeater {
+                model: overview.screens
+
+                MonitorOverviewTile {
+                    required property var modelData
+
+                    screenData: modelData
+                    tileData: overview._tileForScreen(modelData)
+                    selected: overview.selectedScreenId === modelData.name
+                    onClicked: {
+                        // Click the active tile to clear the filter.
+                        var next = overview.selectedScreenId === modelData.name ? "" : modelData.name;
+                        overview.monitorSelected(next);
+                    }
                 }
+
             }
 
         }
 
-    }
-
-    Label {
-        visible: overview.tiles.length === 0
-        text: i18n("No monitors detected.")
-        opacity: 0.6
-        font.italic: true
     }
 
 }

@@ -3,6 +3,7 @@
 
 #include "../plasmazoneseffect.h"
 
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorWindowRule/ExclusionListBridge.h>
@@ -37,22 +38,53 @@ bool rejectedBecause(QString* out, const char* reason)
 
 namespace {
 
-/// Builds a PhosphorWindowRule::WindowQuery from a live KWin window for the
-/// effect's exclusion filtering. Confined to this effect translation unit so
-/// the LGPL phosphor-windowrule library never sees a KWin type. Only the two
-/// fields the exclusion bridge matches on are populated — `desktopFile`
-/// (matched against the "applications" list) and `windowClass` (matched
-/// against the "window classes" list). Context fields stay at their defaults;
-/// an exclusion rule's match expression never references them.
+/// Builds a PhosphorWindowRule::WindowQuery from a live KWin window. Confined
+/// to this effect translation unit so the LGPL phosphor-windowrule library
+/// never sees a KWin type. Populates every window-side field declared on
+/// `WindowQuery` so user-authored rules can match on any of them — the
+/// exclusion lists only read `windowClass` / `desktopFile`, but per-window
+/// rules from the unified rule store may match on title / pid / isFullscreen
+/// / etc.
 PhosphorWindowRule::WindowQuery exclusionQueryFor(KWin::EffectWindow* w)
 {
     PhosphorWindowRule::WindowQuery query;
     if (!w) {
         return query;
     }
-    query.windowClass = w->windowClass();
+    // `WindowQuery` fields are `std::optional` — leaving a field disengaged
+    // makes a predicate over it inert (returns false). Engaging it with an
+    // empty string instead would silently match `Equals ""` and `Regex "^$"`,
+    // and would also flip `hasWindow()` from "no window context" to "engaged
+    // but empty". Gate each string assignment on a non-empty value to keep
+    // the optional / engaged-empty distinction meaningful.
+    const QString windowClass = w->windowClass();
+    if (!windowClass.isEmpty()) {
+        query.windowClass = windowClass;
+    }
+    const QString title = w->caption();
+    if (!title.isEmpty()) {
+        query.title = title;
+    }
     KWin::Window* kw = w->window();
-    query.desktopFile = kw ? kw->desktopFileName() : QString();
+    if (kw) {
+        const QString desktopFile = kw->desktopFileName();
+        if (!desktopFile.isEmpty()) {
+            query.desktopFile = desktopFile;
+        }
+        const QString appId = ::PhosphorIdentity::WindowId::normalizeAppId(desktopFile, windowClass);
+        if (!appId.isEmpty()) {
+            query.appId = appId;
+        }
+        query.pid = static_cast<int>(w->pid());
+    }
+    // Window state flags — read live so a rule like "isFullscreen=true ⇒
+    // Float" matches the moment we evaluate. Bool fields are always engaged
+    // when the window exists; reactive re-evaluation on state-change signals
+    // is a separate concern (callers re-run the query at lifecycle / drag
+    // events, which is when filter-style predicates are consulted).
+    query.isMinimized = w->isMinimized();
+    query.isFullscreen = w->isFullScreen();
+    query.isSticky = w->isOnAllDesktops();
     return query;
 }
 

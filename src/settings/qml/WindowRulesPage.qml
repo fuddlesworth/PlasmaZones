@@ -22,7 +22,26 @@ SettingsFlickable {
 
     readonly property var controller: settingsController.windowRulesPage
     readonly property var ruleModel: controller.model
+    // Composite "appSettings" surface threaded into the rule editor so the
+    // picker components (LayoutComboBox for snapping/tiling actions, and the
+    // screen / activity match-leaf editors) all see the same object.
+    // LayoutComboBox reads `layouts` + the `default*` ids from this; the leaf
+    // pickers read `screens` and `activities`.
+    readonly property QtObject
+    _editorAppSettings: QtObject {
+        readonly property var layouts: settingsController.layouts
+        readonly property var screens: settingsController.screens
+        readonly property var activities: settingsController.activities
+        // `AnimationsPageController` — exposes `eventSections()` and
+        // `availableShaderEffects()` for the animationEvent / shaderEffect
+        // picker editors in ActionRow.
+        readonly property var animationsController: settingsController.animationsPage
+        readonly property string defaultLayoutId: appSettings.defaultLayoutId
+        readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
+        readonly property bool autoAssignAllLayouts: appSettings.autoAssignAllLayouts === true
+    }
     // ── Filter state ──
+
     property string searchText: ""
     // Chip filter: -1 = All, else a WindowRuleModel.Section enum value as int.
     property int chipFilter: -1
@@ -83,6 +102,12 @@ SettingsFlickable {
         }
         return out;
     }
+    // Bump `tilesRevision` whenever the upstream lists change. The tile
+    // payload embeds layout-name + activity-name resolutions; a list-length
+    // touch wouldn't fire when an existing layout is *renamed* (length
+    // unchanged), leaving the tile caption stale. Listening to the change
+    // signals directly invalidates on any structural OR content change.
+    property int tilesRevision: 0
 
     contentHeight: mainCol.implicitHeight
     clip: true
@@ -105,6 +130,22 @@ SettingsFlickable {
         target: page.ruleModel
     }
 
+    Connections {
+        function onLayoutsChanged() {
+            page.tilesRevision++;
+        }
+
+        function onActivitiesChanged() {
+            page.tilesRevision++;
+        }
+
+        function onScreensChanged() {
+            page.tilesRevision++;
+        }
+
+        target: settingsController
+    }
+
     AddRuleSheet {
         id: addRuleSheet
 
@@ -118,6 +159,7 @@ SettingsFlickable {
         id: ruleEditorSheet
 
         controller: page.controller
+        appSettings: page._editorAppSettings
         onRuleSaved: function(ruleJson) {
             if (editing)
                 page.controller.updateRuleFromJson(ruleJson);
@@ -147,17 +189,26 @@ SettingsFlickable {
         }
 
         // ── Monitor overview strip ──
-        SettingsCard {
+        // Bare, no SettingsCard wrapper — mirrors MonitorSelectorSection's
+        // placement on the other pages (Monitor State, Tiling Algorithm,
+        // Snapping, Virtual Screens) where the selector is a direct child of
+        // the page column with no enclosing card or header strip.
+        MonitorOverview {
             Layout.fillWidth: true
-
-            contentItem: MonitorOverview {
-                tiles: page.controller.monitorOverview(settingsController.screens)
-                selectedScreenId: page.monitorFilter
-                onMonitorSelected: function(screenId) {
-                    page.monitorFilter = screenId;
-                }
+            screens: settingsController.screens
+            // `tilesRevision` invalidates this binding whenever the upstream
+            // lists (layouts/activities/screens) change — including content-
+            // only changes like a layout rename that wouldn't move a length
+            // counter. See the `Connections { target: settingsController }`
+            // above for the bump points.
+            tiles: {
+                let _rev = page.tilesRevision;
+                return page.controller.monitorOverview(settingsController.screens);
             }
-
+            selectedScreenId: page.monitorFilter
+            onMonitorSelected: function(screenId) {
+                page.monitorFilter = screenId;
+            }
         }
 
         // ── Search + Add rule ──
@@ -235,69 +286,46 @@ SettingsFlickable {
         }
 
         // ── Grouped rule list ──
+        // Each section renders as a standard `SettingsCard` with `headerText`
+        // — same visual treatment as the rest of the app (Animations Presets,
+        // Virtual Screens, General). The card carries the section label as
+        // its header and the rule rows as its body.
         Repeater {
             model: page.sectionModel
 
-            delegate: ColumnLayout {
+            delegate: SettingsCard {
                 required property var modelData
 
                 Layout.fillWidth: true
-                spacing: 0
+                headerText: modelData.label
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Kirigami.Units.largeSpacing
+                contentItem: ColumnLayout {
+                    spacing: 0
 
-                    Label {
-                        text: modelData.label
-                        font.bold: true
-                        opacity: 0.6
-                        font.capitalization: Font.AllUppercase
-                    }
+                    Repeater {
+                        model: modelData.rules
 
-                    Item {
-                        Layout.fillWidth: true
-                    }
+                        delegate: WindowRuleRow {
+                            required property var modelData
 
-                    Label {
-                        text: i18np("%1 rule", "%1 rules", modelData.rules.length)
-                        opacity: 0.5
-                    }
-
-                }
-
-                SettingsCard {
-                    Layout.fillWidth: true
-
-                    contentItem: ColumnLayout {
-                        spacing: 0
-
-                        Repeater {
-                            model: modelData.rules
-
-                            delegate: WindowRuleRow {
-                                required property var modelData
-
-                                Layout.fillWidth: true
-                                ruleId: modelData.ruleId
-                                ruleName: modelData.name
-                                enabled: modelData.enabled
-                                matchSummary: modelData.matchSummary
-                                actionSummary: modelData.actionSummary
-                                conditionCount: modelData.conditionCount
-                                actionCount: modelData.actionCount
-                                isComposite: modelData.isComposite
-                                onToggleRequested: function(en) {
-                                    page.controller.setRuleEnabled(ruleId, en);
-                                }
-                                onEditRequested: {
-                                    ruleEditorSheet.openFor(page.controller.ruleJson(ruleId), true);
-                                }
-                                onDeleteRequested: {
-                                    page.controller.removeRule(ruleId);
-                                }
+                            Layout.fillWidth: true
+                            ruleId: modelData.ruleId
+                            ruleName: modelData.name
+                            ruleEnabled: modelData.enabled
+                            matchSummary: modelData.matchSummary
+                            actionSummary: modelData.actionSummary
+                            conditionCount: modelData.conditionCount
+                            actionCount: modelData.actionCount
+                            isComposite: modelData.isComposite
+                            onToggleRequested: function(en) {
+                                page.controller.setRuleEnabled(ruleId, en);
                             }
-
+                            onEditRequested: {
+                                ruleEditorSheet.openFor(page.controller.ruleJson(ruleId), true);
+                            }
+                            onDeleteRequested: {
+                                page.controller.removeRule(ruleId);
+                            }
                         }
 
                     }

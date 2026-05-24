@@ -5,6 +5,7 @@
 
 #include "../pz_i18n.h"
 
+#include <PhosphorWindowRule/ContextRuleBridge.h>
 #include <PhosphorWindowRule/MatchTypes.h>
 #include <PhosphorWindowRule/RuleAction.h>
 
@@ -25,7 +26,8 @@ using PhosphorWindowRule::WindowRule;
 bool hasAnimationAction(const QList<RuleAction>& actions)
 {
     for (const RuleAction& a : actions) {
-        if (a.type == ActionType::OverrideAnimationShader || a.type == ActionType::OverrideAnimationTiming) {
+        if (a.type == ActionType::OverrideAnimationShader || a.type == ActionType::OverrideAnimationTiming
+            || a.type == ActionType::OverrideAnimationCurve) {
             return true;
         }
     }
@@ -93,25 +95,68 @@ bool matchIsSimpleConjunction(const MatchExpression& match)
     return true;
 }
 
-/// Human label for a single leaf predicate ("Monitor: DP-2").
-QString leafLabel(const MatchExpression::Predicate& predicate)
+/// Human label for a single leaf predicate ("Monitor: LG Ultra HD").
+/// @p screenLookup and @p activityLookup resolve the opaque ScreenId /
+/// Activity UUID values to friendly names; an empty lookup is treated as
+/// "identity" so the function stays usable in code paths that have not yet
+/// wired the SettingsController-backed resolvers.
+QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleModel::LabelLookup& screenLookup,
+                  const WindowRuleModel::LabelLookup& activityLookup)
 {
-    return PzI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field), predicate.value.toString());
+    const QString raw = predicate.value.toString();
+    QString resolved = raw;
+    if (predicate.field == Field::ScreenId && screenLookup) {
+        const QString label = screenLookup(raw);
+        if (!label.isEmpty()) {
+            resolved = label;
+        }
+    } else if (predicate.field == Field::Activity && activityLookup) {
+        const QString label = activityLookup(raw);
+        if (!label.isEmpty()) {
+            resolved = label;
+        }
+    }
+    return PzI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field), resolved);
 }
 
-/// Human label for one action ("Snapping", "Float", "Excluded").
-QString actionLabel(const RuleAction& action)
+/// Human label for one action ("Snapping", "Float", "Excluded"). @p
+/// layoutLookup resolves layoutId / algorithm-token wire values to their
+/// display name so the user sees "Binary Split" rather than "bsp".
+QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup& layoutLookup)
 {
+    auto resolve = [&](const QString& wire) {
+        if (wire.isEmpty() || !layoutLookup) {
+            return wire;
+        }
+        const QString resolved = layoutLookup(wire);
+        return resolved.isEmpty() ? wire : resolved;
+    };
+
     if (action.type == ActionType::SetEngineMode) {
         const QString mode = action.params.value(QLatin1String("mode")).toString();
-        return PzI18n::tr("Engine: %1").arg(mode);
+        // Render the wire token (`snapping` / `autotile`) as a properly-cased
+        // display label — matches the editor's enum-picker labels.
+        QString label;
+        if (mode == QLatin1String("snapping")) {
+            label = PzI18n::tr("Snapping");
+        } else if (mode == QLatin1String("autotile")) {
+            label = PzI18n::tr("Autotile");
+        } else {
+            label = mode; // unknown / future token — surface verbatim.
+        }
+        return PzI18n::tr("Engine: %1").arg(label);
     }
     if (action.type == ActionType::SetSnappingLayout) {
-        return PzI18n::tr("Snapping layout");
+        const QString layoutId = action.params.value(QLatin1String("layoutId")).toString();
+        return layoutId.isEmpty() ? PzI18n::tr("Snapping layout") : PzI18n::tr("Snapping: %1").arg(resolve(layoutId));
     }
     if (action.type == ActionType::SetTilingAlgorithm) {
         const QString algo = action.params.value(QLatin1String("algorithm")).toString();
-        return PzI18n::tr("Tiling: %1").arg(algo);
+        // Algorithms are wire tokens (`bsp`, `grid`, …). The layout lookup
+        // also knows about the autotile entries — the WindowRuleController
+        // wires it from `settingsController.layouts`, which contains the
+        // `displayName` ("Binary Split") for each algorithm.
+        return PzI18n::tr("Tiling: %1").arg(resolve(algo));
     }
     if (action.type == ActionType::DisableEngine) {
         return PzI18n::tr("Disabled");
@@ -132,7 +177,11 @@ QString actionLabel(const RuleAction& action)
     }
     if (action.type == ActionType::OverrideAnimationTiming) {
         const int ms = action.params.value(QLatin1String("durationMs")).toInt();
-        return ms > 0 ? PzI18n::tr("Timing %1 ms").arg(ms) : PzI18n::tr("Animation timing");
+        return ms > 0 ? PzI18n::tr("Duration %1 ms").arg(ms) : PzI18n::tr("Animation duration");
+    }
+    if (action.type == ActionType::OverrideAnimationCurve) {
+        const QString curve = action.params.value(QLatin1String("curve")).toString();
+        return curve.isEmpty() ? PzI18n::tr("Animation curve") : PzI18n::tr("Curve %1").arg(curve);
     }
     return WindowRuleModel::actionTypeFallbackLabel(action.type);
 }
@@ -176,7 +225,7 @@ QVariant WindowRuleModel::data(const QModelIndex& index, int role) const
     case IdRole:
         return rule.id.toString();
     case NameRole:
-        return rule.name;
+        return displayName(rule);
     case EnabledRole:
         return rule.enabled;
     case PriorityRole:
@@ -405,20 +454,20 @@ QString WindowRuleModel::fieldLabel(Field field)
     return QString();
 }
 
-QString WindowRuleModel::matchSummary(const MatchExpression& match)
+QString WindowRuleModel::matchSummary(const MatchExpression& match) const
 {
     if (match.isCatchAll()) {
         return PzI18n::tr("Any window");
     }
     if (match.isLeaf()) {
-        return leafLabel(match.predicate());
+        return leafLabel(match.predicate(), m_screenLookup, m_activityLookup);
     }
     // A simple AND renders its leaves joined by " · ".
     if (match.kind() == MatchExpression::Kind::All) {
         QStringList parts;
         for (const MatchExpression& child : match.children()) {
             if (child.isLeaf()) {
-                parts.append(leafLabel(child.predicate()));
+                parts.append(leafLabel(child.predicate(), m_screenLookup, m_activityLookup));
             } else {
                 parts.append(PzI18n::tr("(condition group)"));
             }
@@ -430,14 +479,14 @@ QString WindowRuleModel::matchSummary(const MatchExpression& match)
     return PzI18n::tr("%n condition(s)", nullptr, n);
 }
 
-QString WindowRuleModel::actionSummary(const QList<RuleAction>& actions)
+QString WindowRuleModel::actionSummary(const QList<RuleAction>& actions) const
 {
     if (actions.isEmpty()) {
         return PzI18n::tr("No action");
     }
     QStringList parts;
     for (const RuleAction& a : actions) {
-        parts.append(actionLabel(a));
+        parts.append(actionLabel(a, m_layoutLookup));
     }
     return parts.join(QStringLiteral(" · "));
 }
@@ -462,6 +511,69 @@ QString WindowRuleModel::actionTypeFallbackLabel(const QString& type)
     // future-schema action. Surface the raw type id rather than an empty
     // string so the user at least sees what the rule carries.
     return type;
+}
+
+void WindowRuleModel::setScreenLabelLookup(LabelLookup fn)
+{
+    // Setters are install-once: the controller installs the closure during
+    // construction. Re-emitting dataChanged here would force a full-row
+    // rebind on every install, but the closures already read live state via
+    // their captured `this`, so re-installing is redundant. Callers route
+    // upstream change notifications through `refreshLabels()` instead, which
+    // emits a single dataChanged covering every label-derived role.
+    m_screenLookup = std::move(fn);
+}
+
+void WindowRuleModel::setActivityLabelLookup(LabelLookup fn)
+{
+    m_activityLookup = std::move(fn);
+}
+
+void WindowRuleModel::setLayoutLabelLookup(LabelLookup fn)
+{
+    m_layoutLookup = std::move(fn);
+}
+
+void WindowRuleModel::refreshLabels()
+{
+    if (m_rules.isEmpty()) {
+        return;
+    }
+    // One dataChanged covering every role whose value derives from a label
+    // lookup. Coalesces the three-signal cascade (screens/activities/layouts
+    // change) that previously ran nine separate emits.
+    const QModelIndex top = index(0);
+    const QModelIndex bottom = index(m_rules.size() - 1);
+    Q_EMIT dataChanged(top, bottom, {NameRole, MatchSummaryRole, ActionSummaryRole});
+}
+
+QString WindowRuleModel::autoStampedContextName(const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    // Mirror `PhosphorZones::RuleHelpers::contextRuleName` — the formula lives
+    // in the rule-helpers lib but its private header isn't reachable from the
+    // settings tree, so the formatting is duplicated here. Both formulae stay
+    // in sync by convention (and a unit test would catch a drift).
+    return screenId + (virtualDesktop > 0 ? QStringLiteral(" · Desktop ") + QString::number(virtualDesktop) : QString())
+        + (activity.isEmpty() ? QString() : QStringLiteral(" · Activity"));
+}
+
+QString WindowRuleModel::displayName(const PhosphorWindowRule::WindowRule& rule) const
+{
+    // A rule whose stored name matches the auto-stamped form is treated as
+    // "no name" so the row's title falls back to the (lookup-resolved) match
+    // summary. Without this, every legacy context rule shows raw connector
+    // strings and activity UUIDs as its primary label.
+    if (rule.name.isEmpty() || !rule.match.isContextOnly()) {
+        return rule.name;
+    }
+    QString screenId;
+    int virtualDesktop = 0;
+    QString activity;
+    PhosphorWindowRule::ContextRuleBridge::contextDimsOf(rule.match, screenId, virtualDesktop, activity);
+    if (rule.name == autoStampedContextName(screenId, virtualDesktop, activity)) {
+        return QString();
+    }
+    return rule.name;
 }
 
 } // namespace PlasmaZones

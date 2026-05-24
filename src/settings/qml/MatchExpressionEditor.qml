@@ -18,7 +18,7 @@ import org.kde.kirigami as Kirigami
  * Because it instantiates itself, this file MUST be listed in the qml module's
  * QML_FILES — a missing entry is a runtime "not a type" load failure.
  *
- * Two-way: any edit emits `nodeChanged(updatedNode)`; the parent owns the tree.
+ * Two-way: any edit emits `nodeEdited(updatedNode)`; the parent owns the tree.
  */
 ColumnLayout {
     id: matchEditor
@@ -27,6 +27,9 @@ ColumnLayout {
     required property var node
     /// The WindowRuleController, threaded down for leaf field/operator lists.
     required property var controller
+    /// The SettingsController, threaded into MatchLeafEditor so picker-kind
+    /// leaves (screen / activity) can populate their dropdowns.
+    required property var appSettings
     /// Cached `controller.matchFields()` from RuleEditorSheet — the Q_INVOKABLE
     /// allocates a fresh list per call, so it is cached once at the root and
     /// threaded down rather than re-invoked here.
@@ -50,14 +53,17 @@ ColumnLayout {
     }
     readonly property var _children: matchEditor.node ? (matchEditor.node[matchEditor._compositeKind] || []) : []
 
-    signal nodeChanged(var updatedNode)
+    // `nodeEdited`, not `nodeChanged`, because `property var node` already
+    // auto-generates a `nodeChanged()` change-signal and QML rejects the
+    // duplicate. This signal carries the updated subtree upward to the parent.
+    signal nodeEdited(var updatedNode)
     signal removeRequested()
 
     function _emitChildren(kind, children) {
         var next = {
         };
         next[kind] = children;
-        matchEditor.nodeChanged(next);
+        matchEditor.nodeEdited(next);
     }
 
     function _replaceChild(index, updated) {
@@ -111,9 +117,10 @@ ColumnLayout {
         sourceComponent: MatchLeafEditor {
             node: matchEditor.node
             controller: matchEditor.controller
+            appSettings: matchEditor.appSettings
             fieldOptions: matchEditor.matchFieldOptions
             onLeafChanged: function(updated) {
-                matchEditor.nodeChanged(updated);
+                matchEditor.nodeEdited(updated);
             }
             onRemoveRequested: matchEditor.removeRequested()
         }
@@ -141,10 +148,9 @@ ColumnLayout {
                     Layout.fillHeight: true
                 }
 
-                ComboBox {
+                WideComboBox {
                     id: kindCombo
 
-                    Layout.preferredWidth: Kirigami.Units.gridUnit * 7
                     model: [{
                         "value": "all",
                         "label": i18nc("match composite — every child must match", "ALL of")
@@ -181,24 +187,48 @@ ColumnLayout {
 
             }
 
-            // Children — each recursively a MatchExpressionEditor.
+            // Children — each recursively a MatchExpressionEditor, loaded by
+            // URL via Loader. Qt 6 forbids direct self-instantiation of a type
+            // from within its own definition (the type isn't fully registered
+            // yet at compile time → "instantiated recursively" → unavailable).
+            // The URL-based Loader defers resolution to runtime; setSource's
+            // initialProperties seed the inner `required` properties, and a
+            // Qt.binding on `node` keeps it reactive to _replaceChild updates.
             Repeater {
                 model: matchEditor._children.length
 
-                MatchExpressionEditor {
+                Loader {
+                    id: childLoader
+
                     required property int index
 
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
-                    node: matchEditor._children[index]
-                    controller: matchEditor.controller
-                    matchFieldOptions: matchEditor.matchFieldOptions
-                    depth: matchEditor.depth + 1
-                    removable: true
-                    onNodeChanged: function(updated) {
-                        matchEditor._replaceChild(index, updated);
+                    Component.onCompleted: {
+                        setSource("MatchExpressionEditor.qml", {
+                            "node": Qt.binding(function() {
+                                return matchEditor._children[childLoader.index];
+                            }),
+                            "controller": matchEditor.controller,
+                            "appSettings": matchEditor.appSettings,
+                            "matchFieldOptions": matchEditor.matchFieldOptions,
+                            "depth": matchEditor.depth + 1,
+                            "removable": true
+                        });
                     }
-                    onRemoveRequested: matchEditor._removeChild(index)
+
+                    Connections {
+                        function onNodeEdited(updated) {
+                            matchEditor._replaceChild(childLoader.index, updated);
+                        }
+
+                        function onRemoveRequested() {
+                            matchEditor._removeChild(childLoader.index);
+                        }
+
+                        target: childLoader.item
+                    }
+
                 }
 
             }

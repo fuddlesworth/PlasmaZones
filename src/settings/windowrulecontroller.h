@@ -63,6 +63,15 @@ public:
     explicit WindowRuleController(QObject* parent = nullptr);
     ~WindowRuleController() override;
 
+    /// Wire the screen-id / activity-uuid / layout-id → display-name lookups
+    /// used by the model's `matchSummary` and by the controller's own
+    /// `monitorOverview` summary. The lookups capture the SettingsController
+    /// snapshot lists by reference; the parent re-invokes these setters when
+    /// the underlying data changes so the resolved strings stay fresh.
+    void setScreenLookup(WindowRuleModel::LabelLookup fn);
+    void setActivityLookup(WindowRuleModel::LabelLookup fn);
+    void setLayoutLookup(WindowRuleModel::LabelLookup fn);
+
     WindowRuleModel* model()
     {
         return &m_model;
@@ -243,6 +252,10 @@ private:
     bool m_dirty = false;
     bool m_daemonReachable = false;
     bool m_daemonChangedWhileDirty = false;
+    /// Resolves a layoutId to the layout's display name. Used by
+    /// `monitorOverview` to turn the raw UUID in `SetSnappingLayout` /
+    /// `SetTilingAlgorithm` params into the friendly layout/algorithm name.
+    WindowRuleModel::LabelLookup m_layoutLookup;
 };
 
 } // namespace PlasmaZones

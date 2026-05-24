@@ -88,6 +88,23 @@ QVariantMap paramDescriptor(QLatin1StringView key, const QString& kind, const QS
     return p;
 }
 
+/// Enum-option list for the snapping/autotile engine-mode pickers. Shared by
+/// `SetEngineMode` and `DisableEngine`: both pick from the same lowercase
+/// wire tokens but show properly-cased UI labels.
+QVariantList engineModeOptions()
+{
+    QVariantList options;
+    QVariantMap snap;
+    snap[QStringLiteral("value")] = QStringLiteral("snapping");
+    snap[QStringLiteral("label")] = PzI18n::tr("Snapping");
+    options.append(snap);
+    QVariantMap tile;
+    tile[QStringLiteral("value")] = QStringLiteral("autotile");
+    tile[QStringLiteral("label")] = PzI18n::tr("Autotile");
+    options.append(tile);
+    return options;
+}
+
 /// The parameter schema for @p type — the editor `Loader` is driven entirely
 /// off this, so the per-type `if (t === "...")` ladder lives in C++ only.
 QVariantList paramsForActionType(QLatin1StringView type)
@@ -95,14 +112,27 @@ QVariantList paramsForActionType(QLatin1StringView type)
     QVariantList params;
     if (type == ActionType::SetEngineMode) {
         QVariantMap p = paramDescriptor(QLatin1String("mode"), QStringLiteral("enum"), PzI18n::tr("Engine mode"));
-        p[QStringLiteral("options")] = QStringList{QStringLiteral("snapping"), QStringLiteral("autotile")};
+        p[QStringLiteral("options")] = engineModeOptions();
         params.append(p);
     } else if (type == ActionType::SetSnappingLayout) {
-        params.append(
-            paramDescriptor(QLatin1String("layoutId"), QStringLiteral("string"), PzI18n::tr("Snapping layout id")));
+        // `snappingLayout` is the picker-aware kind the QML editor recognises;
+        // it swaps in a ComboBox over `settingsController.layouts` so the
+        // user picks "Grid (2x2)" instead of pasting "{25828c9b-…}".
+        params.append(paramDescriptor(QLatin1String("layoutId"), QStringLiteral("snappingLayout"),
+                                      PzI18n::tr("Snapping layout")));
     } else if (type == ActionType::SetTilingAlgorithm) {
-        params.append(
-            paramDescriptor(QLatin1String("algorithm"), QStringLiteral("string"), PzI18n::tr("Tiling algorithm id")));
+        // Tiling algorithms are still string tokens (`bsp`, `grid`, …) — the
+        // editor offers a ComboBox over the catalogue but stores the token
+        // verbatim.
+        params.append(paramDescriptor(QLatin1String("algorithm"), QStringLiteral("tilingAlgorithm"),
+                                      PzI18n::tr("Tiling algorithm")));
+    } else if (type == ActionType::DisableEngine) {
+        // Validator requires `mode` ∈ {snapping, autotile}; without a picker
+        // the user couldn't author the action. Same enum shape as
+        // SetEngineMode.
+        QVariantMap p = paramDescriptor(QLatin1String("mode"), QStringLiteral("enum"), PzI18n::tr("Engine to disable"));
+        p[QStringLiteral("options")] = engineModeOptions();
+        params.append(p);
     } else if (type == ActionType::SetOpacity) {
         // The wire value is a 0.0–1.0 fraction; the editor shows a 0–100
         // percentage, so the stored value is `display * scale`.
@@ -118,22 +148,30 @@ QVariantList paramsForActionType(QLatin1StringView type)
         // `params` is a free-form shader-uniform object — not authorable
         // through a flat key/kind descriptor, so it is intentionally omitted;
         // a shader-uniform editor would graduate the rule to Advanced.
-        params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("string"),
-                                      PzI18n::tr("Event path, e.g. window.open")));
+        //
+        // `animationEvent` / `shaderEffect` are picker-aware kinds the QML
+        // editor recognises — they swap ComboBoxes driven by
+        // `AnimationsPageController::eventSections()` and
+        // `availableShaderEffects()` in place of the freeform string field.
+        params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("animationEvent"), PzI18n::tr("Event")));
         params.append(
-            paramDescriptor(QLatin1String("effectId"), QStringLiteral("string"), PzI18n::tr("Shader effect id")));
+            paramDescriptor(QLatin1String("effectId"), QStringLiteral("shaderEffect"), PzI18n::tr("Shader effect")));
     } else if (type == ActionType::OverrideAnimationTiming) {
-        // Wire keys must match the OverrideAnimationTiming descriptor
-        // (`event`, `curve`, `durationMs`). `curve` is a free-form easing
-        // descriptor edited through the dedicated curve editor, so it is
-        // intentionally omitted from the flat action-param schema here.
-        params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("string"),
-                                      PzI18n::tr("Event path, e.g. window.open")));
+        // Duration-only override. Curve lives in `OverrideAnimationCurve`
+        // (separate slot) so the user can override curve and duration
+        // independently per event. The descriptor still allows `curve` for
+        // back-compat with legacy rules; the editor doesn't expose it here.
+        params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("animationEvent"), PzI18n::tr("Event")));
         QVariantMap p =
             paramDescriptor(QLatin1String("durationMs"), QStringLiteral("number"), PzI18n::tr("Duration (ms)"));
         p[QStringLiteral("min")] = 0;
         p[QStringLiteral("max")] = 60000;
         params.append(p);
+    } else if (type == ActionType::OverrideAnimationCurve) {
+        // Curve-only override. `OverrideAnimationDuration` lives under
+        // `OverrideAnimationTiming` (kept as the duration-only override).
+        params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("animationEvent"), PzI18n::tr("Event")));
+        params.append(paramDescriptor(QLatin1String("curve"), QStringLiteral("curveEditor"), PzI18n::tr("Curve")));
     }
     // float / disableEngine / exclude carry no parameters — empty list.
     return params;
@@ -163,7 +201,10 @@ QString actionTypeLabel(QLatin1StringView type)
         return PzI18n::tr("Override animation shader");
     }
     if (type == ActionType::OverrideAnimationTiming) {
-        return PzI18n::tr("Override animation timing");
+        return PzI18n::tr("Override animation duration");
+    }
+    if (type == ActionType::OverrideAnimationCurve) {
+        return PzI18n::tr("Override animation curve");
     }
     if (type == ActionType::SetOpacity) {
         return PzI18n::tr("Set opacity");
@@ -179,10 +220,21 @@ WindowRuleController::WindowRuleController(QObject* parent)
     // Re-fetch from the daemon whenever it broadcasts a rule change — but only
     // while the page is clean, so a daemon-side write doesn't silently stomp
     // the user's unsaved staged edits.
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::WindowRules),
-                                          QStringLiteral("rulesChanged"), this, SLOT(reload()));
+    //
+    // `QDBusConnection::connect` accepts only the const-char* SLOT form (no
+    // member-pointer overload), so the SLOT() macro is canonical here. Capture
+    // the return so a failed subscription (e.g. service not yet up) is
+    // diagnosable rather than a silent miss — the deferred reload below still
+    // fetches the initial state, but without this subscription the page would
+    // never re-sync on subsequent daemon-side writes.
+    const bool subscribed = QDBusConnection::sessionBus().connect(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged"), this,
+        SLOT(reload()));
+    if (!subscribed) {
+        qCWarning(lcConfig) << "WindowRuleController: failed to subscribe to org.plasmazones.WindowRules.rulesChanged "
+                               "— page will not refresh on daemon-side writes";
+    }
     // Defer the initial fetch to the next event-loop tick. fetchFromDaemon()
     // issues a synchronous blocking QDBusConnection::call() (up to ~500 ms on
     // a timeout); running it inline in the constructor would stall settings-app
@@ -191,6 +243,24 @@ WindowRuleController::WindowRuleController(QObject* parent)
 }
 
 WindowRuleController::~WindowRuleController() = default;
+
+void WindowRuleController::setScreenLookup(WindowRuleModel::LabelLookup fn)
+{
+    m_model.setScreenLabelLookup(std::move(fn));
+}
+
+void WindowRuleController::setActivityLookup(WindowRuleModel::LabelLookup fn)
+{
+    m_model.setActivityLabelLookup(std::move(fn));
+}
+
+void WindowRuleController::setLayoutLookup(WindowRuleModel::LabelLookup fn)
+{
+    m_layoutLookup = fn;
+    // Also forward to the model so its `actionSummary` can resolve layoutId /
+    // algorithm-token wire values when building the rule-list captions.
+    m_model.setLayoutLabelLookup(std::move(fn));
+}
 
 void WindowRuleController::setDirty(bool dirty)
 {
@@ -245,10 +315,17 @@ bool WindowRuleController::pushToDaemon(const QList<WindowRule>& rules)
 {
     WindowRuleSet set;
     // setRules() drops invalid rules with a logged diagnostic and returns the
-    // accepted count. A partial drop means the daemon would persist fewer
-    // rules than the user staged — treat that as a failed push so the page
-    // stays dirty rather than silently telling the user everything saved.
+    // accepted count. Bail out BEFORE pushing if any rule was rejected — the
+    // earlier code would push a truncated set to the daemon and only fail
+    // the return, leaving the daemon persisting a divergent rule set the
+    // model would never refresh (the next reload is guarded by the dirty
+    // bit, which stays set on failure → permanent divergence).
     const int accepted = set.setRules(rules);
+    if (accepted != rules.size()) {
+        qCWarning(lcConfig) << "WindowRuleController::pushToDaemon: rejecting push —" << (rules.size() - accepted)
+                            << "of" << rules.size() << "rules failed client-side validation; daemon NOT updated";
+        return false;
+    }
     const QJsonDocument doc(set.toJson());
     const QDBusMessage reply =
         DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::WindowRules),
@@ -258,8 +335,7 @@ bool WindowRuleController::pushToDaemon(const QList<WindowRule>& rules)
         return false;
     }
     setDaemonReachable(true);
-    const bool daemonAccepted = !reply.arguments().isEmpty() && reply.arguments().constFirst().toBool();
-    return daemonAccepted && accepted == rules.size();
+    return !reply.arguments().isEmpty() && reply.arguments().constFirst().toBool();
 }
 
 bool WindowRuleController::fetchAndLoad()
@@ -602,7 +678,18 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
 
         QVariantMap tile;
         tile[QStringLiteral("screenId")] = screenId;
-        tile[QStringLiteral("layoutName")] = summary.layoutName;
+        // The summary's layoutName is the raw layoutId / algorithm token from
+        // the rule's action params — resolve it to the user-facing layout name
+        // when a lookup is wired, so the tile's caption reads "BSP" instead of
+        // "{25828c9b-…}".
+        QString layoutLabel = summary.layoutName;
+        if (m_layoutLookup && !layoutLabel.isEmpty()) {
+            const QString resolved = m_layoutLookup(layoutLabel);
+            if (!resolved.isEmpty()) {
+                layoutLabel = resolved;
+            }
+        }
+        tile[QStringLiteral("layoutName")] = layoutLabel;
         tile[QStringLiteral("tilingEnabled")] = summary.tilingEnabled;
         tile[QStringLiteral("ruleCount")] = summary.ruleCount;
         tile[QStringLiteral("assigned")] = assigned;
@@ -622,10 +709,14 @@ QStringList WindowRuleController::ruleScreenIds(const QString& ruleId) const
 
 QVariantList WindowRuleController::matchFields() const
 {
+    // WindowRole is intentionally omitted — it's the X11 WM_WINDOW_ROLE
+    // property, empty for every Wayland-native window. PlasmaZones is
+    // Wayland-only (per CLAUDE.md), so exposing a field that's always blank
+    // would be a footgun.
     static const QList<Field> kFields = {
-        Field::AppId,    Field::WindowClass,    Field::DesktopFile, Field::WindowRole,   Field::Pid,
-        Field::Title,    Field::WindowType,     Field::IsSticky,    Field::IsFullscreen, Field::IsMinimized,
-        Field::ScreenId, Field::VirtualDesktop, Field::Activity,
+        Field::AppId,       Field::WindowClass, Field::DesktopFile,    Field::Pid,
+        Field::Title,       Field::WindowType,  Field::IsSticky,       Field::IsFullscreen,
+        Field::IsMinimized, Field::ScreenId,    Field::VirtualDesktop, Field::Activity,
     };
     QVariantList out;
     for (Field f : kFields) {
@@ -640,6 +731,16 @@ QVariantList WindowRuleController::matchFields() const
             kind = QStringLiteral("number");
         } else if (PhosphorWindowRule::fieldIsBool(f)) {
             kind = QStringLiteral("bool");
+        } else if (f == Field::ScreenId) {
+            // QML editor swaps this for a screen-picker ComboBox driven by
+            // `settingsController.screens`, so the user sees "LG Ultra HD" not
+            // "LG Electronics:LG Ultra HD:115107/vs:0".
+            kind = QStringLiteral("screen");
+        } else if (f == Field::Activity) {
+            // QML editor swaps this for an activity-picker ComboBox driven by
+            // `settingsController.activities`, so the user sees the activity
+            // name not its UUID.
+            kind = QStringLiteral("activity");
         }
         entry[QStringLiteral("valueKind")] = kind;
         out.append(entry);
@@ -684,6 +785,11 @@ QVariantList WindowRuleController::operatorsForField(int fieldValue) const
 
 QVariantList WindowRuleController::actionTypes() const
 {
+    // SetOpacity is registered as an action type (and validated) but no
+    // consumer ever reads its slot — KWin per-window opacity is achievable
+    // via `EffectWindow::setOpacity`, but the plumbing was never wired up.
+    // Exposing it here would let users create rules that silently never
+    // fire. Reinstate when the effect-side handler lands.
     static const QList<QLatin1StringView> kTypes = {
         ActionType::SetEngineMode,
         ActionType::SetSnappingLayout,
@@ -691,8 +797,8 @@ QVariantList WindowRuleController::actionTypes() const
         ActionType::DisableEngine,
         ActionType::Exclude,
         ActionType::Float,
-        ActionType::SetOpacity,
         ActionType::OverrideAnimationShader,
+        ActionType::OverrideAnimationCurve,
         ActionType::OverrideAnimationTiming,
     };
     QVariantList out;

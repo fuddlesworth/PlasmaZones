@@ -19,7 +19,9 @@ ItemDelegate {
     /// Per-rule fields from WindowRuleModel's roles.
     required property string ruleId
     required property string ruleName
-    required property bool enabled
+    /// The rule's own enabled flag — distinct from `ItemDelegate.enabled`,
+    /// which gates the delegate's interactivity.
+    required property bool ruleEnabled
     required property string matchSummary
     required property string actionSummary
     required property int conditionCount
@@ -28,7 +30,10 @@ ItemDelegate {
 
     signal editRequested()
     signal deleteRequested()
-    signal toggleRequested(bool enabled)
+    // Parameter named `ruleEnabled` for symmetry with the `ruleEnabled`
+    // property — using the bare name `enabled` would shadow the row's own
+    // `enabled` in any handler that relies on implicit-argument scope.
+    signal toggleRequested(bool ruleEnabled)
 
     // Instantiated inside a Repeater/ColumnLayout — `Layout.fillWidth: true`
     // (set by the delegate's parent) drives the width; there is no enclosing
@@ -43,13 +48,17 @@ ItemDelegate {
             Layout.alignment: Qt.AlignVCenter
             implicitWidth: Kirigami.Units.iconSizes.small
             implicitHeight: Kirigami.Units.iconSizes.small
-            Accessible.name: row.enabled ? i18n("Disable rule %1", row.ruleName) : i18n("Enable rule %1", row.ruleName)
-            onClicked: row.toggleRequested(!row.enabled)
+            // Expose as a CheckBox to screen readers so the enable/disable
+            // state is announced alongside the action label.
+            Accessible.role: Accessible.CheckBox
+            Accessible.checked: row.ruleEnabled
+            Accessible.name: row.ruleEnabled ? i18n("Disable rule %1", row.ruleName) : i18n("Enable rule %1", row.ruleName)
+            onClicked: row.toggleRequested(!row.ruleEnabled)
 
             contentItem: Rectangle {
                 radius: width / 2
-                color: row.enabled ? Kirigami.Theme.highlightColor : "transparent"
-                border.width: row.enabled ? 0 : 2
+                color: row.ruleEnabled ? Kirigami.Theme.highlightColor : "transparent"
+                border.width: row.ruleEnabled ? 0 : 2
                 border.color: Kirigami.Theme.disabledTextColor
             }
 
@@ -63,14 +72,14 @@ ItemDelegate {
                 Layout.fillWidth: true
                 text: row.ruleName.length > 0 ? row.ruleName : row.matchSummary
                 font.bold: true
-                opacity: row.enabled ? 1 : 0.5
+                opacity: row.ruleEnabled ? 1 : 0.5
                 elide: Text.ElideRight
             }
 
             Label {
                 Layout.fillWidth: true
                 text: row.matchSummary
-                opacity: row.enabled ? 0.7 : 0.4
+                opacity: row.ruleEnabled ? 0.7 : 0.4
                 elide: Text.ElideRight
                 visible: row.ruleName.length > 0
             }
@@ -90,7 +99,7 @@ ItemDelegate {
                 id: condLabel
 
                 anchors.centerIn: parent
-                text: i18np("%1 condition", "%1 conditions", row.conditionCount)
+                text: i18np("%n condition", "%n conditions", row.conditionCount)
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 opacity: 0.7
             }
@@ -110,7 +119,7 @@ ItemDelegate {
                 id: actionLabel
 
                 anchors.centerIn: parent
-                text: i18np("%1 action", "%1 actions", row.actionCount)
+                text: i18np("%n action", "%n actions", row.actionCount)
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 opacity: 0.7
             }
@@ -129,7 +138,7 @@ ItemDelegate {
             Layout.preferredWidth: Kirigami.Units.gridUnit * 14
             text: row.actionSummary
             font.bold: true
-            opacity: row.enabled ? 1 : 0.5
+            opacity: row.ruleEnabled ? 1 : 0.5
             elide: Text.ElideRight
             Layout.alignment: Qt.AlignVCenter
         }

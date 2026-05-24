@@ -5,97 +5,174 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
- * @brief One read-only monitor tile in the MonitorOverview strip.
+ * @brief One monitor tile in the WindowRulesPage MONITORS strip.
  *
- * Shows a monitor's assigned layout, tiling on/off state and rule count.
- * Clicking the tile filters the rule list to that monitor — it is a
- * visualization, never an editor.
+ * Visual style mirrors `MonitorSelectorSection`'s per-screen tile — monitor
+ * icon (rotated for portrait), display label, "Primary" badge — so the
+ * page reads consistently with the rest of the app. A small caption row
+ * carries the rule-count / assignment summary unique to this view.
+ *
+ * Clicking the tile filters the rule list to that monitor; clicking the
+ * active tile again clears the filter (the parent decides the semantics).
  */
 Rectangle {
     id: tile
 
-    /// `{ screenId, layoutName, tilingEnabled, ruleCount, assigned }` from
-    /// `WindowRuleController.monitorOverview()`.
-    required property var tileData
+    /// Full screen map from `settingsController.screens` (displayLabel,
+    /// connectorName, isPrimary, width/height, etc.).
+    required property var screenData
+    /// Rule-related data: `{ screenId, layoutName, tilingEnabled, ruleCount,
+    /// assigned }` from `WindowRuleController.monitorOverview()`. May be
+    /// undefined for a screen with no pinned rules — the tile renders a
+    /// "Not assigned" caption in that case.
+    property var tileData: undefined
     /// True when this tile is the active monitor filter.
     property bool selected: false
-    readonly property bool _assigned: tile.tileData.assigned === true
+    readonly property bool _assigned: tile.tileData !== undefined && tile.tileData.assigned === true
+    readonly property bool _isPortrait: (tile.screenData.width || 0) > 0 && (tile.screenData.height || 0) > 0 && tile.screenData.height > tile.screenData.width
+    // `|| 0` coerces NaN (Number()-ing a non-numeric QVariant) to zero so a
+    // malformed tile payload never lands `NaN` inside `i18np` and produces
+    // "NaN rules" in the caption.
+    readonly property int _ruleCount: (tile.tileData !== undefined && tile.tileData.ruleCount !== undefined ? Number(tile.tileData.ruleCount) : 0) || 0
+    readonly property bool _isPrimary: tile.screenData.isPrimary === true
 
     signal clicked()
 
-    implicitWidth: Kirigami.Units.gridUnit * 16
-    implicitHeight: Kirigami.Units.gridUnit * 5
+    implicitWidth: content.implicitWidth + Kirigami.Units.largeSpacing * 2
+    implicitHeight: content.implicitHeight + Kirigami.Units.largeSpacing
     radius: Kirigami.Units.smallSpacing
-    color: tile.selected ? Kirigami.Theme.highlightColor : Kirigami.Theme.alternateBackgroundColor
-    // A selected tile gets a thicker, contrasting border (the focus/text
-    // color) so the outline stays visible against the highlight fill.
-    border.width: tile.selected ? 2 : 1
-    border.color: tile.selected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.separatorColor
-    Accessible.role: Accessible.Button
-    Accessible.name: i18n("Filter rules to monitor %1", tile.tileData.screenId)
+    color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
+    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+    border.color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : tileMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+    Accessible.role: Accessible.RadioButton
+    Accessible.name: i18n("Filter rules to monitor %1", monitorLabel.text)
+    Accessible.checked: tile.selected
 
     ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: Kirigami.Units.largeSpacing
-        spacing: Kirigami.Units.smallSpacing
+        id: content
 
-        Label {
-            text: tile.tileData.screenId
-            font.bold: true
-            color: tile.selected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
-            elide: Text.ElideRight
-            Layout.fillWidth: true
+        anchors.centerIn: parent
+        spacing: Kirigami.Units.smallSpacing / 2
+
+        Kirigami.Icon {
+            source: "monitor"
+            Layout.preferredWidth: Kirigami.Units.iconSizes.medium
+            Layout.preferredHeight: Kirigami.Units.iconSizes.medium
+            Layout.alignment: Qt.AlignHCenter
+            opacity: tile.selected ? 1 : 0.5
+            rotation: tile._isPortrait ? 90 : 0
         }
 
+        Label {
+            id: monitorLabel
+
+            text: {
+                // Cascade through the available identifiers; a final
+                // `Unknown monitor` placeholder guards against the every-
+                // field-empty case so the tile (and the Accessible.name
+                // interpolation that reads this label) never becomes blank.
+                let label = tile.screenData.displayLabel || tile.screenData.name || (tile.tileData ? tile.tileData.screenId : "") || i18n("Unknown monitor");
+                if (tile.screenData.connectorName)
+                    label += " · " + tile.screenData.connectorName;
+
+                return label;
+            }
+            font: Kirigami.Theme.smallFont
+            Layout.alignment: Qt.AlignHCenter
+            opacity: tile.selected ? 1 : 0.5
+            elide: Text.ElideRight
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 15
+        }
+
+        Rectangle {
+            Layout.alignment: Qt.AlignHCenter
+            width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+            height: primaryLabel.implicitHeight + 2
+            radius: height / 2
+            color: tile._isPrimary ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15) : "transparent"
+
+            Label {
+                id: primaryLabel
+
+                anchors.centerIn: parent
+                text: i18n("Primary")
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize - 1
+                color: Kirigami.Theme.positiveTextColor
+                opacity: tile._isPrimary ? 1 : 0
+            }
+
+        }
+
+        // Rule-count / assignment caption — small, secondary line beneath the
+        // primary badge so the visual hierarchy still leads with the monitor.
         RowLayout {
-            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignHCenter
             spacing: Kirigami.Units.smallSpacing
 
             Kirigami.Icon {
                 source: tile._assigned ? (tile.tileData.tilingEnabled ? "view-grid" : "dialog-cancel") : "edit-none"
                 Layout.preferredWidth: Kirigami.Units.iconSizes.small
                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                // Match the labels' selected-state treatment so the icon
-                // keeps contrast against the highlight fill.
-                color: tile.selected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                opacity: 0.7
             }
 
             Label {
-                Layout.fillWidth: true
+                font: Kirigami.Theme.smallFont
+                opacity: 0.7
                 elide: Text.ElideRight
-                opacity: tile.selected ? 1 : 0.8
-                color: tile.selected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                Layout.maximumWidth: Kirigami.Units.gridUnit * 13
                 text: {
+                    // The KI18n placeholder for the implicit count argument is
+                    // `%n`, not `%1` — using `%1` here leaves the literal
+                    // "%1 rule(s)" in the rendered label.
+                    var n = tile._ruleCount;
+                    var countLabel = i18np("%n rule", "%n rules", n);
                     if (!tile._assigned)
-                        return i18n("Not assigned");
+                        return i18n("Not assigned") + " · " + countLabel;
 
                     if (!tile.tileData.tilingEnabled)
-                        return i18n("Tiling off");
+                        return i18n("Tiling off") + " · " + countLabel;
 
                     if (tile.tileData.layoutName && tile.tileData.layoutName.length > 0)
-                        return tile.tileData.layoutName;
+                        return tile.tileData.layoutName + " · " + countLabel;
 
-                    return i18n("Assigned");
+                    return countLabel;
                 }
             }
 
         }
 
-        Label {
-            Layout.fillWidth: true
-            opacity: tile.selected ? 0.9 : 0.6
-            color: tile.selected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
-            text: i18np("%1 rule", "%1 rules", tile.tileData.ruleCount)
+    }
+
+    MouseArea {
+        id: tileMouse
+
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        hoverEnabled: true
+        activeFocusOnTab: true
+        Keys.onSpacePressed: tile.clicked()
+        Keys.onReturnPressed: tile.clicked()
+        onClicked: tile.clicked()
+    }
+
+    Behavior on color {
+        PhosphorMotionAnimation {
+            profile: "widget.hover"
+            durationOverride: Kirigami.Units.shortDuration
         }
 
     }
 
-    MouseArea {
-        anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
-        onClicked: tile.clicked()
+    Behavior on border.color {
+        PhosphorMotionAnimation {
+            profile: "widget.hover"
+            durationOverride: Kirigami.Units.shortDuration
+        }
+
     }
 
 }

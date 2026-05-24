@@ -1529,10 +1529,14 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 
     // ── Provider-default catch-all rule ────────────────────────────────────
     // The cascade falls through to a lowest-priority empty-All{} rule when no
-    // pinned context rule matches. Derive its mode/layout from the global
-    // defaults in config.json: a configured DefaultLayoutId means snapping;
-    // otherwise the Tiling default algorithm means autotile; otherwise a bare
-    // snapping placeholder.
+    // pinned context rule matches. Both the snapping default AND the tiling
+    // default are baked into the rule so the catch-all has a complete fallback
+    // regardless of which engine the rule selects — the engine-mode action
+    // chooses the active mode, but both layout/algorithm actions stand ready
+    // so a manual mode toggle later (or another rule overriding the engine)
+    // still resolves a sensible layout. Previously only one mode's default
+    // was embedded, leaving the user's snapping default off the catch-all
+    // when an autotile default was also present.
     {
         // Live v4 config keys — route group/key strings through the
         // ConfigDefaults:: accessors (CLAUDE.md: live keys must not use inline
@@ -1544,17 +1548,13 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         const QJsonObject tilingAlgo = groupObjectAtPath(configRoot, ConfigDefaults::tilingAlgorithmGroup());
         const QString defaultAlgorithm = tilingAlgo.value(ConfigDefaults::defaultKey()).toString();
 
-        bool autotileDefault = false;
-        QString providerLayout;
-        QString providerAlgorithm;
-        if (!defaultLayoutId.isEmpty()) {
-            providerLayout = defaultLayoutId;
-        } else if (!defaultAlgorithm.isEmpty()) {
-            autotileDefault = true;
-            providerAlgorithm = defaultAlgorithm;
-        }
+        // Engine-mode preference: pick autotile only when the user has no
+        // snapping default but does have a tiling default — snapping is the
+        // historical default mode and stays selected whenever a snapping
+        // layout is configured.
+        const bool autotileDefault = defaultLayoutId.isEmpty() && !defaultAlgorithm.isEmpty();
         rules.append(PhosphorWindowRule::ContextRuleBridge::makeProviderDefaultRule(
-            QStringLiteral("Default"), autotileDefault, providerLayout, providerAlgorithm));
+            QStringLiteral("Default"), autotileDefault, defaultLayoutId, defaultAlgorithm));
     }
 
     // ── Disable-list rules ─────────────────────────────────────────────────

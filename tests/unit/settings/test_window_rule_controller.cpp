@@ -198,14 +198,28 @@ void TestWindowRuleController::authoringMetadata()
 
     const QVariantList fields = controller.matchFields();
     QVERIFY(!fields.isEmpty());
-    // Every field entry carries value / label / valueKind.
+    // Every field entry carries value / label / valueKind. The `screen` and
+    // `activity` kinds drive the dedicated picker editors in QML — assert
+    // at least one of each is present so a regression that reverts those
+    // fields back to `string` (silently breaking the picker UX) is caught.
+    bool sawScreenKind = false;
+    bool sawActivityKind = false;
     for (const QVariant& v : fields) {
         const QVariantMap f = v.toMap();
         QVERIFY(f.contains(QStringLiteral("value")));
         QVERIFY(!f.value(QStringLiteral("label")).toString().isEmpty());
         const QString kind = f.value(QStringLiteral("valueKind")).toString();
-        QVERIFY(kind == QLatin1String("string") || kind == QLatin1String("number") || kind == QLatin1String("bool"));
+        QVERIFY(kind == QLatin1String("string") || kind == QLatin1String("number") || kind == QLatin1String("bool")
+                || kind == QLatin1String("screen") || kind == QLatin1String("activity"));
+        if (kind == QLatin1String("screen")) {
+            sawScreenKind = true;
+        }
+        if (kind == QLatin1String("activity")) {
+            sawActivityKind = true;
+        }
     }
+    QVERIFY(sawScreenKind);
+    QVERIFY(sawActivityKind);
 
     // AppId (Field enum 0) supports the AppIdMatches operator.
     const QVariantList appOps = controller.operatorsForField(0);

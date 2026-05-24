@@ -101,9 +101,12 @@ void LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
                                           const AssignmentEntry& entry)
 {
     const bool autotile = (entry.mode == AssignmentEntry::Autotile);
+    // Pass an empty rule name — the settings UI renders an auto-friendly
+    // title from the rule's match (with lookup-resolved screen/activity
+    // labels). Stamping a raw `screenId · Desktop N · Activity` here would
+    // bake connector strings and activity UUIDs into the stored rule.
     PWR::WindowRule rule = PWR::ContextRuleBridge::makeAssignmentRule(
-        contextRuleName(screenId, virtualDesktop, activity), screenId, virtualDesktop, activity, autotile,
-        entry.snappingLayout, entry.tilingAlgorithm);
+        QString(), screenId, virtualDesktop, activity, autotile, entry.snappingLayout, entry.tilingAlgorithm);
 
     const PWR::WindowRule* existing = findExactContextRule(screenId, virtualDesktop, activity);
     if (existing == nullptr) {
@@ -153,6 +156,7 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
     //     other actions intact; drop the rule only if nothing meaningful
     //     remains after the removal.
     QList<PWR::WindowRule> kept;
+    QList<QPair<QString, int>> affected;
     bool changed = false;
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
         const bool referencesDeleted =
@@ -171,6 +175,12 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
             // snapping reference cleared; mode + tilingAlgorithm survive.
             const AssignmentEntry entry = entryFromRuleMatchActions(rule);
             const bool autotile = (entry.mode == AssignmentEntry::Autotile);
+            const ContextDims dims = decodeDims(rule.match);
+            // Track the affected (screen, desktop) for the post-update
+            // layoutAssigned emit — every observer keyed on this rule's
+            // context needs to refresh, whether the rule was dropped or just
+            // rebuilt.
+            affected.append(qMakePair(dims.screenId, dims.virtualDesktop));
             if (!autotile && entry.tilingAlgorithm.isEmpty()) {
                 // Nothing meaningful remains — a bare Snapping engine-mode is
                 // the default. Drop the whole rule.
@@ -210,6 +220,13 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
     }
     if (changed) {
         m_ruleStore->setAllRules(kept);
+        // Notify per-screen observers (overlays, autotile state, settings
+        // tile caption, etc.) so they refresh against the new cascade.
+        // Mirrors `clearAutotileAssignments`'s emit pattern — without it,
+        // a layout delete left those consumers showing stale assignments.
+        for (const auto& [sid, desk] : std::as_const(affected)) {
+            Q_EMIT layoutAssigned(sid, desk, nullptr);
+        }
     }
     return changed;
 }
@@ -567,12 +584,15 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
                                   << ctx.activity;
             continue;
         }
+        // logContext is the log-friendly identity string; the rule name itself
+        // stays empty so the settings UI can render a friendly title from
+        // resolved screen / activity labels rather than baking the raw ids in.
         const QString logContext = contextRuleName(ctx.screenId, ctx.virtualDesktop, ctx.activity);
         if (shouldSkipLayoutAssignment(layoutId, logContext)) {
             continue;
         }
         const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldEntries.value(it.key()));
-        kept.append(PWR::ContextRuleBridge::makeAssignmentRule(logContext, ctx.screenId, ctx.virtualDesktop,
+        kept.append(PWR::ContextRuleBridge::makeAssignmentRule(QString(), ctx.screenId, ctx.virtualDesktop,
                                                                ctx.activity, entry.mode == AssignmentEntry::Autotile,
                                                                entry.snappingLayout, entry.tilingAlgorithm));
         storedScreens.insert(ctx.screenId);
