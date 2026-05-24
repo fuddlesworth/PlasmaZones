@@ -61,6 +61,16 @@ inline const PhosphorLayer::Role Osd = PhosphorShellPatterns::Hud().withScopePre
 /// is moot since per-content slots toggle visibility within the shared
 /// scene graph rather than the wl_surface itself unmapping.
 ///
+/// Layer downgrade from Overlay to Top is deliberate (issue #516). A
+/// fullscreen wlr Overlay-layer surface above the active toplevel masks
+/// KWin's Translucency-while-moving effect, and on hybrid Intel+NVIDIA
+/// systems forces a slower compositional path that produces visible drag
+/// artifacts and post-snap flicker. Top still draws the zone preview
+/// above normal toplevels (it is what KDE's own panel uses) but lets
+/// KWin keep the translucency render path and the fast composition
+/// route. Fullscreen apps on Overlay still draw above the zone preview,
+/// which is the correct behaviour anyway.
+///
 /// Each per-content slot is animated by the SurfaceAnimator keyed on
 /// (PassiveShell surface, slot QQuickItem). Per-content motion / shader
 /// configs are resolved via the role-override `beginShow`/`beginHide`
@@ -70,8 +80,9 @@ inline const PhosphorLayer::Role Osd = PhosphorShellPatterns::Hud().withScopePre
 ///
 /// See `PassiveOverlayShell.qml` for the QML side and the unified-shell
 /// migration commits for the per-consumer rewrite.
-inline const PhosphorLayer::Role PassiveShell =
-    PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-passive-shell"));
+inline const PhosphorLayer::Role PassiveShell = PhosphorShellPatterns::Hud()
+                                                    .withLayer(PhosphorLayer::Layer::Top)
+                                                    .withScopePrefix(QStringLiteral("plasmazones-passive-shell"));
 
 /// Snap-assist config-only role. The wl_surface lifetime moved to the
 /// unified PassiveShell post-shell-migration; this role is preserved
