@@ -955,6 +955,16 @@ private Q_SLOTS:
     /// logout/login. Dedicated signal (not settingsChanged) so the
     /// Settings app's change detection is unaffected.
     void slotMotionProfileTreeChanged();
+
+    /// Fetch the unified WindowRule store via `org.plasmazones.WindowRules.
+    /// getAllRules`, filter to rules carrying an OverrideAnimation* action,
+    /// and forward them to the shader manager so they merge with the
+    /// bridge-converted legacy AnimationAppRules. Called once at bringup;
+    /// the bringup also subscribes to the interface's `rulesChanged` signal
+    /// (via the SLOT() macro — QDBusConnection::connect only accepts the
+    /// const-char* form) so a settings-UI edit takes effect without
+    /// restarting the effect.
+    void loadWindowRuleAnimationsFromDbus();
 };
 
 } // namespace PlasmaZones

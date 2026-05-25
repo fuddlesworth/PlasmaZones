@@ -19,6 +19,16 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
+#include <PhosphorWindowRule/RuleAction.h>
+#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
+
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QJsonDocument>
 
 #include <effect/effecthandler.h>
 #include <opengl/glshader.h>
@@ -1488,6 +1498,65 @@ void PlasmaZonesEffect::loadAnimationAppRulesFromDbus()
                                 m_shaderManager.rebuildAnimationRuleSet();
                                 qCDebug(lcEffect) << "loadAnimationAppRulesFromDbus: loaded" << rules.size() << "rules";
                             });
+    });
+}
+
+void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
+{
+    // Fetch the unified WindowRule store via getAllRules (returns a JSON
+    // string of a v4 WindowRuleSet), deserialise, filter to rules whose
+    // action list contains any OverrideAnimation* action, and hand them to
+    // the shader manager. Bridge-converted legacy AnimationAppRules and
+    // these new rules end up concatenated in m_animationRuleSet — the same
+    // RuleEvaluator resolves both, so the existing per-event slot lookup
+    // in shader_resolve.cpp picks the winner without further code changes.
+    const QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("getAllRules"));
+    const QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        const QDBusPendingReply<QString> reply = *w;
+        if (reply.isError()) {
+            // Daemon may not be up yet at startup; the rulesChanged
+            // subscription below will deliver the next change. Log at debug
+            // so the noise stays out of normal-startup logs.
+            qCDebug(lcEffect) << "loadWindowRuleAnimationsFromDbus: getAllRules failed:" << reply.error().message();
+            return;
+        }
+        const QByteArray payload = reply.value().toUtf8();
+        const QJsonDocument doc = QJsonDocument::fromJson(payload);
+        if (!doc.isObject()) {
+            qCWarning(lcEffect) << "loadWindowRuleAnimationsFromDbus: getAllRules returned non-object JSON";
+            return;
+        }
+        const auto setOpt = PhosphorWindowRule::WindowRuleSet::fromJson(doc.object());
+        if (!setOpt) {
+            qCWarning(lcEffect) << "loadWindowRuleAnimationsFromDbus: WindowRuleSet::fromJson refused payload";
+            return;
+        }
+        QList<PhosphorWindowRule::WindowRule> animationRules;
+        for (const PhosphorWindowRule::WindowRule& rule : setOpt->rules()) {
+            if (!rule.enabled) {
+                // Skip disabled rules — they exist in the store but must not
+                // contribute to the evaluator. (RuleEvaluator already gates
+                // on enabled for its own walks, but pruning here keeps the
+                // rule-set size minimal and the priority-order index smaller.)
+                continue;
+            }
+            for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
+                if (action.type == PhosphorWindowRule::ActionType::OverrideAnimationShader
+                    || action.type == PhosphorWindowRule::ActionType::OverrideAnimationTiming
+                    || action.type == PhosphorWindowRule::ActionType::OverrideAnimationCurve) {
+                    animationRules.append(rule);
+                    break;
+                }
+            }
+        }
+        m_shaderManager.setWindowRuleAnimationRules(std::move(animationRules));
+        qCDebug(lcEffect) << "loadWindowRuleAnimationsFromDbus: forwarded" << m_shaderManager.animationRuleSet().count()
+                          << "total animation rules to the evaluator";
     });
 }
 

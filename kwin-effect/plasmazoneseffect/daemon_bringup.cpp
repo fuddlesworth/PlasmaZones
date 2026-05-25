@@ -563,6 +563,16 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadAnimationAppRulesFromDbus();
     loadMotionProfileTreeFromDbus();
     loadShaderRegistryFromDbus();
+    // Unified WindowRule store — pull in any rules carrying an
+    // OverrideAnimation* action so the new editor's animation rules merge
+    // with the legacy AnimationAppRules cascade. The subscription below
+    // refreshes whenever the daemon broadcasts `rulesChanged`, so an edit
+    // in the settings UI lands without restarting the effect.
+    loadWindowRuleAnimationsFromDbus();
+    QDBusConnection::sessionBus().connect(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged"), this,
+        SLOT(loadWindowRuleAnimationsFromDbus()));
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
         m_cachedToggleActivation = v.toBool();
     });
