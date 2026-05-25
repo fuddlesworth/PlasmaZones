@@ -51,6 +51,11 @@ set(plasmazones_settings_SRCS
     windowrulemodel.cpp
     windowrulecontroller.h
     windowrulecontroller.cpp
+    # QAbstractItemModel adapter that exposes a rule's match expression
+    # to QtQuick.Controls.TreeView for read-only preview. Registered as a
+    # QML type via the qt_add_qml_module call below.
+    matchexpressiontreemodel.h
+    matchexpressiontreemodel.cpp
     # Shared helpers used by multiple sub-controllers.
     triggerutils.h
     triggerutils.cpp
@@ -105,6 +110,13 @@ qt_add_qml_module(plasmazones-settings
     URI org.plasmazones.settings
     VERSION 1.0
     RESOURCE_PREFIX /qt/qml
+    SOURCES
+        # C++ types exposed to QML via QML_ELEMENT — qt_add_qml_module
+        # needs the source listed here (separately from the executable's
+        # SOURCES above) so the moc-generated qmltyperegistration picks up
+        # the macro and emits the type in plasmazones-settings.qmltypes.
+        matchexpressiontreemodel.h
+        matchexpressiontreemodel.cpp
     QML_FILES
         qml/Main.qml
         qml/GeneralPage.qml
@@ -137,6 +149,8 @@ qt_add_qml_module(plasmazones-settings
         qml/RuleStartPicker.qml
         qml/RuleStartTile.qml
         qml/MatchExpressionEditor.qml
+        qml/MatchExpressionView.qml
+        qml/ActionListView.qml
         qml/MatchLeafEditor.qml
         qml/ActionListEditor.qml
         qml/ActionRow.qml

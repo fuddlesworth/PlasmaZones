@@ -57,6 +57,14 @@ SettingsFlickable {
     // Ordered section descriptors — `[{ value: int, label }]` straight from
     // the controller. The C++ Section enum order is never duplicated in QML.
     readonly property var sectionDescriptors: page.controller.sections()
+    // Cached `matchFields()` table — threaded down to every WindowRuleRow's
+    // expansion view so the per-row Q_INVOKABLE doesn't fire on every
+    // expand. Same caching rationale as the RuleEditorBody cache.
+    readonly property var matchFieldOptions: page.controller.matchFields()
+    // Cached `actionTypes()` — same caching rationale as matchFieldOptions;
+    // threaded down to WindowRuleRow's expansion so each row doesn't re-invoke
+    // the Q_INVOKABLE.
+    readonly property var actionTypeOptions: page.controller.actionTypes()
     // Bumped whenever the underlying model changes so sectionModel re-evaluates
     // without QML hardcoding the model's role layout.
     property int modelRevision: 0
@@ -317,6 +325,12 @@ SettingsFlickable {
 
                 Layout.fillWidth: true
                 headerText: modelData.label
+                // Collapsible sections — clicking the header chevron toggles
+                // visibility of the section's rule list. State lives on the
+                // delegate so each section collapses independently; resets on
+                // page reload (acceptable — recovering the list is one click
+                // away and the page's rule count makes empty sections honest).
+                collapsible: true
                 // Right-aligned rule count in the section header — matches
                 // the mockup's "MONITOR & LAYOUT  4 rules" pattern and gives
                 // the user a quick scan of how many rules are bucketed where.
@@ -355,6 +369,10 @@ SettingsFlickable {
                             validationIssueCount: modelData.validationIssueCount
                             section: modelData.section
                             priority: modelData.priority
+                            controller: page.controller
+                            matchFieldOptions: page.matchFieldOptions
+                            actionTypeOptions: page.actionTypeOptions
+                            appSettings: page._editorAppSettings
                             onToggleRequested: function(en) {
                                 page.controller.setRuleEnabled(ruleId, en);
                             }
@@ -539,6 +557,18 @@ SettingsFlickable {
                                         validationIssueCount: animDelegateRoot.modelData.validationIssueCount
                                         section: animDelegateRoot.modelData.section
                                         priority: animDelegateRoot.modelData.priority
+                                        controller: page.controller
+                                        matchFieldOptions: page.matchFieldOptions
+                                        actionTypeOptions: page.actionTypeOptions
+                                        appSettings: page._editorAppSettings
+                                        // Drag container uses a fixed
+                                        // rowHeight for its visual-offset
+                                        // cascade; an expanded row would
+                                        // throw off the drag math. Disable
+                                        // expansion here — the row's pencil
+                                        // button still opens the full
+                                        // editor for inspecting the match.
+                                        expandable: false
                                         onToggleRequested: function(en) {
                                             page.controller.setRuleEnabled(animDelegateRoot.modelData.ruleId, en);
                                         }
