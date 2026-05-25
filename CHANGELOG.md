@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.12] - 2026-05-25
+
+### Fixed
+
+- **Focus-follows-mouse stole focus from active floating and overflow windows** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#525](https://github.com/fuddlesworth/PlasmaZones/pull/525)): the 3.0.11 FFM pause fixed the case where an excluded window (emoji picker, notification popup, krunner) was active, but the symmetric case for floating windows still regressed. A manually-floated window, or an overflow window the daemon auto-floats when window count exceeds the `maxWindows` cap, sits on top of the tiled stack while the user works in it; moving the cursor across an underlying tiled window's visible edge still activated that tiled window and sent the floating one to the background. `handleCursorMoved`'s active-window guard now also bails when `isWindowFloating()` returns true for the focused window. `FloatingCache` covers both code paths (user-toggled float and overflow auto-float via `applyFloatCleanup`), so one predicate handles both scenarios. Resumes naturally on the next cursor move once a tiled window becomes active.
+
 ## [3.0.11] - 2026-05-24
 
 ### Changed
@@ -1413,7 +1419,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.11...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.12...HEAD
+[3.0.12]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.11...v3.0.12
 [3.0.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.10...v3.0.11
 [3.0.10]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.9...v3.0.10
 [3.0.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.8...v3.0.9

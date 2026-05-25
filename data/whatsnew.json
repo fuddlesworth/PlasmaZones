@@ -1,6 +1,13 @@
 {
     "releases": [
         {
+            "version": "3.0.12",
+            "date": "2026-05-25",
+            "highlights": [
+                "Fixed focus-follows-mouse stealing focus from active floating and overflow windows when the cursor wandered onto an underlying tiled window — pauses until a tiled window becomes active (#461, #525)"
+            ]
+        },
+        {
             "version": "3.0.11",
             "date": "2026-05-24",
             "highlights": [
