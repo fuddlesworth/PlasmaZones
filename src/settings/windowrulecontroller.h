@@ -13,8 +13,6 @@
 #include <PhosphorWindowRule/WindowRule.h>
 #include <PhosphorWindowRule/WindowRuleSet.h>
 
-#include <optional>
-
 #include "windowrulemodel.h"
 
 namespace PlasmaZones {
@@ -112,15 +110,15 @@ public:
     /// once the user has chosen "overwrite anyway".
     bool commit(bool force = false);
 
-    /// Discard staged edits and re-fetch from the daemon. Clears the dirty bit
-    /// only if the re-fetch actually succeeded. Called by
-    /// `SettingsController::load()` (Discard). If the daemon is unreachable the
-    /// staged edits cannot be safely discarded (there is nothing authoritative
-    /// to reload), so the page stays dirty and `daemonReachable` stays false —
-    /// the revert is reported as having failed rather than silently dropping
-    /// the dirty bit while the stale edits survive. Returns true only if the
-    /// staged set was actually replaced with the daemon's authoritative set.
-    bool revert();
+    /// Discard staged edits and re-fetch from the daemon. The fetch is async,
+    /// so this returns immediately — the model is repopulated when the reply
+    /// arrives (signalled by `rulesLoaded()`). The dirty +
+    /// `daemonChangedWhileDirty` bits are cleared in the reply handler only
+    /// if the re-fetch succeeded; if the daemon is unreachable the staged
+    /// edits are left in place (there is nothing authoritative to reload
+    /// to), and `daemonReachable` is cleared so the page surfaces the
+    /// failure. Called by `SettingsController::load()` (Discard).
+    void revert();
 
     /// True iff there are unsaved staged edits. Mirror of `isDirty()` for the
     /// `SettingsController` pending-changes gate.
@@ -241,6 +239,19 @@ public:
     /// window-property match never fires).
     Q_INVOKABLE QVariantList actionTypes() const;
 
+    /// A complete, default-seeded action payload for @p typeWire — a JSON map
+    /// of the form `{ type: <typeWire>, ...defaults }` ready to drop into a
+    /// rule's `actions` list. Each parameter declared by the type's descriptor
+    /// gets a kind-appropriate starting value (first enum option, minimum
+    /// number, empty string for picker kinds with no implicit default). Used
+    /// by the QML action row when the user switches an existing row's type
+    /// (so the new param set is pre-seeded and `canSave` doesn't immediately
+    /// gate on missing values) and by the action-list editor when appending
+    /// a freshly-added action. An unknown @p typeWire returns just
+    /// `{ type: <typeWire> }`. Kept C++-side so the seeding rules live next
+    /// to the descriptor that drives them (single source of truth).
+    Q_INVOKABLE QVariantMap defaultPayloadFor(const QString& typeWire) const;
+
     /// Semantic validation issues for the rule represented by @p ruleJson —
     /// the editor sheet's working copy. Same check `WindowRuleSet::fromJson`
     /// runs at load time and `WindowRuleModel::ValidationIssueCountRole`
@@ -266,25 +277,26 @@ Q_SIGNALS:
     void dirtyChanged();
     void daemonReachableChanged();
     void daemonChangedWhileDirtyChanged();
+    /// Emitted on the async fetch reply path after the model has been
+    /// repopulated with the daemon's authoritative rule set. Lets tests and
+    /// QML observers know when the initial load (or a daemon-broadcast
+    /// reload) has completed.
+    void rulesLoaded();
 
 private:
     void setDirty(bool dirty);
     void setDaemonReachable(bool reachable);
     void setDaemonChangedWhileDirty(bool changed);
 
-    /// Re-fetch the rule set from the daemon and load it into the model.
-    /// Returns true and clears the dirty + `daemonChangedWhileDirty` bits only
-    /// if the daemon was reachable and the model was actually replaced with the
-    /// authoritative set. Returns false (model and dirty bit left untouched)
-    /// when the daemon is unreachable — the caller must not pretend a reload
-    /// happened. The public `reload()` slot guards on the dirty bit so a daemon
-    /// broadcast can't stomp staged edits; `revert()` calls this directly to
-    /// bypass that guard.
-    bool fetchAndLoad();
-
-    /// Fetch the rule set JSON from the daemon. Returns nullopt on any D-Bus
-    /// failure (daemon down, timeout). Updates `daemonReachable`.
-    std::optional<PhosphorWindowRule::WindowRuleSet> fetchFromDaemon();
+    /// Re-fetch the rule set from the daemon and load it into the model. The
+    /// fetch is asynchronous — the function returns immediately and the model
+    /// is repopulated on the D-Bus reply. On success the dirty +
+    /// `daemonChangedWhileDirty` bits are cleared in the reply handler and
+    /// `rulesLoaded()` is emitted; on a D-Bus error `daemonReachable` is
+    /// cleared and the staged model is left untouched. The public `reload()`
+    /// slot guards on the dirty bit so a daemon broadcast can't stomp staged
+    /// edits; `revert()` calls this directly to bypass that guard.
+    void fetchAndLoad();
 
     /// Push @p rules to the daemon via `setAllRules`. Returns true only if the
     /// daemon accepted every rule (no partial drop).

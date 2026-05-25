@@ -42,16 +42,18 @@ PhosphorWindowRule::WindowQuery animationQuery(const QString& windowClass)
     return query;
 }
 
-/// The event-scoped shader slot id for @p eventPath.
+/// The event-scoped shader slot id for @p eventPath. Concatenation through
+/// the `QLatin1StringView + QString` overload allocates a single QString
+/// directly rather than materialising the prefix into its own QString first.
 QString shaderSlotFor(const QString& eventPath)
 {
-    return QString(PhosphorWindowRule::ActionSlot::AnimShaderPrefix) + eventPath;
+    return PhosphorWindowRule::ActionSlot::AnimShaderPrefix + eventPath;
 }
 
 /// The event-scoped timing slot id for @p eventPath.
 QString timingSlotFor(const QString& eventPath)
 {
-    return QString(PhosphorWindowRule::ActionSlot::AnimTimingPrefix) + eventPath;
+    return PhosphorWindowRule::ActionSlot::AnimTimingPrefix + eventPath;
 }
 
 /// The event-scoped curve-override slot id for @p eventPath. Curve and timing
@@ -59,7 +61,7 @@ QString timingSlotFor(const QString& eventPath)
 /// other so the user can change just the easing or just the duration.
 QString curveSlotFor(const QString& eventPath)
 {
-    return QString(PhosphorWindowRule::ActionSlot::AnimCurvePrefix) + eventPath;
+    return PhosphorWindowRule::ActionSlot::AnimCurvePrefix + eventPath;
 }
 
 } // namespace
@@ -92,27 +94,52 @@ resolveAnimationShaderProfile(const PhosphorWindowRule::RuleEvaluator& evaluator
     return tree.resolve(eventPath);
 }
 
-int resolveAnimationDuration(const PhosphorWindowRule::RuleEvaluator& evaluator, const QString& windowClass,
-                             const QString& eventPath, int defaultDurationMs)
+ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindowRule::RuleEvaluator& evaluator,
+                                                            const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                            const QString& windowId, const QString& windowClass,
+                                                            const QString& eventPath, int defaultDurationMs)
 {
+    // Empty-input short-circuit — preserves the standalone resolvers' header
+    // contract for both an empty windowClass and an empty eventPath, and
+    // avoids consuming a cache slot for an evaluator walk that cannot match
+    // anything (rules match exclusively on WindowClass).
     if (windowClass.isEmpty() || eventPath.isEmpty()) {
-        return defaultDurationMs;
+        return ResolvedShaderAndDuration{tree.resolve(eventPath), defaultDurationMs};
     }
-    const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolve(animationQuery(windowClass));
-    const auto action = resolved.slot(timingSlotFor(eventPath));
-    if (action) {
-        // A Timing rule omits `durationMs` when it is <= 0 (the "inherit"
-        // sentinel), so an absent key resolves to 0 here and falls through.
-        const int durationMs = action->params.value(kKeyDurationMs).toInt(0);
-        if (durationMs > 0) {
-            // Clamp to the same envelope the standalone resolver applied — a
-            // malformed rule must not feed an unbounded duration into the
-            // teardown timer or the per-frame elapsed-time math.
-            return qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, durationMs,
-                          PhosphorAnimation::Limits::MaxAnimationDurationMs);
+    // ONE cached evaluator walk feeds both slot lookups. The standalone
+    // resolveAnimationShaderProfile + resolveAnimationDuration pair did two
+    // independent `resolve()` walks per shader event — same query, same
+    // priority-order traversal, both bypassing the per-window match cache.
+    // `resolveCached` keyed by the composite windowId reuses the result
+    // across both slot reads AND across subsequent shader events for the
+    // same window until the rule set's revision changes.
+    const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolveCached(windowId, animationQuery(windowClass));
+
+    // Shader slot: rule wins verbatim (engaged-empty effectId is the
+    // user's "block tree fallthrough for this app/event" sentinel and
+    // is preserved by ShaderProfile's own contract). Unfilled slot →
+    // fall through to the per-event tree.
+    PhosphorAnimationShaders::ShaderProfile profile;
+    if (const auto action = resolved.slot(shaderSlotFor(eventPath))) {
+        profile.effectId = action->params.value(kKeyEffectId).toString();
+        profile.parameters = action->params.value(kKeyParams).toObject().toVariantMap();
+    } else {
+        profile = tree.resolve(eventPath);
+    }
+
+    // Timing slot: a filled slot with durationMs > 0 wins (clamped to the
+    // standard envelope). durationMs <= 0 is the "inherit" sentinel — fall
+    // through to the caller-supplied default identically to the
+    // resolveAnimationDuration shim.
+    int durationMs = defaultDurationMs;
+    if (const auto action = resolved.slot(timingSlotFor(eventPath))) {
+        const int candidate = action->params.value(kKeyDurationMs).toInt(0);
+        if (candidate > 0) {
+            durationMs = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, candidate,
+                                PhosphorAnimation::Limits::MaxAnimationDurationMs);
         }
     }
-    return defaultDurationMs;
+    return ResolvedShaderAndDuration{std::move(profile), durationMs};
 }
 
 PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRule::RuleEvaluator& evaluator,
@@ -148,8 +175,8 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
     if (timingAction) {
         const int durationMs = timingAction->params.value(kKeyDurationMs).toInt(0);
         if (durationMs > 0) {
-            // Same clamp as resolveAnimationDuration so the motion and shader
-            // paths stay in lockstep for the same user-facing rule.
+            // Same clamp as resolveAnimationShaderAndDuration so the motion
+            // and shader paths stay in lockstep for the same user-facing rule.
             out.duration = static_cast<qreal>(qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, durationMs,
                                                      PhosphorAnimation::Limits::MaxAnimationDurationMs));
         }

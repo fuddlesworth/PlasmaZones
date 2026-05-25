@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
+import org.plasmazones.settings
 
 /**
  * @brief One rule row in the grouped WindowRulesPage list.
@@ -241,10 +242,11 @@ ItemDelegate {
             // Conditions, Actions). Shown only for Advanced-section rules where
             // the raw priority integer is the user-controlled ordering dimension.
             // Other sections derive priority from cascade bands so the raw number
-            // adds noise rather than information. Section enum value 4 =
-            // WindowRuleModel::Section::Advanced.
+            // adds noise rather than information. Uses the C++ Section enum
+            // exposed via QML_NAMED_ELEMENT(WindowRuleModel) so the integer
+            // value isn't hardcoded.
             Rectangle {
-                visible: row.section === 4
+                visible: row.section === WindowRuleModel.Advanced
                 Layout.alignment: Qt.AlignVCenter
                 implicitWidth: priorityLabel.implicitWidth + Kirigami.Units.largeSpacing
                 implicitHeight: priorityLabel.implicitHeight + Kirigami.Units.smallSpacing

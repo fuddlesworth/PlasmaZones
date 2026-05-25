@@ -34,6 +34,17 @@ namespace PhosphorWindowRule {
  * LGPL @c phosphor-zones registry and the GPL daemon can own/borrow it without
  * a GPL→LGPL dependency inversion. It is a plain @c QObject (Qt6::Core only) —
  * it never derives a config location itself; the caller passes the path.
+ *
+ * @todo Add an opt-in @c QFileSystemWatcher so separate-process consumers
+ *       (standalone @c plasmazones-settings, @c plasmazones-editor) that own
+ *       their own store and have no D-Bus path to the daemon see external
+ *       writes without a manual @ref load() call. The in-process race
+ *       between Settings and LayoutRegistry / WindowRuleAdaptor is already
+ *       fixed by sharing one store via the borrowing ctor in the daemon
+ *       composition root; the watcher only addresses the cross-process
+ *       case. Watcher must debounce (Qt fires multiple events per rename)
+ *       and skip self-writes (track our own save() temp+rename so we don't
+ *       reload on our own emission).
  */
 class PHOSPHORWINDOWRULE_EXPORT WindowRuleStore : public QObject
 {
@@ -76,7 +87,10 @@ public:
     // ─── Persistence ──────────────────────────────────────────────────────
 
     /// (Re)load from disk. A missing file is not an error — the store ends
-    /// up empty. Replaces the in-memory set; emits @ref rulesChanged.
+    /// up empty. Replaces the in-memory set and emits @ref rulesChanged only
+    /// when the loaded content actually differs from the in-memory set; an
+    /// idempotent re-load of an unchanged file does not emit (downstream
+    /// cache flushes would otherwise fire for nothing).
     void load();
 
     /// Persist the in-memory set to disk (atomic temp-write + rename).

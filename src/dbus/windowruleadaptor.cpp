@@ -64,6 +64,18 @@ bool WindowRuleAdaptor::setAllRules(const QString& rulesJson)
     if (!m_store) {
         return false;
     }
+    // Reject oversize payloads at the D-Bus boundary rather than letting
+    // QJsonDocument::fromJson allocate megabytes for a malformed/malicious
+    // caller. The settings app pushes the whole rule set on every save, but
+    // even an aggressively-large user rule set stays well under 1 MiB — the
+    // cap is a generous order-of-magnitude headroom above realistic use,
+    // not a tight bound.
+    static constexpr qsizetype kMaxRuleSetBytes = 1 * 1024 * 1024; // 1 MiB
+    if (rulesJson.size() > kMaxRuleSetBytes) {
+        qCWarning(lcDbus) << "WindowRuleAdaptor::setAllRules: rejecting payload of" << rulesJson.size() << "bytes (cap"
+                          << kMaxRuleSetBytes << ")";
+        return false;
+    }
     const auto obj = parseObject(rulesJson);
     if (!obj) {
         return false;

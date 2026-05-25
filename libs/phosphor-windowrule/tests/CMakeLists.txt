@@ -25,7 +25,8 @@ function(pwr_add_test _name)
     )
 endfunction()
 
-# Variant for the bridge tests — AnimationAppRuleBridge.h includes
+# Variant for the bridge tests — the AnimationAppRuleBridge header ships in
+# <PhosphorAnimation/AnimationAppRuleBridge.h> and pulls in
 # <PhosphorAnimation/AnimationAppRule.h>, so the bridge test needs the
 # PhosphorAnimation headers on its include path and the symbols at link.
 function(pwr_add_bridge_test _name)

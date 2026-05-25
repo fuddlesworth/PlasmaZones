@@ -52,15 +52,38 @@ resolveAnimationShaderProfile(const PhosphorWindowRule::RuleEvaluator& evaluator
                               const QString& eventPath);
 
 /**
- * @brief Duration cascade: window-class timing rule → per-event default.
+ * @brief Combined shader-profile + duration cascade for the per-window-event
+ *        hot path, sharing a single cached evaluator walk.
  *
- * A rule filling the `anim-timing:<eventPath>` slot with `durationMs > 0`
- * returns that value clamped to `[Min, Max]AnimationDurationMs`. A
- * `durationMs <= 0` (the "inherit" sentinel) or no rule — including an empty
- * @p windowClass / @p eventPath — returns @p defaultDurationMs.
+ * Returns the resolved `ShaderProfile` (via the rule's `anim-shader:<event>`
+ * slot, falling back to `tree.resolve(eventPath)`) AND the resolved duration
+ * (via the rule's `anim-timing:<event>` slot, falling back to
+ * @p defaultDurationMs) from ONE `evaluator.resolveCached(windowId, …)` call.
+ *
+ * The standalone resolvers each call `evaluator.resolve(…)`, which costs a
+ * full priority-order walk per call and bypasses the per-window cache. The
+ * effect's shader hot path needs both values per event; this overload pays
+ * one cached walk and reads both slots from the same `ResolvedActions`.
+ *
+ * Semantics match the standalone resolvers byte-for-byte:
+ *  - Empty @p windowClass / @p eventPath: returns
+ *    `{ tree.resolve(eventPath), defaultDurationMs }` without touching the
+ *    evaluator (the rule layer matches exclusively on `WindowClass`).
+ *  - Shader slot filled: ShaderProfile taken verbatim (engaged-empty effectId
+ *    preserved as the "block tree fallthrough" sentinel).
+ *  - Timing slot filled with `durationMs > 0`: that value, clamped to
+ *    `[Min, Max]AnimationDurationMs`. `durationMs <= 0` ("inherit" sentinel)
+ *    or no rule → @p defaultDurationMs.
  */
-int resolveAnimationDuration(const PhosphorWindowRule::RuleEvaluator& evaluator, const QString& windowClass,
-                             const QString& eventPath, int defaultDurationMs);
+struct ResolvedShaderAndDuration
+{
+    PhosphorAnimationShaders::ShaderProfile profile;
+    int durationMs;
+};
+ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindowRule::RuleEvaluator& evaluator,
+                                                            const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                            const QString& windowId, const QString& windowClass,
+                                                            const QString& eventPath, int defaultDurationMs);
 
 /**
  * @brief Motion-profile cascade: window-class timing rule → base profile.
@@ -69,8 +92,8 @@ int resolveAnimationDuration(const PhosphorWindowRule::RuleEvaluator& evaluator,
  * fills the `anim-timing:<eventPath>` slot. A non-empty curve is parsed via
  * @p curveRegistry's `tryCreate` (a malformed curve keeps the base curve); a
  * `durationMs > 0` overrides the duration, clamped identically to
- * `resolveAnimationDuration`. An empty @p windowClass / @p eventPath or no
- * matching rule returns @p base unchanged.
+ * `resolveAnimationShaderAndDuration`. An empty @p windowClass / @p eventPath
+ * or no matching rule returns @p base unchanged.
  */
 PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRule::RuleEvaluator& evaluator,
                                                          const PhosphorAnimation::Profile& base,

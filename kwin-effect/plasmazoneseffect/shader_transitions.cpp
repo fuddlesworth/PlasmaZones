@@ -1333,12 +1333,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // tree fallthrough (the user's "no animation for this app on this
     // event" sentinel).
     const QString windowClass = window->windowClass();
+    const QString windowId = getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
-    // Cascade routed through the unified RuleEvaluator: the effect-local
-    // shader_resolve shim walks the event-scoped `anim-shader:<event>` slot
-    // and falls through to the per-event ShaderProfileTree on a miss.
-    const auto profile = PlasmaZones::resolveAnimationShaderProfile(m_shaderManager.animationRuleEvaluator(),
-                                                                    profileTree, windowClass, profilePath);
     // Per-event base duration. The daemon mirrors its motion
     // PhosphorProfileRegistry into `motionProfileTree` over D-Bus —
     // ProfileTree::resolve walks `window.open → window → global` and
@@ -1350,8 +1346,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // when NO node in the path's parent chain carries an override:
     // an empty tree (D-Bus race / fresh user) must not silently
     // collapse every event to the library default (150 ms). The
-    // resolved value is then handed to `resolveAnimationDuration` as
-    // its `defaultDurationMs`, so the per-window-class App Rule timing
+    // resolved value is then handed to the combined resolver as its
+    // `defaultDurationMs`, so the per-window-class App Rule timing
     // cascade still layers on top (rule wins → per-event base →
     // global), matching the resolver's documented contract.
     int baseDurationMs = durationMs;
@@ -1386,12 +1382,16 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
             baseDurationMs = qRound(motionTree.resolve(profilePath).effectiveDuration());
         }
     }
-    // Resolve duration through the rule cascade too — a Timing rule for
-    // the same (class, event) bumps the per-event base. A rule with
-    // durationMs == 0 is the inherit sentinel and falls through to the
-    // per-event base resolved above.
+    // Combined cascade: ONE cached evaluator walk feeds BOTH the shader-slot
+    // and timing-slot reads. The pre-refactor pair of `resolveAnimationShader
+    // Profile` + `resolveAnimationDuration` ran two priority-order walks per
+    // event (same query, both bypassing the per-window match cache); the
+    // combined shim issues a single `resolveCached(windowId, …)` and reads
+    // both slots from the same `ResolvedActions`. Semantics are identical:
+    // rule wins per-slot, with engaged-empty effectId still blocking the tree
+    // fallthrough and durationMs <= 0 still meaning "inherit".
     //
-    // Clamp the resolved value to the upstream `durationMs` floor: if
+    // Clamp the resolved duration to the upstream `durationMs` floor: if
     // the cascade collapses to <= 0 (corrupt persisted rule, missing
     // motion-tree node feeding baseDurationMs), the QTimer::singleShot
     // below would fire on the next event-loop tick and tear down the
@@ -1401,8 +1401,10 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // `durationMs <= 0` guard at the top of `tryBeginShaderForEvent`
     // rejects non-positive inputs, so `durationMs` here is a safe
     // positive floor.
-    int effectiveDurationMs = PlasmaZones::resolveAnimationDuration(m_shaderManager.animationRuleEvaluator(),
-                                                                    windowClass, profilePath, baseDurationMs);
+    const auto resolved = PlasmaZones::resolveAnimationShaderAndDuration(
+        m_shaderManager.animationRuleEvaluator(), profileTree, windowId, windowClass, profilePath, baseDurationMs);
+    const auto& profile = resolved.profile;
+    int effectiveDurationMs = resolved.durationMs;
     if (effectiveDurationMs <= 0) {
         effectiveDurationMs = durationMs;
     }
@@ -1501,6 +1503,16 @@ void PlasmaZonesEffect::loadAnimationAppRulesFromDbus()
     });
 }
 
+void PlasmaZonesEffect::slotWindowRulesChanged()
+{
+    // Coalesce burst signals: the daemon emits one `rulesChanged` per per-rule
+    // mutation, so a 50-rule batch edit would otherwise drive 50 sequential
+    // `getAllRules` round-trips + JSON parses + filter walks. The timer is a
+    // single-shot 50ms debounce (set up in the constructor); each call here
+    // re-arms it, so only the trailing edge of the burst triggers a refresh.
+    m_animationRulesRefreshDebounce.start();
+}
+
 void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
 {
     // Fetch the unified WindowRule store via getAllRules (returns a JSON
@@ -1546,9 +1558,7 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
                 continue;
             }
             for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
-                if (action.type == PhosphorWindowRule::ActionType::OverrideAnimationShader
-                    || action.type == PhosphorWindowRule::ActionType::OverrideAnimationTiming
-                    || action.type == PhosphorWindowRule::ActionType::OverrideAnimationCurve) {
+                if (PhosphorWindowRule::ActionType::isAnimationOverrideAction(action.type)) {
                     animationRules.append(rule);
                     break;
                 }

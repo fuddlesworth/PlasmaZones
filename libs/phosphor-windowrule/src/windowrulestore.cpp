@@ -33,28 +33,34 @@ WindowRuleStore::WindowRuleStore(const QString& filePath, QObject* parent)
 
 void WindowRuleStore::load()
 {
+    // Compute the candidate set up front so every code path can compare it
+    // against the current in-memory set before deciding to emit. Only emit
+    // when the loaded content actually differs from what we already hold —
+    // an idempotent re-load must not fire `rulesChanged` and trigger
+    // downstream cache flushes for nothing.
+    WindowRuleSet candidate;
     if (!QFile::exists(m_filePath)) {
         // A missing store is the fresh-install / never-had-rules case — not
-        // an error. The set stays empty.
-        m_ruleSet = WindowRuleSet();
+        // an error. The candidate stays empty.
         qCInfo(lcWindowRule) << "WindowRuleStore: no" << m_filePath << "— starting with an empty rule set";
-        Q_EMIT rulesChanged();
-        return;
+    } else {
+        auto loaded = WindowRuleSet::loadFromFile(m_filePath);
+        if (!loaded) {
+            // Malformed file / version mismatch — WindowRuleSet already logged
+            // the diagnostic. Fall back to an empty set rather than crashing
+            // the daemon; the user can re-author rules from the settings UI.
+            qCWarning(lcWindowRule) << "WindowRuleStore: failed to load" << m_filePath << "— using an empty rule set";
+        } else {
+            candidate = std::move(*loaded);
+            qCInfo(lcWindowRule) << "WindowRuleStore: loaded" << candidate.count() << "rules from" << m_filePath;
+        }
     }
 
-    auto loaded = WindowRuleSet::loadFromFile(m_filePath);
-    if (!loaded) {
-        // Malformed file / version mismatch — WindowRuleSet already logged
-        // the diagnostic. Fall back to an empty set rather than crashing the
-        // daemon; the user can re-author rules from the settings UI.
-        qCWarning(lcWindowRule) << "WindowRuleStore: failed to load" << m_filePath << "— using an empty rule set";
-        m_ruleSet = WindowRuleSet();
-        Q_EMIT rulesChanged();
+    if (candidate == m_ruleSet) {
+        // Idempotent re-load — content unchanged, do not emit.
         return;
     }
-
-    m_ruleSet = std::move(*loaded);
-    qCInfo(lcWindowRule) << "WindowRuleStore: loaded" << m_ruleSet.count() << "rules from" << m_filePath;
+    m_ruleSet = std::move(candidate);
     Q_EMIT rulesChanged();
 }
 

@@ -136,7 +136,18 @@ public:
     QJsonObject toJson() const;
 
     /// Strict loader — returns nullopt on a malformed / invalid expression.
+    ///
+    /// A pathologically deep composite tree (`All{All{All{…}}}`) is rejected:
+    /// nesting deeper than @ref kMaxParseDepth levels short-circuits to
+    /// `nullopt` with a logged diagnostic, before the recursion would blow
+    /// the stack. The cap is generous — a hand-authored rule never approaches
+    /// it; only a malicious or corrupt store can.
     static std::optional<MatchExpression> fromJson(const QJsonObject& obj);
+
+    /// Hard cap on the JSON parser's recursion depth. A composite at depth
+    /// N may contain children at depth N + 1 — the cap rejects any tree whose
+    /// composite nesting would exceed this limit.
+    static constexpr int kMaxParseDepth = 32;
 
     bool operator==(const MatchExpression& other) const;
     bool operator!=(const MatchExpression& other) const
@@ -161,6 +172,11 @@ private:
     // Regex leaf and the program is not yet built. Idempotent; called from
     // every construction path so evaluate() never has to compile.
     void ensureRegex();
+
+    /// Internal: depth-tracked JSON parser. The public @ref fromJson is the
+    /// depth=0 entry point; composites recurse through here so a pathological
+    /// tree is rejected before it blows the stack.
+    static std::optional<MatchExpression> fromJsonAtDepth(const QJsonObject& obj, int depth);
 };
 
 } // namespace PhosphorWindowRule

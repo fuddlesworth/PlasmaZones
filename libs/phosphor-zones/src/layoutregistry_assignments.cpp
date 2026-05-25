@@ -63,14 +63,35 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     // so the winning rule's full action list is read, preserving the
     // mode-toggle losslessness invariant (an entry keeps BOTH snappingLayout
     // and tilingAlgorithm regardless of active mode).
+    //
+    // Hot-path cache. The linear walk is O(N rules × M predicates per match);
+    // overlay/OSD callers issue it per cursor-move, and the connector +
+    // virtual-screen fallback chain in the public resolvers triples that on a
+    // miss. Memoize the (screenId, virtualDesktop, activity) result, keyed
+    // against the rule set's monotonic revision so any real edit invalidates
+    // lazily. A @c nullopt is cached too — a genuine miss must not re-walk
+    // three times per cursor frame.
+    const quint64 revision = m_ruleStore->ruleSet().revision();
+    if (revision != m_contextResolveCacheRevision) {
+        m_contextResolveCache.clear();
+        m_contextResolveCacheRevision = revision;
+    }
+    const ContextResolveKey key{screenId, virtualDesktop, activity};
+    const auto cached = m_contextResolveCache.constFind(key);
+    if (cached != m_contextResolveCache.constEnd()) {
+        return cached.value();
+    }
+
     const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
     const PWR::WindowRule* winner = m_evaluator->highestPriorityMatch(query, [](const PWR::WindowRule& rule) {
         return hasEngineModeAction(rule) && !rule.match.isCatchAll();
     });
-    if (winner == nullptr) {
-        return std::nullopt;
+    std::optional<AssignmentEntry> result;
+    if (winner != nullptr) {
+        result = entryFromRuleMatchActions(*winner);
     }
-    return entryFromRuleMatchActions(*winner);
+    m_contextResolveCache.insert(key, result);
+    return result;
 }
 
 bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const

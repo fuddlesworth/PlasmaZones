@@ -48,12 +48,15 @@ std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
 }
 } // namespace
 
-Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry, QObject* parent)
+Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
+                   PhosphorWindowRule::WindowRuleStore* windowRuleStore, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
     , m_store(std::make_unique<PhosphorConfig::Store>(backend, buildSettingsSchema(), this))
-    , m_windowRuleStore(
-          std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), this))
+    , m_ownedWindowRuleStore(windowRuleStore ? nullptr
+                                             : std::make_unique<PhosphorWindowRule::WindowRuleStore>(
+                                                   ConfigDefaults::windowRulesFilePath(), this))
+    , m_windowRuleStore(windowRuleStore ? windowRuleStore : m_ownedWindowRuleStore.get())
     , m_curveRegistry(curveRegistry)
 {
     // Contract: @p backend MUST already be pointing at a migrated config
@@ -81,8 +84,9 @@ Settings::Settings(QObject* parent)
     , m_ownedBackend(migrateAndCreateOwnedBackend())
     , m_configBackend(m_ownedBackend.get())
     , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
-    , m_windowRuleStore(
+    , m_ownedWindowRuleStore(
           std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), this))
+    , m_windowRuleStore(m_ownedWindowRuleStore.get())
 {
     // m_curveRegistry is left null; `animationProfile()` /
     // `setAnimationEasingCurve()` fall back to `fallbackCurveRegistry()`.
@@ -169,7 +173,17 @@ void Settings::load()
     // rule store explicitly so a cross-process write (daemon shortcut, KCM
     // D-Bus call) surfaces — the per-mode signal re-emission below compares
     // against the pre-reload snapshot taken above.
-    m_windowRuleStore->load();
+    //
+    // Only reload when WE own the store. When the daemon shares its store
+    // with us, the daemon (or its WindowRuleAdaptor / LayoutRegistry) is
+    // the writer and load() here would clobber unflushed in-memory edits
+    // — exactly the dual-store race this borrow pattern exists to avoid.
+    // The borrowed-store path relies on the owning daemon to drive reloads
+    // (today: on-startup load; a future QFileSystemWatcher will handle
+    // cross-process reloads — see WindowRuleStore.h TODO).
+    if (m_ownedWindowRuleStore) {
+        m_ownedWindowRuleStore->load();
+    }
 
     // Store-backed groups (Shaders, Appearance, Ordering, Animations,
     // Rendering, Performance, ZoneGeometry, Shortcuts, Editor, Exclusions,

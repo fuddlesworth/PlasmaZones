@@ -724,6 +724,136 @@ private Q_SLOTS:
         QVERIFY2(!QFile::exists(assignmentsPath()),
                  "the cleanup-only branch must retire the leftover assignments.json");
     }
+
+    // ─── Data-loss regression (B5): malformed assignments.json aborts ─────
+    //
+    // A corrupt assignments.json (truncation, power-loss, hand-edit error)
+    // must NOT silently produce a windowrules.json holding only the provider-
+    // default + disable rules — that would lose every pinned assignment AND
+    // the quick-layout slots. The migration aborts loudly: the corrupt file
+    // is quarantined to `.corrupt.bak` (NOT `.migrated`, which would imply a
+    // successful migration), windowrules.json is NOT written, and config.json
+    // keeps its v3 stamp so the next run can re-attempt after the user
+    // repairs the sidecar.
+    void testMalformedAssignmentsJsonAborts()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+
+        // Truncated / hand-edited corruption: a non-empty payload that fails
+        // to parse as JSON. Whitespace-only is intentionally NOT what we
+        // simulate — that case is treated as a fresh install (no assignments
+        // to migrate), not corruption.
+        const QString corruptPath = assignmentsPath();
+        QDir().mkpath(QFileInfo(corruptPath).absolutePath());
+        const QByteArray corruptBytes = QByteArrayLiteral("{ \"Assignment:DP-2\": { \"Mode\": 1, ");
+        {
+            QFile f(corruptPath);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(corruptBytes);
+        }
+
+        // Migration MUST abort.
+        QVERIFY2(!ConfigMigration::ensureJsonConfig(),
+                 "ensureJsonConfig must return false on a malformed assignments.json");
+
+        // windowrules.json must NOT have been created — silently writing a
+        // disable-only rule set would mask the data-loss.
+        QVERIFY2(!QFile::exists(ConfigDefaults::windowRulesFilePath()),
+                 "windowrules.json must not be written when the legacy sidecar is corrupt");
+
+        // The corrupt file was quarantined to .corrupt.bak with its original
+        // bytes preserved — the user can inspect and repair it.
+        const QString corruptBak = corruptPath + QStringLiteral(".corrupt.bak");
+        QVERIFY2(QFile::exists(corruptBak), "the malformed assignments.json must be quarantined to .corrupt.bak");
+        {
+            QFile f(corruptBak);
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            QCOMPARE(f.readAll(), corruptBytes);
+        }
+
+        // NOT `.migrated`: that suffix implies a successful migration and
+        // would mask the failure on next inspection.
+        QVERIFY2(!QFile::exists(corruptPath + QStringLiteral(".migrated")),
+                 "the corrupt file must NOT be quarantined as .migrated");
+
+        // The original assignments.json no longer exists at its primary path
+        // (it was renamed to .corrupt.bak).
+        QVERIFY(!QFile::exists(corruptPath));
+
+        // config.json keeps its v3 stamp — the on-disk schema version was
+        // NOT bumped, so the next run will re-attempt the migration. The
+        // user's path forward: repair `.corrupt.bak`, rename it back to
+        // assignments.json, and re-run.
+        const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
+        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 3);
+    }
+
+    // ─── Data-loss regression (B4): QuickLayouts write failure is recoverable ─
+    //
+    // The v3→v4 conversion writes two files: quicklayouts.json (sidecar) and
+    // windowrules.json (the irreversible commit marker). Writing the sidecar
+    // FIRST means a sidecar failure aborts BEFORE committing windowrules.json
+    // — the user's slots stay recoverable from assignments.json on the next
+    // attempt. Writing windowrules.json first would gate the rebuild path off
+    // forever on the next run (the cleanup-only branch never re-attempts the
+    // QuickLayouts relocation), losing the slots to the .migrated quarantine.
+    //
+    // We simulate the sidecar write failure by pre-creating a DIRECTORY at
+    // the quicklayouts.json path: QSaveFile cannot replace a directory with a
+    // file, so the write fails deterministically.
+    void testQuickLayoutsWriteFailureRecoverable()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+
+        // Wedge the sidecar write: a non-empty directory at the target path
+        // makes the atomic-write step fail. QSaveFile's commit() renames a
+        // temp file onto `quicklayouts.json`; renaming a file onto a non-empty
+        // directory fails deterministically on POSIX (ENOTEMPTY/EISDIR), and
+        // the directory stays failed for the duration of the first attempt.
+        const QString quickLayoutsPath = ConfigDefaults::quickLayoutsFilePath();
+        QDir().mkpath(QFileInfo(quickLayoutsPath).absolutePath());
+        QVERIFY(QDir().mkpath(quickLayoutsPath));
+        QVERIFY(QFileInfo(quickLayoutsPath).isDir());
+        // Pin the wedge: a child file makes the directory non-empty so
+        // rename() can't succeed on any filesystem.
+        {
+            QFile pin(quickLayoutsPath + QStringLiteral("/.pin"));
+            QVERIFY(pin.open(QIODevice::WriteOnly));
+            pin.write("x");
+        }
+
+        // First attempt: the sidecar write fails, migration aborts BEFORE
+        // committing windowrules.json. The legacy sidecar must still be on
+        // disk (we never reach the retire step), so the data is recoverable.
+        QVERIFY2(!ConfigMigration::ensureJsonConfig(),
+                 "ensureJsonConfig must return false when the QuickLayouts sidecar write fails");
+        QVERIFY2(!QFile::exists(ConfigDefaults::windowRulesFilePath()),
+                 "windowrules.json must NOT be written when the sidecar write fails");
+        QVERIFY2(QFile::exists(assignmentsPath()),
+                 "assignments.json must remain on disk so the user can re-attempt the migration");
+
+        // Recovery: remove the wedge (delete the pin file, then the
+        // directory) so the next run can write the sidecar. The user's
+        // environment is otherwise unchanged.
+        QVERIFY(QFile::remove(quickLayoutsPath + QStringLiteral("/.pin")));
+        QVERIFY(QDir().rmdir(quickLayoutsPath));
+        QVERIFY(!QFileInfo::exists(quickLayoutsPath));
+
+        // Second attempt: full migration succeeds. windowrules.json is
+        // written, the sidecar is populated, and the legacy file is retired.
+        ConfigMigration::resetMigrationGuardForTesting();
+        QVERIFY2(ConfigMigration::ensureJsonConfig(),
+                 "the migration must succeed once the QuickLayouts sidecar write can complete");
+        QVERIFY(QFile::exists(ConfigDefaults::windowRulesFilePath()));
+        QVERIFY2(QFile::exists(quickLayoutsPath), "the QuickLayouts sidecar must be populated on the second attempt");
+        const QJsonObject slots = readJson(quickLayoutsPath);
+        QCOMPARE(slots.value(QStringLiteral("3")).toString(), QStringLiteral("{quick-layout-id}"));
+        QVERIFY2(!QFile::exists(assignmentsPath()),
+                 "assignments.json must be retired once the full conversion completes");
+    }
 };
 
 QTEST_MAIN(TestMigrationV3ToV4)

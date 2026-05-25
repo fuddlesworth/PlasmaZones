@@ -445,6 +445,22 @@ private:
     /// (the catch-all/provider-default rule is excluded so cascade-miss is
     /// distinguishable). @p screenId is taken verbatim — connector / VS
     /// fallback is the caller's (layoutForScreen) retry loop.
+    ///
+    /// Hot-path cache: the result is memoized in @c m_contextResolveCache keyed
+    /// by (screenId, virtualDesktop, activity). The cache is invalidated
+    /// lazily by comparing the bound rule set's monotonic
+    /// @c WindowRuleSet::revision() against the snapshot taken on the last
+    /// insert — a mismatch clears the whole map before falling through to the
+    /// linear walk. No explicit signal-time clear is required: a real edit
+    /// bumps the revision (see @c WindowRuleSet::setRules), so the next
+    /// resolve sees the bump and re-populates. The cache is bounded by
+    /// live (screens × desktops × activities) — order-of-1000 in the
+    /// worst realistic case — which fits comfortably in a @c QHash.
+    ///
+    /// Thread-affinity: like the rest of @c LayoutRegistry, this method
+    /// (and the cache it mutates through @c mutable members) must only be
+    /// called on the registry's owner thread (typically the main Qt thread).
+    /// The cache itself takes no lock; concurrent calls are not supported.
     std::optional<AssignmentEntry> resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
                                                           const QString& activity) const;
 
@@ -515,6 +531,46 @@ private:
     /// Returns a default-constructed (invalid) entry when no provider
     /// has a value.
     AssignmentEntry resolveDefaultAssignmentEntry() const;
+
+    /// Lookup key for @c m_contextResolveCache. Mirrors the parameters of
+    /// @ref resolveAssignmentEntry — three independent context dimensions
+    /// the windowless cascade walks (screen id, virtual desktop, activity).
+    /// Field-equal + per-field hash composition is enough: every dimension is
+    /// part of the cascade identity.
+    struct ContextResolveKey
+    {
+        QString screenId;
+        int virtualDesktop = 0;
+        QString activity;
+        bool operator==(const ContextResolveKey& other) const noexcept
+        {
+            return virtualDesktop == other.virtualDesktop && screenId == other.screenId && activity == other.activity;
+        }
+    };
+    friend size_t qHash(const LayoutRegistry::ContextResolveKey& key, size_t seed) noexcept
+    {
+        // ::qHash routes to the global Qt qHash overloads — without the leading
+        // qualifier ADL would pick up @c qHash(LayoutAssignmentKey&) (declared
+        // in @c AssignmentEntry.h alongside this header) and fail to convert
+        // each field. Mirrors the same pattern @c LayoutAssignmentKey itself uses.
+        size_t h = seed;
+        h = ::qHash(key.screenId, h);
+        h = ::qHash(key.virtualDesktop, h);
+        h = ::qHash(key.activity, h);
+        return h;
+    }
+
+    /// Cache of @ref resolveAssignmentEntry results keyed by context tuple.
+    /// A @c nullopt value caches a genuine cascade miss (no pinned context
+    /// rule wins) — so a missed lookup pays the linear walk exactly once per
+    /// rule-set revision, not three times per cursor-move (the
+    /// connector / virtual-screen fallback chain in
+    /// @ref assignmentEntryForScreen drives the same miss into three lookups).
+    mutable QHash<ContextResolveKey, std::optional<AssignmentEntry>> m_contextResolveCache;
+    /// The rule-set revision the cache contents are valid for. The cache is
+    /// dropped wholesale whenever this no longer matches
+    /// @c m_ruleStore->ruleSet().revision() — see @ref resolveAssignmentEntry.
+    mutable quint64 m_contextResolveCacheRevision = 0;
 
     std::function<QString()> m_defaultLayoutIdProvider; ///< Empty = provider disabled; falls back to first layout
     /// Empty = provider disabled. Returns the user's default autotile

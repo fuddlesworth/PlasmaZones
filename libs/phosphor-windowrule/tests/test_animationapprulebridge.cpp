@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorWindowRule/AnimationAppRuleBridge.h>
-#include <PhosphorWindowRule/RuleEvaluator.h>
-
 #include <PhosphorAnimation/AnimationAppRule.h>
+#include <PhosphorAnimation/AnimationAppRuleBridge.h>
+
+#include <PhosphorWindowRule/RuleEvaluator.h>
 
 #include <QTest>
 

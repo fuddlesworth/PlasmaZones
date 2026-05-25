@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QList>
+#include <QQmlEngine>
 #include <QString>
 #include <QStringList>
 #include <QUuid>
@@ -53,6 +54,18 @@ namespace PlasmaZones {
 class WindowRuleModel : public QAbstractListModel
 {
     Q_OBJECT
+    // Expose the type to QML as `WindowRuleModel` so QML can reference the
+    // `Section` and `Roles` enum members by name (e.g.
+    // `WindowRuleModel.Animation`, `WindowRuleModel.SectionRole`). Uncreatable
+    // because the page receives the live instance via
+    // `WindowRuleController::model` — instantiating one from QML would yield
+    // an empty disconnected model. `qt_add_qml_module` picks up the
+    // QML_NAMED_ELEMENT macro and emits the registration entry into
+    // `plasmazones-settings.qmltypes`.
+    QML_NAMED_ELEMENT(WindowRuleModel)
+    QML_UNCREATABLE(
+        "WindowRuleModel is owned by WindowRuleController; access "
+        "the live instance via SettingsController.windowRulesPage.model.")
 
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
@@ -85,6 +98,7 @@ public:
                                   ///< etc). The row delegate shows a warning
                                   ///< badge when this is non-zero.
     };
+    Q_ENUM(Roles)
 
     explicit WindowRuleModel(QObject* parent = nullptr);
 

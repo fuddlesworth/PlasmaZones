@@ -5,6 +5,7 @@
 
 #include <QJsonObject>
 #include <QList>
+#include <QLoggingCategory>
 #include <QString>
 #include <QUuid>
 
@@ -14,6 +15,8 @@
 #include "MatchTypes.h"
 #include "RuleAction.h"
 #include "WindowRule.h"
+#include "WindowRuleLogging.h"
+#include "phosphorwindowrule_export.h"
 
 /**
  * @file ContextRuleBridge.h
@@ -311,33 +314,72 @@ inline bool isContextEqualsLeaf(const MatchExpression& expr, Field field)
  * and decomposing it would be silently lossy. Such an input is left as
  * all-defaults — callers that build their own deeper match expressions must
  * not route them through this readback.
+ *
+ * A duplicate context-dimension leaf under the same flat `All{}` (e.g. two
+ * `ScreenId Equals` leaves) is **refused** rather than silently coerced via
+ * last-write-wins: @ref makeContextMatch can never produce duplicates, so a
+ * duplicate is undefined input. The dims are reset to defaults and the
+ * function returns @c false; a successful decomposition returns @c true.
+ * Most callers ignore the return — falling back to all-defaults is the safe
+ * "not a context rule we authored" treatment.
  */
-inline void contextDimsOf(const MatchExpression& match, QString& screenId, int& virtualDesktop, QString& activity)
+inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& virtualDesktop, QString& activity)
 {
     screenId.clear();
     virtualDesktop = 0;
     activity.clear();
     if (match.isCatchAll()) {
-        return;
+        return true;
     }
     // Only a leaf or a flat All{} is a context rule this bridge produced. A
     // composite of any other kind (Any / None) — or an All{} carrying a
     // nested composite child — is outside the contract; leave the defaults.
     if (!match.isLeaf() && match.kind() != MatchExpression::Kind::All) {
-        return;
+        return false;
     }
     const QList<MatchExpression> leaves = match.isLeaf() ? QList<MatchExpression>{match} : match.children();
+    bool sawScreen = false;
+    bool sawDesktop = false;
+    bool sawActivity = false;
     for (const MatchExpression& leaf : leaves) {
         if (isContextEqualsLeaf(leaf, Field::ScreenId)) {
+            if (sawScreen) {
+                qCWarning(lcWindowRule)
+                    << "ContextRuleBridge::contextDimsOf: duplicate ScreenId leaf — refusing to coerce.";
+                screenId.clear();
+                virtualDesktop = 0;
+                activity.clear();
+                return false;
+            }
+            sawScreen = true;
             screenId = leaf.predicate().value.toString();
         } else if (isContextEqualsLeaf(leaf, Field::VirtualDesktop)) {
+            if (sawDesktop) {
+                qCWarning(lcWindowRule)
+                    << "ContextRuleBridge::contextDimsOf: duplicate VirtualDesktop leaf — refusing to coerce.";
+                screenId.clear();
+                virtualDesktop = 0;
+                activity.clear();
+                return false;
+            }
+            sawDesktop = true;
             virtualDesktop = leaf.predicate().value.toInt();
         } else if (isContextEqualsLeaf(leaf, Field::Activity)) {
+            if (sawActivity) {
+                qCWarning(lcWindowRule)
+                    << "ContextRuleBridge::contextDimsOf: duplicate Activity leaf — refusing to coerce.";
+                screenId.clear();
+                virtualDesktop = 0;
+                activity.clear();
+                return false;
+            }
+            sawActivity = true;
             activity = leaf.predicate().value.toString();
         }
         // A non-context or non-equality leaf is ignored — a flat mixed rule
         // still yields its context projection, per the contract above.
     }
+    return true;
 }
 
 /**

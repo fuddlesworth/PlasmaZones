@@ -96,6 +96,74 @@ QString legacyAssignmentsFilePath()
     return QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
 }
 
+/// Pre-flight check for the legacy assignments.json sidecar: if the file
+/// exists but fails to parse (truncation, power-loss, hand-edit error), abort
+/// the v3→v4 conversion BEFORE anything irreversible runs.
+///
+/// Rationale (B5 data-loss fix): silently treating a corrupt assignments.json
+/// as "no assignments" would let the conversion write a windowrules.json
+/// holding only the provider-default + disable rules, then quarantine the
+/// corrupt original to `.migrated` — the user's pinned assignments AND quick-
+/// layout slots would be lost without warning. The `.migrated` suffix also
+/// falsely implies the file was successfully migrated, masking the failure.
+///
+/// On failure: rename the malformed file to `assignments.json.corrupt.bak`
+/// (NOT `.migrated`), log the parse error at critical severity, and return
+/// false so the caller aborts. The user can inspect/repair the `.corrupt.bak`
+/// file, rename it back to `assignments.json`, and re-run.
+///
+/// Returns true if the file is absent, empty (treated as a fresh install with
+/// no assignments — not a corruption case), or parses as a JSON object.
+bool prevalidateLegacyAssignmentsFile(const QString& assignmentsPath)
+{
+    if (!QFile::exists(assignmentsPath)) {
+        return true;
+    }
+    QFile af(assignmentsPath);
+    if (!af.open(QIODevice::ReadOnly)) {
+        // We can't read it to decide either way — log and let the downstream
+        // finalize-step's open-failure handling take its course (it will see
+        // !haveAssignments and continue with the disable-only rule set). This
+        // is the same behaviour as before the prevalidation existed; the
+        // critical case (parse error) is the one this guard exists for.
+        qWarning("ConfigMigration: could not open %s for prevalidation: %s", qPrintable(assignmentsPath),
+                 qPrintable(af.errorString()));
+        return true;
+    }
+    const QByteArray bytes = af.readAll();
+    af.close();
+    if (bytes.trimmed().isEmpty()) {
+        // Empty file is NOT corruption: it carries no data to lose, and the
+        // downstream code already handles `!haveAssignments` as "nothing to
+        // migrate". Treat it like an absent file.
+        return true;
+    }
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(bytes, &err);
+    if (err.error == QJsonParseError::NoError && doc.isObject()) {
+        return true;
+    }
+
+    // Corrupt: quarantine to .corrupt.bak (NOT .migrated — that name implies
+    // a successful migration). Preserve the original bytes so the user can
+    // hand-repair and re-run.
+    const QString corruptBak = assignmentsPath + QStringLiteral(".corrupt.bak");
+    QFile::remove(corruptBak); // clear any stale backup from a prior failed run
+    if (QFile::rename(assignmentsPath, corruptBak)) {
+        qCritical(
+            "ConfigMigration: %s is malformed (%s) — quarantined to %s. "
+            "Aborting v4 conversion to prevent data loss. Inspect/repair the "
+            "file and rename it back to assignments.json, then re-run.",
+            qPrintable(assignmentsPath), qPrintable(err.errorString()), qPrintable(corruptBak));
+    } else {
+        qCritical(
+            "ConfigMigration: %s is malformed (%s) — also failed to quarantine to %s. "
+            "Aborting v4 conversion. Move or repair the file by hand.",
+            qPrintable(assignmentsPath), qPrintable(err.errorString()), qPrintable(corruptBak));
+    }
+    return false;
+}
+
 /// Retire the superseded assignments.json once windowrules.json holds every
 /// datum it carried. Prefer a rename to `assignments.json.migrated` over an
 /// outright delete: a rename is the same directory-entry operation as a remove
@@ -199,6 +267,15 @@ bool ConfigMigration::ensureJsonConfigImpl()
                 if (err.error == QJsonParseError::NoError && doc.isObject()) {
                     const int version = doc.object().value(ConfigKeys::versionKey()).toInt(0);
                     if (version < ConfigSchemaVersion) {
+                        // Pre-flight the legacy sidecar BEFORE the chain runs
+                        // — a malformed assignments.json must abort the
+                        // migration without bumping the on-disk _version
+                        // stamp, so the user's next run can re-attempt the
+                        // conversion against the (now-quarantined) corrupt
+                        // input after they repair it. (B5 data-loss fix.)
+                        if (!prevalidateLegacyAssignmentsFile(legacyAssignmentsFilePath())) {
+                            return false;
+                        }
                         if (!runMigrationChain(jsonPath)) {
                             return false;
                         }
@@ -994,13 +1071,12 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     }
 
     // ── Extract Assignment/QuickLayouts to assignments.json ─────────────────
-    // PhosphorZones::LayoutRegistry owns its own persistence file, separate from config.json.
-    // Note: PhosphorZones::LayoutRegistry::loadAssignments() has a runtime migration fallback
-    // for users already on v2 whose Assignment:* groups were never extracted
-    // by this path (e.g. upgraded between the v2 stamp and this split).
+    // assignments.json is the v3 PhosphorZones::LayoutRegistry persistence file. It is
+    // itself superseded in v4 by windowrules.json (see finalizeV4Conversion),
+    // so this extraction is a stepping-stone that v3→v4 reads back out.
     {
         QJsonObject assignRoot;
-        const QString assignPrefix = ConfigDefaults::assignmentGroupPrefix();
+        const QString assignPrefix = ConfigDefaults::v3assignmentGroupPrefix();
         QStringList keysToRemove;
         for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
             if (it.key().startsWith(assignPrefix)) {
@@ -1008,16 +1084,16 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
                 keysToRemove.append(it.key());
             }
         }
-        const QString quickLayoutsKey = ConfigDefaults::quickLayoutsGroup();
+        const QString quickLayoutsKey = ConfigDefaults::v3quickLayoutsGroup();
         if (root.contains(quickLayoutsKey)) {
             assignRoot[quickLayoutsKey] = root.value(quickLayoutsKey);
             keysToRemove.append(quickLayoutsKey);
         }
-        // ModeTracking is NOT extracted to assignments.json — it is consumed
-        // by PhosphorZones::LayoutRegistry::loadAssignments() directly from config.json and
-        // deleted after application.  Extracting it here would leave dead data
-        // in assignments.json that nothing reads.
-        const QString modeTrackingKey = ConfigDefaults::modeTrackingGroup();
+        // ModeTracking is NOT extracted to assignments.json — in v3 it was
+        // consumed by PhosphorZones::LayoutRegistry directly from config.json and deleted
+        // after application. Extracting it would leave dead data in
+        // assignments.json that nothing reads (and v4 doesn't read it either).
+        const QString modeTrackingKey = ConfigDefaults::v3modeTrackingGroup();
         if (root.contains(modeTrackingKey)) {
             keysToRemove.append(modeTrackingKey);
         }
@@ -1146,12 +1222,12 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
         }
     };
 
-    writeIfNonEmpty(ConfigKeys::snappingDisabledMonitorsKey(), v2Monitors);
-    writeIfNonEmpty(ConfigKeys::autotileDisabledMonitorsKey(), v2Monitors);
-    writeIfNonEmpty(ConfigKeys::snappingDisabledDesktopsKey(), v2Desktops);
-    writeIfNonEmpty(ConfigKeys::autotileDisabledDesktopsKey(), v2Desktops);
-    writeIfNonEmpty(ConfigKeys::snappingDisabledActivitiesKey(), v2Activities);
-    writeIfNonEmpty(ConfigKeys::autotileDisabledActivitiesKey(), v2Activities);
+    writeIfNonEmpty(ConfigKeys::v3snappingDisabledMonitorsKey(), v2Monitors);
+    writeIfNonEmpty(ConfigKeys::v3autotileDisabledMonitorsKey(), v2Monitors);
+    writeIfNonEmpty(ConfigKeys::v3snappingDisabledDesktopsKey(), v2Desktops);
+    writeIfNonEmpty(ConfigKeys::v3autotileDisabledDesktopsKey(), v2Desktops);
+    writeIfNonEmpty(ConfigKeys::v3snappingDisabledActivitiesKey(), v2Activities);
+    writeIfNonEmpty(ConfigKeys::v3autotileDisabledActivitiesKey(), v2Activities);
 
     // Stitch the trimmed v2 Display object back into Snapping.Behavior, drop
     // the Display sub-object entirely if it became empty (no ShowOnAllMonitors
@@ -1227,12 +1303,12 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
         }
         display.remove(configKey);
     };
-    moveDisableKey(ConfigKeys::snappingDisabledMonitorsKey(), QStringLiteral("snappingMonitors"));
-    moveDisableKey(ConfigKeys::autotileDisabledMonitorsKey(), QStringLiteral("autotileMonitors"));
-    moveDisableKey(ConfigKeys::snappingDisabledDesktopsKey(), QStringLiteral("snappingDesktops"));
-    moveDisableKey(ConfigKeys::autotileDisabledDesktopsKey(), QStringLiteral("autotileDesktops"));
-    moveDisableKey(ConfigKeys::snappingDisabledActivitiesKey(), QStringLiteral("snappingActivities"));
-    moveDisableKey(ConfigKeys::autotileDisabledActivitiesKey(), QStringLiteral("autotileActivities"));
+    moveDisableKey(ConfigKeys::v3snappingDisabledMonitorsKey(), QStringLiteral("snappingMonitors"));
+    moveDisableKey(ConfigKeys::v3autotileDisabledMonitorsKey(), QStringLiteral("autotileMonitors"));
+    moveDisableKey(ConfigKeys::v3snappingDisabledDesktopsKey(), QStringLiteral("snappingDesktops"));
+    moveDisableKey(ConfigKeys::v3autotileDisabledDesktopsKey(), QStringLiteral("autotileDesktops"));
+    moveDisableKey(ConfigKeys::v3snappingDisabledActivitiesKey(), QStringLiteral("snappingActivities"));
+    moveDisableKey(ConfigKeys::v3autotileDisabledActivitiesKey(), QStringLiteral("autotileActivities"));
 
     // Write the stripped Display group back; drop it entirely if now empty so
     // no husk object lingers.
@@ -1450,6 +1526,18 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // set — a genuine first run, or a crash before windowrules.json was
     // written. Only this path rebuilds and writes the rule store.
 
+    // Pre-flight the legacy assignments.json: a malformed sidecar must abort
+    // BEFORE we write windowrules.json (otherwise we'd commit a
+    // provider-default-only rule set that silently drops every assignment AND
+    // the quick-layout slots, and then quarantine the corrupt original to
+    // `.migrated` — masking the failure as a successful migration).
+    // Defense-in-depth: the ensureJsonConfigImpl pre-chain guard catches the
+    // version<schema entry; this catches the fresh-install / post-corruption
+    // / already-current re-entry paths. (B5 data-loss fix.)
+    if (!prevalidateLegacyAssignmentsFile(assignmentsPath)) {
+        return false;
+    }
+
     // ── Read config.json + extract the disable stash ───────────────────────
     QJsonObject configRoot;
     bool haveConfig = false;
@@ -1468,6 +1556,10 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     const QJsonObject stash = configRoot.value(kV4DisableStashKey).toObject();
 
     // ── Read assignments.json ──────────────────────────────────────────────
+    // The prevalidate guard above already aborted on a malformed file, so a
+    // parse failure here would only be a TOCTOU race (file replaced between
+    // prevalidate and this read). Treat it the same way — abort rather than
+    // silently dropping every assignment.
     QJsonObject assignmentsRoot;
     bool haveAssignments = false;
     if (QFile::exists(assignmentsPath)) {
@@ -1479,7 +1571,9 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
                 assignmentsRoot = doc.object();
                 haveAssignments = true;
             } else {
-                qWarning("ConfigMigration: assignments.json is malformed — skipping assignment migration");
+                qCritical("ConfigMigration: %s became malformed after prevalidation (%s) — aborting v4 conversion",
+                          qPrintable(assignmentsPath), qPrintable(err.errorString()));
+                return false;
             }
         }
     }
@@ -1495,10 +1589,10 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // ── Assignment rules ───────────────────────────────────────────────────
     QJsonObject quickLayoutsToRelocate;
     if (haveAssignments) {
-        const QString prefix = ConfigDefaults::assignmentGroupPrefix();
+        const QString prefix = ConfigDefaults::v3assignmentGroupPrefix();
         for (auto it = assignmentsRoot.constBegin(); it != assignmentsRoot.constEnd(); ++it) {
             const QString& groupName = it.key();
-            if (groupName == ConfigDefaults::quickLayoutsGroup()) {
+            if (groupName == ConfigDefaults::v3quickLayoutsGroup()) {
                 // QuickLayouts slots are NOT rules — relocate them to the
                 // quicklayouts.json sidecar.
                 quickLayoutsToRelocate = it.value().toObject();
@@ -1612,28 +1706,28 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         }
     }
 
-    // ── Write windowrules.json (atomic) ────────────────────────────────────
-    PhosphorWindowRule::WindowRuleSet ruleSet;
-    ruleSet.setRules(rules);
-    QDir().mkpath(QFileInfo(windowRulesPath).absolutePath());
-    if (!ruleSet.saveToFile(windowRulesPath)) {
-        qWarning("ConfigMigration: failed to write %s — aborting v4 conversion", qPrintable(windowRulesPath));
-        return false;
-    }
-    qInfo("ConfigMigration: wrote %d window rules to %s", ruleSet.count(), qPrintable(windowRulesPath));
-
-    // ── Relocate QuickLayouts to the quicklayouts.json sidecar ─────────────
+    // ── Relocate QuickLayouts to the quicklayouts.json sidecar (FIRST) ─────
     // Quick-layout slots are NOT window rules — they belong in the sibling
     // sidecar LayoutRegistry reads (next to windowrules.json), not in the rule
-    // store and not in config.json. Write it before deleting assignments.json
-    // so the slot data is durably relocated first. The group's shape (slot
-    // number → layout id) already matches the sidecar format verbatim.
+    // store and not in config.json. The group's shape (slot number → layout
+    // id) already matches the sidecar format verbatim.
+    //
+    // Write-order rationale (B4 data-loss fix): the sidecar MUST be durably
+    // written BEFORE windowrules.json — windowrules.json is the irreversible
+    // commit marker (its mere existence flips the `windowRulesAlreadyConverted`
+    // probe on the next run, gating the rebuild path off forever). If the
+    // sidecar write fails AFTER windowrules.json was committed, the next run
+    // takes the cleanup-only branch and never re-attempts the relocation,
+    // while assignments.json gets quarantined to .migrated — the slot data is
+    // recoverable only by hand. Writing the sidecar first means a sidecar
+    // failure aborts the whole conversion with assignments.json still in
+    // place, leaving every datum recoverable on the next run.
     if (!quickLayoutsToRelocate.isEmpty()) {
         const QString quickLayoutsPath = ConfigDefaults::quickLayoutsFilePath();
         // An existing quicklayouts.json is authoritative only if it is a
         // valid, non-empty JSON object — a partial earlier run that wrote an
         // empty/corrupt file then crashed must NOT shadow the real slots,
-        // which would otherwise be lost when assignments.json is deleted
+        // which would otherwise be lost when assignments.json is retired
         // below. In that case re-derive from assignments.json.
         bool existingIsAuthoritative = false;
         if (QFile::exists(quickLayoutsPath)) {
@@ -1649,13 +1743,29 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         if (!existingIsAuthoritative) {
             QDir().mkpath(QFileInfo(quickLayoutsPath).absolutePath());
             if (!PhosphorConfig::JsonBackend::writeJsonAtomically(quickLayoutsPath, quickLayoutsToRelocate)) {
-                qWarning("ConfigMigration: failed to write %s — aborting v4 conversion", qPrintable(quickLayoutsPath));
+                qWarning(
+                    "ConfigMigration: failed to write %s — aborting v4 conversion before committing windowrules.json",
+                    qPrintable(quickLayoutsPath));
                 return false;
             }
             qInfo("ConfigMigration: relocated %d quick-layout slots to %s",
                   static_cast<int>(quickLayoutsToRelocate.size()), qPrintable(quickLayoutsPath));
         }
     }
+
+    // ── Write windowrules.json (atomic — the irreversible commit) ──────────
+    // This is the marker that gates `windowRulesAlreadyConverted` on the next
+    // run. It MUST go after the sidecar relocation (see comment above) — once
+    // this file exists as a valid v4 rule set, the cleanup-only branch
+    // short-circuits the rebuild forever.
+    PhosphorWindowRule::WindowRuleSet ruleSet;
+    ruleSet.setRules(rules);
+    QDir().mkpath(QFileInfo(windowRulesPath).absolutePath());
+    if (!ruleSet.saveToFile(windowRulesPath)) {
+        qWarning("ConfigMigration: failed to write %s — aborting v4 conversion", qPrintable(windowRulesPath));
+        return false;
+    }
+    qInfo("ConfigMigration: wrote %d window rules to %s", ruleSet.count(), qPrintable(windowRulesPath));
 
     // ── Rewrite config.json: strip the temporary stash key ─────────────────
     // The real Display.*Disabled* keys were already removed by migrateV3ToV4;

@@ -205,9 +205,13 @@ private:
 
     /// The rule indices in descending-priority / list-order tie-break order,
     /// computed once per rule-set revision and reused. Rebuilt lazily when
-    /// the bound set's revision moves.
+    /// the bound set's revision moves. The cache key includes the rule count
+    /// as a defensive cross-check: a revision collision against a smaller rule
+    /// list would otherwise let `resolve()` dereference a stale index that no
+    /// longer exists (UB on `rules.at(...)`).
     mutable QList<int> m_priorityOrder;
     mutable quint64 m_priorityOrderRevision = 0;
+    mutable qsizetype m_priorityOrderRulesSize = 0;
     mutable bool m_priorityOrderValid = false;
     const QList<int>& priorityOrder() const;
 };

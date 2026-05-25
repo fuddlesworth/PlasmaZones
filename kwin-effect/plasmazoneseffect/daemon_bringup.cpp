@@ -131,6 +131,19 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // All D-Bus calls use QDBusMessage::createMethodCall + asyncCall (no QDBusInterface)
     // to avoid synchronous D-Bus introspection that blocks the compositor thread.
 
+    // Re-push metadata for every live window. KWin's class/desktop/caption
+    // change signals fired during session restore are swallowed by
+    // pushWindowMetadata's m_daemonServiceRegistered gate, so the daemon's
+    // WindowRegistry is empty when the bridge first comes up. Walk the
+    // stacking order once and re-emit setWindowMetadata so any consumer
+    // querying the registry from a subsequent windowOpened / settings-load
+    // handler sees a populated record. Safe to send before virtual screens
+    // / pending restores arrive — setWindowMetadata is registry-only and has
+    // no dependency on screen identity.
+    for (KWin::EffectWindow* w : KWin::effects->stackingOrder()) {
+        pushWindowMetadata(w);
+    }
+
     // Drop the snap-assist capture's "we recently posted this handle" set —
     // the daemon's bounded LRU is empty after a fresh registration (whether
     // first-start or restart), so any handle the kwin-effect would otherwise
@@ -569,10 +582,14 @@ void PlasmaZonesEffect::loadCachedSettings()
     // refreshes whenever the daemon broadcasts `rulesChanged`, so an edit
     // in the settings UI lands without restarting the effect.
     loadWindowRuleAnimationsFromDbus();
-    QDBusConnection::sessionBus().connect(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged"), this,
-        SLOT(loadWindowRuleAnimationsFromDbus()));
+    // Subscribe via the debounce slot — the daemon emits one rulesChanged per
+    // per-rule mutation, and the slot just re-arms a single-shot 50ms timer
+    // whose timeout fires the actual loadWindowRuleAnimationsFromDbus refetch.
+    // Without this, a batch edit fires N back-to-back full-ruleset fetches.
+    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                          QString(PhosphorProtocol::Service::ObjectPath),
+                                          QString(PhosphorProtocol::Service::Interface::WindowRules),
+                                          QStringLiteral("rulesChanged"), this, SLOT(slotWindowRulesChanged()));
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
         m_cachedToggleActivation = v.toBool();
     });

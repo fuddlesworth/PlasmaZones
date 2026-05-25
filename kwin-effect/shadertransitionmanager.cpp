@@ -3,7 +3,7 @@
 
 #include "shadertransitionmanager.h"
 
-#include <PhosphorWindowRule/AnimationAppRuleBridge.h>
+#include <PhosphorAnimation/AnimationAppRuleBridge.h>
 
 namespace PlasmaZones {
 

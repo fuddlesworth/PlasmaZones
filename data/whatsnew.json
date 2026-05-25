@@ -1,6 +1,15 @@
 {
     "releases": [
         {
+            "version": "Unreleased",
+            "highlights": [
+                "New Window Rules page: one place to manage everything that used to live across Snapping Assignments, Tiling Assignments, Animations App Rules, and the per-mode disabled-apps lists",
+                "Browse, add, edit, duplicate, drag-reorder, and disable rules from a single list. Each rule matches windows by class, title, role, app ID, desktop, activity, or screen — combined with AND, OR, and NOT — and applies snapping, tiling, animation, or exclusion actions",
+                "What you'll see different: the old Snapping Assignments, Tiling Assignments, and Animations → App Rules pages are gone. Everything they did now lives at Settings → Window Rules",
+                "Your existing assignments, animation app rules, and per-monitor / per-desktop / per-activity disable settings were migrated automatically on first launch. If something looks off, your old configuration is preserved on disk under your config folder and can be restored manually"
+            ]
+        },
+        {
             "version": "3.0.10",
             "date": "2026-05-23",
             "highlights": [

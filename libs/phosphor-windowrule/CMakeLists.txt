@@ -66,10 +66,13 @@ set(phosphorwindowrule_public_HDRS
     include/PhosphorWindowRule/WindowRuleSet.h
     include/PhosphorWindowRule/RuleEvaluator.h
     include/PhosphorWindowRule/WindowRuleStore.h
+    include/PhosphorWindowRule/WindowRuleLogging.h
     # Header-only in-memory bridges — public API, installed via the
     # install(DIRECTORY) glob below. Listed here so the target carries them
     # as sources (IDE visibility, install-intent parity with the rest).
-    include/PhosphorWindowRule/AnimationAppRuleBridge.h
+    # AnimationAppRuleBridge ships in PhosphorAnimation/ (its include of
+    # <PhosphorAnimation/AnimationAppRule.h> would otherwise force a
+    # transitive PhosphorAnimation dep on this library's Config.cmake.in).
     include/PhosphorWindowRule/ContextRuleBridge.h
     include/PhosphorWindowRule/ExclusionListBridge.h
 )

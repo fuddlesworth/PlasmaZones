@@ -162,7 +162,17 @@ Daemon::Daemon(QObject* parent)
     // Profile blobs through the daemon-owned registry. Requires
     // m_curveRegistry to be declared BEFORE m_settings in daemon.h —
     // see the DECLARATION ORDER INVARIANT comment there.
-    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, nullptr))
+    //
+    // Pass m_windowRuleStore.get() so Settings shares the daemon's single
+    // canonical store rather than constructing a second one over the same
+    // file. Two stores pointed at windowrules.json race on disk: each
+    // mutator rebuilds its `kept` list from its own stale in-memory
+    // snapshot, so the second writer silently drops rules the first writer
+    // added. Mirrors the existing LayoutRegistry-via-borrowed-pointer
+    // pattern above. Standalone settings / editor processes that have no
+    // daemon-owned store pass nullptr and Settings falls back to owning
+    // its own.
+    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, m_windowRuleStore.get(), nullptr))
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
     , m_windowRegistry(std::make_unique<PhosphorEngine::WindowRegistry>(nullptr))
     , m_panelSource(std::make_unique<Phosphor::Screens::PlasmaPanelSource>())

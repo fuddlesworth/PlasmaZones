@@ -313,11 +313,16 @@ pz_add_test(test_layoutmanager_persistence core/test_layoutmanager_persistence.c
 pz_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
 pz_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
 
+# Regression guard for the in-process dual-WindowRuleStore data-loss race
+# where Settings used to construct its own store pointed at the same file
+# as the daemon's. Pins the share-via-borrow-ctor wiring in daemon.cpp.
+pz_add_test(test_daemon_dual_store_race core/test_daemon_dual_store_race.cpp)
+
 # Cascade-fidelity proof for the window-rule context model — the priority
 # formula reproduces the legacy zone-Assignment cascade.
 add_executable(test_windowrule_cascade_fidelity core/test_windowrule_cascade_fidelity.cpp)
 target_link_libraries(test_windowrule_cascade_fidelity
-    PRIVATE Qt6::Test Qt6::Core PhosphorWindowRule::PhosphorWindowRule)
+    PRIVATE Qt6::Test Qt6::Core PhosphorWindowRule::PhosphorWindowRule PhosphorZones::PhosphorZones plasmazones_core)
 add_test(NAME test_windowrule_cascade_fidelity COMMAND test_windowrule_cascade_fidelity)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -621,6 +626,8 @@ add_executable(test_window_rule_controller
     settings/test_window_rule_controller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowrulemodel.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/windowruleauthoring.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/windowruletemplates.cpp
 )
 target_link_libraries(test_window_rule_controller
     PRIVATE

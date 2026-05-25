@@ -27,19 +27,40 @@
  * suite, which runs against the rule-backed registry). The connector-name /
  * virtual-screen fallback is a query-side retry loop in LayoutRegistry and is
  * out of this model-level suite's scope by design.
+ *
+ * The LayoutRegistry-boundary cases at the bottom of this file then close
+ * the symmetric proof: they assert that the same predicate-evaluation guard
+ * holds end-to-end through @ref PhosphorZones::LayoutRegistry, whose
+ * @c resolveAssignmentEntry composes the evaluator with a structural filter
+ * that admits mixed (context + window-property) rules. A mixed rule must
+ * still be inert against the windowless queries the registry issues.
  */
 
+#include <QDir>
+#include <QScopedPointer>
 #include <QString>
 #include <QTest>
+#include <memory>
+#include <vector>
 
 #include <PhosphorWindowRule/ContextRuleBridge.h>
 #include <PhosphorWindowRule/RuleEvaluator.h>
 #include <PhosphorWindowRule/WindowQuery.h>
 #include <PhosphorWindowRule/WindowRule.h>
 #include <PhosphorWindowRule/WindowRuleSet.h>
+#include <PhosphorWindowRule/WindowRuleStore.h>
+
+#include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/LayoutRegistry.h>
+
+#include "../helpers/IsolatedConfigGuard.h"
+#include "config/configdefaults.h"
 
 namespace PWR = PhosphorWindowRule;
 namespace CRB = PhosphorWindowRule::ContextRuleBridge;
+
+using PlasmaZones::ConfigDefaults;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 class TestWindowRuleCascadeFidelity : public QObject
 {
@@ -82,6 +103,55 @@ private:
             return slot->params.value(QLatin1String("layoutId")).toString();
         }
         return slot->params.value(QLatin1String("algorithm")).toString();
+    }
+
+    /// Per-test fixture for the LayoutRegistry-boundary cases: an isolated XDG
+    /// tempdir, a freshly-constructed WindowRuleStore pointed at the isolated
+    /// rules file, and a LayoutRegistry that borrows the store. Kept here
+    /// (rather than shared via LayoutRegistryTestHelpers.h) because these
+    /// cases need to inject hand-crafted mixed rules straight into the store;
+    /// the shared helper hides the store pointer.
+    struct RegistryFixture
+    {
+        std::unique_ptr<IsolatedConfigGuard> guard;
+        std::unique_ptr<PWR::WindowRuleStore> store;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> registry;
+    };
+
+    RegistryFixture makeRegistryFixture()
+    {
+        RegistryFixture f;
+        f.guard = std::make_unique<IsolatedConfigGuard>();
+        f.store = std::make_unique<PWR::WindowRuleStore>(ConfigDefaults::windowRulesFilePath());
+        f.registry =
+            std::make_unique<PhosphorZones::LayoutRegistry>(f.store.get(), QStringLiteral("plasmazones/layouts"));
+        const QString layoutDir = f.guard->dataPath() + QStringLiteral("/plasmazones/layouts");
+        QDir().mkpath(layoutDir);
+        f.registry->setLayoutDirectory(layoutDir);
+        return f;
+    }
+
+    /// Build a mixed (context + window-property) rule at @p priority. The
+    /// shape is All{ScreenId == screenId, AppId == appId}: it passes the
+    /// LayoutRegistry filter (engine-mode action present, not catch-all) but
+    /// its AppId leaf evaluates false against a windowless query, so the
+    /// All{} must fail at resolve() time. Far above any pinned-context
+    /// priority band so any leak would surface as this rule's layout
+    /// winning the resolution.
+    PWR::WindowRule makeMixedScreenAppRule(const QString& screenId, const QString& appId, bool autotileMode,
+                                           const QString& snappingLayout, const QString& tilingAlgorithm,
+                                           int priority = 999)
+    {
+        PWR::WindowRule mixed;
+        mixed.id = QUuid::createUuid();
+        mixed.name = screenId + QLatin1Char(' ') + appId;
+        mixed.enabled = true;
+        mixed.priority = priority;
+        mixed.match = PWR::MatchExpression::makeAll(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId),
+             PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::Equals, appId)});
+        mixed.actions = CRB::makeAssignmentActions(autotileMode, snappingLayout, tilingAlgorithm);
+        return mixed;
     }
 
 private Q_SLOTS:
@@ -372,6 +442,186 @@ private Q_SLOTS:
         // First-listed rule wins the slot (first-action-per-slot, stable sort).
         QCOMPARE(resolvedLayoutId(evaluator, contextQuery(QStringLiteral("DP-1"), 1, QString())),
                  QStringLiteral("{first}"));
+    }
+
+    // ─── LayoutRegistry boundary: mixed rules and the cascade ─────────────
+    //
+    // The model-level tests above prove the RuleEvaluator's resolve() walk
+    // handles window-property predicates correctly for windowless queries.
+    // The cases below close the symmetric proof at the LayoutRegistry
+    // boundary — production code resolves through assignmentEntryForScreen,
+    // which composes m_evaluator->highestPriorityMatch(query, filter) with a
+    // filter that admits any rule carrying an engine-mode action and not
+    // the catch-all. A mixed (context + window-property) rule passes that
+    // structural filter, so the cascade-fidelity proof has to verify the
+    // predicate-evaluation guard at resolve() time still keeps the mixed
+    // rule out for the windowless queries the registry issues. These tests
+    // assert that end-to-end, plus the provider-default synthesis on total
+    // cascade miss.
+
+    // ─── Case 1: mixed rule does not leak into context-only resolution ────
+    //
+    // Symmetric to testWindowPropertyRuleInertForWindowlessQuery, but
+    // driven through LayoutRegistry::assignmentEntryForScreen — the entry
+    // point production uses. A hand-authored mixed rule
+    // (All{ScreenId == DP-2, AppId == firefox, SetEngineMode autotile})
+    // passes the registry filter structurally (it carries an engine-mode
+    // action and is not the catch-all), but its AppId leaf evaluates false
+    // against the registry's windowless query and so the All{} must fail.
+    // The registry has to fall through to the provider default — the mixed
+    // rule's autotile mode must NOT surface.
+
+    void testMixedRuleDoesNotLeakIntoContextOnlyResolution()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // Snap default so the synthesised provider default is unambiguously
+        // distinguishable from the mixed rule's autotile output.
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+
+        const PWR::WindowRule mixed = makeMixedScreenAppRule(QStringLiteral("DP-2"), QStringLiteral("firefox"),
+                                                             /*autotileMode=*/true, /*snappingLayout=*/QString(),
+                                                             /*tilingAlgorithm=*/QStringLiteral("dwindle"));
+        QVERIFY(f.store->addRule(mixed));
+
+        // The registry queries the rule set with a WINDOWLESS query — no
+        // AppId — so the mixed rule's AppId leaf evaluates false; its All{}
+        // fails; the cascade misses and the level-1 default synthesises.
+        const PhosphorZones::AssignmentEntry entry =
+            f.registry->assignmentEntryForScreen(QStringLiteral("DP-2"), 1, QString());
+
+        // The synthesised entry is Snapping (provider default), not the
+        // Autotile/dwindle that would arrive if the mixed rule leaked.
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QStringLiteral("{provider-snap-default}"));
+        QVERIFY(entry.tilingAlgorithm.isEmpty());
+    }
+
+    // ─── Case 2: mixed rule inert across the field-level readers ──────────
+    //
+    // Same rule set shape, but exercised through the field-level readers
+    // (modeForScreen, snappingLayoutForScreen, tilingAlgorithmForScreen)
+    // that the OSD / cursor-move paths use. Each reader funnels through
+    // assignmentEntryForScreen but exposes a different projection, so the
+    // mixed rule's actions could in principle bleed through e.g.
+    // tilingAlgorithmForScreen even if mode resolved correctly. This case
+    // pins that none of the three field readers see the mixed rule.
+
+    void testMixedRuleDoesNotLeakIntoWindowlessQuery()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // No provider defaults configured → the field readers must observe
+        // empty, confirming the mixed rule's actions never won any slot.
+        const PWR::WindowRule mixed =
+            makeMixedScreenAppRule(QStringLiteral("DP-2"), QStringLiteral("firefox"),
+                                   /*autotileMode=*/false, /*snappingLayout=*/QStringLiteral("{mixed-snap}"),
+                                   /*tilingAlgorithm=*/QStringLiteral("{mixed-tile}"));
+        QVERIFY(f.store->addRule(mixed));
+
+        const QString screen = QStringLiteral("DP-2");
+        // No projection of the mixed rule surfaces — the cascade misses and
+        // every default-less reader returns the cascade-miss empty value.
+        // The mode defaults to Snapping (the AssignmentEntry default).
+        QCOMPARE(f.registry->modeForScreen(screen, 1, QString()), PhosphorZones::AssignmentEntry::Snapping);
+        QVERIFY(f.registry->snappingLayoutForScreen(screen, 1, QString()).isEmpty());
+        QVERIFY(f.registry->tilingAlgorithmForScreen(screen, 1, QString()).isEmpty());
+    }
+
+    // ─── Case 3: context-only rule wins over a higher-priority mixed rule
+    //
+    // The registry filter does NOT order by priority — it filters on
+    // structural shape (engine-mode action present, not catch-all) and lets
+    // RuleEvaluator::highestPriorityMatch pick the winner. A pinned
+    // context-only rule (priority 310) and a structurally-admitted but
+    // predicate-failing mixed rule (priority 999) MUST resolve to the
+    // context-only rule for a windowless query — the mixed rule's higher
+    // numeric priority is moot because its predicate evaluates false.
+
+    void testContextOnlyRuleAndMixedRulePreservePriority()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // Context-only snapping rule at the screen-only band (priority 310).
+        const PWR::WindowRule contextOnly =
+            CRB::makeAssignmentRule(QStringLiteral("DP-3 default"), QStringLiteral("DP-3"), 0, QString(),
+                                    /*autotileMode=*/false, QStringLiteral("{context-only-snap}"), QString());
+        // Mixed rule at far higher priority — but its AppId leaf gates a
+        // windowless query out.
+        const PWR::WindowRule mixed =
+            makeMixedScreenAppRule(QStringLiteral("DP-3"), QStringLiteral("firefox"),
+                                   /*autotileMode=*/true, /*snappingLayout=*/QString(),
+                                   /*tilingAlgorithm=*/QStringLiteral("dwindle"), /*priority=*/999);
+        // Insert mixed BEFORE the context-only rule so list order would
+        // favour the mixed rule if structure alone won the resolution.
+        QVERIFY(f.store->setAllRules({mixed, contextOnly}));
+
+        const PhosphorZones::AssignmentEntry entry =
+            f.registry->assignmentEntryForScreen(QStringLiteral("DP-3"), 1, QString());
+
+        // The context-only rule wins — the mixed rule is filtered by its
+        // own predicate at resolve time, not by the registry's structural
+        // filter. The snapping layout flows through; the mixed rule's
+        // tilingAlgorithm does NOT.
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QStringLiteral("{context-only-snap}"));
+        QVERIFY(entry.tilingAlgorithm.isEmpty());
+    }
+
+    // ─── Case 4: provider-default synthesis when only mixed rules exist ───
+    //
+    // The most adversarial shape — a registry that holds ONLY mixed rules.
+    // Every rule passes the structural filter (engine-mode action, not
+    // catch-all), but every rule's window-property leaf gates the
+    // windowless query out. resolveAssignmentEntry returns nullopt and
+    // assignmentEntryForScreen has to synthesise from the level-1 provider
+    // default. Two sub-cases — snap-default-only and autotile-default-only
+    // — confirm both branches of resolveDefaultAssignmentEntry's three-tier
+    // precedence are reached.
+
+    void testProviderDefaultSynthesisWhenOnlyMixedRulesExist()
+    {
+        // ── Sub-case A: snap provider default ──
+        {
+            RegistryFixture f = makeRegistryFixture();
+            f.registry->setDefaultLayoutIdProvider([]() {
+                return QStringLiteral("{snap-default}");
+            });
+            // Two unrelated mixed rules — neither's window-property leaf
+            // can match a windowless query.
+            QVERIFY(f.store->addRule(makeMixedScreenAppRule(QStringLiteral("DP-1"), QStringLiteral("konsole"),
+                                                            /*autotileMode=*/false, QStringLiteral("{ignored-konsole}"),
+                                                            QString())));
+            QVERIFY(
+                f.store->addRule(makeMixedScreenAppRule(QStringLiteral("DP-1"), QStringLiteral("firefox"),
+                                                        /*autotileMode=*/true, QString(), QStringLiteral("dwindle"))));
+
+            const PhosphorZones::AssignmentEntry entry =
+                f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 1, QString());
+            QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+            QCOMPARE(entry.snappingLayout, QStringLiteral("{snap-default}"));
+            QVERIFY(entry.tilingAlgorithm.isEmpty());
+        }
+
+        // ── Sub-case B: autotile provider default (snap provider returns
+        //                empty → autotile wins) ──
+        {
+            RegistryFixture f = makeRegistryFixture();
+            f.registry->setDefaultLayoutIdProvider([]() {
+                return QString();
+            });
+            f.registry->setDefaultAutotileAlgorithmProvider([]() {
+                return QStringLiteral("bsp");
+            });
+            QVERIFY(f.store->addRule(makeMixedScreenAppRule(QStringLiteral("HDMI-1"), QStringLiteral("vlc"),
+                                                            /*autotileMode=*/false, QStringLiteral("{ignored}"),
+                                                            QString())));
+
+            const PhosphorZones::AssignmentEntry entry =
+                f.registry->assignmentEntryForScreen(QStringLiteral("HDMI-1"), 1, QString());
+            QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+            QVERIFY(entry.snappingLayout.isEmpty());
+            QCOMPARE(entry.tilingAlgorithm, QStringLiteral("bsp"));
+        }
     }
 };
 

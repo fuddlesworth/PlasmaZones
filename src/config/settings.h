@@ -71,9 +71,26 @@ public:
      *                      through the caller's registry, preserving
      *                      `shared_ptr<const Curve>` identity across the
      *                      Settings ↔ daemon boundary.
+     * @param windowRuleStore Non-owned WindowRuleStore pointer. When non-null,
+     *                        Settings shares this store rather than owning a
+     *                        second instance pointed at the same file — a
+     *                        dual-store setup races on disk (one store's
+     *                        `setAllRules` clobbers the other's unflushed
+     *                        edits because both rebuild `kept` from stale
+     *                        in-memory snapshots). The daemon, which already
+     *                        owns the canonical store for `LayoutRegistry`
+     *                        and `WindowRuleAdaptor`, passes it in here so
+     *                        every in-process consumer mutates the same
+     *                        ruleset. Standalone processes (settings app,
+     *                        editor) pass nullptr and Settings falls back to
+     *                        owning its own store. Must outlive this Settings
+     *                        when non-null. The caller is responsible for
+     *                        having already invoked `load()` on a non-null
+     *                        store; this ctor does not reload it.
      * @param parent Parent QObject
      */
-    Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry, QObject* parent);
+    Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
+             PhosphorWindowRule::WindowRuleStore* windowRuleStore, QObject* parent);
 
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
@@ -1202,10 +1219,24 @@ private:
 
     // Per-mode disable lists are stored as `DisableEngine` context rules in
     // the unified WindowRule store (windowrules.json), NOT in config.json.
-    // The store is owned here, keyed off ConfigDefaults::windowRulesFilePath().
-    // load() reloads it from disk so cross-process deltas surface; the
-    // disabled*/setDisabled*/is*Disabled accessors read/write through it.
-    std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_windowRuleStore;
+    //
+    // The store can be either owned (standalone settings app / editor / tests
+    // that have no daemon counterpart) or borrowed (daemon process — the
+    // daemon owns the canonical store for `LayoutRegistry` and
+    // `WindowRuleAdaptor`, and passes that same instance in so every
+    // in-process writer mutates the same in-memory ruleset). Mirroring the
+    // existing `LayoutRegistry`-via-borrowed-pointer pattern eliminates the
+    // dual-store race where two stores pointed at the same file each rebuild
+    // a `kept` list from a stale snapshot and clobber each other's writes.
+    //
+    // The owning ctor calls `load()` on the owned store; the borrowing ctor
+    // does not — the owner is responsible for having loaded already.
+    // load() reloads the active store from disk so cross-process deltas
+    // surface; the disabled*/setDisabled*/is*Disabled accessors read/write
+    // through `m_windowRuleStore` (a raw pointer that always tracks the
+    // active store — owned or borrowed).
+    std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_ownedWindowRuleStore;
+    PhosphorWindowRule::WindowRuleStore* m_windowRuleStore = nullptr;
 
     // Activation
     // Activation is stored in m_store.

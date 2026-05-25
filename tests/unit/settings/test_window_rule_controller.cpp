@@ -43,6 +43,7 @@ private Q_SLOTS:
     void actionTypesCarryDomain();
     void matchIsContextOnlyClassifies();
     void validationIssuesForJsonFlags();
+    void defaultPayloadForSeedsParams();
 };
 
 void TestWindowRuleController::newEmptyRuleShapesBySubject()
@@ -117,16 +118,22 @@ void TestWindowRuleController::dirtyTrackingAndRevert()
     QVERIFY(controller.hasPendingChanges());
     QVERIFY(dirtySpy.count() >= 1);
 
-    // revert() re-fetches the daemon's authoritative set and only clears the
-    // dirty bit if the re-fetch succeeded. The contract this test guards is
-    // the linkage between revert()'s return value and the dirty-state
-    // transition: a successful revert MUST clear dirty, a failed revert MUST
-    // preserve it. The earlier bug was a failed revert silently dropping
-    // staged edits while reporting success. The check is symmetric so it
-    // passes both in a fully headless run (daemon absent → revert fails →
-    // dirty stays) and on a dev machine with a live daemon (revert succeeds
-    // → dirty clears).
-    const bool reverted = controller.revert();
+    // revert() re-fetches the daemon's authoritative set asynchronously and
+    // only clears the dirty bit if the re-fetch succeeded. The contract this
+    // test guards is the linkage between the async outcome and the dirty-state
+    // transition: a successful revert (rulesLoaded fires) MUST clear dirty, a
+    // failed revert MUST preserve it. The earlier bug was a failed revert
+    // silently dropping staged edits while reporting success. The check is
+    // symmetric so it passes both in a fully headless run (daemon absent →
+    // revert fails → dirty stays) and on a dev machine with a live daemon
+    // (revert succeeds → dirty clears).
+    QSignalSpy loadedSpy(&controller, &WindowRuleController::rulesLoaded);
+    controller.revert();
+    // Pump the event loop briefly so the QDBusPendingCall reply (success or
+    // error) lands. A timeout fall-through is acceptable — that's the
+    // daemon-absent path and dirty must stay set.
+    loadedSpy.wait(500);
+    const bool reverted = loadedSpy.count() > 0;
     QCOMPARE(controller.isDirty(), !reverted);
 }
 
@@ -400,6 +407,57 @@ void TestWindowRuleController::validationIssuesForJsonFlags()
     QVariantMap partial = clean;
     partial[QStringLiteral("actions")] = QVariantList{};
     QCOMPARE(controller.validationIssuesForJson(partial).size(), 0);
+}
+
+void TestWindowRuleController::defaultPayloadForSeedsParams()
+{
+    // The QML action row uses `defaultPayloadFor` when the user switches the
+    // type combo to a new action — a stale regression that returned a bare
+    // `{type: X}` map would leave SpinBoxes anchored at 0 and `canSave`
+    // would gate the rule on params the user never had a chance to fill.
+    WindowRuleController controller;
+
+    // Float carries no params — payload is exactly `{type: float}`.
+    const QVariantMap floatPayload = controller.defaultPayloadFor(QStringLiteral("float"));
+    QCOMPARE(floatPayload.value(QStringLiteral("type")).toString(), QStringLiteral("float"));
+    QCOMPARE(floatPayload.size(), 1);
+
+    // SetOpacity stores `display * scale`; the descriptor says min=0, so the
+    // seeded value is the wire-form 0.0 — the SpinBox renders that as 0%.
+    // A future bump of min would automatically flow through here.
+    const QVariantMap opacityPayload = controller.defaultPayloadFor(QStringLiteral("setOpacity"));
+    QCOMPARE(opacityPayload.value(QStringLiteral("type")).toString(), QStringLiteral("setOpacity"));
+    QVERIFY(opacityPayload.contains(QStringLiteral("value")));
+    QCOMPARE(opacityPayload.value(QStringLiteral("value")).toInt(), 0);
+
+    // SetEngineMode's `mode` is an enum — seeded to the first option's wire
+    // value. The engineModeOptions list begins with snapping, so the default
+    // pre-selects that. Changing the order in the descriptor would
+    // automatically change this default.
+    const QVariantMap modePayload = controller.defaultPayloadFor(QStringLiteral("setEngineMode"));
+    QCOMPARE(modePayload.value(QStringLiteral("type")).toString(), QStringLiteral("setEngineMode"));
+    QCOMPARE(modePayload.value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
+
+    // SetSnappingLayout uses the `snappingLayout` picker kind — no implicit
+    // default (the user must pick a layout), so the seeded value is an
+    // empty string. `canSave` will then explicitly surface "layout missing".
+    const QVariantMap layoutPayload = controller.defaultPayloadFor(QStringLiteral("setSnappingLayout"));
+    QVERIFY(layoutPayload.contains(QStringLiteral("layoutId")));
+    QCOMPARE(layoutPayload.value(QStringLiteral("layoutId")).toString(), QString());
+
+    // OverrideAnimationCurve has two picker-kind params — both empty.
+    const QVariantMap curvePayload = controller.defaultPayloadFor(QStringLiteral("overrideAnimationCurve"));
+    QVERIFY(curvePayload.contains(QStringLiteral("event")));
+    QVERIFY(curvePayload.contains(QStringLiteral("curve")));
+    QCOMPARE(curvePayload.value(QStringLiteral("event")).toString(), QString());
+    QCOMPARE(curvePayload.value(QStringLiteral("curve")).toString(), QString());
+
+    // Unknown type → bare `{type: X}` map. The QML side will never call this
+    // with an unknown wire (the picker only offers registered types), but
+    // returning a sane shape keeps the contract total.
+    const QVariantMap unknownPayload = controller.defaultPayloadFor(QStringLiteral("bogusActionType"));
+    QCOMPARE(unknownPayload.value(QStringLiteral("type")).toString(), QStringLiteral("bogusActionType"));
+    QCOMPARE(unknownPayload.size(), 1);
 }
 
 QTEST_MAIN(TestWindowRuleController)

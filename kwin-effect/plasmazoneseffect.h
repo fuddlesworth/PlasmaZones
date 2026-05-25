@@ -573,6 +573,13 @@ private:
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
 
+    /// Debounce timer for `WindowRules.rulesChanged`. Single-shot, 50ms;
+    /// timeout fires `loadWindowRuleAnimationsFromDbus`. Re-armed on every
+    /// `slotWindowRulesChanged` invocation so a burst of per-rule mutations
+    /// (a 50-rule batch edit emits 50 signals) collapses into a single
+    /// `getAllRules` fetch at the trailing edge.
+    QTimer m_animationRulesRefreshDebounce;
+
     void updateWindowBorder(const QString& windowId, KWin::EffectWindow* w);
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();
@@ -961,10 +968,17 @@ private Q_SLOTS:
     /// and forward them to the shader manager so they merge with the
     /// bridge-converted legacy AnimationAppRules. Called once at bringup;
     /// the bringup also subscribes to the interface's `rulesChanged` signal
-    /// (via the SLOT() macro — QDBusConnection::connect only accepts the
-    /// const-char* form) so a settings-UI edit takes effect without
-    /// restarting the effect.
+    /// (via a debounce timer — see m_animationRulesRefreshDebounce) so a
+    /// settings-UI edit takes effect without restarting the effect.
     void loadWindowRuleAnimationsFromDbus();
+
+    /// D-Bus signal handler for `WindowRules.rulesChanged`. Re-arms the
+    /// debounce timer rather than refetching the full ruleset on every
+    /// signal — the daemon emits one signal per per-rule mutation, so a
+    /// 50-rule batch edit would otherwise drive 50 full-ruleset fetches
+    /// and parses. A 50ms single-shot debounce coalesces the burst into a
+    /// single fetch at the trailing edge.
+    void slotWindowRulesChanged();
 };
 
 } // namespace PlasmaZones

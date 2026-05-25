@@ -529,8 +529,13 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
     // a buggy caller) that would otherwise propagate into WindowMetadata
     // and WindowQuery. Clamp them to 0 at the boundary.
     if (pid < 0) {
-        qCWarning(lcDbusWindow) << "setWindowMetadata: negative pid" << pid << "for instance" << instanceId
-                                << "— treating as 0 (unknown)";
+        // Negative pid is now clamped to 0 at the effect-side source
+        // (see window_identity.cpp pushWindowMetadata) so this path is the
+        // defensive belt-and-braces for a malformed external caller — not a
+        // KWin -1 leaking through. Logged at debug so the routine
+        // session-restore "-1" no longer spams the warning log.
+        qCDebug(lcDbusWindow) << "setWindowMetadata: negative pid" << pid << "for instance" << instanceId
+                              << "— treating as 0 (unknown)";
     }
     if (virtualDesktop < 0) {
         qCWarning(lcDbusWindow) << "setWindowMetadata: negative virtualDesktop" << virtualDesktop << "for instance"

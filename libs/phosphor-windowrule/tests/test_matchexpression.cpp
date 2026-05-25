@@ -345,6 +345,51 @@ private Q_SLOTS:
         o.insert(QStringLiteral("value"), QStringLiteral("12"));
         QVERIFY(!MatchExpression::fromJson(o).has_value());
     }
+
+    void testJson_rejectsPathologicallyDeepNesting()
+    {
+        // Build a tree of `all{all{all{…}}}` nested one level past the cap.
+        // The leaf at the deepest position is a valid context-equality leaf
+        // so the rejection is provably about depth, not leaf validity.
+        QJsonObject leaf;
+        leaf.insert(QStringLiteral("field"), QStringLiteral("screenId"));
+        leaf.insert(QStringLiteral("op"), QStringLiteral("equals"));
+        leaf.insert(QStringLiteral("value"), QStringLiteral("DP-1"));
+
+        QJsonObject current = leaf;
+        // The cap is kMaxParseDepth = 32; build depth (kMaxParseDepth + 1) by
+        // wrapping the leaf 33 times. Each wrap adds one composite level —
+        // the parser sees depth 0..33 and must refuse at depth > 32.
+        for (int i = 0; i < MatchExpression::kMaxParseDepth + 1; ++i) {
+            QJsonObject wrapper;
+            QJsonArray arr;
+            arr.append(current);
+            wrapper.insert(QStringLiteral("all"), arr);
+            current = wrapper;
+        }
+        QVERIFY(!MatchExpression::fromJson(current).has_value());
+    }
+
+    void testJson_acceptsExactlyAtDepthCap()
+    {
+        // Sanity: a tree exactly at the cap must still load — the cap is
+        // strictly `> kMaxParseDepth`, never an off-by-one rejection of a
+        // legitimately deep but legal tree.
+        QJsonObject leaf;
+        leaf.insert(QStringLiteral("field"), QStringLiteral("screenId"));
+        leaf.insert(QStringLiteral("op"), QStringLiteral("equals"));
+        leaf.insert(QStringLiteral("value"), QStringLiteral("DP-1"));
+        QJsonObject current = leaf;
+        // Build a tree whose deepest composite sits at exactly the cap depth.
+        for (int i = 0; i < MatchExpression::kMaxParseDepth; ++i) {
+            QJsonObject wrapper;
+            QJsonArray arr;
+            arr.append(current);
+            wrapper.insert(QStringLiteral("all"), arr);
+            current = wrapper;
+        }
+        QVERIFY(MatchExpression::fromJson(current).has_value());
+    }
 };
 
 QTEST_MAIN(TestMatchExpression)

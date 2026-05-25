@@ -380,8 +380,24 @@ QJsonObject MatchExpression::toJson() const
 
 std::optional<MatchExpression> MatchExpression::fromJson(const QJsonObject& obj)
 {
+    return fromJsonAtDepth(obj, 0);
+}
+
+std::optional<MatchExpression> MatchExpression::fromJsonAtDepth(const QJsonObject& obj, int depth)
+{
+    // Hard cap on composite nesting. A hand-authored rule never approaches
+    // 32 levels — only a malicious or corrupt store does. Reject the whole
+    // expression before the recursion can blow the stack (the `kMaxFileBytes`
+    // cap on the rule store does NOT protect against this: a few KB of
+    // nested `{"all":[…]}` already exceeds any reasonable stack budget).
+    if (depth > kMaxParseDepth) {
+        qCWarning(lcWindowRule) << "Match expression exceeds the parse-depth cap of" << kMaxParseDepth
+                                << "— refusing to parse.";
+        return std::nullopt;
+    }
+
     // Composite — exactly one of all/any/none must be present and an array.
-    const auto loadComposite = [](const QJsonValue& arrayValue, Kind kind) -> std::optional<MatchExpression> {
+    const auto loadComposite = [depth](const QJsonValue& arrayValue, Kind kind) -> std::optional<MatchExpression> {
         if (!arrayValue.isArray()) {
             qCWarning(lcWindowRule) << "Composite match node has a non-array body — dropping expression.";
             return std::nullopt;
@@ -392,7 +408,7 @@ std::optional<MatchExpression> MatchExpression::fromJson(const QJsonObject& obj)
                 qCWarning(lcWindowRule) << "Composite child is not an object — dropping expression.";
                 return std::nullopt;
             }
-            const auto child = MatchExpression::fromJson(v.toObject());
+            const auto child = MatchExpression::fromJsonAtDepth(v.toObject(), depth + 1);
             if (!child) {
                 return std::nullopt;
             }

@@ -17,6 +17,10 @@ ColumnLayout {
 
     /// JS array of action objects — `[{ type, ...params }, ...]`.
     required property var actions
+    /// The WindowRuleController — drives `defaultPayloadFor` so a freshly
+    /// appended action and a type-switched action share the same seeding
+    /// path. Forwarded to every ActionRow.
+    required property var controller
     /// Registered action types from `WindowRuleController.actionTypes()`.
     required property var actionTypeOptions
     /// The SettingsController — threaded into ActionRow so the picker-kind
@@ -60,39 +64,19 @@ ColumnLayout {
         editor.actionsEdited(next);
     }
 
-    /// A valid starting value for a parameter descriptor — driven entirely off
-    /// its `kind`, so the per-kind defaulting lives in exactly one place.
-    function _defaultParamValue(param) {
-        if (param.kind === "enum") {
-            // Enum options now carry `{value, label}` pairs — the wire form
-            // stored in the action is the `value`. Older callers passed plain
-            // strings; tolerate both shapes so a future free-form enum doesn't
-            // need to coordinate the schema change.
-            if (!param.options || param.options.length === 0)
-                return "";
-
-            var first = param.options[0];
-            return (first && typeof first === "object") ? (first.value || "") : first;
-        }
-        if (param.kind === "number" || param.kind === "percent")
-            return param.min !== undefined ? param.min : 0;
-
-        return "";
-    }
-
     function _append() {
         // Guarded by the Add-action button's enabled state — there is always
         // at least one registered type when this runs. Pre-seed every param
-        // declared by the type's descriptor so a freshly-added action carries
-        // a complete (if not yet user-filled) param set. The default type is
-        // the first **compatible** entry so a window-property match doesn't
-        // auto-stamp a context action the picker would then flag as invalid.
+        // declared by the type's descriptor via the controller's
+        // `defaultPayloadFor` so a freshly-added action carries a complete
+        // (if not yet user-filled) param set. The default type is the first
+        // **compatible** entry so a window-property match doesn't auto-stamp
+        // a context action the picker would then flag as invalid. Defaults
+        // live in the controller (not duplicated here) so a type switch in
+        // ActionRow and a fresh append hit the same seeding path — adding
+        // a new param kind only requires updating the C++ default map.
         var typeEntry = editor._firstCompatibleType || editor.actionTypeOptions[0];
-        var action = {
-            "type": typeEntry.value
-        };
-        var params = typeEntry.params || [];
-        for (var i = 0; i < params.length; ++i) action[params[i].key] = editor._defaultParamValue(params[i])
+        var action = editor.controller.defaultPayloadFor(typeEntry.value);
         var next = editor.actions.slice();
         next.push(action);
         editor.actionsEdited(next);
@@ -116,6 +100,7 @@ ColumnLayout {
 
             Layout.fillWidth: true
             action: modelData
+            controller: editor.controller
             actionTypeOptions: editor.actionTypeOptions
             appSettings: editor.appSettings
             matchIsContextOnly: editor.matchIsContextOnly

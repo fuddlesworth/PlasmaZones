@@ -19,6 +19,7 @@ namespace {
 namespace ActionType = PhosphorWindowRule::ActionType;
 using PhosphorWindowRule::Field;
 using PhosphorWindowRule::MatchExpression;
+using PhosphorWindowRule::Operator;
 using PhosphorWindowRule::RuleAction;
 using PhosphorWindowRule::WindowRule;
 
@@ -26,8 +27,7 @@ using PhosphorWindowRule::WindowRule;
 bool hasAnimationAction(const QList<RuleAction>& actions)
 {
     for (const RuleAction& a : actions) {
-        if (a.type == ActionType::OverrideAnimationShader || a.type == ActionType::OverrideAnimationTiming
-            || a.type == ActionType::OverrideAnimationCurve) {
+        if (ActionType::isAnimationOverrideAction(a.type)) {
             return true;
         }
     }
@@ -60,13 +60,39 @@ void collectFields(const MatchExpression& match, QList<Field>& out)
 }
 
 /// Append every non-empty ScreenId leaf value in @p match to @p out.
+/// Handles both the scalar shape (Equals/Contains/…: value is a QString) and
+/// the set-membership shape (Operator::In: value is a QVariantList or
+/// QStringList — `toString()` returns empty for a list, so the entries must be
+/// iterated explicitly). Mirrors the dual-shape handling in
+/// `MatchExpression::evaluate` for the In case.
 void collectScreenIds(const MatchExpression& match, QStringList& out)
 {
     if (match.isLeaf()) {
-        if (match.predicate().field == Field::ScreenId) {
-            const QString value = match.predicate().value.toString();
-            if (!value.isEmpty()) {
-                out.append(value);
+        const auto& predicate = match.predicate();
+        if (predicate.field == Field::ScreenId) {
+            if (predicate.op == Operator::In) {
+                // The wire form is a QVariantList; a programmatically built
+                // leaf may carry a QStringList. Accept either — same contract
+                // as the validator/evaluator.
+                if (predicate.value.metaType().id() == QMetaType::QStringList) {
+                    for (const QString& member : predicate.value.toStringList()) {
+                        if (!member.isEmpty()) {
+                            out.append(member);
+                        }
+                    }
+                } else {
+                    for (const QVariant& member : predicate.value.toList()) {
+                        const QString value = member.toString();
+                        if (!value.isEmpty()) {
+                            out.append(value);
+                        }
+                    }
+                }
+            } else {
+                const QString value = predicate.value.toString();
+                if (!value.isEmpty()) {
+                    out.append(value);
+                }
             }
         }
         return;

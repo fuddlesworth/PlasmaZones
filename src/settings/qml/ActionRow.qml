@@ -26,6 +26,10 @@ ColumnLayout {
 
     /// The action JSON object being edited — `{ type, ...params }`.
     required property var action
+    /// The WindowRuleController — exposes `defaultPayloadFor(typeWire)` so a
+    /// type switch can pre-seed the new param set in one place (matches the
+    /// shape ActionListEditor uses when appending a fresh action).
+    required property var controller
     /// Registered action types from `WindowRuleController.actionTypes()` —
     /// each entry: `{ value, label, params: [{ key, kind, label, ... }],
     /// domain: "context"|"window" }`. The `domain` field is consulted by the
@@ -141,6 +145,39 @@ ColumnLayout {
         return next;
     }
 
+    /// Build a fresh payload for the type switch — pre-seeded by the
+    /// controller's `defaultPayloadFor` (the same call ActionListEditor
+    /// uses when appending) and then any param key the previous and new
+    /// types share is migrated from the existing action so the user
+    /// doesn't lose, say, a chosen `event` when switching between two
+    /// animation overrides. The migration is intentionally conservative:
+    /// only when both descriptors declare the **same key** AND the same
+    /// `kind` does the value carry over — different `kind`s could
+    /// otherwise leak the wrong shape (a `snappingLayout` UUID into a
+    /// `tilingAlgorithm` slot).
+    function _payloadForType(newType) {
+        var payload = row.controller ? row.controller.defaultPayloadFor(newType) : ({
+            "type": newType
+        });
+        var newEntry = row._entryForType(newType);
+        var newParams = newEntry ? (newEntry.params || []) : [];
+        var oldParams = row._params || [];
+        var oldKindByKey = ({
+        });
+        for (var i = 0; i < oldParams.length; ++i) oldKindByKey[oldParams[i].key] = oldParams[i].kind
+        for (var j = 0; j < newParams.length; ++j) {
+            var newParam = newParams[j];
+            // Only migrate when the previous descriptor agreed on both the
+            // key AND the kind — anything looser risks slotting a value
+            // typed for one picker into a slot for another (e.g. dropping
+            // a layoutId into a tilingAlgorithm field).
+            if (oldKindByKey[newParam.key] === newParam.kind && row.action[newParam.key] !== undefined)
+                payload[newParam.key] = row.action[newParam.key];
+
+        }
+        return payload;
+    }
+
     /// The actionTypeOptions descriptor whose `value` equals @p type.
     function _entryForType(type) {
         for (var i = 0; i < row.actionTypeOptions.length; ++i) {
@@ -216,11 +253,17 @@ ColumnLayout {
             currentIndex: row._typeIndex()
             Accessible.name: i18n("Action type")
             onActivated: function(index) {
-                if (currentValue !== row.action.type)
-                    row.actionEdited({
-                    "type": currentValue
-                });
+                // Type-switch must seed the new param set's defaults — emitting
+                // a bare `{ type: newType }` left every parameter undefined,
+                // which a SpinBox renders as 0 and `canSave` then gates the
+                // rule on. Route through the controller's `defaultPayloadFor`
+                // so the same kind→default mapping that drives ActionListEditor
+                // ._append also drives a type change here (single source of
+                // truth — adding a new param kind no longer needs two edits).
+                if (currentValue === row.action.type)
+                    return ;
 
+                row.actionEdited(row._payloadForType(currentValue));
             }
 
             delegate: ItemDelegate {

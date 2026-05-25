@@ -3,16 +3,11 @@
 
 #pragma once
 
-// Window-rule-local logging categories. Distinct names from the daemon-side
-// categories so library and daemon each own their own log filtering knob
-// (org.phosphor.windowrule.* — see windowrulelogging.cpp for the registered
-// names).
+// Internal alias for the public logging-category declarations. The actual
+// `Q_LOGGING_CATEGORY` definitions live in windowrulelogging.cpp; the public
+// header re-declares the categories so header-only consumers can emit through
+// the same `org.phosphor.windowrule.*` channels. Distinct names from the
+// daemon-side categories so library and daemon each own their own log
+// filtering knob.
 
-#include <QLoggingCategory>
-
-namespace PhosphorWindowRule {
-
-Q_DECLARE_LOGGING_CATEGORY(lcWindowRule)
-Q_DECLARE_LOGGING_CATEGORY(lcRuleEval)
-
-} // namespace PhosphorWindowRule
+#include <PhosphorWindowRule/WindowRuleLogging.h>

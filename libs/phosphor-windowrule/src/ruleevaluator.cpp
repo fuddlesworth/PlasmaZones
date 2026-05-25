@@ -43,7 +43,13 @@ RuleEvaluator::RuleEvaluator(const WindowRuleSet& ruleSet)
 const QList<int>& RuleEvaluator::priorityOrder() const
 {
     const quint64 revision = m_ruleSet.revision();
-    if (m_priorityOrderValid && m_priorityOrderRevision == revision) {
+    const QList<WindowRule>& rules = m_ruleSet.rules();
+    // Cache validity is keyed on revision AND rule count: a revision collision
+    // (extremely unlikely under a monotonic quint64, but defensive coding
+    // matters) against a smaller rule list would otherwise let `resolve()`
+    // index past the end of `rules` via a stale cached entry — UB on
+    // `rules.at(stale_index)`.
+    if (m_priorityOrderValid && m_priorityOrderRevision == revision && m_priorityOrderRulesSize == rules.size()) {
         return m_priorityOrder;
     }
 
@@ -51,7 +57,6 @@ const QList<int>& RuleEvaluator::priorityOrder() const
     // stable sort over an index vector preserves that tie-break without
     // copying the rules. The result is cached per revision — the sort runs
     // once per rule-set edit, not once per resolve().
-    const QList<WindowRule>& rules = m_ruleSet.rules();
     QList<int> order;
     order.reserve(rules.size());
     for (int i = 0; i < rules.size(); ++i) {
@@ -63,6 +68,7 @@ const QList<int>& RuleEvaluator::priorityOrder() const
 
     m_priorityOrder = std::move(order);
     m_priorityOrderRevision = revision;
+    m_priorityOrderRulesSize = rules.size();
     m_priorityOrderValid = true;
     return m_priorityOrder;
 }

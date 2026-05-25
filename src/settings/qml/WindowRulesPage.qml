@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
+import org.plasmazones.settings
 
 /**
  * @brief The unified Window Rules page.
@@ -124,6 +125,14 @@ SettingsFlickable {
     // unchanged), leaving the tile caption stale. Listening to the change
     // signals directly invalidates on any structural OR content change.
     property int tilesRevision: 0
+    // Roles whose value feeds the sectionModel computation (bucketing,
+    // filtering, summary cards). A dataChanged that only touches OTHER roles
+    // (Name / Enabled / Priority — the row delegate's inline bindings) must
+    // NOT trigger a full sectionModel rebuild: doing so re-walks every rule
+    // on every per-row enable toggle. Mirrors the role enum in
+    // src/settings/windowrulemodel.h — kept in sync by hand because QML can't
+    // reference the C++ enum integers without yet another exposure surface.
+    readonly property var _summaryRoles: [WindowRuleModel.SectionRole, WindowRuleModel.MatchSummaryRole, WindowRuleModel.ActionSummaryRole, WindowRuleModel.ScreenIdsRole, WindowRuleModel.ConditionCountRole, WindowRuleModel.ActionCountRole, WindowRuleModel.IsCompositeRole, WindowRuleModel.ValidationIssueCountRole]
 
     contentHeight: mainCol.implicitHeight
     clip: true
@@ -139,8 +148,22 @@ SettingsFlickable {
             page.modelRevision++;
         }
 
-        function onDataChanged() {
-            page.modelRevision++;
+        function onDataChanged(topLeft, bottomRight, roles) {
+            // A roles vector with overlap against the summary roles drives a
+            // rebuild. An empty roles vector means "any role" (Qt convention
+            // for QAbstractItemModel implementations that don't enumerate
+            // specific roles) — fall through to a bump in that case to avoid
+            // silently dropping legitimate updates.
+            if (!roles || roles.length === 0) {
+                page.modelRevision++;
+                return ;
+            }
+            for (var i = 0; i < roles.length; ++i) {
+                if (page._summaryRoles.indexOf(roles[i]) >= 0) {
+                    page.modelRevision++;
+                    return ;
+                }
+            }
         }
 
         target: page.ruleModel
@@ -318,10 +341,11 @@ SettingsFlickable {
 
             delegate: SettingsCard {
                 required property var modelData
-                // Section enum value 3 = WindowRuleModel::Section::Animation.
                 // Drives both the "drag to set precedence" hint in the header
-                // and the per-row drag handles below.
-                readonly property bool _isAnimationSection: modelData.section === 3
+                // and the per-row drag handles below. Uses the C++ Section
+                // enum exposed via QML_NAMED_ELEMENT(WindowRuleModel) so the
+                // integer value isn't hardcoded in QML.
+                readonly property bool _isAnimationSection: modelData.section === WindowRuleModel.Animation
 
                 Layout.fillWidth: true
                 headerText: modelData.label

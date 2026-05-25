@@ -250,10 +250,57 @@ private Q_SLOTS:
         QString sid = QStringLiteral("stale");
         int desk = 7;
         QString act = QStringLiteral("stale");
-        CRB::contextDimsOf(any, sid, desk, act);
+        const bool ok = CRB::contextDimsOf(any, sid, desk, act);
+        QVERIFY(!ok);
         QVERIFY(sid.isEmpty());
         QCOMPARE(desk, 0);
         QVERIFY(act.isEmpty());
+    }
+
+    void testContextDimsOf_refusesDuplicateContextLeaf()
+    {
+        // A hand-edited rule with two ScreenId Equals leaves under one All{}
+        // is undefined input — makeContextMatch can never produce duplicates.
+        // contextDimsOf must refuse (return false, leave dims at defaults)
+        // rather than silently coerce via last-write-wins.
+        const MatchExpression dup = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-2")),
+        });
+        QString sid = QStringLiteral("stale");
+        int desk = 4;
+        QString act = QStringLiteral("stale");
+        const bool ok = CRB::contextDimsOf(dup, sid, desk, act);
+        QVERIFY2(!ok, "duplicate ScreenId leaves must be refused, not coerced");
+        QVERIFY(sid.isEmpty());
+        QCOMPARE(desk, 0);
+        QVERIFY(act.isEmpty());
+    }
+
+    void testContextDimsOf_refusesDuplicateActivityLeaf()
+    {
+        // Same refusal for a duplicate Activity leaf — covers all three
+        // context dimensions so the guard is symmetrical, not just ScreenId.
+        const MatchExpression dup = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QStringLiteral("act-a")),
+            MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QStringLiteral("act-b")),
+        });
+        QString sid;
+        int desk = 0;
+        QString act;
+        QVERIFY(!CRB::contextDimsOf(dup, sid, desk, act));
+        QVERIFY(act.isEmpty());
+    }
+
+    void testContextDimsOf_returnTrueOnSuccess()
+    {
+        // The non-duplicate happy path must return true so callers that care
+        // (and any future audit) can rely on the bool contract.
+        const MatchExpression m = CRB::makeContextMatch(QStringLiteral("DP-1"), 2, QString());
+        QString sid;
+        int desk = 0;
+        QString act;
+        QVERIFY(CRB::contextDimsOf(m, sid, desk, act));
     }
 
     // ─── Round-trip: makeDisableRule → disableRuleAutotileMode ────────────

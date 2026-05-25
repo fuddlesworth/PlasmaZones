@@ -102,11 +102,6 @@ public:
     PZ_CONFIG_GROUP(tilingQuickLayoutSlotsGroup, "TilingQuickLayoutSlots")
     PZ_CONFIG_GROUP(windowTrackingGroup, "WindowTracking")
 
-    // Assignment group prefix (used in assignments.json and migration code)
-    PZ_CONFIG_GROUP(assignmentGroupPrefix, "Assignment:")
-    PZ_CONFIG_GROUP(quickLayoutsGroup, "QuickLayouts")
-    PZ_CONFIG_GROUP(modeTrackingGroup, "ModeTracking")
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Window Tracking (session.json, written by WTA)
     //
@@ -201,15 +196,6 @@ public:
     // Snapping.Behavior.Display
     PZ_CONFIG_KEY(showOnAllMonitorsKey, "ShowOnAllMonitors")
     PZ_CONFIG_KEY(filterByAspectRatioKey, "FilterByAspectRatio")
-
-    // Display — per-mode disable lists (v3+). Each pair is independent: disabling
-    // a monitor for snap leaves autotile gates untouched, and vice versa.
-    PZ_CONFIG_KEY(snappingDisabledMonitorsKey, "SnappingDisabledMonitors")
-    PZ_CONFIG_KEY(autotileDisabledMonitorsKey, "AutotileDisabledMonitors")
-    PZ_CONFIG_KEY(snappingDisabledDesktopsKey, "SnappingDisabledDesktops")
-    PZ_CONFIG_KEY(autotileDisabledDesktopsKey, "AutotileDisabledDesktops")
-    PZ_CONFIG_KEY(snappingDisabledActivitiesKey, "SnappingDisabledActivities")
-    PZ_CONFIG_KEY(autotileDisabledActivitiesKey, "AutotileDisabledActivities")
 
     // Snapping.Behavior.WindowHandling
     PZ_CONFIG_KEY(keepOnResolutionChangeKey, "KeepOnResolutionChange")
@@ -584,6 +570,31 @@ public:
     PZ_CONFIG_KEY(v2DisabledMonitorsKey, "DisabledMonitors")
     PZ_CONFIG_KEY(v2DisabledDesktopsKey, "DisabledDesktops")
     PZ_CONFIG_KEY(v2DisabledActivitiesKey, "DisabledActivities")
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // v3 legacy key/group accessors — used ONLY by migration code.
+    //
+    // Per-mode disable keys (`v3*DisabledMonitorsKey` etc.) lived in the v3
+    // Display group; migrateV2ToV3 wrote them there and migrateV3ToV4 reads
+    // and removes them as the values move into windowrules.json. They no
+    // longer exist on disk at runtime (v4+) — Settings::disableEntriesFor /
+    // writeDisableEntries route through the rule store instead.
+    //
+    // Group/prefix accessors (`v3assignmentGroupPrefix`, `v3quickLayoutsGroup`,
+    // `v3modeTrackingGroup`) describe the assignments.json layout migrateV1ToV2
+    // produced and finalizeV4Conversion drains. Runtime no longer touches
+    // these on-disk shapes — LayoutRegistry reads the unified rule store via
+    // m_ruleStore->load().
+    // ───────────────────────────────────────────────────────────────────────────
+    PZ_CONFIG_KEY(v3snappingDisabledMonitorsKey, "SnappingDisabledMonitors")
+    PZ_CONFIG_KEY(v3autotileDisabledMonitorsKey, "AutotileDisabledMonitors")
+    PZ_CONFIG_KEY(v3snappingDisabledDesktopsKey, "SnappingDisabledDesktops")
+    PZ_CONFIG_KEY(v3autotileDisabledDesktopsKey, "AutotileDisabledDesktops")
+    PZ_CONFIG_KEY(v3snappingDisabledActivitiesKey, "SnappingDisabledActivities")
+    PZ_CONFIG_KEY(v3autotileDisabledActivitiesKey, "AutotileDisabledActivities")
+    PZ_CONFIG_GROUP(v3assignmentGroupPrefix, "Assignment:")
+    PZ_CONFIG_GROUP(v3quickLayoutsGroup, "QuickLayouts")
+    PZ_CONFIG_GROUP(v3modeTrackingGroup, "ModeTracking")
 
 private:
     // Non-instantiable

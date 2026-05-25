@@ -179,6 +179,16 @@ inline constexpr QLatin1StringView OverrideAnimationTiming{"overrideAnimationTim
 /// checks the curve slot first.
 inline constexpr QLatin1StringView OverrideAnimationCurve{"overrideAnimationCurve"};
 inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
+
+/// True when @p type is one of the three OverrideAnimation* action wire
+/// strings — shader / timing / curve. The trio shares the same cascade
+/// (animation event resolution + per-window scope) so call-sites repeatedly
+/// need the same three-way OR; this helper keeps the action-type list in one
+/// place so adding a fourth override variant only updates here.
+inline bool isAnimationOverrideAction(const QString& type)
+{
+    return type == OverrideAnimationShader || type == OverrideAnimationTiming || type == OverrideAnimationCurve;
+}
 } // namespace ActionType
 
 // ── Built-in slot ids ──

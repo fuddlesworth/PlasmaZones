@@ -18,6 +18,13 @@ import org.kde.kirigami as Kirigami
  * Same `Kirigami.Dialog` + `WizardStepIndicator` + `WizardFooter` framework
  * as `NewLayoutDialog`/`NewAlgorithmDialog` — wizard primitives live in
  * `Wizard*.qml` and are reused verbatim.
+ *
+ * Close gating mirrors `RuleEditorSheet`: a snapshot of the working rule is
+ * taken when it's first seeded (picker step → editor step), and Cancel /
+ * Esc / outside-click route through `_requestClose()`. The Back button
+ * during step 2 also routes through `_requestBack()` since stepping back to
+ * the picker throws away the staged rule — same destructive UX as cancel,
+ * same prompt.
  */
 Kirigami.Dialog {
     id: root
@@ -37,6 +44,13 @@ Kirigami.Dialog {
     /// `ruleSaved` fires.
     property var _workingRule: ({
     })
+    /// JSON snapshot of the working rule at the moment we entered step 2
+    /// (i.e. immediately after the picker handed us the seeded rule). Used
+    /// by `_requestClose` / `_requestBack` to decide whether to surface the
+    /// discard prompt. Empty string ⇒ no rule has been picked yet
+    /// (currentStep == 0); in that case there is nothing to lose, so the
+    /// close paths bypass the prompt.
+    property string _initialSnapshot: ""
 
     /// Emitted with the final rule JSON when the user clicks Create.
     /// `WindowRulesPage` wires this into `controller.addRuleFromJson`.
@@ -47,20 +61,93 @@ Kirigami.Dialog {
         // template/subject id so a debug log can trace which starting
         // point produced an issue, but we don't gate behaviour on it.
         root._workingRule = ruleJson;
+        // Snapshot at hand-off — every subsequent body edit will diverge
+        // from this, which is exactly when the close-discard prompt should
+        // fire. Re-stringifying the post-clone object matches the same
+        // shape `_requestClose` compares against.
+        root._initialSnapshot = JSON.stringify(ruleJson);
         root.currentStep = 1;
+    }
+
+    /// Close gate: clean working rule (step 1 with nothing picked, or
+    /// step 2 with no body edits) closes immediately; otherwise the shared
+    /// confirm dialog gates the destructive close.
+    function _requestClose() {
+        if (root._isClean()) {
+            root.close();
+            return ;
+        }
+        discardConfirm.open();
+    }
+
+    /// Back gate: stepping from the editor back to the picker drops the
+    /// staged rule (a re-pick rebuilds the working state from scratch), so
+    /// any body edits would be silently lost. Same prompt as cancel — only
+    /// "Discard" actually steps back.
+    function _requestBack() {
+        if (root._isClean()) {
+            root._goBack();
+            return ;
+        }
+        discardBackConfirm.open();
+    }
+
+    function _goBack() {
+        root.currentStep = 0;
+        root._workingRule = ({
+        });
+        root._initialSnapshot = "";
+    }
+
+    function _isClean() {
+        // Step 1 has no working rule to lose. Step 2 is dirty iff the
+        // current working rule diverges from the snapshot we took on entry.
+        if (root.currentStep === 0)
+            return true;
+
+        return JSON.stringify(root._workingRule) === root._initialSnapshot;
     }
 
     title: i18nc("@title:window", "New Window Rule")
     preferredWidth: Math.min(Kirigami.Units.gridUnit * 40, parent ? parent.width * 0.9 : Kirigami.Units.gridUnit * 40)
     standardButtons: Kirigami.Dialog.NoButton
     padding: Kirigami.Units.largeSpacing
+    // `Kirigami.Dialog` defaults to `CloseOnEscape | CloseOnReleaseOutside`;
+    // a stray Esc or click outside the dialog would wipe the staged rule
+    // without a prompt. Disable the auto-close paths so every close routes
+    // through `_requestClose()` (Cancel button, X close button via
+    // `onClosed`, our own Shortcut for Esc).
+    closePolicy: Popup.NoAutoClose
     onOpened: {
         // Reset state on every open so a previously-cancelled wizard doesn't
         // carry stale picker selection / draft rule into the next session.
         root.currentStep = 0;
         root._workingRule = ({
         });
+        root._initialSnapshot = "";
         wizardFooter.errorText = "";
+    }
+
+    Shortcut {
+        sequence: StandardKey.Cancel
+        enabled: root.opened
+        onActivated: root._requestClose()
+    }
+
+    DiscardChangesDialog {
+        id: discardConfirm
+
+        onDiscardConfirmed: root.close()
+    }
+
+    DiscardChangesDialog {
+        id: discardBackConfirm
+
+        // The Back path is functionally a discard-and-restart-from-picker —
+        // same destructive UX as cancel, so the same prompt copy is fine.
+        // The only difference is the post-confirm action: don't close the
+        // wizard, just rewind it to step 1.
+        onDiscardConfirmed: root._goBack()
     }
 
     ColumnLayout {
@@ -135,14 +222,7 @@ Kirigami.Dialog {
         // Step 2's body gates Save on a complete + semantically-clean rule
         // exactly like the edit sheet; the wizard footer reuses that.
         createEnabled: editorBody.canSave
-        onBackClicked: {
-            // Back to picker clears the working rule so a re-pick can't
-            // accidentally merge into half-edited state. Same UX as
-            // restarting from the Add-rule button.
-            root.currentStep = 0;
-            root._workingRule = ({
-            });
-        }
+        onBackClicked: root._requestBack()
         onNextClicked: {
             // Picker auto-advances on tile click; this button is a fallback
             // (e.g. keyboard nav) and should advance only if a starting
@@ -158,7 +238,7 @@ Kirigami.Dialog {
             root.ruleSaved(root._workingRule);
             root.close();
         }
-        onCancelClicked: root.close()
+        onCancelClicked: root._requestClose()
     }
 
 }

@@ -210,6 +210,7 @@ ScrollView {
         ActionListEditor {
             Layout.fillWidth: true
             actions: root.workingRule.actions || []
+            controller: root.controller
             actionTypeOptions: root._actionTypeOptions
             appSettings: root.appSettings
             matchIsContextOnly: root.controller.matchIsContextOnly(root.workingRule.match || root._emptyMatch)

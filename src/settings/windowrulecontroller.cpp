@@ -4,10 +4,13 @@
 #include "windowrulecontroller.h"
 
 #include "dbusutils.h"
+#include "windowruleauthoring.h"
+#include "windowruletemplates.h"
 
 #include "../core/logging.h"
 #include "../pz_i18n.h"
 
+#include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorWindowRule/MatchExpression.h>
 #include <PhosphorWindowRule/MatchTypes.h>
@@ -16,31 +19,32 @@
 
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QTimer>
 
 namespace PlasmaZones {
 
 namespace {
 
 namespace ActionType = PhosphorWindowRule::ActionType;
-using PhosphorWindowRule::Field;
 using PhosphorWindowRule::MatchExpression;
-using PhosphorWindowRule::Operator;
 using PhosphorWindowRule::RuleAction;
 using PhosphorWindowRule::WindowRule;
 using PhosphorWindowRule::WindowRuleSet;
 
-/// Priority bands. Context rules keep the migration's cascade bands;
-/// application/animation rules are list-ordered within their band so the
-/// drag-to-reorder is meaningful.
-constexpr int kContextBandBase = 300;
-constexpr int kApplicationBandBase = 200;
-constexpr int kAnimationBandBase = 100;
-constexpr int kAdvancedBandBase = 500;
+// Priority bands live next to the seeded templates (windowruletemplates.h) so
+// the renormalize logic here shares the exact bands the templates /
+// empty-rule seeds land in — a single source of truth keeps section ordering
+// (Advanced > Monitor > Application > Animation) consistent between newly-
+// authored rules and post-reorder priority stamps.
+using WindowRuleTemplates::kAdvancedBandBase;
+using WindowRuleTemplates::kAnimationBandBase;
+using WindowRuleTemplates::kApplicationBandBase;
+using WindowRuleTemplates::kContextBandBase;
 
 /// Convert a JSON map (QML's QVariantMap) into a WindowRule. Returns a
 /// null-id rule on a malformed map.
@@ -49,167 +53,6 @@ WindowRule ruleFromVariant(const QVariantMap& map)
     const QJsonObject obj = QJsonObject::fromVariantMap(map);
     const auto rule = WindowRule::fromJson(obj);
     return rule.value_or(WindowRule{});
-}
-
-QString operatorLabel(Operator op)
-{
-    switch (op) {
-    case Operator::Equals:
-        return PzI18n::tr("is");
-    case Operator::Contains:
-        return PzI18n::tr("contains");
-    case Operator::StartsWith:
-        return PzI18n::tr("starts with");
-    case Operator::EndsWith:
-        return PzI18n::tr("ends with");
-    case Operator::Regex:
-        return PzI18n::tr("matches regex");
-    case Operator::AppIdMatches:
-        return PzI18n::tr("matches app-id");
-    case Operator::In:
-        return PzI18n::tr("is one of");
-    case Operator::GreaterThan:
-        return PzI18n::tr("greater than");
-    case Operator::LessThan:
-        return PzI18n::tr("less than");
-    }
-    return QString();
-}
-
-/// Build one parameter descriptor for the action editor. @p kind is one of
-/// "string" / "number" / "enum" / "percent"; the optional trailing fields are
-/// kind-specific (see WindowRuleController::actionTypes doc).
-QVariantMap paramDescriptor(QLatin1StringView key, const QString& kind, const QString& label)
-{
-    QVariantMap p;
-    p[QStringLiteral("key")] = QString::fromLatin1(key);
-    p[QStringLiteral("kind")] = kind;
-    p[QStringLiteral("label")] = label;
-    return p;
-}
-
-/// Enum-option list for the snapping/autotile engine-mode pickers. Shared by
-/// `SetEngineMode` and `DisableEngine`: both pick from the same lowercase
-/// wire tokens but show properly-cased UI labels.
-QVariantList engineModeOptions()
-{
-    QVariantList options;
-    QVariantMap snap;
-    snap[QStringLiteral("value")] = QStringLiteral("snapping");
-    snap[QStringLiteral("label")] = PzI18n::tr("Snapping");
-    options.append(snap);
-    QVariantMap tile;
-    tile[QStringLiteral("value")] = QStringLiteral("autotile");
-    tile[QStringLiteral("label")] = PzI18n::tr("Autotile");
-    options.append(tile);
-    return options;
-}
-
-/// The parameter schema for @p type — the editor `Loader` is driven entirely
-/// off this, so the per-type `if (t === "...")` ladder lives in C++ only.
-QVariantList paramsForActionType(QLatin1StringView type)
-{
-    QVariantList params;
-    if (type == ActionType::SetEngineMode) {
-        QVariantMap p = paramDescriptor(QLatin1String("mode"), QStringLiteral("enum"), PzI18n::tr("Engine mode"));
-        p[QStringLiteral("options")] = engineModeOptions();
-        params.append(p);
-    } else if (type == ActionType::SetSnappingLayout) {
-        // `snappingLayout` is the picker-aware kind the QML editor recognises;
-        // it swaps in a ComboBox over `settingsController.layouts` so the
-        // user picks "Grid (2x2)" instead of pasting "{25828c9b-…}".
-        params.append(paramDescriptor(QLatin1String("layoutId"), QStringLiteral("snappingLayout"),
-                                      PzI18n::tr("Snapping layout")));
-    } else if (type == ActionType::SetTilingAlgorithm) {
-        // Tiling algorithms are still string tokens (`bsp`, `grid`, …) — the
-        // editor offers a ComboBox over the catalogue but stores the token
-        // verbatim.
-        params.append(paramDescriptor(QLatin1String("algorithm"), QStringLiteral("tilingAlgorithm"),
-                                      PzI18n::tr("Tiling algorithm")));
-    } else if (type == ActionType::DisableEngine) {
-        // Validator requires `mode` ∈ {snapping, autotile}; without a picker
-        // the user couldn't author the action. Same enum shape as
-        // SetEngineMode.
-        QVariantMap p = paramDescriptor(QLatin1String("mode"), QStringLiteral("enum"), PzI18n::tr("Engine to disable"));
-        p[QStringLiteral("options")] = engineModeOptions();
-        params.append(p);
-    } else if (type == ActionType::SetOpacity) {
-        // The wire value is a 0.0–1.0 fraction; the editor shows a 0–100
-        // percentage, so the stored value is `display * scale`.
-        QVariantMap p =
-            paramDescriptor(QLatin1String("value"), QStringLiteral("percent"), PzI18n::tr("Opacity percentage"));
-        p[QStringLiteral("min")] = 0;
-        p[QStringLiteral("max")] = 100;
-        p[QStringLiteral("scale")] = 0.01;
-        params.append(p);
-    } else if (type == ActionType::OverrideAnimationShader) {
-        // Wire keys must match PhosphorWindowRule::ActionRegistry's
-        // OverrideAnimationShader descriptor (`event`, `effectId`, `params`).
-        // `params` is a free-form shader-uniform object — not authorable
-        // through a flat key/kind descriptor, so it is intentionally omitted;
-        // a shader-uniform editor would graduate the rule to Advanced.
-        //
-        // `animationEvent` / `shaderEffect` are picker-aware kinds the QML
-        // editor recognises — they swap ComboBoxes driven by
-        // `AnimationsPageController::eventSections()` and
-        // `availableShaderEffects()` in place of the freeform string field.
-        params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("animationEvent"), PzI18n::tr("Event")));
-        params.append(
-            paramDescriptor(QLatin1String("effectId"), QStringLiteral("shaderEffect"), PzI18n::tr("Shader effect")));
-    } else if (type == ActionType::OverrideAnimationTiming) {
-        // Duration-only override. Curve lives in `OverrideAnimationCurve`
-        // (separate slot) so the user can override curve and duration
-        // independently per event. The descriptor still allows `curve` for
-        // back-compat with legacy rules; the editor doesn't expose it here.
-        params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("animationEvent"), PzI18n::tr("Event")));
-        QVariantMap p =
-            paramDescriptor(QLatin1String("durationMs"), QStringLiteral("number"), PzI18n::tr("Duration (ms)"));
-        p[QStringLiteral("min")] = 0;
-        p[QStringLiteral("max")] = 60000;
-        params.append(p);
-    } else if (type == ActionType::OverrideAnimationCurve) {
-        // Curve-only override. `OverrideAnimationDuration` lives under
-        // `OverrideAnimationTiming` (kept as the duration-only override).
-        params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("animationEvent"), PzI18n::tr("Event")));
-        params.append(paramDescriptor(QLatin1String("curve"), QStringLiteral("curveEditor"), PzI18n::tr("Curve")));
-    }
-    // float / disableEngine / exclude carry no parameters — empty list.
-    return params;
-}
-
-QString actionTypeLabel(QLatin1StringView type)
-{
-    if (type == ActionType::SetEngineMode) {
-        return PzI18n::tr("Set engine mode");
-    }
-    if (type == ActionType::SetSnappingLayout) {
-        return PzI18n::tr("Set snapping layout");
-    }
-    if (type == ActionType::SetTilingAlgorithm) {
-        return PzI18n::tr("Set tiling algorithm");
-    }
-    if (type == ActionType::DisableEngine) {
-        return PzI18n::tr("Disable engine");
-    }
-    if (type == ActionType::Exclude) {
-        return PzI18n::tr("Exclude window");
-    }
-    if (type == ActionType::Float) {
-        return PzI18n::tr("Float window");
-    }
-    if (type == ActionType::OverrideAnimationShader) {
-        return PzI18n::tr("Override animation shader");
-    }
-    if (type == ActionType::OverrideAnimationTiming) {
-        return PzI18n::tr("Override animation duration");
-    }
-    if (type == ActionType::OverrideAnimationCurve) {
-        return PzI18n::tr("Override animation curve");
-    }
-    if (type == ActionType::SetOpacity) {
-        return PzI18n::tr("Set opacity");
-    }
-    return WindowRuleModel::actionTypeFallbackLabel(QString::fromLatin1(type));
 }
 
 } // namespace
@@ -235,11 +78,11 @@ WindowRuleController::WindowRuleController(QObject* parent)
         qCWarning(lcConfig) << "WindowRuleController: failed to subscribe to org.plasmazones.WindowRules.rulesChanged "
                                "— page will not refresh on daemon-side writes";
     }
-    // Defer the initial fetch to the next event-loop tick. fetchFromDaemon()
-    // issues a synchronous blocking QDBusConnection::call() (up to ~500 ms on
-    // a timeout); running it inline in the constructor would stall settings-app
-    // startup whenever the daemon is slow or absent.
-    QTimer::singleShot(0, this, &WindowRuleController::reload);
+    // Kick off the initial fetch immediately — the call is asynchronous
+    // (QDBusPendingCallWatcher), so the constructor returns without
+    // blocking and the settings page can finish loading. The reply
+    // handler repopulates the model on the next event-loop turn.
+    reload();
 }
 
 WindowRuleController::~WindowRuleController()
@@ -301,28 +144,6 @@ void WindowRuleController::setDaemonChangedWhileDirty(bool changed)
     Q_EMIT daemonChangedWhileDirtyChanged();
 }
 
-std::optional<WindowRuleSet> WindowRuleController::fetchFromDaemon()
-{
-    const QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::WindowRules),
-                                                      QStringLiteral("getAllRules"));
-    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-        setDaemonReachable(false);
-        return std::nullopt;
-    }
-    setDaemonReachable(true);
-    const QString json = reply.arguments().constFirst().toString();
-    if (json.isEmpty()) {
-        // Daemon answered but has no store — treat as an empty set.
-        return WindowRuleSet{};
-    }
-    QJsonParseError err;
-    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &err);
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        return WindowRuleSet{};
-    }
-    return WindowRuleSet::fromJson(doc.object()).value_or(WindowRuleSet{});
-}
-
 bool WindowRuleController::pushToDaemon(const QList<WindowRule>& rules)
 {
     WindowRuleSet set;
@@ -350,20 +171,46 @@ bool WindowRuleController::pushToDaemon(const QList<WindowRule>& rules)
     return !reply.arguments().isEmpty() && reply.arguments().constFirst().toBool();
 }
 
-bool WindowRuleController::fetchAndLoad()
+void WindowRuleController::fetchAndLoad()
 {
-    const auto fetched = fetchFromDaemon();
-    if (!fetched) {
-        // Daemon unreachable — there is nothing authoritative to load. Leave
-        // the model and the dirty bit untouched and report failure so the
-        // caller does not pretend a reload happened. fetchFromDaemon() has
-        // already cleared `daemonReachable`.
-        return false;
-    }
-    m_model.setRules(fetched->rules());
-    setDirty(false);
-    setDaemonChangedWhileDirty(false);
-    return true;
+    // Asynchronous `getAllRules` — the reply handler repopulates the model.
+    // Bound to `this` for parent, so a controller teardown before the reply
+    // arrives cancels the watcher cleanly (no dangling lambda).
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(QString(PhosphorProtocol::Service::Interface::WindowRules),
+                                                   QStringLiteral("getAllRules")),
+        this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QString> reply = *w;
+        if (reply.isError()) {
+            // Daemon unreachable or method missing — leave the model and the
+            // dirty bit untouched so a staged-but-unsavable edit isn't silently
+            // dropped. `daemonReachable` flips so the page can surface the
+            // warning banner.
+            qCWarning(lcConfig) << "WindowRuleController::fetchAndLoad: getAllRules failed —"
+                                << reply.error().message();
+            setDaemonReachable(false);
+            return;
+        }
+        setDaemonReachable(true);
+        const QString json = reply.value();
+        WindowRuleSet set;
+        if (!json.isEmpty()) {
+            QJsonParseError err;
+            const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &err);
+            if (err.error == QJsonParseError::NoError && doc.isObject()) {
+                set = WindowRuleSet::fromJson(doc.object()).value_or(WindowRuleSet{});
+            }
+            // Malformed JSON — daemon answered but with a corrupt store. Fall
+            // through to the empty set so the page paints rather than holding
+            // stale rules; the daemon log will carry the parse error.
+        }
+        m_model.setRules(set.rules());
+        setDirty(false);
+        setDaemonChangedWhileDirty(false);
+        Q_EMIT rulesLoaded();
+    });
 }
 
 void WindowRuleController::reload()
@@ -407,14 +254,14 @@ bool WindowRuleController::commit(bool force)
     return true;
 }
 
-bool WindowRuleController::revert()
+void WindowRuleController::revert()
 {
     // Discard staged edits by re-fetching the daemon's authoritative set —
-    // bypass reload()'s dirty guard. fetchAndLoad() only clears the dirty bit
-    // if the daemon was reachable; a failed re-fetch keeps the page dirty
-    // (and `daemonReachable` false) rather than silently dropping the staged
-    // edits while telling the user the revert succeeded.
-    return fetchAndLoad();
+    // bypass reload()'s dirty guard. fetchAndLoad() is async; the reply
+    // handler clears the dirty bit only on success. A failed re-fetch keeps
+    // the page dirty (and `daemonReachable` false) rather than silently
+    // dropping the staged edits.
+    fetchAndLoad();
 }
 
 void WindowRuleController::renormalizePriorities()
@@ -476,122 +323,17 @@ void WindowRuleController::renormalizePriorities()
 
 QVariantMap WindowRuleController::newEmptyRule(const QString& subject) const
 {
-    WindowRule rule;
-    rule.id = QUuid::createUuid();
-    rule.enabled = true;
-
-    if (subject == QLatin1String("monitor")) {
-        rule.name = PzI18n::tr("New monitor rule");
-        rule.priority = kContextBandBase;
-        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
-    } else if (subject == QLatin1String("desktop")) {
-        rule.name = PzI18n::tr("New desktop rule");
-        rule.priority = kContextBandBase;
-        // VirtualDesktop is numeric; seed with 1 (typical first desktop).
-        // Validator rejects 0 because 0 means "all desktops" and is the same
-        // as having no predicate at all.
-        rule.match = MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 1);
-    } else if (subject == QLatin1String("application")) {
-        rule.name = PzI18n::tr("New application rule");
-        rule.priority = kApplicationBandBase;
-        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
-    } else if (subject == QLatin1String("activity")) {
-        rule.name = PzI18n::tr("New activity rule");
-        rule.priority = kContextBandBase;
-        rule.match = MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QString());
-    } else if (subject == QLatin1String("animation")) {
-        rule.name = PzI18n::tr("New animation rule");
-        rule.priority = kAnimationBandBase;
-        // Animation overrides typically apply globally — the action carries
-        // the event scope (see `anim-shader:`/`anim-timing:`/`anim-curve:`
-        // slot prefixes). Start with an always-true match so the user goes
-        // straight to picking event + override in the action editor.
-        rule.match = MatchExpression{};
-    } else {
-        // "custom" — start from the always-true catch-all so the user builds
-        // the tree from scratch in the Advanced editor.
-        rule.name = PzI18n::tr("New custom rule");
-        rule.priority = kAdvancedBandBase;
-        rule.match = MatchExpression{};
-    }
-    return rule.toJson().toVariantMap();
+    return WindowRuleTemplates::newEmptyRule(subject);
 }
 
 QVariantList WindowRuleController::ruleTemplates() const
 {
-    auto entry = [](QLatin1StringView id, const QString& label, const QString& description, QLatin1StringView icon) {
-        QVariantMap m;
-        m[QStringLiteral("id")] = QString::fromLatin1(id);
-        m[QStringLiteral("label")] = label;
-        m[QStringLiteral("description")] = description;
-        m[QStringLiteral("icon")] = QString::fromLatin1(icon);
-        return m;
-    };
-
-    // Templates mirror the flows the per-settings pages used to author
-    // before the unified rule store: monitor → layout / algorithm
-    // (assignments) and app → exclusion (per-mode disable + animation
-    // exclusion lists). That's where the bulk of real-world rules live, so
-    // these three give one-click starting points for the common cases.
-    QVariantList out;
-    out.append(entry(QLatin1String("layoutOnMonitor"), PzI18n::tr("Set a layout on a monitor"),
-                     PzI18n::tr("Pick a snapping layout to use on one monitor."), QLatin1String("view-grid")));
-    out.append(entry(QLatin1String("algorithmOnMonitor"), PzI18n::tr("Set a tiling algorithm on a monitor"),
-                     PzI18n::tr("Pick an autotile algorithm to use on one monitor."), QLatin1String("view-list-tree")));
-    out.append(entry(QLatin1String("excludeApp"), PzI18n::tr("Exclude an app from tiling"),
-                     PzI18n::tr("Keep one application's windows out of the snap and autotile engines entirely."),
-                     QLatin1String("edit-delete-remove")));
-    return out;
+    return WindowRuleTemplates::ruleTemplates();
 }
 
 QVariantMap WindowRuleController::newRuleFromTemplate(const QString& templateId) const
 {
-    WindowRule rule;
-    rule.id = QUuid::createUuid();
-    rule.enabled = true;
-
-    if (templateId == QLatin1String("layoutOnMonitor")) {
-        rule.name = PzI18n::tr("Snapping layout on monitor");
-        rule.priority = kContextBandBase;
-        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
-        // Two seeded actions — set engine mode AND pick the layout — so the
-        // editor opens with the same shape the old MonitorStatePage
-        // assignment flow produced. The user fills in the screen and layout
-        // pickers; the engine-mode is pre-set to "snapping" because the
-        // template's whole point is the snap layout.
-        RuleAction engineMode;
-        engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
-        engineMode.params.insert(QStringLiteral("mode"), QStringLiteral("snapping"));
-        rule.actions.append(engineMode);
-        RuleAction layoutAction;
-        layoutAction.type = QString::fromLatin1(ActionType::SetSnappingLayout);
-        layoutAction.params.insert(QStringLiteral("layoutId"), QString());
-        rule.actions.append(layoutAction);
-    } else if (templateId == QLatin1String("algorithmOnMonitor")) {
-        rule.name = PzI18n::tr("Tiling algorithm on monitor");
-        rule.priority = kContextBandBase;
-        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
-        // Mirror of the layout template, but for the autotile engine + an
-        // algorithm picker. Same rationale: this is the assignment flow.
-        RuleAction engineMode;
-        engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
-        engineMode.params.insert(QStringLiteral("mode"), QStringLiteral("autotile"));
-        rule.actions.append(engineMode);
-        RuleAction algoAction;
-        algoAction.type = QString::fromLatin1(ActionType::SetTilingAlgorithm);
-        algoAction.params.insert(QStringLiteral("algorithm"), QString());
-        rule.actions.append(algoAction);
-    } else if (templateId == QLatin1String("excludeApp")) {
-        rule.name = PzI18n::tr("Exclude an app from tiling");
-        rule.priority = kApplicationBandBase;
-        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
-        RuleAction action;
-        action.type = QString::fromLatin1(ActionType::Exclude);
-        rule.actions.append(action);
-    } else {
-        return {};
-    }
-    return rule.toJson().toVariantMap();
+    return WindowRuleTemplates::newRuleFromTemplate(templateId);
 }
 
 QString WindowRuleController::addRuleFromJson(const QVariantMap& ruleJson)
@@ -889,124 +631,22 @@ QStringList WindowRuleController::ruleScreenIds(const QString& ruleId) const
 
 QVariantList WindowRuleController::matchFields() const
 {
-    // Pid and WindowRole are intentionally omitted from the picker —
-    // both are footguns in a persistent rule store:
-    //   * Pid is ephemeral. A `Pid equals 12345` predicate matches one
-    //     specific process instance and is dead the moment that process
-    //     restarts. Surfacing it in the picker invites users to author
-    //     rules that silently stop working.
-    //   * WindowRole is the X11 WM_WINDOW_ROLE property, empty for every
-    //     Wayland-native window — PlasmaZones is Wayland-only (per
-    //     CLAUDE.md), so the picker would always read as blank.
-    // The Field enum keeps both values for back-compat with already-saved
-    // rules; only the authoring UI hides them.
-    static const QList<Field> kFields = {
-        Field::AppId,       Field::WindowClass, Field::DesktopFile,    Field::Title,
-        Field::WindowType,  Field::IsSticky,    Field::IsFullscreen,   Field::IsMinimized,
-        Field::IsMaximized, Field::ScreenId,    Field::VirtualDesktop, Field::Activity,
-    };
-    QVariantList out;
-    for (Field f : kFields) {
-        QVariantMap entry;
-        entry[QStringLiteral("value")] = static_cast<int>(f);
-        // The JSON wire string for this field — QML keys off this rather than
-        // reconstructing the enum↔string table itself.
-        entry[QStringLiteral("wire")] = PhosphorWindowRule::fieldToString(f);
-        entry[QStringLiteral("label")] = WindowRuleModel::fieldLabel(f);
-        QString kind = QStringLiteral("string");
-        if (PhosphorWindowRule::fieldIsNumeric(f) || f == Field::WindowType) {
-            kind = QStringLiteral("number");
-        } else if (PhosphorWindowRule::fieldIsBool(f)) {
-            kind = QStringLiteral("bool");
-        } else if (f == Field::ScreenId) {
-            // QML editor swaps this for a screen-picker ComboBox driven by
-            // `settingsController.screens`, so the user sees "LG Ultra HD" not
-            // "LG Electronics:LG Ultra HD:115107/vs:0".
-            kind = QStringLiteral("screen");
-        } else if (f == Field::Activity) {
-            // QML editor swaps this for an activity-picker ComboBox driven by
-            // `settingsController.activities`, so the user sees the activity
-            // name not its UUID.
-            kind = QStringLiteral("activity");
-        }
-        entry[QStringLiteral("valueKind")] = kind;
-        out.append(entry);
-    }
-    return out;
+    return WindowRuleAuthoring::matchFields();
 }
 
 QVariantList WindowRuleController::operatorsForField(int fieldValue) const
 {
-    const Field field = static_cast<Field>(fieldValue);
-    QList<Operator> ops;
-    if (PhosphorWindowRule::fieldIsString(field)) {
-        ops = {Operator::Equals, Operator::Contains, Operator::StartsWith, Operator::EndsWith, Operator::Regex};
-        if (field == Field::AppId) {
-            ops.append(Operator::AppIdMatches);
-        }
-        if (field == Field::ScreenId || field == Field::Activity) {
-            ops.append(Operator::In);
-        }
-    } else if (PhosphorWindowRule::fieldIsNumeric(field)) {
-        ops = {Operator::Equals, Operator::GreaterThan, Operator::LessThan};
-        if (field == Field::VirtualDesktop) {
-            ops.append(Operator::In);
-        }
-    } else if (PhosphorWindowRule::fieldIsBool(field) || field == Field::WindowType) {
-        ops = {Operator::Equals};
-        if (field == Field::WindowType) {
-            ops.append(Operator::In);
-        }
-    }
-    QVariantList out;
-    for (Operator op : ops) {
-        QVariantMap entry;
-        entry[QStringLiteral("value")] = static_cast<int>(op);
-        // The JSON wire string for this operator — same contract as matchFields.
-        entry[QStringLiteral("wire")] = PhosphorWindowRule::operatorToString(op);
-        entry[QStringLiteral("label")] = operatorLabel(op);
-        out.append(entry);
-    }
-    return out;
+    return WindowRuleAuthoring::operatorsForField(fieldValue);
 }
 
 QVariantList WindowRuleController::actionTypes() const
 {
-    // SetOpacity is registered as an action type (and validated) but no
-    // consumer ever reads its slot — KWin per-window opacity is achievable
-    // via `EffectWindow::setOpacity`, but the plumbing was never wired up.
-    // Exposing it here would let users create rules that silently never
-    // fire. Reinstate when the effect-side handler lands.
-    static const QList<QLatin1StringView> kTypes = {
-        ActionType::SetEngineMode,
-        ActionType::SetSnappingLayout,
-        ActionType::SetTilingAlgorithm,
-        ActionType::DisableEngine,
-        ActionType::Exclude,
-        ActionType::Float,
-        ActionType::OverrideAnimationShader,
-        ActionType::OverrideAnimationCurve,
-        ActionType::OverrideAnimationTiming,
-    };
-    QVariantList out;
-    for (QLatin1StringView type : kTypes) {
-        QVariantMap entry;
-        entry[QStringLiteral("value")] = QString::fromLatin1(type);
-        entry[QStringLiteral("label")] = actionTypeLabel(type);
-        entry[QStringLiteral("params")] = paramsForActionType(type);
-        // Domain wire string drives the picker's compatibility flag — the
-        // QML side disables a context-domain action type when the current
-        // match references window-property fields (the silently-never-fires
-        // combination). Looked up via a probe RuleAction so the descriptor's
-        // own `domain` field stays the single source of truth.
-        RuleAction probe;
-        probe.type = QString::fromLatin1(type);
-        const auto domain = PhosphorWindowRule::ActionRegistry::instance().domainFor(probe);
-        entry[QStringLiteral("domain")] =
-            domain == PhosphorWindowRule::ActionDomain::Context ? QStringLiteral("context") : QStringLiteral("window");
-        out.append(entry);
-    }
-    return out;
+    return WindowRuleAuthoring::actionTypes();
+}
+
+QVariantMap WindowRuleController::defaultPayloadFor(const QString& typeWire) const
+{
+    return WindowRuleAuthoring::defaultPayloadFor(typeWire);
 }
 
 QVariantList WindowRuleController::validationIssuesForJson(const QVariantMap& ruleJson) const

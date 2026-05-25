@@ -51,6 +51,15 @@ set(plasmazones_settings_SRCS
     windowrulemodel.cpp
     windowrulecontroller.h
     windowrulecontroller.cpp
+    # WindowRuleController authoring metadata + templates — pure read-only
+    # helpers split out so windowrulecontroller.cpp stays under the project's
+    # 800-line cap. The controller's Q_INVOKABLE entry points (matchFields,
+    # operatorsForField, actionTypes, newEmptyRule, ruleTemplates,
+    # newRuleFromTemplate) delegate here.
+    windowruleauthoring.h
+    windowruleauthoring.cpp
+    windowruletemplates.h
+    windowruletemplates.cpp
     # QAbstractItemModel adapter that exposes a rule's match expression
     # to QtQuick.Controls.TreeView for read-only preview. Registered as a
     # QML type via the qt_add_qml_module call below.
@@ -117,6 +126,13 @@ qt_add_qml_module(plasmazones-settings
         # the macro and emits the type in plasmazones-settings.qmltypes.
         matchexpressiontreemodel.h
         matchexpressiontreemodel.cpp
+        # WindowRuleModel — exposed as `WindowRuleModel` (uncreatable) so
+        # QML can reference its `Section` enum (e.g.
+        # `WindowRuleModel.Animation`) and `Roles` enum (e.g.
+        # `WindowRuleModel.SectionRole`) without QML hardcoding the
+        # integer values.
+        windowrulemodel.h
+        windowrulemodel.cpp
     QML_FILES
         qml/Main.qml
         qml/GeneralPage.qml
@@ -146,6 +162,7 @@ qt_add_qml_module(plasmazones-settings
         qml/RuleEditorBody.qml
         qml/RuleEditorStatusBar.qml
         qml/AddRuleWizard.qml
+        qml/DiscardChangesDialog.qml
         qml/RuleStartPicker.qml
         qml/RuleStartTile.qml
         qml/MatchExpressionEditor.qml

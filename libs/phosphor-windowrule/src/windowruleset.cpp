@@ -101,13 +101,16 @@ int WindowRuleSet::setRules(const QList<WindowRule>& rules)
         seenIds.insert(rule.id);
         validated.append(rule);
     }
-    // An identical list is not a mutation — skip the revision bump so the
-    // RuleEvaluator's (windowId, revision) cache survives a no-op rewrite.
-    if (validated == m_rules) {
-        return m_rules.size();
-    }
+    // Always assign + bump. A no-op-skip optimisation here is unsafe: the
+    // round-trip addRule(X) → setRules(originalList) can produce a
+    // post-validation candidate that equals the prior in-memory list, yet
+    // downstream consumers keyed on `revision()` (RuleEvaluator's match cache,
+    // any external cascade-cache) would see no bump and continue serving stale
+    // results. The validation pass already dedupes and rejects bad inputs —
+    // the skip wasn't load-bearing, only premature.
     m_rules = std::move(validated);
     ++m_revision;
+    qCInfo(lcWindowRule) << "setRules: replaced rule list — count:" << m_rules.size() << "revision:" << m_revision;
     return m_rules.size();
 }
 
