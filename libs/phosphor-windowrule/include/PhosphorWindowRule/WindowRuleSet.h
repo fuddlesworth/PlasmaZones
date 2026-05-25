@@ -72,10 +72,12 @@ public:
     bool removeRule(const QUuid& id);
 
     /// Replace the entire ordered rule list. Invalid rules are dropped with a
-    /// logged diagnostic. A list equal to the current set (after dropping
-    /// invalid rules) is a no-op and does not bump the revision — so the
-    /// RuleEvaluator's `(windowId, revision)` cache survives a no-op rewrite.
-    /// Returns the accepted count.
+    /// logged diagnostic. Bumps the revision on every call, even if the
+    /// post-validation list is structurally identical to the current set —
+    /// downstream consumers keyed on revision must rebuild on every set.
+    /// The cache-invalidation pessimization is intentional; the round-trip
+    /// `addRule(X)` → `setRules(originalList)` would otherwise let a stale
+    /// cache survive a real edit. Returns the accepted count.
     int setRules(const QList<WindowRule>& rules);
 
     /// Drop every rule. Bumps the revision.
@@ -99,6 +101,9 @@ public:
     /// (temp-file + rename). Returns false on any I/O failure.
     bool saveToFile(const QString& path) const;
 
+    /// Equality compares the rule LIST only; @ref revision is intentionally
+    /// ignored so the store's no-op fast path can suppress redundant emits
+    /// when content matches even though revisions have diverged.
     bool operator==(const WindowRuleSet& other) const
     {
         return m_rules == other.m_rules;

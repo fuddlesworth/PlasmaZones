@@ -312,6 +312,7 @@ pz_add_test(test_layout_zones core/test_layout_zones.cpp)
 pz_add_test(test_layoutmanager_persistence core/test_layoutmanager_persistence.cpp)
 pz_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
 pz_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
+pz_add_test(test_layout_registry_cache core/test_layout_registry_cache.cpp)
 
 # Regression guard for the in-process dual-WindowRuleStore data-loss race
 # where Settings used to construct its own store pointed at the same file

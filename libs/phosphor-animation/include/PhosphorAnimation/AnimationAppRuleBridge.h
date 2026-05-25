@@ -5,6 +5,7 @@
 
 #include <PhosphorAnimation/AnimationAppRule.h>
 
+#include <PhosphorWindowRule/IdentityKey.h>
 #include <PhosphorWindowRule/MatchExpression.h>
 #include <PhosphorWindowRule/MatchTypes.h>
 #include <PhosphorWindowRule/RuleAction.h>
@@ -94,14 +95,9 @@ inline const QUuid& namespaceUuid()
     return ns;
 }
 
-/// Length-prefix a segment so concatenated identity keys are unambiguous: a
-/// `classPattern` / `eventPath` may itself contain a `|`, so a plain
-/// `|`-joined key could collide for two distinct tuples. `"<len>:<segment>"`
-/// makes every tuple's encoding unique.
-inline QString encodeSegment(const QString& segment)
-{
-    return QString::number(segment.size()) + QLatin1Char(':') + segment;
-}
+/// Length-prefix a segment so concatenated identity keys are unambiguous —
+/// re-exported from the shared @c PhosphorWindowRule/IdentityKey.h.
+using PhosphorWindowRule::Detail::encodeSegment;
 
 /// Stable per-rule key for the v5-UUID derivation. Segments are length-prefixed
 /// so no two distinct (classPattern, eventPath, kind) tuples can collide.

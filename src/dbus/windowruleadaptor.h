@@ -74,8 +74,10 @@ public Q_SLOTS:
     bool setRulePriority(const QString& ruleId, int priority);
 
 Q_SIGNALS:
-    /// Emitted whenever the store's rule set changes.
-    void rulesChanged();
+    /// Emitted whenever the store's rule set changes. @p persisted forwards
+    /// the upstream contract: true means the change is on disk, false means
+    /// the in-memory mutation succeeded but the persist did not.
+    void rulesChanged(bool persisted);
 
 private:
     PhosphorWindowRule::WindowRuleStore* m_store;

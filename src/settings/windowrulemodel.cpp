@@ -129,20 +129,52 @@ bool matchIsSimpleConjunction(const MatchExpression& match)
 QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleModel::LabelLookup& screenLookup,
                   const WindowRuleModel::LabelLookup& activityLookup)
 {
-    const QString raw = predicate.value.toString();
-    QString resolved = raw;
-    if (predicate.field == Field::ScreenId && screenLookup) {
-        const QString label = screenLookup(raw);
-        if (!label.isEmpty()) {
-            resolved = label;
-        }
-    } else if (predicate.field == Field::Activity && activityLookup) {
-        const QString label = activityLookup(raw);
-        if (!label.isEmpty()) {
-            resolved = label;
-        }
+    // Pick the lookup matching the leaf's field. An empty lookup degenerates
+    // to identity so this stays usable from code paths that have not yet
+    // wired the SettingsController-backed resolvers.
+    const WindowRuleModel::LabelLookup* lookup = nullptr;
+    if (predicate.field == Field::ScreenId) {
+        lookup = &screenLookup;
+    } else if (predicate.field == Field::Activity) {
+        lookup = &activityLookup;
     }
-    return PzI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field), resolved);
+    const auto resolveOne = [lookup](const QString& raw) {
+        if (!lookup || !*lookup) {
+            return raw;
+        }
+        const QString label = (*lookup)(raw);
+        return label.isEmpty() ? raw : label;
+    };
+
+    // An `In` operator stores the candidate set as a QVariantList or
+    // QStringList. `toString()` on either of those returns the empty string,
+    // so without this fan-out a rule like "ScreenId In [DP-2, DP-3]" would
+    // render as "Monitor: " with nothing after the colon. Mirror the dual-
+    // shape handling pattern the collectScreenIds helper uses.
+    if (predicate.op == Operator::In) {
+        QStringList resolved;
+        const QVariant& v = predicate.value;
+        if (v.canConvert<QStringList>()) {
+            const QStringList list = v.toStringList();
+            resolved.reserve(list.size());
+            for (const QString& raw : list) {
+                resolved.append(resolveOne(raw));
+            }
+        } else if (v.canConvert<QVariantList>()) {
+            const QVariantList list = v.toList();
+            resolved.reserve(list.size());
+            for (const QVariant& item : list) {
+                resolved.append(resolveOne(item.toString()));
+            }
+        }
+        // QStringList::join keeps the rendered list short; falling back to
+        // a single space-joined line matches how the daemon logs the same set.
+        return PzI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field),
+                                        resolved.join(QStringLiteral(", ")));
+    }
+
+    return PzI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field),
+                                    resolveOne(predicate.value.toString()));
 }
 
 /// Human label for one action ("Snapping", "Float", "Excluded"). @p
@@ -390,17 +422,24 @@ void WindowRuleModel::setPriorities(const QList<int>& priorities)
     if (priorities.size() != m_rules.size() || m_rules.isEmpty()) {
         return;
     }
-    bool anyChanged = false;
+    // Compute the narrowest [firstChanged..lastChanged] range that covers
+    // every actually-modified row, then emit one dataChanged over that range.
+    // A no-op call (no priorities differ) skips the emit entirely.
+    int firstChanged = -1;
+    int lastChanged = -1;
     for (int i = 0; i < m_rules.size(); ++i) {
         if (m_rules[i].priority != priorities.at(i)) {
             m_rules[i].priority = priorities.at(i);
-            anyChanged = true;
+            if (firstChanged < 0) {
+                firstChanged = i;
+            }
+            lastChanged = i;
         }
     }
-    if (!anyChanged) {
+    if (firstChanged < 0) {
         return;
     }
-    Q_EMIT dataChanged(index(0, 0), index(m_rules.size() - 1, 0), {PriorityRole});
+    Q_EMIT dataChanged(index(firstChanged, 0), index(lastChanged, 0), {PriorityRole});
 }
 
 WindowRuleModel::Section WindowRuleModel::sectionFor(const WindowRule& rule)
@@ -581,16 +620,6 @@ void WindowRuleModel::refreshLabels()
     Q_EMIT dataChanged(top, bottom, {NameRole, MatchSummaryRole, ActionSummaryRole});
 }
 
-QString WindowRuleModel::autoStampedContextName(const QString& screenId, int virtualDesktop, const QString& activity)
-{
-    // Mirror `PhosphorZones::RuleHelpers::contextRuleName` — the formula lives
-    // in the rule-helpers lib but its private header isn't reachable from the
-    // settings tree, so the formatting is duplicated here. Both formulae stay
-    // in sync by convention (and a unit test would catch a drift).
-    return screenId + (virtualDesktop > 0 ? QStringLiteral(" · Desktop ") + QString::number(virtualDesktop) : QString())
-        + (activity.isEmpty() ? QString() : QStringLiteral(" · Activity"));
-}
-
 QString WindowRuleModel::displayName(const PhosphorWindowRule::WindowRule& rule) const
 {
     // A rule whose stored name matches the auto-stamped form is treated as
@@ -604,7 +633,7 @@ QString WindowRuleModel::displayName(const PhosphorWindowRule::WindowRule& rule)
     int virtualDesktop = 0;
     QString activity;
     PhosphorWindowRule::ContextRuleBridge::contextDimsOf(rule.match, screenId, virtualDesktop, activity);
-    if (rule.name == autoStampedContextName(screenId, virtualDesktop, activity)) {
+    if (rule.name == PhosphorWindowRule::ContextRuleBridge::contextRuleName(screenId, virtualDesktop, activity)) {
         return QString();
     }
     return rule.name;

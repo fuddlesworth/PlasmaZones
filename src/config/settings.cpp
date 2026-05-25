@@ -1250,6 +1250,11 @@ PZ_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showO
 
 namespace {
 
+// Disable-axis enum mirrors the persisted (axis, mode) family layout. Distinct
+// from `ContextRuleBridge::ContextAxis` only because the bridge enum also
+// carries `CatchAll` and `Combined` — the disable list classifies a tuple as
+// Activity-axis whether or not it also pins a desktop (mirroring the historic
+// per-activity disable family), so we project the bridge axis through here.
 enum class DisableAxis {
     Monitor,
     Desktop,
@@ -1262,19 +1267,27 @@ bool isAutotileMode(PhosphorZones::AssignmentEntry::Mode mode)
 }
 
 // Classify a context rule's pinned-dimension shape into a disable axis.
-// Returns nullopt for a catch-all or a shape that pins no screen.
+// Returns nullopt for a catch-all or a shape that pins no screen — those are
+// not valid disable rules. Delegates to the bridge so the cascade-axis
+// formula lives in one place.
 std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, const QString& activity)
 {
-    if (screenId.isEmpty()) {
+    namespace CRB = PhosphorWindowRule::ContextRuleBridge;
+    switch (CRB::contextAxisOf(screenId, virtualDesktop, activity)) {
+    case CRB::ContextAxis::Monitor:
+        return DisableAxis::Monitor;
+    case CRB::ContextAxis::Desktop:
+        return DisableAxis::Desktop;
+    case CRB::ContextAxis::Activity:
+    case CRB::ContextAxis::Combined:
+        // A combined (screen+desktop+activity) tuple is treated as
+        // Activity-axis for disable-list purposes — mirrors the legacy
+        // classifier which only checked the activity dimension.
+        return DisableAxis::Activity;
+    case CRB::ContextAxis::CatchAll:
         return std::nullopt;
     }
-    if (!activity.isEmpty()) {
-        return DisableAxis::Activity;
-    }
-    if (virtualDesktop > 0) {
-        return DisableAxis::Desktop;
-    }
-    return DisableAxis::Monitor;
+    return std::nullopt;
 }
 
 } // namespace

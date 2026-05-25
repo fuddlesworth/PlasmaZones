@@ -75,6 +75,7 @@ set(phosphorwindowrule_public_HDRS
     # transitive PhosphorAnimation dep on this library's Config.cmake.in).
     include/PhosphorWindowRule/ContextRuleBridge.h
     include/PhosphorWindowRule/ExclusionListBridge.h
+    include/PhosphorWindowRule/IdentityKey.h
 )
 
 set(phosphorwindowrule_SRCS

@@ -39,7 +39,7 @@ Rectangle {
     readonly property int _ruleCount: (tile.tileData !== undefined && tile.tileData.ruleCount !== undefined ? Number(tile.tileData.ruleCount) : 0) || 0
     readonly property bool _isPrimary: tile.screenData.isPrimary === true
 
-    signal clicked
+    signal clicked()
 
     implicitWidth: content.implicitWidth + Kirigami.Units.largeSpacing * 2
     implicitHeight: content.implicitHeight + Kirigami.Units.largeSpacing
@@ -47,7 +47,12 @@ Rectangle {
     color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
     border.width: Math.round(Kirigami.Units.devicePixelRatio)
     border.color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : tileMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-    Accessible.role: Accessible.RadioButton
+    // CheckBox role rather than RadioButton — radio buttons imply that
+    // exactly one option is selected and that clicking the active item is
+    // a no-op, but this tile supports click-to-clear (deselection) so a
+    // checkable-button affordance is the correct semantics for screen
+    // readers ("checked" / "unchecked" toggles per tile).
+    Accessible.role: Accessible.CheckBox
     Accessible.name: i18n("Filter rules to monitor %1", monitorLabel.text)
     Accessible.checked: tile.selected
 
@@ -103,6 +108,7 @@ Rectangle {
                 color: Kirigami.Theme.positiveTextColor
                 opacity: tile._isPrimary ? 1 : 0
             }
+
         }
 
         // Rule-count / assignment caption — small, secondary line beneath the
@@ -141,7 +147,9 @@ Rectangle {
                     return countLabel;
                 }
             }
+
         }
+
     }
 
     MouseArea {
@@ -161,6 +169,7 @@ Rectangle {
             profile: "widget.hover"
             durationOverride: Kirigami.Units.shortDuration
         }
+
     }
 
     Behavior on border.color {
@@ -168,5 +177,7 @@ Rectangle {
             profile: "widget.hover"
             durationOverride: Kirigami.Units.shortDuration
         }
+
     }
+
 }

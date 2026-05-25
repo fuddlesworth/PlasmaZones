@@ -13,6 +13,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <algorithm>
 
@@ -189,7 +190,9 @@ void LayoutRegistry::saveLayout(PhosphorZones::Layout* layout)
     }
 
     const QString filePath = layoutFilePath(layout->id());
-    QFile file(filePath);
+    // QSaveFile gives atomic temp-write + rename — a crash mid-write never
+    // leaves a truncated layout file on disk.
+    QSaveFile file(filePath);
 
     if (!file.open(QIODevice::WriteOnly)) {
         qCWarning(lcZonesLib) << "Failed to open layout file for writing:" << filePath
@@ -203,11 +206,12 @@ void LayoutRegistry::saveLayout(PhosphorZones::Layout* layout)
 
     if (file.write(data) != data.size()) {
         qCWarning(lcZonesLib) << "Failed to write layout file:" << filePath << "Error:" << file.errorString();
+        file.cancelWriting();
         return;
     }
 
-    if (!file.flush()) {
-        qCWarning(lcZonesLib) << "Failed to flush layout file:" << filePath << "Error:" << file.errorString();
+    if (!file.commit()) {
+        qCWarning(lcZonesLib) << "Failed to commit layout file:" << filePath << "Error:" << file.errorString();
         return;
     }
 
@@ -264,12 +268,23 @@ void LayoutRegistry::writeQuickLayouts()
     for (auto it = m_quickLayoutShortcuts.constBegin(); it != m_quickLayoutShortcuts.constEnd(); ++it) {
         obj.insert(QString::number(it.key()), it.value());
     }
-    QFile file(quickLayoutsFilePath());
+    // QSaveFile gives atomic temp-write + rename — a crash mid-write never
+    // leaves a truncated quicklayouts.json behind.
+    QSaveFile file(quickLayoutsFilePath());
     if (!file.open(QIODevice::WriteOnly)) {
         qCWarning(lcZonesLib) << "Failed to save quick layouts:" << file.errorString();
         return;
     }
-    file.write(QJsonDocument(obj).toJson());
+    const QByteArray payload = QJsonDocument(obj).toJson();
+    if (file.write(payload) != payload.size()) {
+        qCWarning(lcZonesLib) << "Failed to write quick layouts:" << file.errorString();
+        file.cancelWriting();
+        return;
+    }
+    if (!file.commit()) {
+        qCWarning(lcZonesLib) << "Failed to commit quick layouts:" << file.errorString();
+        return;
+    }
     qCInfo(lcZonesLib) << "Saved quickShortcuts=" << m_quickLayoutShortcuts.size();
 }
 

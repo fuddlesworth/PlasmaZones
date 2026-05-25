@@ -90,6 +90,18 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     if (winner != nullptr) {
         result = entryFromRuleMatchActions(*winner);
     }
+    // Soft cap. The header claims the cache is bounded by live
+    // (screens × desktops × activities) — order-of-1000 in the worst case —
+    // but a pathological client poking unique non-existent tuples could grow
+    // it unbounded. 256 is comfortably above any realistic live footprint and
+    // far below any heap-pressure concern; on overflow drop the whole cache
+    // rather than evicting one key, which keeps the data-structure simple
+    // and the next walk seeds it cleanly. The walk itself stays O(N), so the
+    // miss cost is bounded.
+    constexpr qsizetype kMaxEntries = 256;
+    if (m_contextResolveCache.size() >= kMaxEntries) {
+        m_contextResolveCache.clear();
+    }
     m_contextResolveCache.insert(key, result);
     return result;
 }
@@ -101,13 +113,28 @@ bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDes
 const PhosphorWindowRule::WindowRule* LayoutRegistry::findExactContextRule(const QString& screenId, int virtualDesktop,
                                                                            const QString& activity) const
 {
+    // The deterministic v5 derivation lets us look up a stored assignment by
+    // its identity tuple — the bridge guarantees identical tuples produce
+    // identical ids. We scan the rule list once for the id (the linear walk
+    // is unavoidable here because callers need a stable in-set pointer, not
+    // the value-copy `ruleById` returns), then guard with
+    // hasEngineModeAction + matchIsExactContext so a hand-edited match that
+    // no longer satisfies the canonical context shape can never be returned
+    // even if its id happens to match the deterministic derivation.
+    //
+    // The win over the previous implementation is the predicate cost: the
+    // old scan called matchIsExactContext on EVERY rule's match expression;
+    // this scan compares ids first and only evaluates the context-shape
+    // predicate on the unique candidate.
+    const QUuid candidateId = PWR::ContextRuleBridge::assignmentRuleIdFor(screenId, virtualDesktop, activity);
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (!hasEngineModeAction(rule)) {
+        if (rule.id != candidateId) {
             continue;
         }
-        if (matchIsExactContext(rule.match, screenId, virtualDesktop, activity)) {
-            return &rule;
+        if (!hasEngineModeAction(rule) || !matchIsExactContext(rule.match, screenId, virtualDesktop, activity)) {
+            return nullptr;
         }
+        return &rule;
     }
     return nullptr;
 }

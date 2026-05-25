@@ -285,38 +285,51 @@ void WindowRuleController::renormalizePriorities()
     const QList<WindowRule>& rules = m_model.rules();
     const int n = rules.size();
     QList<int> priorities;
-    priorities.reserve(n);
+    priorities.resize(n);
     // Bands are spaced 100 apart (Animation=100, Application=200,
-    // Context=300, Advanced=500). Without a per-band offset cap, a band
-    // with >100 rules would have its later entries spill upward into the
-    // next band — e.g. application rule #101 would get priority 200+100 =
-    // 300, colliding with the Context band's base. Clamp the per-rule
-    // offset so it stays strictly inside the 99-slot window owned by
-    // each band; ties at the high end keep list order via the model's
-    // stable sort (insertion order is preserved by `setPriorities`).
+    // Context=300, Advanced=500). The per-rule offset is BAND-LOCAL — each
+    // band re-starts the offset countdown from the band-width cap (99) and
+    // decrements as later entries within the same band are encountered. This
+    // gives a contiguous "earlier list index ⇒ higher priority within the
+    // band" property: the global `i` would only do that if every band were
+    // dense, but with sparse bands (one Animation rule near the bottom of
+    // the list) the global index dropped the bottom rule below other rules
+    // in its own band. Bands run independent counters.
+    //
+    // Each band's offset starts at `kBandWidth - 1` and decrements; capped
+    // at 0 so a band with >100 rules ties at the floor (list order is
+    // preserved by setPriorities's stable application).
     constexpr int kBandWidth = 100;
-    for (int i = 0; i < n; ++i) {
-        int base = kAnimationBandBase;
-        switch (WindowRuleModel::sectionFor(rules.at(i))) {
+    const auto baseFor = [](const WindowRule& rule) {
+        switch (WindowRuleModel::sectionFor(rule)) {
         case WindowRuleModel::Section::Advanced:
-            base = kAdvancedBandBase;
-            break;
+            return kAdvancedBandBase;
         case WindowRuleModel::Section::Monitor:
         case WindowRuleModel::Section::Activity:
-            base = kContextBandBase;
-            break;
+            return kContextBandBase;
         case WindowRuleModel::Section::Application:
-            base = kApplicationBandBase;
-            break;
+            return kApplicationBandBase;
         case WindowRuleModel::Section::Animation:
-            base = kAnimationBandBase;
-            break;
+            return kAnimationBandBase;
         }
-        // Earlier list index ⇒ slightly higher priority within the band,
-        // capped at `kBandWidth - 1` so we never spill into the next
-        // band's range.
-        const int offset = qMin(n - i, kBandWidth - 1);
-        priorities.append(base + offset);
+        return kAnimationBandBase;
+    };
+
+    // Per-band offset counter — base address → next available offset. Each
+    // band seeds at `kBandWidth - 1` on first encounter and decrements as
+    // later entries within the same band are stamped. Sentinel `-1` means
+    // "not yet seeded"; this disambiguates from the value-initialised 0
+    // that `operator[]` on QHash would otherwise produce.
+    QHash<int, int> nextOffset;
+    for (int i = 0; i < n; ++i) {
+        const int base = baseFor(rules.at(i));
+        auto it = nextOffset.find(base);
+        if (it == nextOffset.end()) {
+            it = nextOffset.insert(base, kBandWidth - 1);
+        }
+        const int offset = qMax(0, it.value());
+        it.value() = offset - 1;
+        priorities[i] = base + offset;
     }
     m_model.setPriorities(priorities);
 }
@@ -424,13 +437,22 @@ QString WindowRuleController::duplicateRule(const QString& ruleId)
     m_model.moveRule(clone.id, source.id);
     // moveRule "before source" puts the clone immediately ABOVE the source.
     // Shift it once more to the next slot below the source — find the rule
-    // that currently follows source and move the clone before that.
+    // that currently follows source and move the clone before that. If the
+    // source was the LAST rule in the list, there is no rule after it; move
+    // the clone to the end of the list instead (an empty beforeId means
+    // "send to end"), otherwise the off-by-one leaves order [..., clone,
+    // source] instead of the intended [..., source, clone].
     const auto& rules = m_model.rules();
     for (int i = 0; i < rules.size(); ++i) {
-        if (rules.at(i).id == source.id && i + 1 < rules.size()) {
-            const QUuid afterSource = rules.at(i + 1).id;
-            if (afterSource != clone.id) {
-                m_model.moveRule(clone.id, afterSource);
+        if (rules.at(i).id == source.id) {
+            if (i + 1 < rules.size()) {
+                const QUuid afterSource = rules.at(i + 1).id;
+                if (afterSource != clone.id) {
+                    m_model.moveRule(clone.id, afterSource);
+                }
+            } else {
+                // Source is the last rule — push clone to the end.
+                m_model.moveRule(clone.id, QUuid());
             }
             break;
         }

@@ -24,11 +24,15 @@
  * those belong to higher-level GPL targets.
  */
 
+#include "ContextRuleBridge.h"
+#include "ExclusionListBridge.h"
+#include "IdentityKey.h"
 #include "MatchExpression.h"
 #include "MatchTypes.h"
 #include "RuleAction.h"
 #include "RuleEvaluator.h"
 #include "WindowQuery.h"
 #include "WindowRule.h"
+#include "WindowRuleLogging.h"
 #include "WindowRuleSet.h"
 #include "WindowRuleStore.h"

@@ -30,7 +30,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Config schema bumped v3 → v4.** On first launch after upgrade, `~/.config/plasmazones/assignments.json` is automatically converted into `~/.config/plasmazones/windowrules.json`, and the legacy `Display.SnappingDisabled*` / `Display.AutotileDisabled*` keys in `config.json` are folded into the same rule set. The migration is lossless and runs without user interaction.
 - **Backout**: the source file is renamed `assignments.json.migrated` (not deleted), so a downgrade can restore the previous schema by manually renaming it back and starting an older daemon.
-- **Recovery**: if migration aborts because the source is malformed, the original file is preserved as `~/.config/plasmazones/assignments.json.corrupt.bak` and no destructive action is taken. The daemon then starts with an empty rule set so the user can re-create rules from the new page.
+- **Recovery**: if migration aborts because the source is malformed, the original file is renamed to `~/.config/plasmazones/assignments.json.corrupt.bak`, the schema version stays at v3, and `windowrules.json` is not created — the daemon does not silently flush the old assignments to an empty rule set. The user can inspect / repair the quarantined file and rename it back to `assignments.json`; the next launch then retries the v3→v4 conversion.
 
 ## [3.0.10] - 2026-05-23
 

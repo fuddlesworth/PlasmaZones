@@ -34,11 +34,18 @@ void LayoutRegistry::initCommon()
     // relative path without traversal segments. An absolute path would
     // ignore the XDG root entirely; ".." would escape the user-writable
     // area. Reject both — this is a developer error (composition-root
-    // configuration), not user input, so assertion is the right signal.
-    Q_ASSERT_X(!m_layoutSubdirectory.startsWith(QLatin1Char('/')), "LayoutRegistry",
-               "layoutSubdirectory must be a relative XDG path, not absolute");
-    Q_ASSERT_X(!m_layoutSubdirectory.contains(QLatin1String("..")), "LayoutRegistry",
-               "layoutSubdirectory must not contain '..' traversal");
+    // configuration), not user input, so a fatal is the right signal:
+    // Q_ASSERT compiles out in release, but a bad subdirectory would silently
+    // proceed to QStandardPaths concatenation and produce a non-existent
+    // (absolute) or escaping (..) directory in EVERY build that ships.
+    if (m_layoutSubdirectory.startsWith(QLatin1Char('/'))) {
+        qFatal("LayoutRegistry: layoutSubdirectory must be a relative XDG path, not absolute: %s",
+               qPrintable(m_layoutSubdirectory));
+    }
+    if (m_layoutSubdirectory.contains(QLatin1String(".."))) {
+        qFatal("LayoutRegistry: layoutSubdirectory must not contain '..' traversal: %s",
+               qPrintable(m_layoutSubdirectory));
+    }
 
     m_layoutDirectory =
         QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + m_layoutSubdirectory;

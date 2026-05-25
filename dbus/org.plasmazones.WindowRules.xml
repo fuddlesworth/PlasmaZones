@@ -72,6 +72,9 @@
         </method>
         <signal name="rulesChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted whenever the store's rule set changes (add, update, remove, enable, priority, or full replace)."/>
+            <arg name="persisted" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True when the in-memory change was successfully written to disk. False signals an in-memory mutation whose persist failed — consumers can branch on this to differentiate 'saved' from 'edited but divergent from disk'."/>
+            </arg>
         </signal>
     </interface>
 </node>

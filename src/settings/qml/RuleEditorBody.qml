@@ -59,7 +59,14 @@ ScrollView {
     readonly property bool canSave: root.workingRule.actions !== undefined && root.workingRule.actions.length > 0 && root._matchHasFilledLeaves(root.workingRule.match) && root.validationIssues.length === 0
 
     function _patch(key, value) {
-        var next = JSON.parse(JSON.stringify(root.workingRule));
+        // Shallow clone via Object.assign — we replace `key`'s value
+        // wholesale on the next line, and the QML binding system already
+        // treats `root.workingRule = next` as a structural change for any
+        // observer keyed on the property. A deep clone (JSON.parse +
+        // JSON.stringify) would be O(rule-size) on every text-field edit;
+        // shallow is O(top-level-keys) and equivalent for this use case.
+        var next = Object.assign({
+        }, root.workingRule);
         next[key] = value;
         root.workingRule = next;
     }

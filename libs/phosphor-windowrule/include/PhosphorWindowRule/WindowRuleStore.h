@@ -135,7 +135,14 @@ public:
 
 Q_SIGNALS:
     /// Emitted whenever the in-memory rule set changes (load or any mutator).
-    void rulesChanged();
+    ///
+    /// @p persisted reports whether the change was written to disk
+    /// successfully. @c true is the normal case (and is always true for a
+    /// load — the disk is the source). @c false signals "in-memory state
+    /// changed but the persist failed" — consumers that need to differentiate
+    /// "user saved" from "user edited but the rule store is now divergent
+    /// from disk" can branch on this flag.
+    void rulesChanged(bool persisted);
 
 private:
     QString m_filePath;

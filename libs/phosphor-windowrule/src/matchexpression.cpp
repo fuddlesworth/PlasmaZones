@@ -198,6 +198,27 @@ bool MatchExpression::isValid() const
             return false;
         }
     }
+    // A numeric field's value must be an integer. JSON's only numeric type is
+    // double, so an authored `"value": 12.7` would otherwise be silently
+    // truncated by `subject.toInt()` to 12 — a Pid 12.7 leaf would match pid
+    // 12. Reject the leaf rather than accepting a value the user almost
+    // certainly did not intend. Skips Operator::In (the list-of-values
+    // shape is dimensional — element-wise enforcement would belong here as
+    // a future tightening but is out of scope for the current numeric
+    // tolerance fix).
+    if (fieldIsNumeric(field) && op != Operator::In) {
+        const int valueTypeId = m_predicate.value.metaType().id();
+        if (valueTypeId == QMetaType::Double) {
+            const double d = m_predicate.value.toDouble();
+            // A bit-for-bit integer-valued double is fine (JSON has no int);
+            // only a genuine fractional part is the authoring mistake.
+            if (d != static_cast<double>(static_cast<qint64>(d))) {
+                qCWarning(lcWindowRule) << "MatchExpression: rejecting numeric leaf with fractional value" << d
+                                        << "— numeric fields require integer values.";
+                return false;
+            }
+        }
+    }
     return true;
 }
 

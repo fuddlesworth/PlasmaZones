@@ -190,16 +190,24 @@ public:
     /// Inject the screen-id → display-label resolver used when rendering
     /// `ScreenId` leaf predicates. The settings layer wires this from
     /// `SettingsController::screens()` so the model never reaches into the UI.
-    /// Setting a lookup re-emits `dataChanged` so existing rows re-render.
+    /// Install-once setter; lookups are read live every time `data()` is
+    /// invoked. To refresh visible labels after a lookup-source change,
+    /// call @ref refreshLabels.
     void setScreenLabelLookup(LabelLookup fn);
 
     /// Inject the activity-uuid → activity-name resolver used when rendering
     /// `Activity` leaf predicates (and when stripping auto-stamped rule names).
+    /// Install-once setter; lookups are read live every time `data()` is
+    /// invoked. To refresh visible labels after a lookup-source change,
+    /// call @ref refreshLabels.
     void setActivityLabelLookup(LabelLookup fn);
 
     /// Inject the layoutId / algorithm-token → display-name resolver used by
     /// the action summary so `SetSnappingLayout` and `SetTilingAlgorithm`
     /// render "Binary Split" rather than the wire token / UUID.
+    /// Install-once setter; lookups are read live every time `data()` is
+    /// invoked. To refresh visible labels after a lookup-source change,
+    /// call @ref refreshLabels.
     void setLayoutLabelLookup(LabelLookup fn);
 
     /// Re-emit dataChanged for every row across every label-derived role,
@@ -236,15 +244,6 @@ private:
     QString actionSummary(const QList<PhosphorWindowRule::RuleAction>& actions) const;
     /// Total leaf-predicate count in a match tree.
     static int conditionCount(const PhosphorWindowRule::MatchExpression& match);
-    /// The auto-stamped name `LayoutRegistry::upsertAssignmentRule` and the v1
-    /// → context-rule migration historically wrote for context-only rules —
-    /// `<screenId> · Desktop N · Activity`. The display layer treats stored
-    /// names matching this verbatim as "auto" and falls back to the resolved
-    /// match summary so the user never sees raw screen connector strings or
-    /// activity UUIDs as the rule's title. Reproduces the formula from
-    /// `PhosphorZones::RuleHelpers::contextRuleName` rather than depending on
-    /// the private header.
-    static QString autoStampedContextName(const QString& screenId, int virtualDesktop, const QString& activity);
     QList<PhosphorWindowRule::WindowRule> m_rules;
     LabelLookup m_screenLookup;
     LabelLookup m_activityLookup;

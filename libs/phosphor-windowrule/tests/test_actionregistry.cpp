@@ -139,19 +139,26 @@ private Q_SLOTS:
     void testRegisterCustomAction()
     {
         ActionRegistry& reg = ActionRegistry::instance();
-        const QString customType = QStringLiteral("pwrTestCustomAction");
+        // `_zz_` prefix so the type-id sorts to the end if anyone iterates
+        // `registeredTypes()` in lexicographic order, and the underscore-led
+        // name visually separates it from the production wire identifiers.
+        // The singleton has no unregisterAction — see the file-level comment
+        // for the pollution rationale.
+        const QString customType = QStringLiteral("_zz_pwrTestCustomAction");
         QVERIFY(!reg.isRegistered(customType));
 
-        reg.registerAction(ActionDescriptor{customType,
-                                            [](const QJsonObject&) {
-                                                return QStringLiteral("custom-slot");
-                                            },
-                                            [](const QJsonObject&) {
-                                                return true;
-                                            },
-                                            false});
+        reg.registerAction(ActionDescriptor{.type = customType,
+                                            .slotFor =
+                                                [](const QJsonObject&) {
+                                                    return QStringLiteral("custom-slot");
+                                                },
+                                            .validate =
+                                                [](const QJsonObject&) {
+                                                    return true;
+                                                },
+                                            .terminal = false});
         QVERIFY(reg.isRegistered(customType));
-        QCOMPARE(reg.slotFor(makeAction(QLatin1StringView("pwrTestCustomAction"))), QStringLiteral("custom-slot"));
+        QCOMPARE(reg.slotFor(makeAction(QLatin1StringView("_zz_pwrTestCustomAction"))), QStringLiteral("custom-slot"));
     }
 
     void testValidateRejectsUnregistered()

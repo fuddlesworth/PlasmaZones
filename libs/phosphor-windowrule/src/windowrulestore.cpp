@@ -61,7 +61,9 @@ void WindowRuleStore::load()
         return;
     }
     m_ruleSet = std::move(candidate);
-    Q_EMIT rulesChanged();
+    // Load reflects the on-disk state — the in-memory set is by definition
+    // already "persisted" from this side, so the flag is unconditionally true.
+    Q_EMIT rulesChanged(/*persisted=*/true);
 }
 
 bool WindowRuleStore::save()
@@ -88,7 +90,7 @@ bool WindowRuleStore::setAllRules(const QList<WindowRule>& rules)
     }
     m_ruleSet = std::move(candidate);
     const bool persisted = save();
-    Q_EMIT rulesChanged();
+    Q_EMIT rulesChanged(persisted);
     return persisted;
 }
 
@@ -98,7 +100,7 @@ bool WindowRuleStore::addRule(const WindowRule& rule)
         return false;
     }
     const bool persisted = save();
-    Q_EMIT rulesChanged();
+    Q_EMIT rulesChanged(persisted);
     return persisted;
 }
 
@@ -108,7 +110,7 @@ bool WindowRuleStore::updateRule(const WindowRule& rule)
         return false;
     }
     const bool persisted = save();
-    Q_EMIT rulesChanged();
+    Q_EMIT rulesChanged(persisted);
     return persisted;
 }
 
@@ -118,7 +120,7 @@ bool WindowRuleStore::removeRule(const QUuid& id)
         return false;
     }
     const bool persisted = save();
-    Q_EMIT rulesChanged();
+    Q_EMIT rulesChanged(persisted);
     return persisted;
 }
 
@@ -138,7 +140,7 @@ bool WindowRuleStore::setRuleEnabled(const QUuid& id, bool enabled)
         return false;
     }
     const bool persisted = save();
-    Q_EMIT rulesChanged();
+    Q_EMIT rulesChanged(persisted);
     return persisted;
 }
 
@@ -157,7 +159,7 @@ bool WindowRuleStore::setRulePriority(const QUuid& id, int priority)
         return false;
     }
     const bool persisted = save();
-    Q_EMIT rulesChanged();
+    Q_EMIT rulesChanged(persisted);
     return persisted;
 }
 

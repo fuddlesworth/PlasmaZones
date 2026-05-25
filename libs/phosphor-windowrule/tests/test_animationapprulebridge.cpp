@@ -74,7 +74,8 @@ private Q_SLOTS:
     void testShaderRule_buildsWindowClassMatchAndShaderAction()
     {
         AnimationAppRuleList list;
-        list.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
+        QVERIFY(list.append(
+            shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
         const WindowRuleSet set = AnimationAppRuleBridge::toRuleSet(list);
         QCOMPARE(set.count(), 1);
 
@@ -92,8 +93,8 @@ private Q_SLOTS:
     void testTimingRule_buildsTimingAction()
     {
         AnimationAppRuleList list;
-        list.append(timingRule(QStringLiteral("konsole"), QStringLiteral("window.close"),
-                               QStringLiteral("0.25,0.1,0.25,1"), 320));
+        QVERIFY(list.append(timingRule(QStringLiteral("konsole"), QStringLiteral("window.close"),
+                                       QStringLiteral("0.25,0.1,0.25,1"), 320)));
         const WindowRuleSet set = AnimationAppRuleBridge::toRuleSet(list);
         QCOMPARE(set.count(), 1);
 
@@ -110,7 +111,7 @@ private Q_SLOTS:
     void testTimingRule_zeroDurationOmitsKey()
     {
         AnimationAppRuleList list;
-        list.append(timingRule(QStringLiteral("konsole"), QStringLiteral("window.close"), QString(), 0));
+        QVERIFY(list.append(timingRule(QStringLiteral("konsole"), QStringLiteral("window.close"), QString(), 0)));
         const WindowRuleSet set = AnimationAppRuleBridge::toRuleSet(list);
         QCOMPARE(set.count(), 1);
         // durationMs <= 0 is the "inherit" sentinel — the key is omitted.
@@ -126,7 +127,7 @@ private Q_SLOTS:
         AnimationAppRuleList list;
         // Non-zero duration with an empty curve — isolates the curve gate from
         // the duration gate. The duration key is written; the curve key is not.
-        list.append(timingRule(QStringLiteral("konsole"), QStringLiteral("window.close"), QString(), 300));
+        QVERIFY(list.append(timingRule(QStringLiteral("konsole"), QStringLiteral("window.close"), QString(), 300)));
         const WindowRuleSet set = AnimationAppRuleBridge::toRuleSet(list);
         QCOMPARE(set.count(), 1);
         const QJsonObject& params = set.rules().first().actions.first().params;
@@ -170,8 +171,9 @@ private Q_SLOTS:
     void testShaderAndTimingForSameEvent_fillDistinctSlots()
     {
         AnimationAppRuleList list;
-        list.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
-        list.append(timingRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QString(), 400));
+        QVERIFY(list.append(
+            shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
+        QVERIFY(list.append(timingRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QString(), 400)));
         const WindowRuleSet set = AnimationAppRuleBridge::toRuleSet(list);
         RuleEvaluator eval(set);
 
@@ -183,8 +185,10 @@ private Q_SLOTS:
     void testDifferentEvents_doNotCollide()
     {
         AnimationAppRuleList list;
-        list.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
-        list.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.close"), QStringLiteral("shrink")));
+        QVERIFY(list.append(
+            shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
+        QVERIFY(list.append(
+            shaderRule(QStringLiteral("firefox"), QStringLiteral("window.close"), QStringLiteral("shrink"))));
         const WindowRuleSet set = AnimationAppRuleBridge::toRuleSet(list);
         RuleEvaluator eval(set);
 
@@ -201,8 +205,10 @@ private Q_SLOTS:
     {
         AnimationAppRuleList list;
         // Both target firefox + window.open shader axis — first entry wins.
-        list.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("first")));
-        list.append(shaderRule(QStringLiteral("fire"), QStringLiteral("window.open"), QStringLiteral("second")));
+        QVERIFY(
+            list.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("first"))));
+        QVERIFY(
+            list.append(shaderRule(QStringLiteral("fire"), QStringLiteral("window.open"), QStringLiteral("second"))));
         const WindowRuleSet set = AnimationAppRuleBridge::toRuleSet(list);
         RuleEvaluator eval(set);
 
@@ -217,7 +223,7 @@ private Q_SLOTS:
     {
         AnimationAppRuleList list;
         // Empty effectId = "block the per-event default" sentinel.
-        list.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QString()));
+        QVERIFY(list.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QString())));
         const WindowRuleSet set = AnimationAppRuleBridge::toRuleSet(list);
         RuleEvaluator eval(set);
 
@@ -233,7 +239,8 @@ private Q_SLOTS:
     void testNoMatch_leavesSlotUnfilled()
     {
         AnimationAppRuleList list;
-        list.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
+        QVERIFY(list.append(
+            shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
         const WindowRuleSet set = AnimationAppRuleBridge::toRuleSet(list);
         RuleEvaluator eval(set);
 
@@ -246,7 +253,8 @@ private Q_SLOTS:
     void testHasAnyMatch_eventAgnostic()
     {
         AnimationAppRuleList list;
-        list.append(shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
+        QVERIFY(list.append(
+            shaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve"))));
         const WindowRuleSet set = AnimationAppRuleBridge::toRuleSet(list);
         RuleEvaluator eval(set);
 

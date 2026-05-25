@@ -27,8 +27,10 @@ PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, c
 
 QString contextRuleName(const QString& screenId, int virtualDesktop, const QString& activity)
 {
-    return screenId + (virtualDesktop > 0 ? QStringLiteral(" · Desktop ") + QString::number(virtualDesktop) : QString())
-        + (activity.isEmpty() ? QString() : QStringLiteral(" · Activity"));
+    // Single formula lives in ContextRuleBridge — this private helper stays as
+    // a thin forwarder so callers inside phosphor-zones don't need to reach
+    // into the windowrule namespace directly.
+    return CRB::contextRuleName(screenId, virtualDesktop, activity);
 }
 
 ContextDims decodeDims(const PWR::MatchExpression& match)
@@ -41,11 +43,9 @@ ContextDims decodeDims(const PWR::MatchExpression& match)
 bool matchIsExactContext(const PWR::MatchExpression& match, const QString& screenId, int virtualDesktop,
                          const QString& activity)
 {
-    if (!match.isContextOnly()) {
-        return false;
-    }
-    const ContextDims dims = decodeDims(match);
-    return dims.screenId == screenId && dims.virtualDesktop == virtualDesktop && dims.activity == activity;
+    // Delegate to the public bridge so there's exactly one implementation
+    // of the context-shape predicate across the codebase.
+    return CRB::matchIsExactContext(match, screenId, virtualDesktop, activity);
 }
 
 bool hasEngineModeAction(const PWR::WindowRule& rule)
@@ -60,29 +60,17 @@ bool hasEngineModeAction(const PWR::WindowRule& rule)
 
 bool matchIsExactContextBase(const PWR::MatchExpression& match)
 {
-    if (!match.isContextOnly()) {
-        return false;
-    }
-    const ContextDims dims = decodeDims(match);
-    return !dims.screenId.isEmpty() && dims.virtualDesktop == 0 && dims.activity.isEmpty();
+    return CRB::matchIsExactContextBase(match);
 }
 
 bool matchIsExactContextDesktop(const PWR::MatchExpression& match)
 {
-    if (!match.isContextOnly()) {
-        return false;
-    }
-    const ContextDims dims = decodeDims(match);
-    return !dims.screenId.isEmpty() && dims.virtualDesktop > 0 && dims.activity.isEmpty();
+    return CRB::matchIsExactContextDesktop(match);
 }
 
 bool matchIsExactContextActivity(const PWR::MatchExpression& match)
 {
-    if (!match.isContextOnly()) {
-        return false;
-    }
-    const ContextDims dims = decodeDims(match);
-    return !dims.screenId.isEmpty() && !dims.activity.isEmpty();
+    return CRB::matchIsExactContextActivity(match);
 }
 
 bool isContextAssignmentRule(const PWR::WindowRule& rule)

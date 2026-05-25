@@ -13,6 +13,7 @@
 
 #include <QFile>
 #include <QJsonDocument>
+#include <QSaveFile>
 
 namespace PhosphorZones {
 
@@ -35,12 +36,22 @@ QJsonObject LayoutRegistry::loadAllAutotileOverrides() const
 void LayoutRegistry::saveAllAutotileOverrides(const QJsonObject& all)
 {
     ensureLayoutDirectory();
-    QFile file(m_layoutDirectory + kAutotileOverridesFile);
+    // QSaveFile gives atomic temp-write + rename — a crash mid-write never
+    // leaves a truncated autotile-overrides.json behind.
+    QSaveFile file(m_layoutDirectory + kAutotileOverridesFile);
     if (!file.open(QIODevice::WriteOnly)) {
         qCWarning(lcZonesLib) << "Failed to save autotile overrides:" << file.errorString();
         return;
     }
-    file.write(QJsonDocument(all).toJson());
+    const QByteArray payload = QJsonDocument(all).toJson();
+    if (file.write(payload) != payload.size()) {
+        qCWarning(lcZonesLib) << "Failed to write autotile overrides:" << file.errorString();
+        file.cancelWriting();
+        return;
+    }
+    if (!file.commit()) {
+        qCWarning(lcZonesLib) << "Failed to commit autotile overrides:" << file.errorString();
+    }
 }
 
 QJsonObject LayoutRegistry::loadAutotileOverrides(const QString& algorithmId) const

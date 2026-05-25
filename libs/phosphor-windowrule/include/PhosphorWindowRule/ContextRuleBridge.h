@@ -11,6 +11,7 @@
 
 #include <optional>
 
+#include "IdentityKey.h"
 #include "MatchExpression.h"
 #include "MatchTypes.h"
 #include "RuleAction.h"
@@ -71,6 +72,65 @@ inline constexpr int kScreenWeight = 10;
 /// pinned context rule.
 inline constexpr int kProviderDefaultPriority = 0;
 
+/**
+ * @brief The cascade axis a context tuple resolves to.
+ *
+ * The four shapes the context bridge produces — `Combined` is the
+ * `screen + desktop + activity` exact pin, `Activity` is `screen + activity`,
+ * `Desktop` is `screen + desktop`, `Monitor` is `screen-only`. A catch-all or
+ * a tuple with an empty `screenId` returns @c CatchAll and is not a pinned
+ * axis. Callers that need to compare rule families (per-mode disable lists,
+ * the per-screen / per-desktop / per-activity batch setters) discriminate on
+ * this enum so the formula lives in one place.
+ */
+enum class ContextAxis {
+    CatchAll, ///< empty `screenId` — the provider-default catch-all.
+    Monitor, ///< screen only.
+    Desktop, ///< screen + desktop.
+    Activity, ///< screen + activity.
+    Combined, ///< screen + desktop + activity (the exact-pin shape).
+};
+
+/**
+ * @brief Classify a (screen, desktop, activity) tuple into its cascade axis.
+ *
+ * The classifier mirrors @ref contextPriority's pinned-dimensions formula —
+ * it does NOT distinguish empty-vs-missing in the dimensional sense, only
+ * which dimensions are present.
+ */
+inline ContextAxis contextAxisOf(const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    if (screenId.isEmpty()) {
+        return ContextAxis::CatchAll;
+    }
+    const bool hasDesktop = virtualDesktop > 0;
+    const bool hasActivity = !activity.isEmpty();
+    if (hasDesktop && hasActivity) {
+        return ContextAxis::Combined;
+    }
+    if (hasActivity) {
+        return ContextAxis::Activity;
+    }
+    if (hasDesktop) {
+        return ContextAxis::Desktop;
+    }
+    return ContextAxis::Monitor;
+}
+
+/**
+ * @brief Human-readable label for a context rule's tuple.
+ *
+ * The single canonical formula for the " · Desktop N" / " · Activity" suffix
+ * — every caller that needs to log or display a context-rule identity routes
+ * through here so the string shape stays consistent across the daemon,
+ * settings UI, and migration code.
+ */
+inline QString contextRuleName(const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    return screenId + (virtualDesktop > 0 ? QStringLiteral(" · Desktop ") + QString::number(virtualDesktop) : QString())
+        + (activity.isEmpty() ? QString() : QStringLiteral(" · Activity"));
+}
+
 namespace detail {
 
 /// Fixed v5-UUID namespace for context-rule identities. Deriving each rule's
@@ -86,11 +146,9 @@ inline const QUuid& namespaceUuid()
 /// Length-prefix a segment so concatenated identity keys are unambiguous: a
 /// `screenId` / `activity` may itself contain a `|`, so a plain `|`-joined key
 /// could collide for two distinct tuples. `"<len>:<segment>"` makes every
-/// tuple's encoding unique.
-inline QString encodeSegment(const QString& segment)
-{
-    return QString::number(segment.size()) + QLatin1Char(':') + segment;
-}
+/// tuple's encoding unique. Re-exported from the shared @ref IdentityKey.h so
+/// the three bridges share one implementation.
+using PhosphorWindowRule::Detail::encodeSegment;
 
 /// Stable per-rule key for the v5-UUID derivation. @p family distinguishes the
 /// rule kinds that share a (screen, desktop, activity) tuple — an assignment
@@ -122,6 +180,39 @@ inline int contextPriority(bool screenPinned, bool desktopPinned, bool activityP
     }
     return kBasePriority + (activityPinned ? kActivityWeight : 0) + (desktopPinned ? kDesktopWeight : 0)
         + (screenPinned ? kScreenWeight : 0);
+}
+
+/**
+ * @brief The deterministic v5 rule id @ref makeAssignmentRule would assign
+ *        for a given (screen, desktop, activity) tuple.
+ *
+ * Exposing the id derivation as a public helper lets callers look up a stored
+ * assignment rule by its identity tuple in O(1) (via
+ * `WindowRuleSet::ruleById`) instead of scanning the rule list. Two callers
+ * deriving the same tuple necessarily land on the same id, so the lookup
+ * stays correct across processes and across persistence round-trips.
+ */
+inline QUuid assignmentRuleIdFor(const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    return QUuid::createUuidV5(
+        detail::namespaceUuid(),
+        detail::contextIdentityKey(QLatin1StringView("assignment"), screenId, virtualDesktop, activity));
+}
+
+/**
+ * @brief The deterministic v5 rule id @ref makeDisableRule would assign for a
+ *        given (screen, desktop, activity, autotileMode) tuple.
+ *
+ * The disable rule's id includes the engine the rule disables — snapping and
+ * autotile disables for the same context are distinct rules, so the id helper
+ * mirrors that distinction.
+ */
+inline QUuid disableRuleIdFor(const QString& screenId, int virtualDesktop, const QString& activity, bool autotileMode)
+{
+    return QUuid::createUuidV5(detail::namespaceUuid(),
+                               detail::contextIdentityKey(autotileMode ? QLatin1StringView("disable-autotile")
+                                                                       : QLatin1StringView("disable-snapping"),
+                                                          screenId, virtualDesktop, activity));
 }
 
 /**
@@ -212,9 +303,7 @@ inline WindowRule makeAssignmentRule(const QString& name, const QString& screenI
     WindowRule rule;
     // Deterministic id derived from the source context identity — identical
     // assignments yield identical rules, keeping the migration idempotent.
-    rule.id = QUuid::createUuidV5(
-        detail::namespaceUuid(),
-        detail::contextIdentityKey(QLatin1StringView("assignment"), screenId, virtualDesktop, activity));
+    rule.id = assignmentRuleIdFor(screenId, virtualDesktop, activity);
     rule.name = name;
     rule.enabled = true;
     rule.priority = contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
@@ -267,10 +356,7 @@ inline WindowRule makeDisableRule(const QString& name, const QString& screenId, 
     // Deterministic id — a disable rule's identity is its context tuple plus
     // which engine it disables (snapping/autotile disables for the same
     // context are distinct rules and must not collide).
-    rule.id = QUuid::createUuidV5(detail::namespaceUuid(),
-                                  detail::contextIdentityKey(autotileMode ? QLatin1StringView("disable-autotile")
-                                                                          : QLatin1StringView("disable-snapping"),
-                                                             screenId, virtualDesktop, activity));
+    rule.id = disableRuleIdFor(screenId, virtualDesktop, activity, autotileMode);
     rule.name = name;
     rule.enabled = true;
     rule.priority = contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
@@ -380,6 +466,68 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
         // still yields its context projection, per the contract above.
     }
     return true;
+}
+
+/**
+ * @brief Classify @p match's pinned-dimension shape as a @ref ContextAxis.
+ *
+ * A non-context-only match (one carrying a window-property leaf) returns
+ * @c CatchAll — callers that need to distinguish a window-property rule from
+ * a true catch-all must combine this with `match.isContextOnly()`.
+ */
+inline ContextAxis contextAxisFor(const MatchExpression& match)
+{
+    if (!match.isContextOnly()) {
+        return ContextAxis::CatchAll;
+    }
+    QString screenId;
+    int virtualDesktop = 0;
+    QString activity;
+    contextDimsOf(match, screenId, virtualDesktop, activity);
+    return contextAxisOf(screenId, virtualDesktop, activity);
+}
+
+/// True if @p match is a context-only "screen-only" pin — screen present,
+/// no desktop, no activity. The per-screen-base family classifier.
+inline bool matchIsExactContextBase(const MatchExpression& match)
+{
+    return contextAxisFor(match) == ContextAxis::Monitor;
+}
+
+/// True if @p match is a context-only "screen + desktop" pin (no activity).
+/// The per-desktop family classifier — a screen+desktop+activity tuple is
+/// the Combined axis and does NOT match this family.
+inline bool matchIsExactContextDesktop(const MatchExpression& match)
+{
+    return contextAxisFor(match) == ContextAxis::Desktop;
+}
+
+/// True if @p match is a context-only rule pinning an activity (with screen),
+/// whether or not it ALSO pins a desktop. Mirrors the historical per-activity
+/// family classifier: a screen+activity rule and a screen+desktop+activity
+/// rule both belong to the per-activity family.
+inline bool matchIsExactContextActivity(const MatchExpression& match)
+{
+    const ContextAxis axis = contextAxisFor(match);
+    return axis == ContextAxis::Activity || axis == ContextAxis::Combined;
+}
+
+/// True if @p match is the exact-shape context for @p screenId / @p
+/// virtualDesktop / @p activity — i.e. the match @ref makeContextMatch would
+/// emit for that tuple. A match pinning different dimensions or carrying any
+/// window-property leaf is rejected. Equivalent to `matchIsExactContext*`
+/// plus an explicit value check.
+inline bool matchIsExactContext(const MatchExpression& match, const QString& screenId, int virtualDesktop,
+                                const QString& activity)
+{
+    if (!match.isContextOnly()) {
+        return false;
+    }
+    QString s;
+    int d = 0;
+    QString a;
+    contextDimsOf(match, s, d, a);
+    return s == screenId && d == virtualDesktop && a == activity;
 }
 
 /**

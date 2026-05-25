@@ -388,6 +388,15 @@ public:
     void saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides);
     QJsonObject loadAutotileOverrides(const QString& algorithmId) const;
 
+    /// Current entry count in the @ref resolveAssignmentEntry hot-path cache.
+    /// Used by tests to verify the cache populates and invalidates against
+    /// rule-set revision bumps. Not for production callers — the value
+    /// drifts as cursor-move resolves come in.
+    [[nodiscard]] qsizetype contextResolveCacheSize() const
+    {
+        return m_contextResolveCache.size();
+    }
+
 Q_SIGNALS:
     // layoutAdded / layoutRemoved / activeLayoutChanged / layoutAssigned are
     // inherited from IZoneLayoutRegistry - declared on the interface so

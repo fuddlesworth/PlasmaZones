@@ -9,6 +9,7 @@
 #include <QStringList>
 #include <QUuid>
 
+#include "IdentityKey.h"
 #include "MatchExpression.h"
 #include "MatchTypes.h"
 #include "RuleAction.h"
@@ -64,14 +65,9 @@ inline const QUuid& namespaceUuid()
     return ns;
 }
 
-/// Length-prefix a segment so concatenated identity keys are unambiguous: a
-/// `pattern` is an arbitrary string that may itself contain a `|`, so a plain
-/// `|`-joined key could collide for two distinct tuples. `"<len>:<segment>"`
-/// makes every tuple's encoding unique.
-inline QString encodeSegment(const QString& segment)
-{
-    return QString::number(segment.size()) + QLatin1Char(':') + segment;
-}
+/// Length-prefix a segment so concatenated identity keys are unambiguous —
+/// re-exported from the shared @ref IdentityKey.h.
+using PhosphorWindowRule::Detail::encodeSegment;
 
 /// Stable per-rule key. @p field and @p op disambiguate the rule families:
 /// the same pattern can produce a `DesktopFile Contains` rule, a

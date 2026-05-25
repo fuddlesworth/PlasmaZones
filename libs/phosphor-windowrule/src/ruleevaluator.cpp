@@ -78,6 +78,8 @@ ResolvedActions RuleEvaluator::resolve(const WindowQuery& query) const
     ResolvedActions result;
 
     const QList<WindowRule>& rules = m_ruleSet.rules();
+    qCDebug(lcRuleEval) << "resolve(): rules:" << rules.size() << "revision:" << m_ruleSet.revision()
+                        << "screen:" << query.screenId << "appId:" << query.appId.value_or(QString());
     if (rules.isEmpty()) {
         return result;
     }
