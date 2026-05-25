@@ -657,6 +657,46 @@ bool WindowRuleController::removeRule(const QString& ruleId)
     return true;
 }
 
+QString WindowRuleController::duplicateRule(const QString& ruleId)
+{
+    const WindowRule source = m_model.ruleById(QUuid::fromString(ruleId));
+    if (source.id.isNull()) {
+        return QString();
+    }
+    WindowRule clone = source;
+    clone.id = QUuid::createUuid();
+    // Auto-suffix the name when the source has one so the two rules don't
+    // share an identical label in the list. An empty source name stays empty
+    // — the matchSummary will distinguish the clone in that case (and the
+    // user typically renames immediately on duplicate anyway).
+    if (!source.name.isEmpty()) {
+        clone.name = PzI18n::tr("%1 (copy)").arg(source.name);
+    }
+    if (!m_model.addRule(clone)) {
+        qCWarning(lcConfig) << "WindowRuleController::duplicateRule: model rejected clone" << clone.id.toString();
+        return QString();
+    }
+    // The model appends to the end; reorder so the clone sits just after the
+    // source — preserves the user's mental model ("the new rule is next to
+    // the one I copied") instead of dropping it at the bottom of the list.
+    m_model.moveRule(clone.id, source.id);
+    // moveRule "before source" puts the clone immediately ABOVE the source.
+    // Shift it once more to the next slot below the source — find the rule
+    // that currently follows source and move the clone before that.
+    const auto& rules = m_model.rules();
+    for (int i = 0; i < rules.size(); ++i) {
+        if (rules.at(i).id == source.id && i + 1 < rules.size()) {
+            const QUuid afterSource = rules.at(i + 1).id;
+            if (afterSource != clone.id) {
+                m_model.moveRule(clone.id, afterSource);
+            }
+            break;
+        }
+    }
+    setDirty(true);
+    return clone.id.toString();
+}
+
 bool WindowRuleController::setRuleEnabled(const QString& ruleId, bool enabled)
 {
     WindowRule rule = m_model.ruleById(QUuid::fromString(ruleId));
@@ -720,6 +760,7 @@ QVariantList WindowRuleController::rulesSnapshot() const
         entry[QStringLiteral("ruleId")] = m_model.data(idx, WindowRuleModel::IdRole);
         entry[QStringLiteral("name")] = m_model.data(idx, WindowRuleModel::NameRole);
         entry[QStringLiteral("enabled")] = m_model.data(idx, WindowRuleModel::EnabledRole);
+        entry[QStringLiteral("priority")] = m_model.data(idx, WindowRuleModel::PriorityRole);
         entry[QStringLiteral("section")] =
             static_cast<int>(m_model.data(idx, WindowRuleModel::SectionRole).value<WindowRuleModel::Section>());
         entry[QStringLiteral("matchSummary")] = m_model.data(idx, WindowRuleModel::MatchSummaryRole);

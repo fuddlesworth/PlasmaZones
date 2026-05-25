@@ -165,6 +165,17 @@ public:
     /// Remove the rule with @p ruleId (a UUID string). Returns false if absent.
     Q_INVOKABLE bool removeRule(const QString& ruleId);
 
+    /// Clone the rule with @p ruleId. The clone gets a fresh UUID, the same
+    /// priority as the source (so its evaluation order is unchanged), and an
+    /// auto-suffixed name ("X (copy)") when the source's name is non-empty so
+    /// the two are distinguishable in the list. The clone is inserted just
+    /// after the source so it appears next to it in the section.
+    ///
+    /// Returns the new rule's UUID string on success, or an empty string if
+    /// the source id is unknown or the clone could not be added (id collision
+    /// or invalid rule — neither should happen for a freshly-stamped clone).
+    Q_INVOKABLE QString duplicateRule(const QString& ruleId);
+
     /// Toggle the enabled flag of the rule with @p ruleId.
     Q_INVOKABLE bool setRuleEnabled(const QString& ruleId, bool enabled);
 

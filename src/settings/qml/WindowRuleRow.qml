@@ -14,6 +14,14 @@ import org.kde.kirigami as Kirigami
  * badges. The enabled dot is a toggle; edit / delete are buttons.
  */
 ItemDelegate {
+    // Drag-reorder for the Animation section lives in WindowRulesPage's
+    // dedicated drag container (mirrors OrderingPage's pattern), NOT here:
+    // a ColumnLayout-based Repeater snaps items back to their layout
+    // position the instant a MouseArea sets `drag.target`, so any drag
+    // mechanics on the row itself silently fail. Keeping drag concerns out
+    // of this delegate also means the row stays usable in non-reorderable
+    // contexts (other sections) without an "if draggable" branch.
+
     id: row
 
     /// Per-rule fields from WindowRuleModel's roles.
@@ -32,8 +40,17 @@ ItemDelegate {
     /// knows the rule never fires (the picker now prevents the combination
     /// for new rules, but a hand-edited JSON store keeps the offending rule).
     required property int validationIssueCount
+    /// The rule's section bucket (`WindowRuleModel::Section` int). Drives the
+    /// Advanced-only `priority N` label — only Advanced rules surface their
+    /// raw priority in the row because their priority is the user-controlled
+    /// ordering dimension (other sections derive priority from cascade bands).
+    required property int section
+    /// The rule's raw priority integer — surfaced as a `Priority N` badge in
+    /// the badge cluster on Advanced-section rows only.
+    required property int priority
 
     signal editRequested()
+    signal duplicateRequested()
     signal deleteRequested()
     // Parameter named `ruleEnabled` for symmetry with the `ruleEnabled`
     // property — using the bare name `enabled` would shadow the row's own
@@ -107,6 +124,33 @@ ItemDelegate {
 
         }
 
+        // "Composite" badge — paired with the conditions count for composite
+        // rules. Surfaces the kind of rule the user is looking at without
+        // making them open the editor. Sentence case (project convention; the
+        // mockup's uppercase is intentionally not followed).
+        Rectangle {
+            visible: row.isComposite
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: compositeLabel.implicitWidth + Kirigami.Units.largeSpacing
+            implicitHeight: compositeLabel.implicitHeight + Kirigami.Units.smallSpacing
+            radius: Kirigami.Units.smallSpacing
+            color: Kirigami.Theme.alternateBackgroundColor
+
+            Label {
+                id: compositeLabel
+
+                anchors.centerIn: parent
+                // Project badge convention: title-case the noun ("Composite",
+                // "Conditions", "Actions", "Priority …"). Same in the
+                // condition/action/priority badges below — keeping them
+                // consistent so the eye reads the badge cluster as a unit.
+                text: i18nc("Badge — the rule's match is a composite expression", "Composite")
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                opacity: 0.7
+            }
+
+        }
+
         // Condition-count badge for composite rules.
         Rectangle {
             visible: row.isComposite
@@ -120,7 +164,7 @@ ItemDelegate {
                 id: condLabel
 
                 anchors.centerIn: parent
-                text: i18np("%n condition", "%n conditions", row.conditionCount)
+                text: i18np("%n Condition", "%n Conditions", row.conditionCount)
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 opacity: 0.7
             }
@@ -140,7 +184,32 @@ ItemDelegate {
                 id: actionLabel
 
                 anchors.centerIn: parent
-                text: i18np("%n action", "%n actions", row.actionCount)
+                text: i18np("%n Action", "%n Actions", row.actionCount)
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                opacity: 0.7
+            }
+
+        }
+
+        // Priority badge — sits with the other metadata badges (Composite,
+        // Conditions, Actions). Shown only for Advanced-section rules where
+        // the raw priority integer is the user-controlled ordering dimension.
+        // Other sections derive priority from cascade bands so the raw number
+        // adds noise rather than information. Section enum value 4 =
+        // WindowRuleModel::Section::Advanced.
+        Rectangle {
+            visible: row.section === 4
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: priorityLabel.implicitWidth + Kirigami.Units.largeSpacing
+            implicitHeight: priorityLabel.implicitHeight + Kirigami.Units.smallSpacing
+            radius: Kirigami.Units.smallSpacing
+            color: Kirigami.Theme.alternateBackgroundColor
+
+            Label {
+                id: priorityLabel
+
+                anchors.centerIn: parent
+                text: i18nc("Badge — the rule's raw priority integer", "Priority %1", row.priority)
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 opacity: 0.7
             }
@@ -178,6 +247,19 @@ ItemDelegate {
             ToolTip.visible: hovered
             Accessible.name: i18n("Edit rule %1", row.ruleName)
             onClicked: row.editRequested()
+        }
+
+        // Duplicate — clones the rule with a fresh UUID and inserts it just
+        // after the original. Cheap way to template a near-identical rule
+        // (same match, tweak the actions; or same actions, tweak the match)
+        // without re-entering the editor from scratch.
+        ToolButton {
+            icon.name: "edit-copy"
+            Layout.alignment: Qt.AlignVCenter
+            ToolTip.text: i18n("Duplicate rule")
+            ToolTip.visible: hovered
+            Accessible.name: i18n("Duplicate rule %1", row.ruleName)
+            onClicked: row.duplicateRequested()
         }
 
         ToolButton {

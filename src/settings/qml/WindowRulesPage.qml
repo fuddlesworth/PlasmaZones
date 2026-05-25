@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief The unified Window Rules page.
@@ -311,15 +312,35 @@ SettingsFlickable {
 
             delegate: SettingsCard {
                 required property var modelData
+                // Section enum value 3 = WindowRuleModel::Section::Animation.
+                // Drives both the "drag to set precedence" hint in the header
+                // and the per-row drag handles below.
+                readonly property bool _isAnimationSection: modelData.section === 3
 
                 Layout.fillWidth: true
                 headerText: modelData.label
+                // Right-aligned rule count in the section header — matches
+                // the mockup's "MONITOR & LAYOUT  4 rules" pattern and gives
+                // the user a quick scan of how many rules are bucketed where.
+                // For Animation, also tack on the drag hint since Animation
+                // is the only section where the user-controlled ordering
+                // (within the cascade band) actually matters and is
+                // reorderable through the drag handle on each row.
+                headerTrailingText: {
+                    var count = modelData.rules ? modelData.rules.length : 0;
+                    var base = i18np("%n rule", "%n rules", count);
+                    return _isAnimationSection ? i18nc("Suffix in section header — count followed by reorder hint", "%1 · drag to set precedence", base) : base;
+                }
 
                 contentItem: ColumnLayout {
                     spacing: 0
 
+                    // Non-Animation sections — straight Repeater of
+                    // WindowRuleRow in the enclosing ColumnLayout. No drag
+                    // semantics needed: priority within these sections is
+                    // derived from cascade bands, not list order.
                     Repeater {
-                        model: modelData.rules
+                        model: _isAnimationSection ? null : modelData.rules
 
                         delegate: WindowRuleRow {
                             required property var modelData
@@ -334,15 +355,220 @@ SettingsFlickable {
                             actionCount: modelData.actionCount
                             isComposite: modelData.isComposite
                             validationIssueCount: modelData.validationIssueCount
+                            section: modelData.section
+                            priority: modelData.priority
                             onToggleRequested: function(en) {
                                 page.controller.setRuleEnabled(ruleId, en);
                             }
                             onEditRequested: {
                                 ruleEditorSheet.openFor(page.controller.ruleJson(ruleId), true);
                             }
+                            onDuplicateRequested: {
+                                page.controller.duplicateRule(ruleId);
+                            }
                             onDeleteRequested: {
                                 page.controller.removeRule(ruleId);
                             }
+                        }
+
+                    }
+
+                    // Animation section — manual-positioning drag container,
+                    // mirrors OrderingPage's pattern. Each delegate Item is
+                    // y-positioned by `index * rowHeight + visualOffset`; a
+                    // MouseArea on the dedicated handle column sets
+                    // `drag.target: delegateRoot`, which a ColumnLayout-based
+                    // Repeater would silently snap back. visualOffset shifts
+                    // the in-between rows during drag to preview the new
+                    // ordering; release commits via controller.moveRule
+                    // (translating the (from, to) index pair into the
+                    // before-id reference the controller expects).
+                    Item {
+                        id: animationOrderContainer
+
+                        readonly property real rowHeight: Kirigami.Units.gridUnit * 4
+                        // Snapshot the section's rules array onto the container
+                        // so the inner Repeater delegate can reach it as
+                        // `animationOrderContainer.rules` — within the inner
+                        // delegate's scope, the unqualified `modelData`
+                        // resolves to the **rule** (the delegate's own
+                        // required property), so `modelData.rules.length`
+                        // collapses to undefined and the drop-index math
+                        // returns NaN. That silently disables the visual
+                        // slot-in cascade (every other row's `visualOffset`
+                        // reads `to=NaN` and stays at zero). Re-exposing the
+                        // outer modelData here breaks the shadowing.
+                        readonly property var rules: modelData ? modelData.rules : []
+                        property int dragFromIndex: -1
+                        property int dropTargetIndex: -1
+                        property bool isDragging: false
+
+                        visible: _isAnimationSection
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: _isAnimationSection ? rules.length * rowHeight : 0
+                        clip: true
+
+                        Repeater {
+                            model: _isAnimationSection ? animationOrderContainer.rules : null
+
+                            delegate: Item {
+                                id: animDelegateRoot
+
+                                required property var modelData
+                                required property int index
+                                readonly property real baseY: index * animationOrderContainer.rowHeight
+                                readonly property real visualOffset: {
+                                    if (!animationOrderContainer.isDragging || index === animationOrderContainer.dragFromIndex)
+                                        return 0;
+
+                                    var from = animationOrderContainer.dragFromIndex;
+                                    var to = animationOrderContainer.dropTargetIndex;
+                                    if (from < 0 || to < 0)
+                                        return 0;
+
+                                    if (from < to) {
+                                        if (index > from && index <= to)
+                                            return -animationOrderContainer.rowHeight;
+
+                                    } else if (index >= to && index < from) {
+                                        return animationOrderContainer.rowHeight;
+                                    }
+                                    return 0;
+                                }
+
+                                width: animationOrderContainer.width
+                                height: animationOrderContainer.rowHeight
+                                y: baseY + visualOffset
+                                z: animDragArea.drag.active ? 100 : 0
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    spacing: 0
+
+                                    // Drag-handle column. The drag MouseArea
+                                    // is scoped to this strip so clicks on
+                                    // the row's toolbar buttons (edit /
+                                    // duplicate / delete) still reach them.
+                                    Item {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium + Kirigami.Units.largeSpacing
+                                        Layout.fillHeight: true
+
+                                        Kirigami.Icon {
+                                            anchors.centerIn: parent
+                                            width: Kirigami.Units.iconSizes.smallMedium
+                                            height: Kirigami.Units.iconSizes.smallMedium
+                                            source: "handle-sort"
+                                            opacity: animDragArea.containsMouse || animDragArea.drag.active ? 0.7 : 0.3
+                                        }
+
+                                        MouseArea {
+                                            id: animDragArea
+
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                                            drag.target: animDelegateRoot
+                                            drag.axis: Drag.YAxis
+                                            drag.minimumY: 0
+                                            drag.maximumY: Math.max(0, (animationOrderContainer.rules.length - 1) * animationOrderContainer.rowHeight)
+                                            onPressed: {
+                                                animationOrderContainer.dragFromIndex = animDelegateRoot.index;
+                                                animationOrderContainer.dropTargetIndex = animDelegateRoot.index;
+                                                animationOrderContainer.isDragging = true;
+                                            }
+                                            onReleased: {
+                                                var rules = animationOrderContainer.rules;
+                                                var from = animationOrderContainer.dragFromIndex;
+                                                var to = animationOrderContainer.dropTargetIndex;
+                                                animationOrderContainer.isDragging = false;
+                                                animationOrderContainer.dragFromIndex = -1;
+                                                animationOrderContainer.dropTargetIndex = -1;
+                                                // Snap delegate back to its
+                                                // layout position before the
+                                                // controller mutation reorders
+                                                // the underlying snapshot.
+                                                animDelegateRoot.y = Qt.binding(function() {
+                                                    return animDelegateRoot.baseY + animDelegateRoot.visualOffset;
+                                                });
+                                                if (from >= 0 && to >= 0 && from !== to && from < rules.length && to < rules.length) {
+                                                    var movedId = rules[from].ruleId;
+                                                    // controller.moveRule
+                                                    // positions movedId
+                                                    // immediately BEFORE
+                                                    // beforeId. To move down
+                                                    // (from < to), beforeId is
+                                                    // the rule at (to + 1) so
+                                                    // the moved rule lands
+                                                    // after the target; if
+                                                    // dropping at the end,
+                                                    // pass empty.
+                                                    var beforeId = "";
+                                                    if (from < to) {
+                                                        if (to + 1 < rules.length)
+                                                            beforeId = rules[to + 1].ruleId;
+
+                                                    } else {
+                                                        beforeId = rules[to].ruleId;
+                                                    }
+                                                    page.controller.moveRule(movedId, beforeId);
+                                                }
+                                            }
+                                            onPositionChanged: {
+                                                if (drag.active) {
+                                                    var centerY = animDelegateRoot.y + animationOrderContainer.rowHeight / 2;
+                                                    var targetIndex = Math.max(0, Math.min(animationOrderContainer.rules.length - 1, Math.floor(centerY / animationOrderContainer.rowHeight)));
+                                                    if (targetIndex !== animationOrderContainer.dropTargetIndex)
+                                                        animationOrderContainer.dropTargetIndex = targetIndex;
+
+                                                }
+                                            }
+                                        }
+
+                                    }
+
+                                    WindowRuleRow {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        ruleId: animDelegateRoot.modelData.ruleId
+                                        ruleName: animDelegateRoot.modelData.name
+                                        ruleEnabled: animDelegateRoot.modelData.enabled
+                                        matchSummary: animDelegateRoot.modelData.matchSummary
+                                        actionSummary: animDelegateRoot.modelData.actionSummary
+                                        conditionCount: animDelegateRoot.modelData.conditionCount
+                                        actionCount: animDelegateRoot.modelData.actionCount
+                                        isComposite: animDelegateRoot.modelData.isComposite
+                                        validationIssueCount: animDelegateRoot.modelData.validationIssueCount
+                                        section: animDelegateRoot.modelData.section
+                                        priority: animDelegateRoot.modelData.priority
+                                        onToggleRequested: function(en) {
+                                            page.controller.setRuleEnabled(animDelegateRoot.modelData.ruleId, en);
+                                        }
+                                        onEditRequested: {
+                                            ruleEditorSheet.openFor(page.controller.ruleJson(animDelegateRoot.modelData.ruleId), true);
+                                        }
+                                        onDuplicateRequested: {
+                                            page.controller.duplicateRule(animDelegateRoot.modelData.ruleId);
+                                        }
+                                        onDeleteRequested: {
+                                            page.controller.removeRule(animDelegateRoot.modelData.ruleId);
+                                        }
+                                    }
+
+                                }
+
+                                Behavior on y {
+                                    enabled: !animDragArea.drag.active
+
+                                    PhosphorMotionAnimation {
+                                        profile: "widget.reorder"
+                                        durationOverride: Kirigami.Units.longDuration
+                                    }
+
+                                }
+
+                            }
+
                         }
 
                     }
