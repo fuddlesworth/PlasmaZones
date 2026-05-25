@@ -48,25 +48,20 @@ ItemDelegate {
     contentItem: RowLayout {
         spacing: Kirigami.Units.largeSpacing
 
-        // Enabled dot — toggles the rule.
-        AbstractButton {
+        // Enable/disable toggle. Replaces an earlier filled-dot affordance
+        // that read as decorative: users couldn't tell it was clickable, and
+        // the disabled-state hollow ring wasn't obviously distinct. The
+        // SettingsSwitch is the same control the rest of the settings app
+        // uses for boolean toggles (animated knob via PhosphorMotionAnimation,
+        // PointingHandCursor on hover), so the affordance matches the user's
+        // existing mental model and screen-reader output stays unchanged.
+        SettingsSwitch {
             Layout.alignment: Qt.AlignVCenter
-            implicitWidth: Kirigami.Units.iconSizes.small
-            implicitHeight: Kirigami.Units.iconSizes.small
-            // Expose as a CheckBox to screen readers so the enable/disable
-            // state is announced alongside the action label.
-            Accessible.role: Accessible.CheckBox
-            Accessible.checked: row.ruleEnabled
-            Accessible.name: row.ruleEnabled ? i18n("Disable rule %1", row.ruleName) : i18n("Enable rule %1", row.ruleName)
-            onClicked: row.toggleRequested(!row.ruleEnabled)
-
-            contentItem: Rectangle {
-                radius: width / 2
-                color: row.ruleEnabled ? Kirigami.Theme.highlightColor : "transparent"
-                border.width: row.ruleEnabled ? 0 : 2
-                border.color: Kirigami.Theme.disabledTextColor
+            checked: row.ruleEnabled
+            accessibleName: row.ruleEnabled ? i18n("Disable rule %1", row.ruleName) : i18n("Enable rule %1", row.ruleName)
+            onToggled: function(newValue) {
+                row.toggleRequested(newValue);
             }
-
         }
 
         // Warning badge — sits before the rule name so it's the first thing
