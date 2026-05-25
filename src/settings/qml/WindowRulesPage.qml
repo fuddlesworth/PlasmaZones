@@ -154,12 +154,13 @@ SettingsFlickable {
         target: settingsController
     }
 
-    AddRuleSheet {
-        id: addRuleSheet
+    AddRuleWizard {
+        id: addRuleWizard
 
         controller: page.controller
-        onSubjectChosen: function(ruleJson) {
-            ruleEditorSheet.openFor(ruleJson, false);
+        appSettings: page._editorAppSettings
+        onRuleSaved: function(ruleJson) {
+            page.controller.addRuleFromJson(ruleJson);
         }
     }
 
@@ -178,10 +179,7 @@ SettingsFlickable {
         controller: page.controller
         appSettings: page._editorAppSettings
         onRuleSaved: function(ruleJson) {
-            if (editing)
-                page.controller.updateRuleFromJson(ruleJson);
-            else
-                page.controller.addRuleFromJson(ruleJson);
+            page.controller.updateRuleFromJson(ruleJson);
         }
     }
 
@@ -244,7 +242,7 @@ SettingsFlickable {
                 text: i18n("Add rule")
                 icon.name: "list-add"
                 Accessible.name: i18n("Add a new window rule")
-                onClicked: addRuleSheet.open()
+                onClicked: addRuleWizard.open()
             }
 
         }
@@ -361,7 +359,7 @@ SettingsFlickable {
                                 page.controller.setRuleEnabled(ruleId, en);
                             }
                             onEditRequested: {
-                                ruleEditorSheet.openFor(page.controller.ruleJson(ruleId), true);
+                                ruleEditorSheet.openFor(page.controller.ruleJson(ruleId));
                             }
                             onDuplicateRequested: {
                                 page.controller.duplicateRule(ruleId);
@@ -545,7 +543,7 @@ SettingsFlickable {
                                             page.controller.setRuleEnabled(animDelegateRoot.modelData.ruleId, en);
                                         }
                                         onEditRequested: {
-                                            ruleEditorSheet.openFor(page.controller.ruleJson(animDelegateRoot.modelData.ruleId), true);
+                                            ruleEditorSheet.openFor(page.controller.ruleJson(animDelegateRoot.modelData.ruleId));
                                         }
                                         onDuplicateRequested: {
                                             page.controller.duplicateRule(animDelegateRoot.modelData.ruleId);

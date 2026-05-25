@@ -131,7 +131,10 @@ qt_add_qml_module(plasmazones-settings
         qml/MonitorOverviewTile.qml
         qml/WindowRuleRow.qml
         qml/RuleEditorSheet.qml
-        qml/AddRuleSheet.qml
+        qml/RuleEditorBody.qml
+        qml/RuleEditorStatusBar.qml
+        qml/AddRuleWizard.qml
+        qml/RuleStartPicker.qml
         qml/RuleStartTile.qml
         qml/MatchExpressionEditor.qml
         qml/MatchLeafEditor.qml
