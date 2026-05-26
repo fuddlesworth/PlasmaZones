@@ -49,6 +49,13 @@ Kirigami.ApplicationWindow {
     width: 1200
     height: 800
     title: qsTr("Settings")
+    // The chrome supplies its own breadcrumbs row inside the page
+    // body — Kirigami's default ApplicationWindow global toolbar
+    // would stack a redundant "<page title>" header bar above that,
+    // which is what the legacy chrome avoided by mounting its
+    // content directly under the window. None tells Kirigami's
+    // pageStack to render nothing there.
+    pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
     onClosing: function(close) {
         if (root.controller.dirty) {
             close.accepted = false;
