@@ -21,9 +21,9 @@ Item {
             Kirigami.FormData.label: qsTr("Sound effects:")
             checked: root.controller ? root.controller.soundsEnabled : false
             onToggled: {
-                if (root.controller) {
+                if (root.controller)
                     root.controller.soundsEnabled = checked;
-                }
+
             }
         }
 
@@ -32,10 +32,12 @@ Item {
             text: root.controller ? root.controller.greeting : ""
             Layout.preferredWidth: Kirigami.Units.gridUnit * 20
             onEditingFinished: {
-                if (root.controller) {
+                if (root.controller)
                     root.controller.greeting = text;
-                }
+
             }
         }
+
     }
+
 }

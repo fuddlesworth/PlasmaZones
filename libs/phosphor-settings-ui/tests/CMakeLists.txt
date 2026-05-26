@@ -18,3 +18,4 @@ endfunction()
 
 phosphorsettingsui_add_test(test_page_registry)
 phosphorsettingsui_add_test(test_application_controller)
+phosphorsettingsui_add_test(test_localized_context)

@@ -81,8 +81,7 @@ void GeneralPage::resetToDefaults()
 
 void GeneralPage::recomputeDirty()
 {
-    const bool d = m_stagedSounds != m_persistedSounds
-                || m_stagedGreeting != m_persistedGreeting;
+    const bool d = m_stagedSounds != m_persistedSounds || m_stagedGreeting != m_persistedGreeting;
     if (d == m_dirty) {
         return;
     }

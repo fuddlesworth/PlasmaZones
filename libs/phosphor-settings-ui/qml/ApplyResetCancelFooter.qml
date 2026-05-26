@@ -23,8 +23,7 @@ RowLayout {
 
     Item {
         Layout.fillWidth: true
-        implicitHeight: applyButton.implicitHeight
-            + Kirigami.Units.smallSpacing * 2
+        implicitHeight: applyButton.implicitHeight + Kirigami.Units.smallSpacing * 2
     }
 
     QQC2.Button {
@@ -37,6 +36,7 @@ RowLayout {
 
     QQC2.Button {
         id: cancelButton
+
         text: qsTr("Cancel")
         enabled: root.controller.dirty
         icon.name: "dialog-cancel"
@@ -46,6 +46,7 @@ RowLayout {
 
     QQC2.Button {
         id: applyButton
+
         text: qsTr("Apply")
         enabled: root.controller.dirty
         icon.name: "dialog-ok-apply"
@@ -54,4 +55,5 @@ RowLayout {
         Layout.margins: Kirigami.Units.smallSpacing
         Layout.rightMargin: Kirigami.Units.largeSpacing
     }
+
 }

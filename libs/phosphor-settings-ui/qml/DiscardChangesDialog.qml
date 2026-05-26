@@ -19,9 +19,7 @@ Kirigami.PromptDialog {
 
     title: qsTr("Discard unsaved changes?")
     subtitle: qsTr("You have unsaved settings. Closing now will discard them.")
-
     standardButtons: Kirigami.Dialog.NoButton
-
     customFooterActions: [
         Kirigami.Action {
             text: qsTr("Discard")

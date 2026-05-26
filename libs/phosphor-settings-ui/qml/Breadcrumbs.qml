@@ -17,16 +17,15 @@ RowLayout {
     id: root
 
     required property ApplicationController controller
-
-    /** Ordered ancestors → current. Each entry is a page-data dict. */
+    //* Ordered ancestors → current. Each entry is a page-data dict.
     readonly property var segments: {
         const out = [];
         let id = root.controller.currentPageId;
         while (id) {
             const data = root.controller.registry.pageData(id);
-            if (!data || !data.id) {
+            if (!data || !data.id)
                 break;
-            }
+
             out.unshift(data);
             id = data.parentId;
         }
@@ -40,23 +39,23 @@ RowLayout {
 
         delegate: RowLayout {
             id: segmentRow
+
             required property int index
             required property var modelData
-
             readonly property bool isLast: index === root.segments.length - 1
 
             spacing: Kirigami.Units.smallSpacing
 
             QQC2.AbstractButton {
                 enabled: !segmentRow.isLast
+                onClicked: root.controller.currentPageId = segmentRow.modelData.id
+
                 contentItem: QQC2.Label {
                     text: segmentRow.modelData.title
                     font.bold: segmentRow.isLast
-                    color: segmentRow.isLast
-                           ? Kirigami.Theme.textColor
-                           : Kirigami.Theme.linkColor
+                    color: segmentRow.isLast ? Kirigami.Theme.textColor : Kirigami.Theme.linkColor
                 }
-                onClicked: root.controller.currentPageId = segmentRow.modelData.id
+
             }
 
             Kirigami.Icon {
@@ -66,11 +65,14 @@ RowLayout {
                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
                 opacity: 0.5
             }
+
         }
+
     }
 
     // Spacer to push subsequent items in the parent layout to the right.
     Item {
         Layout.fillWidth: true
     }
+
 }

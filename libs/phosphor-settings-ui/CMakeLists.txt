@@ -33,7 +33,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
@@ -45,6 +45,8 @@ set(phosphorsettingsui_public_HDRS
     include/PhosphorSettingsUi/PageController.h
     include/PhosphorSettingsUi/PageRegistry.h
     include/PhosphorSettingsUi/ApplicationController.h
+    include/PhosphorSettingsUi/LocalizedContext.h
+    include/PhosphorSettingsUi/DBusBridge.h
 )
 
 set(phosphorsettingsui_SRCS
@@ -53,6 +55,8 @@ set(phosphorsettingsui_SRCS
     src/pagecontroller.cpp
     src/pageregistry.cpp
     src/applicationcontroller.cpp
+    src/localizedcontext.cpp
+    src/dbusbridge.cpp
 )
 
 add_library(PhosphorSettingsUi SHARED
@@ -86,6 +90,7 @@ target_compile_features(PhosphorSettingsUi PUBLIC cxx_std_20)
 target_link_libraries(PhosphorSettingsUi
     PUBLIC
         Qt6::Core
+        Qt6::DBus
         Qt6::Gui
         Qt6::Qml
 )
@@ -117,6 +122,7 @@ set(phosphorsettingsui_qml_FILES
     qml/ApplyResetCancelFooter.qml
     qml/PageHost.qml
     qml/DiscardChangesDialog.qml
+    qml/AboutPageShell.qml
 )
 
 qt_add_qml_module(PhosphorSettingsUiQml
@@ -153,6 +159,7 @@ target_link_libraries(PhosphorSettingsUiQml
     PUBLIC
         PhosphorSettingsUi::PhosphorSettingsUi
         Qt6::Core
+        Qt6::DBus
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick

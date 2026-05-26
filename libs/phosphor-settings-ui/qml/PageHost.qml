@@ -18,30 +18,25 @@ Item {
     id: root
 
     required property ApplicationController controller
-
-    readonly property var currentEntry:
-        root.controller.currentPageId === ""
-        ? null
-        : root.controller.registry.pageData(root.controller.currentPageId)
+    readonly property var currentEntry: root.controller.currentPageId === "" ? null : root.controller.registry.pageData(root.controller.currentPageId)
 
     Loader {
         id: pageLoader
+
         anchors.fill: parent
         active: root.currentEntry !== null
         source: root.currentEntry ? root.currentEntry.qmlSource : ""
-
         onLoaded: {
-            if (!item) {
-                return;
-            }
-            const pageController = root.controller.registry.controller(
-                root.controller.currentPageId);
-            if (item.hasOwnProperty("controller")) {
+            if (!item)
+                return ;
+
+            const pageController = root.controller.registry.controller(root.controller.currentPageId);
+            if (item.hasOwnProperty("controller"))
                 item.controller = pageController;
-            }
-            if (item.hasOwnProperty("settingsApp")) {
+
+            if (item.hasOwnProperty("settingsApp"))
                 item.settingsApp = root.controller;
-            }
+
         }
     }
 
@@ -52,4 +47,5 @@ Item {
         text: qsTr("Select a page from the sidebar")
         icon.name: "settings-configure"
     }
+
 }

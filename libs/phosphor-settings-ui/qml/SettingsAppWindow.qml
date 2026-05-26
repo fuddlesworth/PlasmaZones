@@ -20,18 +20,25 @@ Kirigami.ApplicationWindow {
     id: root
 
     required property ApplicationController controller
-
-    /** Optional extra content shown in the header toolbar (e.g. global search). */
+    //* Optional extra content shown in the header toolbar (e.g. global search).
     property alias headerExtras: headerExtrasLoader.sourceComponent
 
     width: 1100
     height: 720
     title: qsTr("Settings")
-
-    onClosing: function (close) {
+    onClosing: function(close) {
         if (root.controller.dirty) {
             close.accepted = false;
             discardDialog.open();
+        }
+    }
+
+    DiscardChangesDialog {
+        id: discardDialog
+
+        onDiscardConfirmed: {
+            root.controller.discardAll();
+            Qt.callLater(root.close);
         }
     }
 
@@ -45,6 +52,7 @@ Kirigami.ApplicationWindow {
 
             Sidebar {
                 id: sidebar
+
                 Layout.fillHeight: true
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 14
                 Layout.minimumWidth: Kirigami.Units.gridUnit * 10
@@ -73,6 +81,7 @@ Kirigami.ApplicationWindow {
                     Loader {
                         id: headerExtrasLoader
                     }
+
                 }
 
                 Kirigami.Separator {
@@ -93,15 +102,11 @@ Kirigami.ApplicationWindow {
                     Layout.fillWidth: true
                     controller: root.controller
                 }
+
             }
+
         }
+
     }
 
-    DiscardChangesDialog {
-        id: discardDialog
-        onDiscardConfirmed: {
-            root.controller.discardAll();
-            Qt.callLater(root.close);
-        }
-    }
 }

@@ -19,10 +19,8 @@ int main(int argc, char* argv[])
     PhosphorSettingsUiExamplesMinimal::DemoApp controller;
 
     QQmlApplicationEngine engine;
-    engine.rootContext()->setContextProperty(QStringLiteral("demoController"),
-                                             &controller);
-    engine.loadFromModule(QStringLiteral("org.phosphor.settings.ui.examples.minimal"),
-                          QStringLiteral("Main"));
+    engine.rootContext()->setContextProperty(QStringLiteral("demoController"), &controller);
+    engine.loadFromModule(QStringLiteral("org.phosphor.settings.ui.examples.minimal"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty()) {
         return 1;
     }

@@ -11,8 +11,7 @@ namespace PhosphorSettingsUiExamplesMinimal {
 class GeneralPage : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
-    Q_PROPERTY(bool soundsEnabled READ soundsEnabled WRITE setSoundsEnabled
-                   NOTIFY soundsEnabledChanged)
+    Q_PROPERTY(bool soundsEnabled READ soundsEnabled WRITE setSoundsEnabled NOTIFY soundsEnabledChanged)
     Q_PROPERTY(QString greeting READ greeting WRITE setGreeting NOTIFY greetingChanged)
     QML_NAMED_ELEMENT(GeneralPage)
     QML_UNCREATABLE("Instantiated by the demo app in C++.")

@@ -18,8 +18,7 @@ QQC2.ScrollView {
     id: root
 
     required property ApplicationController controller
-
-    /** Empty string means "showing top-level pages"; otherwise the parent id. */
+    //* Empty string means "showing top-level pages"; otherwise the parent id.
     property string currentParentId: ""
 
     clip: true
@@ -32,67 +31,74 @@ QQC2.ScrollView {
         QQC2.ItemDelegate {
             visible: root.currentParentId !== ""
             Layout.fillWidth: true
+            onClicked: root.currentParentId = ""
+
             contentItem: RowLayout {
                 spacing: Kirigami.Units.smallSpacing
+
                 Kirigami.Icon {
                     source: "go-previous-symbolic"
                     Layout.preferredWidth: Kirigami.Units.iconSizes.small
                     Layout.preferredHeight: Kirigami.Units.iconSizes.small
                 }
+
                 QQC2.Label {
                     Layout.fillWidth: true
                     text: qsTr("Back")
                 }
+
             }
-            onClicked: root.currentParentId = ""
+
         }
 
         Repeater {
-            model: root.currentParentId === ""
-                   ? root.controller.registry.topLevelPagesData()
-                   : root.controller.registry.childPagesData(root.currentParentId)
+            model: root.currentParentId === "" ? root.controller.registry.topLevelPagesData() : root.controller.registry.childPagesData(root.currentParentId)
 
             delegate: QQC2.ItemDelegate {
                 id: pageDelegate
-                required property var modelData
 
-                readonly property bool hasChildren:
-                    root.controller.registry.childPagesData(modelData.id).length > 0
-                readonly property bool isCurrent:
-                    root.controller.currentPageId === modelData.id
+                required property var modelData
+                readonly property bool hasChildren: root.controller.registry.childPagesData(modelData.id).length > 0
+                readonly property bool isCurrent: root.controller.currentPageId === modelData.id
 
                 Layout.fillWidth: true
                 highlighted: isCurrent
+                onClicked: {
+                    if (hasChildren)
+                        root.currentParentId = modelData.id;
+                    else
+                        root.controller.currentPageId = modelData.id;
+                }
 
                 contentItem: RowLayout {
                     spacing: Kirigami.Units.smallSpacing
+
                     Kirigami.Icon {
                         visible: pageDelegate.modelData.iconSource !== ""
                         source: pageDelegate.modelData.iconSource
                         Layout.preferredWidth: Kirigami.Units.iconSizes.small
                         Layout.preferredHeight: Kirigami.Units.iconSizes.small
                     }
+
                     QQC2.Label {
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                         text: pageDelegate.modelData.title
                     }
+
                     Kirigami.Icon {
                         visible: pageDelegate.hasChildren
                         source: "go-next-symbolic"
                         Layout.preferredWidth: Kirigami.Units.iconSizes.small
                         Layout.preferredHeight: Kirigami.Units.iconSizes.small
                     }
+
                 }
 
-                onClicked: {
-                    if (hasChildren) {
-                        root.currentParentId = modelData.id;
-                    } else {
-                        root.controller.currentPageId = modelData.id;
-                    }
-                }
             }
+
         }
+
     }
+
 }
