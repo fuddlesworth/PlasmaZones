@@ -75,13 +75,19 @@ Kirigami.ScrollablePage {
     title: qsTr("About")
 
     ColumnLayout {
-        // ── Top content slot ──────────────────────────────────────
-        // Component-based injection — the consumer supplies a
-        // Component, this Loader instantiates it. The loader is
-        // visible (and the separator below shows) only when a
-        // Component has been provided.
-
-        width: root.width - root.leftPadding - root.rightPadding
+        // Width binding pattern. `root.width - root.leftPadding -
+        // root.rightPadding` looked correct but fought
+        // Kirigami.ScrollablePage's Flickable contentItem sizing: the
+        // Flickable's contentWidth would inflate to children's
+        // implicitWidth (long description / credit labels), while the
+        // explicit width binding stayed at the smaller viewport math
+        // — Layout.fillWidth children then sized to the inflated
+        // implicit width and overflowed the clip boundary. Use the
+        // legacy SettingsFlickable pattern instead: bind to
+        // `parent.width - spacing*2` and centre horizontally so the
+        // column is always strictly narrower than the viewport.
+        width: parent.width - Kirigami.Units.largeSpacing * 2
+        anchors.horizontalCenter: parent.horizontalCenter
         spacing: Kirigami.Units.largeSpacing
 
         // Critical: the Loader fills the layout's width AND adopts
@@ -146,7 +152,15 @@ Kirigami.ScrollablePage {
         }
 
         QQC2.Label {
+            // Layout.preferredWidth: 0 tells the Layout to ignore the
+            // Label's implicitWidth (which a WordWrap label sets to its
+            // full unwrapped text length — potentially MUCH wider than
+            // the viewport). Without this the ColumnLayout's implicit
+            // width inflates to the label's implicit, and other
+            // Layout.fillWidth siblings (the topContent Loader, etc.)
+            // size to the inflated width, overflowing the clip.
             Layout.fillWidth: true
+            Layout.preferredWidth: 0
             visible: root.description !== ""
             wrapMode: Text.WordWrap
             text: root.description
@@ -158,15 +172,21 @@ Kirigami.ScrollablePage {
         }
 
         QQC2.Label {
+            Layout.fillWidth: true
+            Layout.preferredWidth: 0
             visible: root.copyright !== ""
             text: root.copyright
             opacity: 0.7
+            wrapMode: Text.WordWrap
         }
 
         QQC2.Label {
+            Layout.fillWidth: true
+            Layout.preferredWidth: 0
             visible: root.license !== ""
             text: root.license
             opacity: 0.7
+            wrapMode: Text.WordWrap
         }
 
         Kirigami.UrlButton {
