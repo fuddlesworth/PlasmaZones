@@ -7,7 +7,6 @@
 
 #include "../windowanimator.h"
 
-#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -1302,10 +1301,10 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         // `m_windowAnimator->isEnabled()` checked just below — that
         // covers the user-toggled case. This guard exists to fail
         // closed if a future programmatic call site bypasses the
-        // clamp; a Timing AnimationAppRule intentionally cannot
-        // rescue a 0/negative duration since the value is treated as
-        // "caller didn't supply one" rather than the "inherit
-        // per-event default" sentinel that the rule layer recognises.
+        // clamp; a Timing WindowRule intentionally cannot rescue a
+        // 0/negative duration since the value is treated as "caller
+        // didn't supply one" rather than the "inherit per-event
+        // default" sentinel that the rule layer recognises.
         return;
     }
     // Fast-path early-out on the global animations toggle. The
@@ -1318,16 +1317,16 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     }
     // Window-filtering gate. `shouldAnimateWindow` honours the user's
     // Animations.WindowFiltering exclusions (transient / min-size /
-    // app / class) AND lets a class-pattern AnimationAppRule override
-    // the filter when the rule's classPattern substring-matches the
-    // window's class. Skipping this for shader transitions only would
-    // leave the motion-side cascade in `applySnapGeometry` doing its
-    // own check; both call sites gate identically so the filter is a
-    // single concept across the two paths.
+    // app / class) AND lets a WindowRule carrying any OverrideAnimation*
+    // action override the filter when the rule's matcher substring-matches
+    // the window's class. Skipping this for shader transitions only would
+    // leave the motion-side cascade in `applySnapGeometry` doing its own
+    // check; both call sites gate identically so the filter is a single
+    // concept across the two paths.
     if (!shouldAnimateWindow(window)) {
         return;
     }
-    // Cascade: AnimationAppRule (per-window-class) → ShaderProfileTree
+    // Cascade: per-window animation WindowRule → ShaderProfileTree
     // (per-event default). The rule layer wins for matching windows;
     // an engaged-empty effectId on the rule deliberately blocks the
     // tree fallthrough (the user's "no animation for this app on this
@@ -1347,9 +1346,10 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // an empty tree (D-Bus race / fresh user) must not silently
     // collapse every event to the library default (150 ms). The
     // resolved value is then handed to the combined resolver as its
-    // `defaultDurationMs`, so the per-window-class App Rule timing
-    // cascade still layers on top (rule wins → per-event base →
-    // global), matching the resolver's documented contract.
+    // `defaultDurationMs`, so the per-window-class WindowRule timing
+    // cascade (`OverrideAnimationTiming`) still layers on top (rule
+    // wins → per-event base → global), matching the resolver's
+    // documented contract.
     int baseDurationMs = durationMs;
     {
         const auto& motionTree = m_shaderManager.motionProfileTree();
@@ -1486,23 +1486,6 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
     });
 }
 
-void PlasmaZonesEffect::loadAnimationAppRulesFromDbus()
-{
-    constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::AnimationAppRules;
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this](const QVariant& v) {
-        dispatchJsonSetting(kName, v,
-                            /*objectSink=*/{}, [this](const QJsonArray& arr) {
-                                auto& rules = m_shaderManager.appRules();
-                                rules = PhosphorAnimationShaders::AnimationAppRuleList::fromJson(arr);
-                                // Rebuild the WindowRuleSet view so the RuleEvaluator-backed
-                                // resolvers and shouldAnimateWindow()'s hasAnyMatch query see
-                                // the new rules. setRules() bumps the revision → cache invalid.
-                                m_shaderManager.rebuildAnimationRuleSet();
-                                qCDebug(lcEffect) << "loadAnimationAppRulesFromDbus: loaded" << rules.size() << "rules";
-                            });
-    });
-}
-
 void PlasmaZonesEffect::slotWindowRulesChanged()
 {
     // Coalesce burst signals: the daemon emits one `rulesChanged` per per-rule
@@ -1518,10 +1501,9 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
     // Fetch the unified WindowRule store via getAllRules (returns a JSON
     // string of a v4 WindowRuleSet), deserialise, filter to rules whose
     // action list contains any OverrideAnimation* action, and hand them to
-    // the shader manager. Bridge-converted legacy AnimationAppRules and
-    // these new rules end up concatenated in m_animationRuleSet — the same
-    // RuleEvaluator resolves both, so the existing per-event slot lookup
-    // in shader_resolve.cpp picks the winner without further code changes.
+    // the shader manager. The shader manager mirrors them into
+    // m_animationRuleSet so the per-event slot lookup in shader_resolve.cpp
+    // resolves the cascade against the unified rule store directly.
     const QDBusMessage msg = QDBusMessage::createMethodCall(
         QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
         QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("getAllRules"));

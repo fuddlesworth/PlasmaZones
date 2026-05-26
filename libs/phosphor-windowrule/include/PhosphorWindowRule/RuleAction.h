@@ -191,6 +191,23 @@ inline bool isAnimationOverrideAction(const QString& type)
 }
 } // namespace ActionType
 
+// ── OverrideAnimation* action param keys — canonical wire strings ──
+//
+// The three OverrideAnimation* actions share the same param key vocabulary
+// (`event`, `effectId`, `params`, `curve`, `durationMs`). Listing them here
+// once gives every reader-of-the-wire-shape — the registry validators in
+// ruleaction.cpp, the config-layer v3→v4 migration that ports legacy
+// AnimationAppRule entries, the rule-editor UI — a single source of truth.
+// A future rename (e.g. `effectId` → `effect_id`) updates one place and
+// flows everywhere.
+namespace ActionParam {
+inline constexpr QLatin1StringView Event{"event"};
+inline constexpr QLatin1StringView EffectId{"effectId"};
+inline constexpr QLatin1StringView Params{"params"};
+inline constexpr QLatin1StringView Curve{"curve"};
+inline constexpr QLatin1StringView DurationMs{"durationMs"};
+} // namespace ActionParam
+
 // ── Built-in slot ids ──
 namespace ActionSlot {
 inline constexpr QLatin1StringView EngineMode{"engine-mode"};

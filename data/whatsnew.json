@@ -10,6 +10,30 @@
             ]
         },
         {
+            "version": "3.0.13",
+            "date": "2026-05-26",
+            "highlights": [
+                "Fixed windows from disabled monitors being pulled into the active autotile zone after DPMS sleep — the autotile path now skips KWin's orphan-window reassignment, matching the existing snapping-side guard (#527, #528)"
+            ]
+        },
+        {
+            "version": "3.0.12",
+            "date": "2026-05-25",
+            "highlights": [
+                "Fixed focus-follows-mouse stealing focus from active floating and overflow windows when the cursor wandered onto an underlying tiled window — pauses until a tiled window becomes active (#461, #525)"
+            ]
+        },
+        {
+            "version": "3.0.11",
+            "date": "2026-05-24",
+            "highlights": [
+                "Fixed focus-follows-mouse activating tiled windows underneath an active emoji picker, notification popup, or krunner — pauses until a tileable window becomes active (#461, #521)",
+                "Fixed stale pending-restore entries for excluded apps growing session.json and logging on every daemon start (#461, #521)",
+                "Fixed drag artifacts, post-snap flicker, and a gray decoration ring during snap drags on hybrid Intel+NVIDIA setups (#516, #523)",
+                "Skip redundant layer-shell setter messages across virtual-desktop switches (#522)"
+            ]
+        },
+        {
             "version": "3.0.10",
             "date": "2026-05-23",
             "highlights": [

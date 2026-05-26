@@ -592,14 +592,12 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadShaderProfileFromDbus();
-    loadAnimationAppRulesFromDbus();
     loadMotionProfileTreeFromDbus();
     loadShaderRegistryFromDbus();
     // Unified WindowRule store — pull in any rules carrying an
-    // OverrideAnimation* action so the new editor's animation rules merge
-    // with the legacy AnimationAppRules cascade. The subscription below
-    // refreshes whenever the daemon broadcasts `rulesChanged`, so an edit
-    // in the settings UI lands without restarting the effect.
+    // OverrideAnimation* action. The subscription below refreshes whenever
+    // the daemon broadcasts `rulesChanged`, so an edit in the settings UI
+    // lands without restarting the effect.
     loadWindowRuleAnimationsFromDbus();
     // Subscription to the daemon's rulesChanged broadcast is installed once from
     // continueDaemonReadySetup() — installing it here would re-subscribe on every

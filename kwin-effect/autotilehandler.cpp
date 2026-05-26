@@ -66,6 +66,17 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
             if (!m_effect->isTileableWindow(active) || !m_effect->shouldHandleWindow(active)) {
                 return;
             }
+            // Also pause for floating active windows. FloatingCache covers
+            // both manually-floated windows and overflow windows that the
+            // daemon auto-floated past the maxWindows cap (applyFloatCleanup
+            // path). Either kind is perched on top of the tiled stack while
+            // the user works in it, so activating an underlying tiled window
+            // on cursor wander sends the floating one straight to the
+            // background — the same regression the excluded-active guard
+            // above fixes (discussion #461 follow-up).
+            if (m_effect->isWindowFloating(m_effect->getWindowId(active))) {
+                return;
+            }
             const QRectF aframe = active->frameGeometry();
             if ((m_effect->m_cachedMinWindowWidth > 0 && aframe.width() < m_effect->m_cachedMinWindowWidth)
                 || (m_effect->m_cachedMinWindowHeight > 0 && aframe.height() < m_effect->m_cachedMinWindowHeight)) {

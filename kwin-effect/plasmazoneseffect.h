@@ -303,16 +303,14 @@ private:
      * `Animations.WindowFiltering` cache so the two filter sets can
      * diverge.
      *
-     * A class-pattern AnimationAppRule of ANY kind whose pattern
-     * substring-matches the window's class OVERRIDES the filter —
-     * the existence of even one targeted rule signals deliberate
-     * user intent to animate this app, regardless of which event the
-     * cascade is firing for or whether the rule is Shader / Timing.
-     * Same case-insensitive substring match the
-     * `AnimationAppRuleList::firstMatchOfKind` resolver uses, so the
-     * override scope mirrors the per-rule match contract exactly.
-     * Empty windowClass falls through to the filter (no rule can
-     * match an unidentified window).
+     * A WindowRule carrying any OverrideAnimation* action whose
+     * matcher substring-matches the window's class OVERRIDES the
+     * filter — the existence of even one targeted rule signals
+     * deliberate user intent to animate this app, regardless of
+     * which event the cascade is firing for. Match is the same
+     * case-insensitive `WindowClass Contains <pattern>` matcher the
+     * shader_resolve cascade walks. Empty windowClass falls through
+     * to the filter (no rule can match an unidentified window).
      */
     bool shouldAnimateWindow(KWin::EffectWindow* w) const;
 
@@ -656,7 +654,6 @@ private:
     void endRestoreSuppression(KWin::EffectWindow* window);
 
     void loadShaderProfileFromDbus();
-    void loadAnimationAppRulesFromDbus();
     void loadMotionProfileTreeFromDbus();
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
@@ -971,11 +968,11 @@ private Q_SLOTS:
 
     /// Fetch the unified WindowRule store via `org.plasmazones.WindowRules.
     /// getAllRules`, filter to rules carrying an OverrideAnimation* action,
-    /// and forward them to the shader manager so they merge with the
-    /// bridge-converted legacy AnimationAppRules. Called once at bringup;
-    /// the bringup also subscribes to the interface's `rulesChanged` signal
-    /// (via a debounce timer — see m_animationRulesRefreshDebounce) so a
-    /// settings-UI edit takes effect without restarting the effect.
+    /// and forward them to the shader manager — the sole source of per-window
+    /// animation overrides. Called once at bringup; the bringup also
+    /// subscribes to the interface's `rulesChanged` signal (via a debounce
+    /// timer — see m_animationRulesRefreshDebounce) so a settings-UI edit
+    /// takes effect without restarting the effect.
     void loadWindowRuleAnimationsFromDbus();
 
     /// D-Bus signal handler for `WindowRules.rulesChanged`. Re-arms the

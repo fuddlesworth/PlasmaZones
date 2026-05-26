@@ -1,13 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Effect-local shims that reimplement the animation App Rule cascade on top
-// of PhosphorWindowRule::RuleEvaluator. The bridge (AnimationAppRuleBridge.h)
-// converts the App Rule list into a WindowRuleSet; these shims walk the
-// resolved event-scoped slots and reproduce, byte-identically, the behaviour
-// the standalone `PhosphorAnimationShaders::resolveAnimation*` resolvers
-// produced — including the duration clamp, the curve `tryCreate` fallback,
-// the engaged-empty `effectId` sentinel, and the empty-input short-circuits.
+// Effect-local shims for the per-window animation cascade on top of
+// PhosphorWindowRule::RuleEvaluator. They walk the event-scoped slots
+// (`anim-shader:`, `anim-timing:`, `anim-curve:`) filled by WindowRules
+// carrying OverrideAnimation* actions, with the duration clamp, the curve
+// `tryCreate` fallback, the engaged-empty `effectId` sentinel, and the
+// empty-input short-circuits localised here so the evaluator stays generic.
 //
 // This translation unit never sees a KWin type — it works purely off the
 // rule engine and the animation library value types, so the LGPL boundary
@@ -26,10 +25,13 @@ namespace PlasmaZones {
 
 namespace {
 
-constexpr QLatin1String kKeyEffectId{"effectId"};
-constexpr QLatin1String kKeyParams{"params"};
-constexpr QLatin1String kKeyCurve{"curve"};
-constexpr QLatin1String kKeyDurationMs{"durationMs"};
+// OverrideAnimation* action param keys consumed by the resolvers below come
+// from the shared PhosphorWindowRule::ActionParam vocabulary so the resolver,
+// the action-registry validators in ruleaction.cpp, the rule-editor UI, and
+// the v3→v4 migration in configmigration.cpp::buildAnimationAppRule all read
+// from one source of truth. A future rename of any of these wire keys flows
+// to every consumer in a single edit.
+namespace ActionParam = PhosphorWindowRule::ActionParam;
 
 /// A per-window query carrying only the window class — the animation App
 /// Rules match exclusively on `WindowClass Contains <pattern>`, so no other
@@ -73,9 +75,12 @@ resolveAnimationShaderProfile(const PhosphorWindowRule::RuleEvaluator& evaluator
 {
     // Empty-input short-circuit — mirrors the standalone resolver's header
     // contract for both an empty windowClass and an empty eventPath. An empty
-    // eventPath also maps to no slot (the bridge drops such rules), so the
-    // lookup below would fall through anyway; the explicit guard keeps the
-    // documented behaviour pinned independent of the bridge.
+    // eventPath also maps to no slot — the v3→v4 migration in
+    // configmigration.cpp::animationAppRuleToWindowRule drops rules with empty
+    // event paths, and live rules authored via the settings UI must carry one
+    // through the OverrideAnimation* action validators — so the lookup below
+    // would fall through anyway; the explicit guard keeps the documented
+    // short-circuit pinned independent of any upstream invariant drift.
     if (!windowClass.isEmpty() && !eventPath.isEmpty()) {
         const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolve(animationQuery(windowClass));
         const auto action = resolved.slot(shaderSlotFor(eventPath));
@@ -85,8 +90,8 @@ resolveAnimationShaderProfile(const PhosphorWindowRule::RuleEvaluator& evaluator
             // per-event default for matching windows" sentinel, and
             // ShaderProfile's own engaged-empty contract preserves it.
             PhosphorAnimationShaders::ShaderProfile profile;
-            profile.effectId = action->params.value(kKeyEffectId).toString();
-            profile.parameters = action->params.value(kKeyParams).toObject().toVariantMap();
+            profile.effectId = action->params.value(ActionParam::EffectId).toString();
+            profile.parameters = action->params.value(ActionParam::Params).toObject().toVariantMap();
             return profile;
         }
     }
@@ -121,8 +126,8 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
     // fall through to the per-event tree.
     PhosphorAnimationShaders::ShaderProfile profile;
     if (const auto action = resolved.slot(shaderSlotFor(eventPath))) {
-        profile.effectId = action->params.value(kKeyEffectId).toString();
-        profile.parameters = action->params.value(kKeyParams).toObject().toVariantMap();
+        profile.effectId = action->params.value(ActionParam::EffectId).toString();
+        profile.parameters = action->params.value(ActionParam::Params).toObject().toVariantMap();
     } else {
         profile = tree.resolve(eventPath);
     }
@@ -133,7 +138,7 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
     // resolveAnimationDuration shim.
     int durationMs = defaultDurationMs;
     if (const auto action = resolved.slot(timingSlotFor(eventPath))) {
-        const int candidate = action->params.value(kKeyDurationMs).toInt(0);
+        const int candidate = action->params.value(ActionParam::DurationMs).toInt(0);
         if (candidate > 0) {
             durationMs = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, candidate,
                                 PhosphorAnimation::Limits::MaxAnimationDurationMs);
@@ -159,10 +164,12 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
     PhosphorAnimation::Profile out = base;
     // Curve cascade: prefer the dedicated `anim-curve:` slot. Fall through to
     // the legacy `anim-timing:` slot's curve field so rules authored before
-    // the curve/timing split (or via the bridge) still resolve.
-    QString curve = curveAction ? curveAction->params.value(kKeyCurve).toString() : QString();
+    // the curve/timing split (including those produced by the v3→v4
+    // migration in configmigration.cpp::animationAppRuleToWindowRule) still
+    // resolve.
+    QString curve = curveAction ? curveAction->params.value(ActionParam::Curve).toString() : QString();
     if (curve.isEmpty() && timingAction) {
-        curve = timingAction->params.value(kKeyCurve).toString();
+        curve = timingAction->params.value(ActionParam::Curve).toString();
     }
     if (!curve.isEmpty()) {
         // tryCreate (NOT create) — a malformed curve string stays on the
@@ -173,7 +180,7 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
         }
     }
     if (timingAction) {
-        const int durationMs = timingAction->params.value(kKeyDurationMs).toInt(0);
+        const int durationMs = timingAction->params.value(ActionParam::DurationMs).toInt(0);
         if (durationMs > 0) {
             // Same clamp as resolveAnimationShaderAndDuration so the motion
             // and shader paths stay in lockstep for the same user-facing rule.
