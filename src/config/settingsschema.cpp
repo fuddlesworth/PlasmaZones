@@ -277,11 +277,6 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
         // by Store::read's legacy-string fallback on first load.
         {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QVariantMap},
         {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QVariantMap},
-        // AnimationAppRules persists as an ordered JSON array (each
-        // element a rule object). Stored under the same Animations
-        // group so the on-disk layout keeps everything animation-
-        // related in one section.
-        {CD::animationAppRulesKey(), CD::animationAppRules(), QMetaType::QVariantList},
     };
 }
 

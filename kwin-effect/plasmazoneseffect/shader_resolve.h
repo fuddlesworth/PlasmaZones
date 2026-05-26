@@ -21,19 +21,16 @@ namespace PlasmaZones {
 
 /**
  * @file shader_resolve.h
- * @brief Effect-local animation App Rule cascade shims, reimplemented on
+ * @brief Effect-local per-window animation cascade shims, built on
  *        PhosphorWindowRule::RuleEvaluator.
  *
- * These mirror, byte-identically, the standalone
- * `PhosphorAnimationShaders::resolveAnimation*` resolvers — but resolve the
- * App Rule layer through the unified rule engine instead of the
- * `AnimationAppRuleList` first-match walk. The animation App Rules are
- * converted to a `WindowRuleSet` by `AnimationAppRuleBridge`; the bound
- * `RuleEvaluator` is owned by `ShaderTransitionManager`.
- *
- * The duration clamp, the curve `tryCreate` fallback, the engaged-empty
- * `effectId` sentinel, and the empty-input short-circuits all live in these
- * shims — the bridge and the evaluator stay generic.
+ * These walk the event-scoped action slots (`anim-shader:<event>`,
+ * `anim-timing:<event>`, `anim-curve:<event>`) populated by `WindowRule`s
+ * carrying `OverrideAnimation{Shader,Timing,Curve}` actions, falling back to
+ * the per-event ShaderProfileTree / motion-profile defaults when no rule
+ * matches. The duration clamp, the curve `tryCreate` fallback, the
+ * engaged-empty `effectId` sentinel, and the empty-input short-circuits all
+ * live in these shims — the evaluator stays generic.
  */
 
 /**

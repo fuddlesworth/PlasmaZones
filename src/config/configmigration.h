@@ -27,7 +27,12 @@ namespace PlasmaZones {
 ///     per-mode disable lists become context-only WindowRules in the new
 ///     windowrules.json store. config.json loses the Display.*Disabled* keys;
 ///     assignments.json is superseded. QuickLayouts slots relocate to the
-///     quicklayouts.json sidecar. See docs/window-rule-refactor-design.md §8.
+///     quicklayouts.json sidecar. The Animations.AnimationAppRules array also
+///     folds into windowrules.json as OverrideAnimation{Shader,Timing} actions
+///     on `WindowClass Contains <pattern>` matchers — the legacy
+///     AnimationAppRule/Bridge types are removed and the runtime reads
+///     animation overrides exclusively from the unified rule store. See
+///     docs/window-rule-refactor-design.md §8.
 inline constexpr int ConfigSchemaVersion = 4;
 
 /// A single schema migration step: transforms root JSON in-place from
@@ -96,20 +101,29 @@ public:
     static void migrateV2ToV3(QJsonObject& root);
 
     /// v3 → v4 schema step. A MigrationStep is `void(QJsonObject&)` — it can
-    /// only touch config.json. This step removes the Display.*Disabled* keys
-    /// and stashes their values under a temporary `_v4DisableStash` root key
-    /// for @ref finalizeV4Conversion to consume. It stamps `_version = 4`.
+    /// only touch config.json. This step:
+    ///   - Removes the Display.*Disabled* keys and stashes their values under
+    ///     the temporary `_v4DisableStash` root key.
+    ///   - Removes the `Animations.AnimationAppRules` array and stashes it
+    ///     under the temporary `_v4AnimationRulesStash` root key.
+    /// Both stashes feed @ref finalizeV4Conversion. Empty inputs produce no
+    /// stash entries (the finalizer treats an absent key as a no-op for that
+    /// input). Stamps `_version = 4`.
     static void migrateV3ToV4(QJsonObject& root);
 
-    /// Post-chain finalizer for the v4 conversion. The two-file migration
+    /// Post-chain finalizer for the v4 conversion. The cross-file migration
     /// (config.json + assignments.json → windowrules.json) cannot live in a
     /// single `void(QJsonObject&)` MigrationStep, so this runs after the
     /// chain, from @ref ensureJsonConfigImpl.
     ///
-    /// It reads assignments.json + the `_v4DisableStash` left in config.json,
-    /// builds the WindowRuleSet, writes windowrules.json (atomic), relocates
-    /// the QuickLayouts slots into the quicklayouts.json sidecar, then — as
-    /// the last, irreversible step — deletes assignments.json.
+    /// It reads assignments.json + the `_v4DisableStash` and
+    /// `_v4AnimationRulesStash` left in config.json, builds the
+    /// WindowRuleSet (assignment rules + disable-list rules + per-window
+    /// animation-override rules ported from the legacy AnimationAppRule
+    /// JSON), writes windowrules.json (atomic), relocates the QuickLayouts
+    /// slots into the quicklayouts.json sidecar, strips both stash keys
+    /// from config.json, then — as the last, irreversible step — deletes
+    /// assignments.json.
     ///
     /// Idempotent: a no-op when windowrules.json already exists at
     /// `_version >= 4`. Safe to call on every startup.

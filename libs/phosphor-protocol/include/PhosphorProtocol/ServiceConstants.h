@@ -46,7 +46,6 @@ inline constexpr QLatin1String Shutdown("org.plasmazones.Error.Shutdown");
 /// than duplicating string literals on both ends of the bus.
 namespace SettingProperty {
 inline constexpr QLatin1String ShaderProfileTree("shaderProfileTree");
-inline constexpr QLatin1String AnimationAppRules("animationAppRules");
 inline constexpr QLatin1String MotionProfileTree("motionProfileTree");
 inline constexpr QLatin1String AnimationShaderSearchPaths("animationShaderSearchPaths");
 }
