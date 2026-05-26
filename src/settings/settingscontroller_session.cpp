@@ -165,6 +165,13 @@ void SettingsController::refreshActivities()
         m_activitiesAvailable = availReply.arguments().first().toBool();
     } else if (availReply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "refreshActivities: isActivitiesAvailable D-Bus call failed:" << availReply.errorMessage();
+        // Treat a D-Bus error the same as an explicit "false" reply —
+        // without this, m_activitiesAvailable kept its previous (likely
+        // true) value, the function then entered the `if (true)` branch
+        // below, each sub-call also errored, and m_activities /
+        // m_currentActivity stayed stale. QML rendered activities the
+        // daemon could no longer enumerate.
+        m_activitiesAvailable = false;
     }
 
     if (m_activitiesAvailable) {

@@ -115,62 +115,47 @@ testing but not by automated tests today.
 
 ---
 
-## 3. WindowRuleController commit() force-overwrite reachability (D4 — MAJOR)
+## 3. WindowRuleController commit() force-overwrite reachability (D4 — CLOSED in Pass 2d)
 
-**Finding:** When the daemon's rules change under the user's staged edits
-(`daemonChangedWhileDirty == true`), `commit(force=false)` refuses with a
-return value of false. The framework calls `apply()` with no `force`
-parameter and discards the bool, so the framework can never reach the
-force-overwrite path. The user-facing escape hatch must come from QML
-calling `commit(true)` explicitly.
+**Resolution:** Pass 2d added `Q_INVOKABLE bool forceCommit()` on
+`WindowRuleController` (header line 126, implementation in
+`windowrulecontroller.cpp`). The escape hatch is now reachable from QML.
 
-**What needs verifying:** Does `WindowRulesPage.qml` actually wire a
-"Force overwrite" button that calls `commit(true)`? If not, the user is
-stuck — `apply()` keeps trying `commit(false)` which keeps returning false.
-
-**Suggested approach:**
-
-1. Read `WindowRulesPage.qml` and the matching DiscardDialog binding.
-2. If the force path isn't reachable, expose `forceCommit()` as a
-   `Q_INVOKABLE` and wire a button in the dirty-bar variant that fires
-   when `daemonChangedWhileDirty` is true.
-3. Add a unit test exercising the dirty-while-daemon-changed sequence.
+**Remaining follow-up:** `WindowRulesPage.qml` still needs to wire a
+"Save anyway" button (or similar) that calls `controller.forceCommit()`
+when `daemonChangedWhileDirty` is true — only the C++ exposure landed
+in Pass 2d. Add a unit test once the QML side is wired.
 
 ---
 
-## 4. ShaderPackInstaller usage / contentsChanged O(N) (D11 — MEDIUM)
+## 4. SnappingShadersPageController layout reconnects O(N) (D11 — CLOSED in Pass 2d)
 
-**Finding:** `SnappingShadersPageController::connectLayoutSignals()` runs on
-every `ILayoutSourceRegistry::contentsChanged` and re-walks the full layout
-list to call `connect(... Qt::UniqueConnection)` for each. `UniqueConnection`
-dedupes correctly, so this is a soft perf issue, not a correctness one.
+**Resolution:** Pass 2d added `QSet<QObject*> m_wiredLayouts` tracking
+plus a `QObject::destroyed` eviction slot, so `connectLayoutSignals()`
+now does an O(new-layouts) walk on each `contentsChanged`, not O(N).
 
-**Why deferred:** Connect is cheap (microseconds per call); the cost is
-negligible for realistic layout counts. Real fix is to track the set of
-already-connected layouts and only connect new ones — adds state for
-marginal gain.
-
-**Suggested approach (only if profiling shows a real hotspot):** Track
-`QSet<PhosphorZones::Layout*> m_wiredLayouts`, only `connect()` layouts not
-already in the set, and remove entries on layout-destroyed signal.
+**Remaining follow-up:** None — finding fully addressed.
 
 ---
 
-## 5. WindowRuleController::duplicateRule single-emit (D12 — MEDIUM)
+## 5. WindowRuleController::duplicateRule single-emit (D12 — PARTIAL Pass 2d)
 
-**Finding:** `duplicateRule()` calls `m_model.moveRule()` three times plus
-one `m_model.addRule()`. Each emits Qt model signals (`rowsInserted`,
-`rowsMoved`); QML ListView reacts to all of them. Single user action
-produces a flurry of model notifications. Off-by-one comments in the code
-suggest the API is awkward enough that the author had to write detailed
-prose to get the calls right.
+**Partial Pass-2d fix:** Added `renormalizePriorities()` after the clone
++ reorder sequence — closes the priority-collision concern (clone no
+longer shares the source's band-base priority verbatim).
 
-**Suggested approach:**
+**Still open:** The underlying multi-emit pattern remains. `duplicateRule`
+issues `addRule` (one `rowsInserted`) plus up to two `moveRule` calls
+(each a `rowsMoved` cycle) plus `renormalizePriorities` (a `dataChanged`
+emit). Worst case: four model signals per single user "Duplicate" click.
+
+**Suggested approach (unchanged from original):**
 
 1. Add `WindowRuleModel::addRuleAt(const Rule& rule, int insertIndex)`
    that does a single `beginInsertRows` / `endInsertRows` pair.
-2. Replace `duplicateRule()`'s `addRule` + 3 `moveRule` sequence with one
-   `addRuleAt` call.
+2. Replace `duplicateRule()`'s `addRule` + 2 `moveRule` sequence with one
+   `addRuleAt` call. The priority renormalization can stay or be folded
+   into `addRuleAt` for atomicity.
 3. Update any other call site that needed to construct + reposition.
 
 ---

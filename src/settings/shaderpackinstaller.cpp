@@ -112,8 +112,17 @@ Result install(const QString& sourceUrl, const QString& userShaderDir)
     // re-drop of an already-installed pack would otherwise trip
     // DestinationExists by accident, and a symlinked path back into the
     // user dir would copy onto self.
-    const QString userDirAbsolute = QDir(userShaderDir).absolutePath() + QLatin1Char('/');
-    if (sourceInfo.absoluteFilePath().startsWith(userDirAbsolute))
+    //
+    // Also refuse when the source IS the user shader directory itself
+    // (a drag-drop of the user dir onto the install target). The
+    // startsWith check below uses a trailing slash and would miss the
+    // exact-equality case, leaving the recursive copy to walk into the
+    // freshly-created destination subdir on enumerate.
+    const QString sourceAbs = sourceInfo.absoluteFilePath();
+    const QString userDirAbs = QDir(userShaderDir).absolutePath();
+    if (sourceAbs == userDirAbs)
+        return Result::InvalidSource;
+    if (sourceAbs.startsWith(userDirAbs + QLatin1Char('/')))
         return Result::InvalidSource;
 
     const QString destDir = userShaderDir + QLatin1Char('/') + sourceBasename;

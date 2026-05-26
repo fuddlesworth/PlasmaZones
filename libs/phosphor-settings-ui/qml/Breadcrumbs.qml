@@ -20,20 +20,34 @@ import org.phosphor.settings.ui
  * independent.
  */
 RowLayout {
+    //* Ordered ancestors → current. Each entry is a page-data dict.
+
     id: root
 
     required property ApplicationController controller
-    //* Ordered ancestors → current. Each entry is a page-data dict.
+    //  Cycle guard mirrors ApplicationController::parentChainFor's
+    //  kMaxParentChainHops — a misregistered page with `parentId ==
+    //  own id` (or two pages mutually parenting each other) would
+    //  otherwise freeze the UI thread on first render.
+    readonly property int _maxParentChainHops: 32
     readonly property var segments: {
         const out = [];
+        const seen = ({
+        });
         let id = root.controller.currentPageId;
-        while (id) {
+        let hops = 0;
+        while (id && hops < root._maxParentChainHops) {
+            if (seen[id])
+                break;
+
+            seen[id] = true;
             const data = root.controller.registry.pageData(id);
             if (!data || !data.id)
                 break;
 
             out.unshift(data);
             id = data.parentId;
+            hops++;
         }
         return out;
     }

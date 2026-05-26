@@ -34,6 +34,7 @@
 // same path.
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -50,6 +51,29 @@ namespace PlasmaZones {
 // animations_controller_detail.h into scope so the call sites below stay
 // unqualified — matches the sibling main TU's using-declaration.
 using namespace animations_controller_detail;
+
+namespace {
+/// RAII scope guard for AnimationsPageController::m_mutatingShaderTree.
+/// Sets the flag on construction, clears on destruction — including the
+/// exception path through setShaderProfileTree, where a bare set/clear
+/// pair would leave the flag stuck true and silently disable external-
+/// reload dirty clearance for the rest of the process.
+struct MutatingShaderTreeScope
+{
+    bool& flag;
+    explicit MutatingShaderTreeScope(bool& f)
+        : flag(f)
+    {
+        flag = true;
+    }
+    ~MutatingShaderTreeScope()
+    {
+        flag = false;
+    }
+    MutatingShaderTreeScope(const MutatingShaderTreeScope&) = delete;
+    MutatingShaderTreeScope& operator=(const MutatingShaderTreeScope&) = delete;
+};
+} // namespace
 
 bool AnimationsPageController::supportsShaderLeg(const QString& path) const
 {
@@ -196,9 +220,10 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         if (tree.directOverride(path) == disabledProfile)
             return true;
         tree.setOverride(path, disabledProfile);
-        m_mutatingShaderTree = true;
-        m_settings->setShaderProfileTree(tree);
-        m_mutatingShaderTree = false;
+        {
+            MutatingShaderTreeScope guard(m_mutatingShaderTree);
+            m_settings->setShaderProfileTree(tree);
+        }
         m_shaderTreeDirty = true;
         Q_EMIT pendingChangesChanged();
         return true;
@@ -235,9 +260,10 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     if (tree.directOverride(path) == profile)
         return true;
     tree.setOverride(path, profile);
-    m_mutatingShaderTree = true;
-    m_settings->setShaderProfileTree(tree);
-    m_mutatingShaderTree = false;
+    {
+        MutatingShaderTreeScope guard(m_mutatingShaderTree);
+        m_settings->setShaderProfileTree(tree);
+    }
     m_shaderTreeDirty = true;
     Q_EMIT pendingChangesChanged();
     return true;
@@ -252,9 +278,10 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     if (!tree.hasOverride(path))
         return false;
     tree.clearOverride(path);
-    m_mutatingShaderTree = true;
-    m_settings->setShaderProfileTree(tree);
-    m_mutatingShaderTree = false;
+    {
+        MutatingShaderTreeScope guard(m_mutatingShaderTree);
+        m_settings->setShaderProfileTree(tree);
+    }
     m_shaderTreeDirty = true;
     Q_EMIT pendingChangesChanged();
     return true;
@@ -303,9 +330,10 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
         return 0;
     for (const QString& p : toClear)
         tree.clearOverride(p);
-    m_mutatingShaderTree = true;
-    m_settings->setShaderProfileTree(tree);
-    m_mutatingShaderTree = false;
+    {
+        MutatingShaderTreeScope guard(m_mutatingShaderTree);
+        m_settings->setShaderProfileTree(tree);
+    }
     m_shaderTreeDirty = true;
     Q_EMIT pendingChangesChanged();
     return toClear.size();

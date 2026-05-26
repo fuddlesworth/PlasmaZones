@@ -14,6 +14,7 @@
 #include "../common/layoutbundlebuilder.h"
 #include "../common/layoutpreviewserialize.h"
 #include "../config/configdefaults.h"
+#include "../core/logging.h"
 #include "../core/utils.h"
 #include "../pz_i18n.h"
 #include "dbusutils.h"
@@ -105,7 +106,7 @@ void SettingsController::loadLayoutsAsync()
             }
         }
 
-        sortMergedLayoutList(newLayouts);
+        SettingsController::sortMergedLayoutList(newLayouts);
         m_layouts = newLayouts;
         Q_EMIT layoutsChanged();
 

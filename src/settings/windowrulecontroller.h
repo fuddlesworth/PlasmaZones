@@ -336,10 +336,7 @@ private:
     /// rulesChanged D-Bus signal. Used by both subscribe / unsubscribe
     /// helpers so a rename of any field touches exactly one place — the
     /// dtor's disconnect must spell the same tuple as the ctor's connect
-    /// or the bus keeps a dangling slot reference. Returns true iff every
-    /// element is populated (defensive: an empty service silently fails
-    /// at the bus layer, which the caller can't distinguish from a
-    /// successful connect that never fires).
+    /// or the bus keeps a dangling slot reference.
     struct RulesChangedSubscription
     {
         QString service;

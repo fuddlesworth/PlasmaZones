@@ -82,10 +82,11 @@
 
 namespace PlasmaZones {
 
-// File-scope helper used by both the ctor (file-watcher rebind path) and
-// loadLayoutsAsync (D-Bus refresh path). Manual layouts sort first;
-// within each category alphabetical by name.
-static void sortMergedLayoutList(QVariantList& list)
+// Member-function definition for the static sort helper declared in the
+// header. Both settingscontroller.cpp and settingscontroller_layouts.cpp
+// call it via the qualified `SettingsController::sortMergedLayoutList(...)`
+// name, so the build is unity-batch-independent.
+void SettingsController::sortMergedLayoutList(QVariantList& list)
 {
     std::sort(list.begin(), list.end(), [](const QVariant& a, const QVariant& b) {
         const QVariantMap mapA = a.toMap();
@@ -146,7 +147,7 @@ SettingsController::SettingsController(QObject* parent)
         recalcLocalLayouts();
         QVariantList localLayouts = localLayoutPreviews();
         if (!localLayouts.isEmpty()) {
-            sortMergedLayoutList(localLayouts);
+            SettingsController::sortMergedLayoutList(localLayouts);
             m_layouts = std::move(localLayouts);
             // Suppress the local-path emit while a D-Bus getLayoutList
             // call is in flight — the async reply lambda will emit once

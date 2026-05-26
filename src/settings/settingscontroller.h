@@ -383,14 +383,18 @@ public:
     // The QML picker dialog calls requestRunningWindows() and binds to
     // runningWindowsAvailable(list) — no blocking D-Bus round-trip. The
     // controller caches the most recent list in m_cachedRunningWindows so
-    // repeat opens of the dialog can show the last-seen values immediately
-    // while the fresh fetch is in flight. The old synchronous
+    // QML dialogs can read it directly between calls. The old synchronous
     // getRunningWindows() was removed in Phase 6 of refactor/dbus-performance.
     //
+    // requestRunningWindows() invalidates the cache before issuing the
+    // call, so QML readers binding to cachedRunningWindows() during a
+    // refresh see an empty list (intentional — distinguishes "loading"
+    // from "stale-but-cached").
+    //
     // A client-side timeout guards against the KWin effect being unloaded:
-    // if no reply arrives within RunningWindowsTimeoutMs, we surface the
-    // last-cached list via runningWindowsTimedOut() so the QML dialog can
-    // show a "no response" state instead of hanging on a spinner forever.
+    // if no reply arrives within RunningWindowsTimeoutMs, we emit
+    // runningWindowsTimedOut() so the QML dialog can show a "no response"
+    // state instead of hanging on a spinner forever.
     Q_INVOKABLE void requestRunningWindows();
     Q_INVOKABLE QVariantList cachedRunningWindows() const
     {
@@ -518,8 +522,9 @@ Q_SIGNALS:
      * answers a requestRunningWindows() call (effect unloaded, crashed,
      * or slow). QML dialogs should surface an error state so the user
      * can distinguish "no windows" from "daemon or effect not responding".
-     * Cached list (possibly stale) is still available via
-     * cachedRunningWindows().
+     * Note: cachedRunningWindows() is empty by the time this fires —
+     * requestRunningWindows() invalidated the cache at the start of the
+     * request, so the timeout signal means "no data, refresh failed."
      */
     void runningWindowsTimedOut();
 
@@ -736,6 +741,14 @@ private:
     PhosphorSettingsUi::ApplicationController* m_app = nullptr;
 
     void buildApplicationController();
+
+    // File-scope sort helper exposed as a private static member so both
+    // settingscontroller.cpp (file-watcher rebind path) and
+    // settingscontroller_layouts.cpp (D-Bus refresh path) link to the
+    // same external-linkage symbol regardless of unity-build batching.
+    // Manual layouts sort first; within each category alphabetical by
+    // displayName (case-insensitive).
+    static void sortMergedLayoutList(QVariantList& list);
 };
 
 } // namespace PlasmaZones
