@@ -184,66 +184,12 @@ PhosphorUi.SettingsAppWindow {
     }
 
     // ── Toast ───────────────────────────────────────────────────────
-    Rectangle {
+    // Pill notification, anchored to the bottom of the window's
+    // contentItem so it floats above the chrome.
+    Toast {
         id: toast
 
-        property string message: ""
-
-        function show(msg) {
-            message = msg;
-            toastShow.restart();
-            toastHide.restart();
-        }
-
         parent: window.contentItem
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: Kirigami.Units.largeSpacing * 4
-        width: toastLabel.implicitWidth + Kirigami.Units.largeSpacing * 3
-        height: toastLabel.implicitHeight + Kirigami.Units.largeSpacing * 1.5
-        radius: height / 2
-        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.85)
-        opacity: 0
-        visible: opacity > 0
-        z: 100
-
-        Label {
-            id: toastLabel
-
-            anchors.centerIn: parent
-            text: toast.message
-            color: Kirigami.Theme.backgroundColor
-            font.weight: Font.Medium
-        }
-
-        PhosphorMotionAnimation {
-            id: toastShow
-
-            target: toast
-            properties: "opacity"
-            from: 0
-            to: 1
-            profile: "popup"
-            durationOverride: 200
-        }
-
-        SequentialAnimation {
-            id: toastHide
-
-            PauseAnimation {
-                duration: 2000
-            }
-
-            PhosphorMotionAnimation {
-                target: toast
-                properties: "opacity"
-                from: 1
-                to: 0
-                profile: "widget.fadeOut"
-            }
-
-        }
-
     }
 
     // ── Layout context menu (lives outside any Loader to avoid Qt6 SIGSEGV on Menu destruction) ──
@@ -562,122 +508,10 @@ PhosphorUi.SettingsAppWindow {
     }
 
     // ── Keyboard-shortcut overlay ───────────────────────────────────
-    Rectangle {
-        id: shortcutOverlay
-
+    KeyboardShortcutOverlay {
         parent: window.contentItem
-        anchors.fill: parent
-        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.6)
-        visible: opacity > 0
-        opacity: window._showShortcuts ? 1 : 0
-        z: 200
-        Keys.onEscapePressed: window._showShortcuts = false
-        focus: window._showShortcuts
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: window._showShortcuts = false
-        }
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(parent.width * 0.6, Kirigami.Units.gridUnit * 30)
-            height: shortcutContent.implicitHeight + Kirigami.Units.largeSpacing * 3
-            radius: Kirigami.Units.smallSpacing * 2
-            color: Kirigami.Theme.backgroundColor
-            border.width: Math.round(Kirigami.Units.devicePixelRatio)
-            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-
-            ColumnLayout {
-                id: shortcutContent
-
-                anchors.fill: parent
-                anchors.margins: Kirigami.Units.largeSpacing * 1.5
-                spacing: Kirigami.Units.largeSpacing
-
-                Label {
-                    text: i18n("Keyboard Shortcuts")
-                    font.weight: Font.DemiBold
-                    font.pixelSize: Kirigami.Units.gridUnit * 1.2
-                    Layout.alignment: Qt.AlignHCenter
-                }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                Repeater {
-                    model: [{
-                        "key": "Meta+Shift+P",
-                        "action": i18n("Open PlasmaZones Settings")
-                    }, {
-                        "key": "Meta+Shift+E",
-                        "action": i18n("Open Zone Editor")
-                    }, {
-                        "key": "Ctrl+PgUp",
-                        "action": i18n("Previous page")
-                    }, {
-                        "key": "Ctrl+PgDown",
-                        "action": i18n("Next page")
-                    }, {
-                        "key": "?",
-                        "action": i18n("Toggle this overlay")
-                    }]
-
-                    delegate: RowLayout {
-                        Layout.fillWidth: true
-
-                        Label {
-                            text: modelData.action
-                            Layout.fillWidth: true
-                            opacity: 0.7
-                        }
-
-                        Rectangle {
-                            implicitWidth: keyLabel.implicitWidth + Kirigami.Units.largeSpacing
-                            implicitHeight: keyLabel.implicitHeight + Kirigami.Units.smallSpacing
-                            radius: Kirigami.Units.smallSpacing / 2
-                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-                            border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-
-                            Label {
-                                id: keyLabel
-
-                                anchors.centerIn: parent
-                                text: modelData.key
-                                font: Kirigami.Theme.smallFont
-                            }
-
-                        }
-
-                    }
-
-                }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                Label {
-                    text: i18n("Press ? or Escape to close")
-                    opacity: 0.4
-                    Layout.alignment: Qt.AlignHCenter
-                    font: Kirigami.Theme.smallFont
-                }
-
-            }
-
-        }
-
-        Behavior on opacity {
-            PhosphorMotionAnimation {
-                profile: window._showShortcuts ? "widget.fadeIn" : "widget.fadeOut"
-                durationOverride: 200
-            }
-
-        }
-
+        shown: window._showShortcuts
+        onDismiss: window._showShortcuts = false
     }
 
     // ── What's New dialog ──────────────────────────────────────────

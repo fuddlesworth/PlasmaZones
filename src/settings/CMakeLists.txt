@@ -146,6 +146,8 @@ qt_add_qml_module(plasmazones-settings
         windowrulemodel.cpp
     QML_FILES
         qml/Main.qml
+        qml/Toast.qml
+        qml/KeyboardShortcutOverlay.qml
         qml/GeneralPage.qml
         qml/SnappingAppearancePage.qml
         qml/SnappingEffectsPage.qml
