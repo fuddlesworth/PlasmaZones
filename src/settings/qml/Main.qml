@@ -727,18 +727,16 @@ PhosphorUi.SettingsAppWindow {
                     loops: Animation.Infinite
                     running: dirtyBadge.visible
 
-                    NumberAnimation {
+                    PhosphorMotionAnimation {
                         from: 1
                         to: 0.4
-                        duration: Kirigami.Units.longDuration
-                        easing.type: Easing.InOutQuad
+                        profile: "widget.pulse"
                     }
 
-                    NumberAnimation {
+                    PhosphorMotionAnimation {
                         from: 0.4
                         to: 1
-                        duration: Kirigami.Units.longDuration
-                        easing.type: Easing.InOutQuad
+                        profile: "widget.pulse"
                     }
 
                 }

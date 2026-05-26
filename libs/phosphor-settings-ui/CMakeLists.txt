@@ -169,6 +169,12 @@ target_compile_features(PhosphorSettingsUiQml PUBLIC cxx_std_20)
 target_link_libraries(PhosphorSettingsUiQml
     PUBLIC
         PhosphorSettingsUi::PhosphorSettingsUi
+        # The chrome QML files import org.phosphor.animation for the
+        # spring-physics motion profiles (panel.fadeIn/Out,
+        # widget.accordionExpand/Collapse, widget.tint, widget.pulse).
+        # Linking the QML plugin here pulls phosphor-animation into
+        # the consumer's QML import path automatically.
+        PhosphorAnimation::PhosphorAnimationQml
         Qt6::Core
         Qt6::DBus
         Qt6::Gui

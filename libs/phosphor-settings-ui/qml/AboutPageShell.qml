@@ -32,15 +32,19 @@ Kirigami.ScrollablePage {
     id: root
 
     /** Children placed inside the shell land in the extras slot below the
-     *  standard content. Aliases `data` (not `children`) so the list-
-     *  assignment form `extraContent: [item, item]` works as well as
-     *  default-property nested children. */
+     *  standard content. Aliases `data` so default-property children and
+     *  the list-assignment form both work. */
     default property alias extraContent: extraColumn.data
     /** Optional content rendered ABOVE the icon/name/version header.
      *  Useful for app-level toggles (e.g. enable / disable the
      *  underlying daemon) that should anchor the page visually rather
-     *  than sit below the standard about-page chrome. */
-    property alias topContent: topColumn.data
+     *  than sit below the standard about-page chrome.
+     *
+     *  Accepts a `Component` (NOT a child Item) because property-alias
+     *  binding from outside a non-default property doesn't reliably
+     *  reparent items inside Kirigami.ScrollablePage's scrollable
+     *  area. The Component is instantiated by an internal Loader. */
+    property Component topContent: null
     property string appName: ""
     property string appIcon: ""
     property string appVersion: ""
@@ -56,20 +60,22 @@ Kirigami.ScrollablePage {
         spacing: Kirigami.Units.largeSpacing
 
         // ── Top content slot ──────────────────────────────────────
-        // Consumer-injected content anchored above the standard
-        // about-page chrome. visible flips on once `topContent` has
-        // been assigned (children.length comes from the data alias).
-        ColumnLayout {
-            id: topColumn
+        // Component-based injection — the consumer supplies a
+        // Component, this Loader instantiates it. The loader is
+        // visible (and the separator below shows) only when a
+        // Component has been provided.
+        Loader {
+            id: topLoader
 
             Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-            visible: children.length > 0
+            active: root.topContent !== null
+            visible: active
+            sourceComponent: root.topContent
         }
 
         Kirigami.Separator {
             Layout.fillWidth: true
-            visible: topColumn.children.length > 0
+            visible: topLoader.active
         }
 
         // Header: icon + name + version

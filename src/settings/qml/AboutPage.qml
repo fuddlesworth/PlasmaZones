@@ -125,32 +125,36 @@ PhosphorUi.AboutPageShell {
     }
 
     // ── Daemon enable/disable toggle (top of page, above the header) ──
-    // The shell adds a separator after topContent automatically.
-    topContent: RowLayout {
-        Layout.fillWidth: true
-        spacing: Kirigami.Units.smallSpacing
-
-        Label {
-            text: i18n("Enable PlasmaZones")
-            font.weight: Font.DemiBold
-        }
-
-        Item {
+    // The shell takes a Component and instantiates it via Loader. The
+    // shell adds a separator after topContent automatically.
+    topContent: Component {
+        RowLayout {
             Layout.fillWidth: true
-        }
+            spacing: Kirigami.Units.smallSpacing
 
-        Label {
-            text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
-            opacity: 0.7
-        }
-
-        SettingsSwitch {
-            checked: settingsController.daemonRunning
-            enabled: !settingsController.daemonController.busy
-            onToggled: function(newValue) {
-                settingsController.daemonController.setEnabled(newValue);
+            Label {
+                text: i18n("Enable PlasmaZones")
+                font.weight: Font.DemiBold
             }
-            accessibleName: i18n("Enable PlasmaZones")
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            Label {
+                text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
+                opacity: 0.7
+            }
+
+            SettingsSwitch {
+                checked: settingsController.daemonRunning
+                enabled: !settingsController.daemonController.busy
+                onToggled: function(newValue) {
+                    settingsController.daemonController.setEnabled(newValue);
+                }
+                accessibleName: i18n("Enable PlasmaZones")
+            }
+
         }
 
     }

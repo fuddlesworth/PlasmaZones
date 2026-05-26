@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.phosphor.settings.ui
 
 /**
@@ -41,8 +42,8 @@ ColumnLayout {
         color: root.controller.dirty ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
 
         Behavior on color {
-            ColorAnimation {
-                duration: Kirigami.Units.shortDuration
+            PhosphorMotionAnimation {
+                profile: "widget.tint"
             }
 
         }
@@ -133,10 +134,14 @@ ColumnLayout {
 
         }
 
+        // Use the project's accordion motion profiles. Direction is
+        // taken from `controller.dirty` (the same flag driving
+        // `expansion` above) — reading `expansion` here would re-
+        // evaluate during the Behavior and pick the wrong leg as the
+        // value approaches its target.
         Behavior on expansion {
-            NumberAnimation {
-                duration: Kirigami.Units.longDuration
-                easing.type: root.controller.dirty ? Easing.OutCubic : Easing.InCubic
+            PhosphorMotionAnimation {
+                profile: root.controller.dirty ? "widget.accordionExpand" : "widget.accordionCollapse"
             }
 
         }

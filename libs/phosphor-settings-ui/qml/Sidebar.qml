@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.phosphor.settings.ui
 
 /**
@@ -48,6 +49,10 @@ QQC2.ScrollView {
      *  loader exposes the row's entry as `modelData` so consumers can
      *  branch on `id`. */
     property Component trailingDelegate: null
+    /** Suppress per-row add/remove animations while the whole list is
+     *  cross-fading on drill-in/out — the cross-fade already covers the
+     *  visual change and per-row Transitions would fight it. */
+    property bool _suppressAccordion: false
 
     function drillInto(parentId) {
         if (root.currentParentId === parentId)
@@ -132,15 +137,15 @@ QQC2.ScrollView {
                 const label = (breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title);
                 if (label.toLowerCase().indexOf(needle) >= 0)
                     matches.push({
-                        "id": child.id,
-                        "title": label,
-                        "iconSource": child.iconSource,
-                        "hasQmlSource": true,
-                        "_depth": 0,
-                        "_isCollapsibleHeader": false,
-                        "_isDrillParent": false,
-                        "_isExpanded": false
-                    });
+                    "id": child.id,
+                    "title": label,
+                    "iconSource": child.iconSource,
+                    "hasQmlSource": true,
+                    "_depth": 0,
+                    "_isCollapsibleHeader": false,
+                    "_isDrillParent": false,
+                    "_isExpanded": false
+                });
 
             }
         };
@@ -207,32 +212,39 @@ QQC2.ScrollView {
         target: root.controller
     }
 
-    // Drill-in / drill-out cross-fade. Fades the inner column out, swaps
-    // currentParentId at zero opacity (model refresh runs from the
-    // onCurrentParentIdChanged handler), then fades back in.
+    // Drill-in / drill-out cross-fade. Fades the inner column out via
+    // panel.fadeOut, swaps currentParentId at zero opacity, then fades
+    // back in via panel.fadeIn. Matches the legacy `sidebarTransition`
+    // exactly.
     SequentialAnimation {
         id: drillAnimation
 
         property string pendingParentId: ""
 
-        NumberAnimation {
+        ScriptAction {
+            script: root._suppressAccordion = true
+        }
+
+        PhosphorMotionAnimation {
             target: listColumn
-            property: "opacity"
+            properties: "opacity"
             to: 0
-            duration: Kirigami.Units.shortDuration
-            easing.type: Easing.OutQuad
+            profile: "panel.fadeOut"
         }
 
         ScriptAction {
             script: root.currentParentId = drillAnimation.pendingParentId
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: listColumn
-            property: "opacity"
+            properties: "opacity"
             to: 1
-            duration: Kirigami.Units.shortDuration * 1.5
-            easing.type: Easing.InQuad
+            profile: "panel.fadeIn"
+        }
+
+        ScriptAction {
+            script: root._suppressAccordion = false
         }
 
     }
@@ -294,41 +306,48 @@ QQC2.ScrollView {
             interactive: false
             spacing: 0
 
-            // Accordion add/remove transitions. When a category expands
-            // or collapses, rows are inserted/removed via _refreshModel
-            // and these Transitions animate them in/out.
+            // Accordion add/remove/displaced transitions drive the
+            // category expand/collapse animation. Uses the project's
+            // `widget.accordionExpand` / `widget.accordionCollapse`
+            // motion profiles — matches the legacy chrome's UX
+            // verbatim. Gated by `_suppressAccordion` so they stay
+            // quiet during the drill cross-fade which covers the
+            // visual change.
             add: Transition {
-                NumberAnimation {
+                enabled: !root._suppressAccordion
+
+                PhosphorMotionAnimation {
                     properties: "opacity"
                     from: 0
                     to: 1
-                    duration: Kirigami.Units.shortDuration
-                    easing.type: Easing.OutCubic
+                    profile: "widget.accordionExpand"
                 }
 
-                NumberAnimation {
+                PhosphorMotionAnimation {
                     properties: "y"
-                    duration: Kirigami.Units.shortDuration
-                    easing.type: Easing.OutCubic
+                    profile: "widget.accordionExpand"
                 }
 
             }
 
             remove: Transition {
-                NumberAnimation {
+                enabled: !root._suppressAccordion
+
+                PhosphorMotionAnimation {
                     properties: "opacity"
+                    from: 1
                     to: 0
-                    duration: Kirigami.Units.shortDuration
-                    easing.type: Easing.InCubic
+                    profile: "widget.accordionCollapse"
                 }
 
             }
 
             displaced: Transition {
-                NumberAnimation {
+                enabled: !root._suppressAccordion
+
+                PhosphorMotionAnimation {
                     properties: "y"
-                    duration: Kirigami.Units.shortDuration
-                    easing.type: Easing.OutCubic
+                    profile: "widget.accordionExpand"
                 }
 
             }
