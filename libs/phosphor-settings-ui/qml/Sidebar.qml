@@ -48,6 +48,13 @@ ColumnLayout {
     id: root
 
     required property ApplicationController controller
+    /** When true the sidebar collapses to an icon-only rail: search
+     *  field hidden, row labels / chevrons / trailing widgets hidden
+     *  (icons centred), and tooltips show on hover so the labels are
+     *  still discoverable. Driven by SettingsAppWindow's
+     *  `sidebarCompact` property by default. Standalone consumers can
+     *  set this directly. */
+    property bool compact: false
     //* Empty string means "showing top-level pages"; otherwise the parent id.
     property string currentParentId: ""
     /** Per-id expand state for inline-collapsible categories. Default
@@ -139,16 +146,16 @@ ColumnLayout {
                     // labels under different parents.
                     if (child.hasDividerAfter === true)
                         out.push({
-                            "id": "__divider__" + parentId + "/" + child.id,
-                            "title": "",
-                            "iconSource": "",
-                            "hasQmlSource": false,
-                            "_depth": depth,
-                            "_isCollapsibleHeader": false,
-                            "_isDrillParent": false,
-                            "_isExpanded": false,
-                            "_isDivider": true
-                        });
+                        "id": "__divider__" + parentId + "/" + child.id,
+                        "title": "",
+                        "iconSource": "",
+                        "hasQmlSource": false,
+                        "_depth": depth,
+                        "_isCollapsibleHeader": false,
+                        "_isDrillParent": false,
+                        "_isExpanded": false,
+                        "_isDivider": true
+                    });
 
                 }
             };
@@ -280,6 +287,15 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.margins: Kirigami.Units.smallSpacing
         placeholderText: qsTr("Search...")
+        // In compact mode there's no room for a search field — hide
+        // and clear so a stale filter doesn't keep the rail filtered
+        // when the user collapses the sidebar.
+        visible: !root.compact
+        onVisibleChanged: {
+            if (!visible)
+                text = "";
+
+        }
     }
 
     Kirigami.Separator {
@@ -455,8 +471,20 @@ ColumnLayout {
                     // doesn't change passing over them.
                     enabled: !_isDivider
                     hoverEnabled: !_isDivider
-                    leftPadding: Kirigami.Units.smallSpacing + (_depth * Kirigami.Units.gridUnit)
-                    rightPadding: Kirigami.Units.smallSpacing
+                    // Compact mode collapses leftPadding to zero so the
+                    // icon centers visually in the narrow rail. Depth
+                    // indent is also dropped — there's no room to
+                    // express hierarchy when only the icon is visible,
+                    // and the user has the tooltip + active accent to
+                    // orient by.
+                    leftPadding: root.compact ? 0 : (Kirigami.Units.smallSpacing + (_depth * Kirigami.Units.gridUnit))
+                    rightPadding: root.compact ? 0 : Kirigami.Units.smallSpacing
+                    // Tooltip surfaces the row label when compact mode
+                    // has hidden it. 300ms delay matches legacy. Held
+                    // off for divider rows because they have no label.
+                    ToolTip.visible: root.compact && itemDelegate.hovered && !itemDelegate._isDivider
+                    ToolTip.text: itemDelegate.title
+                    ToolTip.delay: 300
                     onClicked: {
                         if (_isDivider)
                             return ;
@@ -548,6 +576,13 @@ ColumnLayout {
                             source: itemDelegate.iconSource
                             Layout.preferredWidth: Kirigami.Units.iconSizes.small
                             Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            // In compact mode the icon is the only
+                            // visible row content; fillWidth lets the
+                            // RowLayout center it in the rail. In
+                            // normal mode it sits at its natural width
+                            // with the label fillWidth'ing after it.
+                            Layout.fillWidth: root.compact
+                            Layout.alignment: root.compact ? Qt.AlignHCenter : Qt.AlignLeft
                             // Legacy opacity model: active rows go to
                             // 1.0, everything else sits at 0.7. The
                             // 120-ms `widget.hover` transition matches
@@ -570,6 +605,12 @@ ColumnLayout {
                             Layout.preferredWidth: 0
                             elide: Text.ElideRight
                             text: itemDelegate.title
+                            // Compact mode hides the label entirely —
+                            // the row reads as icon-only with a
+                            // tooltip. Labels are still kept in the
+                            // delegate so the screen reader's
+                            // Accessible.name still gets a string.
+                            visible: !root.compact
                             // Demi-bold on active rows AND collapsible
                             // category headers — both read as
                             // "anchored" surfaces. Other leaves get
@@ -593,17 +634,27 @@ ColumnLayout {
                             property var modelData: itemDelegate.entryData
 
                             sourceComponent: root.trailingDelegate
-                            active: root.trailingDelegate !== null
+                            // Trailing widgets (e.g. PlasmaZones'
+                            // snapping/tiling Switch + dirty badge)
+                            // are suppressed in compact mode — there's
+                            // no horizontal room and the row reads as
+                            // icon-only. Consumers that need a compact-
+                            // mode trailing affordance can express it
+                            // through the badge slot once that exists.
+                            active: root.trailingDelegate !== null && !root.compact
+                            visible: active
                             Layout.alignment: Qt.AlignVCenter
                         }
 
                         // Right chevron — single icon, rotated 90°
                         // when an inline category is expanded. Shown
                         // for drill-parents AND collapsible category
-                        // headers; not shown for leaves. Reduced
+                        // headers; not shown for leaves or in compact
+                        // mode (no room, and the active accent + drill
+                        // change carries the affordance). Reduced
                         // opacity so it reads as ornament, not action.
                         Kirigami.Icon {
-                            visible: itemDelegate._isDrillParent || itemDelegate._isCollapsibleHeader
+                            visible: (itemDelegate._isDrillParent || itemDelegate._isCollapsibleHeader) && !root.compact
                             source: "go-next"
                             Layout.preferredWidth: Kirigami.Units.iconSizes.small
                             Layout.preferredHeight: Kirigami.Units.iconSizes.small

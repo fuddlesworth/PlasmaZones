@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.phosphor.settings.ui
 
 /**
@@ -35,6 +36,12 @@ Kirigami.ApplicationWindow {
      *  that need to retitle / restyle it. Read-only — the property
      *  the alias points to is `id: discardDialog` declared below. */
     property alias closeDialog: discardDialog
+    /** Auto-collapses the sidebar to an icon-only rail when the window
+     *  is too narrow to comfortably show labels. Threshold is 50
+     *  grid units, matching the legacy PlasmaZones chrome. Consumers
+     *  can override this binding (e.g. for tests or to force a
+     *  collapsed rail) by reassigning the property. */
+    property bool sidebarCompact: width < Kirigami.Units.gridUnit * 50
 
     width: 1100
     height: 720
@@ -72,17 +79,47 @@ Kirigami.ApplicationWindow {
                 id: sidebar
 
                 Layout.fillHeight: true
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 14
-                Layout.minimumWidth: Kirigami.Units.gridUnit * 10
-                // Layout.maximumWidth caps the Sidebar so an inflated
-                // implicitWidth from any inner child (the daemon Pane
-                // in the footer slot, a long row title, the ListView
-                // delegates) can't push the sidebar past its preferred
-                // size. Without this, ColumnLayout's max-child-implicit
-                // sizing fights the parent RowLayout's preferredWidth
-                // and the sidebar grows to fill the window.
-                Layout.maximumWidth: Kirigami.Units.gridUnit * 18
+                // Sidebar width tracks sidebarCompact: 12 gridUnits at
+                // normal width (matches legacy), collapses to 3
+                // gridUnits in compact mode (icon-only rail). All
+                // three Layout width hints stay in lockstep so the
+                // animation lands at a clean width and inner-child
+                // implicitWidth can't push the rail wider during the
+                // transition.
+                Layout.preferredWidth: root.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
+                Layout.minimumWidth: root.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
+                Layout.maximumWidth: root.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
                 controller: root.controller
+                compact: root.sidebarCompact
+
+                // Slide animation when the rail collapses / expands.
+                // Direction is read from `root.sidebarCompact` (the
+                // same flag that drove the width assignment above) so
+                // the easing leg is decided synchronously — reading
+                // `Layout.preferredWidth` inside the Behavior would
+                // re-evaluate during the animation and converge to
+                // the wrong leg as the value approached its target.
+                Behavior on Layout.preferredWidth {
+                    PhosphorMotionAnimation {
+                        profile: !root.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
+                    }
+
+                }
+
+                Behavior on Layout.minimumWidth {
+                    PhosphorMotionAnimation {
+                        profile: !root.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
+                    }
+
+                }
+
+                Behavior on Layout.maximumWidth {
+                    PhosphorMotionAnimation {
+                        profile: !root.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
+                    }
+
+                }
+
             }
 
             Kirigami.Separator {
