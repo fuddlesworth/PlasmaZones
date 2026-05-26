@@ -225,6 +225,73 @@ private Q_SLOTS:
         app.registerPage(page, {}, QStringLiteral("X"), QUrl());
         QVERIFY(app.registry()->hasPage(QStringLiteral("x")));
     }
+
+    void parentChainWalksUpward()
+    {
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* aB = new StubPage(QStringLiteral("a.b"));
+        auto* aBC = new StubPage(QStringLiteral("a.b.c"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl(QStringLiteral("qrc:/A.qml")));
+        app.registerPage(aB, QStringLiteral("a"), QStringLiteral("B"), QUrl(QStringLiteral("qrc:/B.qml")));
+        app.registerPage(aBC, QStringLiteral("a.b"), QStringLiteral("C"), QUrl(QStringLiteral("qrc:/C.qml")));
+
+        QCOMPARE(app.parentChainFor(QStringLiteral("a.b.c")),
+                 QStringList({QStringLiteral("a"), QStringLiteral("a.b")}));
+        QCOMPARE(app.parentChainFor(QStringLiteral("a.b")), QStringList({QStringLiteral("a")}));
+        QCOMPARE(app.parentChainFor(QStringLiteral("a")), QStringList());
+        QCOMPARE(app.parentChainFor(QStringLiteral("ghost")), QStringList());
+    }
+
+    void gotoNextSkipsNonNavigablePages()
+    {
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* category = new StubPage(QStringLiteral("cat"));
+        auto* b = new StubPage(QStringLiteral("b"));
+        auto* c = new StubPage(QStringLiteral("c"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl(QStringLiteral("qrc:/A.qml")));
+        app.registerPage(category, {}, QStringLiteral("Category"), QUrl());
+        app.registerPage(b, QStringLiteral("cat"), QStringLiteral("B"), QUrl(QStringLiteral("qrc:/B.qml")));
+        app.registerPage(c, QStringLiteral("cat"), QStringLiteral("C"), QUrl(QStringLiteral("qrc:/C.qml")));
+
+        app.setCurrentPageId(QStringLiteral("a"));
+        QCOMPARE(app.gotoNextPage(), QStringLiteral("b")); // skips "cat"
+        QCOMPARE(app.currentPageId(), QStringLiteral("b"));
+        QCOMPARE(app.gotoNextPage(), QStringLiteral("c"));
+        QCOMPARE(app.gotoNextPage(), QStringLiteral("a")); // wraps
+    }
+
+    void gotoPreviousWrapsBackward()
+    {
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* b = new StubPage(QStringLiteral("b"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl(QStringLiteral("qrc:/A.qml")));
+        app.registerPage(b, {}, QStringLiteral("B"), QUrl(QStringLiteral("qrc:/B.qml")));
+
+        app.setCurrentPageId(QStringLiteral("a"));
+        QCOMPARE(app.gotoPreviousPage(), QStringLiteral("b")); // wraps
+        QCOMPARE(app.gotoPreviousPage(), QStringLiteral("a"));
+    }
+
+    void isCollapsibleFlowsThroughRegistry()
+    {
+        ApplicationController app;
+        auto* collapsible = new StubPage(QStringLiteral("cat"));
+        auto* drillIn = new StubPage(QStringLiteral("drill"));
+        app.registerPage(collapsible, {}, QStringLiteral("Cat"), QUrl(), QStringLiteral(""), /*isCollapsible=*/true);
+        app.registerPage(drillIn, {}, QStringLiteral("Drill"), QUrl(), QStringLiteral(""), /*isCollapsible=*/false);
+
+        const auto cat = app.registry()->entry(QStringLiteral("cat"));
+        const auto drill = app.registry()->entry(QStringLiteral("drill"));
+        QVERIFY(cat.isCollapsible);
+        QVERIFY(!drill.isCollapsible);
+
+        // Q_INVOKABLE pageData should surface the flag for QML consumers.
+        const QVariantMap catData = app.registry()->pageData(QStringLiteral("cat"));
+        QCOMPARE(catData.value(QStringLiteral("isCollapsible")).toBool(), true);
+    }
 };
 
 QTEST_MAIN(TestApplicationController)

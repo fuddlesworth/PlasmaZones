@@ -14,46 +14,68 @@ import org.phosphor.settings.ui
  * Reset resets only the current page to its factory defaults; the user
  * still needs to hit Apply afterwards to persist.
  */
-RowLayout {
+ColumnLayout {
     id: root
 
     required property ApplicationController controller
 
-    spacing: Kirigami.Units.smallSpacing
+    spacing: 0
 
-    Item {
+    // Persistent accent line that tints highlightColor when dirty —
+    // a calm always-visible "you have unsaved work" signal.
+    Rectangle {
         Layout.fillWidth: true
-        implicitHeight: applyButton.implicitHeight + Kirigami.Units.smallSpacing * 2
+        height: Math.round(Kirigami.Units.devicePixelRatio)
+        color: root.controller.dirty ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+
+        Behavior on color {
+            ColorAnimation {
+                duration: Kirigami.Units.shortDuration
+            }
+
+        }
+
     }
 
-    QQC2.Button {
-        text: qsTr("Reset Current Page")
-        enabled: root.controller.currentPageId !== ""
-        icon.name: "edit-undo-symbolic"
-        onClicked: root.controller.resetCurrentPage()
-        Layout.margins: Kirigami.Units.smallSpacing
-    }
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: Kirigami.Units.smallSpacing
 
-    QQC2.Button {
-        id: cancelButton
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: applyButton.implicitHeight + Kirigami.Units.smallSpacing * 2
+        }
 
-        text: qsTr("Cancel")
-        enabled: root.controller.dirty
-        icon.name: "dialog-cancel"
-        onClicked: root.controller.discardAll()
-        Layout.margins: Kirigami.Units.smallSpacing
-    }
+        QQC2.Button {
+            text: qsTr("Reset Current Page")
+            enabled: root.controller.currentPageId !== ""
+            icon.name: "edit-undo-symbolic"
+            onClicked: root.controller.resetCurrentPage()
+            Layout.margins: Kirigami.Units.smallSpacing
+        }
 
-    QQC2.Button {
-        id: applyButton
+        QQC2.Button {
+            id: cancelButton
 
-        text: qsTr("Apply")
-        enabled: root.controller.dirty
-        icon.name: "dialog-ok-apply"
-        highlighted: true
-        onClicked: root.controller.applyAll()
-        Layout.margins: Kirigami.Units.smallSpacing
-        Layout.rightMargin: Kirigami.Units.largeSpacing
+            text: qsTr("Cancel")
+            enabled: root.controller.dirty
+            icon.name: "dialog-cancel"
+            onClicked: root.controller.discardAll()
+            Layout.margins: Kirigami.Units.smallSpacing
+        }
+
+        QQC2.Button {
+            id: applyButton
+
+            text: qsTr("Apply")
+            enabled: root.controller.dirty
+            icon.name: "dialog-ok-apply"
+            highlighted: true
+            onClicked: root.controller.applyAll()
+            Layout.margins: Kirigami.Units.smallSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
+        }
+
     }
 
 }

@@ -48,7 +48,7 @@ void ApplicationController::setCurrentPageId(const QString& id)
 }
 
 void ApplicationController::registerPage(PageController* page, const QString& parentId, const QString& title,
-                                         const QUrl& qmlSource, const QString& iconSource)
+                                         const QUrl& qmlSource, const QString& iconSource, bool isCollapsible)
 {
     if (!page) {
         qWarning() << "ApplicationController::registerPage: null page";
@@ -65,6 +65,7 @@ void ApplicationController::registerPage(PageController* page, const QString& pa
     entry.iconSource = iconSource;
     entry.qmlSource = qmlSource;
     entry.controller = page;
+    entry.isCollapsible = isCollapsible;
     m_registry->registerPage(std::move(entry));
 
     trackDomain(page);
@@ -110,6 +111,69 @@ void ApplicationController::resetCurrentPage()
     if (auto* page = m_registry->controller(m_currentPageId)) {
         page->resetToDefaults();
     }
+}
+
+QString ApplicationController::gotoPreviousPage()
+{
+    const auto entries = m_registry->allPages();
+    QStringList navigable;
+    int currentIdx = -1;
+    for (const auto& e : entries) {
+        if (e.qmlSource.isEmpty()) {
+            continue;
+        }
+        if (e.id == m_currentPageId) {
+            currentIdx = navigable.size();
+        }
+        navigable.append(e.id);
+    }
+    if (navigable.isEmpty()) {
+        return QString();
+    }
+    const int next = currentIdx < 0 ? navigable.size() - 1 : (currentIdx == 0 ? navigable.size() - 1 : currentIdx - 1);
+    setCurrentPageId(navigable.at(next));
+    return navigable.at(next);
+}
+
+QString ApplicationController::gotoNextPage()
+{
+    const auto entries = m_registry->allPages();
+    QStringList navigable;
+    int currentIdx = -1;
+    for (const auto& e : entries) {
+        if (e.qmlSource.isEmpty()) {
+            continue;
+        }
+        if (e.id == m_currentPageId) {
+            currentIdx = navigable.size();
+        }
+        navigable.append(e.id);
+    }
+    if (navigable.isEmpty()) {
+        return QString();
+    }
+    const int next = currentIdx < 0 ? 0 : (currentIdx == navigable.size() - 1 ? 0 : currentIdx + 1);
+    setCurrentPageId(navigable.at(next));
+    return navigable.at(next);
+}
+
+QStringList ApplicationController::parentChainFor(const QString& id) const
+{
+    QStringList chain;
+    QString cursor = id;
+    // Walk parent links upward; cap at 32 hops as a cycle guard.
+    for (int i = 0; i < 32; ++i) {
+        if (!m_registry->hasPage(cursor)) {
+            break;
+        }
+        const QString parent = m_registry->entry(cursor).parentId;
+        if (parent.isEmpty()) {
+            break;
+        }
+        chain.prepend(parent);
+        cursor = parent;
+    }
+    return chain;
 }
 
 void ApplicationController::trackDomain(StagingDomain* domain)

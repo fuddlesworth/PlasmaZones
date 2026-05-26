@@ -601,18 +601,21 @@ void SettingsController::buildApplicationController()
     // Helper: register one page. `delegate` may be nullptr for category
     // headings that have children but no page of their own (the Sidebar
     // treats them as drill-down parents rather than navigable leaves).
+    // `collapsible` makes the sidebar render the entry as an inline-
+    // expandable accordion header instead of a drill-down target.
     const auto reg = [this, &qmlPrefix](const QString& id, QObject* delegate, const QString& parentId,
-                                        const QString& title, const QString& qmlFile, const QString& icon) {
+                                        const QString& title, const QString& qmlFile, const QString& icon,
+                                        bool collapsible = false) {
         auto* adapter = new PageAdapter(id, delegate, m_app);
         const QUrl source = qmlFile.isEmpty() ? QUrl() : QUrl(qmlPrefix + qmlFile);
-        m_app->registerPage(adapter, parentId, title, source, icon);
+        m_app->registerPage(adapter, parentId, title, source, icon, collapsible);
     };
 
     // Top-level entries — matches the legacy _mainItems in Main.qml.
     reg(QStringLiteral("overview"), nullptr, QString(), PzI18n::tr("Overview"), QStringLiteral("MonitorStatePage.qml"),
         QStringLiteral("monitor"));
     reg(QStringLiteral("display"), nullptr, QString(), PzI18n::tr("Display"), QString(),
-        QStringLiteral("preferences-desktop-display"));
+        QStringLiteral("preferences-desktop-display"), /*collapsible=*/true);
     reg(QStringLiteral("snapping"), nullptr, QString(), PzI18n::tr("Snapping"), QString(),
         QStringLiteral("view-split-left-right"));
     reg(QStringLiteral("tiling"), nullptr, QString(), PzI18n::tr("Tiling"), QString(),
@@ -620,7 +623,7 @@ void SettingsController::buildApplicationController()
     reg(QStringLiteral("animations"), m_animationsPage, QString(), PzI18n::tr("Animations"), QString(),
         QStringLiteral("media-playback-start"));
     reg(QStringLiteral("rules"), nullptr, QString(), PzI18n::tr("Rules"), QString(),
-        QStringLiteral("view-list-details"));
+        QStringLiteral("view-list-details"), /*collapsible=*/true);
     reg(QStringLiteral("editor"), m_editorPage, QString(), PzI18n::tr("Editor"), QStringLiteral("EditorPage.qml"),
         QStringLiteral("document-edit"));
     reg(QStringLiteral("general"), m_generalPage, QString(), PzI18n::tr("General"), QStringLiteral("GeneralPage.qml"),
@@ -645,11 +648,11 @@ void SettingsController::buildApplicationController()
     // delegate and no qmlSource; PageHost.qml shows the placeholder when one
     // of them is the active page.
     reg(QStringLiteral("snapping-visual-cat"), nullptr, QStringLiteral("snapping"), PzI18n::tr("Visual"), QString(),
-        QStringLiteral("preferences-desktop-color"));
+        QStringLiteral("preferences-desktop-color"), /*collapsible=*/true);
     reg(QStringLiteral("snapping-behavior-cat"), nullptr, QStringLiteral("snapping"), PzI18n::tr("Behavior"), QString(),
-        QStringLiteral("preferences-system"));
+        QStringLiteral("preferences-system"), /*collapsible=*/true);
     reg(QStringLiteral("snapping-config-cat"), nullptr, QStringLiteral("snapping"), PzI18n::tr("Configuration"),
-        QString(), QStringLiteral("configure"));
+        QString(), QStringLiteral("configure"), /*collapsible=*/true);
 
     reg(QStringLiteral("snapping-appearance"), m_snappingAppearancePage, QStringLiteral("snapping-visual-cat"),
         PzI18n::tr("Appearance"), QStringLiteral("SnappingAppearancePage.qml"),
@@ -673,11 +676,11 @@ void SettingsController::buildApplicationController()
 
     // Tiling children — same shape as snapping.
     reg(QStringLiteral("tiling-visual-cat"), nullptr, QStringLiteral("tiling"), PzI18n::tr("Visual"), QString(),
-        QStringLiteral("preferences-desktop-color"));
+        QStringLiteral("preferences-desktop-color"), /*collapsible=*/true);
     reg(QStringLiteral("tiling-behavior-cat"), nullptr, QStringLiteral("tiling"), PzI18n::tr("Behavior"), QString(),
-        QStringLiteral("preferences-system"));
+        QStringLiteral("preferences-system"), /*collapsible=*/true);
     reg(QStringLiteral("tiling-config-cat"), nullptr, QStringLiteral("tiling"), PzI18n::tr("Configuration"), QString(),
-        QStringLiteral("configure"));
+        QStringLiteral("configure"), /*collapsible=*/true);
 
     reg(QStringLiteral("tiling-appearance"), m_tilingAppearancePage, QStringLiteral("tiling-visual-cat"),
         PzI18n::tr("Appearance"), QStringLiteral("TilingAppearancePage.qml"),
@@ -696,9 +699,9 @@ void SettingsController::buildApplicationController()
     reg(QStringLiteral("animations-general"), nullptr, QStringLiteral("animations"), PzI18n::tr("General"),
         QStringLiteral("AnimationsGeneralPage.qml"), QStringLiteral("configure"));
     reg(QStringLiteral("animations-surfaces"), nullptr, QStringLiteral("animations"), PzI18n::tr("Surfaces"), QString(),
-        QStringLiteral("preferences-desktop-multimedia"));
+        QStringLiteral("preferences-desktop-multimedia"), /*collapsible=*/true);
     reg(QStringLiteral("animations-library"), nullptr, QStringLiteral("animations"), PzI18n::tr("Library"), QString(),
-        QStringLiteral("folder-open"));
+        QStringLiteral("folder-open"), /*collapsible=*/true);
 
     reg(QStringLiteral("animations-windows"), nullptr, QStringLiteral("animations-surfaces"), PzI18n::tr("Windows"),
         QStringLiteral("AnimationsWindowsPage.qml"), QStringLiteral("window-new"));

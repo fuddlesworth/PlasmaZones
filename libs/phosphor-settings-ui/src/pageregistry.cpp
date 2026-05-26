@@ -98,6 +98,8 @@ QVariantMap entryToVariant(const PageRegistry::Entry& e)
     m.insert(QStringLiteral("title"), e.title);
     m.insert(QStringLiteral("iconSource"), e.iconSource);
     m.insert(QStringLiteral("qmlSource"), e.qmlSource);
+    m.insert(QStringLiteral("isCollapsible"), e.isCollapsible);
+    m.insert(QStringLiteral("hasQmlSource"), !e.qmlSource.isEmpty());
     return m;
 }
 } // namespace

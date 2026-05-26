@@ -73,6 +73,78 @@ PhosphorUi.SettingsAppWindow {
             window.x = geo.x;
             window.y = geo.y;
         }
+        // Restore sidebar drill state: walk the parent chain from the
+        // restored activePage. The legacy file did a 90-line traversal
+        // over _mainItems / _childItems for this — the framework now
+        // exposes the same lookup as one Q_INVOKABLE on the controller.
+        // Drill into the deepest non-collapsible ancestor so the sub-
+        // sidebar opens at the right level; inline-collapsible
+        // ancestors stay where they live (the sidebar will expand
+        // them via the default-true `expandedCategories` map).
+        const chain = settingsController.app.parentChainFor(settingsController.activePage);
+        for (let i = chain.length - 1; i >= 0; --i) {
+            const entry = settingsController.app.registry.pageData(chain[i]);
+            if (entry && entry.id && entry.isCollapsible !== true) {
+                window.sidebar.drillInto(chain[i]);
+                break;
+            }
+        }
+    }
+
+    // Mirror activePage changes back into the sidebar's drill scope —
+    // external navigation (a CLI --page arg, a daemon broadcast, a
+    // shortcut) should still land in the right drill view rather than
+    // leaving the sidebar showing a stale top-level / wrong-parent list.
+    Connections {
+        function onActivePageChanged() {
+            const chain = settingsController.app.parentChainFor(settingsController.activePage);
+            // Pick the deepest non-collapsible ancestor — same logic
+            // Component.onCompleted uses on startup.
+            for (let i = chain.length - 1; i >= 0; --i) {
+                const entry = settingsController.app.registry.pageData(chain[i]);
+                if (entry && entry.id && entry.isCollapsible !== true) {
+                    if (window.sidebar.currentParentId !== chain[i])
+                        window.sidebar.drillInto(chain[i]);
+
+                    return ;
+                }
+            }
+            // No non-collapsible ancestor — page lives under main
+            // mode (top-level or under an inline category).
+            if (window.sidebar.currentParentId !== "")
+                window.sidebar.drillOut();
+
+        }
+
+        target: settingsController
+    }
+
+    // Auto-drill-out when a feature is disabled while inside its sub-sidebar.
+    Connections {
+        function onSnappingEnabledChanged() {
+            if (!appSettings.snappingEnabled && window.sidebar.currentParentId === "snapping")
+                window.sidebar.drillOut();
+
+        }
+
+        function onAutotileEnabledChanged() {
+            if (!appSettings.autotileEnabled && window.sidebar.currentParentId === "tiling")
+                window.sidebar.drillOut();
+
+        }
+
+        target: appSettings
+    }
+
+    // ── Ctrl+PgUp / Ctrl+PgDown — step through navigable pages ──────
+    Shortcut {
+        sequence: "Ctrl+PgUp"
+        onActivated: settingsController.app.gotoPreviousPage()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+PgDown"
+        onActivated: settingsController.app.gotoNextPage()
     }
 
     // ── Help-overlay shortcut ───────────────────────────────────────
@@ -562,6 +634,12 @@ PhosphorUi.SettingsAppWindow {
                     }, {
                         "key": "Meta+Shift+E",
                         "action": i18n("Open Zone Editor")
+                    }, {
+                        "key": "Ctrl+PgUp",
+                        "action": i18n("Previous page")
+                    }, {
+                        "key": "Ctrl+PgDown",
+                        "action": i18n("Next page")
                     }, {
                         "key": "?",
                         "action": i18n("Toggle this overlay")

@@ -22,6 +22,10 @@ Kirigami.ApplicationWindow {
     required property ApplicationController controller
     //* Optional extra content shown in the header toolbar (e.g. global search).
     property alias headerExtras: headerExtrasLoader.sourceComponent
+    /** Public alias on the chrome Sidebar — consumers use this to restore
+     *  drill state on startup (`sidebar.drillInto(parentId)`), toggle
+     *  collapsible categories programmatically, or react to navigation. */
+    property alias sidebar: sidebar
 
     width: 1100
     height: 720

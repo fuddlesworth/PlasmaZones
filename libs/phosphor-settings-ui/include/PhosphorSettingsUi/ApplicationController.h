@@ -54,13 +54,32 @@ public:
 
     /** Register a page in the sidebar. The page is also tracked as a
      *  staging domain. The controller's parent is reassigned to this
-     *  ApplicationController if it has none. */
+     *  ApplicationController if it has none.
+     *
+     *  When `isCollapsible` is true the sidebar renders this entry as
+     *  an inline-expandable category header rather than a drill-down
+     *  target — children appear indented under it instead of replacing
+     *  the list. */
     void registerPage(PageController* page, const QString& parentId, const QString& title, const QUrl& qmlSource,
-                      const QString& iconSource = QString());
+                      const QString& iconSource = QString(), bool isCollapsible = false);
 
     /** Register a headless staging domain (no sidebar entry).
      *  Used for cross-cutting state shared across multiple pages. */
     void registerDomain(StagingDomain* domain);
+
+    /** Navigate to the previous / next navigable page (one with a
+     *  qmlSource) in the registry's in-order traversal. The current
+     *  page is skipped; the list wraps at boundaries. Returns the id
+     *  we landed on, or an empty string if there's nowhere to go. */
+    Q_INVOKABLE QString gotoPreviousPage();
+    Q_INVOKABLE QString gotoNextPage();
+
+    /** Walk the parent chain from the registered entry for `id` to the
+     *  top level. Returns the chain ordered root-first, EXCLUDING `id`
+     *  itself. Used by consumers to restore sidebar drill state at
+     *  startup (e.g. given a restored activePage of
+     *  "snapping-behavior", produces ["snapping"]). */
+    Q_INVOKABLE QStringList parentChainFor(const QString& id) const;
 
 public Q_SLOTS:
     void applyAll();

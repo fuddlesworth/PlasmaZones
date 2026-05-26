@@ -45,6 +45,12 @@ public:
         QString iconSource; // freedesktop icon name or QML asset URL; optional
         QUrl qmlSource; // page QML file URL
         PageController* controller = nullptr;
+        /// When true, the Sidebar renders this entry as an inline-expandable
+        /// category header rather than a drill-down target — its children
+        /// appear indented under it (toggleable) instead of replacing the
+        /// list. Useful for shallow grouping ("Display", "Rules", `*-cat`
+        /// buckets) inside an otherwise drill-down sidebar.
+        bool isCollapsible = false;
     };
 
     explicit PageRegistry(QObject* parent = nullptr);
