@@ -57,6 +57,25 @@ QVariantList applyCustomOrder(const QStringList& customOrder, const QHash<QStrin
     return result;
 }
 
+// Move an item within a resolved order list and stage the result.
+// Anonymous namespace for the same TU-locality reason as applyCustomOrder.
+bool moveOrderedItem(const QVariantList& resolved, int fromIndex, int toIndex, std::optional<QStringList>& staged)
+{
+    if (fromIndex < 0 || fromIndex >= resolved.size() || toIndex < 0 || toIndex >= resolved.size()
+        || fromIndex == toIndex) {
+        return false;
+    }
+
+    QStringList ids;
+    ids.reserve(resolved.size());
+    for (const QVariant& v : resolved) {
+        ids.append(v.toMap().value(QStringLiteral("id")).toString());
+    }
+    ids.move(fromIndex, toIndex);
+    staged = ids;
+    return true;
+}
+
 } // namespace
 
 QStringList SettingsController::effectiveSnappingOrder() const
@@ -103,25 +122,6 @@ QVariantList SettingsController::resolvedTilingOrder() const
         }
     }
     return applyCustomOrder(effectiveTilingOrder(), algoMap);
-}
-
-// Shared helper: move an item within a resolved order list and stage the result
-static bool moveOrderedItem(const QVariantList& resolved, int fromIndex, int toIndex,
-                            std::optional<QStringList>& staged)
-{
-    if (fromIndex < 0 || fromIndex >= resolved.size() || toIndex < 0 || toIndex >= resolved.size()
-        || fromIndex == toIndex) {
-        return false;
-    }
-
-    QStringList ids;
-    ids.reserve(resolved.size());
-    for (const QVariant& v : resolved) {
-        ids.append(v.toMap().value(QStringLiteral("id")).toString());
-    }
-    ids.move(fromIndex, toIndex);
-    staged = ids;
-    return true;
 }
 
 void SettingsController::moveSnappingLayout(int fromIndex, int toIndex)

@@ -114,14 +114,31 @@ void SettingsController::save()
     // Flush staged assignment changes to daemon (same batch protocol as KCM).
     // This must happen AFTER notifyReload so the reload doesn't overwrite
     // the assignment changes.
+    bool assignmentsCommitOk = true;
     if (m_staging.hasPendingAssignments()) {
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("setSaveBatchMode"), {true});
+        QDBusMessage batchOn = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                      QStringLiteral("setSaveBatchMode"), {true});
+        if (batchOn.type() == QDBusMessage::ErrorMessage) {
+            qCWarning(lcCore) << "save: setSaveBatchMode(true) failed:" << batchOn.errorMessage();
+            assignmentsCommitOk = false;
+        }
         m_staging.flushAssignmentsToDaemon();
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("applyAssignmentChanges"));
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("setSaveBatchMode"), {false});
+        QDBusMessage apply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                    QStringLiteral("applyAssignmentChanges"));
+        if (apply.type() == QDBusMessage::ErrorMessage) {
+            qCWarning(lcCore) << "save: applyAssignmentChanges failed:" << apply.errorMessage();
+            Q_EMIT layoutOperationFailed(
+                PzI18n::tr("Failed to apply assignment changes: %1").arg(apply.errorMessage()));
+            assignmentsCommitOk = false;
+        }
+        // ALWAYS attempt to drop batch mode — leaving the daemon in
+        // batch mode after a failure would break the next save attempt.
+        QDBusMessage batchOff = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                       QStringLiteral("setSaveBatchMode"), {false});
+        if (batchOff.type() == QDBusMessage::ErrorMessage) {
+            qCWarning(lcCore) << "save: setSaveBatchMode(false) failed:" << batchOff.errorMessage();
+            assignmentsCommitOk = false;
+        }
     }
 
     // Defer `m_saving = false` to the next event-loop tick. Although
@@ -143,6 +160,13 @@ void SettingsController::save()
         beginExternalEdit(QStringLiteral("window-rules"));
         setNeedsSave(true);
         endExternalEdit();
+    }
+    if (!assignmentsCommitOk) {
+        // Surface the assignment-flush failure to the user — same shape
+        // as the window-rules retry path. Without this, a failed batch
+        // looks "saved" in the UI while the daemon never applied the
+        // edits, so the next launch silently shows stale assignments.
+        setNeedsSave(true);
     }
     QTimer::singleShot(0, this, [this]() {
         m_saving = false;

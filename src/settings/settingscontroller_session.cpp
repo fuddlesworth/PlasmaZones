@@ -145,6 +145,10 @@ void SettingsController::refreshVirtualDesktops()
     } else if (countReply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "refreshVirtualDesktops: getVirtualDesktopCount D-Bus call failed:"
                           << countReply.errorMessage();
+        // Mirror the refreshActivities pattern: reset to the single-
+        // desktop default on error so QML doesn't render desktop indices
+        // the daemon no longer enumerates.
+        m_virtualDesktopCount = 1;
     }
 
     QDBusMessage namesReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
@@ -154,6 +158,7 @@ void SettingsController::refreshVirtualDesktops()
     } else if (namesReply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "refreshVirtualDesktops: getVirtualDesktopNames D-Bus call failed:"
                           << namesReply.errorMessage();
+        m_virtualDesktopNames.clear();
     }
 }
 

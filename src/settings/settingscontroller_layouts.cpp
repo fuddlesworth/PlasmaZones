@@ -352,8 +352,12 @@ void SettingsController::setLayoutHidden(const QString& layoutId, bool hidden)
 {
     if (layoutId.isEmpty())
         return;
-    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                           QStringLiteral("setLayoutHidden"), {layoutId, hidden});
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("setLayoutHidden"), {layoutId, hidden});
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "setLayoutHidden failed for" << layoutId << ":" << reply.errorMessage();
+        Q_EMIT layoutOperationFailed(PzI18n::tr("Failed to update layout visibility: %1").arg(reply.errorMessage()));
+    }
     scheduleLayoutLoad();
 }
 
@@ -361,8 +365,12 @@ void SettingsController::setLayoutAutoAssign(const QString& layoutId, bool enabl
 {
     if (layoutId.isEmpty())
         return;
-    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                           QStringLiteral("setLayoutAutoAssign"), {layoutId, enabled});
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("setLayoutAutoAssign"), {layoutId, enabled});
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "setLayoutAutoAssign failed for" << layoutId << ":" << reply.errorMessage();
+        Q_EMIT layoutOperationFailed(PzI18n::tr("Failed to update auto-assign: %1").arg(reply.errorMessage()));
+    }
     scheduleLayoutLoad();
 }
 
@@ -370,8 +378,13 @@ void SettingsController::setLayoutAspectRatio(const QString& layoutId, int aspec
 {
     if (layoutId.isEmpty())
         return;
-    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                           QStringLiteral("setLayoutAspectRatioClass"), {layoutId, aspectRatioClass});
+    QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("setLayoutAspectRatioClass"), {layoutId, aspectRatioClass});
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "setLayoutAspectRatio failed for" << layoutId << ":" << reply.errorMessage();
+        Q_EMIT layoutOperationFailed(PzI18n::tr("Failed to update aspect ratio: %1").arg(reply.errorMessage()));
+    }
     scheduleLayoutLoad();
 }
 
