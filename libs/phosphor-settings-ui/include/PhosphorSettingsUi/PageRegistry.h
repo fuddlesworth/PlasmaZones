@@ -51,6 +51,12 @@ public:
         /// list. Useful for shallow grouping ("Display", "Rules", `*-cat`
         /// buckets) inside an otherwise drill-down sidebar.
         bool isCollapsible = false;
+        /// When true, the Sidebar draws a horizontal divider line in the
+        /// row slot immediately after this entry. Used to break up the
+        /// vertical rhythm of long sidebars without grouping items under
+        /// a category header. Suppressed while a search filter is active
+        /// — dividers are navigation ornament, not match metadata.
+        bool hasDividerAfter = false;
     };
 
     explicit PageRegistry(QObject* parent = nullptr);

@@ -59,9 +59,14 @@ public:
      *  When `isCollapsible` is true the sidebar renders this entry as
      *  an inline-expandable category header rather than a drill-down
      *  target — children appear indented under it instead of replacing
-     *  the list. */
+     *  the list.
+     *
+     *  When `hasDividerAfter` is true the sidebar draws a horizontal
+     *  divider line immediately after this row (suppressed while a
+     *  search filter is active). Used for visual grouping of long
+     *  flat sections. */
     void registerPage(PageController* page, const QString& parentId, const QString& title, const QUrl& qmlSource,
-                      const QString& iconSource = QString(), bool isCollapsible = false);
+                      const QString& iconSource = QString(), bool isCollapsible = false, bool hasDividerAfter = false);
 
     /** Register a headless staging domain (no sidebar entry).
      *  Used for cross-cutting state shared across multiple pages. */

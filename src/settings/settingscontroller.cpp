@@ -610,29 +610,33 @@ void SettingsController::buildApplicationController()
     //                PageController*.
     const auto regPage = [this, &qmlPrefix](PhosphorSettingsUi::PageController* page, const QString& parentId,
                                             const QString& title, const QString& qmlFile, const QString& icon,
-                                            bool collapsible = false) {
+                                            bool collapsible = false, bool divider = false) {
         const QUrl source = qmlFile.isEmpty() ? QUrl() : QUrl(qmlPrefix + qmlFile);
-        m_app->registerPage(page, parentId, title, source, icon, collapsible);
+        m_app->registerPage(page, parentId, title, source, icon, collapsible, divider);
     };
     const auto regVirtual = [this, &qmlPrefix](const QString& id, const QString& parentId, const QString& title,
-                                               const QString& qmlFile, const QString& icon, bool collapsible = false) {
+                                               const QString& qmlFile, const QString& icon, bool collapsible = false,
+                                               bool divider = false) {
         auto* adapter = new PageAdapter(id, /*delegate=*/nullptr, m_app);
         const QUrl source = qmlFile.isEmpty() ? QUrl() : QUrl(qmlPrefix + qmlFile);
-        m_app->registerPage(adapter, parentId, title, source, icon, collapsible);
+        m_app->registerPage(adapter, parentId, title, source, icon, collapsible, divider);
     };
 
     // Top-level entries — matches the legacy _mainItems in Main.qml.
+    // Divider placements mirror the legacy `hasDividerAfter: true` flags
+    // on overview/display/tiling/rules so the rail's visual rhythm is
+    // preserved across the migration.
     regVirtual(QStringLiteral("overview"), QString(), PzI18n::tr("Overview"), QStringLiteral("MonitorStatePage.qml"),
-               QStringLiteral("monitor"));
+               QStringLiteral("monitor"), /*collapsible=*/false, /*divider=*/true);
     regVirtual(QStringLiteral("display"), QString(), PzI18n::tr("Display"), QString(),
-               QStringLiteral("preferences-desktop-display"), /*collapsible=*/true);
+               QStringLiteral("preferences-desktop-display"), /*collapsible=*/true, /*divider=*/true);
     regVirtual(QStringLiteral("snapping"), QString(), PzI18n::tr("Snapping"), QString(),
                QStringLiteral("view-split-left-right"));
-    regVirtual(QStringLiteral("tiling"), QString(), PzI18n::tr("Tiling"), QString(),
-               QStringLiteral("window-duplicate"));
+    regVirtual(QStringLiteral("tiling"), QString(), PzI18n::tr("Tiling"), QString(), QStringLiteral("window-duplicate"),
+               /*collapsible=*/false, /*divider=*/true);
     regPage(m_animationsPage, QString(), PzI18n::tr("Animations"), QString(), QStringLiteral("media-playback-start"));
     regVirtual(QStringLiteral("rules"), QString(), PzI18n::tr("Rules"), QString(), QStringLiteral("view-list-details"),
-               /*collapsible=*/true);
+               /*collapsible=*/true, /*divider=*/true);
     regPage(m_editorPage, QString(), PzI18n::tr("Editor"), QStringLiteral("EditorPage.qml"),
             QStringLiteral("document-edit"));
     regPage(m_generalPage, QString(), PzI18n::tr("General"), QStringLiteral("GeneralPage.qml"),
@@ -657,9 +661,9 @@ void SettingsController::buildApplicationController()
     // delegate and no qmlSource; PageHost.qml shows the placeholder when one
     // of them is the active page.
     regVirtual(QStringLiteral("snapping-visual-cat"), QStringLiteral("snapping"), PzI18n::tr("Visual"), QString(),
-               QStringLiteral("preferences-desktop-color"), /*collapsible=*/true);
+               QStringLiteral("preferences-desktop-color"), /*collapsible=*/true, /*divider=*/true);
     regVirtual(QStringLiteral("snapping-behavior-cat"), QStringLiteral("snapping"), PzI18n::tr("Behavior"), QString(),
-               QStringLiteral("preferences-system"), /*collapsible=*/true);
+               QStringLiteral("preferences-system"), /*collapsible=*/true, /*divider=*/true);
     regVirtual(QStringLiteral("snapping-config-cat"), QStringLiteral("snapping"), PzI18n::tr("Configuration"),
                QString(), QStringLiteral("configure"), /*collapsible=*/true);
 
@@ -683,9 +687,9 @@ void SettingsController::buildApplicationController()
 
     // Tiling children — same shape as snapping.
     regVirtual(QStringLiteral("tiling-visual-cat"), QStringLiteral("tiling"), PzI18n::tr("Visual"), QString(),
-               QStringLiteral("preferences-desktop-color"), /*collapsible=*/true);
+               QStringLiteral("preferences-desktop-color"), /*collapsible=*/true, /*divider=*/true);
     regVirtual(QStringLiteral("tiling-behavior-cat"), QStringLiteral("tiling"), PzI18n::tr("Behavior"), QString(),
-               QStringLiteral("preferences-system"), /*collapsible=*/true);
+               QStringLiteral("preferences-system"), /*collapsible=*/true, /*divider=*/true);
     regVirtual(QStringLiteral("tiling-config-cat"), QStringLiteral("tiling"), PzI18n::tr("Configuration"), QString(),
                QStringLiteral("configure"), /*collapsible=*/true);
 
@@ -703,7 +707,8 @@ void SettingsController::buildApplicationController()
 
     // Animations children — Surfaces / Library categories drill in.
     regVirtual(QStringLiteral("animations-general"), QStringLiteral("animations"), PzI18n::tr("General"),
-               QStringLiteral("AnimationsGeneralPage.qml"), QStringLiteral("configure"));
+               QStringLiteral("AnimationsGeneralPage.qml"), QStringLiteral("configure"), /*collapsible=*/false,
+               /*divider=*/true);
     regVirtual(QStringLiteral("animations-surfaces"), QStringLiteral("animations"), PzI18n::tr("Surfaces"), QString(),
                QStringLiteral("preferences-desktop-multimedia"), /*collapsible=*/true);
     regVirtual(QStringLiteral("animations-library"), QStringLiteral("animations"), PzI18n::tr("Library"), QString(),

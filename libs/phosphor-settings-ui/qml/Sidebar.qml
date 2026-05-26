@@ -124,10 +124,31 @@ ColumnLayout {
                         "_depth": depth,
                         "_isCollapsibleHeader": collapsible,
                         "_isDrillParent": !collapsible && childHasChildren,
-                        "_isExpanded": collapsible && root._isExpanded(child.id)
+                        "_isExpanded": collapsible && root._isExpanded(child.id),
+                        "_isDivider": false
                     });
                     if (collapsible && root._isExpanded(child.id))
                         walk(child.id, depth + 1);
+
+                    // Section divider — synthetic row pushed immediately
+                    // after an entry that requested `hasDividerAfter`.
+                    // Suppressed in search mode because dividers carry
+                    // no match metadata and would break the flat result
+                    // list's reading order. The id includes parentId +
+                    // child.id so it stays unique even with identical
+                    // labels under different parents.
+                    if (child.hasDividerAfter === true)
+                        out.push({
+                            "id": "__divider__" + parentId + "/" + child.id,
+                            "title": "",
+                            "iconSource": "",
+                            "hasQmlSource": false,
+                            "_depth": depth,
+                            "_isCollapsibleHeader": false,
+                            "_isDrillParent": false,
+                            "_isExpanded": false,
+                            "_isDivider": true
+                        });
 
                 }
             };
@@ -159,7 +180,8 @@ ColumnLayout {
                     "_depth": 0,
                     "_isCollapsibleHeader": false,
                     "_isDrillParent": false,
-                    "_isExpanded": false
+                    "_isExpanded": false,
+                    "_isDivider": false
                 });
 
             }
@@ -399,6 +421,7 @@ ColumnLayout {
                     required property bool _isCollapsibleHeader
                     required property bool _isDrillParent
                     required property bool _isExpanded
+                    required property bool _isDivider
                     readonly property var entryData: ({
                         "id": id,
                         "title": title,
@@ -407,7 +430,8 @@ ColumnLayout {
                         "_depth": _depth,
                         "_isCollapsibleHeader": _isCollapsibleHeader,
                         "_isDrillParent": _isDrillParent,
-                        "_isExpanded": _isExpanded
+                        "_isExpanded": _isExpanded,
+                        "_isDivider": _isDivider
                     })
                     // `isCurrent` drives the highlight background + left
                     // accent + label/icon font-weight/opacity. Only true
@@ -420,12 +444,23 @@ ColumnLayout {
                     width: ListView.view.width
                     // Legacy row height — explicit so the rail's
                     // vertical rhythm is stable regardless of label
-                    // metrics. `highlighted` is intentionally NOT used
-                    // because we paint the background ourselves below.
-                    implicitHeight: Kirigami.Units.gridUnit * 2.2
+                    // metrics. Dividers get a shorter slot than nav
+                    // rows so the breaks read as breathing-room rather
+                    // than empty rows. `highlighted` is intentionally
+                    // NOT used because we paint the background
+                    // ourselves below.
+                    implicitHeight: _isDivider ? Kirigami.Units.largeSpacing : (Kirigami.Units.gridUnit * 2.2)
+                    // Dividers are visual ornament — disable click
+                    // routing and any focus/hover state so the cursor
+                    // doesn't change passing over them.
+                    enabled: !_isDivider
+                    hoverEnabled: !_isDivider
                     leftPadding: Kirigami.Units.smallSpacing + (_depth * Kirigami.Units.gridUnit)
                     rightPadding: Kirigami.Units.smallSpacing
                     onClicked: {
+                        if (_isDivider)
+                            return ;
+
                         if (_isCollapsibleHeader)
                             root.toggleCategory(id);
                         else if (_isDrillParent)
@@ -442,6 +477,11 @@ ColumnLayout {
                         // run through `widget.tint.fast` so they feel
                         // snappy without flicker.
                         color: {
+                            // Dividers paint nothing — the Separator
+                            // child below provides their only visual.
+                            if (itemDelegate._isDivider)
+                                return "transparent";
+
                             if (itemDelegate.isCurrent)
                                 return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12);
 
@@ -467,6 +507,20 @@ ColumnLayout {
                             visible: itemDelegate.isCurrent
                         }
 
+                        // Section divider line — only present on
+                        // divider rows. Centered vertically with
+                        // largeSpacing horizontal margins so the line
+                        // visually clears row hover backgrounds above
+                        // and below.
+                        Kirigami.Separator {
+                            visible: itemDelegate._isDivider
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.leftMargin: Kirigami.Units.largeSpacing
+                            anchors.rightMargin: Kirigami.Units.largeSpacing
+                        }
+
                         Behavior on color {
                             PhosphorMotionAnimation {
                                 profile: "widget.tint.fast"
@@ -478,6 +532,12 @@ ColumnLayout {
 
                     contentItem: RowLayout {
                         spacing: Kirigami.Units.smallSpacing
+                        // Divider rows hide all row content — the
+                        // background's Kirigami.Separator carries the
+                        // entire visual. Leaving the RowLayout present
+                        // (and just zeroing its visibility) keeps the
+                        // delegate's geometry stable.
+                        visible: !itemDelegate._isDivider
 
                         // Per-row icon. Collapsible-category headers
                         // don't have their own icon (the rotating

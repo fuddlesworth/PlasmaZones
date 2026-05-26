@@ -48,7 +48,8 @@ void ApplicationController::setCurrentPageId(const QString& id)
 }
 
 void ApplicationController::registerPage(PageController* page, const QString& parentId, const QString& title,
-                                         const QUrl& qmlSource, const QString& iconSource, bool isCollapsible)
+                                         const QUrl& qmlSource, const QString& iconSource, bool isCollapsible,
+                                         bool hasDividerAfter)
 {
     if (!page) {
         qWarning() << "ApplicationController::registerPage: null page";
@@ -66,6 +67,7 @@ void ApplicationController::registerPage(PageController* page, const QString& pa
     entry.qmlSource = qmlSource;
     entry.controller = page;
     entry.isCollapsible = isCollapsible;
+    entry.hasDividerAfter = hasDividerAfter;
     m_registry->registerPage(std::move(entry));
 
     trackDomain(page);
