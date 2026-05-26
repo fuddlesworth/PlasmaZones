@@ -612,6 +612,33 @@ public:
     PZ_CONFIG_GROUP(v4AnimationsGroup, "Animations")
     PZ_CONFIG_KEY(v4AnimationAppRulesKey, "AnimationAppRules")
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Settings-app session keys
+    //
+    // These do NOT live in the main config JSON — they're per-organization
+    // QSettings entries (~/.config/<org>/<app>.conf) for the settings UI's
+    // own ephemeral state: last window geometry, dismissed update banner,
+    // last-seen what's-new version. Centralised here so the CLAUDE.md "no
+    // inline QStringLiteral for config keys" rule applies uniformly.
+    // ═══════════════════════════════════════════════════════════════════════════
+    PZ_CONFIG_KEY(settingsAppWindowXKey, "x")
+    PZ_CONFIG_KEY(settingsAppWindowYKey, "y")
+    PZ_CONFIG_KEY(settingsAppWindowWidthKey, "width")
+    PZ_CONFIG_KEY(settingsAppWindowHeightKey, "height")
+    PZ_CONFIG_KEY(settingsAppDismissedUpdateVersionKey, "dismissedUpdateVersion")
+    PZ_CONFIG_KEY(settingsAppLastSeenWhatsNewVersionKey, "lastSeenWhatsNewVersion")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Filesystem paths under XDG_DATA_HOME
+    //
+    // Daemon, settings app, and editor all read/write the same per-user
+    // layouts and algorithms directories. Hoisted into one accessor each so
+    // a rename only touches one site.
+    // ═══════════════════════════════════════════════════════════════════════════
+    PZ_CONFIG_KEY(userDataSubdir, "plasmazones")
+    PZ_CONFIG_KEY(layoutsSubdir, "plasmazones/layouts")
+    PZ_CONFIG_KEY(algorithmsSubdir, "plasmazones/algorithms")
+
 private:
     // Non-instantiable
     ConfigKeys() = delete;

@@ -106,8 +106,8 @@ SettingsController::SettingsController(QObject* parent)
     , m_screenHelper(&m_settings, this)
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
     , m_localRuleStore(std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
-    , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(),
-                                                                           QStringLiteral("plasmazones/layouts")))
+    , m_localLayoutManager(
+          std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(), ConfigDefaults::layoutsSubdir()))
 {
     // Install the library-level screen-id resolver before any layout load
     // runs. First call initialises the static; subsequent constructions
@@ -556,8 +556,9 @@ SettingsController::SettingsController(QObject* parent)
     // Load dismissed update version from app-local settings
     {
         QSettings appSettings;
-        m_dismissedUpdateVersion = appSettings.value(QStringLiteral("dismissedUpdateVersion")).toString();
-        m_lastSeenWhatsNewVersion = appSettings.value(QStringLiteral("lastSeenWhatsNewVersion")).toString();
+        m_dismissedUpdateVersion = appSettings.value(ConfigDefaults::settingsAppDismissedUpdateVersionKey()).toString();
+        m_lastSeenWhatsNewVersion =
+            appSettings.value(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey()).toString();
     }
 
     // Load What's New entries from embedded resource
@@ -764,7 +765,7 @@ void SettingsController::setDismissedUpdateVersion(const QString& version)
     if (m_dismissedUpdateVersion != version) {
         m_dismissedUpdateVersion = version;
         QSettings appSettings;
-        appSettings.setValue(QStringLiteral("dismissedUpdateVersion"), version);
+        appSettings.setValue(ConfigDefaults::settingsAppDismissedUpdateVersionKey(), version);
         Q_EMIT dismissedUpdateVersionChanged();
     }
 }
@@ -815,7 +816,7 @@ void SettingsController::markWhatsNewSeen()
     if (m_lastSeenWhatsNewVersion != latest) {
         m_lastSeenWhatsNewVersion = latest;
         QSettings appSettings;
-        appSettings.setValue(QStringLiteral("lastSeenWhatsNewVersion"), latest);
+        appSettings.setValue(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey(), latest);
         Q_EMIT lastSeenWhatsNewVersionChanged();
     }
 }
@@ -1432,8 +1433,8 @@ void SettingsController::editLayoutOnScreen(const QString& layoutId, const QStri
 
 void SettingsController::openLayoutsFolder()
 {
-    const QString path =
-        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/layouts");
+    const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+        + ConfigDefaults::layoutsSubdir();
     QDir dir(path);
     if (!dir.exists()) {
         dir.mkpath(QStringLiteral("."));
@@ -2075,11 +2076,11 @@ QVariantMap SettingsController::loadWindowGeometry() const
 {
     QSettings settings;
     QVariantMap geo;
-    int w = settings.value(QStringLiteral("width"), 0).toInt();
-    int h = settings.value(QStringLiteral("height"), 0).toInt();
-    int x = settings.value(QStringLiteral("x")).toInt();
-    int y = settings.value(QStringLiteral("y")).toInt();
-    bool hasPosition = settings.contains(QStringLiteral("x"));
+    int w = settings.value(ConfigDefaults::settingsAppWindowWidthKey(), 0).toInt();
+    int h = settings.value(ConfigDefaults::settingsAppWindowHeightKey(), 0).toInt();
+    int x = settings.value(ConfigDefaults::settingsAppWindowXKey()).toInt();
+    int y = settings.value(ConfigDefaults::settingsAppWindowYKey()).toInt();
+    bool hasPosition = settings.contains(ConfigDefaults::settingsAppWindowXKey());
 
     // Validate against available screen geometry
     if (w > 0 && h > 0) {
@@ -2096,10 +2097,10 @@ QVariantMap SettingsController::loadWindowGeometry() const
         }
     }
 
-    geo[QStringLiteral("width")] = w;
-    geo[QStringLiteral("height")] = h;
-    geo[QStringLiteral("x")] = x;
-    geo[QStringLiteral("y")] = y;
+    geo[ConfigDefaults::settingsAppWindowWidthKey()] = w;
+    geo[ConfigDefaults::settingsAppWindowHeightKey()] = h;
+    geo[ConfigDefaults::settingsAppWindowXKey()] = x;
+    geo[ConfigDefaults::settingsAppWindowYKey()] = y;
     geo[QStringLiteral("hasPosition")] = hasPosition;
     return geo;
 }
@@ -2107,10 +2108,10 @@ QVariantMap SettingsController::loadWindowGeometry() const
 void SettingsController::saveWindowGeometry(int x, int y, int width, int height)
 {
     QSettings settings;
-    settings.setValue(QStringLiteral("x"), x);
-    settings.setValue(QStringLiteral("y"), y);
-    settings.setValue(QStringLiteral("width"), width);
-    settings.setValue(QStringLiteral("height"), height);
+    settings.setValue(ConfigDefaults::settingsAppWindowXKey(), x);
+    settings.setValue(ConfigDefaults::settingsAppWindowYKey(), y);
+    settings.setValue(ConfigDefaults::settingsAppWindowWidthKey(), width);
+    settings.setValue(ConfigDefaults::settingsAppWindowHeightKey(), height);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
