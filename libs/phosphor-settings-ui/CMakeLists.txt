@@ -41,10 +41,18 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
 
 set(phosphorsettingsui_public_HDRS
     include/PhosphorSettingsUi/PhosphorSettingsUi.h
+    include/PhosphorSettingsUi/StagingDomain.h
+    include/PhosphorSettingsUi/PageController.h
+    include/PhosphorSettingsUi/PageRegistry.h
+    include/PhosphorSettingsUi/ApplicationController.h
 )
 
 set(phosphorsettingsui_SRCS
     src/phosphorsettingsui.cpp
+    src/stagingdomain.cpp
+    src/pagecontroller.cpp
+    src/pageregistry.cpp
+    src/applicationcontroller.cpp
 )
 
 add_library(PhosphorSettingsUi SHARED
