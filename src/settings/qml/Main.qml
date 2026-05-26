@@ -402,10 +402,10 @@ ApplicationWindow {
         const cat = _categoryOf(activePage);
         if (cat.length > 0)
             segments.push({
-                "name": cat,
-                "label": _modeLabel(cat),
-                "clickable": true
-            });
+            "name": cat,
+            "label": _modeLabel(cat),
+            "clickable": true
+        });
 
         segments.push({
             "name": activePage,
@@ -766,14 +766,77 @@ ApplicationWindow {
 
     // Toggle the expanded state of an inline collapsible category by
     // its item name (e.g. "animations-surfaces"). Replaces the whole
-    // map so QML's binding system observes the mutation, then rebuilds
-    // the sidebar so the grand-children appear/disappear immediately.
+    // map so QML's binding system observes the mutation, then mutates
+    // the sidebar model INCREMENTALLY — insert this category's child
+    // rows directly after the header (expand), or remove them in place
+    // (collapse). A full `_rebuildSidebar()` here would clear and
+    // re-append every row in the model, firing the ListView's
+    // `add`/`remove` transitions for every visible row instead of just
+    // the toggled category's children — producing a sidebar-wide flash
+    // rather than the local accordion reveal. The incremental path
+    // keeps every other row in place so its `displaced` transition
+    // animates them sliding to make room.
     function _toggleCategory(name) {
         let next = Object.assign({
         }, _expandedCategories);
-        next[name] = !(next[name] === true);
+        const willBeExpanded = !(next[name] === true);
+        next[name] = willBeExpanded;
         _expandedCategories = next;
-        _rebuildSidebar();
+        _applyCategoryExpansion(name, willBeExpanded);
+    }
+
+    // Apply @p expanded to the named category's row in `sidebarModel`
+    // by inserting or removing its children. Falls back to a full
+    // rebuild when the category isn't visible as a category row in
+    // the current model (e.g. during search mode, where matches are
+    // inlined under a non-category parent).
+    function _applyCategoryExpansion(name, expanded) {
+        let headerIdx = -1;
+        for (let i = 0; i < sidebarModel.count; i++) {
+            const row = sidebarModel.get(i);
+            if (row.name === name && row.isCategory === true) {
+                headerIdx = i;
+                break;
+            }
+        }
+        if (headerIdx < 0) {
+            // Not a category row in the current model — rebuild from
+            // scratch (cheap path; the data structure walk is the
+            // authoritative renderer for non-trivial state changes).
+            _rebuildSidebar();
+            return ;
+        }
+        sidebarModel.setProperty(headerIdx, "categoryExpanded", expanded);
+        if (expanded) {
+            const children = _childItems[name] || [];
+            for (let j = 0; j < children.length; j++) {
+                const child = children[j];
+                sidebarModel.insert(headerIdx + 1 + j, {
+                    "name": child.name,
+                    "label": child.label,
+                    "iconName": child.iconName,
+                    "hasChildren": child.hasChildren === true,
+                    "isBackButton": false,
+                    "hasDividerAfter": false,
+                    "isDivider": false,
+                    "isCategory": false,
+                    "categoryExpanded": false,
+                    "isCategoryChild": true
+                });
+            }
+        } else {
+            // Walk forward while the row is a child of this category
+            // (marked via `isCategoryChild`). Stop at the next
+            // header / divider / non-child so we don't remove a
+            // sibling category's contents.
+            while (headerIdx + 1 < sidebarModel.count) {
+                const r = sidebarModel.get(headerIdx + 1);
+                if (r.isCategoryChild !== true)
+                    break;
+
+                sidebarModel.remove(headerIdx + 1);
+            }
+        }
     }
 
     // Smart-default expansion: if the active page lives inside an inline
@@ -793,7 +856,10 @@ ApplicationWindow {
         }, _expandedCategories);
         next[cat] = true;
         _expandedCategories = next;
-        _rebuildSidebar();
+        // Incremental expand keeps the rest of the sidebar in place so
+        // only the newly-revealed children animate in. See the same
+        // rationale on `_toggleCategory`.
+        _applyCategoryExpansion(cat, true);
     }
 
     /// If @p pageName lives inside an inline collapsible category, return
@@ -834,7 +900,9 @@ ApplicationWindow {
                     }, _expandedCategories);
                     next[name] = true;
                     _expandedCategories = next;
-                    _rebuildSidebar();
+                    // Incremental — see `_toggleCategory` for the
+                    // rationale (avoids whole-sidebar flash).
+                    _applyCategoryExpansion(name, true);
                     return ;
                 }
                 sidebarTransition.pendingMode = "main";
