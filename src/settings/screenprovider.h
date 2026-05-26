@@ -11,15 +11,15 @@
 #include <QString>
 #include <QVariantList>
 #include <functional>
-#include "../../src/core/constants.h"
+#include "core/constants.h"
 
 namespace PlasmaZones {
 
 class Settings;
 
 /// Re-export of the lib's POD so PlasmaZones-internal callers don't need the
-/// PhosphorScreens:: prefix and don't need to be touched when the type moved.
-using ScreenInfo = PhosphorScreens::ScreenInfo;
+/// `Phosphor::Screens::` prefix. Single update-site for any future renames.
+using ScreenInfo = Phosphor::Screens::ScreenInfo;
 
 /**
  * @brief Fetch the list of connected screens via D-Bus (daemon) with Qt fallback

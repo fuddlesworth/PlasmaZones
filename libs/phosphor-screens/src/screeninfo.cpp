@@ -5,7 +5,7 @@
 
 #include <QStringList>
 
-namespace PhosphorScreens {
+namespace Phosphor::Screens {
 
 QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
 {
@@ -69,4 +69,4 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
     return list;
 }
 
-} // namespace PhosphorScreens
+} // namespace Phosphor::Screens

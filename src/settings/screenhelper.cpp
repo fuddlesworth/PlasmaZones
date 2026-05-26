@@ -3,7 +3,7 @@
 
 #include "screenhelper.h"
 #include "screenprovider.h"
-#include "../../src/config/settings.h"
+#include "config/settings.h"
 
 namespace PlasmaZones {
 
@@ -20,7 +20,7 @@ QVariantList ScreenHelper::screens() const
 
 void ScreenHelper::refreshScreens()
 {
-    m_screens = PhosphorScreens::screenInfoListToVariantList(fetchScreens());
+    m_screens = Phosphor::Screens::screenInfoListToVariantList(fetchScreens());
     Q_EMIT screensChanged();
 }
 

@@ -8,7 +8,7 @@
 
 #include "phosphorscreenscore_export.h"
 
-namespace PhosphorScreens {
+namespace Phosphor::Screens {
 
 /**
  * Lightweight descriptor for a connected screen, suitable for passing
@@ -47,4 +47,4 @@ struct PHOSPHORSCREENSCORE_EXPORT ScreenInfo
  */
 PHOSPHORSCREENSCORE_EXPORT QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens);
 
-} // namespace PhosphorScreens
+} // namespace Phosphor::Screens

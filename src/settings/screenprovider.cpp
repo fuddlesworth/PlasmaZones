@@ -7,9 +7,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QScreen>
-#include "../../src/config/settings.h"
-#include "../../src/core/constants.h"
-#include "../../src/core/utils.h"
+#include "config/settings.h"
+#include "core/constants.h"
+#include "core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
