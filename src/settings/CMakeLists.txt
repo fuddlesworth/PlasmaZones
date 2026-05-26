@@ -25,6 +25,10 @@ set(plasmazones_settings_SRCS
     # exposing the Q_PROPERTY surface for a single settings page each.
     animationspagecontroller.h
     animationspagecontroller.cpp
+    # AnimationsPageController shader-leg methods compile into the same
+    # target — same class, separate TU, no API change. Keeps the main
+    # cpp under the 800-line cap (CLAUDE.md).
+    animationspagecontroller_shaders.cpp
     # Sub-services hosted by AnimationsPageController as child QObjects:
     # preset library + motion-set store. Split out to keep
     # animationspagecontroller.cpp under the project's 800-line cap.

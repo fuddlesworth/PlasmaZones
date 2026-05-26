@@ -555,6 +555,7 @@ add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_c
 add_executable(test_animations_page_controller
     settings/test_animations_page_controller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
@@ -575,6 +576,7 @@ add_test(NAME test_animations_page_controller COMMAND test_animations_page_contr
 add_executable(test_animations_motion_sets
     settings/test_animations_motion_sets.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
@@ -595,6 +597,7 @@ add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
 add_executable(test_animations_shader_overrides
     settings/test_animations_shader_overrides.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
