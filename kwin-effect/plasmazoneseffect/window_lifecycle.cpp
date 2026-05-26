@@ -461,10 +461,37 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
             m_trackedScreenPerWindow[safeW] = newScreenId;
 
+            // Detect involuntary moves up front: when a monitor drops out
+            // (DPMS standby on Wayland, hotplug-unplug) KWin reassigns the
+            // windows that were on it to a remaining output and fires
+            // outputChanged for each — even though the user did nothing. Both
+            // the autotile and snapping paths below must skip these, because
+            // routing them through the normal cross-screen logic would either
+            // tile a window from the disabled monitor into the active
+            // autotile zone (discussion #527) or fire a spurious unsnap.
+            // Recovery is owned by the daemon's virtualScreensReconfigured /
+            // ScreenChangeHandler debounce, which resettles assignments once
+            // the screen change has stopped chattering.
+            bool oldScreenStillConnected = false;
+            for (const auto* output : KWin::effects->screens()) {
+                if (outputScreenId(output) == oldScreenId) {
+                    oldScreenStillConnected = true;
+                    break;
+                }
+            }
+            const bool involuntaryMove = !oldScreenId.isEmpty()
+                && (!oldScreenStillConnected || m_screenChangeHandler->isScreenChangeInProgress());
+
             // Delegate autotile handling (autotile→autotile, autotile→snapping, etc.)
             // This must run even during drag so the autotile engine removes the
-            // window from the old screen's tiling state immediately.
-            m_autotileHandler->handleWindowOutputChanged(safeW);
+            // window from the old screen's tiling state immediately. The
+            // involuntary-move guard is the symmetric partner of the snapping
+            // guard further down — before #527, only the snapping path was
+            // protected and KWin's orphan-reassignment got mistaken for the
+            // window genuinely entering autotile.
+            if (!involuntaryMove) {
+                m_autotileHandler->handleWindowOutputChanged(safeW);
+            }
 
             // For snapping→snapping cross-screen moves: notify the daemon which
             // decides whether to unsnap based on its own state. If the daemon just
@@ -475,22 +502,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // Skip during drag: the drag system owns snap state transitions
             // (float, unsnap, size restore, pre-tile cleanup) and handles them
             // in dragStopped() with richer context.
-            // Skip when the old screen disappeared (monitor standby/disconnect):
-            // KWin reassigns orphaned windows to remaining outputs, firing
-            // outputChanged even though the window didn't actually move. The
-            // ScreenChangeHandler will resnap windows after the debounce settles.
-            // Also skip during an active screen geometry change (debounce in flight).
-            bool oldScreenStillConnected = false;
-            for (const auto* output : KWin::effects->screens()) {
-                if (outputScreenId(output) == oldScreenId) {
-                    oldScreenStillConnected = true;
-                    break;
-                }
-            }
+            // Skip involuntary moves: see the involuntaryMove computation above.
             if (!oldScreenId.isEmpty() && oldScreenId != newScreenId
                 && !m_autotileHandler->isAutotileScreen(oldScreenId)
                 && !m_autotileHandler->isAutotileScreen(newScreenId) && !m_dragTracker->isDragging()
-                && oldScreenStillConnected && !m_screenChangeHandler->isScreenChangeInProgress()) {
+                && !involuntaryMove) {
                 const QString windowId = getWindowId(safeW);
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
