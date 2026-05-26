@@ -20,40 +20,6 @@ PhosphorUi.AboutPageShell {
     description: i18n("A window tiling and zone management tool for " + "Wayland compositors. Organize your desktop with " + "customizable zones, automatic tiling layouts, " + "and keyboard-driven window placement.")
     license: i18n("PlasmaZones is free software licensed under the " + "GNU General Public License version 3 or later " + "(GPL-3.0-or-later).")
     homepageUrl: "https://github.com/fuddlesworth/PlasmaZones"
-    // ── Daemon enable/disable toggle (top of page, above the header) ──
-    topContent: [
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            Label {
-                text: i18n("Enable PlasmaZones")
-                font.weight: Font.DemiBold
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            Label {
-                text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
-                opacity: 0.7
-            }
-
-            SettingsSwitch {
-                checked: settingsController.daemonRunning
-                enabled: !settingsController.daemonController.busy
-                onToggled: function(newValue) {
-                    settingsController.daemonController.setEnabled(newValue);
-                }
-                accessibleName: i18n("Enable PlasmaZones")
-            }
-
-        },
-        Kirigami.Separator {
-            Layout.fillWidth: true
-        }
-    ]
 
     // ── Links ───────────────────────────────────────────────────────
     SettingsCard {
@@ -154,6 +120,37 @@ PhosphorUi.AboutPageShell {
                 opacity: 0.7
             }
 
+        }
+
+    }
+
+    // ── Daemon enable/disable toggle (top of page, above the header) ──
+    // The shell adds a separator after topContent automatically.
+    topContent: RowLayout {
+        Layout.fillWidth: true
+        spacing: Kirigami.Units.smallSpacing
+
+        Label {
+            text: i18n("Enable PlasmaZones")
+            font.weight: Font.DemiBold
+        }
+
+        Item {
+            Layout.fillWidth: true
+        }
+
+        Label {
+            text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
+            opacity: 0.7
+        }
+
+        SettingsSwitch {
+            checked: settingsController.daemonRunning
+            enabled: !settingsController.daemonController.busy
+            onToggled: function(newValue) {
+                settingsController.daemonController.setEnabled(newValue);
+            }
+            accessibleName: i18n("Enable PlasmaZones")
         }
 
     }

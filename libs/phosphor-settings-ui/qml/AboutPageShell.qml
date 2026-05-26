@@ -32,14 +32,15 @@ Kirigami.ScrollablePage {
     id: root
 
     /** Children placed inside the shell land in the extras slot below the
-     *  standard content. */
-    default property alias extraContent: extraColumn.children
+     *  standard content. Aliases `data` (not `children`) so the list-
+     *  assignment form `extraContent: [item, item]` works as well as
+     *  default-property nested children. */
+    default property alias extraContent: extraColumn.data
     /** Optional content rendered ABOVE the icon/name/version header.
      *  Useful for app-level toggles (e.g. enable / disable the
      *  underlying daemon) that should anchor the page visually rather
-     *  than sit below the standard about-page chrome. Hosted in its
-     *  own ColumnLayout so consumers can declare multiple siblings. */
-    property alias topContent: topColumn.children
+     *  than sit below the standard about-page chrome. */
+    property alias topContent: topColumn.data
     property string appName: ""
     property string appIcon: ""
     property string appVersion: ""
@@ -56,13 +57,19 @@ Kirigami.ScrollablePage {
 
         // ── Top content slot ──────────────────────────────────────
         // Consumer-injected content anchored above the standard
-        // about-page chrome. Empty when no children are declared.
+        // about-page chrome. visible flips on once `topContent` has
+        // been assigned (children.length comes from the data alias).
         ColumnLayout {
             id: topColumn
 
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
             visible: children.length > 0
+        }
+
+        Kirigami.Separator {
+            Layout.fillWidth: true
+            visible: topColumn.children.length > 0
         }
 
         // Header: icon + name + version

@@ -10,36 +10,27 @@ import org.phosphor.settings.ui
 /**
  * Page sidebar.
  *
- * Renders entries from the controller's PageRegistry as a list with two
- * navigation modes mixed freely:
+ * Renders entries from the controller's PageRegistry as a ListView with
+ * three navigation modes mixed freely:
  *
  *   - Drill-down parents (entry has children, not collapsible) — taps
  *     replace the list with the parent's children + a Back button.
  *
  *   - Inline-collapsible categories (entry has children, isCollapsible) —
- *     act as accordion headers within the current drill view; tapping
- *     toggles whether their children show below them, indented.
+ *     act as accordion headers; tapping toggles whether their children
+ *     show below them, indented. Toggling animates rows in/out via
+ *     ListView add/remove Transitions.
  *
  *   - Navigable leaves (entry has a qmlSource) — taps set
  *     controller.currentPageId.
  *
- * `currentParentId` is the drill scope; "" is top-level. The property is
- * externally bindable / settable so consumers can restore drill state on
- * startup (use `controller.parentChainFor(activePageId)` and drill into
- * the deepest ancestor).
+ * `currentParentId` is the drill scope; "" is top-level. Drill
+ * transitions (`drillInto` / `drillOut`) cross-fade the entire list.
  *
- * Type-as-you-search filters the flat-tree under the current drill scope
- * (or the whole catalogue when at top-level + no scope). Matches show
- * with their owning category prefixed ("Surfaces / Windows").
+ * Search filters the flat-tree under the current drill scope.
  *
- * Drill transitions (`drillInto` / `drillOut`) cross-fade the list — fade
- * out the current items, swap currentParentId, fade in the new items.
- *
- * Per-row trailing content can be injected via `trailingDelegate`: a QML
- * Component instantiated next to each row's title. The loader exposes
- * the row's entry as `modelData` so consumers can branch on `id`. Used
- * by PlasmaZones to put inline Switch widgets next to "snapping" and
- * "tiling" rows for quick feature toggling.
+ * Per-row trailing content via `trailingDelegate` — typically used
+ * to inject a dirty badge + an inline Switch on relevant rows.
  */
 QQC2.ScrollView {
     id: root
@@ -47,19 +38,16 @@ QQC2.ScrollView {
     required property ApplicationController controller
     //* Empty string means "showing top-level pages"; otherwise the parent id.
     property string currentParentId: ""
-    /** Per-id expand state for inline-collapsible categories. Seeded true
-     *  by default — flip an entry to false to start it collapsed. */
+    /** Per-id expand state for inline-collapsible categories. Default
+     *  expanded (true). Flip an entry to false to start it collapsed. */
     property var expandedCategories: ({
     })
-    /** Search text. Empty disables filtering and the sidebar drills /
-     *  expands as normal. */
+    //* Search text. Empty disables filtering.
     property alias searchText: searchField.text
-    /** Optional Component instantiated next to each row's title (between
-     *  the label and the drill chevron). The Component's root item sees
-     *  the entry via `parent.modelData` (id, title, iconSource, etc.).
-     *  When null (default) the slot collapses to nothing. */
+    /** Optional Component instantiated next to each row's title. The
+     *  loader exposes the row's entry as `modelData` so consumers can
+     *  branch on `id`. */
     property Component trailingDelegate: null
-    property var _visible: _visibleItems()
 
     function drillInto(parentId) {
         if (root.currentParentId === parentId)
@@ -160,22 +148,68 @@ QQC2.ScrollView {
         return matches;
     }
 
-    onCurrentParentIdChanged: _visible = _visibleItems()
-    onExpandedCategoriesChanged: _visible = _visibleItems()
-    onSearchTextChanged: _visible = _visibleItems()
+    /// Diff-and-apply: bring the ListModel into agreement with the
+    /// computed _visibleItems(). Removes rows no longer wanted, inserts
+    /// or moves rows to match the desired order. Triggers per-row add /
+    /// remove Transitions in the ListView — the accordion effect that
+    /// the legacy chrome had on category expand / collapse.
+    function _refreshModel() {
+        const wanted = root._visibleItems();
+        const wantedIds = new Set(wanted.map((w) => {
+            return w.id;
+        }));
+        // Pass 1: remove rows the new view no longer wants.
+        for (let i = visibleModel.count - 1; i >= 0; --i) {
+            if (!wantedIds.has(visibleModel.get(i).id))
+                visibleModel.remove(i);
+
+        }
+        // Pass 2: insert / reorder to match wanted. For each desired
+        // position, either the row is already there, or we move it from
+        // its current position, or we insert it fresh.
+        for (let i = 0; i < wanted.length; ++i) {
+            const item = wanted[i];
+            if (i < visibleModel.count && visibleModel.get(i).id === item.id) {
+                // In place — but update the volatile fields (e.g.
+                // _isExpanded flipped on a category header).
+                visibleModel.set(i, item);
+                continue;
+            }
+            let currentIdx = -1;
+            for (let j = i; j < visibleModel.count; ++j) {
+                if (visibleModel.get(j).id === item.id) {
+                    currentIdx = j;
+                    break;
+                }
+            }
+            if (currentIdx === -1) {
+                visibleModel.insert(i, item);
+            } else {
+                visibleModel.move(currentIdx, i, 1);
+                visibleModel.set(i, item);
+            }
+        }
+    }
+
+    onCurrentParentIdChanged: _refreshModel()
+    onExpandedCategoriesChanged: _refreshModel()
+    onSearchTextChanged: _refreshModel()
+    Component.onCompleted: _refreshModel()
     clip: true
 
     Connections {
         function onCurrentPageIdChanged() {
-            root._visible = root._visibleItems();
+            // currentPageId is a per-row highlight binding — no model
+            // change needed, just re-evaluate.
+            root._refreshModel();
         }
 
         target: root.controller
     }
 
     // Drill-in / drill-out cross-fade. Fades the inner column out, swaps
-    // currentParentId at zero opacity, then fades back in. Matches the
-    // legacy `sidebarTransition` UX.
+    // currentParentId at zero opacity (model refresh runs from the
+    // onCurrentParentIdChanged handler), then fades back in.
     SequentialAnimation {
         id: drillAnimation
 
@@ -201,6 +235,13 @@ QQC2.ScrollView {
             easing.type: Easing.InQuad
         }
 
+    }
+
+    // Backing store for the visible list. Mutated incrementally by
+    // _refreshModel so ListView's add/remove Transitions fire on the
+    // rows that actually change (accordion effect).
+    ListModel {
+        id: visibleModel
     }
 
     ColumnLayout {
@@ -244,41 +285,111 @@ QQC2.ScrollView {
 
         }
 
-        Repeater {
-            model: root._visible
+        ListView {
+            id: listView
+
+            Layout.fillWidth: true
+            Layout.preferredHeight: contentHeight
+            model: visibleModel
+            interactive: false
+            spacing: 0
+
+            // Accordion add/remove transitions. When a category expands
+            // or collapses, rows are inserted/removed via _refreshModel
+            // and these Transitions animate them in/out.
+            add: Transition {
+                NumberAnimation {
+                    properties: "opacity"
+                    from: 0
+                    to: 1
+                    duration: Kirigami.Units.shortDuration
+                    easing.type: Easing.OutCubic
+                }
+
+                NumberAnimation {
+                    properties: "y"
+                    duration: Kirigami.Units.shortDuration
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
+            remove: Transition {
+                NumberAnimation {
+                    properties: "opacity"
+                    to: 0
+                    duration: Kirigami.Units.shortDuration
+                    easing.type: Easing.InCubic
+                }
+
+            }
+
+            displaced: Transition {
+                NumberAnimation {
+                    properties: "y"
+                    duration: Kirigami.Units.shortDuration
+                    easing.type: Easing.OutCubic
+                }
+
+            }
 
             delegate: QQC2.ItemDelegate {
                 id: itemDelegate
 
-                required property var modelData
-                readonly property bool isCurrent: !modelData._isCollapsibleHeader && modelData.hasQmlSource && root.controller.currentPageId === modelData.id
+                required property string id
+                required property string title
+                required property string iconSource
+                required property bool hasQmlSource
+                required property int _depth
+                required property bool _isCollapsibleHeader
+                required property bool _isDrillParent
+                required property bool _isExpanded
+                readonly property var entryData: ({
+                    "id": id,
+                    "title": title,
+                    "iconSource": iconSource,
+                    "hasQmlSource": hasQmlSource,
+                    "_depth": _depth,
+                    "_isCollapsibleHeader": _isCollapsibleHeader,
+                    "_isDrillParent": _isDrillParent,
+                    "_isExpanded": _isExpanded
+                })
+                readonly property bool isCurrent: !_isCollapsibleHeader && hasQmlSource && root.controller.currentPageId === id
 
-                Layout.fillWidth: true
+                width: ListView.view.width
                 highlighted: isCurrent
-                leftPadding: Kirigami.Units.smallSpacing + (modelData._depth * Kirigami.Units.gridUnit)
+                leftPadding: Kirigami.Units.smallSpacing + (_depth * Kirigami.Units.gridUnit)
                 onClicked: {
-                    if (modelData._isCollapsibleHeader)
-                        root.toggleCategory(modelData.id);
-                    else if (modelData._isDrillParent)
-                        root.drillInto(modelData.id);
-                    else if (modelData.hasQmlSource)
-                        root.controller.currentPageId = modelData.id;
+                    if (_isCollapsibleHeader)
+                        root.toggleCategory(id);
+                    else if (_isDrillParent)
+                        root.drillInto(id);
+                    else if (hasQmlSource)
+                        root.controller.currentPageId = id;
                 }
 
                 contentItem: RowLayout {
                     spacing: Kirigami.Units.smallSpacing
 
                     Kirigami.Icon {
-                        visible: modelData._isCollapsibleHeader
-                        source: modelData._isExpanded ? "go-down-symbolic" : "go-next-symbolic"
+                        visible: itemDelegate._isCollapsibleHeader
+                        source: itemDelegate._isExpanded ? "go-down-symbolic" : "go-next-symbolic"
                         Layout.preferredWidth: Kirigami.Units.iconSizes.small
                         Layout.preferredHeight: Kirigami.Units.iconSizes.small
                         opacity: 0.7
+
+                        Behavior on rotation {
+                            NumberAnimation {
+                                duration: Kirigami.Units.shortDuration
+                            }
+
+                        }
+
                     }
 
                     Kirigami.Icon {
-                        visible: !modelData._isCollapsibleHeader && modelData.iconSource !== ""
-                        source: modelData.iconSource
+                        visible: !itemDelegate._isCollapsibleHeader && itemDelegate.iconSource !== ""
+                        source: itemDelegate.iconSource
                         Layout.preferredWidth: Kirigami.Units.iconSizes.small
                         Layout.preferredHeight: Kirigami.Units.iconSizes.small
                     }
@@ -286,16 +397,14 @@ QQC2.ScrollView {
                     QQC2.Label {
                         Layout.fillWidth: true
                         elide: Text.ElideRight
-                        text: modelData.title
-                        font.weight: modelData._isCollapsibleHeader ? Font.DemiBold : Font.Normal
+                        text: itemDelegate.title
+                        font.weight: itemDelegate._isCollapsibleHeader ? Font.DemiBold : Font.Normal
                     }
 
-                    // Per-row trailing slot. The Loader exposes `modelData`
-                    // (the entry data) so consumers can branch on id.
                     Loader {
                         id: trailingLoader
 
-                        property var modelData: itemDelegate.modelData
+                        property var modelData: itemDelegate.entryData
 
                         sourceComponent: root.trailingDelegate
                         active: root.trailingDelegate !== null
@@ -303,7 +412,7 @@ QQC2.ScrollView {
                     }
 
                     Kirigami.Icon {
-                        visible: modelData._isDrillParent
+                        visible: itemDelegate._isDrillParent
                         source: "go-next-symbolic"
                         Layout.preferredWidth: Kirigami.Units.iconSizes.small
                         Layout.preferredHeight: Kirigami.Units.iconSizes.small

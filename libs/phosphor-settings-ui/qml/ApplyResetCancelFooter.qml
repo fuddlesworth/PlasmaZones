@@ -50,11 +50,19 @@ ColumnLayout {
     }
 
     // ── Slide-in unsaved-changes bar ────────────────────────────────
+    // The slide is driven by an internal real property (`expansion`
+    // 0..1) with a Behavior, and Layout.preferredHeight is bound to
+    // `expansion * barContent.implicitHeight`. Animating a plain
+    // property and binding the attached property to it works
+    // consistently — `Behavior on Layout.preferredHeight` is
+    // unreliable in Qt 6 because some Layout pipelines bypass it.
     Item {
         id: dirtyBar
 
+        property real expansion: root.controller.dirty ? 1 : 0
+
         Layout.fillWidth: true
-        Layout.preferredHeight: root.controller.dirty ? barContent.implicitHeight : 0
+        Layout.preferredHeight: expansion * barContent.implicitHeight
         clip: true
 
         Rectangle {
@@ -125,7 +133,7 @@ ColumnLayout {
 
         }
 
-        Behavior on Layout.preferredHeight {
+        Behavior on expansion {
             NumberAnimation {
                 duration: Kirigami.Units.longDuration
                 easing.type: root.controller.dirty ? Easing.OutCubic : Easing.InCubic

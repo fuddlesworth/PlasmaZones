@@ -680,30 +680,86 @@ PhosphorUi.SettingsAppWindow {
         onTriggered: whatsNewDialog.open()
     }
 
-    // Per-row sidebar trailing content — inline Switch for the snapping
-    // and tiling parent entries so the user can disable a whole feature
-    // without drilling in. The Component's root sees the page entry as
-    // `parent.modelData` via the Loader the sidebar instantiates.
+    // Per-row sidebar trailing content — a Row with two slots:
+    //   1. Pulsing dirty badge that's visible when the row's page (or
+    //      one of its descendants for a collapsed category header) is
+    //      dirty. The user sees pending edits hiding inside categories
+    //      without having to drill in.
+    //   2. Inline SettingsSwitch on the snapping / tiling rows so a
+    //      whole feature can be disabled without drilling in.
     sidebar.trailingDelegate: Component {
-        SettingsSwitch {
+        RowLayout {
+            id: trailingRow
+
             readonly property var entry: parent ? parent.modelData : null
             readonly property bool isSnapping: entry && entry.id === "snapping"
             readonly property bool isTiling: entry && entry.id === "tiling"
+            readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
+            readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
 
-            visible: isSnapping || isTiling
-            checked: isSnapping ? appSettings.snappingEnabled : (isTiling ? appSettings.autotileEnabled : false)
-            accessibleName: entry ? entry.title : ""
-            onToggled: function(newValue) {
-                // Wrap in begin/endExternalEdit so the dirty marker lands
-                // on the snapping/tiling page rather than the currently
-                // viewed page.
-                settingsController.beginExternalEdit(isSnapping ? "snapping" : "tiling");
-                if (isSnapping)
-                    appSettings.snappingEnabled = newValue;
-                else
-                    appSettings.autotileEnabled = newValue;
-                settingsController.endExternalEdit();
+            spacing: Kirigami.Units.smallSpacing
+
+            // ── Unsaved-changes badge ────────────────────────────────
+            Rectangle {
+                id: dirtyBadge
+
+                width: Kirigami.Units.smallSpacing * 1.5
+                height: Kirigami.Units.smallSpacing * 1.5
+                radius: width / 2
+                color: Kirigami.Theme.neutralTextColor
+                Layout.alignment: Qt.AlignVCenter
+                visible: {
+                    if (!trailingRow.entry)
+                        return false;
+
+                    // For inline-collapsible headers, only show the
+                    // badge when the category is COLLAPSED — expanded
+                    // categories show their dirty children's own
+                    // badges so the header badge is redundant.
+                    if (trailingRow.isCollapsibleHeader && trailingRow.isCollapsibleExpanded)
+                        return false;
+
+                    settingsController.dirtyPages; // binding dependency
+                    return settingsController.isPageDirty(trailingRow.entry.id);
+                }
+
+                SequentialAnimation on opacity {
+                    loops: Animation.Infinite
+                    running: dirtyBadge.visible
+
+                    NumberAnimation {
+                        from: 1
+                        to: 0.4
+                        duration: Kirigami.Units.longDuration
+                        easing.type: Easing.InOutQuad
+                    }
+
+                    NumberAnimation {
+                        from: 0.4
+                        to: 1
+                        duration: Kirigami.Units.longDuration
+                        easing.type: Easing.InOutQuad
+                    }
+
+                }
+
             }
+
+            // ── Snapping / Tiling toggle ────────────────────────────
+            SettingsSwitch {
+                visible: trailingRow.isSnapping || trailingRow.isTiling
+                checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : false)
+                accessibleName: trailingRow.entry ? trailingRow.entry.title : ""
+                onToggled: function(newValue) {
+                    settingsController.beginExternalEdit(trailingRow.isSnapping ? "snapping" : "tiling");
+                    if (trailingRow.isSnapping)
+                        appSettings.snappingEnabled = newValue;
+                    else
+                        appSettings.autotileEnabled = newValue;
+                    settingsController.endExternalEdit();
+                }
+            }
+
         }
 
     }
