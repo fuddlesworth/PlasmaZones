@@ -43,8 +43,11 @@ Kirigami.ApplicationWindow {
      *  collapsed rail) by reassigning the property. */
     property bool sidebarCompact: width < Kirigami.Units.gridUnit * 50
 
-    width: 1100
-    height: 720
+    // Legacy PlasmaZones default geometry — wide enough to keep the
+    // sidebar out of compact mode (50 * 18 = 900px threshold) with
+    // breathing room for tall pages. Consumers can override.
+    width: 1200
+    height: 800
     title: qsTr("Settings")
     onClosing: function(close) {
         if (root.controller.dirty) {
