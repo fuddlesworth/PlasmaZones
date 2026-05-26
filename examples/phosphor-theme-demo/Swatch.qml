@@ -12,7 +12,11 @@ Rectangle {
     required property string tokenName
     required property color tokenColor
 
-    width: 220
+    // implicit, not fixed — the parent GridLayout stretches us with
+    // Layout.fillWidth so columns share the row evenly. 220 is the
+    // intrinsic minimum that still fits the longest token name without
+    // eliding.
+    implicitWidth: 220
     height: 88
     radius: Tokens.radius_m
     color: Theme.surface_container

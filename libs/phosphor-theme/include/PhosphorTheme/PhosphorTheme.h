@@ -10,4 +10,5 @@
 #include <PhosphorTheme/IThemeService.h>
 #include <PhosphorTheme/MatugenRunner.h>
 #include <PhosphorTheme/PaletteStore.h>
+#include <PhosphorTheme/PresetPalettes.h>
 #include <PhosphorTheme/TemplateEngine.h>

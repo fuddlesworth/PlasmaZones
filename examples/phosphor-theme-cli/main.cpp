@@ -9,6 +9,7 @@
 
 #include <PhosphorTheme/MatugenRunner.h>
 #include <PhosphorTheme/PaletteStore.h>
+#include <PhosphorTheme/PresetPalettes.h>
 #include <PhosphorTheme/TemplateEngine.h>
 
 #include <QCommandLineOption>
@@ -209,6 +210,80 @@ int runRenderTemplate(const QStringList& args)
     return 0;
 }
 
+int runCycle(const QStringList& args)
+{
+    QCommandLineParser p;
+    p.setApplicationDescription(
+        QStringLiteral("Rotate through preset palettes — proves the hot-reload pipeline end-to-end"));
+    QCommandLineOption intervalOpt(QStringLiteral("interval"),
+                                   QStringLiteral("Milliseconds between presets (default 1500)"), QStringLiteral("ms"),
+                                   QStringLiteral("1500"));
+    QCommandLineOption onceOpt(QStringLiteral("once"),
+                               QStringLiteral("Walk presets once and exit instead of looping forever"));
+    QCommandLineOption applyOpt(QStringLiteral("apply"),
+                                QStringLiteral("Write each preset to current.json (drives a running demo)"));
+    QCommandLineOption outOpt(QStringLiteral("out"),
+                              QStringLiteral("Write each preset to a specific path (overrides --apply)"),
+                              QStringLiteral("path"));
+    p.addOption(intervalOpt);
+    p.addOption(onceOpt);
+    p.addOption(applyOpt);
+    p.addOption(outOpt);
+    p.process(args);
+
+    const PhosphorTheme::PresetPalettes presets;
+    const auto names = presets.names();
+    if (names.isEmpty()) {
+        std::cerr << "phosphor-theme-cli: no presets available\n";
+        return 1;
+    }
+
+    bool ok = false;
+    const int interval = p.value(intervalOpt).toInt(&ok);
+    if (!ok || interval <= 0) {
+        std::cerr << "phosphor-theme-cli: --interval must be a positive integer\n";
+        return 2;
+    }
+
+    const QString outPath = p.isSet(outOpt) ? p.value(outOpt) : p.isSet(applyOpt) ? defaultPalettePath() : QString();
+    const bool runOnce = p.isSet(onceOpt);
+
+    // Counter survives across timer ticks via lambda capture-by-ref.
+    auto* idx = new int(0);
+
+    auto applyNext = [&, idx]() {
+        const auto name = names.at(*idx % names.size());
+        const auto tokens = presets.byName(name);
+        std::cerr << "phosphor-theme-cli: applying preset " << name.toStdString() << " (" << tokens.size()
+                  << " tokens)\n";
+        if (!outPath.isEmpty()) {
+            if (!writeAtomic(outPath, serialisePalette(tokens))) {
+                std::cerr << "phosphor-theme-cli: write failed; aborting cycle\n";
+                QCoreApplication::exit(1);
+                return;
+            }
+        }
+        ++(*idx);
+        if (runOnce && *idx >= names.size()) {
+            QCoreApplication::quit();
+        }
+    };
+
+    // Fire one immediately so the user sees retinting on tick zero rather
+    // than after a full interval of staring at the unchanged window.
+    QTimer::singleShot(0, applyNext);
+
+    auto* loopTimer = new QTimer();
+    loopTimer->setInterval(interval);
+    QObject::connect(loopTimer, &QTimer::timeout, applyNext);
+    loopTimer->start();
+
+    const int rc = QCoreApplication::exec();
+    delete loopTimer;
+    delete idx;
+    return rc;
+}
+
 void printUsage()
 {
     std::cerr << R"(phosphor-theme-cli — drive the PhosphorTheme library headlessly.
@@ -217,8 +292,13 @@ USAGE
   phosphor-theme-cli set-wallpaper <image> [--mode dark|light] [--apply | --out <path>]
   phosphor-theme-cli dump [--source <palette.json>]
   phosphor-theme-cli render-template <template> <out> [--palette <palette.json>]
+  phosphor-theme-cli cycle [--interval ms] [--once] [--apply | --out <path>]
 
 Without --apply or --out, set-wallpaper prints the new palette JSON to stdout.
+cycle without --apply or --out only logs each preset name — pair it with
+--apply (or --out path) to drive a running phosphor-theme-demo and watch
+the whole window retint every <interval> ms.
+
 dump and render-template default to the canonical built-in palette
 (plus any active current.json under ~/.local/share/phosphor/palettes/).
 )";
@@ -256,6 +336,9 @@ int main(int argc, char* argv[])
     }
     if (cmd == QLatin1String("render-template")) {
         return runRenderTemplate(subArgs);
+    }
+    if (cmd == QLatin1String("cycle")) {
+        return runCycle(subArgs);
     }
     if (cmd == QLatin1String("-h") || cmd == QLatin1String("--help") || cmd == QLatin1String("help")) {
         printUsage();
