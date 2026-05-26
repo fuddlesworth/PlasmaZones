@@ -115,7 +115,7 @@ bin/
 
 ## The theme token system
 
-We adopt **upstream Material 3 token names verbatim**, with state aliases layered on top (not baked into the names, that was a DMS mistake). The **built-in default values come from the canonical Phosphor palette** at https://phosphor-works.github.io/palette/ (M3 + ANSI 16, CC-BY-SA 4.0). Matugen replaces these at runtime from any wallpaper; the names stay stable.
+We adopt **upstream Material 3 token names verbatim**. State aliases layer on top rather than being baked into the names. That was a DMS mistake. The **built-in default values come from the canonical Phosphor palette** at https://phosphor-works.github.io/palette/. The palette is M3 plus ANSI 16 under CC-BY-SA 4.0. Matugen replaces these values at runtime from any wallpaper. The names stay stable.
 
 **Shipped (PR #534).** The lib at `libs/phosphor-theme` ships the MVP subset of the token set sketched below. That subset is the surface ramp, primary/secondary/tertiary accents, error, outline, status ramp from ANSI 16, and the four brand-gradient stops. The full M3 ramp is aspirational. Missing tokens include `surfaceContainerLowest/Highest`, the `inverse*` triad, `on_secondary_container`, and the explicit ANSI 16 namespace. Future tokens land via the same `TokenNames` contract. Snake_case is the wire format because it matches the matugen JSON keys. Examples are `on_surface` and `surface_container_high`. The camelCase forms below are sketch shorthand only.
 
@@ -265,7 +265,7 @@ QtObject {
 }
 ```
 
-C++ backing in `phosphor-theme` is sketched below. The shipped interface lives at `libs/phosphor-theme/include/PhosphorTheme/IThemeService.h` and is narrower than this sketch. It is pure-virtual with no QObject base. It returns `QVariantMap` instead of `QJsonObject`. Load splits into `loadFromJson(QByteArray)` and `loadFromFile(QString)`. The wallpaper trigger lives in a separate `MatugenRunner` rather than on `IThemeService`.
+C++ backing in `phosphor-theme` is sketched below. The shipped interface lives at `libs/phosphor-theme/include/PhosphorTheme/IThemeService.h` and is narrower than this sketch. It is pure-virtual with no QObject base. It returns `QVariantMap` instead of `QJsonObject`. Load splits into `loadFromJson(QByteArray)` and `loadFromFile(QString)`. The wallpaper trigger lives in a separate `MatugenRunner` rather than on `IThemeService`. The shipped interface also exposes `applyTokens(QVariantMap)`, `token(QString)`, and `resetToDefaults()`.
 
 ```cpp
 namespace PhosphorTheme {

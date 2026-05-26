@@ -6,13 +6,13 @@
 // the canonical Phosphor palette tokens exactly (snake_case verbatim,
 // matching the palette JSON wire format published at
 // https://phosphor-works.github.io/palette/).
-// Binding-tracking note: every named accessor below indexes into the
+// Binding-tracking note. Every named accessor below indexes into the
 // `palette` QVariantMap rather than calling PaletteStore.token(). The
-// QML engine tracks property reads, not method calls, `palette` is a
+// QML engine tracks property reads, not method calls. `palette` is a
 // Q_PROPERTY with NOTIFY paletteChanged, so bindings on `Theme.primary`
 // re-evaluate every time the store reloads. Calling token() would NOT
-// retint live; the swatches would update (they read palette directly)
-// but the surrounding chrome would not. Keep the index form.
+// retint live. Swatches would update because they read palette directly.
+// The surrounding chrome would not. Keep the index form.
 // Missing-token defense: `_t(name)` returns a sentinel magenta when a
 // token isn't in the active palette. A bare `palette[name]` would yield
 // an invalid QColor that renders as transparent black, silently hiding
@@ -32,9 +32,9 @@ QtObject {
     // binding tracking. Calling .token() does NOT. See the file-level
     // comment for the binding-tracking rationale.
     readonly property var paletteStore: PaletteStore
-    // The active token map (token name → QColor). Every accessor below
-    // routes through this, that's how change-tracking works (see the
-    // file-level comment above).
+    // The active token map. Token name maps to QColor. Every accessor
+    // below routes through this property, which is how change-tracking
+    // works. See the file-level comment above for the rationale.
     readonly property var palette: PaletteStore.palette
     // Sentinel for a missing token. Bright magenta is impossible to
     // miss in a normally-themed surface. Exposed as a property so tests

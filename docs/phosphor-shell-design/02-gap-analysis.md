@@ -173,8 +173,8 @@ Once the plugin ABI is stable.
 
 - DMS's `Common/SettingsData.qml` god-singleton, we keep our per-domain `ISettings` split. (See `project_settings_page_controllers`.)
 - Noctalia's 40-step `Migration27..59.qml` chain, we keep one migration function per real schema bump per `CLAUDE.md` and `feedback_no_legacy_shims`.
-- Noctalia's `noctalia-qs` Quickshell fork, we're not Quickshell-based; the lesson is "don't fork your engine to ship features".
+- Noctalia's `noctalia-qs` Quickshell fork. We're not Quickshell-based. The lesson is "don't fork your engine to ship features".
 - DMS's `Qt.createComponent()` plugin loader + remote registry without sandboxing, capability-scoped plugins from day one.
 - DMS's `onSurface_12` opacity-baked token names, use upstream M3 names verbatim, layer state aliases on top.
 - HyprPanel's GTK3-on-Wayland stack and AGS dependency chain, we're past this hurdle by being native Qt6.
-- end-4's AI chat / OCR sidebars, fun, but out of shell scope; ship as plugins instead.
+- end-4's AI chat / OCR sidebars are fun but out of shell scope. Ship them as plugins instead.

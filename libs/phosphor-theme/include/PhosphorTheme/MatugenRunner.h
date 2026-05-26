@@ -47,13 +47,14 @@ class PHOSPHORTHEME_EXPORT MatugenRunner : public QObject
     // requested one before exposing. Default: "dark".
     Q_PROPERTY(QString mode READ mode WRITE setMode NOTIFY modeChanged)
 
-    // Candidate-color preference. When an image yields multiple source
-    // colors and matugen runs non-interactively (no TTY, always our
-    // case, we're a subprocess) it refuses to pick without this flag.
-    // Default: "saturation" (picks the most saturated candidate, which
-    // matches user expectation for a "vibrant" wallpaper-derived palette).
-    // Valid matugen values: "darkness", "lightness", "saturation",
-    // "less-saturation", "value", "closest-to-fallback".
+    // Candidate-color preference. Matugen needs this flag whenever an
+    // image yields multiple source colors and matugen runs
+    // non-interactively. We invoke it as a subprocess with no TTY, so
+    // this is always our case. Default is "saturation", which picks the
+    // most saturated candidate and matches user expectations for a
+    // vibrant wallpaper-derived palette. Valid matugen values are
+    // "darkness", "lightness", "saturation", "less-saturation", "value",
+    // and "closest-to-fallback".
     Q_PROPERTY(QString prefer READ prefer WRITE setPrefer NOTIFY preferChanged)
 
     // True while a `run()` call is in flight. Bind UI busy indicators here.
@@ -114,12 +115,21 @@ private:
     void teardownProcess();
     void cancelInflight();
     void disposeProcess();
+    void emitRunningChangedIfTransitioned();
 
     QString m_matugenBinary;
     QString m_mode;
     QString m_prefer;
     QString m_pendingWallpaper;
     std::unique_ptr<QProcess> m_process;
+    // Last value we actually emitted via runningChanged. The signal
+    // contract is "edge-triggered on real transitions". Sampling
+    // isRunning() at emit time isn't enough because Qt flips
+    // QProcess::state() to NotRunning BEFORE delivering errorOccurred,
+    // so a lambda observing isRunning() can miss the transition it's
+    // supposed to report. Tracking what we already told consumers
+    // pins the contract regardless of Qt's internal ordering.
+    bool m_lastEmittedRunning = false;
 };
 
 } // namespace PhosphorTheme

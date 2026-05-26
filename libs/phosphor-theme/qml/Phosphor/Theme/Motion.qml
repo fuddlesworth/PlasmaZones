@@ -1,19 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Phosphor.Theme.Motion, duration and easing tokens (Material 3 motion).
-// Wire NumberAnimation / Behavior {} via these instead of one-off
-// durations and Easing.* picks: a single tuning here propagates across
-// every animated surface.
+// Wire NumberAnimation and Behavior elements via these instead of
+// one-off durations and Easing.* picks. A single tuning here propagates
+// across every animated surface.
 
 import QtQuick
 pragma Singleton
 
 QtObject {
-    // ─── Easings ─────────────────────────────────────────────────────────
-    // M3 "standard" / "emphasized" / "decelerated" / "accelerated" curves.
-    // Stored as bezier control-point arrays so consumers can hand them to
-    // Easing { type: Easing.BezierSpline; bezierCurve: ... }.
-
     // ─── Durations (ms) ──────────────────────────────────────────────────
     // M3 motion duration tokens.
     readonly property int duration_short_1: 50
@@ -32,13 +27,16 @@ QtObject {
     readonly property int duration_extra_long_2: 800
     readonly property int duration_extra_long_3: 900
     readonly property int duration_extra_long_4: 1000
-    // Pass each one as the four-control-point cubic-bezier from M3:
-    //   [ x1, y1, x2, y2, 1, 1 ], final pair pins the curve at (1,1).
+    // ─── Easings ─────────────────────────────────────────────────────────
+    // M3 standard, emphasized, decelerated, and accelerated curves.
+    // Stored as bezier control-point arrays in Qt's BezierSpline format.
+    // Each array is the four-control-point cubic-bezier from M3, padded
+    // with the curve endpoint at 1,1 as Qt's BezierSpline requires.
     readonly property var easing_standard: [0.2, 0, 0, 1, 1, 1]
     readonly property var easing_emphasized: [0.05, 0.7, 0.1, 1, 1, 1]
     readonly property var easing_decelerated: [0, 0, 0.2, 1, 1, 1]
     readonly property var easing_accelerated: [0.3, 0, 1, 1, 1, 1]
-    // Helpers, pre-built Easing{} factories. Use as
+    // Pre-built easing objects. Hand directly to Behavior.easing. Example.
     //   Behavior on x { NumberAnimation { duration: Motion.duration_medium_2; easing: Motion.standard } }
     readonly property var standard: ({
         "type": Easing.BezierSpline,

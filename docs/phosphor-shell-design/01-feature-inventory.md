@@ -121,8 +121,8 @@ DMS wraps this with a Go CLI `dms ipc call <target> <fn>` (~25 targets, spotligh
 ### Plugin / widget registries
 
 - Noctalia: `BarWidgetRegistry`, `ControlCenterWidgetRegistry`, `DesktopWidgetRegistry`, `LauncherProviderRegistry`, plus a `PluginRegistry` with 7 extension points and a remote source registry (`SourcesSubTab.qml`).
-- DMS: `PluginService.qml` (30 KB) + `PLUGINS/plugin-schema.json`; types are `widget`, `daemon`, `launcher`, `desktop`, `control-center`, `control-center-detail`. **No sandboxing**, plugins get full shell privileges. Browsable via `dms plugins search`.
-- HyprPanel / end-4: no real plugin API. "Custom modules" are user-edited TS / QML files in the rice tree; every rice is a hard fork.
+- DMS: `PluginService.qml` (30 KB) plus `PLUGINS/plugin-schema.json`. Types are `widget`, `daemon`, `launcher`, `desktop`, `control-center`, and `control-center-detail`. **No sandboxing**. Plugins get full shell privileges. Browsable via `dms plugins search`.
+- HyprPanel / end-4: no real plugin API. "Custom modules" are user-edited TS or QML files in the rice tree. Every rice is a hard fork.
 
 ## Three things to steal (cross-shell verdict)
 
@@ -134,4 +134,4 @@ DMS wraps this with a Go CLI `dms ipc call <target> <fn>` (~25 targets, spotligh
 
 1. **DMS's `Common/SettingsData.qml`**, a 121 KB QML singleton holding every setting. Merge-conflict magnet, binding cost scales with consumers. Keep our per-domain `ISettings` split (matches `project_settings_page_controllers` memory and the SettingsController breakup we already did).
 2. **Noctalia's `Migration27..59.qml`**, one file per release, never consolidated. Exactly the rot our `CLAUDE.md` warns about. Keep one migration function per *real* schema bump.
-3. **DMS's `Qt.createComponent()` plugin loader + remote registry**, supply-chain attractive nuisance. Phosphor's `ILayoutSourceFactory` already implies a compiled / signed surface; extend that, not a JS free-for-all.
+3. **DMS's `Qt.createComponent()` plugin loader plus remote registry** is a supply-chain attractive nuisance. Phosphor's `ILayoutSourceFactory` already implies a compiled or signed surface. Extend that, not a JS free-for-all.

@@ -14,7 +14,6 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
-#include <QQmlContext>
 #include <QQuickStyle>
 #include <QStandardPaths>
 #include <QString>
@@ -62,13 +61,13 @@ int main(int argc, char* argv[])
         if (QFile::exists(path)) {
             store->loadFromFile(path);
         }
-        QObject::connect(store, &PhosphorTheme::PaletteStore::loadError, &app,
-                         [](const QString& path, const QString& reason) {
-                             qWarning().noquote() << "phosphor-theme: failed to load" << path << ", " << reason;
-                         });
+        QObject::connect(
+            store, &PhosphorTheme::PaletteStore::loadError, &app, [](const QString& path, const QString& reason) {
+                qWarning().noquote() << QStringLiteral("phosphor-theme: failed to load %1, %2").arg(path, reason);
+            });
     }
 
-    engine.loadFromModule("Phosphor.ThemeDemo", "Main");
+    engine.loadFromModule(QStringLiteral("Phosphor.ThemeDemo"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty()) {
         return 1;
     }

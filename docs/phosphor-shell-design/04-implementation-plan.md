@@ -11,7 +11,7 @@ This is the **execution playbook** for the gaps inventoried in `02-gap-analysis.
 2. **Example-first.** Each library ships with an `examples/phosphor-<name>-demo/` (and a CLI demo where it makes sense). The example is the acceptance test, if you can't drive the library from a small standalone app, the API isn't right.
 3. **Ship thin slices.** Each phase ends at a tagged release. No phase depends on the next; partial completion is shippable.
 4. **No premature UI polish.** The mockups in `mockups/` are the *destination*, not the starting point. We earn each surface by completing the libraries beneath it. The final shell UI work happens last, when every primitive is solid.
-5. **Run on the Phosphor compositor.** Per [[project-phosphor-standalone-stack]], we are the compositor. The shell binds to `phosphor-compositor` directly; we do not target other compositors as deployment surfaces. (Early Phase 1 / Phase 2 libraries that are pure data sources or DBus clients may happen to be testable under another Wayland compositor while `phosphor-compositor` matures in parallel, that's a tactical convenience, not a design goal.)
+5. **Run on the Phosphor compositor.** Per [[project-phosphor-standalone-stack]], we are the compositor. The shell binds to `phosphor-compositor` directly. We do not target other compositors as deployment surfaces. Early Phase 1 and Phase 2 libraries are pure data sources or DBus clients and may happen to be testable under another Wayland compositor while `phosphor-compositor` matures in parallel. That is a tactical convenience, not a design goal.
 
 ## Where we are (Phase 0, what already exists)
 
@@ -47,7 +47,7 @@ Cross-reference: this plan implements the same gaps as `02-gap-analysis.md` (`M0
 - 02's **M5 lockscreen + polish** = Phase 4.5 + Phase 5
 - 02's **M6 plugins** = Phase 5
 
-If anything in `02` conflicts with this doc, this doc wins (newer + execution-oriented).
+If anything in `02` conflicts with this doc, this doc wins. It is newer and execution-oriented.
 
 ---
 
@@ -161,7 +161,7 @@ The `phosphor-foundations-0.1` tag is gated on all five, do not cut it until 1.2
 
 ### Naming, layout, and the existing umbrella
 
-The existing `phosphor-services` library is an umbrella whose CMakeLists explicitly anticipates `Notifications`, `MPRIS`, `UPower`, `NetworkManager`, and `logind` as "future siblings" *inside* it. **This plan deviates from that.** Every other non-shell library in `libs/` (e.g. `phosphor-dbus`, `phosphor-shortcuts`, `phosphor-audio`, `phosphor-layer`, `phosphor-overlay`) follows a `phosphor-<purpose>` one-lib-per-concern pattern; the umbrella is the outlier. We adopt the broader pattern.
+The existing `phosphor-services` library is an umbrella whose CMakeLists explicitly anticipates `Notifications`, `MPRIS`, `UPower`, `NetworkManager`, and `logind` as "future siblings" *inside* it. **This plan deviates from that.** Every other non-shell library in `libs/` follows a `phosphor-<purpose>` one-lib-per-concern pattern. Examples include `phosphor-dbus`, `phosphor-shortcuts`, `phosphor-audio`, `phosphor-layer`, and `phosphor-overlay`. The umbrella is the outlier. We adopt the broader pattern.
 
 The shared "-common" already exists: **`phosphor-dbus`** is the service-agnostic DBus plumbing (`client.cpp`, error/cancel handling, custom-type marshalling). Every new service lib in this phase consumes `phosphor-dbus` instead of duplicating boilerplate.
 
@@ -371,8 +371,8 @@ Lower priority, deferred until 4 ships. Open scope.
 - **Don't port end-4's novelty widgets** (AI chat, OCR translator, anime sidebar), out of shell scope; let them be plugins later.
 - **Don't ship a CUPS printer manager**, standalone tool, not shell concern.
 - **Don't reimplement matugen**, call the external binary like DMS does.
-- **Don't fork Qt or QtQuick.** We're not building on Quickshell or any other external shell framework, we are the framework, in `phosphor-*` libs. Engine-level fixes go through Qt upstream or land as a workaround inside the relevant `phosphor-*` lib. (Noctalia's `noctalia-qs` Quickshell fork is the cautionary tale, but it's a tale about a *different* project's stack; our analogous risk is forking Qt itself, which we likewise refuse.)
-- **Don't build a marketplace** for plugins, local discovery in Phase 5; remote registry deferred indefinitely (supply-chain risk per `01`-feature-inventory.md anti-patterns).
+- **Don't fork Qt or QtQuick.** We're not building on Quickshell or any other external shell framework. We are the framework, in `phosphor-*` libs. Engine-level fixes go through Qt upstream or land as a workaround inside the relevant `phosphor-*` lib. Noctalia's `noctalia-qs` Quickshell fork is the cautionary tale. It's a tale about a *different* project's stack. Our analogous risk is forking Qt itself, which we likewise refuse.
+- **Don't build a marketplace** for plugins. Local discovery lands in Phase 5. Remote registry is deferred indefinitely. The supply-chain risk is documented in `01-feature-inventory.md` anti-patterns.
 - **Don't add backwards-compat shims** for the bar's TopPanel POC, replace cleanly when 4.1 lands (per `feedback_no_legacy_shims`).
 - **Don't introduce ad-hoc settings migrations**, only the one migration function per real schema bump (per CLAUDE.md "No Ad-Hoc Backwards Compatibility").
 - **Don't optimize before measuring.** No premature animation tuning, no premature shader compilation pipeline, no premature plugin sandboxing.

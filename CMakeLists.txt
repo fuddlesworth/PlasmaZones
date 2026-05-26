@@ -600,6 +600,17 @@ install(FILES ${_plasmazones_light_icons}
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
 )
 
+# phosphor-theme example apps. These are the lib's acceptance harness.
+# They consume only the phosphor-theme lib, so they build whenever the
+# lib builds. Gating them behind BUILD_PHOSPHOR_SHELL would force a
+# theme developer to pull in the whole shell tree just to run the demo.
+# phosphor-theme-demo renders the active PaletteStore as a swatch sheet
+# and hot-reloads from ~/.local/share/phosphor/palettes/current.json.
+# phosphor-theme-cli is the headless round-trip driver: wallpaper to
+# matugen to palette JSON to rendered template.
+add_subdirectory(examples/phosphor-theme-demo)
+add_subdirectory(examples/phosphor-theme-cli)
+
 if(BUILD_PHOSPHOR_SHELL)
     # Build the bundled example shell as a Qt QML module so qmlcachegen
     # and qmlsc run at build time. The resulting static module gets linked
@@ -608,23 +619,12 @@ if(BUILD_PHOSPHOR_SHELL)
     # install (qrc fallback in ShellLoader::resolve()).
     add_subdirectory(examples/phosphor-shell)
 
-    # phosphor-theme-demo, Phase 1.1 acceptance test. Renders the active
-    # PaletteStore as a swatch sheet; hot-reloads from
-    # ~/.local/share/phosphor/palettes/current.json. Standalone exe so it
-    # boots without the full shell.
-    add_subdirectory(examples/phosphor-theme-demo)
-
-    # phosphor-theme-cli, headless driver for the matugen runner and
-    # template engine. Exercises the round-trip the demo skips:
-    # wallpaper -> matugen -> palette JSON -> rendered template.
-    add_subdirectory(examples/phosphor-theme-cli)
-
     # Install the example phosphor-shell QML/shaders so users can copy
-    # them into their config dir and edit. Same source as the qrc above:
-    # qrc is the build-time frozen copy used as final fallback, this is
-    # the user-editable copy. ShellLoader::resolve() probes
-    # GenericConfigLocation (~/.config) → GenericDataLocation (this
-    # install) → qrc:/ (linked-in fallback) in that order.
+    # them into their config dir and edit. Same source as the qrc above.
+    # The qrc is the build-time frozen copy used as final fallback. This
+    # install is the user-editable copy. ShellLoader::resolve() probes
+    # GenericConfigLocation (~/.config), then GenericDataLocation (this
+    # install), then qrc:/ (linked-in fallback) in that order.
     install(DIRECTORY examples/phosphor-shell/
         DESTINATION ${KDE_INSTALL_DATADIR}/phosphor-shell
         FILES_MATCHING

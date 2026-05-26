@@ -171,15 +171,16 @@ int runDump(const QStringList& args)
     p.process(args);
 
     PhosphorTheme::PaletteStore store;
+    QObject::connect(&store, &PhosphorTheme::PaletteStore::loadError, [](const QString& path, const QString& reason) {
+        std::cerr << "phosphor-theme-cli: failed to load " << path.toStdString() << ", " << reason.toStdString()
+                  << '\n';
+    });
     if (p.isSet(srcOpt)) {
         if (!store.loadFromFile(p.value(srcOpt))) {
             return 1;
         }
     } else if (QFile::exists(defaultPalettePath())) {
-        if (!store.loadFromFile(defaultPalettePath())) {
-            std::cerr << "phosphor-theme-cli: " << defaultPalettePath().toStdString()
-                      << " is unreadable or malformed; falling back to built-in defaults\n";
-        }
+        store.loadFromFile(defaultPalettePath());
     }
     // else: built-in defaults are already loaded.
 
@@ -208,15 +209,16 @@ int runRenderTemplate(const QStringList& args)
     const auto outPath = positional.at(1);
 
     PhosphorTheme::PaletteStore store;
+    QObject::connect(&store, &PhosphorTheme::PaletteStore::loadError, [](const QString& path, const QString& reason) {
+        std::cerr << "phosphor-theme-cli: failed to load " << path.toStdString() << ", " << reason.toStdString()
+                  << '\n';
+    });
     if (p.isSet(paletteOpt)) {
         if (!store.loadFromFile(p.value(paletteOpt))) {
             return 1;
         }
     } else if (QFile::exists(defaultPalettePath())) {
-        if (!store.loadFromFile(defaultPalettePath())) {
-            std::cerr << "phosphor-theme-cli: " << defaultPalettePath().toStdString()
-                      << " is unreadable or malformed; rendering against built-in defaults\n";
-        }
+        store.loadFromFile(defaultPalettePath());
     }
 
     if (!PhosphorTheme::TemplateEngine::renderFile(templatePath, outPath, store.palette())) {

@@ -5,7 +5,10 @@
 
 #include <QColor>
 #include <QSignalSpy>
+#include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QTest>
+#include <QUrl>
 #include <QVariantMap>
 
 using namespace PhosphorTheme;
@@ -28,6 +31,10 @@ private Q_SLOTS:
     void parse_handlesV4PerTokenNesting();
     void parse_v4FallsBackToDefaultWhenModeMissing();
     void run_emitsFailedOnMissingWallpaper();
+    void runUrl_rejectsNonLocalUrl();
+    void runUrl_routesLocalUrlThroughStringOverload();
+    void run_normalisesRelativePathToAbsolute();
+    void run_syncFailDoesNotEmitDoubleRunningChanged();
     void cancel_onIdleRunnerIsNoOp();
     void setters_onlyEmitOnChange();
 };
@@ -133,9 +140,115 @@ void TestMatugenRunner::run_emitsFailedOnMissingWallpaper()
     // this test doesn't depend on the binary being installed.
     MatugenRunner r;
     QSignalSpy failedSpy(&r, &MatugenRunner::failed);
+    QSignalSpy runSpy(&r, &MatugenRunner::runningChanged);
     r.run(QStringLiteral("/definitely/does/not/exist.jpg"));
     QCOMPARE(failedSpy.count(), 1);
     QCOMPARE(failedSpy.first().at(0).toString(), QStringLiteral("/definitely/does/not/exist.jpg"));
+    QVERIFY(!r.isRunning());
+    // The sync-fail path returns before constructing m_process, so
+    // runningChanged must not fire.
+    QCOMPARE(runSpy.count(), 0);
+}
+
+void TestMatugenRunner::runUrl_rejectsNonLocalUrl()
+{
+    // The QUrl overload is the QML entry point. A non-file URL must be
+    // rejected via the failed signal so a passing-but-wrong QML call
+    // surfaces visibly instead of spawning matugen with a malformed
+    // argument.
+    MatugenRunner r;
+    QSignalSpy failedSpy(&r, &MatugenRunner::failed);
+    QSignalSpy runSpy(&r, &MatugenRunner::runningChanged);
+    r.run(QUrl(QStringLiteral("https://example.com/img.jpg")));
+    QCOMPARE(failedSpy.count(), 1);
+    QCOMPARE(failedSpy.first().at(0).toString(), QStringLiteral("https://example.com/img.jpg"));
+    QVERIFY(failedSpy.first().at(1).toString().contains(QStringLiteral("not a local file")));
+    QCOMPARE(runSpy.count(), 0);
+    QVERIFY(!r.isRunning());
+}
+
+void TestMatugenRunner::runUrl_routesLocalUrlThroughStringOverload()
+{
+    // A local-file URL pointing at a missing path must route through the
+    // string overload and produce the same "wallpaper does not exist"
+    // failure as a raw missing path, with the converted local path in
+    // the signal payload (not the URL string).
+    MatugenRunner r;
+    QSignalSpy failedSpy(&r, &MatugenRunner::failed);
+    const QString missing = QStringLiteral("/definitely/does/not/exist-url.jpg");
+    r.run(QUrl::fromLocalFile(missing));
+    QCOMPARE(failedSpy.count(), 1);
+    QCOMPARE(failedSpy.first().at(0).toString(), missing);
+}
+
+void TestMatugenRunner::run_normalisesRelativePathToAbsolute()
+{
+    // Flag-injection hardening: a wallpaper named "-foo.jpg" passed as
+    // a relative path would otherwise be parsed by matugen's clap as a
+    // flag. run() canonicalises to an absolute "/..." path before the
+    // subprocess sees it. We can observe this only through the failed
+    // signal's payload, since the sync-success path requires a real
+    // binary, so we point matugenBinary at /nonexistent to force a
+    // synchronous FailedToStart and inspect the path that was passed.
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString fileName = QStringLiteral("-flag-shaped-name.jpg");
+    const QString absolutePath = tmp.filePath(fileName);
+    {
+        QFile f(absolutePath);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("not a real image");
+    }
+
+    MatugenRunner r;
+    r.setMatugenBinary(QStringLiteral("/nonexistent/binary/matugen"));
+    QSignalSpy failedSpy(&r, &MatugenRunner::failed);
+
+    // Pass relative path; chdir to the temp dir so the relative form
+    // resolves correctly. Restore cwd at scope end.
+    const QString originalCwd = QDir::currentPath();
+    QVERIFY(QDir::setCurrent(tmp.path()));
+    r.run(QStringLiteral("./") + fileName);
+    QVERIFY(QDir::setCurrent(originalCwd));
+
+    QVERIFY(failedSpy.wait(2000) || failedSpy.count() >= 1);
+    QVERIFY(failedSpy.count() >= 1);
+    const QString reported = failedSpy.first().at(0).toString();
+    QVERIFY2(reported.startsWith(QLatin1Char('/')),
+             qPrintable(QStringLiteral("expected absolute path, got '%1'").arg(reported)));
+    QVERIFY(reported.endsWith(fileName));
+}
+
+void TestMatugenRunner::run_syncFailDoesNotEmitDoubleRunningChanged()
+{
+    // runningChanged contract: only fires on actual transitions. A run
+    // against a missing binary fails via errorOccurred. The total emit
+    // count must be even, never odd, so listeners never see an unpaired
+    // half-transition. With the wasRunning tracking in place we get
+    // either zero emits (failure detected before any state change) or
+    // two emits (false-to-true on start, then true-to-false on failure).
+    // Without it, a synchronous fail can yield one stray false-to-false
+    // emit.
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString wallpaper = tmp.filePath(QStringLiteral("w.jpg"));
+    {
+        QFile f(wallpaper);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("not a real image");
+    }
+
+    MatugenRunner r;
+    r.setMatugenBinary(QStringLiteral("/nonexistent/binary/matugen"));
+    QSignalSpy runSpy(&r, &MatugenRunner::runningChanged);
+    QSignalSpy failedSpy(&r, &MatugenRunner::failed);
+
+    r.run(wallpaper);
+    QVERIFY(failedSpy.wait(2000) || failedSpy.count() >= 1);
+    QVERIFY(failedSpy.count() >= 1);
+    // Even count. Each emit corresponds to a real isRunning() flip.
+    QVERIFY2(runSpy.count() % 2 == 0,
+             qPrintable(QStringLiteral("runningChanged count %1 is odd (unpaired transition)").arg(runSpy.count())));
     QVERIFY(!r.isRunning());
 }
 

@@ -109,7 +109,14 @@ bool PaletteStore::loadFromJson(const QByteArray& json)
     //      palette files where the wrapper feels like noise).
     // Layout 1 takes precedence if `tokens` is present.
     QJsonObject tokens;
-    if (root.contains(QLatin1String("tokens")) && root.value(QLatin1String("tokens")).isObject()) {
+    if (root.contains(QLatin1String("tokens"))) {
+        // Caller signalled the wrapped layout. If the value isn't an
+        // object the caller's intent is unambiguous but malformed. Fail
+        // explicitly instead of silently treating sibling metadata keys
+        // as tokens, which would change the palette in a surprising way.
+        if (!root.value(QLatin1String("tokens")).isObject()) {
+            return false;
+        }
         tokens = root.value(QLatin1String("tokens")).toObject();
     } else {
         tokens = root;
@@ -153,6 +160,11 @@ bool PaletteStore::loadFromFile(const QString& path)
         Q_EMIT loadError(path, QStringLiteral("invalid JSON or empty token map"));
         return false;
     }
+
+    // Drop any pending debounce from the previous source so a queued
+    // tick can't fire a redundant reload of the file we just loaded
+    // synchronously.
+    m_reloadDebounce->stop();
 
     // Replace any previous watch so the store never accumulates stale
     // paths across `loadFromFile` calls. Pair the file watch with a

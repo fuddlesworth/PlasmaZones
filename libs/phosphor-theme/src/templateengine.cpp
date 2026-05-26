@@ -16,15 +16,16 @@ namespace PhosphorTheme {
 
 namespace {
 
-// Map a single-token reference (token name + optional `.field`) to its
-// rendered string. Field defaults to "hex" (the most common case for
-// CSS / config files).
+// Map a single-token reference to its rendered string. The reference
+// is a token name plus an optional `.field`. Field defaults to "hex"
+// because that is the most common case for CSS and config files.
 //
-// Returned `ok` is false only when the token is unknown, in which case
+// Returned `ok` is false only when the token is unknown. In that case
 // the caller leaves the original `{{...}}` placeholder in place. An
 // unknown FIELD on a known token renders the default form rather than
-// failing loudly: a typo in a field name is less critical than a
-// missing color, and we don't want a renderer crash to break a save.
+// failing loudly. A typo in a field name is less critical than a
+// missing color. A renderer crash mid-save would be worse than a
+// fallback render.
 QString renderToken(const QString& name, const QString& field, const QVariantMap& tokens, bool& ok)
 {
     ok = false;
@@ -133,14 +134,20 @@ bool TemplateEngine::renderFile(const QString& templatePath, const QString& outP
     in.close();
 
     const auto rendered = render(src, tokens);
+    const auto payload = rendered.toUtf8();
 
     QFile out(outPath);
     if (!out.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
         qWarning().noquote() << "phosphor-theme: cannot write rendered output" << outPath << ", " << out.errorString();
         return false;
     }
-    out.write(rendered.toUtf8());
+    const qint64 written = out.write(payload);
     out.close();
+    if (written != payload.size() || out.error() != QFileDevice::NoError) {
+        qWarning().noquote() << "phosphor-theme: short write or IO error on rendered output" << outPath << ", "
+                             << out.errorString();
+        return false;
+    }
     return true;
 }
 
