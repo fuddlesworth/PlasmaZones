@@ -22,6 +22,7 @@
 #include "../core/utils.h"
 #include "../pz_i18n.h"
 #include "animationfileutils.h"
+#include "animations_controller_detail.h"
 #include "shaderpackinstaller.h"
 
 // IMPORTANT: include via the project-local path (PhosphorAnimation/),
@@ -44,6 +45,11 @@
 #include <QUrl>
 
 namespace PlasmaZones {
+
+// Bring the shared effect/parameter/profile→QVariantMap helpers from
+// animations_controller_detail.h into scope so the call sites below stay
+// unqualified — matches the sibling main TU's using-declaration.
+using namespace animations_controller_detail;
 
 bool AnimationsPageController::supportsShaderLeg(const QString& path) const
 {

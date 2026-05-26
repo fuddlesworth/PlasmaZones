@@ -288,7 +288,10 @@ SettingsController::SettingsController(QObject* parent)
                "onSettingsPropertyChanged() slot not found — was it renamed?");
     const QMetaMethod settingsChangedSlot = metaObject()->method(settingsChangedSlotIdx);
     const QMetaObject* mo = m_settings.metaObject();
-    for (int i = mo->propertyOffset(); i < mo->propertyCount(); ++i) {
+    // Walk from 0 (not propertyOffset()) so Q_PROPERTYs declared on the
+    // ISettings base or any future intermediate class are also wired —
+    // hasNotifySignal() filters out properties without NOTIFY.
+    for (int i = 0; i < mo->propertyCount(); ++i) {
         QMetaProperty prop = mo->property(i);
         if (prop.hasNotifySignal()) {
             connect(&m_settings, prop.notifySignal(), this, settingsChangedSlot);

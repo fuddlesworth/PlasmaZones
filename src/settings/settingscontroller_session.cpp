@@ -27,6 +27,7 @@
 #include "../config/configbackends.h"
 #include "../config/configdefaults.h"
 #include "../config/configmigration.h"
+#include "../core/logging.h"
 #include "../core/utils.h"
 #include "../pz_i18n.h"
 #include "dbusutils.h"
@@ -141,12 +142,18 @@ void SettingsController::refreshVirtualDesktops()
                                                      QStringLiteral("getVirtualDesktopCount"));
     if (countReply.type() == QDBusMessage::ReplyMessage && !countReply.arguments().isEmpty()) {
         m_virtualDesktopCount = countReply.arguments().first().toInt();
+    } else if (countReply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "refreshVirtualDesktops: getVirtualDesktopCount D-Bus call failed:"
+                          << countReply.errorMessage();
     }
 
     QDBusMessage namesReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                      QStringLiteral("getVirtualDesktopNames"));
     if (namesReply.type() == QDBusMessage::ReplyMessage && !namesReply.arguments().isEmpty()) {
         m_virtualDesktopNames = namesReply.arguments().first().toStringList();
+    } else if (namesReply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "refreshVirtualDesktops: getVirtualDesktopNames D-Bus call failed:"
+                          << namesReply.errorMessage();
     }
 }
 
@@ -156,6 +163,8 @@ void SettingsController::refreshActivities()
                                                      QStringLiteral("isActivitiesAvailable"));
     if (availReply.type() == QDBusMessage::ReplyMessage && !availReply.arguments().isEmpty()) {
         m_activitiesAvailable = availReply.arguments().first().toBool();
+    } else if (availReply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "refreshActivities: isActivitiesAvailable D-Bus call failed:" << availReply.errorMessage();
     }
 
     if (m_activitiesAvailable) {
@@ -170,13 +179,25 @@ void SettingsController::refreshActivities()
                     m_activities.append(val.toObject().toVariantMap());
                 }
             }
+        } else if (infoReply.type() == QDBusMessage::ErrorMessage) {
+            qCWarning(lcCore) << "refreshActivities: getAllActivitiesInfo D-Bus call failed:"
+                              << infoReply.errorMessage();
         }
 
         QDBusMessage currentReply = DaemonDBus::callDaemon(
             QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("getCurrentActivity"));
         if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
             m_currentActivity = currentReply.arguments().first().toString();
+        } else if (currentReply.type() == QDBusMessage::ErrorMessage) {
+            qCWarning(lcCore) << "refreshActivities: getCurrentActivity D-Bus call failed:"
+                              << currentReply.errorMessage();
         }
+    } else {
+        // Activities subsystem went away (kactivities not running, plugin
+        // disabled, etc.) — clear stale state so QML stops rendering
+        // activities that no longer exist.
+        m_activities.clear();
+        m_currentActivity.clear();
     }
 }
 
@@ -722,44 +743,6 @@ bool SettingsController::hasUnsavedVirtualScreenConfig(const QString& physicalSc
 QVariantList SettingsController::getStagedVirtualScreenConfig(const QString& physicalScreenId) const
 {
     return m_staging.stagedVirtualScreenConfig(physicalScreenId);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Ordering helpers
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Shared helper: apply custom order to a set of items, appending unordered items alphabetically
-static QVariantList applyCustomOrder(const QStringList& customOrder, const QHash<QString, QVariantMap>& itemMap)
-{
-    QVariantList result;
-    QSet<QString> added;
-
-    // First: items in custom order (skip stale IDs)
-    for (const QString& id : customOrder) {
-        if (itemMap.contains(id)) {
-            result.append(itemMap.value(id));
-            added.insert(id);
-        }
-    }
-
-    // Then: remaining items in default order (name-alphabetical)
-    QVector<QPair<QString, QVariantMap>> remaining;
-    for (auto it = itemMap.cbegin(); it != itemMap.cend(); ++it) {
-        if (!added.contains(it.key())) {
-            remaining.append({it.key(), it.value()});
-        }
-    }
-    std::sort(remaining.begin(), remaining.end(), [](const auto& a, const auto& b) {
-        return a.second.value(QStringLiteral("name"))
-                   .toString()
-                   .compare(b.second.value(QStringLiteral("name")).toString(), Qt::CaseInsensitive)
-            < 0;
-    });
-    for (const auto& pair : remaining) {
-        result.append(pair.second);
-    }
-
-    return result;
 }
 
 } // namespace PlasmaZones

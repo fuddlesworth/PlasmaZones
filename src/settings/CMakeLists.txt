@@ -25,6 +25,10 @@ set(plasmazones_settings_SRCS
     # exposing the Q_PROPERTY surface for a single settings page each.
     animationspagecontroller.h
     animationspagecontroller.cpp
+    # Internal header carrying the inline effect/parameter/profile→QVariantMap
+    # helpers shared between the two AnimationsPageController TUs. Inline
+    # definitions make cross-TU linkage independent of unity-build merging.
+    animations_controller_detail.h
     # AnimationsPageController shader-leg methods compile into the same
     # target — same class, separate TU, no API change. Keeps the main
     # cpp under the 800-line cap (CLAUDE.md).

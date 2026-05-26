@@ -19,6 +19,46 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+// Apply custom order to a set of items, appending unordered items alphabetically.
+// Anonymous namespace keeps this TU-local so the build doesn't depend on unity
+// build merging this TU with sibling settingscontroller_*.cpp files.
+QVariantList applyCustomOrder(const QStringList& customOrder, const QHash<QString, QVariantMap>& itemMap)
+{
+    QVariantList result;
+    QSet<QString> added;
+
+    // First: items in custom order (skip stale IDs)
+    for (const QString& id : customOrder) {
+        if (itemMap.contains(id)) {
+            result.append(itemMap.value(id));
+            added.insert(id);
+        }
+    }
+
+    // Then: remaining items in default order (name-alphabetical)
+    QVector<QPair<QString, QVariantMap>> remaining;
+    for (auto it = itemMap.cbegin(); it != itemMap.cend(); ++it) {
+        if (!added.contains(it.key())) {
+            remaining.append({it.key(), it.value()});
+        }
+    }
+    std::sort(remaining.begin(), remaining.end(), [](const auto& a, const auto& b) {
+        return a.second.value(QStringLiteral("name"))
+                   .toString()
+                   .compare(b.second.value(QStringLiteral("name")).toString(), Qt::CaseInsensitive)
+            < 0;
+    });
+    for (const auto& pair : remaining) {
+        result.append(pair.second);
+    }
+
+    return result;
+}
+
+} // namespace
+
 QStringList SettingsController::effectiveSnappingOrder() const
 {
     return m_stagedSnappingOrder.value_or(m_settings.snappingLayoutOrder());
