@@ -8,8 +8,8 @@
 #include "../pz_i18n.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QStandardPaths>
-#include <QStringLiteral>
 
 namespace PlasmaZones {
 
@@ -66,7 +66,24 @@ void SnappingAppearanceController::loadColorsFromPywal()
 
 void SnappingAppearanceController::loadColorsFromFile(const QString& filePath)
 {
-    const QString error = m_settings->loadColorsFromFile(filePath);
+    // QML-callable entry point — `filePath` is untrusted input. Reject
+    // empty / non-existent / non-regular / non-.json paths before
+    // forwarding to Settings, which does JSON parsing without
+    // re-validating the path itself. Defence-in-depth per CLAUDE.md
+    // "Sanitize file paths to prevent directory traversal" — the colors
+    // file picker should already constrain selection, but the QML
+    // surface is a public API.
+    const QFileInfo info(filePath);
+    if (filePath.isEmpty() || !info.exists() || !info.isFile()) {
+        Q_EMIT colorImportError(PzI18n::tr("Color import file does not exist: %1").arg(filePath));
+        return;
+    }
+    if (info.suffix().compare(QStringLiteral("json"), Qt::CaseInsensitive) != 0) {
+        Q_EMIT colorImportError(PzI18n::tr("Color import file must be a .json file: %1").arg(filePath));
+        return;
+    }
+
+    const QString error = m_settings->loadColorsFromFile(info.canonicalFilePath());
     if (!error.isEmpty()) {
         Q_EMIT colorImportError(error);
         return;

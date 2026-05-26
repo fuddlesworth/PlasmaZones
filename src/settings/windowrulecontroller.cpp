@@ -128,10 +128,15 @@ void WindowRuleController::setActivityLookup(WindowRuleModel::LabelLookup fn)
 
 void WindowRuleController::setLayoutLookup(WindowRuleModel::LabelLookup fn)
 {
-    m_layoutLookup = fn;
+    // Store the controller-side copy first, then hand the model a fresh
+    // copy from the member (instead of std::move-ing the parameter into
+    // the model after copying it — that left `fn` in a moved-from state
+    // while m_layoutLookup also held a live copy, an awkward construction
+    // a future reader might "fix" by removing the apparent duplication).
+    m_layoutLookup = std::move(fn);
     // Also forward to the model so its `actionSummary` can resolve layoutId /
     // algorithm-token wire values when building the rule-list captions.
-    m_model.setLayoutLabelLookup(std::move(fn));
+    m_model.setLayoutLabelLookup(m_layoutLookup);
 }
 
 bool WindowRuleController::isDirty() const

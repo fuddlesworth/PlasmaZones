@@ -32,6 +32,11 @@ public:
 
 private:
     QPointer<SettingsController> m_controller;
+    /// Last value of isDirty() observed by the dirtyPagesChanged
+    /// forwarder lambda. Used to gate the framework-facing dirtyChanged
+    /// emit so per-page transitions that do not flip the global
+    /// needsSave() bool do not spuriously re-fire it.
+    bool m_lastDirty = false;
 };
 
 } // namespace PlasmaZones

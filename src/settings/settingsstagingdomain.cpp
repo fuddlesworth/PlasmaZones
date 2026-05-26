@@ -19,15 +19,26 @@ SettingsStagingDomain::SettingsStagingDomain(SettingsController* controller, QOb
         // no-op. The framework would still happily register it and
         // wire dirtyChanged through, just to a domain that can
         // never transition. Warn loudly so the bug surfaces.
-        qWarning() << "PlasmaZones::SettingsStagingDomain: constructed with null SettingsController — "
+        qWarning() << "PlasmaZones::SettingsStagingDomain: constructed with null SettingsController —"
                    << "apply/discard/isDirty will be permanently no-op.";
         return;
     }
-    // SettingsController emits dirtyPagesChanged whenever m_dirtyPages mutates;
-    // forward to the framework's StagingDomain signal so ApplicationController
-    // recomputes its global dirty flag.
-    connect(m_controller, &SettingsController::dirtyPagesChanged, this,
-            &PhosphorSettingsUi::StagingDomain::dirtyChanged);
+    // SettingsController emits dirtyPagesChanged whenever m_dirtyPages
+    // mutates — but the global needsSave() bool only flips between
+    // empty/non-empty dirty-page sets. Forwarding dirtyPagesChanged
+    // directly would re-fire StagingDomain::dirtyChanged for every
+    // per-page transition, prompting ApplicationController to
+    // recompute its global dirty flag and re-render the footer for
+    // changes the global flag did not actually see.
+    m_lastDirty = isDirty();
+    connect(m_controller, &SettingsController::dirtyPagesChanged, this, [this]() {
+        const bool currentDirty = isDirty();
+        if (currentDirty == m_lastDirty) {
+            return;
+        }
+        m_lastDirty = currentDirty;
+        Q_EMIT dirtyChanged();
+    });
 }
 
 SettingsStagingDomain::~SettingsStagingDomain() = default;

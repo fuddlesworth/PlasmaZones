@@ -7,7 +7,10 @@ namespace PhosphorSettingsUi {
 
 QString version()
 {
-    return QStringLiteral("0.1.0");
+    // PHOSPHORSETTINGSUI_VERSION_STR is set from PHOSPHORSETTINGSUI_VERSION
+    // in libs/phosphor-settings-ui/CMakeLists.txt so one bump updates both
+    // the install version metadata and this getter.
+    return QStringLiteral(PHOSPHORSETTINGSUI_VERSION_STR);
 }
 
 } // namespace PhosphorSettingsUi

@@ -83,6 +83,13 @@ Result install(const QString& sourceUrl, const QString& userShaderDir)
     const QFileInfo sourceInfo(sourcePath);
     if (!sourceInfo.exists() || !sourceInfo.isDir() || sourceInfo.isSymLink())
         return Result::InvalidSource;
+    // Detect ANCESTOR symlinks too — `sourceInfo.isSymLink()` only checks
+    // the leaf, but a drop from `/home/x/symlinked-parent/pack` resolves
+    // to a path whose canonical form differs from its absolute form, and
+    // following the link smuggles in arbitrary content under the linked
+    // parent's resolved location. Reject when canonical != absolute.
+    if (sourceInfo.canonicalFilePath() != sourceInfo.absoluteFilePath())
+        return Result::InvalidSource;
     const QString sourceBasename = sourceInfo.fileName();
     if (sourceBasename.isEmpty())
         return Result::InvalidSource;
@@ -100,6 +107,14 @@ Result install(const QString& sourceUrl, const QString& userShaderDir)
         return Result::InvalidUserDir;
     if (!QDir().mkpath(userShaderDir))
         return Result::InvalidUserDir;
+
+    // Refuse a source that lives INSIDE the user shader directory — a
+    // re-drop of an already-installed pack would otherwise trip
+    // DestinationExists by accident, and a symlinked path back into the
+    // user dir would copy onto self.
+    const QString userDirAbsolute = QDir(userShaderDir).absolutePath() + QLatin1Char('/');
+    if (sourceInfo.absoluteFilePath().startsWith(userDirAbsolute))
+        return Result::InvalidSource;
 
     const QString destDir = userShaderDir + QLatin1Char('/') + sourceBasename;
     if (QFileInfo::exists(destDir))

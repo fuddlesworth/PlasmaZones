@@ -203,6 +203,16 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
             // can't tell which path moved without diffing. QML pages refresh
             // every visible event card on this signal which is cheap enough.
             Q_EMIT shaderProfileChanged(QString());
+            // If this signal arrived from an external reload (Discard from
+            // another page, import, settings.load()), the on-disk tree is
+            // now authoritative — drop the staged-dirty flag so
+            // hasPendingChanges() does not report phantom edits. The
+            // m_mutatingShaderTree guard distinguishes our own writes
+            // (which keep the dirty flag set) from external reloads.
+            if (!m_mutatingShaderTree && m_shaderTreeDirty) {
+                m_shaderTreeDirty = false;
+                Q_EMIT pendingChangesChanged();
+            }
         });
     }
 }

@@ -196,7 +196,9 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         if (tree.directOverride(path) == disabledProfile)
             return true;
         tree.setOverride(path, disabledProfile);
+        m_mutatingShaderTree = true;
         m_settings->setShaderProfileTree(tree);
+        m_mutatingShaderTree = false;
         m_shaderTreeDirty = true;
         Q_EMIT pendingChangesChanged();
         return true;
@@ -233,7 +235,9 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     if (tree.directOverride(path) == profile)
         return true;
     tree.setOverride(path, profile);
+    m_mutatingShaderTree = true;
     m_settings->setShaderProfileTree(tree);
+    m_mutatingShaderTree = false;
     m_shaderTreeDirty = true;
     Q_EMIT pendingChangesChanged();
     return true;
@@ -248,7 +252,9 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     if (!tree.hasOverride(path))
         return false;
     tree.clearOverride(path);
+    m_mutatingShaderTree = true;
     m_settings->setShaderProfileTree(tree);
+    m_mutatingShaderTree = false;
     m_shaderTreeDirty = true;
     Q_EMIT pendingChangesChanged();
     return true;
@@ -297,7 +303,9 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
         return 0;
     for (const QString& p : toClear)
         tree.clearOverride(p);
+    m_mutatingShaderTree = true;
     m_settings->setShaderProfileTree(tree);
+    m_mutatingShaderTree = false;
     m_shaderTreeDirty = true;
     Q_EMIT pendingChangesChanged();
     return toClear.size();

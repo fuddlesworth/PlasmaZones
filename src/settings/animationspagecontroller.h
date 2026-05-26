@@ -408,6 +408,12 @@ private:
     /// re-emit path like every other settings page.
     QHash<QString, std::optional<QByteArray>> m_pendingFileSnapshots;
     bool m_shaderTreeDirty = false;
+    /// Set to true while a controller-owned setter is mutating the
+    /// shader profile tree on m_settings. The shaderProfileTreeChanged
+    /// handler uses this to distinguish our own writes (which keep
+    /// m_shaderTreeDirty true) from external reloads (which should
+    /// clear it).
+    bool m_mutatingShaderTree = false;
 };
 
 } // namespace PlasmaZones

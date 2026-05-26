@@ -114,6 +114,13 @@ set_target_properties(PhosphorSettingsUi PROPERTIES
     UNITY_BUILD OFF
 )
 
+# Surface the CMake version to the C++ version() accessor so the two
+# stay in sync (avoid drift between the project metadata + a hardcoded
+# string literal in src/phosphorsettingsui.cpp).
+target_compile_definitions(PhosphorSettingsUi PRIVATE
+    PHOSPHORSETTINGSUI_VERSION_STR="${PHOSPHORSETTINGSUI_VERSION}"
+)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # QML Module — org.phosphor.settings.ui (STATIC, in-tree linkable)
 #
@@ -151,8 +158,11 @@ qt_add_qml_module(PhosphorSettingsUiQml
 # The QML target compiles the same .cpp files as the C++ SHARED library;
 # set the export define so PHOSPHORSETTINGSUI_EXPORT resolves to
 # visibility("default") on both builds. Mirrors phosphor-animation.
+# Also surface PHOSPHORSETTINGSUI_VERSION_STR so the shared
+# phosphorsettingsui.cpp's version() accessor compiles in this target too.
 target_compile_definitions(PhosphorSettingsUiQml PRIVATE
     PhosphorSettingsUi_EXPORTS
+    PHOSPHORSETTINGSUI_VERSION_STR="${PHOSPHORSETTINGSUI_VERSION}"
 )
 
 add_library(PhosphorSettingsUi::PhosphorSettingsUiQml ALIAS PhosphorSettingsUiQml)
