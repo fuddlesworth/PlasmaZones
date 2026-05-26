@@ -209,11 +209,20 @@ PhosphorUi.SettingsAppWindow {
         property string _aspectRatioMenuKind: "none"
         readonly property bool isAutotile: layout && layout.isAutotile === true
         readonly property string layoutId: layout ? (layout.id || "") : ""
+        // Cache the aspect-ratio options + screen list rather than
+        // re-deriving them on every binding read. The Instantiator
+        // delegate models below depend on these — re-evaluation on
+        // each popup() round was tearing down and rebuilding every
+        // delegate, which is precisely the Qt6 SIGSEGV class the
+        // header comment warns about. The bindings still react to
+        // `settingsController.screensChanged` so multi-monitor
+        // hotplug is handled.
         readonly property var _aspectRatioOptions: [["any", window.aspectRatioLabels["any"], 0], ["standard", window.aspectRatioLabels["standard"], 1], ["ultrawide", window.aspectRatioLabels["ultrawide"], 2], ["super-ultrawide", window.aspectRatioLabels["super-ultrawide"], 3], ["portrait", window.aspectRatioLabels["portrait"], 4]]
-        readonly property var _screenItemsModel: {
-            var screens = settingsController.screens || [];
-            return screens.length > 1 ? screens : [];
-        }
+        // Memoise the screen list result. The getter still re-runs on
+        // `settingsController.screensChanged`, but doesn't re-run on
+        // each popup() / every `_screenItemsModel.length` read.
+        property var _cachedScreens: []
+        readonly property var _screenItemsModel: _cachedScreens
 
         signal deleteRequested(var layout)
         signal exportRequested(string layoutId)
@@ -241,6 +250,20 @@ PhosphorUi.SettingsAppWindow {
                 layoutContextMenu._aspectRatioMenuKind = wantKind;
             }
             layoutContextMenu.popup();
+        }
+
+        Component.onCompleted: {
+            var s = settingsController.screens || [];
+            _cachedScreens = (s.length > 1) ? s : [];
+        }
+
+        Connections {
+            function onScreensChanged() {
+                var s = settingsController.screens || [];
+                layoutContextMenu._cachedScreens = (s.length > 1) ? s : [];
+            }
+
+            target: settingsController
         }
 
         MenuItem {
@@ -621,10 +644,24 @@ PhosphorUi.SettingsAppWindow {
             readonly property bool isTiling: entry && entry.id === "tiling"
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
+            property int _dirtyTick: 0
 
             spacing: Kirigami.Units.smallSpacing
 
             // ── Unsaved-changes badge ────────────────────────────────
+            // `_dirtyTick` bumps once per `dirtyPagesChanged` emit. We
+            // bind the badge's `visible` to it (read once via the
+            // ternary) and to `isPageDirty()` directly — vs. the
+            // earlier `settingsController.dirtyPages` read, which
+            // materialised a fresh QStringList per row per emit.
+            Connections {
+                function onDirtyPagesChanged() {
+                    trailingRow._dirtyTick++;
+                }
+
+                target: settingsController
+            }
+
             Rectangle {
                 id: dirtyBadge
 
@@ -644,7 +681,7 @@ PhosphorUi.SettingsAppWindow {
                     if (trailingRow.isCollapsibleHeader && trailingRow.isCollapsibleExpanded)
                         return false;
 
-                    settingsController.dirtyPages; // binding dependency
+                    trailingRow._dirtyTick; // re-evaluate when dirty state changes
                     return settingsController.isPageDirty(trailingRow.entry.id);
                 }
 

@@ -285,12 +285,46 @@ void SettingsController::openLayoutsFolder()
     QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 }
 
+namespace {
+// Path validation for import/export dialogs. User-driven calls come
+// from QFileDialog (already canonical), but the methods are
+// Q_INVOKABLE so a compromised page resource — or a future --page
+// CLI flag — could pass arbitrary strings. Defence-in-depth:
+//   * Reject paths containing NUL (POSIX path corruption / D-Bus
+//     marshalling break).
+//   * Reject relative-traversal segments AFTER cleanPath so
+//     `/home/x/../../etc/passwd` doesn't survive normalisation.
+//   * Reject paths beginning with `~` (untilde resolution is QML's
+//     responsibility, not ours).
+// Returns the canonical path or empty on rejection. Caller logs.
+QString sanitizeIOPath(const QString& raw)
+{
+    if (raw.isEmpty() || raw.contains(QLatin1Char('\0'))) {
+        return {};
+    }
+    if (raw.startsWith(QLatin1Char('~'))) {
+        return {};
+    }
+    const QString clean = QDir::cleanPath(raw);
+    // cleanPath resolves `..`; reject if the cleaned form still contains
+    // `..` as a segment (which means the path started outside any
+    // resolvable filesystem root, e.g. relative `../../etc/passwd`).
+    if (clean.contains(QStringLiteral("/../")) || clean.endsWith(QStringLiteral("/.."))) {
+        return {};
+    }
+    return clean;
+}
+} // namespace
+
 void SettingsController::importLayout(const QString& filePath)
 {
-    if (filePath.isEmpty())
+    const QString safe = sanitizeIOPath(filePath);
+    if (safe.isEmpty()) {
+        qCWarning(lcCore) << "importLayout: refusing unsafe path" << filePath;
         return;
+    }
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("importLayout"), {filePath});
+                                                QStringLiteral("importLayout"), {safe});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString newLayoutId = reply.arguments().first().toString();
         if (!newLayoutId.isEmpty()) {
@@ -302,10 +336,15 @@ void SettingsController::importLayout(const QString& filePath)
 
 void SettingsController::exportLayout(const QString& layoutId, const QString& filePath)
 {
-    if (layoutId.isEmpty() || filePath.isEmpty())
+    if (layoutId.isEmpty())
         return;
+    const QString safe = sanitizeIOPath(filePath);
+    if (safe.isEmpty()) {
+        qCWarning(lcCore) << "exportLayout: refusing unsafe path" << filePath;
+        return;
+    }
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                                QStringLiteral("exportLayout"), {layoutId, filePath});
+                                                QStringLiteral("exportLayout"), {layoutId, safe});
 }
 
 void SettingsController::setLayoutHidden(const QString& layoutId, bool hidden)
