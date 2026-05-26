@@ -11,6 +11,11 @@ set(plasmazones_settings_SRCS
     main.cpp
     settingscontroller.h
     settingscontroller.cpp
+    # SettingsController is large enough to violate the 800-line cap
+    # if kept as a single TU. The sub-domain methods live in sibling
+    # .cpp files compiled into the same target — same class, multiple
+    # translation units, no API change.
+    settingscontroller_layouts.cpp
     # Per-page sub-controllers — hang off SettingsController as child QObjects,
     # exposing the Q_PROPERTY surface for a single settings page each.
     animationspagecontroller.h
