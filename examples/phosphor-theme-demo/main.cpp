@@ -1,0 +1,66 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// phosphor-theme-demo — entry point.
+//
+// Boots a QGuiApplication + QQmlApplicationEngine, points the
+// PaletteStore singleton at the default palette JSON path (if one
+// exists), and loads Main.qml.
+
+#include <PhosphorTheme/PaletteStore.h>
+
+#include <QDebug>
+#include <QDir>
+#include <QFile>
+#include <QGuiApplication>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QStandardPaths>
+#include <QString>
+#include <QStringLiteral>
+
+namespace {
+
+// XDG-conformant default. Edit this file (or copy a matugen output to
+// it) and the demo retints in <100 ms — that's the acceptance test for
+// Phase 1.1 hot-reload.
+QString defaultPalettePath()
+{
+    const auto base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    return QDir(base).filePath(QStringLiteral("palettes/current.json"));
+}
+
+} // namespace
+
+int main(int argc, char* argv[])
+{
+    QGuiApplication app(argc, argv);
+    QCoreApplication::setOrganizationName(QStringLiteral("Phosphor"));
+    QCoreApplication::setApplicationName(QStringLiteral("phosphor"));
+
+    QQmlApplicationEngine engine;
+
+    // Touch the singleton through the engine so Theme.qml resolves
+    // PaletteStore correctly. This also surfaces load errors at boot
+    // — if the user has a palette JSON but it's malformed, the
+    // demo's status bar shows the error rather than silently falling
+    // back to defaults.
+    auto* store = engine.singletonInstance<PhosphorTheme::PaletteStore*>(QStringLiteral("Phosphor.Theme"),
+                                                                         QStringLiteral("PaletteStore"));
+    if (store) {
+        const auto path = defaultPalettePath();
+        if (QFile::exists(path)) {
+            store->loadFromFile(path);
+        }
+        QObject::connect(store, &PhosphorTheme::PaletteStore::loadError,
+                         [](const QString& path, const QString& reason) {
+                             qWarning().noquote() << "phosphor-theme: failed to load" << path << "—" << reason;
+                         });
+    }
+
+    engine.loadFromModule("Phosphor.ThemeDemo", "Main");
+    if (engine.rootObjects().isEmpty()) {
+        return -1;
+    }
+    return app.exec();
+}

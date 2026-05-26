@@ -368,6 +368,7 @@ add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA back
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mechanism (rides on layer/shell-patterns/surfaces/animation/screens)
 if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(libs/phosphor-theme)   # M3 color-token store + Phosphor.Theme QML singletons
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
 endif()
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts (INTERFACE)
@@ -601,6 +602,17 @@ if(BUILD_PHOSPHOR_SHELL)
     # executable has a working default that doesn't depend on filesystem
     # install (qrc fallback in ShellLoader::resolve()).
     add_subdirectory(examples/phosphor-shell)
+
+    # phosphor-theme-demo — Phase 1.1 acceptance test. Renders the active
+    # PaletteStore as a swatch sheet; hot-reloads from
+    # ~/.local/share/phosphor/palettes/current.json. Standalone exe so it
+    # boots without the full shell.
+    add_subdirectory(examples/phosphor-theme-demo)
+
+    # phosphor-theme-cli — headless driver for the matugen runner and
+    # template engine. Exercises the round-trip the demo skips:
+    # wallpaper -> matugen -> palette JSON -> rendered template.
+    add_subdirectory(examples/phosphor-theme-cli)
 
     # Install the example phosphor-shell QML/shaders so users can copy
     # them into their config dir and edit. Same source as the qrc above —
