@@ -57,7 +57,31 @@ ApplicationWindow {
 
         mode: "dark"
         onPaletteReady: function(tokens, wp) {
-            Theme.paletteStore.applyTokens(tokens);
+            // Matugen emits M3 tokens but not Phosphor's brand-gradient
+            // extensions (brand_stop_0..3) or the ANSI status colors
+            // (success / warning / info). PaletteStore's merge semantics
+            // would leave those at the *previous* palette's values, which
+            // is technically correct (preserves user overrides) but
+            // visibly wrong for a "use this wallpaper" UX: the gradient
+            // strip would stay on the old colors. Synthesize the brand
+            // stops from M3 accents in display order — cyan ish → blue
+            // → purple → rose, matching the canonical Phosphor stop
+            // assignment in the default palette.
+            const augmented = Object.assign({
+            }, tokens);
+            if (tokens.tertiary)
+                augmented.brand_stop_0 = tokens.tertiary;
+
+            if (tokens.primary)
+                augmented.brand_stop_1 = tokens.primary;
+
+            if (tokens.secondary)
+                augmented.brand_stop_2 = tokens.secondary;
+
+            if (tokens.error)
+                augmented.brand_stop_3 = tokens.error;
+
+            Theme.paletteStore.applyTokens(augmented);
             root.activePreset = "wallpaper";
             root.wallpaperPath = wp;
             root.lastError = "";

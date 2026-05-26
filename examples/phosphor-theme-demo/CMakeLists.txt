@@ -8,7 +8,7 @@
 # acceptance test for libs/phosphor-theme — if the demo doesn't update
 # live, the library isn't wired right.
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
 
 # AUTOMOC is required so the QML module's metatype generation picks up
 # any Q_OBJECT we add here.
@@ -55,6 +55,7 @@ target_link_libraries(phosphor-theme-demo
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
+        Qt6::QuickControls2
         # Static QML modules ship both a library (`*Qml`) and a plugin
         # registrar (`*Qmlplugin`). The registrar is what actually
         # publishes the module to QQmlEngine at runtime — without it,

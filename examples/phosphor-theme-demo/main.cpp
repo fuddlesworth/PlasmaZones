@@ -15,6 +15,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickStyle>
 #include <QStandardPaths>
 #include <QString>
 #include <QStringLiteral>
@@ -37,6 +38,16 @@ int main(int argc, char* argv[])
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Phosphor"));
     QCoreApplication::setApplicationName(QStringLiteral("phosphor"));
+
+    // Pin QtQuick.Controls to its Basic style. On KDE, the system-wide
+    // Breeze QtQuick.Controls style ships an `ApplicationWindow` /
+    // `ScrollView` chrome path that null-derefs on `palette` access in
+    // some Qt6 versions ("qrc:/qt/qml/org/kde/breeze/impl/ButtonBackground.qml
+    // TypeError"). The demo doesn't theme through QtQuick.Controls — every
+    // colored surface binds to Theme.* directly — so an unstyled "Basic"
+    // base both silences the Breeze noise and keeps the chrome out of
+    // our token-driven retint path.
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     QQmlApplicationEngine engine;
 
