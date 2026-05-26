@@ -117,6 +117,14 @@ public:
     /// once the user has chosen "overwrite anyway".
     bool commit(bool force = false);
 
+    /// QML-callable shorthand for `commit(true)`. Surfaces the "overwrite
+    /// anyway" escape hatch the daemonChangedWhileDirty banner needs — the
+    /// inherited StagingDomain `apply()` slot calls `commit(false)` and
+    /// discards the bool return, so without this Q_INVOKABLE QML had no way
+    /// to reach the force path and the user could get stuck in a permanent
+    /// "page dirty / save refused" loop.
+    Q_INVOKABLE bool forceCommit();
+
     /// Discard staged edits and re-fetch from the daemon. The fetch is async,
     /// so this returns immediately — the model is repopulated when the reply
     /// arrives (signalled by `rulesLoaded()`). The dirty +
@@ -323,6 +331,23 @@ private:
     /// controller.
     bool subscribeRulesChanged();
     void unsubscribeRulesChanged();
+
+    /// Canonical (service, path, interface, signal) tuple for the
+    /// rulesChanged D-Bus signal. Used by both subscribe / unsubscribe
+    /// helpers so a rename of any field touches exactly one place — the
+    /// dtor's disconnect must spell the same tuple as the ctor's connect
+    /// or the bus keeps a dangling slot reference. Returns true iff every
+    /// element is populated (defensive: an empty service silently fails
+    /// at the bus layer, which the caller can't distinguish from a
+    /// successful connect that never fires).
+    struct RulesChangedSubscription
+    {
+        QString service;
+        QString objectPath;
+        QString interface;
+        QString signalName;
+    };
+    static RulesChangedSubscription rulesChangedSubscriptionArgs();
 
     /// Re-fetch the rule set from the daemon and load it into the model. The
     /// fetch is asynchronous — the function returns immediately and the model

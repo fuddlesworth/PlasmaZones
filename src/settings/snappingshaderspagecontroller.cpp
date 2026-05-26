@@ -49,19 +49,32 @@ void SnappingShadersPageController::connectLayoutSignals()
 {
     if (!m_layoutRegistry)
         return;
-    // Per-layout `shaderIdChanged` connections. A second call to this
-    // function (from contentsChanged) re-tries every existing layout; we
-    // route through a member slot so `Qt::UniqueConnection` actually
-    // dedupes — Qt cannot dedupe functor / lambda connections, only
-    // pointer-to-member-function ones, and a lambda would silently
-    // accumulate one fresh edge per refire.
+    // Track which layouts are already wired so the O(N) walk on every
+    // contentsChanged shrinks to O(new-layouts). Qt::UniqueConnection
+    // still guarantees idempotence at the QObject layer, but the
+    // membership check spares the per-call function-prologue cost and,
+    // more importantly, scales sublinearly when contentsChanged fires
+    // repeatedly during a bulk-edit (drag-reorder, import).
     const QVector<PhosphorZones::Layout*> layouts = m_layoutRegistry->layouts();
     for (PhosphorZones::Layout* layout : layouts) {
         if (!layout)
             continue;
+        if (m_wiredLayouts.contains(layout))
+            continue;
         connect(layout, &PhosphorZones::Layout::shaderIdChanged, this,
                 &SnappingShadersPageController::onLayoutShaderIdChanged, Qt::UniqueConnection);
+        // Track destruction so the set stays in sync — without this,
+        // a deleted-then-reused address would skip the connect path
+        // and the new layout's shaderIdChanged would never reach us.
+        connect(layout, &QObject::destroyed, this, &SnappingShadersPageController::onWiredLayoutDestroyed,
+                Qt::UniqueConnection);
+        m_wiredLayouts.insert(layout);
     }
+}
+
+void SnappingShadersPageController::onWiredLayoutDestroyed(QObject* layout)
+{
+    m_wiredLayouts.remove(layout);
 }
 
 void SnappingShadersPageController::onLayoutShaderIdChanged()

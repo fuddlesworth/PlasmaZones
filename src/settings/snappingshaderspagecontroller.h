@@ -5,6 +5,7 @@
 
 #include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
@@ -137,10 +138,25 @@ private:
     /// Wire up `shaderIdChanged` for every layout currently in the
     /// registry plus any added later. Each fire re-emits
     /// `shaderProfileChanged` so the QML usage chips re-evaluate.
+    /// Layouts already in @c m_wiredLayouts are skipped to keep the
+    /// per-refresh cost proportional to NEW layouts rather than the
+    /// full registry size — Qt::UniqueConnection still guarantees
+    /// idempotence on the rare path where the set drifts.
     void connectLayoutSignals();
+
+    /// Evict an entry from @c m_wiredLayouts when its layout is
+    /// destroyed (QObject::destroyed). Without this, the set retains
+    /// stale dangling pointers, and the next reconnect would skip a
+    /// reused address that happens to match an old entry.
+    void onWiredLayoutDestroyed(QObject* layout);
 
     PlasmaZones::ShaderRegistry* m_shaderRegistry = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutRegistry = nullptr;
+    /// Layouts already wired via @c connectLayoutSignals — tracked so
+    /// the O(N) walk on every @c contentsChanged is replaced by an
+    /// O(new) walk. Entries are evicted on the layout's destroyed()
+    /// signal (see @c onWiredLayoutDestroyed).
+    QSet<QObject*> m_wiredLayouts;
 };
 
 } // namespace PlasmaZones

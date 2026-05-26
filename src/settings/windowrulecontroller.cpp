@@ -96,20 +96,24 @@ WindowRuleController::~WindowRuleController()
     unsubscribeRulesChanged();
 }
 
+WindowRuleController::RulesChangedSubscription WindowRuleController::rulesChangedSubscriptionArgs()
+{
+    return {QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+            QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged")};
+}
+
 bool WindowRuleController::subscribeRulesChanged()
 {
-    return QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                                 QString(PhosphorProtocol::Service::ObjectPath),
-                                                 QString(PhosphorProtocol::Service::Interface::WindowRules),
-                                                 QStringLiteral("rulesChanged"), this, SLOT(reload()));
+    const auto args = rulesChangedSubscriptionArgs();
+    return QDBusConnection::sessionBus().connect(args.service, args.objectPath, args.interface, args.signalName, this,
+                                                 SLOT(reload()));
 }
 
 void WindowRuleController::unsubscribeRulesChanged()
 {
-    QDBusConnection::sessionBus().disconnect(QString(PhosphorProtocol::Service::Name),
-                                             QString(PhosphorProtocol::Service::ObjectPath),
-                                             QString(PhosphorProtocol::Service::Interface::WindowRules),
-                                             QStringLiteral("rulesChanged"), this, SLOT(reload()));
+    const auto args = rulesChangedSubscriptionArgs();
+    QDBusConnection::sessionBus().disconnect(args.service, args.objectPath, args.interface, args.signalName, this,
+                                             SLOT(reload()));
 }
 
 void WindowRuleController::setScreenLookup(WindowRuleModel::LabelLookup fn)
@@ -278,6 +282,11 @@ void WindowRuleController::reload()
         return;
     }
     fetchAndLoad();
+}
+
+bool WindowRuleController::forceCommit()
+{
+    return commit(/*force=*/true);
 }
 
 bool WindowRuleController::commit(bool force)
@@ -463,7 +472,17 @@ bool WindowRuleController::updateRuleFromJson(const QVariantMap& ruleJson)
 
 bool WindowRuleController::removeRule(const QString& ruleId)
 {
-    if (!m_model.removeRule(QUuid::fromString(ruleId))) {
+    const QUuid id = QUuid::fromString(ruleId);
+    if (id.isNull()) {
+        // Distinguish "you sent garbage" from "rule doesn't exist" — both
+        // return false but the garbage path deserves a warning so a buggy
+        // caller doesn't silently fail in production.
+        if (!ruleId.isEmpty()) {
+            qCWarning(lcConfig) << "WindowRuleController::removeRule: invalid UUID:" << ruleId;
+        }
+        return false;
+    }
+    if (!m_model.removeRule(id)) {
         return false;
     }
     setDirty(true);
@@ -515,6 +534,11 @@ QString WindowRuleController::duplicateRule(const QString& ruleId)
             break;
         }
     }
+    // The clone inherited the source's priority verbatim; without
+    // re-stamping the two would collide on the band-base value and the
+    // daemon's section-ordering would treat them as indistinguishable.
+    // Mirrors the renormalize call addRuleFromJson does after appending.
+    renormalizePriorities();
     setDirty(true);
     return clone.id.toString();
 }
