@@ -299,13 +299,6 @@ ApplicationWindow {
             "iconName": "preferences-desktop-display"
         }]
     })
-    // Map from sub-mode → its parent mode. Modes not listed here drill
-    // back to "main". Lets `_drillOut` pop one level instead of always
-    // returning to the top. Surfaces and Library inside Animations are
-    // inline collapsible categories (not drill-down sub-modes), so they
-    // are intentionally absent here.
-    readonly property var _parentMode: ({
-    })
     // Page component map -- loaded on demand by Loader
     readonly property var _pageComponents: ({
         "overview": "MonitorStatePage.qml",
@@ -388,24 +381,16 @@ ApplicationWindow {
                 "clickable": false
             }];
         }
-        // Walk the parent chain top-down with an explicit depth
-        // bound; `_parentMode[mode]` returning undefined terminates
-        // the walk normally, the bound is belt-and-braces against a
-        // future cyclic map.
-        let chain = [];
-        let mode = _sidebarMode;
-        for (let depth = 0; depth < _maxNavDepth && mode !== undefined; depth++) {
-            chain.unshift(mode);
-            mode = _parentMode[mode];
-        }
-        let segments = [];
-        for (let i = 0; i < chain.length; i++) {
-            segments.push({
-                "name": chain[i],
-                "label": _modeLabel(chain[i]),
-                "clickable": chain[i] !== _sidebarMode
-            });
-        }
+        // No intermediate sub-modes today (Surfaces/Library inside
+        // Animations are inline collapsible categories, not drill-down
+        // sub-modes), so the chain has exactly one entry: the current
+        // sub-sidebar mode. If a future intermediate parent shows up,
+        // restore the parent-walk here.
+        let segments = [{
+            "name": _sidebarMode,
+            "label": _modeLabel(_sidebarMode),
+            "clickable": false
+        }];
         // If the active page lives inside an inline collapsible category
         // (e.g. animations-windows under animations-surfaces), splice the
         // category segment in between the mode and the page so the
@@ -425,6 +410,34 @@ ApplicationWindow {
             "clickable": false
         });
         return segments;
+    }
+    /// Set of `_childItems` bucket keys whose entries are inline
+    /// collapsible categories — derived from the data once at startup so
+    /// adding a new category to `_childItems` automatically participates
+    /// in `_categoryOf` / breadcrumb-splice / smart-expand without a
+    /// matching hardcoded list edit. A bucket is a category iff some
+    /// parent bucket references it with `isCollapsible: true`.
+    readonly property var _categoryBuckets: {
+        let buckets = ({
+        });
+        const parents = Object.keys(_childItems);
+        for (let p = 0; p < parents.length; p++) {
+            const entries = _childItems[parents[p]];
+            for (let e = 0; e < entries.length; e++) {
+                if (entries[e].isCollapsible === true)
+                    buckets[entries[e].name] = true;
+
+            }
+        }
+        // Top-level `_mainItems` collapsibles (e.g. "display", "rules")
+        // also have a `_childItems` bucket of the same name; promote them
+        // so `_categoryOf` finds pages inside those groups too.
+        for (let i = 0; i < _mainItems.length; i++) {
+            if (_mainItems[i].isCollapsible === true)
+                buckets[_mainItems[i].name] = true;
+
+        }
+        return buckets;
     }
 
     /// Resolve the page QML source for @p pageName. An unmapped page name is
@@ -818,6 +831,21 @@ ApplicationWindow {
             _rebuildSidebar();
             return ;
         }
+        // Detect the current on-screen state by sniffing the row
+        // immediately after the header. Idempotent against repeat calls
+        // with the same `expanded` value — expanding an already-expanded
+        // category would otherwise insert duplicate child rows; this
+        // guard makes every caller safe whether or not they pre-checked
+        // `_expandedCategories[name]`.
+        const nextRow = headerIdx + 1 < sidebarModel.count ? sidebarModel.get(headerIdx + 1) : null;
+        const currentlyExpanded = nextRow !== null && nextRow.isCategoryChild === true;
+        if (currentlyExpanded === expanded) {
+            // Keep the header role in sync (e.g. on a fresh rebuild
+            // where it was stamped from a stale flag) but skip the
+            // model mutation entirely.
+            sidebarModel.setProperty(headerIdx, "categoryExpanded", expanded);
+            return ;
+        }
         sidebarModel.setProperty(headerIdx, "categoryExpanded", expanded);
         if (expanded) {
             const children = _childItems[name] || [];
@@ -875,13 +903,13 @@ ApplicationWindow {
     }
 
     /// If @p pageName lives inside an inline collapsible category, return
-    /// that category's item name (e.g. "animations-surfaces" or "display").
-    /// Otherwise returns "". Used by the breadcrumb chain to insert the
-    /// category segment between the mode and the page AND by the
-    /// smart-default-expansion logic that auto-expands the owning category
-    /// whenever activePage lands inside it.
+    /// that category's bucket name (e.g. "animations-surfaces" or
+    /// "display"). Otherwise returns "". Used by the breadcrumb chain to
+    /// insert the category segment between the mode and the page AND by
+    /// the smart-default-expansion logic that auto-expands the owning
+    /// category whenever activePage lands inside it.
     function _categoryOf(pageName) {
-        const candidates = ["animations-surfaces", "animations-library", "display", "rules", "snapping-visual-cat", "snapping-behavior-cat", "snapping-config-cat", "tiling-visual-cat", "tiling-behavior-cat", "tiling-config-cat"];
+        const candidates = Object.keys(_categoryBuckets);
         for (let c = 0; c < candidates.length; c++) {
             const list = _childItems[candidates[c]] || [];
             for (let i = 0; i < list.length; i++) {
@@ -1026,20 +1054,14 @@ ApplicationWindow {
         layoutContextMenu.showForLayout(layout);
     }
 
-    // Pop one level. Sub-modes registered in `_parentMode` (e.g.
-    // `animations-surfaces` → `animations`) drill back to the
-    // intermediate parent; everything else returns to "main" with the
-    // current parent highlighted as `activePage`. When popping back
-    // into an intermediate (still-virtual) parent, `activePage` is
-    // left untouched (empty pendingPage) so the leaf the user came
-    // from stays visible until they pick another — re-anchoring on
-    // the virtual category they just stepped out of would be less
-    // useful context.
+    // Pop one level. With no intermediate parent modes today, every
+    // sub-sidebar drills back to "main" with the parent name as the
+    // restored activePage (so the sidebar highlights it). Calling from
+    // main mode is a defensive no-op equivalent ("overview" stays the
+    // landing page rather than picking an empty activePage).
     function _drillOut() {
-        const target = _parentMode[_sidebarMode] || "main";
-        const popToMain = target === "main";
-        const pendingPage = popToMain ? (_sidebarMode !== "main" ? _sidebarMode : "overview") : "";
-        sidebarTransition.pendingMode = target;
+        const pendingPage = _sidebarMode !== "main" ? _sidebarMode : "overview";
+        sidebarTransition.pendingMode = "main";
         sidebarTransition.pendingPage = pendingPage;
         sidebarTransition.restart();
     }
@@ -1169,15 +1191,19 @@ ApplicationWindow {
                 }, window._expandedCategories);
                 next[cat] = true;
                 window._expandedCategories = next;
-                // Rebuild only when the affected category is on screen.
-                // Top-level categories (display/rules) live in main mode;
-                // sub-sidebar categories live under the mode returned by
-                // _parentModeForCategory (animations, snapping, tiling).
-                const topLevel = (cat === "display" || cat === "rules");
+                // Only animate when the affected category is on-screen.
+                // Top-level categories (display/rules) live under main
+                // mode; sub-sidebar categories (animations/snapping/
+                // tiling) live under the mode returned by
+                // _parentModeForCategory. When off-screen, the next
+                // _rebuildSidebar (triggered by drill-in) will render
+                // the category as expanded from the start, so there is
+                // nothing to animate here.
                 const subMode = window._parentModeForCategory(cat);
-                const subVisible = subMode.length > 0 && window._sidebarMode === subMode;
-                if ((topLevel && window._sidebarMode === "main") || subVisible)
-                    window._rebuildSidebar();
+                const topLevel = subMode.length === 0;
+                const visible = topLevel ? (window._sidebarMode === "main") : (window._sidebarMode === subMode);
+                if (visible)
+                    window._applyCategoryExpansion(cat, true);
 
             }
         }
@@ -1475,12 +1501,26 @@ ApplicationWindow {
                                     for (let c = 0; c < children.length; c++) {
                                         if (children[c].name === name) {
                                             sidebarSearch.text = "";
-                                            // Map inline-category parent
-                                            // buckets to their owning mode —
-                                            // inline categories are not
-                                            // sidebar modes themselves.
+                                            // Inline-category parents are not
+                                            // sidebar modes themselves —
+                                            // resolve the leaf's owning mode
+                                            // from the category's host
+                                            // (snapping-visual-cat lives
+                                            // under "snapping",
+                                            // animations-surfaces under
+                                            // "animations", and top-level
+                                            // categories like "display" /
+                                            // "rules" live directly under
+                                            // "main"). For non-collapsible
+                                            // leaves the parent bucket name
+                                            // IS the sidebar mode.
                                             const owner = window._categoryOf(name);
-                                            _sidebarMode = owner.length > 0 ? "animations" : parents[p];
+                                            if (owner.length === 0) {
+                                                _sidebarMode = parents[p];
+                                            } else {
+                                                const ownerHost = window._parentModeForCategory(owner);
+                                                _sidebarMode = ownerHost.length > 0 ? ownerHost : "main";
+                                            }
                                             _rebuildSidebar();
                                             settingsController.activePage = name;
                                             return ;
