@@ -11,29 +11,40 @@ import org.phosphor.settings.ui
 /**
  * Page sidebar.
  *
- * Renders entries from the controller's PageRegistry as a ListView with
- * three navigation modes mixed freely:
+ * Vertical layout:
+ *
+ *   ┌─────────────────────────┐
+ *   │ SearchField  (sticky)   │
+ *   ├─────────────────────────┤
+ *   │ Back button (when drilled)
+ *   │ ListView (scrollable)   │
+ *   │ — rows drill / toggle / │
+ *   │   navigate as below     │
+ *   ├─────────────────────────┤
+ *   │ footerContent (sticky)  │
+ *   └─────────────────────────┘
+ *
+ * Navigation modes:
  *
  *   - Drill-down parents (entry has children, not collapsible) — taps
  *     replace the list with the parent's children + a Back button.
- *
  *   - Inline-collapsible categories (entry has children, isCollapsible) —
- *     act as accordion headers; tapping toggles whether their children
- *     show below them, indented. Toggling animates rows in/out via
- *     ListView add/remove Transitions.
- *
+ *     accordion headers; tapping toggles children. Toggling animates
+ *     rows in/out via ListView add/remove Transitions.
  *   - Navigable leaves (entry has a qmlSource) — taps set
  *     controller.currentPageId.
  *
- * `currentParentId` is the drill scope; "" is top-level. Drill
- * transitions (`drillInto` / `drillOut`) cross-fade the entire list.
+ * Slots for consumers:
  *
- * Search filters the flat-tree under the current drill scope.
- *
- * Per-row trailing content via `trailingDelegate` — typically used
- * to inject a dirty badge + an inline Switch on relevant rows.
+ *   - `trailingDelegate`: Component instantiated next to each row's
+ *     title (between label and drill chevron). Used by PlasmaZones for
+ *     the snapping/tiling Switch + dirty badge.
+ *   - `footerContent`: Component instantiated at the very bottom of
+ *     the sidebar, OUTSIDE the scroll area. Stays visible across
+ *     drill / scroll. Used by PlasmaZones for the persistent daemon
+ *     status + enable/disable toggle.
  */
-QQC2.ScrollView {
+ColumnLayout {
     id: root
 
     required property ApplicationController controller
@@ -46,12 +57,16 @@ QQC2.ScrollView {
     //* Search text. Empty disables filtering.
     property alias searchText: searchField.text
     /** Optional Component instantiated next to each row's title. The
-     *  loader exposes the row's entry as `modelData` so consumers can
-     *  branch on `id`. */
+     *  loader exposes the row's entry as `modelData`. */
     property Component trailingDelegate: null
+    /** Optional Component instantiated at the bottom of the sidebar,
+     *  below the scrollable list. Stays visible while the list
+     *  scrolls. Used for persistent status surfaces (e.g. a daemon
+     *  enable/disable toggle that should be reachable from every
+     *  page). */
+    property Component footerContent: null
     /** Suppress per-row add/remove animations while the whole list is
-     *  cross-fading on drill-in/out — the cross-fade already covers the
-     *  visual change and per-row Transitions would fight it. */
+     *  cross-fading on drill-in/out. */
     property bool _suppressAccordion: false
 
     function drillInto(parentId) {
@@ -137,15 +152,15 @@ QQC2.ScrollView {
                 const label = (breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title);
                 if (label.toLowerCase().indexOf(needle) >= 0)
                     matches.push({
-                    "id": child.id,
-                    "title": label,
-                    "iconSource": child.iconSource,
-                    "hasQmlSource": true,
-                    "_depth": 0,
-                    "_isCollapsibleHeader": false,
-                    "_isDrillParent": false,
-                    "_isExpanded": false
-                });
+                        "id": child.id,
+                        "title": label,
+                        "iconSource": child.iconSource,
+                        "hasQmlSource": true,
+                        "_depth": 0,
+                        "_isCollapsibleHeader": false,
+                        "_isDrillParent": false,
+                        "_isExpanded": false
+                    });
 
             }
         };
@@ -153,30 +168,19 @@ QQC2.ScrollView {
         return matches;
     }
 
-    /// Diff-and-apply: bring the ListModel into agreement with the
-    /// computed _visibleItems(). Removes rows no longer wanted, inserts
-    /// or moves rows to match the desired order. Triggers per-row add /
-    /// remove Transitions in the ListView — the accordion effect that
-    /// the legacy chrome had on category expand / collapse.
     function _refreshModel() {
         const wanted = root._visibleItems();
         const wantedIds = new Set(wanted.map((w) => {
             return w.id;
         }));
-        // Pass 1: remove rows the new view no longer wants.
         for (let i = visibleModel.count - 1; i >= 0; --i) {
             if (!wantedIds.has(visibleModel.get(i).id))
                 visibleModel.remove(i);
 
         }
-        // Pass 2: insert / reorder to match wanted. For each desired
-        // position, either the row is already there, or we move it from
-        // its current position, or we insert it fresh.
         for (let i = 0; i < wanted.length; ++i) {
             const item = wanted[i];
             if (i < visibleModel.count && visibleModel.get(i).id === item.id) {
-                // In place — but update the volatile fields (e.g.
-                // _isExpanded flipped on a category header).
                 visibleModel.set(i, item);
                 continue;
             }
@@ -196,26 +200,20 @@ QQC2.ScrollView {
         }
     }
 
+    spacing: 0
     onCurrentParentIdChanged: _refreshModel()
     onExpandedCategoriesChanged: _refreshModel()
     onSearchTextChanged: _refreshModel()
     Component.onCompleted: _refreshModel()
-    clip: true
 
     Connections {
         function onCurrentPageIdChanged() {
-            // currentPageId is a per-row highlight binding — no model
-            // change needed, just re-evaluate.
             root._refreshModel();
         }
 
         target: root.controller
     }
 
-    // Drill-in / drill-out cross-fade. Fades the inner column out via
-    // panel.fadeOut, swaps currentParentId at zero opacity, then fades
-    // back in via panel.fadeIn. Matches the legacy `sidebarTransition`
-    // exactly.
     SequentialAnimation {
         id: drillAnimation
 
@@ -249,192 +247,186 @@ QQC2.ScrollView {
 
     }
 
-    // Backing store for the visible list. Mutated incrementally by
-    // _refreshModel so ListView's add/remove Transitions fire on the
-    // rows that actually change (accordion effect).
     ListModel {
         id: visibleModel
     }
 
-    ColumnLayout {
-        id: listColumn
+    // ── Sticky search field at the top ──────────────────────────────
+    Kirigami.SearchField {
+        id: searchField
 
-        width: root.availableWidth
-        spacing: 0
+        Layout.fillWidth: true
+        Layout.margins: Kirigami.Units.smallSpacing
+        placeholderText: qsTr("Search settings…")
+    }
 
-        Kirigami.SearchField {
-            id: searchField
+    Kirigami.Separator {
+        Layout.fillWidth: true
+    }
 
-            Layout.fillWidth: true
-            Layout.margins: Kirigami.Units.smallSpacing
-            placeholderText: qsTr("Search settings…")
-        }
+    // ── Scrollable list area ────────────────────────────────────────
+    QQC2.ScrollView {
+        id: listScroll
 
-        Kirigami.Separator {
-            Layout.fillWidth: true
-        }
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        clip: true
 
-        QQC2.ItemDelegate {
-            visible: root.currentParentId !== "" && root.searchText.length === 0
-            Layout.fillWidth: true
-            onClicked: root.drillOut()
+        ColumnLayout {
+            id: listColumn
 
-            contentItem: RowLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                Kirigami.Icon {
-                    source: "go-previous-symbolic"
-                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                }
-
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    text: qsTr("Back")
-                }
-
-            }
-
-        }
-
-        ListView {
-            id: listView
-
-            Layout.fillWidth: true
-            Layout.preferredHeight: contentHeight
-            model: visibleModel
-            interactive: false
+            width: listScroll.availableWidth
             spacing: 0
 
-            // Accordion add/remove/displaced transitions drive the
-            // category expand/collapse animation. Uses the project's
-            // `widget.accordionExpand` / `widget.accordionCollapse`
-            // motion profiles — matches the legacy chrome's UX
-            // verbatim. Gated by `_suppressAccordion` so they stay
-            // quiet during the drill cross-fade which covers the
-            // visual change.
-            add: Transition {
-                enabled: !root._suppressAccordion
-
-                PhosphorMotionAnimation {
-                    properties: "opacity"
-                    from: 0
-                    to: 1
-                    profile: "widget.accordionExpand"
-                }
-
-                PhosphorMotionAnimation {
-                    properties: "y"
-                    profile: "widget.accordionExpand"
-                }
-
-            }
-
-            remove: Transition {
-                enabled: !root._suppressAccordion
-
-                PhosphorMotionAnimation {
-                    properties: "opacity"
-                    from: 1
-                    to: 0
-                    profile: "widget.accordionCollapse"
-                }
-
-            }
-
-            displaced: Transition {
-                enabled: !root._suppressAccordion
-
-                PhosphorMotionAnimation {
-                    properties: "y"
-                    profile: "widget.accordionExpand"
-                }
-
-            }
-
-            delegate: QQC2.ItemDelegate {
-                id: itemDelegate
-
-                required property string id
-                required property string title
-                required property string iconSource
-                required property bool hasQmlSource
-                required property int _depth
-                required property bool _isCollapsibleHeader
-                required property bool _isDrillParent
-                required property bool _isExpanded
-                readonly property var entryData: ({
-                    "id": id,
-                    "title": title,
-                    "iconSource": iconSource,
-                    "hasQmlSource": hasQmlSource,
-                    "_depth": _depth,
-                    "_isCollapsibleHeader": _isCollapsibleHeader,
-                    "_isDrillParent": _isDrillParent,
-                    "_isExpanded": _isExpanded
-                })
-                readonly property bool isCurrent: !_isCollapsibleHeader && hasQmlSource && root.controller.currentPageId === id
-
-                width: ListView.view.width
-                highlighted: isCurrent
-                leftPadding: Kirigami.Units.smallSpacing + (_depth * Kirigami.Units.gridUnit)
-                onClicked: {
-                    if (_isCollapsibleHeader)
-                        root.toggleCategory(id);
-                    else if (_isDrillParent)
-                        root.drillInto(id);
-                    else if (hasQmlSource)
-                        root.controller.currentPageId = id;
-                }
+            QQC2.ItemDelegate {
+                visible: root.currentParentId !== "" && root.searchText.length === 0
+                Layout.fillWidth: true
+                onClicked: root.drillOut()
 
                 contentItem: RowLayout {
                     spacing: Kirigami.Units.smallSpacing
 
                     Kirigami.Icon {
-                        visible: itemDelegate._isCollapsibleHeader
-                        source: itemDelegate._isExpanded ? "go-down-symbolic" : "go-next-symbolic"
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                        opacity: 0.7
-
-                        Behavior on rotation {
-                            NumberAnimation {
-                                duration: Kirigami.Units.shortDuration
-                            }
-
-                        }
-
-                    }
-
-                    Kirigami.Icon {
-                        visible: !itemDelegate._isCollapsibleHeader && itemDelegate.iconSource !== ""
-                        source: itemDelegate.iconSource
+                        source: "go-previous-symbolic"
                         Layout.preferredWidth: Kirigami.Units.iconSizes.small
                         Layout.preferredHeight: Kirigami.Units.iconSizes.small
                     }
 
                     QQC2.Label {
                         Layout.fillWidth: true
-                        elide: Text.ElideRight
-                        text: itemDelegate.title
-                        font.weight: itemDelegate._isCollapsibleHeader ? Font.DemiBold : Font.Normal
+                        text: qsTr("Back")
                     }
 
-                    Loader {
-                        id: trailingLoader
+                }
 
-                        property var modelData: itemDelegate.entryData
+            }
 
-                        sourceComponent: root.trailingDelegate
-                        active: root.trailingDelegate !== null
-                        Layout.alignment: Qt.AlignVCenter
+            ListView {
+                id: listView
+
+                Layout.fillWidth: true
+                Layout.preferredHeight: contentHeight
+                model: visibleModel
+                interactive: false
+                spacing: 0
+
+                add: Transition {
+                    enabled: !root._suppressAccordion
+
+                    PhosphorMotionAnimation {
+                        properties: "opacity"
+                        from: 0
+                        to: 1
+                        profile: "widget.accordionExpand"
                     }
 
-                    Kirigami.Icon {
-                        visible: itemDelegate._isDrillParent
-                        source: "go-next-symbolic"
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                    PhosphorMotionAnimation {
+                        properties: "y"
+                        profile: "widget.accordionExpand"
+                    }
+
+                }
+
+                remove: Transition {
+                    enabled: !root._suppressAccordion
+
+                    PhosphorMotionAnimation {
+                        properties: "opacity"
+                        from: 1
+                        to: 0
+                        profile: "widget.accordionCollapse"
+                    }
+
+                }
+
+                displaced: Transition {
+                    enabled: !root._suppressAccordion
+
+                    PhosphorMotionAnimation {
+                        properties: "y"
+                        profile: "widget.accordionExpand"
+                    }
+
+                }
+
+                delegate: QQC2.ItemDelegate {
+                    id: itemDelegate
+
+                    required property string id
+                    required property string title
+                    required property string iconSource
+                    required property bool hasQmlSource
+                    required property int _depth
+                    required property bool _isCollapsibleHeader
+                    required property bool _isDrillParent
+                    required property bool _isExpanded
+                    readonly property var entryData: ({
+                        "id": id,
+                        "title": title,
+                        "iconSource": iconSource,
+                        "hasQmlSource": hasQmlSource,
+                        "_depth": _depth,
+                        "_isCollapsibleHeader": _isCollapsibleHeader,
+                        "_isDrillParent": _isDrillParent,
+                        "_isExpanded": _isExpanded
+                    })
+                    readonly property bool isCurrent: !_isCollapsibleHeader && hasQmlSource && root.controller.currentPageId === id
+
+                    width: ListView.view.width
+                    highlighted: isCurrent
+                    leftPadding: Kirigami.Units.smallSpacing + (_depth * Kirigami.Units.gridUnit)
+                    onClicked: {
+                        if (_isCollapsibleHeader)
+                            root.toggleCategory(id);
+                        else if (_isDrillParent)
+                            root.drillInto(id);
+                        else if (hasQmlSource)
+                            root.controller.currentPageId = id;
+                    }
+
+                    contentItem: RowLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Kirigami.Icon {
+                            visible: itemDelegate._isCollapsibleHeader
+                            source: itemDelegate._isExpanded ? "go-down-symbolic" : "go-next-symbolic"
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            opacity: 0.7
+                        }
+
+                        Kirigami.Icon {
+                            visible: !itemDelegate._isCollapsibleHeader && itemDelegate.iconSource !== ""
+                            source: itemDelegate.iconSource
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        }
+
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 0
+                            elide: Text.ElideRight
+                            text: itemDelegate.title
+                            font.weight: itemDelegate._isCollapsibleHeader ? Font.DemiBold : Font.Normal
+                        }
+
+                        Loader {
+                            id: trailingLoader
+
+                            property var modelData: itemDelegate.entryData
+
+                            sourceComponent: root.trailingDelegate
+                            active: root.trailingDelegate !== null
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+
+                        Kirigami.Icon {
+                            visible: itemDelegate._isDrillParent
+                            source: "go-next-symbolic"
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        }
+
                     }
 
                 }
@@ -443,6 +435,24 @@ QQC2.ScrollView {
 
         }
 
+    }
+
+    // ── Sticky footer slot (e.g. daemon status / enable toggle) ─────
+    Loader {
+        id: footerLoader
+
+        Layout.fillWidth: true
+        Layout.preferredHeight: item ? item.implicitHeight : 0
+        active: root.footerContent !== null
+        visible: active
+        sourceComponent: root.footerContent
+        onLoaded: {
+            if (item)
+                item.width = Qt.binding(() => {
+                    return footerLoader.width;
+                });
+
+        }
     }
 
 }

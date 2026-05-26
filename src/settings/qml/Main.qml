@@ -680,6 +680,86 @@ PhosphorUi.SettingsAppWindow {
         onTriggered: whatsNewDialog.open()
     }
 
+    // Sticky daemon-status footer at the bottom of the sidebar, always
+    // visible regardless of which page is active. Mirrors the legacy
+    // chrome's persistent status Pane: pulsing colored dot (positive
+    // when running, negative when stopped) + Running/Stopped label +
+    // enable/disable SettingsSwitch.
+    sidebar.footerContent: Component {
+        Pane {
+            padding: Kirigami.Units.smallSpacing * 1.5
+            topPadding: Kirigami.Units.smallSpacing * 2
+            bottomPadding: Kirigami.Units.smallSpacing * 2
+
+            background: Rectangle {
+                color: "transparent"
+
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: Math.round(Kirigami.Units.devicePixelRatio)
+                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+                }
+
+            }
+
+            contentItem: RowLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                Rectangle {
+                    id: daemonDot
+
+                    width: Kirigami.Units.smallSpacing * 1.5
+                    height: Kirigami.Units.smallSpacing * 1.5
+                    radius: width / 2
+                    Layout.alignment: Qt.AlignVCenter
+                    color: settingsController.daemonRunning ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+
+                    SequentialAnimation on opacity {
+                        loops: Animation.Infinite
+                        running: settingsController.daemonRunning
+
+                        PhosphorMotionAnimation {
+                            from: 1
+                            to: 0.4
+                            profile: "widget.pulse.slow"
+                        }
+
+                        PhosphorMotionAnimation {
+                            from: 0.4
+                            to: 1
+                            profile: "widget.pulse.slow"
+                        }
+
+                    }
+
+                }
+
+                Label {
+                    text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
+                    opacity: 0.7
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: !window.sidebarCompact
+                }
+
+                SettingsSwitch {
+                    Layout.alignment: Qt.AlignVCenter
+                    checked: settingsController.daemonRunning
+                    enabled: !settingsController.daemonController.busy
+                    accessibleName: i18n("Toggle daemon")
+                    onToggled: function(newValue) {
+                        settingsController.daemonController.setEnabled(newValue);
+                    }
+                }
+
+            }
+
+        }
+
+    }
+
     // Per-row sidebar trailing content — a Row with two slots:
     //   1. Pulsing dirty badge that's visible when the row's page (or
     //      one of its descendants for a collapsed category header) is
