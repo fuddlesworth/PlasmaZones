@@ -43,6 +43,8 @@ class ShaderRegistry;
 #include <memory>
 #include <optional>
 
+#include <PhosphorSettingsUi/ApplicationController.h>
+
 #include "algorithmservice.h"
 #include "animationspagecontroller.h"
 #include "editorpagecontroller.h"
@@ -104,6 +106,12 @@ class SettingsController : public QObject
     // WindowRuleModel and talks to the daemon's org.plasmazones.WindowRules
     // adaptor; QML reads `settingsController.windowRulesPage.model`.
     Q_PROPERTY(WindowRuleController* windowRulesPage READ windowRulesPage CONSTANT)
+
+    // PhosphorSettingsUi ApplicationController hosting the PageRegistry that
+    // SettingsAppWindow's sidebar / breadcrumbs / footer consume. Constructed
+    // lazily after every page controller has been built so the registry
+    // entries can carry stable PageController* pointers.
+    Q_PROPERTY(PhosphorSettingsUi::ApplicationController* app READ app CONSTANT)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -353,6 +361,11 @@ public:
     WindowRuleController* windowRulesPage() const
     {
         return m_windowRulesPage;
+    }
+
+    PhosphorSettingsUi::ApplicationController* app() const
+    {
+        return m_app;
     }
 
     // ── Running window picker (async flow) ──────────────────────────────────
@@ -704,6 +717,15 @@ private:
     // Staged ordering changes (flushed to m_settings on save)
     std::optional<QStringList> m_stagedSnappingOrder;
     std::optional<QStringList> m_stagedTilingOrder;
+
+    // PhosphorSettingsUi integration — owns the PageRegistry the framework's
+    // SettingsAppWindow chrome consumes. Constructed lazily after every page
+    // controller exists (so adapter registrations carry stable pointers).
+    // Owned via QObject parent on `this`; declared after the other members so
+    // its setup in the constructor runs once everything else has been wired.
+    PhosphorSettingsUi::ApplicationController* m_app = nullptr;
+
+    void buildApplicationController();
 };
 
 } // namespace PlasmaZones
