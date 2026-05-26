@@ -393,12 +393,6 @@ public:
     // same dot-path namespace — see design doc decision AA).
     PZ_CONFIG_KEY(shaderProfileTreeKey, "ShaderProfileTree")
 
-    // Animation App Rules — ordered list of per-window-class shader/
-    // timing overrides, layered on top of `ShaderProfileTree`. Stored
-    // in the same `Animations` group as the rest of the animation
-    // settings so a single config-section read covers everything.
-    PZ_CONFIG_KEY(animationAppRulesKey, "AnimationAppRules")
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Global
     // ═══════════════════════════════════════════════════════════════════════════
@@ -595,6 +589,21 @@ public:
     PZ_CONFIG_GROUP(v3assignmentGroupPrefix, "Assignment:")
     PZ_CONFIG_GROUP(v3quickLayoutsGroup, "QuickLayouts")
     PZ_CONFIG_GROUP(v3modeTrackingGroup, "ModeTracking")
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // v4 legacy key/group accessors — used ONLY by migration code.
+    //
+    // The `Animations.AnimationAppRules` array carried per-window animation
+    // overrides up through v4. migrateV3ToV4 stashes that array for
+    // finalizeV4Conversion to convert into WindowRules, then removes the key
+    // permanently. The group name `Animations` is unchanged at runtime (it
+    // still hosts ShaderProfileTree), but the key accessor is migration-only:
+    // it lives here so the migration is the sole remaining reader of the v4
+    // wire format — the live ConfigDefaults accessors for the key and its
+    // default value have been removed.
+    // ───────────────────────────────────────────────────────────────────────────
+    PZ_CONFIG_GROUP(v4AnimationsGroup, "Animations")
+    PZ_CONFIG_KEY(v4AnimationAppRulesKey, "AnimationAppRules")
 
 private:
     // Non-instantiable

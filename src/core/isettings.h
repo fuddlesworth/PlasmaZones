@@ -15,7 +15,6 @@
 #include "enums.h"
 #include "settings_interfaces.h"
 
-#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include <QColor>
@@ -110,8 +109,6 @@ public:
     virtual void setAnimationStaggerInterval(int ms) = 0;
     virtual PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const = 0;
     virtual void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) = 0;
-    virtual PhosphorAnimationShaders::AnimationAppRuleList animationAppRules() const = 0;
-    virtual void setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules) = 0;
 
     // Animation window filtering — gates animations BEFORE the app-rule
     // cascade. A class-pattern rule whose pattern matches the window's
@@ -445,7 +442,6 @@ Q_SIGNALS:
     void animationSequenceModeChanged();
     void animationStaggerIntervalChanged();
     void shaderProfileTreeChanged();
-    void animationAppRulesChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();

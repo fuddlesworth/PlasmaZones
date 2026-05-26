@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ProfileTree.h>
@@ -85,25 +84,14 @@ public:
         return m_shaderProfileTree;
     }
 
-    PhosphorAnimationShaders::AnimationAppRuleList& appRules()
-    {
-        return m_animationAppRules;
-    }
-    const PhosphorAnimationShaders::AnimationAppRuleList& appRules() const
-    {
-        return m_animationAppRules;
-    }
-
-    /// Rebuild the animation `WindowRuleSet` from the current `appRules()`
-    /// **plus** any unified-store rules carrying animation actions
-    /// (`m_windowRuleAnimationRules`). Call after every mutation of either
-    /// source. The bridge converts the legacy App Rule list into rule-engine
-    /// form; those rules and the unified-store rules are concatenated into
-    /// one set in priority order. The bound `RuleEvaluator` picks up the new
-    /// revision transparently and its match cache is invalidated.
+    /// Rebuild the animation `WindowRuleSet` from `m_windowRuleAnimationRules`
+    /// — the rules from `windowrules.json` that carry an `OverrideAnimation*`
+    /// action. Call after every mutation of that list. The bound
+    /// `RuleEvaluator` picks up the new revision transparently and its match
+    /// cache is invalidated.
     void rebuildAnimationRuleSet();
 
-    /// Replace the set of unified `windowrules.json` rules that carry an
+    /// Replace the set of `windowrules.json` rules that carry an
     /// `overrideAnimation*` action. The effect refreshes this on the
     /// `org.plasmazones.WindowRules.rulesChanged` D-Bus signal so a new
     /// animation rule authored in the settings UI fires without a restart.
@@ -321,20 +309,18 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════
     PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
-    PhosphorAnimationShaders::AnimationAppRuleList m_animationAppRules;
     PhosphorAnimation::ProfileTree m_motionProfileTree;
     // Rules from windowrules.json that carry an OverrideAnimation* action.
     // Refreshed from the daemon's org.plasmazones.WindowRules interface on
-    // every `rulesChanged` signal; concatenated with the bridge-converted
-    // legacy AnimationAppRules in `m_animationRuleSet`. Stored separately
-    // so a settings UI write to one source doesn't blow away the other.
+    // every `rulesChanged` signal; mirrored into `m_animationRuleSet` so the
+    // bound RuleEvaluator picks up the new revision.
     QList<PhosphorWindowRule::WindowRule> m_windowRuleAnimationRules;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Window-rule view of the animation App Rules
+    // Window-rule view of the animation rules
     //
-    // `m_animationRuleSet` is the bridge-converted form of `m_animationAppRules`,
-    // rebuilt by `rebuildAnimationRuleSet()` on every App Rule D-Bus load.
+    // `m_animationRuleSet` mirrors `m_windowRuleAnimationRules`, rebuilt by
+    // `rebuildAnimationRuleSet()` on every D-Bus refresh.
     // `m_animationRuleEvaluator` binds a const reference to it — declaration
     // ORDER MATTERS: the rule set must outlive (and precede) the evaluator.
     // ═══════════════════════════════════════════════════════════════════════════

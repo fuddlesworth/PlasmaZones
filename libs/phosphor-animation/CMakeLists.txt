@@ -122,15 +122,6 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/AnimationUniformExtension.h
     include/PhosphorAnimation/ShaderProfile.h
     include/PhosphorAnimation/ShaderProfileTree.h
-    include/PhosphorAnimation/AnimationAppRule.h
-    include/PhosphorAnimation/AnimationAppRuleResolver.h
-    # Header-only in-memory bridge: AnimationAppRuleList -> WindowRuleSet.
-    # Lives here (not in phosphor-windowrule) so the windowrule library's
-    # Config.cmake.in stays free of a transitive PhosphorAnimation dep.
-    # Consumers that include the bridge must find_package(PhosphorWindowRule)
-    # AND PhosphorAnimation themselves and link both libraries — see the
-    # header's file-level doxygen for the rationale.
-    include/PhosphorAnimation/AnimationAppRuleBridge.h
 
     # Layer animator (ex phosphor-animation-layer)
     include/PhosphorAnimation/PhosphorAnimationLayer.h
@@ -180,8 +171,6 @@ set(phosphoranimation_SRCS
     src/animationshaderregistry.cpp
     src/shaderprofile.cpp
     src/shaderprofiletree.cpp
-    src/animationapprule.cpp
-    src/animationappruleresolver.cpp
     src/contract_pins.cpp
 
     # Layer animator (ex phosphor-animation-layer)

@@ -12,6 +12,10 @@
 #include <PhosphorConfig/MigrationRunner.h>
 #include <PhosphorConfig/Schema.h>
 #include <PhosphorWindowRule/ContextRuleBridge.h>
+#include <PhosphorWindowRule/IdentityKey.h>
+#include <PhosphorWindowRule/MatchExpression.h>
+#include <PhosphorWindowRule/MatchTypes.h>
+#include <PhosphorWindowRule/RuleAction.h>
 #include <PhosphorWindowRule/WindowRule.h>
 #include <PhosphorWindowRule/WindowRuleSet.h>
 
@@ -21,9 +25,11 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QLatin1String>
 #include <QLockFile>
 #include <QSet>
+#include <QUuid>
 #include <array>
 #include <atomic>
 #include <optional>
@@ -1273,10 +1279,16 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 // assignments.json as the irreversible commit.
 
 namespace {
-// The temporary root key migrateV3ToV4 writes and finalizeV4Conversion
-// consumes + strips. Not a real schema key — it never survives a completed
+// The temporary root keys migrateV3ToV4 writes and finalizeV4Conversion
+// consumes + strips. Not real schema keys — they never survive a completed
 // conversion.
 constexpr QLatin1String kV4DisableStashKey{"_v4DisableStash"};
+// Carries the v4 `Animations.AnimationAppRules` array forward to
+// finalizeV4Conversion, which converts each legacy entry into a WindowRule and
+// appends it to windowrules.json. The source key is removed from the
+// Animations group in migrateV3ToV4 so the unified rule store becomes the sole
+// home for per-window animation overrides.
+constexpr QLatin1String kV4AnimationRulesStashKey{"_v4AnimationRulesStash"};
 } // namespace
 
 void ConfigMigration::migrateV3ToV4(QJsonObject& root)
@@ -1319,6 +1331,28 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     }
 
     root[kV4DisableStashKey] = stash;
+
+    // Stash + remove the legacy `Animations.AnimationAppRules` array. v4 folds
+    // per-window animation overrides into the unified windowrules.json store
+    // (`OverrideAnimationShader` / `OverrideAnimationTiming` actions on a
+    // `WindowClass Contains <pattern>` matcher). finalizeV4Conversion ports
+    // the bridge logic against the stashed JSON and appends the resulting
+    // WindowRules to the same rule set assignments/disable lists feed.
+    //
+    // Empty/absent source → no stash entry, finalizer no-ops. The Animations
+    // group itself stays on disk when non-empty: ShaderProfileTree still
+    // lives under it.
+    QJsonObject animations = root.value(ConfigKeys::v4AnimationsGroup()).toObject();
+    const QJsonArray animationRules = animations.value(ConfigKeys::v4AnimationAppRulesKey()).toArray();
+    if (!animationRules.isEmpty()) {
+        root[kV4AnimationRulesStashKey] = animationRules;
+    }
+    animations.remove(ConfigKeys::v4AnimationAppRulesKey());
+    if (animations.isEmpty()) {
+        root.remove(ConfigKeys::v4AnimationsGroup());
+    } else {
+        root[ConfigKeys::v4AnimationsGroup()] = animations;
+    }
 
     // Stamp literal 4 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
     root[ConfigKeys::versionKey()] = 4;
@@ -1455,6 +1489,131 @@ QString assignmentRuleName(const QString& screenId, int desktop, const QString& 
     return name;
 }
 
+// ─── Animation App Rule → WindowRule conversion ─────────────────────────────
+// Ports the (now-deleted) PhosphorWindowRule::AnimationAppRuleBridge logic
+// against the raw stash JSON. The legacy AnimationAppRule type is gone in v4+,
+// so the conversion lives here — the migration is its sole remaining caller.
+
+/// Fixed v5-UUID namespace for animation App-Rule identities. Inherited
+/// verbatim from the legacy bridge so the migration's output is byte-stable
+/// across re-runs (idempotent rule-id derivation).
+const QUuid& animationAppRuleNamespaceUuid()
+{
+    static const QUuid ns(QStringLiteral("{b3f2c1a0-7d4e-5f6a-8b9c-0d1e2f3a4b5c}"));
+    return ns;
+}
+
+/// Build a single WindowRule from a legacy AnimationAppRule JSON object.
+/// Mirrors the legacy rule-level loader's drop-on-malformed contract: empty
+/// classPattern / eventPath and unknown `kind` strings yield nullopt so the
+/// caller silently discards entries the runtime would have rejected anyway.
+///
+/// @param i      zero-based source index — used to derive `priority = count - i`
+///               (first entry → highest priority, mirroring the bridge).
+/// @param count  total source entries (priority floors at 1, reserving 0 for
+///               the provider-default catch-all band).
+std::optional<PhosphorWindowRule::WindowRule> animationAppRuleToWindowRule(const QJsonObject& source, int i, int count)
+{
+    // Legacy AnimationAppRule wire keys. The v3 on-disk format is frozen —
+    // the runtime accessors are deleted, so these literals are the migration's
+    // last reader of the shape.
+    constexpr QLatin1StringView kKeyClassPattern{"classPattern"};
+    constexpr QLatin1StringView kKeyEventPath{"eventPath"};
+    constexpr QLatin1StringView kKeyKind{"kind"};
+    constexpr QLatin1StringView kKeyEffectId{"effectId"};
+    constexpr QLatin1StringView kKeyShaderParams{"shaderParams"};
+    constexpr QLatin1StringView kKeyCurve{"curve"};
+    constexpr QLatin1StringView kKeyDurationMs{"durationMs"};
+    constexpr QLatin1StringView kKindShader{"shader"};
+    constexpr QLatin1StringView kKindTiming{"timing"};
+
+    // OverrideAnimation* action params — must stay in lockstep with the
+    // action-registry validators in libs/phosphor-windowrule.
+    constexpr QLatin1StringView kParamEvent{"event"};
+    constexpr QLatin1StringView kParamEffectId{"effectId"};
+    constexpr QLatin1StringView kParamParams{"params"};
+    constexpr QLatin1StringView kParamCurve{"curve"};
+    constexpr QLatin1StringView kParamDurationMs{"durationMs"};
+
+    const QString classPattern = source.value(kKeyClassPattern).toString();
+    const QString eventPath = source.value(kKeyEventPath).toString();
+    if (classPattern.isEmpty() || eventPath.isEmpty()) {
+        return std::nullopt;
+    }
+    const QString kindStr = source.value(kKeyKind).toString();
+    QString canonicalKind;
+    if (kindStr.compare(kKindShader, Qt::CaseInsensitive) == 0) {
+        canonicalKind = kKindShader;
+    } else if (kindStr.compare(kKindTiming, Qt::CaseInsensitive) == 0) {
+        canonicalKind = kKindTiming;
+    } else {
+        return std::nullopt;
+    }
+
+    PhosphorWindowRule::RuleAction action;
+    QJsonObject params;
+    params.insert(kParamEvent, eventPath);
+    if (canonicalKind == kKindShader) {
+        action.type = QString(PhosphorWindowRule::ActionType::OverrideAnimationShader);
+        // effectId is always written — the empty string is the engaged-blocking
+        // sentinel ("disable shader for matching windows"), distinct from an
+        // unfilled slot ("no rule matched").
+        params.insert(kParamEffectId, source.value(kKeyEffectId).toString());
+        const QJsonValue rawParams = source.value(kKeyShaderParams);
+        if (rawParams.isObject()) {
+            const QJsonObject paramsObj = rawParams.toObject();
+            if (!paramsObj.isEmpty()) {
+                params.insert(kParamParams, paramsObj);
+            }
+        }
+    } else {
+        action.type = QString(PhosphorWindowRule::ActionType::OverrideAnimationTiming);
+        const QString curve = source.value(kKeyCurve).toString();
+        if (!curve.isEmpty()) {
+            params.insert(kParamCurve, curve);
+        }
+        // `durationMs <= 0` is the "inherit per-event default" sentinel —
+        // omit the key entirely, mirroring AnimationAppRule::toJson.
+        const int durationMs = source.value(kKeyDurationMs).toInt(0);
+        if (durationMs > 0) {
+            params.insert(kParamDurationMs, durationMs);
+        }
+    }
+    action.params = params;
+
+    PhosphorWindowRule::WindowRule rule;
+    // Deterministic id from the source identity tuple so repeated migrations
+    // yield byte-identical rules — keeps the conversion idempotent under
+    // crash-and-retry.
+    rule.id = QUuid::createUuidV5(animationAppRuleNamespaceUuid(),
+                                  PhosphorWindowRule::Detail::encodeSegment(classPattern)
+                                      + PhosphorWindowRule::Detail::encodeSegment(eventPath)
+                                      + PhosphorWindowRule::Detail::encodeSegment(canonicalKind));
+    rule.enabled = true;
+    rule.priority = count - i;
+    rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(PhosphorWindowRule::Field::WindowClass,
+                                                               PhosphorWindowRule::Operator::Contains, classPattern);
+    rule.actions.append(action);
+    return rule;
+}
+
+/// Drain the v4 animation-rule stash into @p rules. Malformed entries are
+/// silently discarded — the legacy runtime loader did the same.
+void appendAnimationRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules, const QJsonArray& stash)
+{
+    const int count = stash.size();
+    rules.reserve(rules.size() + count);
+    for (int i = 0; i < count; ++i) {
+        const QJsonValue entry = stash.at(i);
+        if (!entry.isObject()) {
+            continue;
+        }
+        if (auto rule = animationAppRuleToWindowRule(entry.toObject(), i, count)) {
+            rules.append(*rule);
+        }
+    }
+}
+
 } // namespace
 
 bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
@@ -1493,7 +1652,8 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         // still-pending, idempotent cleanup steps.
         bool ok = true;
 
-        // Strip the `_v4DisableStash` scratch key from config.json if present.
+        // Strip the v4 scratch keys (`_v4DisableStash`, `_v4AnimationRulesStash`)
+        // from config.json if any survived a partial earlier run.
         if (QFile::exists(jsonPath)) {
             QFile cf(jsonPath);
             if (cf.open(QIODevice::ReadOnly)) {
@@ -1501,11 +1661,13 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
                 const QJsonDocument doc = QJsonDocument::fromJson(cf.readAll(), &err);
                 cf.close();
                 if (err.error == QJsonParseError::NoError && doc.isObject()
-                    && doc.object().contains(kV4DisableStashKey)) {
+                    && (doc.object().contains(kV4DisableStashKey)
+                        || doc.object().contains(kV4AnimationRulesStashKey))) {
                     QJsonObject configRoot = doc.object();
                     configRoot.remove(kV4DisableStashKey);
+                    configRoot.remove(kV4AnimationRulesStashKey);
                     if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
-                        qWarning("ConfigMigration: failed to strip _v4DisableStash from %s during cleanup retry",
+                        qWarning("ConfigMigration: failed to strip v4 stash keys from %s during cleanup retry",
                                  qPrintable(jsonPath));
                         ok = false;
                     }
@@ -1554,6 +1716,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     }
 
     const QJsonObject stash = configRoot.value(kV4DisableStashKey).toObject();
+    const QJsonArray animationRulesStash = configRoot.value(kV4AnimationRulesStashKey).toArray();
 
     // ── Read assignments.json ──────────────────────────────────────────────
     // The prevalidate guard above already aborted on a malformed file, so a
@@ -1706,6 +1869,13 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         }
     }
 
+    // ── Animation App Rules → WindowRules ──────────────────────────────────
+    // Port the (now-deleted) AnimationAppRuleBridge logic against the stashed
+    // legacy JSON. The animation rules target slot prefixes (`anim-shader:`,
+    // `anim-timing:`) that no other rule type fills, so they coexist with the
+    // assignment/disable rules above regardless of priority interleaving.
+    appendAnimationRulesFromStash(rules, animationRulesStash);
+
     // ── Relocate QuickLayouts to the quicklayouts.json sidecar (FIRST) ─────
     // Quick-layout slots are NOT window rules — they belong in the sibling
     // sidecar LayoutRegistry reads (next to windowrules.json), not in the rule
@@ -1767,11 +1937,13 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     }
     qInfo("ConfigMigration: wrote %d window rules to %s", ruleSet.count(), qPrintable(windowRulesPath));
 
-    // ── Rewrite config.json: strip the temporary stash key ─────────────────
-    // The real Display.*Disabled* keys were already removed by migrateV3ToV4;
-    // only the `_v4DisableStash` scratch key remains to be cleaned up here.
-    if (haveConfig && configRoot.contains(kV4DisableStashKey)) {
+    // ── Rewrite config.json: strip the temporary stash keys ────────────────
+    // The real Display.*Disabled* keys and Animations.AnimationAppRules array
+    // were already removed by migrateV3ToV4; only the `_v4DisableStash` and
+    // `_v4AnimationRulesStash` scratch keys remain to be cleaned up here.
+    if (haveConfig && (configRoot.contains(kV4DisableStashKey) || configRoot.contains(kV4AnimationRulesStashKey))) {
         configRoot.remove(kV4DisableStashKey);
+        configRoot.remove(kV4AnimationRulesStashKey);
         if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
             qWarning("ConfigMigration: failed to rewrite %s after v4 conversion", qPrintable(jsonPath));
             return false;

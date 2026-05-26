@@ -5,7 +5,6 @@
 #include "../core/interfaces.h"
 #include "../config/settings.h" // For concrete Settings type
 #include "../core/dbusvariantutils.h"
-#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ProfileTree.h>
@@ -26,7 +25,6 @@ namespace PlasmaZones {
 
 namespace {
 constexpr qsizetype kMaxShaderProfileTreeBytes = 64 * 1024;
-constexpr qsizetype kMaxAnimationAppRulesBytes = 64 * 1024;
 }
 
 SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry,
@@ -576,28 +574,6 @@ void SettingsAdaptor::initializeRegistry()
             return true;
         };
         m_schemas[QString(PhosphorProtocol::Service::SettingProperty::ShaderProfileTree)] = QStringLiteral("string");
-
-        // Animation app rules: ordered JSON array round-trip — the wire
-        // shape mirrors `Settings::animationAppRulesJson`. Same byte cap
-        // as the profile tree since both blobs share the same per-user
-        // upper bound (dozens of overrides at most).
-        m_getters[QString(PhosphorProtocol::Service::SettingProperty::AnimationAppRules)] = [concrete]() {
-            return QString::fromUtf8(
-                QJsonDocument(concrete->animationAppRules().toJson()).toJson(QJsonDocument::Compact));
-        };
-        m_setters[QString(PhosphorProtocol::Service::SettingProperty::AnimationAppRules)] =
-            [concrete](const QVariant& v) -> bool {
-            // Same UTF-8-byte gate rationale as shaderProfileTree above.
-            const QByteArray raw = v.toString().toUtf8();
-            if (raw.size() > kMaxAnimationAppRulesBytes)
-                return false;
-            const QJsonDocument doc = QJsonDocument::fromJson(raw);
-            if (!doc.isArray())
-                return false;
-            concrete->setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array()));
-            return true;
-        };
-        m_schemas[QString(PhosphorProtocol::Service::SettingProperty::AnimationAppRules)] = QStringLiteral("string");
     }
 
     // Per-event motion-profile tree (read-only, JSON blob round-trip).

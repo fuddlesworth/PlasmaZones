@@ -421,9 +421,10 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     //
     // `shouldAnimateWindow` adds the user's per-animation Window
     // Filtering gate (transient / min-size / app / class) and lets a
-    // class-pattern AnimationAppRule override the filter when the
-    // rule's classPattern matches. Falling through to the non-animated
-    // path just runs the moveResize without the snap motion / shader.
+    // WindowRule carrying any OverrideAnimation* action override the
+    // filter when the rule's class matcher matches. Falling through to
+    // the non-animated path just runs the moveResize without the snap
+    // motion / shader.
     if (!skipAnimation && !allowDuringDrag && m_windowAnimator->isEnabled() && shouldAnimateWindow(window)) {
         const QRectF targetFrame(geo);
 
@@ -447,11 +448,11 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             kw->moveResize(targetFrame);
         }
 
-        // AnimationAppRule motion-cascade: a Timing rule for this
-        // (windowClass, eventPath) replaces the global animator profile's
-        // curve / duration for THIS animation only. No rule → resolver
-        // returns the base profile unchanged and no override is passed,
-        // preserving the historical fast-path. Retarget intentionally does
+        // Per-window animation motion-cascade: a Timing WindowRule for
+        // this (windowClass, eventPath) replaces the global animator
+        // profile's curve / duration for THIS animation only. No rule →
+        // resolver returns the base profile unchanged and no override is
+        // passed, preserving the historical fast-path. Retarget intentionally does
         // not re-apply the cascade — once an animation is in flight, it
         // stays on the curve that started it for visual continuity.
         //

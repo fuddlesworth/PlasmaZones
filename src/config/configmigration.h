@@ -27,7 +27,12 @@ namespace PlasmaZones {
 ///     per-mode disable lists become context-only WindowRules in the new
 ///     windowrules.json store. config.json loses the Display.*Disabled* keys;
 ///     assignments.json is superseded. QuickLayouts slots relocate to the
-///     quicklayouts.json sidecar. See docs/window-rule-refactor-design.md §8.
+///     quicklayouts.json sidecar. The Animations.AnimationAppRules array also
+///     folds into windowrules.json as OverrideAnimation{Shader,Timing} actions
+///     on `WindowClass Contains <pattern>` matchers — the legacy
+///     AnimationAppRule/Bridge types are removed and the runtime reads
+///     animation overrides exclusively from the unified rule store. See
+///     docs/window-rule-refactor-design.md §8.
 inline constexpr int ConfigSchemaVersion = 4;
 
 /// A single schema migration step: transforms root JSON in-place from

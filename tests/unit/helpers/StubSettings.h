@@ -27,8 +27,8 @@ class StubSettings : public ISettings, public PhosphorEngine::ISnapSettings
 {
     // No Q_OBJECT — this stub defines no NEW signals/slots; ISettings's
     // meta-object is reused for the inherited signal emits (e.g.
-    // `animationAppRulesChanged`, `renderingBackendChanged`,
-    // `settingsChanged`) that the setters trigger directly.
+    // `renderingBackendChanged`, `settingsChanged`) that the setters trigger
+    // directly.
 
 public:
     explicit StubSettings(QObject* parent = nullptr)
@@ -446,8 +446,8 @@ public:
     // Animation window filtering — pure-stub no-op accessors backed by
     // m_animation* state so tests that exercise the filter cascade can
     // round-trip values through the stub without involving the real
-    // PhosphorConfig::Store. Mirrors `setAnimationAppRules`'s
-    // value-changed-guarded emit pattern.
+    // PhosphorConfig::Store. Uses the same value-changed-guarded emit
+    // pattern the concrete Settings layer uses.
     bool animationExcludeTransientWindows() const override
     {
         return m_animationExcludeTransientWindows;
@@ -742,18 +742,6 @@ public:
     void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree&) override
     {
     }
-    PhosphorAnimationShaders::AnimationAppRuleList animationAppRules() const override
-    {
-        return m_animationAppRules;
-    }
-    void setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules) override
-    {
-        if (m_animationAppRules == rules)
-            return;
-        m_animationAppRules = rules;
-        Q_EMIT animationAppRulesChanged();
-        Q_EMIT settingsChanged();
-    }
 
     // Autotile decoration settings (ISettings)
     bool autotileFocusFollowsMouse() const override
@@ -904,7 +892,6 @@ private:
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
-    PhosphorAnimationShaders::AnimationAppRuleList m_animationAppRules;
     bool m_animationExcludeTransientWindows = false;
     bool m_animationExcludeNotificationsAndOsd = true;
     int m_animationMinimumWindowWidth = 0;
