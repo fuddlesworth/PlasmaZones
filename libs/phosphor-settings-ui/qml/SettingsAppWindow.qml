@@ -161,7 +161,7 @@ Kirigami.ApplicationWindow {
                     Layout.fillWidth: true
                 }
 
-                ApplyResetCancelFooter {
+                UnsavedChangesFooter {
                     Layout.fillWidth: true
                     controller: root.controller
                 }

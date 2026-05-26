@@ -130,7 +130,7 @@ set(phosphorsettingsui_qml_FILES
     qml/SettingsAppWindow.qml
     qml/Sidebar.qml
     qml/Breadcrumbs.qml
-    qml/ApplyResetCancelFooter.qml
+    qml/UnsavedChangesFooter.qml
     qml/PageHost.qml
     qml/DiscardChangesDialog.qml
     qml/AboutPageShell.qml

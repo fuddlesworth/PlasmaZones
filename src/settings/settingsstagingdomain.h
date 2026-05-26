@@ -11,7 +11,7 @@ namespace PlasmaZones {
 class SettingsController;
 
 /// PhosphorSettingsUi::StagingDomain that wraps SettingsController's existing
-/// save()/load() lifecycle so the framework's ApplyResetCancelFooter can
+/// save()/load() lifecycle so the framework's UnsavedChangesFooter can
 /// trigger them.
 ///
 /// PlasmaZones tracks dirty state centrally (m_dirtyPages in SettingsController),
