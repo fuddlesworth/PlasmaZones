@@ -20,7 +20,7 @@ QVariantList ScreenHelper::screens() const
 
 void ScreenHelper::refreshScreens()
 {
-    m_screens = screenInfoListToVariantList(fetchScreens());
+    m_screens = PhosphorScreens::screenInfoListToVariantList(fetchScreens());
     Q_EMIT screensChanged();
 }
 

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorScreens/ScreenInfo.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <QDBusConnection>
 #include <QList>
@@ -16,39 +17,19 @@ namespace PlasmaZones {
 
 class Settings;
 
-/**
- * @brief Lightweight screen descriptor returned by fetchScreens()
- */
-struct ScreenInfo
-{
-    QString name;
-    bool isPrimary = false;
-    QString manufacturer;
-    QString model;
-    int width = 0;
-    int height = 0;
-    QString screenId;
-    bool isVirtualScreen = false;
-    QString connectorName; ///< Physical connector (e.g. "DP-2")
-    int virtualIndex = -1; ///< 0-based index within the physical screen (-1 = not virtual)
-    QString virtualDisplayName; ///< User-facing name (e.g. "Left", "Right")
-};
+/// Re-export of the lib's POD so PlasmaZones-internal callers don't need the
+/// PhosphorScreens:: prefix and don't need to be touched when the type moved.
+using ScreenInfo = PhosphorScreens::ScreenInfo;
 
 /**
  * @brief Fetch the list of connected screens via D-Bus (daemon) with Qt fallback
  *
  * Each ScreenInfo contains connector name, primary flag, manufacturer, model,
- * resolution, and the stable EDID-based screenId from the daemon.
+ * resolution, and the stable EDID-based screenId from the daemon. This call
+ * stays in PlasmaZones because it speaks the PlasmaZones daemon's specific
+ * D-Bus protocol; the generic ScreenInfo POD itself lives in phosphor-screens.
  */
 QList<ScreenInfo> fetchScreens();
-
-/**
- * @brief Convert a ScreenInfo list to QVariantList suitable for QML consumption
- *
- * Each entry is a QVariantMap with keys: name, isPrimary, manufacturer, model,
- * resolution, screenId.
- */
-QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens);
 
 /**
  * @brief Check whether a given monitor is disabled in settings for the given mode
