@@ -503,16 +503,31 @@ ApplicationWindow {
                     // like "Windows" still surfaces under the
                     // top-level Animations entry.
                     let itemMatches = item.label.toLowerCase().indexOf(searchText) >= 0;
-                    let matchingChildren = item.hasChildren ? _collectMatchingDescendants(item.name, searchText) : [];
+                    // When a top-level collapsible category's OWN label
+                    // matches, broaden the descendant walk to include every
+                    // leaf — otherwise the user sees just the bare category
+                    // header (which isn't navigable) with no children. Mirrors
+                    // the intermediate-label-match logic in
+                    // `_collectMatchingDescendants`. Non-collapsible drill-down
+                    // parents (Snapping/Tiling/Animations) keep their current
+                    // behaviour: the header alone is enough because clicking
+                    // it drills in.
+                    let descendantQuery = (item.isCollapsible === true && itemMatches) ? "" : searchText;
+                    let matchingChildren = item.hasChildren ? _collectMatchingDescendants(item.name, descendantQuery) : [];
                     if (!itemMatches && matchingChildren.length === 0)
                         continue;
 
-                    // Show parent (disable drill-in if showing matched children)
+                    // Show parent. Inline-collapsible categories are NEVER
+                    // drillable (they don't have a sub-sidebar mode); the
+                    // matched children appear below as search hits and the
+                    // header is a non-navigable label — the click handler's
+                    // `_categoryBuckets` guard keeps a stray header click
+                    // from setting `activePage` to the category name.
                     sidebarModel.append({
                         "name": item.name,
                         "label": item.label,
                         "iconName": item.iconName,
-                        "hasChildren": matchingChildren.length === 0 && item.hasChildren,
+                        "hasChildren": item.isCollapsible !== true && matchingChildren.length === 0 && item.hasChildren,
                         "isBackButton": false,
                         "hasDividerAfter": false,
                         "isDivider": false,
@@ -672,15 +687,26 @@ ApplicationWindow {
                     // Windows lives one level deeper under Surfaces —
                     // a regression compared with the prior flat layout.
                     let ownMatch = child.label.toLowerCase().indexOf(searchText) >= 0;
-                    let nestedMatches = child.hasChildren ? _collectMatchingDescendants(child.name, searchText) : [];
+                    // Same broaden-on-label-match rule as the main-mode
+                    // branch: an inline-collapsible category whose own label
+                    // matches reveals every descendant so the user can
+                    // navigate into it. See the matching comment above.
+                    let nestedQuery = (child.isCollapsible === true && ownMatch) ? "" : searchText;
+                    let nestedMatches = child.hasChildren ? _collectMatchingDescendants(child.name, nestedQuery) : [];
                     if (!ownMatch && nestedMatches.length === 0)
                         continue;
 
+                    // Inline-collapsible categories never drill (they're
+                    // pseudo-grouping rows, not sub-sidebar modes). Force
+                    // hasChildren:false so the chevron / drill-in click
+                    // handler doesn't enter the category as a sidebar mode
+                    // — the click handler's `_categoryBuckets` guard catches
+                    // any stray header click and short-circuits it.
                     sidebarModel.append({
                         "name": child.name,
                         "label": child.label,
                         "iconName": child.iconName,
-                        "hasChildren": nestedMatches.length === 0 && (child.hasChildren || false),
+                        "hasChildren": child.isCollapsible !== true && nestedMatches.length === 0 && (child.hasChildren || false),
                         "isBackButton": false,
                         "hasDividerAfter": false,
                         "isDivider": false,
@@ -1124,12 +1150,12 @@ ApplicationWindow {
         for (let p = 0; p < parents.length; p++) {
             let children = _childItems[parents[p]];
             for (let c = 0; c < children.length; c++) {
-                if (children[c].name === page && !children[c].hasChildren) {
-                    // Page lives in a top-level main-mode collapsible
-                    // (a category whose host bucket isn't in any
-                    // sub-sidebar) — stay in main mode and let the
-                    // expanded category render the leaf inline.
+                // Page lives in a top-level main-mode collapsible
+                // (a category whose host bucket isn't in any
+                // sub-sidebar) — stay in main mode and let the
+                // expanded category render the leaf inline.
 
+                if (children[c].name === page && !children[c].hasChildren) {
                     // If the owning parent is an inline collapsible
                     // category, drill into its host mode (so the
                     // sub-sidebar opens) — except for top-level main-mode
@@ -1549,6 +1575,15 @@ ApplicationWindow {
                                     }
                                 }
                             }
+                            // Inline-collapsible category headers reach this
+                            // fallthrough when shown in search results — they
+                            // aren't leaves, so assigning them to `activePage`
+                            // would land the user on the silent LayoutsPage
+                            // fallback. Treat the click as a no-op; the user
+                            // is meant to click matched leaves below.
+                            if (window._categoryBuckets[name] === true)
+                                return ;
+
                             settingsController.activePage = name;
                         }
                         leftPadding: {
@@ -1709,7 +1744,19 @@ ApplicationWindow {
                                 radius: width / 2
                                 color: Kirigami.Theme.neutralTextColor
                                 visible: {
-                                    if (navDelegate.isDivider || navDelegate.isBackButton || navDelegate.isCategory)
+                                    if (navDelegate.isDivider || navDelegate.isBackButton)
+                                        return false;
+
+                                    // For inline-collapsible category headers,
+                                    // show the badge only when the category is
+                                    // COLLAPSED. Expanded categories don't need
+                                    // a header badge because every dirty child
+                                    // row below shows its own. Collapsed headers
+                                    // need it as the sole indicator that there
+                                    // are unsaved changes hiding inside the
+                                    // group — without this the user can miss
+                                    // pending edits behind a closed accordion.
+                                    if (navDelegate.isCategory && navDelegate.categoryExpanded)
                                         return false;
 
                                     settingsController.dirtyPages; // binding dependency
