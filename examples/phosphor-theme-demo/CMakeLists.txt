@@ -25,6 +25,24 @@ qt_add_qml_module(phosphor_theme_demo_qml
     QML_FILES
         Main.qml
         Swatch.qml
+    # PresetPalettes ships as a QML_SINGLETON inside this demo's own
+    # module — hardcoded named palettes are demo decoration, not lib
+    # contract. Compiling header + .cpp into the QML module static lib
+    # gives both the type registration and the implementation in one
+    # place; AUTOMOC scans the header and qmltyperegistrar publishes
+    # `PhosphorThemeDemo::PresetPalettes` to QML.
+    SOURCES
+        PresetPalettes.h
+        presetpalettes.cpp
+)
+
+# The QML module needs PhosphorTheme link visibility because
+# presetpalettes.cpp instantiates PaletteStore (to read the canonical
+# default tokens without duplicating them here) and references
+# TokenNames constants.
+target_link_libraries(phosphor_theme_demo_qml
+    PRIVATE
+        PhosphorTheme::PhosphorTheme
 )
 
 add_executable(phosphor-theme-demo

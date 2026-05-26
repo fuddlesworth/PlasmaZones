@@ -1,16 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <PhosphorTheme/PresetPalettes.h>
-
-#include "defaultpalette.h"
+#include "PresetPalettes.h"
 
 #include <PhosphorTheme/IThemeService.h>
+#include <PhosphorTheme/PaletteStore.h>
 
 #include <QColor>
 #include <QLatin1String>
 
-namespace PhosphorTheme {
+namespace PhosphorThemeDemo {
+
+using PhosphorTheme::TokenNames;
 
 namespace {
 
@@ -40,7 +41,12 @@ PresetPalettes::PresetPalettes(QObject* parent)
 
 QVariantMap PresetPalettes::dark() const
 {
-    return detail::defaultDarkPalette();
+    // The canonical Phosphor dark is the built-in default; a freshly
+    // constructed PaletteStore already holds it. Read it back so we
+    // never duplicate the hex values across the lib's defaults and the
+    // demo's preset row — the palette is owned by phosphor-theme.
+    PhosphorTheme::PaletteStore store;
+    return store.palette();
 }
 
 QVariantMap PresetPalettes::light() const
@@ -178,4 +184,4 @@ QVariantMap PresetPalettes::byName(const QString& name) const
     return {};
 }
 
-} // namespace PhosphorTheme
+} // namespace PhosphorThemeDemo

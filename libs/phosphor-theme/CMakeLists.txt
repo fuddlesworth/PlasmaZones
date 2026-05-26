@@ -47,7 +47,6 @@ set(phosphortheme_public_HDRS
     include/PhosphorTheme/IThemeService.h
     include/PhosphorTheme/MatugenRunner.h
     include/PhosphorTheme/PaletteStore.h
-    include/PhosphorTheme/PresetPalettes.h
     include/PhosphorTheme/TemplateEngine.h
 )
 
@@ -55,7 +54,6 @@ set(phosphortheme_SRCS
     src/defaultpalette.cpp
     src/matugenrunner.cpp
     src/palettestore.cpp
-    src/presetpalettes.cpp
     src/templateengine.cpp
 )
 
@@ -163,7 +161,6 @@ set(_phosphor_theme_qml_sources
     # the QML module only needs the type metadata.
     include/PhosphorTheme/PaletteStore.h
     include/PhosphorTheme/MatugenRunner.h
-    include/PhosphorTheme/PresetPalettes.h
     include/PhosphorTheme/TemplateEngine.h
 )
 

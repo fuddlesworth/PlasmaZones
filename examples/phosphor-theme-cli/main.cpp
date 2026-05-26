@@ -9,7 +9,6 @@
 
 #include <PhosphorTheme/MatugenRunner.h>
 #include <PhosphorTheme/PaletteStore.h>
-#include <PhosphorTheme/PresetPalettes.h>
 #include <PhosphorTheme/TemplateEngine.h>
 
 #include <QCommandLineOption>
@@ -214,16 +213,17 @@ int runCycle(const QStringList& args)
 {
     QCommandLineParser p;
     p.setApplicationDescription(
-        QStringLiteral("Rotate through preset palettes — proves the hot-reload pipeline end-to-end"));
+        QStringLiteral("Rotate through palette JSON files in a directory — proves the hot-reload pipeline"));
+    p.addPositionalArgument(QStringLiteral("dir"), QStringLiteral("Directory of *.json palette files"));
     QCommandLineOption intervalOpt(QStringLiteral("interval"),
-                                   QStringLiteral("Milliseconds between presets (default 1500)"), QStringLiteral("ms"),
+                                   QStringLiteral("Milliseconds between palettes (default 1500)"), QStringLiteral("ms"),
                                    QStringLiteral("1500"));
     QCommandLineOption onceOpt(QStringLiteral("once"),
-                               QStringLiteral("Walk presets once and exit instead of looping forever"));
+                               QStringLiteral("Walk the directory once and exit instead of looping forever"));
     QCommandLineOption applyOpt(QStringLiteral("apply"),
-                                QStringLiteral("Write each preset to current.json (drives a running demo)"));
+                                QStringLiteral("Write each palette to current.json (drives a running demo)"));
     QCommandLineOption outOpt(QStringLiteral("out"),
-                              QStringLiteral("Write each preset to a specific path (overrides --apply)"),
+                              QStringLiteral("Write each palette to a specific path (overrides --apply)"),
                               QStringLiteral("path"));
     p.addOption(intervalOpt);
     p.addOption(onceOpt);
@@ -231,10 +231,22 @@ int runCycle(const QStringList& args)
     p.addOption(outOpt);
     p.process(args);
 
-    const PhosphorTheme::PresetPalettes presets;
-    const auto names = presets.names();
-    if (names.isEmpty()) {
-        std::cerr << "phosphor-theme-cli: no presets available\n";
+    const auto positional = p.positionalArguments();
+    if (positional.isEmpty()) {
+        std::cerr << "usage: phosphor-theme-cli cycle <dir> [--interval ms] [--once] [--apply | --out <path>]\n";
+        return 2;
+    }
+
+    // Enumerate *.json files in alphabetical order so successive runs
+    // produce the same cycle order (deterministic for screenshots / demos).
+    const QDir dir(positional.at(0));
+    if (!dir.exists()) {
+        std::cerr << "phosphor-theme-cli: directory does not exist: " << positional.at(0).toStdString() << '\n';
+        return 1;
+    }
+    const auto entries = dir.entryInfoList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+    if (entries.isEmpty()) {
+        std::cerr << "phosphor-theme-cli: no *.json files in " << positional.at(0).toStdString() << '\n';
         return 1;
     }
 
@@ -251,20 +263,28 @@ int runCycle(const QStringList& args)
     // Counter survives across timer ticks via lambda capture-by-ref.
     auto* idx = new int(0);
 
-    auto applyNext = [&, idx]() {
-        const auto name = names.at(*idx % names.size());
-        const auto tokens = presets.byName(name);
-        std::cerr << "phosphor-theme-cli: applying preset " << name.toStdString() << " (" << tokens.size()
-                  << " tokens)\n";
-        if (!outPath.isEmpty()) {
-            if (!writeAtomic(outPath, serialisePalette(tokens))) {
-                std::cerr << "phosphor-theme-cli: write failed; aborting cycle\n";
-                QCoreApplication::exit(1);
-                return;
+    auto applyNext = [entries, outPath, runOnce, idx]() {
+        const auto& entry = entries.at(*idx % entries.size());
+        // Validate by loading through PaletteStore — same parse path the
+        // demo's watcher uses. A broken JSON file logs an error and skips
+        // to the next tick rather than crashing the cycle.
+        PhosphorTheme::PaletteStore store;
+        if (!store.loadFromFile(entry.absoluteFilePath())) {
+            std::cerr << "phosphor-theme-cli: skipping " << entry.fileName().toStdString()
+                      << " (not a valid palette JSON)\n";
+        } else {
+            std::cerr << "phosphor-theme-cli: applying " << entry.fileName().toStdString() << " ("
+                      << store.palette().size() << " tokens)\n";
+            if (!outPath.isEmpty()) {
+                if (!writeAtomic(outPath, serialisePalette(store.palette()))) {
+                    std::cerr << "phosphor-theme-cli: write failed; aborting cycle\n";
+                    QCoreApplication::exit(1);
+                    return;
+                }
             }
         }
         ++(*idx);
-        if (runOnce && *idx >= names.size()) {
+        if (runOnce && *idx >= entries.size()) {
             QCoreApplication::quit();
         }
     };
@@ -292,12 +312,13 @@ USAGE
   phosphor-theme-cli set-wallpaper <image> [--mode dark|light] [--apply | --out <path>]
   phosphor-theme-cli dump [--source <palette.json>]
   phosphor-theme-cli render-template <template> <out> [--palette <palette.json>]
-  phosphor-theme-cli cycle [--interval ms] [--once] [--apply | --out <path>]
+  phosphor-theme-cli cycle <dir> [--interval ms] [--once] [--apply | --out <path>]
 
 Without --apply or --out, set-wallpaper prints the new palette JSON to stdout.
-cycle without --apply or --out only logs each preset name — pair it with
---apply (or --out path) to drive a running phosphor-theme-demo and watch
-the whole window retint every <interval> ms.
+cycle iterates *.json files in <dir> alphabetically; without --apply or
+--out it just logs each file. Pair it with --apply (or --out <path>) to
+drive a running phosphor-theme-demo and watch the whole window retint
+every <interval> ms.
 
 dump and render-template default to the canonical built-in palette
 (plus any active current.json under ~/.local/share/phosphor/palettes/).

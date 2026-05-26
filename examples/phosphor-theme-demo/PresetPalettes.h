@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
-
-#include <PhosphorTheme/phosphortheme_export.h>
 
 #include <QObject>
 #include <QString>
@@ -10,7 +8,7 @@
 #include <QVariantMap>
 #include <QtQmlIntegration/qqmlintegration.h>
 
-namespace PhosphorTheme {
+namespace PhosphorThemeDemo {
 
 // Hand-curated contrasting palettes used to demonstrate live retinting
 // without depending on matugen or an on-disk JSON.
@@ -20,11 +18,11 @@ namespace PhosphorTheme {
 // every bound surface in one shot — same code path the matugen runner
 // uses when a wallpaper changes.
 //
-// The list is intentionally small (dark / light / sunset / forest) — this
-// is a demonstration aid, not a theme distribution channel. Real themes
-// ship as JSON under `~/.local/share/phosphor/palettes/` and load through
-// PaletteStore directly.
-class PHOSPHORTHEME_EXPORT PresetPalettes : public QObject
+// Demo-only. Not part of the phosphor-theme public API: real themes
+// ship as JSON under `~/.local/share/phosphor/palettes/` (or similar)
+// and load through PaletteStore directly. Hardcoded named palettes
+// don't belong in a library third-party shells consume.
+class PresetPalettes : public QObject
 {
     Q_OBJECT
     QML_ELEMENT
@@ -58,4 +56,4 @@ public:
     [[nodiscard]] Q_INVOKABLE QVariantMap byName(const QString& name) const;
 };
 
-} // namespace PhosphorTheme
+} // namespace PhosphorThemeDemo
