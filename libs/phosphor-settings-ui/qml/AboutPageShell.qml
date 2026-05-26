@@ -56,21 +56,37 @@ Kirigami.ScrollablePage {
     title: qsTr("About")
 
     ColumnLayout {
-        width: root.width - root.leftPadding - root.rightPadding
-        spacing: Kirigami.Units.largeSpacing
-
         // ── Top content slot ──────────────────────────────────────
         // Component-based injection — the consumer supplies a
         // Component, this Loader instantiates it. The loader is
         // visible (and the separator below shows) only when a
         // Component has been provided.
+
+        width: root.width - root.leftPadding - root.rightPadding
+        spacing: Kirigami.Units.largeSpacing
+
+        // Critical: the Loader fills the layout's width AND adopts
+        // the loaded item's implicit height. Without
+        // `Layout.preferredHeight: item ? item.implicitHeight : 0`,
+        // the Loader collapses to zero because Layout sizing on a
+        // bare Loader doesn't propagate the child's implicitHeight.
         Loader {
             id: topLoader
 
             Layout.fillWidth: true
+            Layout.preferredHeight: item ? item.implicitHeight : 0
             active: root.topContent !== null
             visible: active
             sourceComponent: root.topContent
+            // The loaded item's parent is the Loader; bind its width
+            // to the Loader's width so child layouts can stretch.
+            onLoaded: {
+                if (item)
+                    item.width = Qt.binding(() => {
+                        return topLoader.width;
+                    });
+
+            }
         }
 
         Kirigami.Separator {
