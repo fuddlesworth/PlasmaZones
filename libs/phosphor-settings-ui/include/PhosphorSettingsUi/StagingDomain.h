@@ -39,10 +39,16 @@ public:
     virtual bool isDirty() const = 0;
 
 public Q_SLOTS:
-    /** Persist staged changes to the backing store. */
+    /** Persist staged changes to the backing store. ApplicationController
+     *  only invokes apply() on domains whose isDirty() returns true, so
+     *  implementations may assume there is staged work to do. Must not
+     *  rely on side effects ("stamp last-applied timestamp", "fire
+     *  notification") that need to run even when clean. */
     virtual void apply() = 0;
 
-    /** Drop staged changes; reload from the backing store. */
+    /** Drop staged changes; reload from the backing store.
+     *  ApplicationController only invokes discard() on dirty domains —
+     *  same side-effect-free contract as apply(). */
     virtual void discard() = 0;
 
     /** Load factory defaults into the staged area. Caller still needs apply()

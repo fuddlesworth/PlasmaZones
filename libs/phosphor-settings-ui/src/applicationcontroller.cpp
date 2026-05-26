@@ -166,12 +166,21 @@ QString ApplicationController::gotoNextPage()
 
 QStringList ApplicationController::parentChainFor(const QString& id) const
 {
+    // Cycle guard for parent-id graph walks. 32 hops is well above any
+    // realistic sidebar nesting (typical settings apps cap at 3-4 levels)
+    // and well below the cost of any pathological cycle.
+    constexpr int kMaxParentChainHops = 32;
+
     QStringList chain;
     QString cursor = id;
-    // Walk parent links upward; cap at 32 hops as a cycle guard.
-    for (int i = 0; i < 32; ++i) {
+    // Walk parent links upward; cap at kMaxParentChainHops as a cycle guard.
+    for (int i = 0; i < kMaxParentChainHops; ++i) {
         if (!m_registry->hasPage(cursor)) {
-            break;
+            // Unknown id is a legitimate query path (QML probing during
+            // bootstrap before pages are registered). Return whatever
+            // we've collected so far without warning — the warning below
+            // is reserved for actual cycle / depth-exceeded cases.
+            return chain;
         }
         const QString parent = m_registry->entry(cursor).parentId;
         if (parent.isEmpty()) {
@@ -180,11 +189,12 @@ QStringList ApplicationController::parentChainFor(const QString& id) const
         chain.prepend(parent);
         cursor = parent;
     }
-    // Reached the loop cap without hitting a root — indicates a cycle
-    // in the registry's parentId graph (programmer error). Warn so
-    // the bug surfaces instead of silently producing a truncated
-    // chain.
-    qWarning() << "ApplicationController::parentChainFor: cycle or depth>32 in registry for id" << id;
+    // Reached the hop cap on a known starting id without hitting a root —
+    // indicates a cycle in the registry's parentId graph (programmer
+    // error). Warn so the bug surfaces instead of silently producing a
+    // truncated chain.
+    qWarning() << "ApplicationController::parentChainFor: cycle or depth>" << kMaxParentChainHops
+               << "in registry for id" << id;
     return chain;
 }
 

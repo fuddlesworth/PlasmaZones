@@ -76,7 +76,11 @@ public:
     /** Navigate to the previous / next navigable page (one with a
      *  qmlSource) in the registry's in-order traversal. The current
      *  page is skipped; the list wraps at boundaries. Returns the id
-     *  we landed on, or an empty string if there's nowhere to go. */
+     *  we landed on, or an empty string if there's nowhere to go.
+     *
+     *  When the current page is not in the navigable list (e.g. unset
+     *  at startup or pointing at a non-navigable category), gotoPrevious
+     *  wraps to the last page and gotoNext wraps to the first. */
     Q_INVOKABLE QString gotoPreviousPage();
     Q_INVOKABLE QString gotoNextPage();
 

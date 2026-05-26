@@ -166,6 +166,15 @@ void SettingsController::defaults()
     Q_EMIT stagedSnappingOrderChanged();
     Q_EMIT stagedTilingOrderChanged();
 
+    // Drop the animations page's in-memory staged edits so the page
+    // matches the reset settings (on-disk animation overrides in
+    // per-event JSON files are a separate concern — reset() doesn't
+    // touch them, and the user would need a dedicated "reset all
+    // animation customizations" entry point to clear those).
+    if (m_animationsPage) {
+        m_animationsPage->revertPending();
+    }
+
     // Notify daemon to reload — reset() wrote defaults to disk
     DaemonDBus::notifyReload();
 

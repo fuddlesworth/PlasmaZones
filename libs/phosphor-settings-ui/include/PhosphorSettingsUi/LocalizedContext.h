@@ -37,6 +37,18 @@ public:
     explicit LocalizedContext(QObject* parent = nullptr);
     ~LocalizedContext() override;
 
+    /**
+     * Returns the current translation context — the explicit setter value
+     * if non-empty, otherwise the live QCoreApplication::applicationName().
+     *
+     * Note: because the empty-state getter reads applicationName() at
+     * call time, the property's effective value can change without a
+     * NOTIFY emit if `setApplicationName()` is called externally while
+     * `m_context` is empty. This is intentional: consumers wanting to
+     * track late-binding application-name changes get them for free.
+     * Consumers wanting a stable value should call setTranslationContext()
+     * explicitly once at startup.
+     */
     QString translationContext() const;
     void setTranslationContext(const QString& ctx);
 

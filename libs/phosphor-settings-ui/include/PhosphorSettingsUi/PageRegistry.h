@@ -28,7 +28,10 @@ class PageController;
  * ownership lives with whoever constructed them (typically the
  * ApplicationController owning a parent QObject chain). Registry entries
  * are never moved or removed at runtime; the catalogue is built at
- * application start and is read-only thereafter.
+ * application start and is read-only thereafter. Dynamic page registration
+ * (post-startup `registerPage` calls) is supported and fires
+ * `pageRegistered`; dynamic removal is intentionally NOT — apps that need
+ * plugin-style hot-unload should rebuild the controller.
  */
 class PHOSPHORSETTINGSUI_EXPORT PageRegistry : public QObject
 {

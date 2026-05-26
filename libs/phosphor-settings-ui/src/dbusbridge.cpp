@@ -4,6 +4,7 @@
 #include "PhosphorSettingsUi/DBusBridge.h"
 
 #include <QDebug>
+#include <QThread>
 #include <QtDBus/QDBusConnection>
 #include <QtDBus/QDBusPendingCall>
 #include <QtDBus/QDBusPendingCallWatcher>
@@ -53,8 +54,8 @@ DBusBridge::DBusBridge(DBusEndpoint endpoint, QObject* parent)
     // syncTimeoutMs is always a usable value.
     if (m_endpoint.syncTimeoutMs <= 0) {
         qWarning() << "PhosphorSettingsUi::DBusBridge: non-positive syncTimeoutMs" << m_endpoint.syncTimeoutMs
-                   << "— clamping to default 500ms";
-        m_endpoint.syncTimeoutMs = 500;
+                   << "— clamping to default" << kDefaultSyncTimeoutMs << "ms";
+        m_endpoint.syncTimeoutMs = kDefaultSyncTimeoutMs;
     }
 }
 
@@ -92,6 +93,14 @@ void DBusBridge::asyncCallOn(const QString& interface, const QString& method, co
     if (!validateEndpoint(m_endpoint, interface, method, "PhosphorSettingsUi::DBusBridge::asyncCallOn")) {
         return;
     }
+    // QDBusConnection::sessionBus() returns a per-thread connection; the
+    // watcher's deleteLater() relies on the event loop on the thread that
+    // owns it. Calling asyncCallOn from a worker thread would attach the
+    // watcher to that thread's loop — usually unintended for a settings-app
+    // bridge that expects single-threaded UI usage. Assert in debug builds
+    // so misuse surfaces before it leaks watchers in production.
+    Q_ASSERT_X(thread() == QThread::currentThread(), "PhosphorSettingsUi::DBusBridge::asyncCallOn",
+               "asyncCallOn must be called from the bridge's owning thread");
     QDBusMessage msg = QDBusMessage::createMethodCall(m_endpoint.service, m_endpoint.objectPath, interface, method);
     if (!args.isEmpty()) {
         msg.setArguments(args);

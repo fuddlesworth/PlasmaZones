@@ -12,6 +12,13 @@
 namespace PhosphorSettingsUi {
 
 /**
+ * Default bound for synchronous DBusBridge::call(): "definitely something
+ * is wrong" rather than expected latency for in-memory daemon hash lookups.
+ * Centralised so the struct default and the clamp warning agree.
+ */
+inline constexpr int kDefaultSyncTimeoutMs = 500;
+
+/**
  * Configured endpoint for a single D-Bus service the settings app talks to.
  *
  *   service       — bus name (e.g. "org.phosphor.plasmazones.daemon")
@@ -19,25 +26,34 @@ namespace PhosphorSettingsUi {
  *   interface     — default interface used by call()/asyncCall(). Apps that
  *                   talk to multiple interfaces on the same object call
  *                   callOn() / asyncCallOn() with an explicit interface.
- *   syncTimeoutMs — bound for synchronous calls. The default of 500 ms is
- *                   "definitely something is wrong" rather than expected
- *                   latency for in-memory daemon hash lookups.
+ *   syncTimeoutMs — bound for synchronous calls; see kDefaultSyncTimeoutMs.
+ *
+ * The struct is a POD passed across the lib boundary by value, so it is
+ * exported for visibility-hidden builds — downstream consumers need typeinfo
+ * symbols to construct, copy, and pass DBusEndpoint instances cleanly.
  */
-struct DBusEndpoint
+struct PHOSPHORSETTINGSUI_EXPORT DBusEndpoint
 {
     QString service;
     QString objectPath;
     QString interface;
-    int syncTimeoutMs = 500;
+    int syncTimeoutMs = kDefaultSyncTimeoutMs;
 };
 
 /**
  * Thin wrapper around QDBusConnection::sessionBus() that bakes in a
- * pre-configured endpoint. Replaces the ad-hoc dbusutils.h pattern where
- * every call site had to repeat the service / path / interface constants.
+ * pre-configured endpoint. Replaces the ad-hoc pattern of repeating
+ * service / path / interface constants at every call site.
  *
  * The bridge holds no state beyond its endpoint and is safe to construct
  * once per settings app and pass to whatever pages need daemon access.
+ *
+ * Signal subscription (QDBusConnection::sessionBus().connect(...)) is not
+ * wrapped — D-Bus signals require string-based slot signatures that Qt's
+ * member-function-pointer overloads cannot synthesise, and the current
+ * settings-app callers prefer to keep that one-off plumbing local to the
+ * subscribing class. Add a typed subscribe() helper here if a future
+ * consumer needs symmetric subscribe/unsubscribe at the bridge level.
  */
 class PHOSPHORSETTINGSUI_EXPORT DBusBridge : public QObject
 {

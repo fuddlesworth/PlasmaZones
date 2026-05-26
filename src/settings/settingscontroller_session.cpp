@@ -305,6 +305,11 @@ void SettingsController::requestRunningWindows()
     // Start (or restart) the client-side timeout guard. Repeated calls
     // coalesce — the most recent deadline wins, matching the fire-and-
     // forget semantics on the daemon side.
+    //
+    // Invalidate the cached list so a subsequent timeout truly reflects
+    // "no fresh data" — without this, QML readers would continue to see
+    // the stale list and never realise the refresh attempt failed.
+    m_cachedRunningWindows.clear();
     m_runningWindowsTimeout.start();
     DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Settings),
                            QStringLiteral("requestRunningWindows"));
@@ -363,10 +368,30 @@ bool SettingsController::importAllSettings(const QString& filePath)
         if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
             // Read enough bytes to find the first non-whitespace character.
             // JSON files start with '{' (or '[' for arrays, though config is always an object).
+            QByteArray head = f.peek(256);
+            // Reject non-UTF-8 BOMs explicitly — a UTF-16/UTF-32 file would
+            // not be valid JSON for our config format AND is not legacy INI
+            // either; misclassifying it as INI would corrupt data on
+            // migration. Caller gets the same "not legacy" path which then
+            // fails JSON validation and aborts cleanly.
+            const auto byte = [&head](int i) {
+                return static_cast<unsigned char>(head.at(i));
+            };
+            if (head.size() >= 4 && byte(0) == 0x00 && byte(1) == 0x00 && byte(2) == 0xFE && byte(3) == 0xFF) {
+                qCWarning(PlasmaZones::lcCore) << "Import file has UTF-32 BE BOM, refusing:" << filePath;
+                return false;
+            }
+            if (head.size() >= 4 && byte(0) == 0xFF && byte(1) == 0xFE && byte(2) == 0x00 && byte(3) == 0x00) {
+                qCWarning(PlasmaZones::lcCore) << "Import file has UTF-32 LE BOM, refusing:" << filePath;
+                return false;
+            }
+            if (head.size() >= 2 && ((byte(0) == 0xFE && byte(1) == 0xFF) || (byte(0) == 0xFF && byte(1) == 0xFE))) {
+                qCWarning(PlasmaZones::lcCore) << "Import file has UTF-16 BOM, refusing:" << filePath;
+                return false;
+            }
+            head = head.trimmed();
             // Skip UTF-8 BOM (EF BB BF) if present — trimmed() only strips ASCII whitespace.
-            QByteArray head = f.peek(256).trimmed();
-            if (head.size() >= 3 && static_cast<unsigned char>(head.at(0)) == 0xEF
-                && static_cast<unsigned char>(head.at(1)) == 0xBB && static_cast<unsigned char>(head.at(2)) == 0xBF) {
+            if (head.size() >= 3 && byte(0) == 0xEF && byte(1) == 0xBB && byte(2) == 0xBF) {
                 head = head.mid(3).trimmed();
             }
             isLegacyIni = !head.isEmpty() && head.at(0) != '{';
@@ -419,10 +444,18 @@ bool SettingsController::importAllSettings(const QString& filePath)
     }
 
     if (!ok) {
-        // Restore backup on failure
+        // Restore backup on failure. Use rename-then-verify so we never
+        // delete the (possibly still-good) configPath without proof the
+        // backup is in place — a failed rename would otherwise leave the
+        // user with no config file at all.
         if (QFile::exists(backupPath)) {
-            QFile::remove(configPath);
-            QFile::rename(backupPath, configPath);
+            if (QFile::exists(configPath)) {
+                QFile::remove(configPath);
+            }
+            if (!QFile::rename(backupPath, configPath)) {
+                qCWarning(PlasmaZones::lcCore)
+                    << "Failed to restore config from backup after failed import. Backup remains at:" << backupPath;
+            }
         }
     } else {
         // Clean up backup on success
@@ -432,6 +465,17 @@ bool SettingsController::importAllSettings(const QString& filePath)
         m_loading = true;
         m_settings.load();
         m_loading = false;
+        // Page controllers with their own on-disk staging surfaces
+        // (animations / window-rules) must reload too — m_settings.load()
+        // only refreshes settings.json-backed state. Without these the
+        // imported config disagrees with what the page controllers still
+        // hold in their in-memory snapshots.
+        if (m_animationsPage) {
+            m_animationsPage->revertPending();
+        }
+        if (m_windowRulesPage) {
+            m_windowRulesPage->revert();
+        }
         DaemonDBus::notifyReload();
         setNeedsSave(false);
     }
