@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.13] - 2026-05-26
+
+### Fixed
+
+- **Windows from disabled monitors got pulled into the active autotile zone after DPMS sleep** ([#527](https://github.com/fuddlesworth/PlasmaZones/discussions/527), [#528](https://github.com/fuddlesworth/PlasmaZones/pull/528)): with one monitor autotile-disabled, waiting for that monitor to power off and then moving the mouse to wake the active monitor would cause windows from the disabled monitor to be tiled into the active zone. KWin reassigns orphaned windows from a dropped-out monitor to a remaining output and fires `outputChanged` for each, indistinguishable from a deliberate cross-screen move. The snapping D-Bus path already guarded for this with `oldScreenStillConnected && !isScreenChangeInProgress()`, but the autotile delegation immediately above ran unconditionally — so the orphan reassignment was mistaken for the window genuinely entering autotile. The disconnect check now feeds both paths via a shared `involuntaryMove` flag; recovery is owned by the daemon's `virtualScreensReconfigured` handler once the screen change has stopped chattering.
+
 ## [3.0.12] - 2026-05-25
 
 ### Fixed
@@ -1419,7 +1425,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.12...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.13...HEAD
+[3.0.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.12...v3.0.13
 [3.0.12]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.11...v3.0.12
 [3.0.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.10...v3.0.11
 [3.0.10]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.9...v3.0.10

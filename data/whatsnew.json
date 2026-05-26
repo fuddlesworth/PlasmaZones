@@ -1,6 +1,13 @@
 {
     "releases": [
         {
+            "version": "3.0.13",
+            "date": "2026-05-26",
+            "highlights": [
+                "Fixed windows from disabled monitors being pulled into the active autotile zone after DPMS sleep — the autotile path now skips KWin's orphan-window reassignment, matching the existing snapping-side guard (#527, #528)"
+            ]
+        },
+        {
             "version": "3.0.12",
             "date": "2026-05-25",
             "highlights": [
