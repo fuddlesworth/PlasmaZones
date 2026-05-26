@@ -32,6 +32,10 @@
 #include "version.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
+// std::make_unique<WindowRuleStore> in the ctor needs the complete
+// type. The header forward-declares it to avoid pulling the
+// dependency graph into every consumer of SettingsController.
+#include <PhosphorWindowRule/WindowRuleStore.h>
 
 #include "../core/shaderregistry.h"
 #include "snappingshaderspagecontroller.h"
@@ -830,11 +834,13 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     // passed via `--page` or D-Bus lands on a real leaf instead of triggering
     // the generic "Unknown settings page" warning.
     static const QHash<QString, QString> redirects{
+        {QStringLiteral("display"), QStringLiteral("virtualscreens")},
         {QStringLiteral("snapping"), QStringLiteral("snapping-appearance")},
         {QStringLiteral("tiling"), QStringLiteral("tiling-appearance")},
         {QStringLiteral("animations"), QStringLiteral("animations-general")},
         {QStringLiteral("animations-surfaces"), QStringLiteral("animations-windows")},
         {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
+        {QStringLiteral("rules"), QStringLiteral("window-rules")},
     };
     return redirects;
 }
@@ -878,6 +884,14 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
+        // Top-level inline-collapsible parents must also propagate
+        // dirty state from their leaves — without these entries the
+        // sidebar's collapsed dirty badge stays cold even when a
+        // child page is dirty. Mirrors the registry topology in
+        // buildApplicationController() and the legacy _childItems
+        // map in src/settings/qml/Main.qml.
+        {QStringLiteral("display"), {QStringLiteral("virtualscreens"), QStringLiteral("layouts")}},
+        {QStringLiteral("rules"), {QStringLiteral("window-rules"), QStringLiteral("exclusions")}},
     };
     return groups;
 }

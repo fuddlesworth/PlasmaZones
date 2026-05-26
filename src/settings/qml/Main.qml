@@ -140,13 +140,20 @@ PhosphorUi.SettingsAppWindow {
     }
 
     // ── Ctrl+PgUp / Ctrl+PgDown — step through navigable pages ──────
+    // Guarded: page navigation must not fire while any of the modal
+    // sub-dialogs is open (whatsNewDialog, resetConfirmDialog,
+    // defaultsConfirmDialog, shortcut overlay). Without the guard the
+    // user can mutate the underlying page state while interacting
+    // with a confirm prompt.
     Shortcut {
         sequence: "Ctrl+PgUp"
+        enabled: !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !window._showShortcuts
         onActivated: settingsController.app.gotoPreviousPage()
     }
 
     Shortcut {
         sequence: "Ctrl+PgDown"
+        enabled: !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !window._showShortcuts
         onActivated: settingsController.app.gotoNextPage()
     }
 
@@ -155,7 +162,11 @@ PhosphorUi.SettingsAppWindow {
         sequence: "?"
         enabled: {
             // Don't toggle the overlay while the user is typing in a
-            // text field — `?` is a legitimate character there.
+            // text field — `?` is a legitimate character there. The
+            // Accessible.role fallback catches TextField/TextArea
+            // (Qt Quick Controls 2 wrappers) which subclass neither
+            // TextInput nor TextEdit directly but report EditableText
+            // / PasswordText through their AT-SPI role.
             var item = window.activeFocusItem;
             if (!item)
                 return true;

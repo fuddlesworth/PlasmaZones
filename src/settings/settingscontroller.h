@@ -29,6 +29,16 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
+namespace PhosphorWindowRule {
+// Forward-declared for the `std::unique_ptr<WindowRuleStore>` member
+// below. The complete type is needed only in settingscontroller.cpp
+// (where m_localRuleStore is constructed); pulling
+// <PhosphorWindowRule/WindowRuleStore.h> into the header would force
+// every consumer of this controller to re-parse the WindowRuleStore
+// dependency graph.
+class WindowRuleStore;
+}
+
 namespace PlasmaZones {
 class ShaderRegistry;
 }
