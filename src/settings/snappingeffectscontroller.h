@@ -5,6 +5,7 @@
 
 #include "../config/configdefaults.h"
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 #include <QStandardPaths>
 #include <QStringLiteral>
@@ -17,7 +18,7 @@ namespace PlasmaZones {
 /// sliders, plus a one-shot `cavaAvailable` check (runs `which cava` at
 /// controller construction). Live effect toggles are on Settings and
 /// bind directly via `appSettings.X`.
-class SnappingEffectsController : public QObject
+class SnappingEffectsController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
@@ -28,7 +29,21 @@ class SnappingEffectsController : public QObject
     Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
 
 public:
-    using QObject::QObject;
+    explicit SnappingEffectsController(QObject* parent = nullptr)
+        : PhosphorSettingsUi::PageController(QStringLiteral("snapping-effects"), parent)
+    {
+    }
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     int shaderFrameRateMin() const
     {

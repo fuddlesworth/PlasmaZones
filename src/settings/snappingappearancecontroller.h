@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 #include <QString>
 
@@ -23,7 +24,7 @@ class Settings;
 ///      Q_PROPERTY on Settings and mark dirty through the meta-loop, but
 ///      the top-level load path needs the explicit signal to cover any
 ///      batched writes that don't individually trip a NOTIFY.
-class SnappingAppearanceController : public QObject
+class SnappingAppearanceController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
@@ -34,6 +35,17 @@ class SnappingAppearanceController : public QObject
 
 public:
     explicit SnappingAppearanceController(Settings* settings, QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     int borderWidthMin() const;
     int borderWidthMax() const;

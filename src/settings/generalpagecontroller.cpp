@@ -9,7 +9,7 @@
 namespace PlasmaZones {
 
 GeneralPageController::GeneralPageController(Settings* settings, QObject* parent)
-    : QObject(parent)
+    : PhosphorSettingsUi::PageController(QStringLiteral("general"), parent)
 {
     Q_ASSERT(settings);
 

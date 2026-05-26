@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 #include <QVariantList>
 
@@ -23,7 +24,7 @@ class Settings;
 /// already wires the NOTIFY to `onSettingsPropertyChanged()`. This class
 /// just forwards the NOTIFY to QML and caches the derived boolean so it
 /// only fires when it actually flips.
-class TilingBehaviorController : public QObject
+class TilingBehaviorController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
@@ -35,6 +36,17 @@ class TilingBehaviorController : public QObject
 
 public:
     explicit TilingBehaviorController(Settings* settings, QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     bool alwaysReinsertIntoStack() const;
     QVariantList autotileDragInsertTriggers() const;

@@ -11,7 +11,7 @@
 namespace PlasmaZones {
 
 EditorPageController::EditorPageController(Settings* settings, QObject* parent)
-    : QObject(parent)
+    : PhosphorSettingsUi::PageController(QStringLiteral("editor"), parent)
     , m_settings(settings)
 {
     Q_ASSERT(m_settings);

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -41,12 +42,13 @@ namespace PlasmaZones {
  * The controller is the only thing on the settings side that knows the D-Bus
  * shape; the model and QML never touch the wire.
  */
-class WindowRuleController : public QObject
+class WindowRuleController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
     Q_PROPERTY(WindowRuleModel* model READ model CONSTANT)
-    Q_PROPERTY(bool dirty READ isDirty NOTIFY dirtyChanged)
+    // `dirty` Q_PROPERTY + `dirtyChanged()` signal are inherited from
+    // PhosphorSettingsUi::StagingDomain via PageController — do not redeclare.
     Q_PROPERTY(bool daemonReachable READ daemonReachable NOTIFY daemonReachableChanged)
     /// True when a daemon `rulesChanged` broadcast arrived while the page had
     /// unsaved staged edits — `reload()` skipped the refresh to avoid stomping
@@ -60,6 +62,13 @@ class WindowRuleController : public QObject
 public:
     explicit WindowRuleController(QObject* parent = nullptr);
     ~WindowRuleController() override;
+
+    /// PhosphorSettingsUi::StagingDomain contract. apply() forwards to
+    /// commit() (the staged set goes to the daemon); discard() forwards to
+    /// revert() (the daemon's set is re-fetched into the model).
+    bool isDirty() const override;
+    void apply() override;
+    void discard() override;
 
     /// Wire the screen-id / activity-uuid / layout-id → display-name lookups
     /// used by the model's `matchSummary` and by the controller's own
@@ -76,11 +85,6 @@ public:
     WindowRuleModel* model()
     {
         return &m_model;
-    }
-
-    bool isDirty() const
-    {
-        return m_dirty;
     }
 
     bool daemonReachable() const
@@ -287,7 +291,7 @@ public:
     Q_INVOKABLE bool matchIsContextOnly(const QVariantMap& matchJson) const;
 
 Q_SIGNALS:
-    void dirtyChanged();
+    // dirtyChanged() inherited from StagingDomain.
     void daemonReachableChanged();
     void daemonChangedWhileDirtyChanged();
     /// Emitted on the async fetch reply path after the model has been

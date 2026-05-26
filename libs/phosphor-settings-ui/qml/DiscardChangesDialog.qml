@@ -8,31 +8,72 @@ import org.kde.kirigami as Kirigami
 /**
  * "You have unsaved changes" close-confirmation dialog.
  *
- * Emits discardConfirmed() when the user confirms; emits no signal on
- * Cancel (caller should keep the window open). Stateless — caller is
- * responsible for tracking whether changes exist.
+ * Two modes:
+ *   - Default (`applyAvailable: false`): two actions, Discard / Keep
+ *     Editing. Emits `discardConfirmed()` on Discard; no signal on
+ *     Keep.
+ *   - 3-action (`applyAvailable: true`): adds an Apply button which
+ *     emits `applyConfirmed()` — for apps whose preferred answer to
+ *     "you have unsaved changes" is to commit them, not throw them
+ *     away (matches the legacy PlasmaZones Apply / Discard / Cancel
+ *     prompt).
+ *
+ * Stateless — caller is responsible for tracking whether changes
+ * exist and for wiring the signals into the appropriate
+ * controller.applyAll() / discardAll() / close() actions.
  */
 Kirigami.PromptDialog {
     id: root
 
+    /** When true, the dialog adds an Apply action that emits
+     *  applyConfirmed() — typically wired to controller.applyAll()
+     *  followed by closing the window. */
+    property bool applyAvailable: false
+
     signal discardConfirmed()
+    signal applyConfirmed()
 
     title: qsTr("Discard unsaved changes?")
-    subtitle: qsTr("You have unsaved settings. Closing now will discard them.")
+    subtitle: root.applyAvailable ? qsTr("You have unsaved settings. Apply them now, or close without saving?") : qsTr("You have unsaved settings. Closing now will discard them.")
     standardButtons: Kirigami.Dialog.NoButton
-    customFooterActions: [
-        Kirigami.Action {
-            text: qsTr("Discard")
-            icon.name: "dialog-cancel"
-            onTriggered: {
-                root.close();
-                root.discardConfirmed();
-            }
-        },
-        Kirigami.Action {
-            text: qsTr("Keep Editing")
-            icon.name: "dialog-ok"
-            onTriggered: root.close()
+    customFooterActions: {
+        const actions = [];
+        if (root.applyAvailable)
+            actions.push(applyAction);
+
+        actions.push(discardAction);
+        actions.push(keepAction);
+        return actions;
+    }
+
+    Kirigami.Action {
+        id: applyAction
+
+        text: qsTr("Apply")
+        icon.name: "dialog-ok-apply"
+        onTriggered: {
+            root.close();
+            root.applyConfirmed();
         }
-    ]
+    }
+
+    Kirigami.Action {
+        id: discardAction
+
+        text: qsTr("Discard")
+        icon.name: "dialog-cancel"
+        onTriggered: {
+            root.close();
+            root.discardConfirmed();
+        }
+    }
+
+    Kirigami.Action {
+        id: keepAction
+
+        text: root.applyAvailable ? qsTr("Cancel") : qsTr("Keep Editing")
+        icon.name: "dialog-ok"
+        onTriggered: root.close()
+    }
+
 }

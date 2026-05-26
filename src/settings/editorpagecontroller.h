@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 
 namespace PlasmaZones {
@@ -24,7 +25,7 @@ class Settings;
 /// [Editor] group, so SettingsController's meta-object-loop dirty wiring
 /// skips it; this forwarder replaces the explicit connect() list that used
 /// to sit in SettingsController's constructor.
-class EditorPageController : public QObject
+class EditorPageController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
@@ -54,6 +55,17 @@ class EditorPageController : public QObject
 
 public:
     explicit EditorPageController(Settings* settings, QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     QString duplicateShortcut() const;
     QString splitHorizontalShortcut() const;

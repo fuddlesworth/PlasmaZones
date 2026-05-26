@@ -14,7 +14,7 @@
 namespace PlasmaZones {
 
 SnappingAppearanceController::SnappingAppearanceController(Settings* settings, QObject* parent)
-    : QObject(parent)
+    : PhosphorSettingsUi::PageController(QStringLiteral("snapping-appearance"), parent)
     , m_settings(settings)
 {
     Q_ASSERT(m_settings);

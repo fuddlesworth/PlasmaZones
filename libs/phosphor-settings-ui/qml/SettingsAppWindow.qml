@@ -26,6 +26,15 @@ Kirigami.ApplicationWindow {
      *  drill state on startup (`sidebar.drillInto(parentId)`), toggle
      *  collapsible categories programmatically, or react to navigation. */
     property alias sidebar: sidebar
+    /** When true, the close-confirmation prompt offers an Apply action
+     *  (Apply / Discard / Cancel) in addition to Discard / Keep Editing.
+     *  Defaults false; flip on for apps whose preferred answer to "you
+     *  have unsaved changes" is to commit them. */
+    property bool closePromptShowsApply: false
+    /** Alias to the close-confirmation dialog itself, for consumers
+     *  that need to retitle / restyle it. Read-only — the property
+     *  the alias points to is `id: discardDialog` declared below. */
+    property alias closeDialog: discardDialog
 
     width: 1100
     height: 720
@@ -40,8 +49,13 @@ Kirigami.ApplicationWindow {
     DiscardChangesDialog {
         id: discardDialog
 
+        applyAvailable: root.closePromptShowsApply
         onDiscardConfirmed: {
             root.controller.discardAll();
+            Qt.callLater(root.close);
+        }
+        onApplyConfirmed: {
+            root.controller.applyAll();
             Qt.callLater(root.close);
         }
     }

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 #include <QVariantList>
 
@@ -28,7 +29,7 @@ class Settings;
 /// therefore only needs to forward NOTIFY signals to QML — no additional
 /// `changed()` bridging (the editor-page case needed it because its
 /// properties are NOT Q_PROPERTY on Settings).
-class SnappingBehaviorController : public QObject
+class SnappingBehaviorController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
@@ -48,6 +49,17 @@ class SnappingBehaviorController : public QObject
 
 public:
     explicit SnappingBehaviorController(Settings* settings, QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     bool alwaysActivateOnDrag() const;
     QVariantList dragActivationTriggers() const;

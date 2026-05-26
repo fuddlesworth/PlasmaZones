@@ -62,7 +62,7 @@ static bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
 SnappingShadersPageController::SnappingShadersPageController(PlasmaZones::ShaderRegistry* shaderRegistry,
                                                              PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
                                                              QObject* parent)
-    : QObject(parent)
+    : PhosphorSettingsUi::PageController(QStringLiteral("snapping-shaders"), parent)
     , m_shaderRegistry(shaderRegistry)
     , m_layoutRegistry(layoutRegistry)
 {

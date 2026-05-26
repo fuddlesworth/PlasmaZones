@@ -10,7 +10,7 @@
 namespace PlasmaZones {
 
 TilingBehaviorController::TilingBehaviorController(Settings* settings, QObject* parent)
-    : QObject(parent)
+    : PhosphorSettingsUi::PageController(QStringLiteral("tiling-behavior"), parent)
     , m_settings(settings)
 {
     Q_ASSERT(m_settings);

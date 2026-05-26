@@ -151,10 +151,15 @@ using namespace animations_controller_detail;
 
 AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry,
                                                    ISettings* settings, QObject* parent)
-    : QObject(parent)
+    : PhosphorSettingsUi::PageController(QStringLiteral("animations"), parent)
     , m_shaderRegistry(shaderRegistry)
     , m_settings(settings)
 {
+    // Forward the existing pendingChangesChanged() signal to the
+    // framework's dirtyChanged() so ApplicationController picks up
+    // animation-page edits as part of the global dirty flag.
+    connect(this, &AnimationsPageController::pendingChangesChanged, this,
+            &PhosphorSettingsUi::StagingDomain::dirtyChanged);
     // Forward the snapshot helper as a callable so the sub-services can
     // capture pre-edit content without coupling to the controller's
     // m_pendingFileSnapshots layout.
@@ -253,6 +258,21 @@ bool AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
 bool AnimationsPageController::hasPendingChanges() const
 {
     return !m_pendingFileSnapshots.isEmpty() || m_shaderTreeDirty;
+}
+
+bool AnimationsPageController::isDirty() const
+{
+    return hasPendingChanges();
+}
+
+void AnimationsPageController::apply()
+{
+    commitPending();
+}
+
+void AnimationsPageController::discard()
+{
+    revertPending();
 }
 
 void AnimationsPageController::commitPending()

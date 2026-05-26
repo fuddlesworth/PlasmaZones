@@ -58,7 +58,7 @@ WindowRule ruleFromVariant(const QVariantMap& map)
 } // namespace
 
 WindowRuleController::WindowRuleController(QObject* parent)
-    : QObject(parent)
+    : PhosphorSettingsUi::PageController(QStringLiteral("window-rules"), parent)
 {
     // Re-fetch from the daemon whenever it broadcasts a rule change — but only
     // while the page is clean, so a daemon-side write doesn't silently stomp
@@ -115,6 +115,26 @@ void WindowRuleController::setLayoutLookup(WindowRuleModel::LabelLookup fn)
     // Also forward to the model so its `actionSummary` can resolve layoutId /
     // algorithm-token wire values when building the rule-list captions.
     m_model.setLayoutLabelLookup(std::move(fn));
+}
+
+bool WindowRuleController::isDirty() const
+{
+    return m_dirty;
+}
+
+void WindowRuleController::apply()
+{
+    // commit() pushes the staged rule set to the daemon. The bool return
+    // is consulted by SettingsController on the explicit save() path, but
+    // the framework's StagingDomain contract is fire-and-forget — if the
+    // push fails commit() leaves m_dirty true, dirtyChanged() doesn't fire,
+    // and ApplicationController sees the page as still dirty next tick.
+    commit(/*force=*/false);
+}
+
+void WindowRuleController::discard()
+{
+    revert();
 }
 
 void WindowRuleController::setDirty(bool dirty)

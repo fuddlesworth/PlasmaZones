@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QByteArray>
 #include <QHash>
 #include <QObject>
@@ -56,7 +57,7 @@ class MotionSetStore;
 /// (motion-set CRUD). Their signals are forwarded to the controller's
 /// own signals via `connect()` so QML rebinds without poking at the
 /// sub-services directly.
-class AnimationsPageController : public QObject
+class AnimationsPageController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
@@ -74,6 +75,14 @@ public:
     explicit AnimationsPageController(PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry = nullptr,
                                       ISettings* settings = nullptr, QObject* parent = nullptr);
     ~AnimationsPageController() override;
+
+    /// PhosphorSettingsUi::StagingDomain contract. The animations page's
+    /// own pendingChanges API is the per-page staging — wire it through.
+    /// dirtyChanged() (inherited from StagingDomain) is emitted alongside
+    /// pendingChangesChanged() so ApplicationController can react.
+    bool isDirty() const override;
+    void apply() override;
+    void discard() override;
 
     qreal springOmegaMin() const
     {

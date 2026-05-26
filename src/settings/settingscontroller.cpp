@@ -598,131 +598,137 @@ void SettingsController::buildApplicationController()
 
     const QString qmlPrefix = QStringLiteral("qrc:/qt/qml/org/plasmazones/settings/qml/");
 
-    // Helper: register one page. `delegate` may be nullptr for category
-    // headings that have children but no page of their own (the Sidebar
-    // treats them as drill-down parents rather than navigable leaves).
-    // `collapsible` makes the sidebar render the entry as an inline-
-    // expandable accordion header instead of a drill-down target.
-    const auto reg = [this, &qmlPrefix](const QString& id, QObject* delegate, const QString& parentId,
-                                        const QString& title, const QString& qmlFile, const QString& icon,
-                                        bool collapsible = false) {
-        auto* adapter = new PageAdapter(id, delegate, m_app);
+    // Two helpers — both delegate to ApplicationController::registerPage:
+    //   regPage:     the page already has its own PageController subclass
+    //                (the existing m_xxxPage controllers, now PhosphorSettingsUi::
+    //                PageController-derived).
+    //   regVirtual:  no concrete controller — either a drill-down parent /
+    //                inline-collapsible category header, or a leaf whose QML
+    //                page binds to a Settings property directly (no per-page
+    //                controller). Uses PageAdapter as the framework-facing
+    //                identity so the registry still gets a stable
+    //                PageController*.
+    const auto regPage = [this, &qmlPrefix](PhosphorSettingsUi::PageController* page, const QString& parentId,
+                                            const QString& title, const QString& qmlFile, const QString& icon,
+                                            bool collapsible = false) {
+        const QUrl source = qmlFile.isEmpty() ? QUrl() : QUrl(qmlPrefix + qmlFile);
+        m_app->registerPage(page, parentId, title, source, icon, collapsible);
+    };
+    const auto regVirtual = [this, &qmlPrefix](const QString& id, const QString& parentId, const QString& title,
+                                               const QString& qmlFile, const QString& icon, bool collapsible = false) {
+        auto* adapter = new PageAdapter(id, /*delegate=*/nullptr, m_app);
         const QUrl source = qmlFile.isEmpty() ? QUrl() : QUrl(qmlPrefix + qmlFile);
         m_app->registerPage(adapter, parentId, title, source, icon, collapsible);
     };
 
     // Top-level entries — matches the legacy _mainItems in Main.qml.
-    reg(QStringLiteral("overview"), nullptr, QString(), PzI18n::tr("Overview"), QStringLiteral("MonitorStatePage.qml"),
-        QStringLiteral("monitor"));
-    reg(QStringLiteral("display"), nullptr, QString(), PzI18n::tr("Display"), QString(),
-        QStringLiteral("preferences-desktop-display"), /*collapsible=*/true);
-    reg(QStringLiteral("snapping"), nullptr, QString(), PzI18n::tr("Snapping"), QString(),
-        QStringLiteral("view-split-left-right"));
-    reg(QStringLiteral("tiling"), nullptr, QString(), PzI18n::tr("Tiling"), QString(),
-        QStringLiteral("window-duplicate"));
-    reg(QStringLiteral("animations"), m_animationsPage, QString(), PzI18n::tr("Animations"), QString(),
-        QStringLiteral("media-playback-start"));
-    reg(QStringLiteral("rules"), nullptr, QString(), PzI18n::tr("Rules"), QString(),
-        QStringLiteral("view-list-details"), /*collapsible=*/true);
-    reg(QStringLiteral("editor"), m_editorPage, QString(), PzI18n::tr("Editor"), QStringLiteral("EditorPage.qml"),
-        QStringLiteral("document-edit"));
-    reg(QStringLiteral("general"), m_generalPage, QString(), PzI18n::tr("General"), QStringLiteral("GeneralPage.qml"),
-        QStringLiteral("configure"));
-    reg(QStringLiteral("about"), nullptr, QString(), PzI18n::tr("About"), QStringLiteral("AboutPage.qml"),
-        QStringLiteral("help-about"));
+    regVirtual(QStringLiteral("overview"), QString(), PzI18n::tr("Overview"), QStringLiteral("MonitorStatePage.qml"),
+               QStringLiteral("monitor"));
+    regVirtual(QStringLiteral("display"), QString(), PzI18n::tr("Display"), QString(),
+               QStringLiteral("preferences-desktop-display"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("snapping"), QString(), PzI18n::tr("Snapping"), QString(),
+               QStringLiteral("view-split-left-right"));
+    regVirtual(QStringLiteral("tiling"), QString(), PzI18n::tr("Tiling"), QString(),
+               QStringLiteral("window-duplicate"));
+    regPage(m_animationsPage, QString(), PzI18n::tr("Animations"), QString(), QStringLiteral("media-playback-start"));
+    regVirtual(QStringLiteral("rules"), QString(), PzI18n::tr("Rules"), QString(), QStringLiteral("view-list-details"),
+               /*collapsible=*/true);
+    regPage(m_editorPage, QString(), PzI18n::tr("Editor"), QStringLiteral("EditorPage.qml"),
+            QStringLiteral("document-edit"));
+    regPage(m_generalPage, QString(), PzI18n::tr("General"), QStringLiteral("GeneralPage.qml"),
+            QStringLiteral("configure"));
+    regVirtual(QStringLiteral("about"), QString(), PzI18n::tr("About"), QStringLiteral("AboutPage.qml"),
+               QStringLiteral("help-about"));
 
     // Display children
-    reg(QStringLiteral("virtualscreens"), nullptr, QStringLiteral("display"), PzI18n::tr("Virtual Screens"),
-        QStringLiteral("VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"));
-    reg(QStringLiteral("layouts"), nullptr, QStringLiteral("display"), PzI18n::tr("Layouts"),
-        QStringLiteral("LayoutsPage.qml"), QStringLiteral("view-grid"));
+    regVirtual(QStringLiteral("virtualscreens"), QStringLiteral("display"), PzI18n::tr("Virtual Screens"),
+               QStringLiteral("VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"));
+    regVirtual(QStringLiteral("layouts"), QStringLiteral("display"), PzI18n::tr("Layouts"),
+               QStringLiteral("LayoutsPage.qml"), QStringLiteral("view-grid"));
 
     // Rules children
-    reg(QStringLiteral("window-rules"), m_windowRulesPage, QStringLiteral("rules"), PzI18n::tr("Window Rules"),
-        QStringLiteral("WindowRulesPage.qml"), QStringLiteral("view-list-details"));
-    reg(QStringLiteral("exclusions"), nullptr, QStringLiteral("rules"), PzI18n::tr("Exclusions"),
-        QStringLiteral("ExclusionsPage.qml"), QStringLiteral("dialog-cancel"));
+    regPage(m_windowRulesPage, QStringLiteral("rules"), PzI18n::tr("Window Rules"),
+            QStringLiteral("WindowRulesPage.qml"), QStringLiteral("view-list-details"));
+    regVirtual(QStringLiteral("exclusions"), QStringLiteral("rules"), PzI18n::tr("Exclusions"),
+               QStringLiteral("ExclusionsPage.qml"), QStringLiteral("dialog-cancel"));
 
     // Snapping children — the *-cat entries mirror the legacy collapsible
     // category headers (Visual / Behavior / Configuration). They have no
     // delegate and no qmlSource; PageHost.qml shows the placeholder when one
     // of them is the active page.
-    reg(QStringLiteral("snapping-visual-cat"), nullptr, QStringLiteral("snapping"), PzI18n::tr("Visual"), QString(),
-        QStringLiteral("preferences-desktop-color"), /*collapsible=*/true);
-    reg(QStringLiteral("snapping-behavior-cat"), nullptr, QStringLiteral("snapping"), PzI18n::tr("Behavior"), QString(),
-        QStringLiteral("preferences-system"), /*collapsible=*/true);
-    reg(QStringLiteral("snapping-config-cat"), nullptr, QStringLiteral("snapping"), PzI18n::tr("Configuration"),
-        QString(), QStringLiteral("configure"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("snapping-visual-cat"), QStringLiteral("snapping"), PzI18n::tr("Visual"), QString(),
+               QStringLiteral("preferences-desktop-color"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("snapping-behavior-cat"), QStringLiteral("snapping"), PzI18n::tr("Behavior"), QString(),
+               QStringLiteral("preferences-system"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("snapping-config-cat"), QStringLiteral("snapping"), PzI18n::tr("Configuration"),
+               QString(), QStringLiteral("configure"), /*collapsible=*/true);
 
-    reg(QStringLiteral("snapping-appearance"), m_snappingAppearancePage, QStringLiteral("snapping-visual-cat"),
-        PzI18n::tr("Appearance"), QStringLiteral("SnappingAppearancePage.qml"),
-        QStringLiteral("preferences-desktop-color"));
-    reg(QStringLiteral("snapping-effects"), m_snappingEffectsPage, QStringLiteral("snapping-visual-cat"),
-        PzI18n::tr("Effects"), QStringLiteral("SnappingEffectsPage.qml"),
-        QStringLiteral("preferences-desktop-effects"));
-    reg(QStringLiteral("snapping-shaders"), m_snappingShadersPage.get(), QStringLiteral("snapping-visual-cat"),
-        PzI18n::tr("Shaders"), QStringLiteral("SnappingShadersPage.qml"),
-        QStringLiteral("preferences-desktop-display"));
+    regPage(m_snappingAppearancePage, QStringLiteral("snapping-visual-cat"), PzI18n::tr("Appearance"),
+            QStringLiteral("SnappingAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
+    regPage(m_snappingEffectsPage, QStringLiteral("snapping-visual-cat"), PzI18n::tr("Effects"),
+            QStringLiteral("SnappingEffectsPage.qml"), QStringLiteral("preferences-desktop-effects"));
+    regPage(m_snappingShadersPage.get(), QStringLiteral("snapping-visual-cat"), PzI18n::tr("Shaders"),
+            QStringLiteral("SnappingShadersPage.qml"), QStringLiteral("preferences-desktop-display"));
 
-    reg(QStringLiteral("snapping-behavior"), m_snappingBehaviorPage, QStringLiteral("snapping-behavior-cat"),
-        PzI18n::tr("Behavior"), QStringLiteral("SnappingBehaviorPage.qml"), QStringLiteral("preferences-system"));
-    reg(QStringLiteral("snapping-zoneselector"), m_snappingZoneSelectorPage, QStringLiteral("snapping-behavior-cat"),
-        PzI18n::tr("Zone Selector"), QStringLiteral("SnappingZoneSelectorPage.qml"), QStringLiteral("view-choose"));
+    regPage(m_snappingBehaviorPage, QStringLiteral("snapping-behavior-cat"), PzI18n::tr("Behavior"),
+            QStringLiteral("SnappingBehaviorPage.qml"), QStringLiteral("preferences-system"));
+    regPage(m_snappingZoneSelectorPage, QStringLiteral("snapping-behavior-cat"), PzI18n::tr("Zone Selector"),
+            QStringLiteral("SnappingZoneSelectorPage.qml"), QStringLiteral("view-choose"));
 
-    reg(QStringLiteral("snapping-ordering"), nullptr, QStringLiteral("snapping-config-cat"), PzI18n::tr("Priority"),
-        QStringLiteral("SnappingOrderingPage.qml"), QStringLiteral("view-sort"));
-    reg(QStringLiteral("snapping-shortcuts"), nullptr, QStringLiteral("snapping-config-cat"),
-        PzI18n::tr("Quick Shortcuts"), QStringLiteral("SnappingQuickShortcutsPage.qml"), QStringLiteral("bookmark"));
+    regVirtual(QStringLiteral("snapping-ordering"), QStringLiteral("snapping-config-cat"), PzI18n::tr("Priority"),
+               QStringLiteral("SnappingOrderingPage.qml"), QStringLiteral("view-sort"));
+    regVirtual(QStringLiteral("snapping-shortcuts"), QStringLiteral("snapping-config-cat"),
+               PzI18n::tr("Quick Shortcuts"), QStringLiteral("SnappingQuickShortcutsPage.qml"),
+               QStringLiteral("bookmark"));
 
     // Tiling children — same shape as snapping.
-    reg(QStringLiteral("tiling-visual-cat"), nullptr, QStringLiteral("tiling"), PzI18n::tr("Visual"), QString(),
-        QStringLiteral("preferences-desktop-color"), /*collapsible=*/true);
-    reg(QStringLiteral("tiling-behavior-cat"), nullptr, QStringLiteral("tiling"), PzI18n::tr("Behavior"), QString(),
-        QStringLiteral("preferences-system"), /*collapsible=*/true);
-    reg(QStringLiteral("tiling-config-cat"), nullptr, QStringLiteral("tiling"), PzI18n::tr("Configuration"), QString(),
-        QStringLiteral("configure"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("tiling-visual-cat"), QStringLiteral("tiling"), PzI18n::tr("Visual"), QString(),
+               QStringLiteral("preferences-desktop-color"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("tiling-behavior-cat"), QStringLiteral("tiling"), PzI18n::tr("Behavior"), QString(),
+               QStringLiteral("preferences-system"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("tiling-config-cat"), QStringLiteral("tiling"), PzI18n::tr("Configuration"), QString(),
+               QStringLiteral("configure"), /*collapsible=*/true);
 
-    reg(QStringLiteral("tiling-appearance"), m_tilingAppearancePage, QStringLiteral("tiling-visual-cat"),
-        PzI18n::tr("Appearance"), QStringLiteral("TilingAppearancePage.qml"),
-        QStringLiteral("preferences-desktop-color"));
-    reg(QStringLiteral("tiling-behavior"), m_tilingBehaviorPage, QStringLiteral("tiling-behavior-cat"),
-        PzI18n::tr("Behavior"), QStringLiteral("TilingBehaviorPage.qml"), QStringLiteral("preferences-system"));
-    reg(QStringLiteral("tiling-algorithm"), m_tilingAlgorithmPage.get(), QStringLiteral("tiling-behavior-cat"),
-        PzI18n::tr("Algorithms"), QStringLiteral("TilingAlgorithmPage.qml"), QStringLiteral("view-grid"));
+    regPage(m_tilingAppearancePage, QStringLiteral("tiling-visual-cat"), PzI18n::tr("Appearance"),
+            QStringLiteral("TilingAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
+    regPage(m_tilingBehaviorPage, QStringLiteral("tiling-behavior-cat"), PzI18n::tr("Behavior"),
+            QStringLiteral("TilingBehaviorPage.qml"), QStringLiteral("preferences-system"));
+    regPage(m_tilingAlgorithmPage.get(), QStringLiteral("tiling-behavior-cat"), PzI18n::tr("Algorithms"),
+            QStringLiteral("TilingAlgorithmPage.qml"), QStringLiteral("view-grid"));
 
-    reg(QStringLiteral("tiling-ordering"), nullptr, QStringLiteral("tiling-config-cat"), PzI18n::tr("Priority"),
-        QStringLiteral("TilingOrderingPage.qml"), QStringLiteral("view-sort"));
-    reg(QStringLiteral("tiling-shortcuts"), nullptr, QStringLiteral("tiling-config-cat"), PzI18n::tr("Quick Shortcuts"),
-        QStringLiteral("TilingQuickShortcutsPage.qml"), QStringLiteral("bookmark"));
+    regVirtual(QStringLiteral("tiling-ordering"), QStringLiteral("tiling-config-cat"), PzI18n::tr("Priority"),
+               QStringLiteral("TilingOrderingPage.qml"), QStringLiteral("view-sort"));
+    regVirtual(QStringLiteral("tiling-shortcuts"), QStringLiteral("tiling-config-cat"), PzI18n::tr("Quick Shortcuts"),
+               QStringLiteral("TilingQuickShortcutsPage.qml"), QStringLiteral("bookmark"));
 
     // Animations children — Surfaces / Library categories drill in.
-    reg(QStringLiteral("animations-general"), nullptr, QStringLiteral("animations"), PzI18n::tr("General"),
-        QStringLiteral("AnimationsGeneralPage.qml"), QStringLiteral("configure"));
-    reg(QStringLiteral("animations-surfaces"), nullptr, QStringLiteral("animations"), PzI18n::tr("Surfaces"), QString(),
-        QStringLiteral("preferences-desktop-multimedia"), /*collapsible=*/true);
-    reg(QStringLiteral("animations-library"), nullptr, QStringLiteral("animations"), PzI18n::tr("Library"), QString(),
-        QStringLiteral("folder-open"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("animations-general"), QStringLiteral("animations"), PzI18n::tr("General"),
+               QStringLiteral("AnimationsGeneralPage.qml"), QStringLiteral("configure"));
+    regVirtual(QStringLiteral("animations-surfaces"), QStringLiteral("animations"), PzI18n::tr("Surfaces"), QString(),
+               QStringLiteral("preferences-desktop-multimedia"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("animations-library"), QStringLiteral("animations"), PzI18n::tr("Library"), QString(),
+               QStringLiteral("folder-open"), /*collapsible=*/true);
 
-    reg(QStringLiteral("animations-windows"), nullptr, QStringLiteral("animations-surfaces"), PzI18n::tr("Windows"),
-        QStringLiteral("AnimationsWindowsPage.qml"), QStringLiteral("window-new"));
-    reg(QStringLiteral("animations-osds"), nullptr, QStringLiteral("animations-surfaces"), PzI18n::tr("OSDs"),
-        QStringLiteral("AnimationsOsdsPage.qml"), QStringLiteral("dialog-information"));
-    reg(QStringLiteral("animations-overlays"), nullptr, QStringLiteral("animations-surfaces"), PzI18n::tr("Overlays"),
-        QStringLiteral("AnimationsOverlaysPage.qml"), QStringLiteral("view-presentation"));
-    reg(QStringLiteral("animations-side-panels"), nullptr, QStringLiteral("animations-surfaces"),
-        PzI18n::tr("Side Panels"), QStringLiteral("AnimationsSidePanelsPage.qml"),
-        QStringLiteral("sidebar-collapse-symbolic"));
-    reg(QStringLiteral("animations-widgets"), nullptr, QStringLiteral("animations-surfaces"), PzI18n::tr("Widgets"),
-        QStringLiteral("AnimationsWidgetsPage.qml"), QStringLiteral("preferences-desktop-theme"));
-    reg(QStringLiteral("animations-editor"), nullptr, QStringLiteral("animations-surfaces"),
-        PzI18n::tr("Layout Editor"), QStringLiteral("AnimationsEditorPage.qml"), QStringLiteral("document-edit"));
+    regVirtual(QStringLiteral("animations-windows"), QStringLiteral("animations-surfaces"), PzI18n::tr("Windows"),
+               QStringLiteral("AnimationsWindowsPage.qml"), QStringLiteral("window-new"));
+    regVirtual(QStringLiteral("animations-osds"), QStringLiteral("animations-surfaces"), PzI18n::tr("OSDs"),
+               QStringLiteral("AnimationsOsdsPage.qml"), QStringLiteral("dialog-information"));
+    regVirtual(QStringLiteral("animations-overlays"), QStringLiteral("animations-surfaces"), PzI18n::tr("Overlays"),
+               QStringLiteral("AnimationsOverlaysPage.qml"), QStringLiteral("view-presentation"));
+    regVirtual(QStringLiteral("animations-side-panels"), QStringLiteral("animations-surfaces"),
+               PzI18n::tr("Side Panels"), QStringLiteral("AnimationsSidePanelsPage.qml"),
+               QStringLiteral("sidebar-collapse-symbolic"));
+    regVirtual(QStringLiteral("animations-widgets"), QStringLiteral("animations-surfaces"), PzI18n::tr("Widgets"),
+               QStringLiteral("AnimationsWidgetsPage.qml"), QStringLiteral("preferences-desktop-theme"));
+    regVirtual(QStringLiteral("animations-editor"), QStringLiteral("animations-surfaces"), PzI18n::tr("Layout Editor"),
+               QStringLiteral("AnimationsEditorPage.qml"), QStringLiteral("document-edit"));
 
-    reg(QStringLiteral("animations-presets"), nullptr, QStringLiteral("animations-library"), PzI18n::tr("Presets"),
-        QStringLiteral("AnimationsPresetsPage.qml"), QStringLiteral("bookmarks"));
-    reg(QStringLiteral("animations-motionsets"), nullptr, QStringLiteral("animations-library"),
-        PzI18n::tr("Motion Sets"), QStringLiteral("AnimationsMotionSetsPage.qml"), QStringLiteral("color-palette"));
-    reg(QStringLiteral("animations-shaders"), nullptr, QStringLiteral("animations-library"), PzI18n::tr("Shaders"),
-        QStringLiteral("AnimationsShadersPage.qml"), QStringLiteral("preferences-desktop-display"));
+    regVirtual(QStringLiteral("animations-presets"), QStringLiteral("animations-library"), PzI18n::tr("Presets"),
+               QStringLiteral("AnimationsPresetsPage.qml"), QStringLiteral("bookmarks"));
+    regVirtual(QStringLiteral("animations-motionsets"), QStringLiteral("animations-library"), PzI18n::tr("Motion Sets"),
+               QStringLiteral("AnimationsMotionSetsPage.qml"), QStringLiteral("color-palette"));
+    regVirtual(QStringLiteral("animations-shaders"), QStringLiteral("animations-library"), PzI18n::tr("Shaders"),
+               QStringLiteral("AnimationsShadersPage.qml"), QStringLiteral("preferences-desktop-display"));
 
     // Bridge SettingsController.save/load to the framework's Apply/Cancel
     // (and to the global dirty flag QML chrome binds to).

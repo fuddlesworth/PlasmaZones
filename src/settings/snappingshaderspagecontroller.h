@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 #include <QString>
 #include <QVariantList>
@@ -42,11 +43,22 @@ namespace PlasmaZones {
 /// independently, FS watching keeps each in sync. The settings-side
 /// registry instance is borrowed (constructor parameter); composition
 /// is owned by `SettingsController`.
-class SnappingShadersPageController : public QObject
+class SnappingShadersPageController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
 public:
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
+
     /// @param shaderRegistry Borrowed; lifetime managed by the caller.
     ///        Pass nullptr to make every Q_INVOKABLE return an empty
     ///        result (useful for unit tests). Takes the PlasmaZones

@@ -20,7 +20,7 @@ namespace PlasmaZones {
 
 TilingAlgorithmController::TilingAlgorithmController(Settings* settings, PhosphorTiles::AlgorithmRegistry* registry,
                                                      QObject* parent)
-    : QObject(parent)
+    : PhosphorSettingsUi::PageController(QStringLiteral("tiling-algorithm"), parent)
     , m_settings(settings)
     , m_registry(registry)
 {

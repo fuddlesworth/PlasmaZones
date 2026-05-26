@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 #include <QString>
 #include <QVariant>
@@ -28,7 +29,7 @@ class Settings;
 /// stay on SettingsController — they're shared across multiple pages /
 /// sub-components (AlgorithmPreview, NewAlgorithmDialog, TilingOrderingPage)
 /// and don't belong to any single page.
-class TilingAlgorithmController : public QObject
+class TilingAlgorithmController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
@@ -43,6 +44,17 @@ class TilingAlgorithmController : public QObject
 public:
     explicit TilingAlgorithmController(Settings* settings, PhosphorTiles::AlgorithmRegistry* registry,
                                        QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     int autotileGapMin() const;
     int autotileGapMax() const;

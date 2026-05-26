@@ -10,7 +10,7 @@
 namespace PlasmaZones {
 
 SnappingBehaviorController::SnappingBehaviorController(Settings* settings, QObject* parent)
-    : QObject(parent)
+    : PhosphorSettingsUi::PageController(QStringLiteral("snapping-behavior"), parent)
     , m_settings(settings)
 {
     Q_ASSERT(m_settings);

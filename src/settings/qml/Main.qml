@@ -33,9 +33,6 @@ PhosphorUi.SettingsAppWindow {
     })
     // Keyboard-shortcut overlay state.
     property bool _showShortcuts: false
-    // Set true when one of the unsaved-changes dialog actions decides
-    // the close should go through unconditionally on the next attempt.
-    property bool _closeConfirmed: false
 
     function showWhatsNew() {
         whatsNewDialog.open();
@@ -53,16 +50,10 @@ PhosphorUi.SettingsAppWindow {
     title: i18n("PlasmaZones Settings")
     width: 1200
     height: 800
-    // Override the lib's onClosing — PlasmaZones wants the richer
-    // three-way unsaved-changes prompt (Apply / Discard / Cancel)
-    // instead of the lib's plain Discard / Keep dialog.
-    onClosing: function(close) {
-        settingsController.saveWindowGeometry(window.x, window.y, window.width, window.height);
-        if (settingsController.needsSave && !window._closeConfirmed) {
-            close.accepted = false;
-            unsavedChangesDialog.open();
-        }
-    }
+    // Use the lib's 3-action close prompt (Apply / Discard / Cancel)
+    // — same UX as the legacy hand-rolled unsavedChangesDialog, but
+    // the framework owns the dialog and the close orchestration.
+    closePromptShowsApply: true
     Component.onCompleted: {
         var geo = settingsController.loadWindowGeometry();
         if (geo.width > 0 && geo.height > 0) {
@@ -89,6 +80,18 @@ PhosphorUi.SettingsAppWindow {
                 break;
             }
         }
+    }
+
+    // The lib's onClosing handles the dirty-state prompt. We just
+    // need to add a window-geometry save alongside it — Connections
+    // adds to the closing signal rather than overriding the base
+    // handler, so the framework's prompt still fires.
+    Connections {
+        function onClosing(close) {
+            settingsController.saveWindowGeometry(window.x, window.y, window.width, window.height);
+        }
+
+        target: window
     }
 
     // Mirror activePage changes back into the sidebar's drill scope —
@@ -498,41 +501,6 @@ PhosphorUi.SettingsAppWindow {
         exit: Transition {
         }
 
-    }
-
-    // ── Unsaved-changes confirmation (3-way) ─────────────────────────
-    Kirigami.PromptDialog {
-        id: unsavedChangesDialog
-
-        title: i18n("Unsaved Changes")
-        subtitle: i18n("You have unsaved changes. Do you want to apply them before closing?")
-        standardButtons: Kirigami.Dialog.NoButton
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Apply")
-                icon.name: "dialog-ok-apply"
-                onTriggered: {
-                    unsavedChangesDialog.close();
-                    settingsController.save();
-                    window._closeConfirmed = true;
-                    window.close();
-                }
-            },
-            Kirigami.Action {
-                text: i18n("Discard")
-                icon.name: "edit-delete"
-                onTriggered: {
-                    unsavedChangesDialog.close();
-                    window._closeConfirmed = true;
-                    window.close();
-                }
-            },
-            Kirigami.Action {
-                text: i18n("Cancel")
-                icon.name: "dialog-cancel"
-                onTriggered: unsavedChangesDialog.close()
-            }
-        ]
     }
 
     // ── Reset / Restore-defaults dialogs (used by Tools menu in pages) ──

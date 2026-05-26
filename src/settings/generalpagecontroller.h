@@ -5,6 +5,7 @@
 
 #include "../config/configdefaults.h"
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -23,7 +24,10 @@ class Settings;
 ///
 /// Import/export of the full config stays on SettingsController — those are
 /// top-level app actions that touch every page, not a "General" concern.
-class GeneralPageController : public QObject
+///
+/// Pure CONSTANT facade — no per-page staged state; isDirty/apply/discard
+/// are no-ops. Dirty tracking is global through SettingsController.
+class GeneralPageController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
@@ -40,6 +44,17 @@ class GeneralPageController : public QObject
 
 public:
     explicit GeneralPageController(Settings* settings, QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     QStringList renderingBackendOptions() const
     {
