@@ -680,4 +680,32 @@ PhosphorUi.SettingsAppWindow {
         onTriggered: whatsNewDialog.open()
     }
 
+    // Per-row sidebar trailing content — inline Switch for the snapping
+    // and tiling parent entries so the user can disable a whole feature
+    // without drilling in. The Component's root sees the page entry as
+    // `parent.modelData` via the Loader the sidebar instantiates.
+    sidebar.trailingDelegate: Component {
+        SettingsSwitch {
+            readonly property var entry: parent ? parent.modelData : null
+            readonly property bool isSnapping: entry && entry.id === "snapping"
+            readonly property bool isTiling: entry && entry.id === "tiling"
+
+            visible: isSnapping || isTiling
+            checked: isSnapping ? appSettings.snappingEnabled : (isTiling ? appSettings.autotileEnabled : false)
+            accessibleName: entry ? entry.title : ""
+            onToggled: function(newValue) {
+                // Wrap in begin/endExternalEdit so the dirty marker lands
+                // on the snapping/tiling page rather than the currently
+                // viewed page.
+                settingsController.beginExternalEdit(isSnapping ? "snapping" : "tiling");
+                if (isSnapping)
+                    appSettings.snappingEnabled = newValue;
+                else
+                    appSettings.autotileEnabled = newValue;
+                settingsController.endExternalEdit();
+            }
+        }
+
+    }
+
 }

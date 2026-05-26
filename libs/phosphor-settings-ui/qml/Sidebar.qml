@@ -31,6 +31,15 @@ import org.phosphor.settings.ui
  * Type-as-you-search filters the flat-tree under the current drill scope
  * (or the whole catalogue when at top-level + no scope). Matches show
  * with their owning category prefixed ("Surfaces / Windows").
+ *
+ * Drill transitions (`drillInto` / `drillOut`) cross-fade the list — fade
+ * out the current items, swap currentParentId, fade in the new items.
+ *
+ * Per-row trailing content can be injected via `trailingDelegate`: a QML
+ * Component instantiated next to each row's title. The loader exposes
+ * the row's entry as `modelData` so consumers can branch on `id`. Used
+ * by PlasmaZones to put inline Switch widgets next to "snapping" and
+ * "tiling" rows for quick feature toggling.
  */
 QQC2.ScrollView {
     id: root
@@ -39,30 +48,39 @@ QQC2.ScrollView {
     //* Empty string means "showing top-level pages"; otherwise the parent id.
     property string currentParentId: ""
     /** Per-id expand state for inline-collapsible categories. Seeded true
-     *  by default — the registry can override via setCollapsibleDefault
-     *  later if a category should start collapsed. */
+     *  by default — flip an entry to false to start it collapsed. */
     property var expandedCategories: ({
     })
     /** Search text. Empty disables filtering and the sidebar drills /
      *  expands as normal. */
     property alias searchText: searchField.text
-    /** Flat list cached + invalidated whenever the underlying state
-     *  changes. Bound at the Repeater's model below. */
+    /** Optional Component instantiated next to each row's title (between
+     *  the label and the drill chevron). The Component's root item sees
+     *  the entry via `parent.modelData` (id, title, iconSource, etc.).
+     *  When null (default) the slot collapses to nothing. */
+    property Component trailingDelegate: null
     property var _visible: _visibleItems()
 
     function drillInto(parentId) {
-        root.currentParentId = parentId;
+        if (root.currentParentId === parentId)
+            return ;
+
+        drillAnimation.pendingParentId = parentId;
+        drillAnimation.restart();
     }
 
     function drillOut() {
-        root.currentParentId = "";
+        if (root.currentParentId === "")
+            return ;
+
+        drillAnimation.pendingParentId = "";
+        drillAnimation.restart();
     }
 
     function toggleCategory(id) {
         const next = Object.assign({
         }, root.expandedCategories);
         next[id] = next[id] === false ? true : !(next[id] === true);
-        // First-touch initialise to false on first toggle (default expanded).
         if (next[id] === undefined)
             next[id] = true;
 
@@ -70,7 +88,6 @@ QQC2.ScrollView {
     }
 
     function _isExpanded(id) {
-        // Default to expanded so categories open out of the box.
         return root.expandedCategories[id] !== false;
     }
 
@@ -83,8 +100,6 @@ QQC2.ScrollView {
     }
 
     function _visibleItems() {
-        // No search: walk children of currentParentId, splicing in
-        // expanded collapsible categories' children inline.
         if (root.searchText.length === 0) {
             const out = [];
             const walk = function walk(parentId, depth) {
@@ -111,8 +126,6 @@ QQC2.ScrollView {
             walk(root.currentParentId, 0);
             return out;
         }
-        // Search: flatten under scope, keep navigable leaves whose title
-        // matches the query.
         const needle = root.searchText.toLowerCase();
         const matches = [];
         const collect = function collect(parentId, breadcrumb) {
@@ -152,7 +165,6 @@ QQC2.ScrollView {
     onSearchTextChanged: _visible = _visibleItems()
     clip: true
 
-    // Invalidate the cached visible list whenever any of its inputs changes.
     Connections {
         function onCurrentPageIdChanged() {
             root._visible = root._visibleItems();
@@ -161,11 +173,42 @@ QQC2.ScrollView {
         target: root.controller
     }
 
+    // Drill-in / drill-out cross-fade. Fades the inner column out, swaps
+    // currentParentId at zero opacity, then fades back in. Matches the
+    // legacy `sidebarTransition` UX.
+    SequentialAnimation {
+        id: drillAnimation
+
+        property string pendingParentId: ""
+
+        NumberAnimation {
+            target: listColumn
+            property: "opacity"
+            to: 0
+            duration: Kirigami.Units.shortDuration
+            easing.type: Easing.OutQuad
+        }
+
+        ScriptAction {
+            script: root.currentParentId = drillAnimation.pendingParentId
+        }
+
+        NumberAnimation {
+            target: listColumn
+            property: "opacity"
+            to: 1
+            duration: Kirigami.Units.shortDuration * 1.5
+            easing.type: Easing.InQuad
+        }
+
+    }
+
     ColumnLayout {
+        id: listColumn
+
         width: root.availableWidth
         spacing: 0
 
-        // ── Search field ────────────────────────────────────────────
         Kirigami.SearchField {
             id: searchField
 
@@ -178,7 +221,6 @@ QQC2.ScrollView {
             Layout.fillWidth: true
         }
 
-        // ── Back button (only when drilled in) ──────────────────────
         QQC2.ItemDelegate {
             visible: root.currentParentId !== "" && root.searchText.length === 0
             Layout.fillWidth: true
@@ -202,7 +244,6 @@ QQC2.ScrollView {
 
         }
 
-        // ── Items ───────────────────────────────────────────────────
         Repeater {
             model: root._visible
 
@@ -227,8 +268,6 @@ QQC2.ScrollView {
                 contentItem: RowLayout {
                     spacing: Kirigami.Units.smallSpacing
 
-                    // Expand/collapse chevron for category headers; static
-                    // icon for everything else.
                     Kirigami.Icon {
                         visible: modelData._isCollapsibleHeader
                         source: modelData._isExpanded ? "go-down-symbolic" : "go-next-symbolic"
@@ -251,7 +290,18 @@ QQC2.ScrollView {
                         font.weight: modelData._isCollapsibleHeader ? Font.DemiBold : Font.Normal
                     }
 
-                    // Drill-in indicator for non-collapsible parents.
+                    // Per-row trailing slot. The Loader exposes `modelData`
+                    // (the entry data) so consumers can branch on id.
+                    Loader {
+                        id: trailingLoader
+
+                        property var modelData: itemDelegate.modelData
+
+                        sourceComponent: root.trailingDelegate
+                        active: root.trailingDelegate !== null
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+
                     Kirigami.Icon {
                         visible: modelData._isDrillParent
                         source: "go-next-symbolic"

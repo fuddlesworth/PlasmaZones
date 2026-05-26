@@ -8,11 +8,24 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.settings.ui
 
 /**
- * Bottom button bar: Reset (current page) | Apply | Cancel.
+ * Persistent dirty indicator + slide-in unsaved-changes action bar.
+ *
+ * Two visual elements stacked vertically:
+ *
+ *   1. A 1-px accent line that's always present. Tints highlightColor
+ *      when controller.dirty, neutral border otherwise — a calm
+ *      always-visible "you have unsaved work" signal.
+ *
+ *   2. A slide-in notification bar that's hidden when clean and
+ *      animates open when controller.dirty flips true. Contains an
+ *      icon + "Unsaved changes" label and three action buttons:
+ *      Reset Current Page (visible only when a page is selected),
+ *      Cancel (= controller.discardAll), Apply (= controller.applyAll).
  *
  * Apply and Cancel act on the whole application (all staging domains).
- * Reset resets only the current page to its factory defaults; the user
- * still needs to hit Apply afterwards to persist.
+ * Reset is per-page: it calls controller.resetCurrentPage which
+ * forwards to the active PageController's resetToDefaults(). Pages
+ * with no factory defaults just no-op.
  */
 ColumnLayout {
     id: root
@@ -21,8 +34,7 @@ ColumnLayout {
 
     spacing: 0
 
-    // Persistent accent line that tints highlightColor when dirty —
-    // a calm always-visible "you have unsaved work" signal.
+    // ── Persistent accent line ──────────────────────────────────────
     Rectangle {
         Layout.fillWidth: true
         height: Math.round(Kirigami.Units.devicePixelRatio)
@@ -37,43 +49,88 @@ ColumnLayout {
 
     }
 
-    RowLayout {
+    // ── Slide-in unsaved-changes bar ────────────────────────────────
+    Item {
+        id: dirtyBar
+
         Layout.fillWidth: true
-        spacing: Kirigami.Units.smallSpacing
+        Layout.preferredHeight: root.controller.dirty ? barContent.implicitHeight : 0
+        clip: true
 
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: applyButton.implicitHeight + Kirigami.Units.smallSpacing * 2
+        Rectangle {
+            id: barContent
+
+            width: parent.width
+            implicitHeight: barRow.implicitHeight + Kirigami.Units.smallSpacing * 3
+            anchors.bottom: parent.bottom
+            color: Qt.rgba(Kirigami.Theme.neutralTextColor.r, Kirigami.Theme.neutralTextColor.g, Kirigami.Theme.neutralTextColor.b, 0.12)
+
+            // Top accent line for the bar itself, separate from the
+            // persistent line above. Always neutralTextColor so the
+            // bar reads as a distinct surface.
+            Rectangle {
+                anchors.top: parent.top
+                width: parent.width
+                height: Math.round(Kirigami.Units.devicePixelRatio)
+                color: Kirigami.Theme.neutralTextColor
+                opacity: 0.4
+            }
+
+            RowLayout {
+                id: barRow
+
+                anchors.fill: parent
+                anchors.leftMargin: Kirigami.Units.largeSpacing
+                anchors.rightMargin: Kirigami.Units.largeSpacing
+                anchors.topMargin: Kirigami.Units.smallSpacing * 1.5
+                anchors.bottomMargin: Kirigami.Units.smallSpacing * 1.5
+                spacing: Kirigami.Units.smallSpacing
+
+                Kirigami.Icon {
+                    source: "dialog-information"
+                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                    color: Kirigami.Theme.neutralTextColor
+                }
+
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Unsaved changes")
+                    color: Kirigami.Theme.neutralTextColor
+                }
+
+                QQC2.Button {
+                    text: qsTr("Reset Current Page")
+                    visible: root.controller.currentPageId !== ""
+                    icon.name: "edit-undo-symbolic"
+                    flat: true
+                    onClicked: root.controller.resetCurrentPage()
+                }
+
+                QQC2.Button {
+                    text: qsTr("Cancel")
+                    icon.name: "edit-undo"
+                    flat: true
+                    onClicked: root.controller.discardAll()
+                }
+
+                QQC2.Button {
+                    text: qsTr("Apply")
+                    icon.name: "document-save"
+                    highlighted: true
+                    onClicked: root.controller.applyAll()
+                }
+
+            }
+
         }
 
-        QQC2.Button {
-            text: qsTr("Reset Current Page")
-            enabled: root.controller.currentPageId !== ""
-            icon.name: "edit-undo-symbolic"
-            onClicked: root.controller.resetCurrentPage()
-            Layout.margins: Kirigami.Units.smallSpacing
-        }
+        Behavior on Layout.preferredHeight {
+            NumberAnimation {
+                duration: Kirigami.Units.longDuration
+                easing.type: root.controller.dirty ? Easing.OutCubic : Easing.InCubic
+            }
 
-        QQC2.Button {
-            id: cancelButton
-
-            text: qsTr("Cancel")
-            enabled: root.controller.dirty
-            icon.name: "dialog-cancel"
-            onClicked: root.controller.discardAll()
-            Layout.margins: Kirigami.Units.smallSpacing
-        }
-
-        QQC2.Button {
-            id: applyButton
-
-            text: qsTr("Apply")
-            enabled: root.controller.dirty
-            icon.name: "dialog-ok-apply"
-            highlighted: true
-            onClicked: root.controller.applyAll()
-            Layout.margins: Kirigami.Units.smallSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
         }
 
     }
