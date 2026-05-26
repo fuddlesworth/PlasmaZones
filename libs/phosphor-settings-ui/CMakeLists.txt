@@ -35,6 +35,17 @@ include(GenerateExportHeader)
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
 
+# Qt 6.5+ QML policies:
+#   QTP0001 — use `:/qt/qml/` as the QML module resource prefix (NEW).
+#             Matches the RESOURCE_PREFIX we set on qt_add_qml_module below.
+#   QTP0004 — auto-generate qmldir files for QML subdirectories (`qml/`)
+#             so module type resolution finds them. Without NEW, Qt warns
+#             "You need qmldir files for each extra directory".
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+    qt_policy(SET QTP0004 NEW)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
 # ═══════════════════════════════════════════════════════════════════════════════
