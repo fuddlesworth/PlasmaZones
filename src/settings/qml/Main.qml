@@ -42,15 +42,27 @@ ApplicationWindow {
     // accordion animations. Toggling a collapsible category leaves this
     // false so the accordion plays as intended.
     property bool _suppressAccordion: false
-    // Expanded state for inline collapsible categories. Categories
-    // currently come in two flavours: top-level "display" / "rules"
-    // groupings under the main sidebar, and "animations-surfaces" /
-    // "animations-library" inside the Animations sub-sidebar. Default
-    // is empty — categories auto-expand only when the active page lives
-    // inside them (see _expandActivePageCategory). Keyed by the
-    // category's item name. Mutated by replacing the whole object so
-    // QML's binding system picks up the change.
+    // Expanded state for inline collapsible categories. Every known
+    // category is seeded to `true` so the sidebar opens with all
+    // groups expanded — the user can collapse any of them with a
+    // single click, and per-session state survives in this map.
+    // Categories currently come in three flavours: top-level
+    // "display" / "rules" groupings under the main sidebar, the
+    // Snapping/Tiling sub-sidebar `*-cat` buckets, and the
+    // Animations sub-sidebar "animations-surfaces" /
+    // "animations-library" buckets. Mutated by replacing the whole
+    // object so QML's binding system picks up the change.
     property var _expandedCategories: ({
+        "display": true,
+        "rules": true,
+        "snapping-visual-cat": true,
+        "snapping-behavior-cat": true,
+        "snapping-config-cat": true,
+        "tiling-visual-cat": true,
+        "tiling-behavior-cat": true,
+        "tiling-config-cat": true,
+        "animations-surfaces": true,
+        "animations-library": true
     })
     // Main sidebar items. "display" and "rules" are top-level inline
     // collapsible categories that group related leaves under a single
