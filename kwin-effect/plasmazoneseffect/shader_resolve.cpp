@@ -25,10 +25,13 @@ namespace PlasmaZones {
 
 namespace {
 
-constexpr QLatin1String kKeyEffectId{"effectId"};
-constexpr QLatin1String kKeyParams{"params"};
-constexpr QLatin1String kKeyCurve{"curve"};
-constexpr QLatin1String kKeyDurationMs{"durationMs"};
+// OverrideAnimation* action param keys consumed by the resolvers below come
+// from the shared PhosphorWindowRule::ActionParam vocabulary so the resolver,
+// the action-registry validators in ruleaction.cpp, the rule-editor UI, and
+// the v3→v4 migration in configmigration.cpp::buildAnimationAppRule all read
+// from one source of truth. A future rename of any of these wire keys flows
+// to every consumer in a single edit.
+namespace ActionParam = PhosphorWindowRule::ActionParam;
 
 /// A per-window query carrying only the window class — the animation App
 /// Rules match exclusively on `WindowClass Contains <pattern>`, so no other
@@ -87,8 +90,8 @@ resolveAnimationShaderProfile(const PhosphorWindowRule::RuleEvaluator& evaluator
             // per-event default for matching windows" sentinel, and
             // ShaderProfile's own engaged-empty contract preserves it.
             PhosphorAnimationShaders::ShaderProfile profile;
-            profile.effectId = action->params.value(kKeyEffectId).toString();
-            profile.parameters = action->params.value(kKeyParams).toObject().toVariantMap();
+            profile.effectId = action->params.value(ActionParam::EffectId).toString();
+            profile.parameters = action->params.value(ActionParam::Params).toObject().toVariantMap();
             return profile;
         }
     }
@@ -123,8 +126,8 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
     // fall through to the per-event tree.
     PhosphorAnimationShaders::ShaderProfile profile;
     if (const auto action = resolved.slot(shaderSlotFor(eventPath))) {
-        profile.effectId = action->params.value(kKeyEffectId).toString();
-        profile.parameters = action->params.value(kKeyParams).toObject().toVariantMap();
+        profile.effectId = action->params.value(ActionParam::EffectId).toString();
+        profile.parameters = action->params.value(ActionParam::Params).toObject().toVariantMap();
     } else {
         profile = tree.resolve(eventPath);
     }
@@ -135,7 +138,7 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
     // resolveAnimationDuration shim.
     int durationMs = defaultDurationMs;
     if (const auto action = resolved.slot(timingSlotFor(eventPath))) {
-        const int candidate = action->params.value(kKeyDurationMs).toInt(0);
+        const int candidate = action->params.value(ActionParam::DurationMs).toInt(0);
         if (candidate > 0) {
             durationMs = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, candidate,
                                 PhosphorAnimation::Limits::MaxAnimationDurationMs);
@@ -164,9 +167,9 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
     // the curve/timing split (including those produced by the v3→v4
     // migration in configmigration.cpp::animationAppRuleToWindowRule) still
     // resolve.
-    QString curve = curveAction ? curveAction->params.value(kKeyCurve).toString() : QString();
+    QString curve = curveAction ? curveAction->params.value(ActionParam::Curve).toString() : QString();
     if (curve.isEmpty() && timingAction) {
-        curve = timingAction->params.value(kKeyCurve).toString();
+        curve = timingAction->params.value(ActionParam::Curve).toString();
     }
     if (!curve.isEmpty()) {
         // tryCreate (NOT create) — a malformed curve string stays on the
@@ -177,7 +180,7 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
         }
     }
     if (timingAction) {
-        const int durationMs = timingAction->params.value(kKeyDurationMs).toInt(0);
+        const int durationMs = timingAction->params.value(ActionParam::DurationMs).toInt(0);
         if (durationMs > 0) {
             // Same clamp as resolveAnimationShaderAndDuration so the motion
             // and shader paths stay in lockstep for the same user-facing rule.
