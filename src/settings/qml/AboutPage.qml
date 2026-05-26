@@ -5,253 +5,158 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.settings.ui as PhosphorUi
 
-SettingsFlickable {
+// Uses PhosphorUi.AboutPageShell for the standard chrome (icon + name +
+// version + description + license + homepage) and injects PlasmaZones-
+// specific content — daemon toggle, link cards, credits — via the
+// shell's default-property `extraContent` slot.
+PhosphorUi.AboutPageShell {
     id: root
 
-    contentHeight: content.implicitHeight
-    clip: true
+    appName: i18n("PlasmaZones")
+    appIcon: "plasmazones"
+    appVersion: Qt.application.version.length > 0 ? i18n("Version %1", Qt.application.version) : i18n("Version unknown")
+    description: i18n("A window tiling and zone management tool for " + "Wayland compositors. Organize your desktop with " + "customizable zones, automatic tiling layouts, " + "and keyboard-driven window placement.")
+    license: i18n("PlasmaZones is free software licensed under the " + "GNU General Public License version 3 or later " + "(GPL-3.0-or-later).")
+    homepageUrl: "https://github.com/fuddlesworth/PlasmaZones"
 
-    ColumnLayout {
-        id: content
+    // ── Daemon enable/disable toggle ────────────────────────────────
+    RowLayout {
+        Layout.fillWidth: true
+        Layout.bottomMargin: Kirigami.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
-        width: parent.width - Kirigami.Units.largeSpacing * 2
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: Kirigami.Units.largeSpacing
-
-        // Enable/disable toggle (matching original header placement)
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 0
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.margins: Kirigami.Units.largeSpacing
-
-                Label {
-                    text: i18n("Enable PlasmaZones")
-                    font.weight: Font.DemiBold
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                }
-
-                Label {
-                    text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
-                    opacity: 0.7
-                }
-
-                SettingsSwitch {
-                    checked: settingsController.daemonRunning
-                    enabled: !settingsController.daemonController.busy
-                    onToggled: function(newValue) {
-                        settingsController.daemonController.setEnabled(newValue);
-                    }
-                    accessibleName: i18n("Enable PlasmaZones")
-                }
-
-            }
-
-            Kirigami.Separator {
-                Layout.fillWidth: true
-            }
-
-        }
-
-        // App header with icon and version
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-            spacing: Kirigami.Units.largeSpacing
-
-            Kirigami.Icon {
-                source: "plasmazones"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.huge
-                Layout.preferredHeight: Kirigami.Units.iconSizes.huge
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
-
-                Kirigami.Heading {
-                    level: 1
-                    text: i18n("PlasmaZones")
-                }
-
-                Label {
-                    text: Qt.application.version.length > 0 ? i18n("Version %1", Qt.application.version) : i18n("Version unknown")
-                    opacity: 0.7
-                }
-
-            }
-
-        }
-
-        // Description
         Label {
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-            text: i18n("A window tiling and zone management tool for Wayland compositors. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.")
-            wrapMode: Text.WordWrap
+            text: i18n("Enable PlasmaZones")
+            font.weight: Font.DemiBold
         }
 
-        // Links card
         Item {
             Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-            implicitHeight: linksCard.implicitHeight
+        }
 
-            SettingsCard {
-                id: linksCard
+        Label {
+            text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
+            opacity: 0.7
+        }
 
-                anchors.fill: parent
-                headerText: i18n("Links")
-
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    LinkButton {
-                        linkText: i18n("GitHub Repository")
-                        linkIcon: "vcs-branch"
-                        url: "https://github.com/fuddlesworth/PlasmaZones"
-                    }
-
-                    LinkButton {
-                        linkText: i18n("Report a Bug")
-                        linkIcon: "tools-report-bug"
-                        url: "https://github.com/fuddlesworth/PlasmaZones/issues/new"
-                    }
-
-                    LinkButton {
-                        linkText: i18n("Documentation")
-                        linkIcon: "documentation"
-                        url: "https://phosphor-works.github.io/plasmazones/"
-                    }
-
-                    LinkButton {
-                        linkText: i18n("Releases")
-                        linkIcon: "package-available"
-                        url: "https://github.com/fuddlesworth/PlasmaZones/releases"
-                    }
-
-                    Button {
-                        Layout.fillWidth: true
-                        flat: true
-                        horizontalPadding: Kirigami.Units.largeSpacing
-                        Accessible.name: i18n("What's New")
-                        onClicked: window.showWhatsNew()
-
-                        contentItem: RowLayout {
-                            spacing: Kirigami.Units.smallSpacing
-
-                            Kirigami.Icon {
-                                source: "documentinfo"
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                            }
-
-                            Label {
-                                text: i18n("What's New")
-                                Layout.fillWidth: true
-                                color: Kirigami.Theme.linkColor
-                            }
-
-                            Kirigami.Icon {
-                                source: "arrow-right"
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                opacity: 0.5
-                            }
-
-                        }
-
-                    }
-
-                }
-
+        SettingsSwitch {
+            checked: settingsController.daemonRunning
+            enabled: !settingsController.daemonController.busy
+            onToggled: function(newValue) {
+                settingsController.daemonController.setEnabled(newValue);
             }
-
-        }
-
-        // License card
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: licenseCard.implicitHeight
-
-            SettingsCard {
-                id: licenseCard
-
-                anchors.fill: parent
-                headerText: i18n("License")
-
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: i18n("PlasmaZones is free software licensed under the GNU General Public License version 3 or later (GPL-3.0-or-later).")
-                        wrapMode: Text.WordWrap
-                    }
-
-                    LinkButton {
-                        linkText: i18n("View License")
-                        linkIcon: "license"
-                        url: "https://www.gnu.org/licenses/gpl-3.0.html"
-                    }
-
-                }
-
-            }
-
-        }
-
-        // Credits card
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: creditsCard.implicitHeight
-
-            SettingsCard {
-                id: creditsCard
-
-                anchors.fill: parent
-                headerText: i18n("Credits")
-
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: i18n("Created by fuddlesworth")
-                        font.weight: Font.DemiBold
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: i18n("Inspired by FancyZones, extended with automatic tiling")
-                        opacity: 0.7
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: i18n("Built with Qt, KDE Frameworks, and Kirigami")
-                        opacity: 0.7
-                    }
-
-                }
-
-            }
-
-        }
-
-        Item {
-            Layout.fillHeight: true
+            accessibleName: i18n("Enable PlasmaZones")
         }
 
     }
 
-    // Helper component for link buttons (matching original design)
+    // ── Links ───────────────────────────────────────────────────────
+    SettingsCard {
+        Layout.fillWidth: true
+        headerText: i18n("Links")
+
+        contentItem: ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing
+
+            LinkButton {
+                linkText: i18n("GitHub Repository")
+                linkIcon: "vcs-branch"
+                url: "https://github.com/fuddlesworth/PlasmaZones"
+            }
+
+            LinkButton {
+                linkText: i18n("Report a Bug")
+                linkIcon: "tools-report-bug"
+                url: "https://github.com/fuddlesworth/PlasmaZones/issues/new"
+            }
+
+            LinkButton {
+                linkText: i18n("Documentation")
+                linkIcon: "documentation"
+                url: "https://phosphor-works.github.io/plasmazones/"
+            }
+
+            LinkButton {
+                linkText: i18n("Releases")
+                linkIcon: "package-available"
+                url: "https://github.com/fuddlesworth/PlasmaZones/releases"
+            }
+
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                horizontalPadding: Kirigami.Units.largeSpacing
+                Accessible.name: i18n("What's New")
+                onClicked: {
+                    if (typeof window !== "undefined" && window.showWhatsNew)
+                        window.showWhatsNew();
+
+                }
+
+                contentItem: RowLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Kirigami.Icon {
+                        source: "documentinfo"
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                    }
+
+                    Label {
+                        text: i18n("What's New")
+                        Layout.fillWidth: true
+                        color: Kirigami.Theme.linkColor
+                    }
+
+                    Kirigami.Icon {
+                        source: "arrow-right"
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        opacity: 0.5
+                    }
+
+                }
+
+            }
+
+        }
+
+    }
+
+    // ── Credits ─────────────────────────────────────────────────────
+    SettingsCard {
+        Layout.fillWidth: true
+        headerText: i18n("Credits")
+
+        contentItem: ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing
+
+            Label {
+                Layout.fillWidth: true
+                text: i18n("Created by fuddlesworth")
+                font.weight: Font.DemiBold
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: i18n("Inspired by FancyZones, extended with automatic tiling")
+                opacity: 0.7
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: i18n("Built with Qt, KDE Frameworks, and Kirigami")
+                opacity: 0.7
+            }
+
+        }
+
+    }
+
+    // ── LinkButton helper (kept inline so this file stays drop-in compatible
+    // with the old AboutPage.qml — same component name + signature) ────
     component LinkButton: Button {
         id: linkButton
 
