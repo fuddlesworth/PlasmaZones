@@ -5,59 +5,17 @@
 
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
+#include "shaderpackinstaller.h"
 
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 
 #include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QUrl>
 
 #include <algorithm>
 
 namespace PlasmaZones {
-
-namespace snapping_shaders_controller_detail {
-
-/// Recursive directory copy with symlink protection. Mirror of the helper
-/// in `animationspagecontroller.cpp` — same SOLID/security rationale
-/// (drag-drop sources are untrusted; symlinks would let a malicious pack
-/// smuggle arbitrary readable filesystem content under deceptive names).
-/// Kept private to this TU rather than promoted to a shared helper
-/// because each controller's call site has its own pre/post-flight
-/// validation; the bare copy primitive is too small to justify a header
-/// dependency just for DRY.
-static bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
-{
-    QDir sourceDir(sourcePath);
-    if (!sourceDir.exists())
-        return false;
-    if (!QDir().mkpath(destPath))
-        return false;
-
-    const QFileInfoList entries =
-        sourceDir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoSymLinks | QDir::NoDotAndDotDot);
-    for (const QFileInfo& entry : entries) {
-        if (entry.isSymLink())
-            continue;
-
-        const QString destEntryPath = destPath + QLatin1Char('/') + entry.fileName();
-        if (entry.isDir()) {
-            if (!copyDirRecursive(entry.absoluteFilePath(), destEntryPath))
-                return false;
-        } else if (entry.isFile()) {
-            if (QFile::exists(destEntryPath))
-                QFile::remove(destEntryPath);
-            if (!QFile::copy(entry.absoluteFilePath(), destEntryPath))
-                return false;
-        }
-    }
-    return true;
-}
-
-} // namespace snapping_shaders_controller_detail
 
 SnappingShadersPageController::SnappingShadersPageController(PlasmaZones::ShaderRegistry* shaderRegistry,
                                                              PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
@@ -155,62 +113,16 @@ void SnappingShadersPageController::openUserShaderDirectory()
 
 bool SnappingShadersPageController::installShaderPack(const QString& sourceUrl)
 {
-    if (sourceUrl.isEmpty())
-        return false;
-
-    // Accept both `file://...` URLs (drag-drop from a file manager) and
-    // bare paths (programmatic callers).
-    QString sourcePath = sourceUrl;
-    if (sourcePath.startsWith(QLatin1String("file://")))
-        sourcePath = QUrl(sourceUrl).toLocalFile();
-
-    sourcePath = QDir::cleanPath(sourcePath);
-
-    const QFileInfo sourceInfo(sourcePath);
-    if (!sourceInfo.exists() || !sourceInfo.isDir() || sourceInfo.isSymLink()) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): source is not an existing directory:" << sourcePath;
+    // All validation + copy lives in the shared ShaderPackInstaller
+    // helper. Same logic as the animations-shader page (DRY) and the
+    // security-sensitive bits (symlink rejection, metadata.json
+    // verification, rollback) only need an audit in one place.
+    const auto result = ShaderPackInstaller::install(sourceUrl, userShaderDirectoryPath());
+    if (result != ShaderPackInstaller::Result::Success) {
+        qCWarning(lcConfig) << "installShaderPack (overlay):" << ShaderPackInstaller::errorMessage(result)
+                            << "— source:" << sourceUrl;
         return false;
     }
-    const QString sourceBasename = sourceInfo.fileName();
-    if (sourceBasename.isEmpty()) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): source path has no basename:" << sourcePath;
-        return false;
-    }
-
-    // Validate metadata.json — without it the registry won't pick up the
-    // pack, so accepting the drop would silently be a no-op. Reject
-    // symlinked metadata so a malicious pack can't smuggle a non-shader
-    // JSON file's content past validation.
-    const QString metadataPath = sourceInfo.absoluteFilePath() + QLatin1String("/metadata.json");
-    const QFileInfo metadataInfo(metadataPath);
-    if (!metadataInfo.exists() || !metadataInfo.isFile() || metadataInfo.isSymLink()) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): source has no metadata.json:" << sourcePath;
-        return false;
-    }
-
-    const QString userDir = userShaderDirectoryPath();
-    if (userDir.isEmpty()) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): no user shader directory available (registry missing).";
-        return false;
-    }
-    if (!QDir().mkpath(userDir)) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): could not create user shader directory:" << userDir;
-        return false;
-    }
-
-    const QString destDir = userDir + QLatin1Char('/') + sourceBasename;
-    if (QFileInfo::exists(destDir)) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): destination already exists, refusing to overwrite:"
-                            << destDir;
-        return false;
-    }
-
-    if (!snapping_shaders_controller_detail::copyDirRecursive(sourceInfo.absoluteFilePath(), destDir)) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): copy failed; rolling back:" << destDir;
-        QDir(destDir).removeRecursively();
-        return false;
-    }
-
     // The registry's filewatcher rescans on its own — `shadersChanged`
     // fires automatically and reaches QML through this controller's
     // forwarded `shaderEffectsChanged` signal.

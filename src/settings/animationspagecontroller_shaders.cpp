@@ -22,6 +22,7 @@
 #include "../core/utils.h"
 #include "../pz_i18n.h"
 #include "animationfileutils.h"
+#include "shaderpackinstaller.h"
 
 // IMPORTANT: include via the project-local path (PhosphorAnimation/),
 // not the system PhosphorAnimationShaders/ path. There are two copies
@@ -97,117 +98,19 @@ void AnimationsPageController::openUserShaderDirectory()
     QDesktopServices::openUrl(QUrl::fromLocalFile(userShaderDirectoryPath()));
 }
 
-namespace animations_controller_detail {
-
-/// Copy a directory recursively. Qt has no built-in equivalent; the
-/// stdlib's `std::filesystem::copy` exists but we stick to QDir/QFile
-/// for consistency with the rest of the codebase. Returns false on the
-/// first failure (broken file copy, mkpath fail, etc.) so the caller
-/// can roll back via QDir::removeRecursively.
-///
-/// Symlinks (file or dir) are explicitly skipped via `QDir::NoSymLinks`
-/// AND a per-entry `isSymLink()` guard. Without that, a dropped pack
-/// containing `metadata.json -> /etc/shadow` or `assets -> /etc` would
-/// silently follow the link during traversal and the recursive copy
-/// would smuggle arbitrary readable filesystem content into the user
-/// shader dir under deceptive names. A shader pack contains regular
-/// files only; anything exotic is suspect and refused.
-static bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
-{
-    QDir sourceDir(sourcePath);
-    if (!sourceDir.exists())
-        return false;
-    if (!QDir().mkpath(destPath))
-        return false;
-
-    const QFileInfoList entries =
-        sourceDir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoSymLinks | QDir::NoDotAndDotDot);
-    for (const QFileInfo& entry : entries) {
-        // QDir::NoSymLinks already filters at the entryInfoList layer, but
-        // recheck per-entry: filesystem races (the entry being replaced
-        // by a symlink between enumeration and this iteration) and the
-        // historical leniency of QDir::NoSymLinks across Qt versions
-        // both argue for an explicit guard at the copy boundary.
-        if (entry.isSymLink())
-            continue;
-
-        const QString destEntryPath = destPath + QLatin1Char('/') + entry.fileName();
-        if (entry.isDir()) {
-            if (!copyDirRecursive(entry.absoluteFilePath(), destEntryPath))
-                return false;
-        } else if (entry.isFile()) {
-            // QFile::copy refuses to overwrite — caller's collision check
-            // already guarantees a clean destination, but defend against
-            // a partial failed previous run leaving stale files.
-            if (QFile::exists(destEntryPath))
-                QFile::remove(destEntryPath);
-            if (!QFile::copy(entry.absoluteFilePath(), destEntryPath))
-                return false;
-        }
-        // Devices, FIFOs, sockets, etc. are not isFile()/isDir() and
-        // therefore fall through silently — same intent as the symlink
-        // skip above.
-    }
-    return true;
-}
-
-} // namespace animations_controller_detail
-
 bool AnimationsPageController::installShaderPack(const QString& sourceUrl)
 {
-    if (sourceUrl.isEmpty())
-        return false;
-
-    // Accept both `file://...` URLs (drag-drop from a file manager) and
-    // bare paths (programmatic callers).
-    QString sourcePath = sourceUrl;
-    if (sourcePath.startsWith(QLatin1String("file://")))
-        sourcePath = QUrl(sourceUrl).toLocalFile();
-
-    // Normalise trailing slashes and `.`/`..` components — without this,
-    // a drop URL like `file:///path/to/pack/` produces an empty
-    // `fileName()` below and the destDir collapses onto the user shader
-    // dir itself, surfacing as a confusing "destination already exists"
-    // rather than a clean parse failure.
-    sourcePath = QDir::cleanPath(sourcePath);
-
-    const QFileInfo sourceInfo(sourcePath);
-    if (!sourceInfo.exists() || !sourceInfo.isDir() || sourceInfo.isSymLink()) {
-        qCWarning(lcConfig) << "installShaderPack: source is not an existing directory:" << sourcePath;
+    // All validation + copy lives in the shared ShaderPackInstaller
+    // helper (src/settings/shaderpackinstaller.{h,cpp}). The snapping-
+    // shaders page uses the same primitive; the security-sensitive
+    // bits (symlink rejection, metadata.json verification, rollback)
+    // only need an audit in one place.
+    const auto result = ShaderPackInstaller::install(sourceUrl, userShaderDirectoryPath());
+    if (result != ShaderPackInstaller::Result::Success) {
+        qCWarning(lcConfig) << "installShaderPack:" << ShaderPackInstaller::errorMessage(result)
+                            << "— source:" << sourceUrl;
         return false;
     }
-    const QString sourceBasename = sourceInfo.fileName();
-    if (sourceBasename.isEmpty()) {
-        qCWarning(lcConfig) << "installShaderPack: source path has no basename:" << sourcePath;
-        return false;
-    }
-
-    // Validate metadata.json — without it the registry won't pick up the
-    // pack, so accepting the drop would silently be a no-op. Reject
-    // symlinked metadata so a malicious pack can't smuggle a non-shader
-    // JSON file's content past the validation gate.
-    const QString metadataPath = sourceInfo.absoluteFilePath() + QLatin1String("/metadata.json");
-    const QFileInfo metadataInfo(metadataPath);
-    if (!metadataInfo.exists() || !metadataInfo.isFile() || metadataInfo.isSymLink()) {
-        qCWarning(lcConfig) << "installShaderPack: source has no metadata.json:" << sourcePath;
-        return false;
-    }
-
-    if (!ensureUserShaderDirectory())
-        return false;
-
-    const QString destDir = userShaderDirectoryPath() + QLatin1Char('/') + sourceBasename;
-    if (QFileInfo::exists(destDir)) {
-        qCWarning(lcConfig) << "installShaderPack: destination already exists, refusing to overwrite:" << destDir;
-        return false;
-    }
-
-    if (!animations_controller_detail::copyDirRecursive(sourceInfo.absoluteFilePath(), destDir)) {
-        qCWarning(lcConfig) << "installShaderPack: copy failed; rolling back:" << destDir;
-        QDir(destDir).removeRecursively();
-        return false;
-    }
-
     // The registry's filewatcher rescans on its own — no explicit poke
     // needed. If a poke is ever required, emit `shaderEffectsChanged`
     // here.

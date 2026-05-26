@@ -1,0 +1,141 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "shaderpackinstaller.h"
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QUrl>
+
+namespace PlasmaZones::ShaderPackInstaller {
+
+namespace {
+
+/// Recursive directory copy with symlink protection. Returns false on
+/// the first failure so the caller can roll back via
+/// QDir::removeRecursively. Symlinks (file or dir) are explicitly
+/// skipped — without that, a dropped pack containing
+/// `metadata.json -> /etc/shadow` or `assets -> /etc` would silently
+/// follow the link during traversal and smuggle arbitrary readable
+/// filesystem content into the user shader dir under deceptive names.
+/// A shader pack contains regular files only; anything exotic is
+/// suspect and refused.
+bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
+{
+    QDir sourceDir(sourcePath);
+    if (!sourceDir.exists())
+        return false;
+    if (!QDir().mkpath(destPath))
+        return false;
+
+    const QFileInfoList entries =
+        sourceDir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoSymLinks | QDir::NoDotAndDotDot);
+    for (const QFileInfo& entry : entries) {
+        // QDir::NoSymLinks already filters at the entryInfoList layer,
+        // but recheck per-entry: filesystem races (entry replaced by a
+        // symlink between enumeration and this iteration) and the
+        // historical leniency of QDir::NoSymLinks across Qt versions
+        // both argue for an explicit guard at the copy boundary.
+        if (entry.isSymLink())
+            continue;
+
+        const QString destEntryPath = destPath + QLatin1Char('/') + entry.fileName();
+        if (entry.isDir()) {
+            if (!copyDirRecursive(entry.absoluteFilePath(), destEntryPath))
+                return false;
+        } else if (entry.isFile()) {
+            // QFile::copy refuses to overwrite — caller's collision
+            // check already guarantees a clean destination, but
+            // defend against a partial failed previous run leaving
+            // stale files.
+            if (QFile::exists(destEntryPath))
+                QFile::remove(destEntryPath);
+            if (!QFile::copy(entry.absoluteFilePath(), destEntryPath))
+                return false;
+        }
+        // Devices, FIFOs, sockets, etc. fall through silently — same
+        // intent as the symlink skip above.
+    }
+    return true;
+}
+
+} // namespace
+
+Result install(const QString& sourceUrl, const QString& userShaderDir)
+{
+    if (sourceUrl.isEmpty())
+        return Result::InvalidSource;
+
+    // Accept both `file://...` URLs (drag-drop from a file manager)
+    // and bare paths (programmatic callers).
+    QString sourcePath = sourceUrl;
+    if (sourcePath.startsWith(QLatin1String("file://")))
+        sourcePath = QUrl(sourceUrl).toLocalFile();
+
+    // Normalise trailing slashes and `.`/`..` components — without
+    // this, a drop URL like `file:///path/to/pack/` produces an empty
+    // fileName() below and the destDir collapses onto the user shader
+    // dir itself, surfacing as a confusing "destination already exists"
+    // rather than a clean parse failure.
+    sourcePath = QDir::cleanPath(sourcePath);
+
+    const QFileInfo sourceInfo(sourcePath);
+    if (!sourceInfo.exists() || !sourceInfo.isDir() || sourceInfo.isSymLink())
+        return Result::InvalidSource;
+    const QString sourceBasename = sourceInfo.fileName();
+    if (sourceBasename.isEmpty())
+        return Result::InvalidSource;
+
+    // Validate metadata.json — without it the registry won't pick up
+    // the pack, so accepting the drop would silently be a no-op.
+    // Reject symlinked metadata so a malicious pack can't smuggle a
+    // non-shader JSON file's content past validation.
+    const QString metadataPath = sourceInfo.absoluteFilePath() + QLatin1String("/metadata.json");
+    const QFileInfo metadataInfo(metadataPath);
+    if (!metadataInfo.exists() || !metadataInfo.isFile() || metadataInfo.isSymLink())
+        return Result::MissingMetadata;
+
+    if (userShaderDir.isEmpty())
+        return Result::InvalidUserDir;
+    if (!QDir().mkpath(userShaderDir))
+        return Result::InvalidUserDir;
+
+    const QString destDir = userShaderDir + QLatin1Char('/') + sourceBasename;
+    if (QFileInfo::exists(destDir))
+        return Result::DestinationExists;
+
+    if (!copyDirRecursive(sourceInfo.absoluteFilePath(), destDir)) {
+        // Best-effort rollback. If removeRecursively also fails the
+        // destination is left half-populated — that's still better
+        // than leaving the user without a clear error, and the next
+        // install attempt will get DestinationExists.
+        QDir(destDir).removeRecursively();
+        return Result::CopyFailed;
+    }
+
+    return Result::Success;
+}
+
+QString errorMessage(Result r)
+{
+    switch (r) {
+    case Result::Success:
+        return QStringLiteral("success");
+    case Result::InvalidSource:
+        return QStringLiteral(
+            "source is not a regular existing directory (rejected: empty path, missing, "
+            "regular-file, symlinked, or path with no basename)");
+    case Result::MissingMetadata:
+        return QStringLiteral("source is missing a regular-file metadata.json (or metadata.json is a symlink)");
+    case Result::InvalidUserDir:
+        return QStringLiteral("user shader directory is empty or could not be created");
+    case Result::DestinationExists:
+        return QStringLiteral("destination basename already exists; refusing to overwrite");
+    case Result::CopyFailed:
+        return QStringLiteral("recursive copy failed mid-flight; destination rolled back");
+    }
+    return QStringLiteral("unknown ShaderPackInstaller error");
+}
+
+} // namespace PlasmaZones::ShaderPackInstaller

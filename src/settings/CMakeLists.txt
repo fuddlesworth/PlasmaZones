@@ -29,6 +29,11 @@ set(plasmazones_settings_SRCS
     # target — same class, separate TU, no API change. Keeps the main
     # cpp under the 800-line cap (CLAUDE.md).
     animationspagecontroller_shaders.cpp
+    # Shared validate+copy primitive for installing shader packs.
+    # Consumed by AnimationsPageController + SnappingShadersPageController.
+    # Centralises the symlink-rejection + metadata.json safety checks.
+    shaderpackinstaller.h
+    shaderpackinstaller.cpp
     # Sub-services hosted by AnimationsPageController as child QObjects:
     # preset library + motion-set store. Split out to keep
     # animationspagecontroller.cpp under the project's 800-line cap.
