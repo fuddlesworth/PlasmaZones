@@ -36,7 +36,27 @@ ApplicationWindow {
     // are both valid values; `_drillOut` walks the lineage one level
     // at a time using `_parentMode`.
     property string _sidebarMode: "main"
-    // Main sidebar items
+    // Suppression flag for the sidebar ListView's accordion add/remove
+    // transitions. Set true while `sidebarTransition` is rebuilding the
+    // model so the drill-in/out cross-fade isn't fought by per-row
+    // accordion animations. Toggling a collapsible category leaves this
+    // false so the accordion plays as intended.
+    property bool _suppressAccordion: false
+    // Expanded state for inline collapsible categories. Categories
+    // currently come in two flavours: top-level "display" / "rules"
+    // groupings under the main sidebar, and "animations-surfaces" /
+    // "animations-library" inside the Animations sub-sidebar. Default
+    // is empty — categories auto-expand only when the active page lives
+    // inside them (see _expandActivePageCategory). Keyed by the
+    // category's item name. Mutated by replacing the whole object so
+    // QML's binding system picks up the change.
+    property var _expandedCategories: ({
+    })
+    // Main sidebar items. "display" and "rules" are top-level inline
+    // collapsible categories that group related leaves under a single
+    // header. They behave exactly like Surfaces/Library inside the
+    // Animations sub-sidebar: the header row toggles _expandedCategories
+    // and renders its children inline (indented) immediately below.
     readonly property var _mainItems: [{
         "name": "overview",
         "label": i18n("Overview"),
@@ -44,16 +64,11 @@ ApplicationWindow {
         "hasChildren": false,
         "hasDividerAfter": true
     }, {
-        "name": "virtualscreens",
-        "label": i18n("Virtual Screens"),
-        "iconName": "virtual-desktops",
-        "hasChildren": false,
-        "hasDividerAfter": false
-    }, {
-        "name": "layouts",
-        "label": i18n("Layouts"),
-        "iconName": "view-grid",
-        "hasChildren": false,
+        "name": "display",
+        "label": i18n("Display"),
+        "iconName": "preferences-desktop-display",
+        "hasChildren": true,
+        "isCollapsible": true,
         "hasDividerAfter": true
     }, {
         "name": "snapping",
@@ -74,16 +89,11 @@ ApplicationWindow {
         "hasChildren": true,
         "hasDividerAfter": false
     }, {
-        "name": "window-rules",
-        "label": i18n("Window Rules"),
+        "name": "rules",
+        "label": i18n("Rules"),
         "iconName": "view-list-details",
-        "hasChildren": false,
-        "hasDividerAfter": true
-    }, {
-        "name": "exclusions",
-        "label": i18n("Exclusions"),
-        "iconName": "dialog-cancel",
-        "hasChildren": false,
+        "hasChildren": true,
+        "isCollapsible": true,
         "hasDividerAfter": true
     }, {
         "name": "editor",
@@ -106,7 +116,46 @@ ApplicationWindow {
     }]
     // Children for each parent
     readonly property var _childItems: ({
+        "display": [{
+            "name": "virtualscreens",
+            "label": i18n("Virtual Screens"),
+            "iconName": "virtual-desktops"
+        }, {
+            "name": "layouts",
+            "label": i18n("Layouts"),
+            "iconName": "view-grid"
+        }],
+        "rules": [{
+            "name": "window-rules",
+            "label": i18n("Window Rules"),
+            "iconName": "view-list-details"
+        }, {
+            "name": "exclusions",
+            "label": i18n("Exclusions"),
+            "iconName": "dialog-cancel"
+        }],
         "snapping": [{
+            "name": "snapping-visual-cat",
+            "label": i18n("Visual"),
+            "iconName": "preferences-desktop-color",
+            "hasChildren": true,
+            "isCollapsible": true,
+            "hasDividerAfter": true
+        }, {
+            "name": "snapping-behavior-cat",
+            "label": i18n("Behavior"),
+            "iconName": "preferences-system",
+            "hasChildren": true,
+            "isCollapsible": true,
+            "hasDividerAfter": true
+        }, {
+            "name": "snapping-config-cat",
+            "label": i18n("Configuration"),
+            "iconName": "configure",
+            "hasChildren": true,
+            "isCollapsible": true
+        }],
+        "snapping-visual-cat": [{
             "name": "snapping-appearance",
             "label": i18n("Appearance"),
             "iconName": "preferences-desktop-color"
@@ -117,18 +166,18 @@ ApplicationWindow {
         }, {
             "name": "snapping-shaders",
             "label": i18n("Shaders"),
-            "iconName": "preferences-desktop-display",
-            "hasDividerAfter": true
-        }, {
+            "iconName": "preferences-desktop-display"
+        }],
+        "snapping-behavior-cat": [{
             "name": "snapping-behavior",
             "label": i18n("Behavior"),
             "iconName": "preferences-system"
         }, {
             "name": "snapping-zoneselector",
             "label": i18n("Zone Selector"),
-            "iconName": "view-choose",
-            "hasDividerAfter": true
-        }, {
+            "iconName": "view-choose"
+        }],
+        "snapping-config-cat": [{
             "name": "snapping-ordering",
             "label": i18n("Priority"),
             "iconName": "view-sort"
@@ -138,20 +187,41 @@ ApplicationWindow {
             "iconName": "bookmark"
         }],
         "tiling": [{
-            "name": "tiling-appearance",
-            "label": i18n("Appearance"),
+            "name": "tiling-visual-cat",
+            "label": i18n("Visual"),
             "iconName": "preferences-desktop-color",
+            "hasChildren": true,
+            "isCollapsible": true,
             "hasDividerAfter": true
         }, {
+            "name": "tiling-behavior-cat",
+            "label": i18n("Behavior"),
+            "iconName": "preferences-system",
+            "hasChildren": true,
+            "isCollapsible": true,
+            "hasDividerAfter": true
+        }, {
+            "name": "tiling-config-cat",
+            "label": i18n("Configuration"),
+            "iconName": "configure",
+            "hasChildren": true,
+            "isCollapsible": true
+        }],
+        "tiling-visual-cat": [{
+            "name": "tiling-appearance",
+            "label": i18n("Appearance"),
+            "iconName": "preferences-desktop-color"
+        }],
+        "tiling-behavior-cat": [{
             "name": "tiling-behavior",
             "label": i18n("Behavior"),
             "iconName": "preferences-system"
         }, {
             "name": "tiling-algorithm",
             "label": i18n("Algorithms"),
-            "iconName": "view-grid",
-            "hasDividerAfter": true
-        }, {
+            "iconName": "view-grid"
+        }],
+        "tiling-config-cat": [{
             "name": "tiling-ordering",
             "label": i18n("Priority"),
             "iconName": "view-sort"
@@ -169,12 +239,14 @@ ApplicationWindow {
             "name": "animations-surfaces",
             "label": i18n("Surfaces"),
             "iconName": "preferences-desktop-multimedia",
-            "hasChildren": true
+            "hasChildren": true,
+            "isCollapsible": true
         }, {
             "name": "animations-library",
             "label": i18n("Library"),
             "iconName": "folder-open",
-            "hasChildren": true
+            "hasChildren": true,
+            "isCollapsible": true
         }],
         "animations-surfaces": [{
             "name": "animations-windows",
@@ -217,11 +289,10 @@ ApplicationWindow {
     })
     // Map from sub-mode → its parent mode. Modes not listed here drill
     // back to "main". Lets `_drillOut` pop one level instead of always
-    // returning to the top, so `animations-surfaces` → `animations` →
-    // `main` works as three discrete steps.
+    // returning to the top. Surfaces and Library inside Animations are
+    // inline collapsible categories (not drill-down sub-modes), so they
+    // are intentionally absent here.
     readonly property var _parentMode: ({
-        "animations-surfaces": "animations",
-        "animations-library": "animations"
     })
     // Page component map -- loaded on demand by Loader
     readonly property var _pageComponents: ({
@@ -323,9 +394,22 @@ ApplicationWindow {
                 "clickable": chain[i] !== _sidebarMode
             });
         }
+        // If the active page lives inside an inline collapsible category
+        // (e.g. animations-windows under animations-surfaces), splice the
+        // category segment in between the mode and the page so the
+        // breadcrumb reads "Animations / Surfaces / Windows".
+        const activePage = settingsController.activePage;
+        const cat = _categoryOf(activePage);
+        if (cat.length > 0)
+            segments.push({
+                "name": cat,
+                "label": _modeLabel(cat),
+                "clickable": true
+            });
+
         segments.push({
-            "name": settingsController.activePage,
-            "label": _subPageLabel(settingsController.activePage),
+            "name": activePage,
+            "label": _subPageLabel(activePage),
             "clickable": false
         });
         return segments;
@@ -399,7 +483,10 @@ ApplicationWindow {
                         "hasChildren": matchingChildren.length === 0 && item.hasChildren,
                         "isBackButton": false,
                         "hasDividerAfter": false,
-                        "isDivider": false
+                        "isDivider": false,
+                        "isCategory": false,
+                        "categoryExpanded": false,
+                        "isCategoryChild": false
                     });
                     // Show matching children inline
                     for (let j = 0; j < matchingChildren.length; j++) {
@@ -412,7 +499,10 @@ ApplicationWindow {
                             "isBackButton": false,
                             "hasDividerAfter": false,
                             "isDivider": false,
-                            "isSearchChild": true
+                            "isSearchChild": true,
+                            "isCategory": false,
+                            "categoryExpanded": false,
+                            "isCategoryChild": false
                         });
                         if (childDivider)
                             sidebarModel.append({
@@ -422,10 +512,67 @@ ApplicationWindow {
                             "hasChildren": false,
                             "isBackButton": false,
                             "hasDividerAfter": false,
-                            "isDivider": true
+                            "isDivider": true,
+                            "isCategory": false,
+                            "categoryExpanded": false,
+                            "isCategoryChild": false
                         });
 
                     }
+                    continue;
+                }
+                // Top-level inline collapsible category (Display, Rules):
+                // append the header row with isCategory:true and, when
+                // expanded, every child immediately after with
+                // isCategoryChild flagged so the delegate indents. The
+                // chevron is driven by isCategory, so don't set
+                // hasChildren on the header (that would make it drill).
+                if (item.isCollapsible === true) {
+                    const expanded = _expandedCategories[item.name] === true;
+                    sidebarModel.append({
+                        "name": item.name,
+                        "label": item.label,
+                        "iconName": item.iconName,
+                        "hasChildren": false,
+                        "isBackButton": false,
+                        "hasDividerAfter": false,
+                        "isDivider": false,
+                        "isCategory": true,
+                        "categoryExpanded": expanded,
+                        "isCategoryChild": false
+                    });
+                    if (expanded) {
+                        const groupChildren = _childItems[item.name] || [];
+                        for (let g = 0; g < groupChildren.length; g++) {
+                            const gc = groupChildren[g];
+                            sidebarModel.append({
+                                "name": gc.name,
+                                "label": gc.label,
+                                "iconName": gc.iconName,
+                                "hasChildren": false,
+                                "isBackButton": false,
+                                "hasDividerAfter": false,
+                                "isDivider": false,
+                                "isCategory": false,
+                                "categoryExpanded": false,
+                                "isCategoryChild": true
+                            });
+                        }
+                    }
+                    if (item.hasDividerAfter)
+                        sidebarModel.append({
+                        "name": "__divider__",
+                        "label": "",
+                        "iconName": "",
+                        "hasChildren": false,
+                        "isBackButton": false,
+                        "hasDividerAfter": false,
+                        "isDivider": true,
+                        "isCategory": false,
+                        "categoryExpanded": false,
+                        "isCategoryChild": false
+                    });
+
                     continue;
                 }
                 sidebarModel.append({
@@ -435,7 +582,10 @@ ApplicationWindow {
                     "hasChildren": item.hasChildren,
                     "isBackButton": false,
                     "hasDividerAfter": false,
-                    "isDivider": false
+                    "isDivider": false,
+                    "isCategory": false,
+                    "categoryExpanded": false,
+                    "isCategoryChild": false
                 });
                 if (item.hasDividerAfter)
                     sidebarModel.append({
@@ -445,7 +595,10 @@ ApplicationWindow {
                     "hasChildren": false,
                     "isBackButton": false,
                     "hasDividerAfter": false,
-                    "isDivider": true
+                    "isDivider": true,
+                    "isCategory": false,
+                    "categoryExpanded": false,
+                    "isCategoryChild": false
                 });
 
             }
@@ -468,7 +621,10 @@ ApplicationWindow {
                 "hasChildren": false,
                 "isBackButton": true,
                 "hasDividerAfter": false,
-                "isDivider": false
+                "isDivider": false,
+                "isCategory": false,
+                "categoryExpanded": false,
+                "isCategoryChild": false
             });
             // Child items
             let children = _childItems[_sidebarMode] || [];
@@ -495,7 +651,10 @@ ApplicationWindow {
                         "hasChildren": nestedMatches.length === 0 && (child.hasChildren || false),
                         "isBackButton": false,
                         "hasDividerAfter": false,
-                        "isDivider": false
+                        "isDivider": false,
+                        "isCategory": false,
+                        "categoryExpanded": false,
+                        "isCategoryChild": false
                     });
                     for (let j = 0; j < nestedMatches.length; j++) {
                         sidebarModel.append({
@@ -506,9 +665,65 @@ ApplicationWindow {
                             "isBackButton": false,
                             "hasDividerAfter": false,
                             "isDivider": false,
-                            "isSearchChild": true
+                            "isSearchChild": true,
+                            "isCategory": false,
+                            "categoryExpanded": false,
+                            "isCategoryChild": false
                         });
                     }
+                    continue;
+                }
+                // Inline collapsible category (Surfaces / Library inside
+                // the Animations sub-sidebar). The header row never drills
+                // — clicking toggles _expandedCategories. When expanded,
+                // append every grand-child immediately after with
+                // isCategoryChild flagged so the delegate indents.
+                if (child.isCollapsible === true) {
+                    const expanded = _expandedCategories[child.name] === true;
+                    sidebarModel.append({
+                        "name": child.name,
+                        "label": child.label,
+                        "iconName": child.iconName,
+                        "hasChildren": false,
+                        "isBackButton": false,
+                        "hasDividerAfter": false,
+                        "isDivider": false,
+                        "isCategory": true,
+                        "categoryExpanded": expanded,
+                        "isCategoryChild": false
+                    });
+                    if (expanded) {
+                        const grandChildren = _childItems[child.name] || [];
+                        for (let g = 0; g < grandChildren.length; g++) {
+                            const gc = grandChildren[g];
+                            sidebarModel.append({
+                                "name": gc.name,
+                                "label": gc.label,
+                                "iconName": gc.iconName,
+                                "hasChildren": false,
+                                "isBackButton": false,
+                                "hasDividerAfter": false,
+                                "isDivider": false,
+                                "isCategory": false,
+                                "categoryExpanded": false,
+                                "isCategoryChild": true
+                            });
+                        }
+                    }
+                    if (childDivider)
+                        sidebarModel.append({
+                        "name": "__divider__",
+                        "label": "",
+                        "iconName": "",
+                        "hasChildren": false,
+                        "isBackButton": false,
+                        "hasDividerAfter": false,
+                        "isDivider": true,
+                        "isCategory": false,
+                        "categoryExpanded": false,
+                        "isCategoryChild": false
+                    });
+
                     continue;
                 }
                 sidebarModel.append({
@@ -518,7 +733,10 @@ ApplicationWindow {
                     "hasChildren": child.hasChildren || false,
                     "isBackButton": false,
                     "hasDividerAfter": false,
-                    "isDivider": false
+                    "isDivider": false,
+                    "isCategory": false,
+                    "categoryExpanded": false,
+                    "isCategoryChild": false
                 });
                 if (childDivider)
                     sidebarModel.append({
@@ -528,7 +746,10 @@ ApplicationWindow {
                     "hasChildren": false,
                     "isBackButton": false,
                     "hasDividerAfter": false,
-                    "isDivider": true
+                    "isDivider": true,
+                    "isCategory": false,
+                    "categoryExpanded": false,
+                    "isCategoryChild": false
                 });
 
             }
@@ -543,23 +764,122 @@ ApplicationWindow {
         return label !== undefined ? label : name;
     }
 
+    // Toggle the expanded state of an inline collapsible category by
+    // its item name (e.g. "animations-surfaces"). Replaces the whole
+    // map so QML's binding system observes the mutation, then rebuilds
+    // the sidebar so the grand-children appear/disappear immediately.
+    function _toggleCategory(name) {
+        let next = Object.assign({
+        }, _expandedCategories);
+        next[name] = !(next[name] === true);
+        _expandedCategories = next;
+        _rebuildSidebar();
+    }
+
+    // Smart-default expansion: if the active page lives inside an inline
+    // collapsible category, ensure that category is expanded. Called at
+    // startup and whenever activePage changes (via the Connections slot
+    // below). Idempotent — bails when the category is already expanded
+    // so it doesn't churn the sidebar model.
+    function _expandActivePageCategory() {
+        const cat = _categoryOf(settingsController.activePage);
+        if (cat.length === 0)
+            return ;
+
+        if (_expandedCategories[cat] === true)
+            return ;
+
+        let next = Object.assign({
+        }, _expandedCategories);
+        next[cat] = true;
+        _expandedCategories = next;
+        _rebuildSidebar();
+    }
+
+    /// If @p pageName lives inside an inline collapsible category, return
+    /// that category's item name (e.g. "animations-surfaces" or "display").
+    /// Otherwise returns "". Used by the breadcrumb chain to insert the
+    /// category segment between the mode and the page AND by the
+    /// smart-default-expansion logic that auto-expands the owning category
+    /// whenever activePage lands inside it.
+    function _categoryOf(pageName) {
+        const candidates = ["animations-surfaces", "animations-library", "display", "rules", "snapping-visual-cat", "snapping-behavior-cat", "snapping-config-cat", "tiling-visual-cat", "tiling-behavior-cat", "tiling-config-cat"];
+        for (let c = 0; c < candidates.length; c++) {
+            const list = _childItems[candidates[c]] || [];
+            for (let i = 0; i < list.length; i++) {
+                if (list[i].name === pageName)
+                    return candidates[c];
+
+            }
+        }
+        return "";
+    }
+
     // Navigate to the breadcrumb segment named @p name. Top-level
     // modes pop to main with that parent name as `activePage` (so the
-    // sidebar highlights it); sub-modes pop directly into that
-    // intermediate sub-sidebar. Both go through the same fade
-    // transition as a back-button click for visual continuity.
+    // sidebar highlights it); top-level inline collapsible categories
+    // (e.g. "display", "rules") expand in place without a sidebar mode
+    // switch; sub-sidebar inline categories (animations-surfaces /
+    // animations-library) drill into their owning mode and ensure the
+    // category is expanded; remaining drill-down sub-modes pop directly
+    // into that intermediate sub-sidebar. All non-trivial transitions
+    // run through sidebarTransition for visual continuity.
     function _navigateToBreadcrumbSegment(name) {
         for (let i = 0; i < _mainItems.length; i++) {
             if (_mainItems[i].name === name) {
+                // Top-level inline collapsible category — already in
+                // main mode, just guarantee the group is expanded.
+                if (_mainItems[i].isCollapsible === true) {
+                    let next = Object.assign({
+                    }, _expandedCategories);
+                    next[name] = true;
+                    _expandedCategories = next;
+                    _rebuildSidebar();
+                    return ;
+                }
                 sidebarTransition.pendingMode = "main";
                 sidebarTransition.pendingPage = name;
                 sidebarTransition.restart();
                 return ;
             }
         }
+        // Inline collapsible category inside any sub-sidebar — find its
+        // parent mode by scanning `_childItems` for the bucket that
+        // contains this name as a collapsible entry, then drill into it.
+        const parentMode = _parentModeForCategory(name);
+        if (parentMode.length > 0) {
+            let next = Object.assign({
+            }, _expandedCategories);
+            next[name] = true;
+            _expandedCategories = next;
+            sidebarTransition.pendingMode = parentMode;
+            sidebarTransition.pendingPage = "";
+            sidebarTransition.restart();
+            return ;
+        }
+        // Drill-down sub-mode (Snapping / Tiling / Animations top-level).
         sidebarTransition.pendingMode = name;
         sidebarTransition.pendingPage = "";
         sidebarTransition.restart();
+    }
+
+    /// Reverse lookup: given an inline collapsible category's item name
+    /// (e.g. "snapping-visual-cat"), return the sub-sidebar mode that
+    /// hosts it (e.g. "snapping"). Returns "" when no `_childItems`
+    /// bucket lists @p categoryName as a collapsible entry. Used by the
+    /// breadcrumb navigator and the stale-`activePage` remap so the
+    /// owning mode doesn't need to be hard-coded per category.
+    function _parentModeForCategory(categoryName) {
+        const keys = Object.keys(_childItems);
+        for (let k = 0; k < keys.length; k++) {
+            const list = _childItems[keys[k]];
+            for (let i = 0; i < list.length; i++) {
+                if (list[i].name === categoryName && list[i].isCollapsible === true)
+                    return keys[k];
+
+            }
+        }
+        return "";
     }
 
     // Helper: find a subpage label by name. Searches the current
@@ -666,13 +986,18 @@ ApplicationWindow {
             window.x = geo.x;
             window.y = geo.y;
         }
+        // Seed smart-default expansion BEFORE the first build so the
+        // owning category of a restored activePage is open from the
+        // first paint instead of flashing closed → open.
+        _expandActivePageCategory();
         // Build initial sidebar
         _rebuildSidebar();
         // If the active page is a child of a category, drill in. Skip
         // intermediate (`hasChildren: true`) entries so a stale
         // `activePage = "animations-surfaces"` doesn't masquerade as a
         // valid restored leaf — the virtual parent name only ever
-        // means "show this sub-sidebar", and there's no QML component
+        // means "show this sub-sidebar" (drill-down) or "show this
+        // inline category" (no drill), and there's no QML component
         // for it in `_pageComponents`. The drill-in transition picks a
         // real leaf for the user when one of those names round-trips
         // through stored state.
@@ -682,16 +1007,53 @@ ApplicationWindow {
             let children = _childItems[parents[p]];
             for (let c = 0; c < children.length; c++) {
                 if (children[c].name === page && !children[c].hasChildren) {
-                    _sidebarMode = parents[p];
+                    // If the owning parent is an inline collapsible
+                    // category, drill into its host mode (so the
+                    // sub-sidebar opens) — except for top-level main-mode
+                    // categories (Display/Rules), which live directly
+                    // under main and need _sidebarMode left at "main".
+                    // Inline categories are not sidebar modes themselves;
+                    // they render expanded under their owner.
+                    const cat = _categoryOf(page);
+                    const subMode = cat.length > 0 ? _parentModeForCategory(cat) : "";
+                    if (subMode.length > 0)
+                        _sidebarMode = subMode;
+                    else if (cat === "display" || cat === "rules")
+                        _sidebarMode = "main";
+                    else
+                        _sidebarMode = parents[p];
                     _rebuildSidebar();
                     return ;
                 }
             }
         }
-        // Stale activePage is a virtual parent (e.g. saved as
-        // "animations-surfaces") — treat it as a drill-in request so
-        // the user lands on a real leaf instead of seeing the silent
-        // LayoutsPage fallback.
+        // Stale activePage is a virtual parent. Inline category names
+        // need to be remapped to a real leaf so the user lands on
+        // something other than the silent LayoutsPage fallback. The
+        // owning sidebar mode is derived from the category's host
+        // bucket: top-level main-mode categories (display/rules) live
+        // under "main"; sub-sidebar categories (animations-*-cat,
+        // snapping-*-cat, tiling-*-cat) live under their parent mode
+        // returned by _parentModeForCategory.
+        let staleMode = "";
+        for (let m = 0; m < _mainItems.length; m++) {
+            if (_mainItems[m].name === page && _mainItems[m].isCollapsible === true) {
+                staleMode = "main";
+                break;
+            }
+        }
+        if (staleMode.length === 0)
+            staleMode = _parentModeForCategory(page);
+
+        if (staleMode.length > 0) {
+            _sidebarMode = staleMode;
+            const firstLeaf = _firstLeafOf(page);
+            if (firstLeaf.length > 0)
+                settingsController.activePage = firstLeaf;
+
+            _rebuildSidebar();
+            return ;
+        }
         if (_childItems[page])
             _drillIn(page);
 
@@ -714,17 +1076,53 @@ ApplicationWindow {
         target: appSettings
     }
 
+    // Auto-expand the owning inline collapsible category when activePage
+    // changes to a page inside one (e.g. external navigation lands on
+    // animations-windows while Surfaces is collapsed, or on layouts
+    // while Display is collapsed). The user should see the selected
+    // leaf rather than a collapsed category hiding it.
+    Connections {
+        function onActivePageChanged() {
+            const cat = window._categoryOf(settingsController.activePage);
+            if (cat && window._expandedCategories[cat] !== true) {
+                let next = Object.assign({
+                }, window._expandedCategories);
+                next[cat] = true;
+                window._expandedCategories = next;
+                // Rebuild only when the affected category is on screen.
+                // Top-level categories (display/rules) live in main mode;
+                // sub-sidebar categories live under the mode returned by
+                // _parentModeForCategory (animations, snapping, tiling).
+                const topLevel = (cat === "display" || cat === "rules");
+                const subMode = window._parentModeForCategory(cat);
+                const subVisible = subMode.length > 0 && window._sidebarMode === subMode;
+                if ((topLevel && window._sidebarMode === "main") || subVisible)
+                    window._rebuildSidebar();
+
+            }
+        }
+
+        target: settingsController
+    }
+
     // Visible sidebar model (rebuilt when _sidebarMode changes)
     ListModel {
         id: sidebarModel
     }
 
-    // Sidebar drill-in/out transition animation
+    // Sidebar drill-in/out transition animation. While this animation
+    // runs, _suppressAccordion is held true so the ListView's accordion
+    // add/remove transitions stay quiet — the cross-fade already covers
+    // the visual change and per-row animations would fight it.
     SequentialAnimation {
         id: sidebarTransition
 
         property string pendingMode: ""
         property string pendingPage: ""
+
+        ScriptAction {
+            script: window._suppressAccordion = true
+        }
 
         PhosphorMotionAnimation {
             target: sidebar
@@ -750,6 +1148,10 @@ ApplicationWindow {
             profile: "panel.fadeIn"
         }
 
+        ScriptAction {
+            script: window._suppressAccordion = false
+        }
+
     }
 
     Shortcut {
@@ -758,7 +1160,7 @@ ApplicationWindow {
             let idx = sidebar.currentIndex;
             for (let i = idx - 1; i >= 0; i--) {
                 let item = sidebarModel.get(i);
-                if (!item.isBackButton && !item.hasChildren && item.name !== "__divider__") {
+                if (!item.isBackButton && !item.hasChildren && !item.isCategory && item.name !== "__divider__") {
                     settingsController.activePage = item.name;
                     return ;
                 }
@@ -776,7 +1178,7 @@ ApplicationWindow {
             let idx = sidebar.currentIndex;
             for (let i = idx + 1; i < sidebarModel.count; i++) {
                 let item = sidebarModel.get(i);
-                if (!item.isBackButton && !item.hasChildren && item.name !== "__divider__") {
+                if (!item.isBackButton && !item.hasChildren && !item.isCategory && item.name !== "__divider__") {
                     settingsController.activePage = item.name;
                     return ;
                 }
@@ -874,6 +1276,50 @@ ApplicationWindow {
                     }
                     clip: true
 
+                    // Accordion add/remove/displaced transitions drive the
+                    // collapsible category toggle (Display, Rules,
+                    // Surfaces, Library). Gated by _suppressAccordion so
+                    // they stay quiet during the drill-in/out cross-fade
+                    // which already covers the visual change.
+                    add: Transition {
+                        enabled: !window._suppressAccordion
+
+                        PhosphorMotionAnimation {
+                            properties: "opacity"
+                            from: 0
+                            to: 1
+                            profile: "widget.accordionExpand"
+                        }
+
+                        PhosphorMotionAnimation {
+                            properties: "y"
+                            profile: "widget.accordionExpand"
+                        }
+
+                    }
+
+                    remove: Transition {
+                        enabled: !window._suppressAccordion
+
+                        PhosphorMotionAnimation {
+                            properties: "opacity"
+                            from: 1
+                            to: 0
+                            profile: "widget.accordionCollapse"
+                        }
+
+                    }
+
+                    displaced: Transition {
+                        enabled: !window._suppressAccordion
+
+                        PhosphorMotionAnimation {
+                            properties: "y"
+                            profile: "widget.accordionExpand"
+                        }
+
+                    }
+
                     delegate: ItemDelegate {
                         id: navDelegate
 
@@ -885,6 +1331,9 @@ ApplicationWindow {
                         required property bool isBackButton
                         required property bool hasDividerAfter
                         required property bool isDivider
+                        required property bool isCategory
+                        required property bool categoryExpanded
+                        required property bool isCategoryChild
                         // `model` is the full row object — explicit
                         // `required` so strict QML resolution finds it
                         // (the ListView's implicit `model` context property
@@ -902,6 +1351,9 @@ ApplicationWindow {
                             if (hasChildren)
                                 return false;
 
+                            if (isCategory)
+                                return false;
+
                             return name === settingsController.activePage;
                         }
 
@@ -910,6 +1362,10 @@ ApplicationWindow {
                         enabled: !isDivider
                         highlighted: isActive
                         onClicked: {
+                            if (isCategory) {
+                                window._toggleCategory(name);
+                                return ;
+                            }
                             if (isBackButton) {
                                 window._drillOut();
                                 return ;
@@ -939,7 +1395,12 @@ ApplicationWindow {
                                     for (let c = 0; c < children.length; c++) {
                                         if (children[c].name === name) {
                                             sidebarSearch.text = "";
-                                            _sidebarMode = parents[p];
+                                            // Map inline-category parent
+                                            // buckets to their owning mode —
+                                            // inline categories are not
+                                            // sidebar modes themselves.
+                                            const owner = window._categoryOf(name);
+                                            _sidebarMode = owner.length > 0 ? "animations" : parents[p];
                                             _rebuildSidebar();
                                             settingsController.activePage = name;
                                             return ;
@@ -951,13 +1412,17 @@ ApplicationWindow {
                         }
                         leftPadding: {
                             const base = window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing;
-                            // Inline search-result rows nest under
+                            // Inline search-result rows AND inline
+                            // collapsible-category children nest under
                             // their parent — bump leftPadding by an
                             // iconSize-equivalent so the indent reads
                             // as hierarchy. Theme-aware via
                             // `Kirigami.Units` and RTL-correct because
                             // `leftPadding` flips with layoutDirection.
-                            return base + (navDelegate.isSearchChild ? Kirigami.Units.iconSizes.small : 0);
+                            if (navDelegate.isSearchChild || navDelegate.isCategoryChild)
+                                return base + Kirigami.Units.iconSizes.small;
+
+                            return base;
                         }
                         rightPadding: window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing
                         // Strip the "Surfaces / Windows" prefix from
@@ -1103,7 +1568,7 @@ ApplicationWindow {
                                 radius: width / 2
                                 color: Kirigami.Theme.neutralTextColor
                                 visible: {
-                                    if (navDelegate.isDivider || navDelegate.isBackButton)
+                                    if (navDelegate.isDivider || navDelegate.isBackButton || navDelegate.isCategory)
                                         return false;
 
                                     settingsController.dirtyPages; // binding dependency
@@ -1160,7 +1625,9 @@ ApplicationWindow {
                                 }
                             }
 
-                            // Right chevron for items with children
+                            // Right chevron for drill-down items AND inline
+                            // collapsible category headers. Rotates 90° to
+                            // point down when an inline category is expanded.
                             Kirigami.Icon {
                                 source: "go-next"
                                 Layout.preferredWidth: Kirigami.Units.iconSizes.small
@@ -1175,7 +1642,19 @@ ApplicationWindow {
 
                                     return 0.3;
                                 }
-                                visible: navDelegate.hasChildren && !window.sidebarCompact
+                                visible: (navDelegate.hasChildren || navDelegate.isCategory) && !window.sidebarCompact
+                                // Keep the same icon so the visual stays
+                                // familiar; rotation is animatable.
+                                rotation: navDelegate.categoryExpanded ? 90 : 0
+
+                                Behavior on rotation {
+                                    PhosphorMotionAnimation {
+                                        profile: "widget.hover"
+                                        durationOverride: 150
+                                    }
+
+                                }
+
                             }
 
                         }
