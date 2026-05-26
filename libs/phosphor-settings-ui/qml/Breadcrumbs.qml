@@ -10,8 +10,14 @@ import org.phosphor.settings.ui
 /**
  * Breadcrumb trail for the current page.
  *
- * Walks parentId links upward from the current page; each segment but the
- * last is clickable and navigates to that ancestor.
+ * Walks parentId links upward from the current page; each segment but
+ * the last is clickable and navigates to that ancestor.
+ *
+ * Visual model matches the legacy PlasmaZones chrome: plain Labels at
+ * 0.5 opacity by default, fading to 0.8 + an underline on hover for
+ * clickable segments. Separator is a `›` (U+203A) Label between
+ * segments, not an icon — keeps the trail lightweight and theme-
+ * independent.
  */
 RowLayout {
     id: root
@@ -43,26 +49,38 @@ RowLayout {
             required property int index
             required property var modelData
             readonly property bool isLast: index === root.segments.length - 1
+            readonly property bool clickable: !isLast
 
             spacing: Kirigami.Units.smallSpacing
 
-            QQC2.AbstractButton {
-                enabled: !segmentRow.isLast
-                onClicked: root.controller.currentPageId = segmentRow.modelData.id
+            QQC2.Label {
+                id: segmentLabel
 
-                contentItem: QQC2.Label {
-                    text: segmentRow.modelData.title
-                    font.bold: segmentRow.isLast
-                    color: segmentRow.isLast ? Kirigami.Theme.textColor : Kirigami.Theme.linkColor
+                text: segmentRow.modelData.title
+                opacity: segmentRow.clickable && segmentMouse.containsMouse ? 0.8 : 0.5
+                font.underline: segmentRow.clickable && segmentMouse.containsMouse
+                Accessible.name: text
+                Accessible.role: segmentRow.clickable ? Accessible.Link : Accessible.StaticText
+
+                MouseArea {
+                    id: segmentMouse
+
+                    anchors.fill: parent
+                    hoverEnabled: segmentRow.clickable
+                    enabled: segmentRow.clickable
+                    cursorShape: segmentRow.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: root.controller.currentPageId = segmentRow.modelData.id
                 }
 
             }
 
-            Kirigami.Icon {
+            QQC2.Label {
                 visible: !segmentRow.isLast
-                source: "go-next-symbolic"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                // U+203A SINGLE RIGHT-POINTING ANGLE QUOTATION MARK —
+                // matches the legacy separator glyph. Lighter visual
+                // weight than an icon and doesn't depend on the
+                // freedesktop icon theme.
+                text: "›"
                 opacity: 0.5
             }
 
