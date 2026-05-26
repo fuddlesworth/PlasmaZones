@@ -15,17 +15,20 @@ Settings.AboutPageShell {
     copyright: "© 2026 fuddlesworth"
     license: "LGPL-2.1-or-later"
     homepageUrl: "https://github.com/fuddlesworth/PlasmaZones"
-
-    // Anything declared as a child lands in the extras slot.
-    Kirigami.Heading {
-        level: 3
-        text: qsTr("Try the demo")
-    }
-
-    QQC2.Label {
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        text: qsTr("Switch to the General page, toggle the sound switch or edit " + "the greeting, then watch the Apply / Cancel buttons in the " + "footer light up.")
-    }
-
+    // Extras land below the homepage URL via the named `extraContent`
+    // slot — explicit list syntax, since the shell intentionally does
+    // NOT make extraContent its default property (that would hijack
+    // Kirigami.ScrollablePage's own default and break the shell's
+    // internal layout).
+    extraContent: [
+        Kirigami.Heading {
+            level: 3
+            text: qsTr("Try the demo")
+        },
+        QQC2.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: qsTr("Switch to the General page, toggle the sound switch or " + "edit the greeting, then watch the Apply / Cancel " + "buttons in the footer light up.")
+        }
+    ]
 }

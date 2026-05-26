@@ -10,9 +10,17 @@ import org.kde.kirigami as Kirigami
  * Standard "About this application" page scaffold.
  *
  * The shell renders the conventional layout (icon + name + version on top,
- * description / copyright / license / homepage below) and exposes a
- * default-property slot for apps to inject extra content (daemon-status
- * cards, version-history toggles, "Report a bug" buttons, etc.).
+ * description / copyright / license / homepage below) and exposes two
+ * named slots for app-injected content:
+ *
+ *   - `topContent`  — a Component rendered ABOVE the icon header
+ *                     (e.g. a daemon enable/disable toggle).
+ *   - `extraContent` — a list of items rendered BELOW the homepage URL
+ *                      (license / credits / build-info cards).
+ *
+ * Both slots are EXPLICIT-assignment only (not default property), because
+ * Kirigami.ScrollablePage already has its own default property (the
+ * scrollable content area) and shadowing it breaks the shell's layout.
  *
  * Usage:
  *
@@ -23,27 +31,38 @@ import org.kde.kirigami as Kirigami
  *       description: qsTr("A reusable Qt6/Kirigami settings framework.")
  *       homepageUrl: "https://example.com/phosphor"
  *
- *       // Anything declared as a child goes into the extras slot.
- *       Kirigami.Heading { text: qsTr("Build info") }
- *       QQC2.Label  { text: qsTr("Compiled against Qt %1").arg(qVersion) }
+ *       topContent: Component {
+ *           RowLayout { Label { text: qsTr("Enable daemon") } ; Switch {} }
+ *       }
+ *
+ *       extraContent: [
+ *           Kirigami.Heading { text: qsTr("Build info") },
+ *           QQC2.Label  { text: qsTr("Compiled against Qt %1").arg(qVersion) }
+ *       ]
  *   }
  */
 Kirigami.ScrollablePage {
+    // Named property aliases for the two consumer slots. NEITHER is the
+    // shell's `default` — making `extraContent` the default property
+    // hijacks Kirigami.ScrollablePage's own default (the scrollable
+    // contentItem), which would route the shell's own internal
+    // ColumnLayout into `extraColumn.data` (an alias to a child that
+    // doesn't exist yet at that point). Without the `default` keyword,
+    // the inner ColumnLayout below becomes the ScrollablePage's
+    // contentItem as intended.
+
     id: root
 
-    /** Children placed inside the shell land in the extras slot below the
-     *  standard content. Aliases `data` so default-property children and
-     *  the list-assignment form both work. */
-    default property alias extraContent: extraColumn.data
+    /** Content rendered below the homepage URL, inside the standard
+     *  about-page scroll. Accepts list-assignment:
+     *      AboutPageShell {
+     *          extraContent: [ Card {...}, Card {...} ]
+     *      } */
+    property alias extraContent: extraColumn.data
     /** Optional content rendered ABOVE the icon/name/version header.
-     *  Useful for app-level toggles (e.g. enable / disable the
-     *  underlying daemon) that should anchor the page visually rather
-     *  than sit below the standard about-page chrome.
-     *
-     *  Accepts a `Component` (NOT a child Item) because property-alias
-     *  binding from outside a non-default property doesn't reliably
-     *  reparent items inside Kirigami.ScrollablePage's scrollable
-     *  area. The Component is instantiated by an internal Loader. */
+     *  Accepts a `Component` (instantiated by an internal Loader) —
+     *  Component slots are bulletproof for single-root injection in
+     *  scrollable pages. */
     property Component topContent: null
     property string appName: ""
     property string appIcon: ""
@@ -83,8 +102,8 @@ Kirigami.ScrollablePage {
             onLoaded: {
                 if (item)
                     item.width = Qt.binding(() => {
-                        return topLoader.width;
-                    });
+                    return topLoader.width;
+                });
 
             }
         }

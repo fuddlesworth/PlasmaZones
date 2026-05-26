@@ -5,92 +5,23 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.settings.ui as PhosphorUi
 
-// Direct Kirigami.ScrollablePage rather than PhosphorUi.AboutPageShell.
-// The shell's Component-slot machinery fell over too many times trying
-// to host the daemon toggle above the standard header — restoring the
-// legacy structure verbatim. Apps that don't have a header-anchored
-// toggle can still use AboutPageShell.
-Kirigami.ScrollablePage {
+// PhosphorUi.AboutPageShell hosts the standard chrome (icon + name +
+// version + description + license + homepage); PlasmaZones-specific
+// content (daemon toggle on top, link / license / credits cards in
+// extras) is injected through the shell's slots.
+PhosphorUi.AboutPageShell {
     id: root
 
-    title: i18n("About")
-
-    ColumnLayout {
-        width: root.width - root.leftPadding - root.rightPadding
-        spacing: Kirigami.Units.largeSpacing
-
-        // ── Daemon enable/disable toggle (anchored at top) ──────────
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            Label {
-                text: i18n("Enable PlasmaZones")
-                font.weight: Font.DemiBold
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            Label {
-                text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
-                opacity: 0.7
-            }
-
-            SettingsSwitch {
-                checked: settingsController.daemonRunning
-                enabled: !settingsController.daemonController.busy
-                onToggled: function(newValue) {
-                    settingsController.daemonController.setEnabled(newValue);
-                }
-                accessibleName: i18n("Enable PlasmaZones")
-            }
-
-        }
-
-        Kirigami.Separator {
-            Layout.fillWidth: true
-        }
-
-        // ── Header: icon + name + version ───────────────────────────
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.largeSpacing
-
-            Kirigami.Icon {
-                source: "plasmazones"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.huge
-                Layout.preferredHeight: Kirigami.Units.iconSizes.huge
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
-
-                Kirigami.Heading {
-                    level: 1
-                    text: i18n("PlasmaZones")
-                }
-
-                Label {
-                    text: Qt.application.version.length > 0 ? i18n("Version %1", Qt.application.version) : i18n("Version unknown")
-                    opacity: 0.7
-                }
-
-            }
-
-        }
-
-        // ── Description ─────────────────────────────────────────────
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            text: i18n("A window tiling and zone management tool for " + "Wayland compositors. Organize your desktop with " + "customizable zones, automatic tiling layouts, " + "and keyboard-driven window placement.")
-        }
-
-        // ── Links card ──────────────────────────────────────────────
+    appName: i18n("PlasmaZones")
+    appIcon: "plasmazones"
+    appVersion: Qt.application.version.length > 0 ? i18n("Version %1", Qt.application.version) : i18n("Version unknown")
+    description: i18n("A window tiling and zone management tool for " + "Wayland compositors. Organize your desktop with " + "customizable zones, automatic tiling layouts, " + "and keyboard-driven window placement.")
+    license: i18n("PlasmaZones is free software licensed under the " + "GNU General Public License version 3 or later " + "(GPL-3.0-or-later).")
+    homepageUrl: "https://github.com/fuddlesworth/PlasmaZones"
+    // ── Extras: Links / Credits cards rendered below the homepage URL ──
+    extraContent: [
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Links")
@@ -161,33 +92,7 @@ Kirigami.ScrollablePage {
 
             }
 
-        }
-
-        // ── License card ────────────────────────────────────────────
-        SettingsCard {
-            Layout.fillWidth: true
-            headerText: i18n("License")
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: i18n("PlasmaZones is free software licensed under the " + "GNU General Public License version 3 or later " + "(GPL-3.0-or-later).")
-                }
-
-                LinkButton {
-                    linkText: i18n("View License")
-                    linkIcon: "license"
-                    url: "https://www.gnu.org/licenses/gpl-3.0.html"
-                }
-
-            }
-
-        }
-
-        // ── Credits card ────────────────────────────────────────────
+        },
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Credits")
@@ -216,15 +121,40 @@ Kirigami.ScrollablePage {
             }
 
         }
+    ]
 
-        Item {
-            Layout.fillHeight: true
+    // ── Daemon enable/disable toggle, anchored above the header ──
+    topContent: Component {
+        RowLayout {
+            spacing: Kirigami.Units.smallSpacing
+
+            Label {
+                text: i18n("Enable PlasmaZones")
+                font.weight: Font.DemiBold
+            }
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            Label {
+                text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
+                opacity: 0.7
+            }
+
+            SettingsSwitch {
+                checked: settingsController.daemonRunning
+                enabled: !settingsController.daemonController.busy
+                onToggled: function(newValue) {
+                    settingsController.daemonController.setEnabled(newValue);
+                }
+                accessibleName: i18n("Enable PlasmaZones")
+            }
+
         }
 
     }
 
-    // Helper component for link buttons (kept inline, same shape as
-    // the legacy AboutPage.qml).
     component LinkButton: Button {
         id: linkButton
 
