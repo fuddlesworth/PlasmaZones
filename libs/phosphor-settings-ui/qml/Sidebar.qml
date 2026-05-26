@@ -482,9 +482,13 @@ ColumnLayout {
                     // Tooltip surfaces the row label when compact mode
                     // has hidden it. 300ms delay matches legacy. Held
                     // off for divider rows because they have no label.
-                    ToolTip.visible: root.compact && itemDelegate.hovered && !itemDelegate._isDivider
-                    ToolTip.text: itemDelegate.title
-                    ToolTip.delay: 300
+                    // `QtQuick.Controls` is imported as QQC2 so the
+                    // attached property has to be namespaced too —
+                    // unqualified `ToolTip.x` reads as a non-existent
+                    // attached object.
+                    QQC2.ToolTip.visible: root.compact && itemDelegate.hovered && !itemDelegate._isDivider
+                    QQC2.ToolTip.text: itemDelegate.title
+                    QQC2.ToolTip.delay: 300
                     onClicked: {
                         if (_isDivider)
                             return ;
