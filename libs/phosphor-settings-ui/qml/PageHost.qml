@@ -23,7 +23,19 @@ Item {
     id: root
 
     required property ApplicationController controller
-    readonly property var currentEntry: root.controller.currentPageId === "" ? null : root.controller.registry.pageData(root.controller.currentPageId)
+    // `pageData()` returns an empty QVariantMap when the id is unknown
+    // (e.g. mid-startup before registration completes, or a stale id
+    // restored from disk). An empty map marshals to a non-null JS
+    // object — so we must check for a valid `id` field to fall
+    // through to the placeholder rather than rendering an empty
+    // viewport with no page and no fallback message.
+    readonly property var currentEntry: {
+        if (root.controller.currentPageId === "")
+            return null;
+
+        const data = root.controller.registry.pageData(root.controller.currentPageId);
+        return (data && data.id) ? data : null;
+    }
 
     Loader {
         id: pageLoader

@@ -77,7 +77,15 @@ ColumnLayout {
     property bool _suppressAccordion: false
 
     function drillInto(parentId) {
+        // Short-circuit on either the already-displayed scope OR a
+        // drill already in flight targeting the same parent — without
+        // the second check, a double-click on a drill row would
+        // restart the cross-fade mid-animation and the user would see
+        // the panel briefly flash back to opacity 0.
         if (root.currentParentId === parentId)
+            return ;
+
+        if (drillAnimation.running && drillAnimation.pendingParentId === parentId)
             return ;
 
         drillAnimation.pendingParentId = parentId;
@@ -88,17 +96,22 @@ ColumnLayout {
         if (root.currentParentId === "")
             return ;
 
+        if (drillAnimation.running && drillAnimation.pendingParentId === "")
+            return ;
+
         drillAnimation.pendingParentId = "";
         drillAnimation.restart();
     }
 
     function toggleCategory(id) {
+        // Flip relative to the *displayed* state — _isExpanded() treats
+        // an absent id as expanded (the rail starts open), so the
+        // toggle must respect that view. The earlier ternary form
+        // mapped undefined → true (no-op for the user) and required a
+        // second click to actually collapse a never-toggled category.
         const next = Object.assign({
         }, root.expandedCategories);
-        next[id] = next[id] === false ? true : !(next[id] === true);
-        if (next[id] === undefined)
-            next[id] = true;
-
+        next[id] = !root._isExpanded(id);
         root.expandedCategories = next;
     }
 
@@ -169,19 +182,23 @@ ColumnLayout {
             for (let i = 0; i < kids.length; ++i) {
                 const child = kids[i];
                 const grand = root._hasChildren(child.id);
-                if (grand) {
-                    const next = breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title;
-                    collect(child.id, next);
-                    continue;
-                }
+                const childBreadcrumb = breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title;
+                // Always recurse so descendants can match — but if
+                // this parent is itself navigable (`hasQmlSource`),
+                // also consider its own label as a match candidate.
+                // The previous form skipped parents entirely, so a
+                // navigable category page (one that has children AND
+                // a qmlSource) was unreachable through search.
+                if (grand)
+                    collect(child.id, childBreadcrumb);
+
                 if (!child.hasQmlSource)
                     continue;
 
-                const label = (breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title);
-                if (label.toLowerCase().indexOf(needle) >= 0)
+                if (childBreadcrumb.toLowerCase().indexOf(needle) >= 0)
                     matches.push({
                     "id": child.id,
-                    "title": label,
+                    "title": childBreadcrumb,
                     "iconSource": child.iconSource,
                     "hasQmlSource": true,
                     "_depth": 0,
@@ -241,6 +258,19 @@ ColumnLayout {
         }
 
         target: root.controller
+    }
+
+    // Late-registered pages need to appear in the rail without a
+    // restart. The registry's pageRegistered signal fires once per
+    // registerPage() call; refreshing on each is cheap (the model
+    // diff keeps the visible delegates stable) and covers async
+    // catalog warm-up flows (plugin loading, dynamic registration).
+    Connections {
+        function onPageRegistered() {
+            root._refreshModel();
+        }
+
+        target: root.controller.registry
     }
 
     SequentialAnimation {

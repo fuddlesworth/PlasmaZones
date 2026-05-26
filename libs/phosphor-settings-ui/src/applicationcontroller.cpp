@@ -115,48 +115,53 @@ void ApplicationController::resetCurrentPage()
     }
 }
 
-QString ApplicationController::gotoPreviousPage()
+namespace {
+// Collects the registry's in-order list of navigable (qmlSource set)
+// page ids and locates the current page's index inside it. Returns
+// `currentIdx = -1` when the current page id is empty / not in the
+// navigable set — the caller decides how to wrap.
+struct NavigableState
 {
-    const auto entries = m_registry->allPages();
-    QStringList navigable;
+    QStringList ids;
     int currentIdx = -1;
-    for (const auto& e : entries) {
+};
+
+NavigableState collectNavigable(const PageRegistry* registry, const QString& currentPageId)
+{
+    NavigableState out;
+    for (const auto& e : registry->allPages()) {
         if (e.qmlSource.isEmpty()) {
             continue;
         }
-        if (e.id == m_currentPageId) {
-            currentIdx = navigable.size();
+        if (e.id == currentPageId) {
+            out.currentIdx = out.ids.size();
         }
-        navigable.append(e.id);
+        out.ids.append(e.id);
     }
-    if (navigable.isEmpty()) {
+    return out;
+}
+} // namespace
+
+QString ApplicationController::gotoPreviousPage()
+{
+    const auto state = collectNavigable(m_registry, m_currentPageId);
+    if (state.ids.isEmpty()) {
         return QString();
     }
-    const int next = currentIdx < 0 ? navigable.size() - 1 : (currentIdx == 0 ? navigable.size() - 1 : currentIdx - 1);
-    setCurrentPageId(navigable.at(next));
-    return navigable.at(next);
+    const int next = state.currentIdx <= 0 ? state.ids.size() - 1 : state.currentIdx - 1;
+    setCurrentPageId(state.ids.at(next));
+    return state.ids.at(next);
 }
 
 QString ApplicationController::gotoNextPage()
 {
-    const auto entries = m_registry->allPages();
-    QStringList navigable;
-    int currentIdx = -1;
-    for (const auto& e : entries) {
-        if (e.qmlSource.isEmpty()) {
-            continue;
-        }
-        if (e.id == m_currentPageId) {
-            currentIdx = navigable.size();
-        }
-        navigable.append(e.id);
-    }
-    if (navigable.isEmpty()) {
+    const auto state = collectNavigable(m_registry, m_currentPageId);
+    if (state.ids.isEmpty()) {
         return QString();
     }
-    const int next = currentIdx < 0 ? 0 : (currentIdx == navigable.size() - 1 ? 0 : currentIdx + 1);
-    setCurrentPageId(navigable.at(next));
-    return navigable.at(next);
+    const int next = state.currentIdx < 0 || state.currentIdx == state.ids.size() - 1 ? 0 : state.currentIdx + 1;
+    setCurrentPageId(state.ids.at(next));
+    return state.ids.at(next);
 }
 
 QStringList ApplicationController::parentChainFor(const QString& id) const
@@ -170,17 +175,31 @@ QStringList ApplicationController::parentChainFor(const QString& id) const
         }
         const QString parent = m_registry->entry(cursor).parentId;
         if (parent.isEmpty()) {
-            break;
+            return chain;
         }
         chain.prepend(parent);
         cursor = parent;
     }
+    // Reached the loop cap without hitting a root — indicates a cycle
+    // in the registry's parentId graph (programmer error). Warn so
+    // the bug surfaces instead of silently producing a truncated
+    // chain.
+    qWarning() << "ApplicationController::parentChainFor: cycle or depth>32 in registry for id" << id;
     return chain;
 }
 
 void ApplicationController::trackDomain(StagingDomain* domain)
 {
-    m_domains.append(QPointer<StagingDomain>(domain));
+    const QPointer<StagingDomain> tracked(domain);
+    if (m_domains.contains(tracked)) {
+        // Same domain registered twice (e.g. once via registerPage and
+        // once via registerDomain). Connecting `dirtyChanged` a second
+        // time would double-fire `recomputeDirty()` per emit — silently
+        // wastes work and is always a caller bug.
+        qWarning() << "ApplicationController::trackDomain: domain already tracked, ignoring";
+        return;
+    }
+    m_domains.append(tracked);
     connect(domain, &StagingDomain::dirtyChanged, this, &ApplicationController::onDomainDirtyChanged);
     if (domain->isDirty()) {
         recomputeDirty();

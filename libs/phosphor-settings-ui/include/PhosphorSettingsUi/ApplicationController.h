@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 #include <QtQml/qqmlregistration.h>
 

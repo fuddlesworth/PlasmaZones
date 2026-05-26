@@ -15,7 +15,7 @@ PageAdapter::~PageAdapter() = default;
 
 QObject* PageAdapter::delegate() const
 {
-    return m_delegate.data();
+    return m_delegate;
 }
 
 bool PageAdapter::isDirty() const

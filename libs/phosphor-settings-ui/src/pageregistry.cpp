@@ -31,6 +31,14 @@ void PageRegistry::registerPage(Entry entry)
                    << "— ignoring registration";
         return;
     }
+    // ApplicationController::resetCurrentPage() and any consumer of
+    // PageRegistry::controller(id) will deref the controller pointer;
+    // reject null at registration so the failure surfaces here rather
+    // than at first use.
+    if (!entry.controller) {
+        qWarning() << "PageRegistry::registerPage: page" << entry.id << "has null controller — ignoring registration";
+        return;
+    }
 
     const QString id = entry.id;
     m_indexById.insert(id, m_pages.size());

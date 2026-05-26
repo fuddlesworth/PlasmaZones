@@ -5,7 +5,6 @@
 
 #include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
-#include <QPointer>
 
 namespace PlasmaZones {
 
@@ -22,6 +21,14 @@ namespace PlasmaZones {
 /// Per-page apply/discard semantics are deliberately no-ops here — dirty
 /// tracking is centralised in SettingsController and orchestrated through
 /// the single SettingsStagingDomain registered alongside these adapters.
+///
+/// Lifetime: `delegate` is required to outlive the adapter. Both the adapter
+/// and the delegate share `SettingsController` as their owning QObject parent,
+/// so they're destroyed in registration order on app shutdown — there is no
+/// path where the delegate disappears while the adapter is still alive. A
+/// raw pointer is therefore safe AND matches the CONSTANT Q_PROPERTY contract;
+/// the earlier QPointer would silently null out under contract violation
+/// without firing NOTIFY (CONSTANT properties must not change).
 class PageAdapter : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
@@ -38,7 +45,7 @@ public:
     void discard() override;
 
 private:
-    QPointer<QObject> m_delegate;
+    QObject* m_delegate = nullptr;
 };
 
 } // namespace PlasmaZones
