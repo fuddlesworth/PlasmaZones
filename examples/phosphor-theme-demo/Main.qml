@@ -10,6 +10,7 @@ import Phosphor.Theme
 import Phosphor.ThemeDemo
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 ApplicationWindow {
@@ -24,6 +25,10 @@ ApplicationWindow {
     // only), so the demo holds it locally for highlight state. Cleared
     // when an external source overrides via loadFromFile.
     property string activePreset: "dark"
+    // Set when matugen produces a palette from a user-picked wallpaper.
+    // Stays set across re-runs so the header shows what the active
+    // matugen palette was derived from.
+    property string wallpaperPath: ""
 
     width: 960
     height: 720
@@ -41,6 +46,39 @@ ApplicationWindow {
         }
 
         target: Theme.paletteStore
+    }
+
+    // Matugen subprocess. Spawned on-demand from the "Wallpaper..." button.
+    // Failures (matugen missing, image unreadable, unexpected JSON shape)
+    // route through the same status bar PaletteStore uses, so any single
+    // visible error surface tells the user what went wrong.
+    MatugenRunner {
+        id: matugen
+
+        mode: "dark"
+        onPaletteReady: function(tokens, wp) {
+            Theme.paletteStore.applyTokens(tokens);
+            root.activePreset = "wallpaper";
+            root.wallpaperPath = wp;
+            root.lastError = "";
+        }
+        onFailed: function(wp, reason) {
+            root.lastError = qsTr("matugen: %1 — %2").arg(wp).arg(reason);
+        }
+    }
+
+    FileDialog {
+        id: wallpaperDialog
+
+        title: qsTr("Pick a wallpaper for matugen")
+        nameFilters: [qsTr("Images (*.png *.jpg *.jpeg *.webp *.bmp)"), qsTr("All files (*)")]
+        fileMode: FileDialog.OpenFile
+        onAccepted: {
+            // QtQuick.Dialogs hands back a file:// QUrl. MatugenRunner.run
+            // wants a plain filesystem path.
+            const path = decodeURIComponent(selectedFile.toString().replace(/^file:\/\/+/, "/"));
+            matugen.run(path);
+        }
     }
 
     ColumnLayout {
@@ -67,7 +105,16 @@ ApplicationWindow {
             }
 
             Text {
-                text: Theme.paletteStore.sourcePath.length > 0 ? qsTr("source: %1").arg(Theme.paletteStore.sourcePath) : qsTr("source: built-in (preset: %1)").arg(root.activePreset)
+                text: {
+                    if (root.activePreset === "wallpaper" && root.wallpaperPath.length > 0) {
+                        const base = root.wallpaperPath.split("/").pop();
+                        return qsTr("source: matugen ← %1").arg(base);
+                    }
+                    if (Theme.paletteStore.sourcePath.length > 0)
+                        return qsTr("source: %1").arg(Theme.paletteStore.sourcePath);
+
+                    return qsTr("source: built-in (preset: %1)").arg(root.activePreset);
+                }
                 color: Theme.on_surface_variant
                 font.pixelSize: Tokens.font_size_body_m
                 font.family: Tokens.font_family
@@ -135,6 +182,48 @@ ApplicationWindow {
                         }
                     }
 
+                }
+
+            }
+
+            // ─── Wallpaper trigger ───────────────────────────────────────
+            // Runs matugen on a user-picked image and applies the resulting
+            // palette to PaletteStore. While the subprocess is in flight
+            // the pill swaps to a "running…" label and is non-interactive.
+            Rectangle {
+                readonly property bool isActive: root.activePreset === "wallpaper"
+                readonly property bool isHovered: wallpaperHover.containsMouse && !matugen.running
+                readonly property string pillLabel: matugen.running ? qsTr("running…") : qsTr("wallpaper…")
+
+                Layout.preferredWidth: wallpaperLabel.implicitWidth + Tokens.spacing_l * 2
+                Layout.preferredHeight: 32
+                radius: Tokens.radius_full
+                opacity: matugen.running ? 0.6 : 1
+                color: isActive ? Theme.tertiary : isHovered ? Theme.surface_container_high : Theme.surface_container
+                border.color: isActive ? Theme.tertiary : Theme.outline_variant
+                border.width: 1
+
+                Text {
+                    id: wallpaperLabel
+
+                    anchors.centerIn: parent
+                    text: parent.pillLabel
+                    color: parent.isActive ? Theme.on_tertiary : Theme.on_surface
+                    font.pixelSize: Tokens.font_size_label_l
+                    font.family: Tokens.font_family
+                    font.weight: Tokens.font_weight_medium
+                }
+
+                MouseArea {
+                    id: wallpaperHover
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: matugen.running ? Qt.ArrowCursor : Qt.PointingHandCursor
+                    enabled: !matugen.running
+                    Accessible.role: Accessible.Button
+                    Accessible.name: qsTr("Pick a wallpaper and run matugen")
+                    onClicked: wallpaperDialog.open()
                 }
 
             }
