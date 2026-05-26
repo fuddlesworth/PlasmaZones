@@ -33,7 +33,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
@@ -87,6 +87,7 @@ target_link_libraries(PhosphorSettingsUi
     PUBLIC
         Qt6::Core
         Qt6::Gui
+        Qt6::Qml
 )
 
 set_target_properties(PhosphorSettingsUi PROPERTIES
@@ -96,6 +97,84 @@ set_target_properties(PhosphorSettingsUi PROPERTIES
     VISIBILITY_INLINES_HIDDEN ON
     UNITY_BUILD OFF
 )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# QML Module — org.phosphor.settings.ui (STATIC, in-tree linkable)
+#
+# The C++ library above intentionally avoids Qt6::Qml/Quick so non-QML
+# consumers (e.g. headless tests) stay light. Foreign type registrations
+# live in qml/foreigntypes.cpp, processed only by this target.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# The QML module re-compiles the same public headers + sources as the C++
+# lib so qmltyperegistrar sees the QML_NAMED_ELEMENT markers and emits
+# registrations into org.phosphor.settings.ui. This mirrors phosphor-animation.
+
+set(phosphorsettingsui_qml_FILES
+    qml/SettingsAppWindow.qml
+    qml/Sidebar.qml
+    qml/Breadcrumbs.qml
+    qml/ApplyResetCancelFooter.qml
+    qml/PageHost.qml
+    qml/DiscardChangesDialog.qml
+)
+
+qt_add_qml_module(PhosphorSettingsUiQml
+    URI org.phosphor.settings.ui
+    VERSION 1.0
+    STATIC
+    RESOURCE_PREFIX /qt/qml
+    SOURCES
+        ${phosphorsettingsui_public_HDRS}
+        ${phosphorsettingsui_SRCS}
+    QML_FILES ${phosphorsettingsui_qml_FILES}
+    OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/org/phosphor/settings/ui
+)
+
+# The QML target compiles the same .cpp files as the C++ SHARED library;
+# set the export define so PHOSPHORSETTINGSUI_EXPORT resolves to
+# visibility("default") on both builds. Mirrors phosphor-animation.
+target_compile_definitions(PhosphorSettingsUiQml PRIVATE
+    PhosphorSettingsUi_EXPORTS
+)
+
+add_library(PhosphorSettingsUi::PhosphorSettingsUiQml ALIAS PhosphorSettingsUiQml)
+
+target_include_directories(PhosphorSettingsUiQml
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+)
+
+target_compile_features(PhosphorSettingsUiQml PUBLIC cxx_std_20)
+
+target_link_libraries(PhosphorSettingsUiQml
+    PUBLIC
+        PhosphorSettingsUi::PhosphorSettingsUi
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+)
+
+set_target_properties(PhosphorSettingsUiQml PROPERTIES
+    VERSION ${PHOSPHORSETTINGSUI_VERSION}
+    SOVERSION 0
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Examples — opt-in via -DBUILD_PHOSPHOR_SETTINGS_UI_EXAMPLES=ON
+# ═══════════════════════════════════════════════════════════════════════════════
+
+option(BUILD_PHOSPHOR_SETTINGS_UI_EXAMPLES
+    "Build the phosphor-settings-ui example apps"
+    ${PROJECT_IS_TOP_LEVEL})
+
+if(BUILD_PHOSPHOR_SETTINGS_UI_EXAMPLES AND
+   EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")
+    add_subdirectory(examples)
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Install

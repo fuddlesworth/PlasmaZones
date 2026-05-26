@@ -7,6 +7,9 @@
 #include <QObject>
 #include <QString>
 #include <QUrl>
+#include <QVariantList>
+#include <QVariantMap>
+#include <QtQml/qqmlregistration.h>
 
 #include "phosphorsettingsui_export.h"
 
@@ -30,6 +33,8 @@ class PageController;
 class PHOSPHORSETTINGSUI_EXPORT PageRegistry : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(PageRegistry)
+    QML_UNCREATABLE("PageRegistry is owned by ApplicationController.")
 
 public:
     struct Entry
@@ -49,13 +54,20 @@ public:
      *  non-empty, refers to a previously-registered page. */
     void registerPage(Entry entry);
 
-    bool hasPage(const QString& id) const;
-    PageController* controller(const QString& id) const;
+    Q_INVOKABLE bool hasPage(const QString& id) const;
+    Q_INVOKABLE PhosphorSettingsUi::PageController* controller(const QString& id) const;
     Entry entry(const QString& id) const;
 
     QList<Entry> topLevelPages() const;
     QList<Entry> childPages(const QString& parentId) const;
     QList<Entry> allPages() const;
+
+    // QML-facing accessors. Return dicts with keys: id, parentId, title,
+    // iconSource, qmlSource. Used by Sidebar.qml + Breadcrumbs.qml to drive
+    // their Repeaters without needing a custom QAbstractListModel.
+    Q_INVOKABLE QVariantList topLevelPagesData() const;
+    Q_INVOKABLE QVariantList childPagesData(const QString& parentId) const;
+    Q_INVOKABLE QVariantMap pageData(const QString& id) const;
 
 Q_SIGNALS:
     void pageRegistered(const QString& id);

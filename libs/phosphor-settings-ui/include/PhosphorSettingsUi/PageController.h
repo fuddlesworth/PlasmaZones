@@ -24,6 +24,8 @@ class PHOSPHORSETTINGSUI_EXPORT PageController : public StagingDomain
 {
     Q_OBJECT
     Q_PROPERTY(QString id READ id CONSTANT)
+    QML_NAMED_ELEMENT(PageController)
+    QML_UNCREATABLE("PageController is an abstract base; subclass in C++.")
 
 public:
     explicit PageController(QString id, QObject* parent = nullptr);

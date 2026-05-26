@@ -7,6 +7,7 @@
 #include <QPointer>
 #include <QString>
 #include <QUrl>
+#include <QtQml/qqmlregistration.h>
 
 #include "PhosphorSettingsUi/PageRegistry.h"
 #include "phosphorsettingsui_export.h"
@@ -37,6 +38,8 @@ class PHOSPHORSETTINGSUI_EXPORT ApplicationController : public QObject
     Q_PROPERTY(PhosphorSettingsUi::PageRegistry* registry READ registry CONSTANT)
     Q_PROPERTY(bool dirty READ isDirty NOTIFY dirtyChanged)
     Q_PROPERTY(QString currentPageId READ currentPageId WRITE setCurrentPageId NOTIFY currentPageIdChanged)
+    QML_NAMED_ELEMENT(ApplicationController)
+    QML_UNCREATABLE("ApplicationController is constructed in C++.")
 
 public:
     explicit ApplicationController(QObject* parent = nullptr);

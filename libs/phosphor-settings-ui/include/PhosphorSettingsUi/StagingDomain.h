@@ -3,6 +3,7 @@
 #pragma once
 
 #include <QObject>
+#include <QtQml/qqmlregistration.h>
 
 #include "phosphorsettingsui_export.h"
 
@@ -28,6 +29,8 @@ class PHOSPHORSETTINGSUI_EXPORT StagingDomain : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool dirty READ isDirty NOTIFY dirtyChanged)
+    QML_NAMED_ELEMENT(StagingDomain)
+    QML_UNCREATABLE("StagingDomain is an abstract base; subclass in C++.")
 
 public:
     explicit StagingDomain(QObject* parent = nullptr);

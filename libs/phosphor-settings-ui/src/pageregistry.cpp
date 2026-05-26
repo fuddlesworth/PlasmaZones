@@ -89,4 +89,48 @@ QList<PageRegistry::Entry> PageRegistry::allPages() const
     return m_pages;
 }
 
+namespace {
+QVariantMap entryToVariant(const PageRegistry::Entry& e)
+{
+    QVariantMap m;
+    m.insert(QStringLiteral("id"), e.id);
+    m.insert(QStringLiteral("parentId"), e.parentId);
+    m.insert(QStringLiteral("title"), e.title);
+    m.insert(QStringLiteral("iconSource"), e.iconSource);
+    m.insert(QStringLiteral("qmlSource"), e.qmlSource);
+    return m;
+}
+} // namespace
+
+QVariantList PageRegistry::topLevelPagesData() const
+{
+    QVariantList out;
+    for (const Entry& e : m_pages) {
+        if (e.parentId.isEmpty()) {
+            out.append(entryToVariant(e));
+        }
+    }
+    return out;
+}
+
+QVariantList PageRegistry::childPagesData(const QString& parentId) const
+{
+    QVariantList out;
+    for (const Entry& e : m_pages) {
+        if (e.parentId == parentId) {
+            out.append(entryToVariant(e));
+        }
+    }
+    return out;
+}
+
+QVariantMap PageRegistry::pageData(const QString& id) const
+{
+    const auto it = m_indexById.constFind(id);
+    if (it == m_indexById.constEnd()) {
+        return {};
+    }
+    return entryToVariant(m_pages.at(it.value()));
+}
+
 } // namespace PhosphorSettingsUi
