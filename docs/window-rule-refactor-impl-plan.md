@@ -306,7 +306,7 @@ introduce `windowrules.json` + its D-Bus adaptor; ship `migrateV3ToV4`.
    on the rule store — `isContextDisabled`/`contextDisabledReason` bodies unchanged (18 call sites untouched).
 7. Migrate the daemon's own exclusion enforcement (`navigation_actions.cpp`, `lifecycle.cpp`).
 8. `WindowRuleAdaptor` D-Bus object (`org.plasmazones.WindowRules`) + register in the daemon.
-9. Relocate `QuickLayouts` slots into the `quicklayouts.json` sidecar; remove `assignments.json` after conversion.
+9. Relocate `QuickLayouts` slots into the `quicklayouts.json` sidecar; rename `assignments.json` → `assignments.json.migrated` after conversion.
 10. Tests (cascade-fidelity, migration, store).
 11. Cleanup: delete `createAssignmentsBackend()`, `assignmentsFilePath()`, `Assignment:`/`QuickLayouts` group I/O.
 
@@ -350,10 +350,11 @@ a query-side retry loop inside the reimplemented `layoutForScreen`.
 - The migration touches **two files**, but a `MigrationStep` is `void(QJsonObject&)`.
   Split: `migrateV3ToV4` does the `config.json`-side key removals + stashes the data;
   `finalizeV4Conversion` (a post-chain step) reads `assignments.json`, writes
-  `windowrules.json`, deletes `assignments.json`.
-- `assignments.json` deletion is the **irreversible commit** — do it last, after
-  `windowrules.json` is durably written (temp-write + rename + fsync). Idempotency: skip
-  if `windowrules.json` already exists at `_version ≥ 4`.
+  `windowrules.json`, retires `assignments.json` (renamed to `assignments.json.migrated`
+  so a downgrade can recover the previous schema).
+- The `assignments.json` rename-to-`.migrated` is the **irreversible commit** — do it
+  last, after `windowrules.json` is durably written (temp-write + rename + fsync).
+  Idempotency: skip if `windowrules.json` already exists at `_version ≥ 4`.
 - Migrated assignment rules carry **all three** actions (`SetEngineMode`,
   `SetSnappingLayout`, `SetTilingAlgorithm`) to preserve the mode-toggle losslessness
   invariant.
@@ -370,14 +371,14 @@ a query-side retry loop inside the reimplemented `layoutForScreen`.
 `test_windowrule_cascade_fidelity.cpp` ports every scenario from
 `test_layoutmanager_assignment.cpp` against the rule-backed registry — the highest-risk
 correctness work. `test_migration_v3_to_v4.cpp` asserts exact priorities, losslessness,
-`assignments.json` deletion, idempotency. Existing `test_settings_disable_per_mode.cpp`
+`assignments.json` retirement, idempotency. Existing `test_settings_disable_per_mode.cpp`
 must pass unchanged — that is the disable-list parity proof.
 
 ### Top gotchas
 
 - Mode-toggle losslessness; `hasExplicitAssignment` exactness; two-file migration; the
-  irreversible `assignments.json` delete; connector/VS fallback is not priority;
-  `RuleEvaluator` tie-break must be a `stable_sort`.
+  irreversible `assignments.json` rename-to-`.migrated`; connector/VS fallback is not
+  priority; `RuleEvaluator` tie-break must be a `stable_sort`.
 
 ---
 
@@ -466,7 +467,7 @@ Advanced, summaries), `test_window_rule_controller.cpp` (CRUD by **UUID**, `move
 | Cascade↔priority fidelity (incl. activity-beats-desktop, provider fallback) | 3 | `test_windowrule_cascade_fidelity.cpp` ports the full `test_layoutmanager_assignment.cpp` suite; the priority formula is written in Phase 1's cascade test as the oracle |
 | Engaged-empty `effectId` sentinel collapses to "no rule" | 1, 2 | `ResolvedActions` distinguishes slot-unfilled from slot-filled-empty; pinned by `test_ruleevaluator.cpp` |
 | Mode-toggle losslessness lost in migration | 3 | migrated rules carry all three engine/layout actions; `assignmentEntryForScreen` reads all three slots |
-| Two-file migration / crash mid-convert | 3 | `migrateV3ToV4` + `finalizeV4Conversion` split; temp-write+rename+fsync; `assignments.json` deleted last; idempotency guard |
+| Two-file migration / crash mid-convert | 3 | `migrateV3ToV4` + `finalizeV4Conversion` split; temp-write+rename+fsync; `assignments.json` renamed to `.migrated` last; idempotency guard |
 | Effect/daemon match-code divergence | 2, 3 | both link the one LGPL evaluator; Phase 2 preserves the existing `Contains` vs `appIdMatches` divergence, Phase 3 reconciles it deliberately |
 | Evaluation cost on hot paths | 1, 2 | match cache keyed `(windowId, revision)`; `!ruleSet.isEmpty()` fast path; Phase 1 benchmark |
 | `WindowType` ownership / dependency direction | 0, 1 | enum in `phosphor-protocol`; Phase 0 lands it before Phase 1 |
