@@ -356,6 +356,8 @@ ColumnLayout {
                 implicitHeight: Kirigami.Units.gridUnit * 2.6
                 leftPadding: Kirigami.Units.smallSpacing
                 rightPadding: Kirigami.Units.smallSpacing
+                Accessible.name: qsTr("Back")
+                Accessible.role: Accessible.Button
                 onClicked: root.drillOut()
 
                 background: Rectangle {
@@ -496,6 +498,13 @@ ColumnLayout {
                     // NOT used because we paint the background
                     // ourselves below.
                     implicitHeight: _isDivider ? Kirigami.Units.largeSpacing : (Kirigami.Units.gridUnit * 2.2)
+                    // Accessible.name is always the row's title — in
+                    // compact mode the visible Label is hidden, so a
+                    // screen reader would otherwise have no announce-
+                    // able content. Divider rows are flagged so AT
+                    // tools skip them rather than reading "Button".
+                    Accessible.name: itemDelegate._isDivider ? "" : itemDelegate.title
+                    Accessible.role: itemDelegate._isDivider ? Accessible.Separator : Accessible.Button
                     // Dividers are visual ornament — disable click
                     // routing and any focus/hover state so the cursor
                     // doesn't change passing over them.

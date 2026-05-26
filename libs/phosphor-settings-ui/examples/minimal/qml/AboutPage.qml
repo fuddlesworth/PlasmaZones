@@ -11,7 +11,7 @@ Settings.AboutPageShell {
     appName: qsTr("Phosphor Settings — Minimal Demo")
     appIcon: "preferences-system"
     appVersion: "0.1.0"
-    description: qsTr("Tiny end-to-end demo of the phosphor-settings-ui framework: " + "ApplicationController + two registered pages routed through " + "the standard sidebar/breadcrumbs/footer chrome.")
+    description: qsTr("Tiny end-to-end demo of the phosphor-settings-ui framework: ApplicationController + two registered pages routed through the standard sidebar/breadcrumbs/footer chrome.")
     copyright: "© 2026 fuddlesworth"
     license: "LGPL-2.1-or-later"
     homepageUrl: "https://github.com/fuddlesworth/PlasmaZones"
@@ -28,7 +28,7 @@ Settings.AboutPageShell {
         QQC2.Label {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: qsTr("Switch to the General page, toggle the sound switch or " + "edit the greeting, then watch the Apply / Cancel " + "buttons in the footer light up.")
+            text: qsTr("Switch to the General page, toggle the sound switch or edit the greeting, then watch the Apply / Cancel buttons in the footer light up.")
         }
     ]
 }

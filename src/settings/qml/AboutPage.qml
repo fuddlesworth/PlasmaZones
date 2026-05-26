@@ -17,8 +17,8 @@ PhosphorUi.AboutPageShell {
     appName: i18n("PlasmaZones")
     appIcon: "plasmazones"
     appVersion: Qt.application.version.length > 0 ? i18n("Version %1", Qt.application.version) : i18n("Version unknown")
-    description: i18n("A window tiling and zone management tool for " + "Wayland compositors. Organize your desktop with " + "customizable zones, automatic tiling layouts, " + "and keyboard-driven window placement.")
-    license: i18n("PlasmaZones is free software licensed under the " + "GNU General Public License version 3 or later " + "(GPL-3.0-or-later).")
+    description: i18n("A window tiling and zone management tool for Wayland compositors. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.")
+    license: i18n("PlasmaZones is free software licensed under the GNU General Public License version 3 or later (GPL-3.0-or-later).")
     homepageUrl: "https://github.com/fuddlesworth/PlasmaZones"
     // ── Extras: Links / Credits cards rendered below the homepage URL ──
     extraContent: [
@@ -168,7 +168,17 @@ PhosphorUi.AboutPageShell {
         Accessible.name: linkText
         Accessible.role: Accessible.Link
         Accessible.description: i18n("Opens %1 in web browser", url)
-        onClicked: Qt.openUrlExternally(linkButton.url)
+        // Scheme-gate Qt.openUrlExternally — the LinkButton component
+        // is reusable and a future consumer wiring a user-controlled
+        // URL through it could otherwise navigate the browser to a
+        // local file:// or other unintended scheme.
+        onClicked: {
+            const u = linkButton.url;
+            if (u.startsWith("https://") || u.startsWith("http://"))
+                Qt.openUrlExternally(u);
+            else
+                console.warn("AboutPage.LinkButton: refusing to open non-http(s) URL:", u);
+        }
 
         contentItem: RowLayout {
             spacing: Kirigami.Units.smallSpacing
