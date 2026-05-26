@@ -214,6 +214,17 @@ ColumnLayout {
         return matches;
     }
 
+    // Deep-equal the 9 known role values between a model row and the
+    // wanted item. Used to skip ListModel.set() when nothing actually
+    // changed — set() replaces all roles AND fires their change
+    // signals, which on a search-field keystroke meant every
+    // delegate's required-property bindings re-fired even for rows
+    // whose content was identical. Cheap JS compare beats animation
+    // + repaint churn.
+    function _itemEqualsRow(item, row) {
+        return item.id === row.id && item.title === row.title && item.iconSource === row.iconSource && item.hasQmlSource === row.hasQmlSource && item._depth === row._depth && item._isCollapsibleHeader === row._isCollapsibleHeader && item._isDrillParent === row._isDrillParent && item._isExpanded === row._isExpanded && item._isDivider === row._isDivider;
+    }
+
     function _refreshModel() {
         const wanted = root._visibleItems();
         const wantedIds = new Set(wanted.map((w) => {
@@ -227,7 +238,14 @@ ColumnLayout {
         for (let i = 0; i < wanted.length; ++i) {
             const item = wanted[i];
             if (i < visibleModel.count && visibleModel.get(i).id === item.id) {
-                visibleModel.set(i, item);
+                // Position correct + id matches — only re-set roles if
+                // ANY of them actually changed. Otherwise the row's
+                // delegate sees no required-property changes, no
+                // bindings re-evaluate, no Behavior animations re-
+                // arm. Major win on each search-field keystroke.
+                if (!_itemEqualsRow(item, visibleModel.get(i)))
+                    visibleModel.set(i, item);
+
                 continue;
             }
             let currentIdx = -1;
@@ -241,7 +259,11 @@ ColumnLayout {
                 visibleModel.insert(i, item);
             } else {
                 visibleModel.move(currentIdx, i, 1);
-                visibleModel.set(i, item);
+                // Same compare after the move — set() only if the
+                // post-move row differs from the wanted item.
+                if (!_itemEqualsRow(item, visibleModel.get(i)))
+                    visibleModel.set(i, item);
+
             }
         }
     }
@@ -319,11 +341,14 @@ ColumnLayout {
         placeholderText: qsTr("Search...")
         // In compact mode there's no room for a search field — hide
         // and clear so a stale filter doesn't keep the rail filtered
-        // when the user collapses the sidebar.
+        // when the user collapses the sidebar. Clearing via the alias
+        // (root.searchText = "") instead of directly on `text` makes
+        // the side effect visible to external consumers that might be
+        // tracking the aliased property.
         visible: !root.compact
         onVisibleChanged: {
             if (!visible)
-                text = "";
+                root.searchText = "";
 
         }
     }

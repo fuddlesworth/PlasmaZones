@@ -96,8 +96,15 @@ ColumnLayout {
                 anchors.fill: parent
                 anchors.leftMargin: Kirigami.Units.largeSpacing
                 anchors.rightMargin: Kirigami.Units.largeSpacing
-                anchors.topMargin: Kirigami.Units.smallSpacing * 1.5
-                anchors.bottomMargin: Kirigami.Units.smallSpacing * 1.5
+                // Round non-integer Kirigami multipliers to avoid
+                // sub-pixel margin values on HiDPI (smallSpacing*1.5
+                // = 6 on 1x, 12 on 2x — integer, fine; on 1.5x it's
+                // 9 which is still integer — but on themes that scale
+                // smallSpacing to odd values like 5, the *1.5 produces
+                // 7.5 and Qt rounds inconsistently). Math.round keeps
+                // the rail's rhythm pixel-aligned on every DPR.
+                anchors.topMargin: Math.round(Kirigami.Units.smallSpacing * 1.5)
+                anchors.bottomMargin: Math.round(Kirigami.Units.smallSpacing * 1.5)
                 spacing: Kirigami.Units.smallSpacing
 
                 Kirigami.Icon {
