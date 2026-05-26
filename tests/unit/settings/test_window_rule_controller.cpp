@@ -373,7 +373,6 @@ void TestWindowRuleController::validationIssuesForJsonFlags()
 
     // Clean rule: window match + Float action → no issues.
     QVariantMap clean = controller.newEmptyRule(QStringLiteral("application"));
-    clean[QStringLiteral("match")].toMap();
     QVariantMap appLeaf;
     appLeaf[QStringLiteral("field")] = QStringLiteral("appId");
     appLeaf[QStringLiteral("op")] = QStringLiteral("equals");

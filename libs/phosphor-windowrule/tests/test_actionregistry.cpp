@@ -105,6 +105,7 @@ private Q_SLOTS:
         QVERIFY(!reg.isTerminal(makeAction(ActionType::DisableEngine)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::OverrideAnimationShader)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::OverrideAnimationTiming)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::OverrideAnimationCurve)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetOpacity)));
     }
 

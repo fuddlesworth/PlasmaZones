@@ -563,11 +563,13 @@ private Q_SLOTS:
         QCOMPARE(actions.first().toObject().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
     }
 
-    // ─── Superseding: assignments.json deleted ────────────────────────────
+    // ─── Superseding: assignments.json retired to .migrated ───────────────
 
     /// windowrules.json supersedes assignments.json — once the rule store is
-    /// durably written, the legacy file is deleted (the irreversible commit).
-    void testSupersede_assignmentsJsonDeleted()
+    /// durably written, the legacy file is renamed to assignments.json.migrated
+    /// (the irreversible commit). Rename is preferred over deletion so a
+    /// downgrade or manual recovery can restore the previous schema.
+    void testSupersede_assignmentsJsonRetired()
     {
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
@@ -576,10 +578,11 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        // windowrules.json written; assignments.json gone.
+        // windowrules.json written; assignments.json retired from its original
+        // location (renamed to .migrated, or in the fallback path removed).
         QVERIFY(QFile::exists(ConfigDefaults::windowRulesFilePath()));
         QVERIFY2(!QFile::exists(assignmentsPath()),
-                 "assignments.json must be deleted once windowrules.json supersedes it");
+                 "assignments.json must be retired once windowrules.json supersedes it");
     }
 
     // ─── Superseding: Display.*Disabled* keys removed ─────────────────────
@@ -634,9 +637,9 @@ private Q_SLOTS:
     // ─── Idempotency of the superseding behaviour ─────────────────────────
 
     /// Running the migration a second time after assignments.json is already
-    /// deleted is a clean no-op: the idempotency guard short-circuits on the
-    /// existing v4 windowrules.json, nothing is re-created or re-deleted.
-    void testSupersede_idempotentAfterAssignmentsDeleted()
+    /// retired is a clean no-op: the idempotency guard short-circuits on the
+    /// existing v4 windowrules.json, nothing is re-created or re-retired.
+    void testSupersede_idempotentAfterAssignmentsRetired()
     {
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());

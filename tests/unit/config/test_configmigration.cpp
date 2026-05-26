@@ -225,8 +225,9 @@ private Q_SLOTS:
 
         // ensureJsonConfig runs the full v1→v4 chain. The v1→v2 step extracts
         // Assignment groups to assignments.json; the v4 conversion folds them
-        // into windowrules.json and DELETES assignments.json. Assert the v4
-        // end-state.
+        // into windowrules.json and retires assignments.json (renames it to
+        // assignments.json.migrated so a downgrade can recover). Assert the
+        // v4 end-state.
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         // Assignment groups must NOT be in config.json.
@@ -235,10 +236,12 @@ private Q_SLOTS:
         const QString groupName = QStringLiteral("Assignment:eDP-1:Desktop:1:Activity:abc-123");
         QVERIFY2(!configRoot.contains(groupName), "Assignment group should not remain in config.json");
 
-        // assignments.json was superseded by windowrules.json and deleted.
+        // assignments.json was superseded by windowrules.json and retired from
+        // its original location (renamed to .migrated, or removed in the
+        // fallback path).
         const QString assignmentsPath =
             QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
-        QVERIFY2(!QFile::exists(assignmentsPath), "assignments.json must be deleted by the v4 conversion");
+        QVERIFY2(!QFile::exists(assignmentsPath), "assignments.json must be retired by the v4 conversion");
 
         // The assignment lives in windowrules.json as a context rule. The
         // exact (screen+desktop+activity) cascade level → priority 610, with
