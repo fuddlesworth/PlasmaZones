@@ -17,8 +17,22 @@ import org.kde.kirigami as Kirigami
 Kirigami.Dialog {
     id: dialog
 
-    required property var appSettings
-    property bool forApps: false
+    // The SettingsController — supplies cachedRunningWindows() /
+    // requestRunningWindows(). Named `controller` (not `appSettings`) because
+    // it is the controller, not a Settings object.
+    required property var controller
+    /// Picker mode — `"apps"` returns the app's short / desktop-file name,
+    /// `"classes"` the X11/Wayland window class, `"desktopFiles"` the full
+    /// `.desktop` basename (filtered to rows that have one), `"titles"`
+    /// the window caption. Drives the title, the row's primary text, and
+    /// the value passed to `picked`.
+    property string mode: "apps"
+    /// Convenience boolean read by older callers (ExclusionsPage,
+    /// AnimationsGeneralPage) inside their `onPicked` handlers to branch
+    /// between the "application" and "window class" lists. Derived from
+    /// `mode` so the open* helpers don't have to keep two properties in
+    /// sync; new callers should consult `mode` directly.
+    readonly property bool forApps: mode === "apps"
     property var windowList: []
     // Set by the Connections block below when the controller signals a
     // timeout (KWin effect unloaded / unresponsive). Cleared on every
@@ -46,17 +60,66 @@ Kirigami.Dialog {
     }
 
     function openForApps() {
-        forApps = true;
+        mode = "apps";
         refresh();
         open();
         searchField.forceActiveFocus();
     }
 
     function openForClasses() {
-        forApps = false;
+        mode = "classes";
         refresh();
         open();
         searchField.forceActiveFocus();
+    }
+
+    function openForDesktopFiles() {
+        mode = "desktopFiles";
+        refresh();
+        open();
+        searchField.forceActiveFocus();
+    }
+
+    function openForTitles() {
+        mode = "titles";
+        refresh();
+        open();
+        searchField.forceActiveFocus();
+    }
+
+    /// User-facing title for the current mode. Extracted from the quadruple-
+    /// nested ternary so the dialog header reads as a function call instead
+    /// of a wall of `?:`.
+    function titleForMode() {
+        if (mode === "classes")
+            return i18n("Pick Window Class from Running Windows");
+
+        if (mode === "desktopFiles")
+            return i18n("Pick Desktop File from Running Windows");
+
+        if (mode === "titles")
+            return i18n("Pick Window Title from Running Windows");
+
+        return i18n("Pick Application from Running Windows");
+    }
+
+    /// Extract the picker value for @p row according to the current mode.
+    /// Centralised here so the title, the filter predicate, the delegate,
+    /// and the `picked` emit all stay in sync.
+    function primaryFor(row) {
+        if (!row)
+            return "";
+
+        if (mode === "classes")
+            return row.windowClass || "";
+
+        if (mode === "desktopFiles")
+            return row.desktopFile || "";
+
+        if (mode === "titles")
+            return row.caption || "";
+
+        return row.appName && row.appName.length > 0 ? row.appName : deriveAppName(row.windowClass);
     }
 
     // Async refresh: show whatever we already have cached from a previous
@@ -70,11 +133,11 @@ Kirigami.Dialog {
     function refresh() {
         searchField.text = "";
         requestTimedOut = false;
-        windowList = appSettings.cachedRunningWindows();
-        appSettings.requestRunningWindows();
+        windowList = controller.cachedRunningWindows();
+        controller.requestRunningWindows();
     }
 
-    title: forApps ? i18n("Pick Application from Running Windows") : i18n("Pick Window Class from Running Windows")
+    title: titleForMode()
     preferredWidth: Kirigami.Units.gridUnit * 25
     preferredHeight: Kirigami.Units.gridUnit * 20
     customFooterActions: [
@@ -95,7 +158,12 @@ Kirigami.Dialog {
             dialog.requestTimedOut = true;
         }
 
-        target: settingsController
+        // Declare `target` BEFORE the signal-handler functions — strict
+        // QML resolves signal names against the target's metaobject at
+        // parse time, so a target listed after the handlers fails the
+        // lookup ("Detected function … but no signal of the target
+        // matches the name").
+        target: dialog.controller
     }
 
     ColumnLayout {
@@ -123,13 +191,31 @@ Kirigami.Dialog {
                 if (!dialog.windowList || dialog.windowList.length === 0)
                     return [];
 
+                let base = dialog.windowList;
+                // Titles mode still prunes captionless rows — clicking one
+                // would fill the leaf with an empty string and there is no
+                // sensible fallback. DesktopFile mode does NOT prune: many
+                // X11 apps have no registered .desktop file, and older
+                // KWin-effect builds don't populate the field at all, so
+                // an aggressive prune produces an empty picker. The
+                // delegate flags rows that would yield an empty value
+                // (greyed primary text + "(no desktop file)" subtext) so
+                // the user can still see and search the running windows.
+                if (dialog.mode === "titles")
+                    base = base.filter(function(w) {
+                        return (w.caption || "").length > 0;
+                    });
+
                 let filter = searchField.text.toLowerCase();
                 if (filter.length === 0)
-                    return dialog.windowList;
+                    return base;
 
-                return dialog.windowList.filter(function(w) {
-                    let primary = dialog.forApps ? (w.appName && w.appName.length > 0 ? w.appName : dialog.deriveAppName(w.windowClass)) : w.windowClass;
-                    return primary.toLowerCase().includes(filter) || w.caption.toLowerCase().includes(filter);
+                return base.filter(function(w) {
+                    let primary = dialog.primaryFor(w);
+                    if (primary.length === 0)
+                        primary = w.appName || dialog.deriveAppName(w.windowClass);
+
+                    return primary.toLowerCase().includes(filter) || (w.caption || "").toLowerCase().includes(filter);
                 });
             }
 
@@ -142,14 +228,31 @@ Kirigami.Dialog {
             }
 
             delegate: ItemDelegate {
-                readonly property string appNameResolved: modelData.appName && modelData.appName.length > 0 ? modelData.appName : dialog.deriveAppName(modelData.windowClass)
-                readonly property string primaryText: dialog.forApps ? appNameResolved : modelData.windowClass
+                // Strict QML requires the delegate's context property to be
+                // declared before it's read in bindings.
+                required property var modelData
+                readonly property string rawValue: dialog.primaryFor(modelData)
+                readonly property bool valueAvailable: rawValue.length > 0
+                // For empty-value rows (e.g. a desktop-file pick where the
+                // window has no registered .desktop), fall back to the
+                // app name so the user can still tell which window the
+                // row represents — but disable selection so they don't
+                // commit an empty leaf value.
+                readonly property string primaryText: valueAvailable ? rawValue : (modelData.appName && modelData.appName.length > 0 ? modelData.appName : dialog.deriveAppName(modelData.windowClass))
+                // Subtext gives the user some disambiguation context — for
+                // a Title pick we show the windowClass so two windows with
+                // the same caption are distinguishable; for the other
+                // modes we surface the caption. When the value is
+                // unavailable we replace it with an explanatory hint.
+                readonly property string secondaryText: !valueAvailable ? (dialog.mode === "desktopFiles" ? i18n("(no desktop file)") : dialog.mode === "titles" ? i18n("(no title)") : "") : dialog.mode === "titles" ? (modelData.windowClass || "") : (modelData.caption || "")
 
                 width: ListView.view.width
                 highlighted: ListView.isCurrentItem
-                Accessible.name: primaryText + (modelData.caption.length > 0 ? " — " + modelData.caption : "")
+                enabled: valueAvailable
+                opacity: valueAvailable ? 1 : 0.5
+                Accessible.name: primaryText + (secondaryText.length > 0 ? " — " + secondaryText : "")
                 onClicked: {
-                    dialog.picked(primaryText);
+                    dialog.picked(rawValue);
                     dialog.close();
                 }
 
@@ -157,7 +260,7 @@ Kirigami.Dialog {
                     spacing: Kirigami.Units.smallSpacing
 
                     Kirigami.Icon {
-                        source: dialog.forApps ? "application-x-executable" : "window"
+                        source: dialog.mode === "classes" ? "window" : dialog.mode === "desktopFiles" ? "application-x-desktop" : dialog.mode === "titles" ? "draw-text" : "application-x-executable"
                         Layout.preferredWidth: Kirigami.Units.iconSizes.small
                         Layout.preferredHeight: Kirigami.Units.iconSizes.small
                         Layout.alignment: Qt.AlignVCenter
@@ -174,12 +277,12 @@ Kirigami.Dialog {
                         }
 
                         Label {
-                            text: modelData.caption
+                            text: secondaryText
                             Layout.fillWidth: true
                             font: Kirigami.Theme.smallFont
                             opacity: 0.7
                             elide: Text.ElideRight
-                            visible: modelData.caption.length > 0
+                            visible: secondaryText.length > 0
                         }
 
                     }

@@ -439,13 +439,28 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
         }
     }
 
+    // keepMappedOnHide is gated on whether any visual effect is enabled.
+    // The keep-mapped lifecycle exists so shader / animation transitions
+    // do not pay the wl_surface unmap + RHI swapchain teardown cost on
+    // every dismiss; with both shaders and animations disabled there is
+    // no transition to amortize, and keeping the shell mapped means a
+    // fullscreen wlr OVERLAY layer surface is composited above every
+    // normal toplevel for the daemon's lifetime - which masks the
+    // compositor's own translucency-while-moving effect and exposes
+    // composition-pipeline bugs on hybrid-GPU setups. Effects-on path
+    // keeps the warm cache; effects-off path lets the next
+    // syncSurfaceState !anyVisible transition unmap the wl_surface.
+    const bool shadersOn = m_shaderRegistry && m_shaderRegistry->shadersEnabled();
+    const bool animationsOn = m_settings && m_settings->animationsEnabled();
+    const bool keepMapped = shadersOn || animationsOn;
+
     auto* surface = createLayerSurface({.qmlUrl = qmlUrl,
                                         .screen = physScreen,
                                         .role = role,
                                         .windowType = windowType,
                                         .anchorsOverride = anchorsOverride,
                                         .marginsOverride = marginsOverride,
-                                        .keepMappedOnHide = true,
+                                        .keepMappedOnHide = keepMapped,
                                         .initialSize = initialSize});
     if (!surface) {
         return nullptr;

@@ -57,6 +57,7 @@ endif()
 set(phosphorprotocol_types_HDRS
     include/PhosphorProtocol/ZoneTypes.h
     include/PhosphorProtocol/WindowTypes.h
+    include/PhosphorProtocol/WindowTypeEnum.h
     include/PhosphorProtocol/AutotileTypes.h
     include/PhosphorProtocol/NavigationTypes.h
     include/PhosphorProtocol/DragTypes.h

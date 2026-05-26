@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 3.0.9 LANGUAGES C CXX)
+project(PlasmaZones VERSION 3.0.10 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -346,6 +346,7 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 add_subdirectory(libs/phosphor-identity)    # stable cross-process window identity (composite ids, app-id matching)
 add_subdirectory(libs/phosphor-dbus)        # generic, service-agnostic D-Bus client utilities (Client, HasDBusStreaming)
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants — needed by phosphor-screens (Resolver endpoint defaults)
+add_subdirectory(libs/phosphor-windowrule)  # unified window/context rule engine (MatchExpression, RuleEvaluator) - depends on phosphor-identity + phosphor-protocol
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
 add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner - needed by phosphor-zones
@@ -464,6 +465,7 @@ install(FILES
     dbus/org.plasmazones.SettingsApp.xml
     dbus/org.plasmazones.Shader.xml
     dbus/org.plasmazones.WindowDrag.xml
+    dbus/org.plasmazones.WindowRules.xml
     dbus/org.plasmazones.WindowTracking.xml
     dbus/org.plasmazones.ZoneDetection.xml
     DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR}

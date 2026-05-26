@@ -4,6 +4,7 @@
 #include "EditorController.h"
 
 #include "../config/configbackends.h"
+#include "../config/configdefaults.h"
 #include "services/ILayoutService.h"
 #include "services/DBusLayoutService.h"
 #include "services/ZoneManager.h"
@@ -47,7 +48,8 @@ EditorController::EditorController(QObject* parent)
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
-    , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
+    , m_localRuleStore(std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
+    , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(),
                                                                            QStringLiteral("plasmazones/layouts")))
 {
     // Install the library-level screen-id resolver before any layout load

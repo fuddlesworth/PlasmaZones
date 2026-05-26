@@ -9,10 +9,6 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
-    readonly property var
-    settingsBridge: TilingBridge {
-    }
-
     readonly property int viewMode: 1
 
     contentHeight: mainCol.implicitHeight
@@ -40,12 +36,9 @@ SettingsFlickable {
                 id: quickSlotsCard
 
                 anchors.fill: parent
-                appSettings: root.settingsBridge
+                appSettings: settingsController
                 viewMode: root.viewMode
             }
-
         }
-
     }
-
 }

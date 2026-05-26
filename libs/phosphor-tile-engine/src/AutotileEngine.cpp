@@ -1555,6 +1555,37 @@ void AutotileEngine::deserializePendingRestores(const QJsonObject& queuesObj)
     qCInfo(PhosphorTileEngine::lcTileEngine) << "Autotile pending restores: loaded" << restoredEntries << "entries";
 }
 
+int AutotileEngine::pruneExcludedPendingRestores(const QStringList& exclusionPatterns)
+{
+    if (exclusionPatterns.isEmpty() || m_pendingAutotileRestores.isEmpty()) {
+        return 0;
+    }
+    int removed = 0;
+    for (auto it = m_pendingAutotileRestores.begin(); it != m_pendingAutotileRestores.end();) {
+        const QString& appId = it.key();
+        bool matched = false;
+        for (const QString& pattern : exclusionPatterns) {
+            if (pattern.isEmpty()) {
+                continue;
+            }
+            if (PhosphorIdentity::WindowId::appIdMatches(appId, pattern)) {
+                matched = true;
+                break;
+            }
+        }
+        if (matched) {
+            qCInfo(PhosphorTileEngine::lcTileEngine)
+                << "Pruning autotile pending-restore queue for excluded appId:" << appId << "(" << it.value().size()
+                << "entries)";
+            it = m_pendingAutotileRestores.erase(it);
+            ++removed;
+        } else {
+            ++it;
+        }
+    }
+    return removed;
+}
+
 void AutotileEngine::scheduleRetileForScreen(const QString& screenId)
 {
     m_pendingRetileScreens.insert(screenId);

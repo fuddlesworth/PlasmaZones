@@ -15,11 +15,10 @@ SettingsFlickable {
     WindowPickerDialog {
         id: windowPickerDialog
 
-        appSettings: settingsController
-        onPicked: (value) => {
-            // Use settingsController.settings (the Settings object) because
-            // windowPickerDialog.appSettings shadows the context property and
-            // points to SettingsController, which lacks add/remove methods.
+        controller: settingsController
+        onPicked: value => {
+            // Add/remove methods live on settingsController.settings (the
+            // Settings object), not on the controller itself.
             if (forApps) {
                 settingsController.settings.addExcludedApplication(value);
                 appsCard.refreshModel();
@@ -66,15 +65,13 @@ SettingsFlickable {
                         SettingsSwitch {
                             checked: appSettings.excludeTransientWindows
                             accessibleName: i18n("Exclude transient windows")
-                            onToggled: function(newValue) {
+                            onToggled: function (newValue) {
                                 appSettings.excludeTransientWindows = newValue;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Minimum window width")
@@ -87,18 +84,16 @@ SettingsFlickable {
                             value: appSettings.minimumWindowWidth
                             unitText: ""
                             Accessible.name: i18n("Minimum window width")
-                            onValueModified: (value) => {
-                                return appSettings.minimumWindowWidth = value;
+                            onValueModified: value => {
+                                appSettings.minimumWindowWidth = value;
                             }
-                            textFromValue: function(value) {
+                            textFromValue: function (value) {
                                 return value === 0 ? i18n("Off") : value + " px";
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Minimum window height")
@@ -111,20 +106,16 @@ SettingsFlickable {
                             value: appSettings.minimumWindowHeight
                             unitText: ""
                             Accessible.name: i18n("Minimum window height")
-                            onValueModified: (value) => {
-                                return appSettings.minimumWindowHeight = value;
+                            onValueModified: value => {
+                                appSettings.minimumWindowHeight = value;
                             }
-                            textFromValue: function(value) {
+                            textFromValue: function (value) {
                                 return value === 0 ? i18n("Off") : value + " px";
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // --- Excluded Applications ---
@@ -144,15 +135,14 @@ SettingsFlickable {
                 model: appSettings.excludedApplications
                 useMonospaceFont: false
                 showPickButton: true
-                onAddRequested: (text) => {
+                onAddRequested: text => {
                     return appSettings.addExcludedApplication(text);
                 }
-                onRemoveRequested: (index) => {
+                onRemoveRequested: index => {
                     return appSettings.removeExcludedApplicationAt(index);
                 }
                 onPickRequested: windowPickerDialog.openForApps()
             }
-
         }
 
         // --- Excluded Window Classes ---
@@ -172,17 +162,14 @@ SettingsFlickable {
                 model: appSettings.excludedWindowClasses
                 useMonospaceFont: true
                 showPickButton: true
-                onAddRequested: (text) => {
+                onAddRequested: text => {
                     return appSettings.addExcludedWindowClass(text);
                 }
-                onRemoveRequested: (index) => {
+                onRemoveRequested: index => {
                     return appSettings.removeExcludedWindowClassAt(index);
                 }
                 onPickRequested: windowPickerDialog.openForClasses()
             }
-
         }
-
     }
-
 }

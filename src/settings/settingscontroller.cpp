@@ -103,7 +103,8 @@ SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
     , m_screenHelper(&m_settings, this)
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
-    , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
+    , m_localRuleStore(std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
+    , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(),
                                                                            QStringLiteral("plasmazones/layouts")))
 {
     // Install the library-level screen-id resolver before any layout load
@@ -347,6 +348,114 @@ SettingsController::SettingsController(QObject* parent)
             setNeedsSave(true);
     });
 
+    // Window Rules page sub-controller — the unified rule surface. It owns
+    // its own WindowRuleModel and talks to the daemon's
+    // org.plasmazones.WindowRules adaptor. Dirty-tracking mirrors the
+    // animations page: a staged edit flips needsSave; commit/revert run
+    // from this controller's save()/load() so they don't race the
+    // setNeedsSave(false) those methods emit.
+    m_windowRulesPage = new WindowRuleController(this);
+    connect(m_windowRulesPage, &WindowRuleController::dirtyChanged, this, [this]() {
+        if (m_loading || m_saving)
+            return;
+        if (m_windowRulesPage->isDirty()) {
+            // A window-rule edit can be driven by a background daemon signal, not
+            // just by the user viewing the page — so mark the "window-rules" page
+            // explicitly rather than letting setNeedsSave() target m_activePage.
+            beginExternalEdit(QStringLiteral("window-rules"));
+            setNeedsSave(true);
+            endExternalEdit();
+            return;
+        }
+        // Controller transitioned to clean (e.g. a successful fetchAndLoad
+        // flipped m_dirty false→true→false during initial async load, or a
+        // direct revert from QML). Mirror the dirty-side behaviour: remove
+        // "window-rules" from m_dirtyPages and emit dirtyPagesChanged when
+        // the set actually shrinks. setNeedsSave(false) cannot be used here
+        // — it blanket-clears every page, which would wipe other unrelated
+        // dirty leaves.
+        if (m_dirtyPages.remove(QStringLiteral("window-rules"))) {
+            Q_EMIT dirtyPagesChanged();
+        }
+    });
+    // A user-driven Discard fires WindowRuleController::revert() inside our
+    // load() under m_loading=true, which suppresses the dirtyChanged → dirty
+    // pages plumbing for the duration of the call. The async re-fetch lands
+    // AFTER load() has already done `setNeedsSave(false)` (which blanket-
+    // clears m_dirtyPages). If the re-fetch *fails*, the controller's m_dirty
+    // stays true per its documented contract — but its dirtyChanged signal
+    // never fires (value didn't change) and the cleared dirty-page entry is
+    // never re-added. Listen to revertFinished here so a failed revert can
+    // re-mark the page dirty.
+    connect(m_windowRulesPage, &WindowRuleController::revertFinished, this, [this](bool success) {
+        if (success || !m_windowRulesPage->isDirty()) {
+            return;
+        }
+        // m_loading is already false by the time this async reply lands.
+        beginExternalEdit(QStringLiteral("window-rules"));
+        setNeedsSave(true);
+        endExternalEdit();
+    });
+
+    // Wire screen / activity / layout label resolvers so the rule model and
+    // monitor-overview render friendly names instead of raw connector strings,
+    // activity UUIDs and layout UUIDs.
+    //
+    // The closures capture `this` and read live snapshot state on every call,
+    // so they need to be installed exactly ONCE — re-installing on every
+    // upstream change was wasteful (three model-wide `dataChanged` emits per
+    // signal × three signals = nine emits). Upstream changes are now routed
+    // to `WindowRuleModel::refreshLabels()` which emits a single dataChanged
+    // covering every label-derived role.
+    m_windowRulesPage->setScreenLookup([this](const QString& screenId) -> QString {
+        const QVariantList all = screens();
+        for (const QVariant& sv : all) {
+            const QVariantMap m = sv.toMap();
+            // Match against `name` (the connector / virtual-screen id) or
+            // `screenId` (the daemon-stable screen identifier). The screen
+            // payload built by `screenInfoListToVariantList` never emits an
+            // `id` key — comparing against `"id"` would be dead code.
+            if (m.value(QStringLiteral("name")).toString() == screenId
+                || m.value(QStringLiteral("screenId")).toString() == screenId) {
+                const QString label = m.value(QStringLiteral("displayLabel")).toString();
+                return label.isEmpty() ? screenId : label;
+            }
+        }
+        return screenId;
+    });
+    m_windowRulesPage->setActivityLookup([this](const QString& activityId) -> QString {
+        for (const QVariant& av : std::as_const(m_activities)) {
+            const QVariantMap m = av.toMap();
+            if (m.value(QStringLiteral("id")).toString() == activityId) {
+                const QString name = m.value(QStringLiteral("name")).toString();
+                return name.isEmpty() ? activityId : name;
+            }
+        }
+        return activityId;
+    });
+    m_windowRulesPage->setLayoutLookup([this](const QString& layoutId) -> QString {
+        for (const QVariant& lv : std::as_const(m_layouts)) {
+            const QVariantMap m = lv.toMap();
+            if (m.value(QStringLiteral("id")).toString() == layoutId) {
+                // Layouts are serialised via `toVariantMap(LayoutPreview)`
+                // which stamps the friendly label under `displayName`, not
+                // `name`. Reading `name` here would always return an empty
+                // string and the tile caption would show the raw UUID.
+                const QString name = m.value(QStringLiteral("displayName")).toString();
+                return name.isEmpty() ? layoutId : name;
+            }
+        }
+        return layoutId;
+    });
+    auto refreshRuleLabels = [this]() {
+        if (m_windowRulesPage && m_windowRulesPage->model()) {
+            m_windowRulesPage->model()->refreshLabels();
+        }
+    };
+    connect(this, &SettingsController::screensChanged, this, refreshRuleLabels);
+    connect(this, &SettingsController::activitiesChanged, this, refreshRuleLabels);
+    connect(this, &SettingsController::layoutsChanged, this, refreshRuleLabels);
+
     // Overlay shader registry — settings-side mirror of the daemon's. The
     // PlasmaZones::ShaderRegistry subclass auto-wires the standard system
     // + user search paths (`plasmazones/shaders`), so no extra path
@@ -371,27 +480,6 @@ SettingsController::SettingsController(QObject* parent)
     connect(&m_screenHelper, &ScreenHelper::needsSave, this, [this]() {
         setNeedsSave(true);
     });
-
-    // Forward the per-mode disable signals from the underlying Settings up
-    // through the controller so QML bridges react regardless of write origin:
-    //   - in-process toggle in this UI (controller invokables → Settings setters)
-    //   - cross-process external write reflected via load() (daemon shortcut,
-    //     D-Bus call to SettingsAdaptor) — see Settings::load() for the
-    //     post-reparse emission of these signals
-    //   - ScreenHelper-mediated monitor toggle (the helper writes through to
-    //     Settings, which fires the underlying signal)
-    // Single forwarding point keeps the three modes' write paths symmetrical
-    // and avoids per-callsite Q_EMIT bookkeeping.
-    connect(&m_settings, &ISettings::disabledMonitorsChanged, this, [this](PhosphorZones::AssignmentEntry::Mode mode) {
-        Q_EMIT disabledMonitorsChanged(static_cast<int>(mode));
-    });
-    connect(&m_settings, &ISettings::disabledDesktopsChanged, this, [this](PhosphorZones::AssignmentEntry::Mode mode) {
-        Q_EMIT disabledDesktopsChanged(static_cast<int>(mode));
-    });
-    connect(&m_settings, &ISettings::disabledActivitiesChanged, this,
-            [this](PhosphorZones::AssignmentEntry::Mode mode) {
-                Q_EMIT disabledActivitiesChanged(static_cast<int>(mode));
-            });
 
     // PhosphorZones::Layout load timer (debounce)
     m_layoutLoadTimer.setSingleShot(true);
@@ -462,8 +550,6 @@ SettingsController::SettingsController(QObject* parent)
     // (Editor NOTIFY signals are forwarded to QML by EditorPageController
     // itself — see its constructor — so no SettingsController-side plumbing
     // is needed here.)
-    // Forward lock state changes (from Settings::load() after external D-Bus settingsChanged)
-    connect(&m_settings, &Settings::lockedScreensChanged, this, &SettingsController::lockedScreensChanged);
 
     // Load dismissed update version from app-local settings
     {
@@ -604,19 +690,17 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kAnimationsLibraryChildren{QStringLiteral("animations-presets"),
                                                           QStringLiteral("animations-motionsets"),
                                                           QStringLiteral("animations-shaders")};
-    static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-general"),
-                                                         QStringLiteral("animations-app-rules")};
+    static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-general")};
     static const QSet<QString> kAnimationsAllLeaves =
         kAnimationsDirectChildren + kAnimationsSurfacesChildren + kAnimationsLibraryChildren;
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"),
          {QStringLiteral("snapping-appearance"), QStringLiteral("snapping-effects"), QStringLiteral("snapping-shaders"),
           QStringLiteral("snapping-behavior"), QStringLiteral("snapping-zoneselector"),
-          QStringLiteral("snapping-assignments"), QStringLiteral("snapping-apprules"),
           QStringLiteral("snapping-ordering"), QStringLiteral("snapping-shortcuts")}},
         {QStringLiteral("tiling"),
          {QStringLiteral("tiling-appearance"), QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm"),
-          QStringLiteral("tiling-assignments"), QStringLiteral("tiling-ordering"), QStringLiteral("tiling-shortcuts")}},
+          QStringLiteral("tiling-ordering"), QStringLiteral("tiling-shortcuts")}},
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
@@ -636,16 +720,14 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-effects"),
         QStringLiteral("snapping-shaders"),
-        QStringLiteral("snapping-assignments"),
         QStringLiteral("snapping-shortcuts"),
         QStringLiteral("tiling-appearance"),
         QStringLiteral("tiling-behavior"),
         QStringLiteral("tiling-algorithm"),
-        QStringLiteral("tiling-assignments"),
         QStringLiteral("tiling-shortcuts"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
-        QStringLiteral("snapping-apprules"),
+        QStringLiteral("window-rules"),
         QStringLiteral("exclusions"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
@@ -653,7 +735,6 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("virtualscreens"),
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),
-        QStringLiteral("animations-app-rules"),
         QStringLiteral("animations-editor"),
         QStringLiteral("animations-osds"),
         QStringLiteral("animations-overlays"),
@@ -697,6 +778,10 @@ void SettingsController::load()
     // Q_PROPERTY re-emit like every other page setting.
     if (m_animationsPage)
         m_animationsPage->revertPending();
+    // Window rules are owned by the daemon (windowrules.json); Discard
+    // re-fetches the daemon's authoritative set, dropping staged edits.
+    if (m_windowRulesPage)
+        m_windowRulesPage->revert();
     m_settings.load();
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
@@ -738,6 +823,13 @@ void SettingsController::save()
     if (m_animationsPage)
         m_animationsPage->commitPending();
 
+    // Push the staged window-rule set to the daemon (sole writer of
+    // windowrules.json). Done before notifyReload so the daemon's rule
+    // engine picks up the new set as part of the same save. A failed push
+    // (daemon down, or a partial rule drop) must NOT be reported as saved —
+    // tracked here and re-flagged after the blanket setNeedsSave(false) below.
+    const bool windowRulesCommitOk = !m_windowRulesPage || m_windowRulesPage->commit();
+
     // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen
     // IDs exist when assignments referencing them are processed.
     m_staging.flushVirtualScreensToDaemon();
@@ -772,6 +864,15 @@ void SettingsController::save()
     // reset through singleShot(0) drains those queued signals first, so
     // onExternalSettingsChanged() sees m_saving=true and returns early.
     setNeedsSave(false);
+    // If the window-rule push failed, the page still has unsaved staged edits
+    // — re-flag it so the user is not told everything saved. Done after the
+    // blanket clear above (and with m_saving still true, so the dirtyChanged
+    // connect lambda's guard short-circuits and does not double-mark).
+    if (!windowRulesCommitOk) {
+        beginExternalEdit(QStringLiteral("window-rules"));
+        setNeedsSave(true);
+        endExternalEdit();
+    }
     QTimer::singleShot(0, this, [this]() {
         m_saving = false;
     });
@@ -803,7 +904,18 @@ void SettingsController::defaults()
     // when state already matches the post-defaults set) doesn't fire
     // a spurious `dirtyPagesChanged`, matching the emit-on-change
     // discipline used by `setNeedsSave` everywhere else in this file.
-    const QSet<QString>& fullSet = validPageNames();
+    //
+    // "window-rules" is INTENTIONALLY excluded from the blanket-mark:
+    // its source of truth is the daemon's `windowrules.json` (not the
+    // KConfig store reset() clears), and `WindowRuleController::commit()`
+    // is a no-op when the controller is clean. Marking the page dirty
+    // here would surface a stale "unsaved changes" indicator that a
+    // subsequent Save would never actually clear (commit short-circuits,
+    // leaving the page dirty in perpetuity until the user touches it).
+    // Window-rule defaults are out of scope for this entry point —
+    // resetting them requires a separate daemon-side "reset rules" path.
+    QSet<QString> fullSet = validPageNames();
+    fullSet.remove(QStringLiteral("window-rules"));
     if (m_dirtyPages != fullSet) {
         m_dirtyPages = fullSet;
         Q_EMIT dirtyPagesChanged();
@@ -1207,7 +1319,7 @@ void SettingsController::setLayoutAspectRatio(const QString& layoutId, int aspec
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Assignment helpers (D-Bus to daemon PhosphorZones::LayoutRegistry)
+// Font helpers (for FontPickerDialog)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QStringList SettingsController::fontStylesForFamily(const QString& family) const
@@ -1226,92 +1338,10 @@ bool SettingsController::fontStyleItalic(const QString& family, const QString& s
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Assignment staging / mutations — QML-callable methods forward to StagingService
-// and flip the dirty flag; all state + flush logic lives in the service.
+// Assignment staging — the QML-callable atomic mode+layout staging entry point
+// forwards to StagingService and flips the dirty flag; all state + flush logic
+// lives in the service.
 // ═══════════════════════════════════════════════════════════════════════════════
-
-void SettingsController::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
-{
-    m_staging.stageSnapping(screenName, 0, QString(), layoutId);
-    setNeedsSave(true);
-}
-
-void SettingsController::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
-                                                     const QString& layoutId)
-{
-    m_staging.stageSnapping(screenName, virtualDesktop, QString(), layoutId);
-    setNeedsSave(true);
-}
-
-void SettingsController::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                      const QString& layoutId)
-{
-    m_staging.stageSnapping(screenName, 0, activityId, layoutId);
-    setNeedsSave(true);
-}
-
-void SettingsController::assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId)
-{
-    m_staging.stageTiling(screenName, 0, QString(), layoutId);
-    setNeedsSave(true);
-}
-
-void SettingsController::assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
-                                                           const QString& layoutId)
-{
-    m_staging.stageTiling(screenName, virtualDesktop, QString(), layoutId);
-    setNeedsSave(true);
-}
-
-void SettingsController::assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                            const QString& layoutId)
-{
-    m_staging.stageTiling(screenName, 0, activityId, layoutId);
-    setNeedsSave(true);
-}
-
-// "Clear" on the per-page Assignment dropdowns means "clear this slot's
-// preference" — NOT "remove the entire (screen, desktop, activity) entry."
-// Snap-page clears route through stageSnapping(empty) so the flush
-// emits `setSnappingLayoutEntry(..., "")` which wipes only the snap
-// field on the daemon side; the tile preference and the rendered mode
-// at that context are preserved. Tile-page clears are symmetric via
-// stageTilingClear → `setTilingAlgorithmEntry(..., "")`.
-void SettingsController::clearScreenAssignment(const QString& screenName)
-{
-    m_staging.stageSnapping(screenName, 0, QString(), QString());
-    setNeedsSave(true);
-}
-
-void SettingsController::clearTilingScreenAssignment(const QString& screenName)
-{
-    m_staging.stageTilingClear(screenName, 0, QString());
-    setNeedsSave(true);
-}
-
-void SettingsController::clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
-{
-    m_staging.stageSnapping(screenName, virtualDesktop, QString(), QString());
-    setNeedsSave(true);
-}
-
-void SettingsController::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
-{
-    m_staging.stageSnapping(screenName, 0, activityId, QString());
-    setNeedsSave(true);
-}
-
-void SettingsController::clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
-{
-    m_staging.stageTilingClear(screenName, virtualDesktop, QString());
-    setNeedsSave(true);
-}
-
-void SettingsController::clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId)
-{
-    m_staging.stageTilingClear(screenName, 0, activityId);
-    setNeedsSave(true);
-}
 
 void SettingsController::stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
                                               int mode, const QString& snappingLayoutId,
@@ -1319,202 +1349,6 @@ void SettingsController::stageAssignmentEntry(const QString& screenName, int vir
 {
     m_staging.stageAssignmentEntry(screenName, virtualDesktop, activityId, mode, snappingLayoutId, tilingAlgorithmId);
     setNeedsSave(true);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Assignment query helpers (check staged state, then fall back to D-Bus)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-QString SettingsController::getLayoutForScreen(const QString& screenName) const
-{
-    QString staged;
-    if (m_staging.stagedSnappingLayout(screenName, 0, QString(), staged))
-        return staged;
-    // Query the SCREEN-LEVEL snap slot (desktop=0, activity=""), not the
-    // daemon's contextual `getLayoutForScreen`. The latter walks the
-    // current-desktop / current-activity cascade — so when the user edits
-    // the Monitor row on the Snapping Assignments page (which writes the
-    // screen-level entry), the page's own re-read picks up the higher-
-    // priority per-desktop / per-activity entry instead and renders as
-    // "the save didn't stick". Mirrors `getTilingLayoutForScreen`, which
-    // already queries `getTilingAlgorithmForScreenDesktop(screen, 0)`.
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getSnappingLayoutForScreenDesktop"), {screenName, 0});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
-}
-
-QString SettingsController::getTilingLayoutForScreen(const QString& screenName) const
-{
-    QString staged;
-    if (m_staging.stagedTilingLayout(screenName, 0, QString(), staged))
-        return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, 0});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        // Daemon returns the raw algorithm name (e.g. "cluster"); the
-        // LayoutComboBox model uses the prefixed "autotile:<algo>" form.
-        // Match the staged path (stagedTilingLayout already prefixes) so
-        // saved values resolve to a model entry instead of falling through
-        // to "Default".
-        return PhosphorLayout::LayoutId::normalizeAlgorithmId(reply.arguments().first().toString());
-    }
-    return {};
-}
-
-QString SettingsController::getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
-{
-    QString staged;
-    if (m_staging.stagedSnappingLayout(screenName, virtualDesktop, QString(), staged))
-        return staged;
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getLayoutForScreenDesktop"), {screenName, virtualDesktop});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
-}
-
-QString SettingsController::getSnappingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
-{
-    QString staged;
-    if (m_staging.stagedSnappingLayout(screenName, virtualDesktop, QString(), staged))
-        return staged;
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getSnappingLayoutForScreenDesktop"), {screenName, virtualDesktop});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
-}
-
-bool SettingsController::hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
-{
-    QString snap, tile;
-    bool hasSnap = m_staging.stagedSnappingLayout(screenName, virtualDesktop, QString(), snap);
-    bool hasTile = m_staging.stagedTilingLayout(screenName, virtualDesktop, QString(), tile);
-    if (hasSnap || hasTile) {
-        // If either staged field is non-empty, we definitely have an assignment
-        if (!snap.isEmpty() || !tile.isEmpty())
-            return true;
-        // Only short-circuit to false when BOTH fields are staged and empty;
-        // otherwise fall through to D-Bus so the daemon's other field is checked.
-        if (hasSnap && hasTile)
-            return false;
-    }
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("hasExplicitAssignmentForScreenDesktop"), {screenName, virtualDesktop});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toBool();
-    return false;
-}
-
-QString SettingsController::getTilingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
-{
-    QString staged;
-    if (m_staging.stagedTilingLayout(screenName, virtualDesktop, QString(), staged))
-        return staged;
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, virtualDesktop});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return PhosphorLayout::LayoutId::normalizeAlgorithmId(reply.arguments().first().toString());
-    return {};
-}
-
-bool SettingsController::hasExplicitTilingAssignmentForScreenDesktop(const QString& screenName,
-                                                                     int virtualDesktop) const
-{
-    QString staged;
-    if (m_staging.stagedTilingLayout(screenName, virtualDesktop, QString(), staged))
-        return !staged.isEmpty();
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, virtualDesktop});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return !reply.arguments().first().toString().isEmpty();
-    return false;
-}
-
-QString SettingsController::getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
-{
-    QString staged;
-    if (m_staging.stagedSnappingLayout(screenName, 0, activityId, staged))
-        return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
-}
-
-QString SettingsController::getSnappingLayoutForScreenActivity(const QString& screenName,
-                                                               const QString& activityId) const
-{
-    QString staged;
-    if (m_staging.stagedSnappingLayout(screenName, 0, activityId, staged))
-        return staged;
-    // Read the per-field snap slot at (screen, 0, activity), not the
-    // mode-resolved active-layout id. Mirrors
-    // SettingsController::getLayoutForScreen (commit 0bee42ee) — the legacy
-    // `getLayoutForScreenActivity` reply is mode-filtered and would hide a
-    // stored-but-inactive snap preference when the activity slot's mode is
-    // Autotile (per the partial-update / preserve-mode semantics added in
-    // c5d909034).
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getSnappingLayoutForScreenActivity"), {screenName, activityId});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
-}
-
-bool SettingsController::hasExplicitAssignmentForScreenActivity(const QString& screenName,
-                                                                const QString& activityId) const
-{
-    QString snap, tile;
-    bool hasSnap = m_staging.stagedSnappingLayout(screenName, 0, activityId, snap);
-    bool hasTile = m_staging.stagedTilingLayout(screenName, 0, activityId, tile);
-    if (hasSnap || hasTile) {
-        if (!snap.isEmpty() || !tile.isEmpty())
-            return true;
-        if (hasSnap && hasTile)
-            return false;
-    }
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("hasExplicitAssignmentForScreenActivity"), {screenName, activityId});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toBool();
-    return false;
-}
-
-QString SettingsController::getTilingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
-{
-    QString staged;
-    if (m_staging.stagedTilingLayout(screenName, 0, activityId, staged))
-        return staged;
-    // Mirrors SettingsController::getTilingLayoutForScreen (commit d5cc4936):
-    // read the per-field tile slot via `getTilingAlgorithmForScreenActivity`
-    // and prefix the raw algo to the `autotile:<algo>` form so it matches
-    // LayoutComboBox model entries. The legacy `getLayoutForScreenActivity`
-    // path was mode-filtered and would silently hide a stored-but-inactive
-    // tile preference (Snapping-mode slot with a tile field set).
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getTilingAlgorithmForScreenActivity"), {screenName, activityId});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return PhosphorLayout::LayoutId::normalizeAlgorithmId(reply.arguments().first().toString());
-    return {};
-}
-
-bool SettingsController::hasExplicitTilingAssignmentForScreenActivity(const QString& screenName,
-                                                                      const QString& activityId) const
-{
-    QString tiling = getTilingLayoutForScreenActivity(screenName, activityId);
-    return !tiling.isEmpty();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1568,266 +1402,6 @@ void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString&
         return;
     m_staging.stageTilingQuickSlot(slotNumber, layoutId);
     setNeedsSave(true);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// App-to-zone rules (D-Bus to daemon, reading from layout JSON)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-QVariantList SettingsController::getAppRulesForLayout(const QString& layoutId) const
-{
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getLayout"), {layoutId});
-    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
-        return {};
-
-    QString json = reply.arguments().first().toString();
-    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-    if (doc.isNull() || !doc.isObject())
-        return {};
-
-    QJsonArray rulesArray = doc.object()[QLatin1String("appRules")].toArray();
-    QVariantList result;
-    for (const auto& ruleVal : rulesArray) {
-        QJsonObject ruleObj = ruleVal.toObject();
-        QVariantMap rule;
-        rule[QStringLiteral("pattern")] = ruleObj[QLatin1String("pattern")].toString();
-        rule[QStringLiteral("zoneNumber")] = ruleObj[QLatin1String("zoneNumber")].toInt();
-        if (ruleObj.contains(QLatin1String("targetScreen")))
-            rule[QStringLiteral("targetScreen")] = ruleObj[QLatin1String("targetScreen")].toString();
-        result.append(rule);
-    }
-    return result;
-}
-
-void SettingsController::addAppRuleToLayout(const QString& layoutId, const QString& pattern, int zoneNumber,
-                                            const QString& targetScreen)
-{
-    QString trimmed = pattern.trimmed();
-    if (trimmed.isEmpty() || zoneNumber < 1)
-        return;
-
-    QVariantList rules = getAppRulesForLayout(layoutId);
-
-    // Check for duplicates
-    for (const auto& ruleVar : rules) {
-        QVariantMap existing = ruleVar.toMap();
-        if (existing[QStringLiteral("pattern")].toString().compare(trimmed, Qt::CaseInsensitive) == 0
-            && existing[QStringLiteral("targetScreen")].toString() == targetScreen) {
-            return;
-        }
-    }
-
-    QVariantMap newRule;
-    newRule[QStringLiteral("pattern")] = trimmed;
-    newRule[QStringLiteral("zoneNumber")] = zoneNumber;
-    if (!targetScreen.isEmpty())
-        newRule[QStringLiteral("targetScreen")] = targetScreen;
-    rules.append(newRule);
-
-    // Save via updateLayout D-Bus
-    saveAppRulesToDaemon(layoutId, rules);
-}
-
-void SettingsController::removeAppRuleFromLayout(const QString& layoutId, int index)
-{
-    QVariantList rules = getAppRulesForLayout(layoutId);
-    if (index < 0 || index >= rules.size())
-        return;
-    rules.removeAt(index);
-    saveAppRulesToDaemon(layoutId, rules);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Assignment lock helpers
-// ═══════════════════════════════════════════════════════════════════════════════
-
-static QString lockKey(const QString& screenName, int mode)
-{
-    // Resolve connector names (e.g., "DP-3") to EDID-based screen IDs
-    // to match the daemon's lock key format
-    QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenName);
-    return QString::number(mode) + QStringLiteral(":") + resolved;
-}
-
-bool SettingsController::isScreenLocked(const QString& screenName, int mode) const
-{
-    return m_settings.isScreenLocked(lockKey(screenName, mode));
-}
-
-void SettingsController::toggleScreenLock(const QString& screenName, int mode)
-{
-    const QString key = lockKey(screenName, mode);
-    m_settings.setScreenLocked(key, !m_settings.isScreenLocked(key));
-    Q_EMIT lockedScreensChanged();
-    setNeedsSave(true);
-}
-
-bool SettingsController::isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity,
-                                         int mode) const
-{
-    return m_settings.isContextLocked(lockKey(screenName, mode), virtualDesktop, activity);
-}
-
-void SettingsController::toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity,
-                                           int mode)
-{
-    const QString key = lockKey(screenName, mode);
-    bool locked = m_settings.isContextLocked(key, virtualDesktop, activity);
-    m_settings.setContextLocked(key, virtualDesktop, activity, !locked);
-    Q_EMIT lockedScreensChanged();
-    setNeedsSave(true);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Screen helpers
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Convert the QML-side `viewMode` int to PhosphorZones::AssignmentEntry::Mode.
-// The numeric values match by design (0 = Snapping, 1 = Autotile) but routing
-// every call through the helper keeps the cast explicit and gives us a single
-// place to add range-clamping if a future mode is introduced.
-//
-// SharedBridge.qml sets `assignmentViewMode: -1` as a sentinel that the
-// SnappingBridge / TilingBridge subclass MUST override. If a future bridge
-// subclass forgets the override, every disable read/write would silently
-// land on the snapping list — exactly the mode confusion this whole
-// machinery is meant to eliminate. Warn loudly so the bug shows up in logs.
-//
-// The previous implementation triggered Q_ASSERT(false) on the unexpected
-// path, but QML binding evaluation order during component construction can
-// run a `function on*Changed: isMonitorDisabled(name)` handler before the
-// SnappingBridge/TilingBridge subclass override of `assignmentViewMode`
-// takes effect, hard-crashing dev builds on what is otherwise transient
-// state. The warning is enough — the fallback to Snapping is the safest
-// choice (defaults to the more permissive of the two lists for reads,
-// avoids accidental writes to a list the user didn't intend).
-static PhosphorZones::AssignmentEntry::Mode modeFromViewMode(int viewMode)
-{
-    if (viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Snapping)
-        && viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)) {
-        qCWarning(PlasmaZones::lcCore)
-            << "modeFromViewMode: unexpected viewMode" << viewMode
-            << "— defaulting to Snapping. A bridge subclass likely forgot to set assignmentViewMode.";
-    }
-    return viewMode == static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)
-        ? PhosphorZones::AssignmentEntry::Autotile
-        : PhosphorZones::AssignmentEntry::Snapping;
-}
-
-bool SettingsController::isMonitorDisabled(int viewMode, const QString& screenName) const
-{
-    return m_screenHelper.isMonitorDisabled(modeFromViewMode(viewMode), screenName);
-}
-
-void SettingsController::setMonitorDisabled(int viewMode, const QString& screenName, bool disabled)
-{
-    m_screenHelper.setMonitorDisabled(modeFromViewMode(viewMode), screenName, disabled);
-}
-
-bool SettingsController::isDesktopDisabled(int viewMode, const QString& screenName, int desktop) const
-{
-    return m_settings.isDesktopDisabled(modeFromViewMode(viewMode), screenName, desktop);
-}
-
-namespace {
-
-// Strip every connector-name ↔ resolved-id variant of `screenName + suffix`
-// from `entries`. Mirrors the read-side resolution that
-// Settings::isDesktopDisabled / isActivityDisabled apply via
-// ScreenIdentity::variantsFor so a stored entry in any form gets removed
-// regardless of which form the caller supplies. Discussion #461 item 12.
-void removeDisabledKeyVariants(QStringList& entries, const QString& screenName, const QString& suffix)
-{
-    for (const QString& variant : Phosphor::Screens::ScreenIdentity::variantsFor(screenName)) {
-        entries.removeAll(variant + suffix);
-    }
-}
-
-} // namespace
-
-void SettingsController::setDesktopDisabled(int viewMode, const QString& screenName, int desktop, bool disabled)
-{
-    // desktop <= 0 is nonsensical (QML supplies 1-based desktop numbers; the
-    // read-side isDesktopDisabled fast-paths to "not disabled" on this input).
-    // Without the guard, repeated toggles with desktop=0 would unboundedly
-    // append "<screen>/0" entries because the dedup check below also
-    // fast-paths to "not disabled".
-    if (screenName.isEmpty() || desktop <= 0) {
-        return;
-    }
-    // The disabledDesktopsChanged(viewMode) signal is fired by the
-    // m_settings → controller forward in the constructor — no manual emit
-    // needed here.
-    const auto mode = modeFromViewMode(viewMode);
-    const QString desktopSuffix = QLatin1Char('/') + QString::number(desktop);
-    QStringList entries = m_settings.disabledDesktops(mode);
-    if (disabled) {
-        // isDesktopDisabled probes the stored list under both connector-name
-        // and resolved-id forms (settings.cpp builds `namesToCheck` with the
-        // variant set), so its `false` return structurally implies "no
-        // matching variant in entries" — an additional entries.contains()
-        // would be re-validating the same invariant.
-        if (!m_settings.isDesktopDisabled(mode, screenName, desktop)) {
-            entries.append(screenName + desktopSuffix);
-            m_settings.setDisabledDesktops(mode, entries);
-            setNeedsSave(true);
-        }
-    } else {
-        // Strip every variant of `<screen>/<desktop>`. The CLAUDE rule
-        // "only emit signals when value actually changes" extends to the
-        // dirty flag: if the variant strip is a no-op (the entry was
-        // already absent — possible when a stale QML view toggles a
-        // checkbox off for a screen that was never in the list), skip
-        // both the writeback and the dirty mark.
-        const QStringList before = entries;
-        removeDisabledKeyVariants(entries, screenName, desktopSuffix);
-        if (entries != before) {
-            m_settings.setDisabledDesktops(mode, entries);
-            setNeedsSave(true);
-        }
-    }
-}
-
-bool SettingsController::isActivityDisabled(int viewMode, const QString& screenName, const QString& activityId) const
-{
-    return m_settings.isActivityDisabled(modeFromViewMode(viewMode), screenName, activityId);
-}
-
-void SettingsController::setActivityDisabled(int viewMode, const QString& screenName, const QString& activityId,
-                                             bool disabled)
-{
-    // Empty activityId is nonsensical (no activity is being addressed; the
-    // read-side isActivityDisabled fast-paths to "not disabled" on this
-    // input). Same unbounded-append regression as setDesktopDisabled's
-    // desktop<=0 case without this guard.
-    if (screenName.isEmpty() || activityId.isEmpty()) {
-        return;
-    }
-    // See setDesktopDisabled — the per-mode signal is forwarded from
-    // m_settings via the connect set up in the constructor.
-    const auto mode = modeFromViewMode(viewMode);
-    const QString activitySuffix = QLatin1Char('/') + activityId;
-    QStringList entries = m_settings.disabledActivities(mode);
-    if (disabled) {
-        // See setDesktopDisabled — isActivityDisabled probes every screen-name
-        // variant against the stored entries, so a false return implies no
-        // match in any form.
-        if (!m_settings.isActivityDisabled(mode, screenName, activityId)) {
-            entries.append(screenName + activitySuffix);
-            m_settings.setDisabledActivities(mode, entries);
-            setNeedsSave(true);
-        }
-    } else {
-        // See setDesktopDisabled — strip every variant, but only write
-        // and mark dirty when something actually changed.
-        const QStringList before = entries;
-        removeDisabledKeyVariants(entries, screenName, activitySuffix);
-        if (entries != before) {
-            m_settings.setDisabledActivities(mode, entries);
-            setNeedsSave(true);
-        }
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1964,6 +1538,10 @@ static QVariantList parseRunningWindowsJson(const QString& json)
         item[QStringLiteral("windowClass")] = obj[QLatin1String("windowClass")].toString();
         item[QStringLiteral("appName")] = obj[QLatin1String("appName")].toString();
         item[QStringLiteral("caption")] = obj[QLatin1String("caption")].toString();
+        // `desktopFile` is forwarded verbatim — older effect builds that
+        // don't include the field will produce an empty string, which the
+        // WindowPickerDialog hides from its DesktopFile mode.
+        item[QStringLiteral("desktopFile")] = obj[QLatin1String("desktopFile")].toString();
         result.append(item);
     }
     return result;
@@ -2138,12 +1716,6 @@ QVariantList SettingsController::getScreenStates() const
             result.append(value.toObject().toVariantMap());
     }
     return result;
-}
-
-bool SettingsController::hasStagedAssignment(const QString& screenName, int virtualDesktop,
-                                             const QString& activityId) const
-{
-    return m_staging.stagedAssignmentFor(screenName, virtualDesktop, activityId) != nullptr;
 }
 
 QVariantMap SettingsController::getStagedAssignment(const QString& screenName, int virtualDesktop,
@@ -2324,37 +1896,6 @@ void SettingsController::clearPerScreenZoneSelectorSettings(const QString& scree
 bool SettingsController::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 {
     return m_settings.hasPerScreenZoneSelectorSettings(screenName);
-}
-
-void SettingsController::saveAppRulesToDaemon(const QString& layoutId, const QVariantList& rules)
-{
-    // Get the current layout JSON, update the appRules field, and send back via updateLayout
-    QDBusMessage getReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                   QStringLiteral("getLayout"), {layoutId});
-    if (getReply.type() != QDBusMessage::ReplyMessage || getReply.arguments().isEmpty())
-        return;
-
-    QJsonDocument doc = QJsonDocument::fromJson(getReply.arguments().first().toString().toUtf8());
-    if (doc.isNull() || !doc.isObject())
-        return;
-
-    QJsonObject obj = doc.object();
-    QJsonArray rulesArray;
-    for (const auto& ruleVar : rules) {
-        QVariantMap ruleMap = ruleVar.toMap();
-        QJsonObject ruleObj;
-        ruleObj[QLatin1String("pattern")] = ruleMap[QStringLiteral("pattern")].toString();
-        ruleObj[QLatin1String("zoneNumber")] = ruleMap[QStringLiteral("zoneNumber")].toInt();
-        if (ruleMap.contains(QStringLiteral("targetScreen")))
-            ruleObj[QLatin1String("targetScreen")] = ruleMap[QStringLiteral("targetScreen")].toString();
-        rulesArray.append(ruleObj);
-    }
-    obj[QLatin1String("appRules")] = rulesArray;
-
-    QString updatedJson = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                           QStringLiteral("updateLayout"), {updatedJson});
-    scheduleLayoutLoad();
 }
 
 QVariantMap SettingsController::loadWindowGeometry() const

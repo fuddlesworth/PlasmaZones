@@ -49,6 +49,10 @@ class ActivityManager;
 class VirtualDesktopManager;
 }
 
+namespace PhosphorWindowRule {
+class WindowRuleStore;
+}
+
 namespace PhosphorZones {
 class Layout;
 class LayoutComputeService;
@@ -72,6 +76,7 @@ class OverlayAdaptor;
 class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class WindowDragAdaptor;
+class WindowRuleAdaptor;
 class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
@@ -426,6 +431,11 @@ private:
     void syncModeFromAssignments();
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
+    // Unified WindowRule store (windowrules.json). Declared BEFORE
+    // m_layoutManager because the LayoutRegistry borrows it for its
+    // rule-backed assignment cascade — construction order must build the
+    // store first. The WindowRuleAdaptor borrows it too.
+    std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_windowRuleStore;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry. Replaces the old
     // AlgorithmRegistry::instance() singleton — per-process ownership is
@@ -554,6 +564,12 @@ private:
     // window (and any queued D-Bus call landing in that window would UAF).
     ShaderAdaptor* m_shaderAdaptor = nullptr;
     ControlAdaptor* m_controlAdaptor = nullptr;
+    // Unified WindowRule store + its D-Bus adaptor. The store owns
+    // windowrules.json (daemon sole writer); the adaptor exposes it on
+    // org.plasmazones.WindowRules. Adaptor is Qt-parented (raw pointer); it
+    // borrows the store, so stop() calls detach() before the store unique_ptr
+    // is destroyed.
+    WindowRuleAdaptor* m_windowRuleAdaptor = nullptr;
     // Compositor bridge adaptor (KWin effect ↔ daemon protocol endpoint).
     // Parented to `this`; holds only plain state, so it needs no detach().
     CompositorBridgeAdaptor* m_compositorBridge = nullptr;

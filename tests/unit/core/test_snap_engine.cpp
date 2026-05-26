@@ -25,6 +25,7 @@ using namespace PhosphorSnapEngine;
 #include <PhosphorZones/Zone.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
 
@@ -105,8 +106,7 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"));
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsSnap(nullptr);
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
         m_wts = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);

@@ -37,6 +37,7 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
 
@@ -59,8 +60,7 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"));
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsSnapAssist(nullptr);
         m_settings->setSnapAssistFeatureEnabled(true);
         m_settings->setSnapAssistEnabled(true);

@@ -548,9 +548,15 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
 // Snapping.Behavior.Display plus the Effects sub-group entries that aren't
 // the blur toggle (already migrated via Appearance). Enum ints (OsdStyle,
 // OverlayDisplayMode) get clamp validators; lists use canonicalCommaList.
-// Note: disabled-monitor connector-name resolution (Phosphor::Screens::ScreenIdentity::idForName)
-// stays PZ-side — we keep the wire format as comma-joined and let the
-// Settings getter do the resolution step.
+//
+// Per-mode disable lists (formerly Display.{Snapping,Autotile}Disabled*)
+// are NOT in the schema: as of the window-rule refactor (PR #477) every
+// read/write routes through `windowrules.json` via Settings::disableEntriesFor
+// / writeDisableEntries. Re-declaring them here would let the schema-driven
+// backend silently re-write dead defaults under the mode-neutral Display
+// group, re-introducing keys we explicitly migrated out in v3→v4. The v3
+// key accessors live on solely for migrateV3ToV4 to read the legacy values
+// before they are moved to the rule store.
 
 void appendDisplaySchema(PhosphorConfig::Schema& schema)
 {
@@ -559,18 +565,6 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingBehaviorDisplayGroup()] = {
         {CD::showOnAllMonitorsKey(), CD::showOnAllMonitors(), QMetaType::Bool},
         {CD::filterByAspectRatioKey(), CD::filterLayoutsByAspectRatio(), QMetaType::Bool},
-    };
-
-    // Mode-neutral Display group: per-mode disable lists. Each pair is independent —
-    // disabling a monitor for snap leaves autotile gates untouched. Connector-name
-    // resolution stays PZ-side (see Settings::disabledMonitors).
-    schema.groups[CD::displayGroup()] = {
-        {CD::snappingDisabledMonitorsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::autotileDisabledMonitorsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::snappingDisabledDesktopsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::autotileDisabledDesktopsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::snappingDisabledActivitiesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::autotileDisabledActivitiesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
     };
 
     // Full Effects group declared here in one shot. Blur is logically an

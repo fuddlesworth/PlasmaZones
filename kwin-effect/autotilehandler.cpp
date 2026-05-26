@@ -46,6 +46,34 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
         return;
     }
 
+    // Pause focus-follows-mouse while the currently active window is one we
+    // would refuse to focus via FFM anyway: excluded app, dialog, popup,
+    // keep-above overlay, or a window below the min-size threshold. Without
+    // this, the user opens an emoji picker or notification inside a zone,
+    // moves the cursor across the underlying tiled window's visible area, and
+    // FFM activates that tiled window first, sending the just-opened popup
+    // straight to the background (discussion #461 item 3 follow-up).
+    // Resumes naturally on the next cursor move once a tileable window is
+    // active. Scoped to the same screen as the cursor so an unrelated focused
+    // window on another monitor never freezes FFM here.
+    if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
+        if (!PlasmaZonesEffect::isOwnOverlayClass(active->windowClass())
+            && m_effect->getWindowScreenId(active) == screenId) {
+            // Filter first, then size-check. This mirrors the under-cursor
+            // guard below so the two predicates stay structurally aligned.
+            // The cheap-to-skip min-size check is only paid when the active
+            // window is otherwise tileable.
+            if (!m_effect->isTileableWindow(active) || !m_effect->shouldHandleWindow(active)) {
+                return;
+            }
+            const QRectF aframe = active->frameGeometry();
+            if ((m_effect->m_cachedMinWindowWidth > 0 && aframe.width() < m_effect->m_cachedMinWindowWidth)
+                || (m_effect->m_cachedMinWindowHeight > 0 && aframe.height() < m_effect->m_cachedMinWindowHeight)) {
+                return;
+            }
+        }
+    }
+
     // Find the topmost autotile-managed window under the cursor.
     // Iterate stacking order in reverse (top → bottom).
     const auto windows = KWin::effects->stackingOrder();
@@ -56,6 +84,12 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
         }
         // Geometry check first (cheap QRectF::contains) before shouldHandleWindow (allocates via windowClass())
         if (!w->frameGeometry().contains(pos)) {
+            continue;
+        }
+        // Look through our own overlay/editor layer-shell surfaces — they are
+        // full-screen and always topmost on the autotile monitor, so the bail
+        // below would otherwise kill FFM forever (discussion #461 #3).
+        if (PlasmaZonesEffect::isOwnOverlayClass(w->windowClass())) {
             continue;
         }
         // A non-autotile window (excluded app, keep-above overlay, popup, dialog,

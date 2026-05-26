@@ -195,10 +195,16 @@ public Q_SLOTS:
      * internalId(); Hyprland's address on a future bridge). It is opaque to
      * the daemon — never parsed.
      *
-     * @param instanceId  Opaque compositor handle (stable for window lifetime)
-     * @param appId       Current app class (mutable)
-     * @param desktopFile Current desktop file name (mutable, may be empty)
-     * @param title       Current caption (mutable, may be empty)
+     * @param instanceId     Opaque compositor handle (stable for window lifetime)
+     * @param appId          Current app class (mutable)
+     * @param desktopFile    Current desktop file name (mutable, may be empty)
+     * @param title          Current caption (mutable, may be empty)
+     * @param windowRole     X11 WM_WINDOW_ROLE (empty for Wayland-native windows)
+     * @param pid            Process id (0 = unknown)
+     * @param virtualDesktop 1-based x11 desktop number (0 = all desktops / unknown)
+     * @param activity       Activity UUID (empty = all activities / unknown)
+     * @param windowType     PhosphorProtocol::WindowType underlying value; out-of-range
+     *                       values are clamped to WindowType::Unknown
      *
      * Emits no D-Bus signal. Populates the daemon's WindowRegistry; consumers
      * subscribe to the registry's Qt signals directly.
@@ -207,7 +213,8 @@ public Q_SLOTS:
      * is unchanged.
      */
     void setWindowMetadata(const QString& instanceId, const QString& appId, const QString& desktopFile,
-                           const QString& title);
+                           const QString& title, const QString& windowRole, int pid, int virtualDesktop,
+                           const QString& activity, int windowType);
 
     // windowSnapped, windowSnappedMultiZone, windowUnsnapped, windowsSnappedBatch,
     // recordSnapIntent moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
@@ -301,7 +308,7 @@ public Q_SLOTS:
      * @param windowId Window ID that was closed
      * @note Call this when KWin reports a window has been closed to prevent memory leaks
      */
-    void windowClosed(const QString& windowId);
+    void windowClosed(const QString& windowId, int windowKind);
 
     /**
      * Notify daemon that a window was activated/focused
@@ -556,6 +563,29 @@ public Q_SLOTS:
      * daemon next encounters those window IDs.
      */
     void loadState();
+
+    /**
+     * @brief Drop snap and autotile pending-restore queues for excluded appIds.
+     *
+     * Reads the current snap-side exclusion lists from m_settings, combines
+     * them, and asks both engines to walk their pending-restore queues and
+     * remove any appId matching a pattern. Marks DirtyPendingRestores or
+     * DirtyAutotilePending as appropriate so the next debounced save persists
+     * the pruned state.
+     *
+     * Called from three sites.
+     *   1. WTA's own constructor, right after loadState. The snap queues are
+     *      populated by then but the autotile queue is not.
+     *   2. The excludedApplicationsChanged and excludedWindowClassesChanged signal
+     *      handlers wired in the constructor.
+     *   3. The daemon's finalizeStartup, after AutotileEngine::loadState runs. By
+     *      then the autotile queue has also been deserialized into the engine,
+     *      so it gets pruned too.
+     *
+     * Calling this before either engine is wired is safe. Engines that are
+     * missing contribute zero removals.
+     */
+    void pruneExcludedPendingRestoresFromSettings();
 
     /**
      * @brief Emit reapplyWindowGeometriesRequested (called by daemon after geometry settles)

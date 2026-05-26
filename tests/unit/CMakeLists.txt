@@ -243,6 +243,18 @@ add_executable(test_configmigration config/test_configmigration.cpp)
 target_link_libraries(test_configmigration PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_configmigration COMMAND test_configmigration)
 
+# v3 → v4 window-rule consolidation migration.
+add_executable(test_migration_v3_to_v4 config/test_migration_v3_to_v4.cpp)
+target_link_libraries(test_migration_v3_to_v4
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorWindowRule::PhosphorWindowRule)
+add_test(NAME test_migration_v3_to_v4 COMMAND test_migration_v3_to_v4)
+
+# WindowRuleStore — daemon-side windowrules.json persistence + mutation API.
+add_executable(test_windowrule_store config/test_windowrule_store.cpp)
+target_link_libraries(test_windowrule_store
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorWindowRule::PhosphorWindowRule)
+add_test(NAME test_windowrule_store COMMAND test_windowrule_store)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # daemon/ - Daemon-level Integration Tests (animation profile publication, etc.)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -300,6 +312,19 @@ pz_add_test(test_layout_zones core/test_layout_zones.cpp)
 pz_add_test(test_layoutmanager_persistence core/test_layoutmanager_persistence.cpp)
 pz_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
 pz_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
+pz_add_test(test_layout_registry_cache core/test_layout_registry_cache.cpp)
+
+# Regression guard for the in-process dual-WindowRuleStore data-loss race
+# where Settings used to construct its own store pointed at the same file
+# as the daemon's. Pins the share-via-borrow-ctor wiring in daemon.cpp.
+pz_add_test(test_daemon_dual_store_race core/test_daemon_dual_store_race.cpp)
+
+# Cascade-fidelity proof for the window-rule context model — the priority
+# formula reproduces the legacy zone-Assignment cascade.
+add_executable(test_windowrule_cascade_fidelity core/test_windowrule_cascade_fidelity.cpp)
+target_link_libraries(test_windowrule_cascade_fidelity
+    PRIVATE Qt6::Test Qt6::Core PhosphorWindowRule::PhosphorWindowRule PhosphorZones::PhosphorZones plasmazones_core)
+add_test(NAME test_windowrule_cascade_fidelity COMMAND test_windowrule_cascade_fidelity)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Virtual Screen Tests (ID utilities, data model, Phosphor::Screens::ScreenManager)
@@ -580,24 +605,40 @@ target_link_libraries(test_animations_shader_overrides
 )
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
 
-# Companion test executable: app-rule list CRUD end-to-end. Same split
-# rationale as test_animations_shader_overrides - keep each test file
-# under the project's <800-line guideline.
-add_executable(test_animations_app_rules
-    settings/test_animations_app_rules.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+# Window Rules page (Phase 4 of the window-rule refactor): WindowRuleModel
+# derives SectionRole / summaries from a rule's shape; WindowRuleController
+# stages CRUD by UUID and builds the monitor overview. Compiles the model /
+# controller sources directly (they live in the plasmazones-settings
+# executable, not plasmazones_core).
+add_executable(test_window_rule_model
+    settings/test_window_rule_model.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/windowrulemodel.cpp
 )
-target_link_libraries(test_animations_app_rules
+target_link_libraries(test_window_rule_model
     PRIVATE
         Qt6::Test
         Qt6::Core
-        PhosphorAnimation::PhosphorAnimation
+        PhosphorWindowRule::PhosphorWindowRule
         plasmazones_core
 )
-add_test(NAME test_animations_app_rules COMMAND test_animations_app_rules)
+add_test(NAME test_window_rule_model COMMAND test_window_rule_model)
+
+add_executable(test_window_rule_controller
+    settings/test_window_rule_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/windowrulemodel.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/windowruleauthoring.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/windowruletemplates.cpp
+)
+target_link_libraries(test_window_rule_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        PhosphorWindowRule::PhosphorWindowRule
+        plasmazones_core
+)
+add_test(NAME test_window_rule_controller COMMAND test_window_rule_controller)
 
 # Validation methods on D-Bus struct types - pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,

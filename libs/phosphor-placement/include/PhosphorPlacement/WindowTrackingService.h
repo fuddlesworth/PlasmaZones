@@ -87,10 +87,11 @@ public:
                                    IGeometryResolver* geometryResolver = nullptr, PlacementConfig config = {},
                                    QObject* parent = nullptr);
 
-    void setConfig(const PlacementConfig& config)
-    {
-        m_config = config;
-    }
+    /// The placement config installed at construction. Read-only after wiring:
+    /// the constructor is the sole entry point. Consumers that observe
+    /// `m_config` directly (no notify signal) rely on it being frozen
+    /// post-construction; reassigning it later would silently desynchronise
+    /// their cached values, which is why no setter is exposed.
     const PlacementConfig& config() const
     {
         return m_config;
@@ -479,6 +480,38 @@ public:
      */
     bool consumePendingAssignment(const QString& windowId) override;
 
+    /**
+     * @brief Drop pending-restore queues whose appId matches any exclusion
+     *        pattern.
+     *
+     * The snap engine already refuses to honor a pending restore for an
+     * excluded app at runtime. See resolveWindowRestore in
+     * phosphor-snap-engine/lifecycle.cpp. So the entries are functionally
+     * dead, yet they still live on disk in PendingRestoreQueues until the
+     * next save cycle. Their persistence generates one "pending snap:" log
+     * line per entry at every daemon startup, and bloats session state
+     * with values that can never be replayed. This method walks the queues
+     * and removes appIds that match any pattern via
+     * PhosphorIdentity::WindowId::appIdMatches. That is the same predicate
+     * the snap engine itself uses. When any removal happens it marks
+     * DirtyPendingRestores so the next debounced save persists the pruned
+     * set.
+     *
+     * Called from the daemon adaptor at startup right after loadState.
+     * Also called on every excludedApplicationsChanged or
+     * excludedWindowClassesChanged signal so freshly excluded apps don't
+     * strand their old queues.
+     *
+     * @param exclusionPatterns combined list of excludedApplications and
+     *                          excludedWindowClasses entries. Empty
+     *                          patterns and an empty list are no-ops.
+     * @return number of appId entries fully removed. The queue may have
+     *         contained multiple PendingRestores for one appId. One
+     *         removal counts once. This mirrors the shape of
+     *         m_pendingRestoreQueues' QHash.
+     */
+    int pruneExcludedPendingRestores(const QStringList& exclusionPatterns);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation Helpers
     // ═══════════════════════════════════════════════════════════════════════════
@@ -667,8 +700,13 @@ public:
     /**
      * @brief Clean up all tracking data for a closed window
      * @param windowId Full window ID
+     * @param kind Structural kind of the closing window. When a PendingRestore
+     *             entry is enqueued for this close, the kind is stamped onto
+     *             the entry so the consume path can refuse to assign it to a
+     *             window of a different kind on reopen. Defaults to
+     *             `WindowKind::Unknown` (the pre-fix behaviour: no kind gate).
      */
-    void windowClosed(const QString& windowId);
+    void windowClosed(const QString& windowId, PhosphorEngine::WindowKind kind = PhosphorEngine::WindowKind::Unknown);
 
     /**
      * @brief Handle layout change - validate/clear stale zone assignments

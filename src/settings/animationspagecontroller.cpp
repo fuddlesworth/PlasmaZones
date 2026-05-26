@@ -11,7 +11,6 @@
 #include "dbusutils.h"
 #include "motionsetstore.h"
 
-#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/Easing.h>
@@ -199,10 +198,6 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
             // every visible event card on this signal which is cheap enough.
             Q_EMIT shaderProfileChanged(QString());
         });
-        // Same path-agnostic-broadcast rationale: the rule list is one
-        // blob Q_PROPERTY, QML rebinds on appRulesChanged() without
-        // having to diff which entry moved.
-        connect(m_settings, &ISettings::animationAppRulesChanged, this, &AnimationsPageController::appRulesChanged);
     }
 }
 
@@ -227,26 +222,6 @@ bool AnimationsPageController::isValidEventPath(const QString& path) const
         return QSet<QString>(paths.cbegin(), paths.cend());
     }();
     return kKnownPathSet.contains(path);
-}
-
-bool AnimationsPageController::isValidAppRuleEventPath(const QString& path) const
-{
-    // App rules match on `(windowClass, eventPath)` and the resolver
-    // does an exact-string match on eventPath at runtime. Non-window
-    // events (`popup.show`, `osd.hide`, etc.) have no window-class to
-    // match against, so a rule referencing them would round-trip
-    // through the list, occupy a UI row, and never fire. The Add Rule
-    // dropdown already filters to window.* concrete leaves; this gate
-    // mirrors that filter at the controller boundary so programmatic
-    // Q_INVOKABLE callers can't bypass the UI restriction.
-    //
-    // The bare `"window"` parent path is also rejected — the cascade
-    // resolver does exact-match, so even though the path is in the
-    // built-in catalogue it can never be matched by any event the
-    // kwin-effect emits (those always use leaves like `window.open`).
-    if (!isValidEventPath(path))
-        return false;
-    return path.startsWith(QLatin1String("window."));
 }
 
 // ─── Pending-changes snapshot machinery ────────────────────────────────
@@ -277,7 +252,7 @@ bool AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
 
 bool AnimationsPageController::hasPendingChanges() const
 {
-    return !m_pendingFileSnapshots.isEmpty() || m_shaderTreeDirty || m_appRulesDirty;
+    return !m_pendingFileSnapshots.isEmpty() || m_shaderTreeDirty;
 }
 
 void AnimationsPageController::commitPending()
@@ -285,17 +260,15 @@ void AnimationsPageController::commitPending()
     const bool had = hasPendingChanges();
     m_pendingFileSnapshots.clear();
     m_shaderTreeDirty = false;
-    m_appRulesDirty = false;
     if (had)
         Q_EMIT pendingChangesChanged();
 }
 
 void AnimationsPageController::revertPending()
 {
-    // Shader tree and app-rule list changes are both reverted by the
-    // subsequent m_settings.load() call in SettingsController, not by
-    // this method. Do not call revertPending() without a following
-    // load().
+    // Shader tree changes are reverted by the subsequent m_settings.load()
+    // call in SettingsController, not by this method. Do not call
+    // revertPending() without a following load().
     using namespace PhosphorAnimation;
     using namespace PhosphorAnimationShaders;
 
@@ -303,7 +276,6 @@ void AnimationsPageController::revertPending()
         return;
 
     m_shaderTreeDirty = false;
-    m_appRulesDirty = false;
 
     const QString profilesDir = userProfilesDir();
     const QString setsDir = userMotionSetsDir();
@@ -1106,261 +1078,6 @@ QVariantList AnimationsPageController::shaderEffectUsages(const QString& effectI
     std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
         return a.toMap().value(QLatin1String("label")).toString() < b.toMap().value(QLatin1String("label")).toString();
     });
-    return out;
-}
-
-// ─── AnimationAppRule list ─────────────────────────────────────────────
-
-namespace animations_controller_detail {
-
-/// Translate the QML-shape map into an AnimationAppRule. Returns nullopt
-/// when the map is missing required fields, carries an unknown kind,
-/// names an `eventPath` outside the built-in ProfilePaths taxonomy, or
-/// (for shader-kind rules) names an `effectId` the registry doesn't
-/// know. The controller's mutators reject malformed rules at the
-/// boundary rather than letting them silently round-trip through
-/// `fromJson`'s drop-on-malformed path (which would surface as a no-op
-/// write the user can't distinguish from "stored successfully").
-static std::optional<PhosphorAnimationShaders::AnimationAppRule>
-appRuleFromVariantMap(const QVariantMap& map, const std::function<bool(const QString&)>& isValidEventPath,
-                      const std::function<bool(const QString&)>& isKnownEffectId)
-{
-    using PhosphorAnimationShaders::AnimationAppRule;
-    AnimationAppRule rule;
-    rule.classPattern = map.value(QLatin1String("classPattern")).toString();
-    rule.eventPath = map.value(QLatin1String("eventPath")).toString();
-    if (rule.classPattern.isEmpty() || rule.eventPath.isEmpty()) {
-        return std::nullopt;
-    }
-    if (isValidEventPath && !isValidEventPath(rule.eventPath)) {
-        // A typo or stale-across-releases event path round-trips through
-        // the list, occupies a UI row, and silently never matches at
-        // resolve time — reject at the QML boundary instead. The page-
-        // level dropdown only offers valid paths, but a programmatic
-        // caller (Q_INVOKABLE, scripting hook, hand-edited config) can
-        // bypass that gate.
-        return std::nullopt;
-    }
-    const QString kindStr = map.value(QLatin1String("kind")).toString();
-    if (kindStr == QLatin1String("shader")) {
-        rule.kind = AnimationAppRule::Kind::Shader;
-        rule.effectId = map.value(QLatin1String("effectId")).toString();
-        rule.shaderParams = map.value(QLatin1String("shaderParams")).toMap();
-        // Mirror the validation `setShaderOverride` already applies:
-        // reject unknown effectIds at the boundary so the journal
-        // surfaces typos with a real diagnostic instead of "no shader
-        // applied, no error" at runtime. The non-empty guard preserves
-        // the engaged-empty "block default" sentinel — that's a valid
-        // rule shape that the registry can't validate.
-        if (!rule.effectId.isEmpty() && isKnownEffectId && !isKnownEffectId(rule.effectId)) {
-            return std::nullopt;
-        }
-    } else if (kindStr == QLatin1String("timing")) {
-        rule.kind = AnimationAppRule::Kind::Timing;
-        rule.curve = map.value(QLatin1String("curve")).toString();
-        rule.durationMs = map.value(QLatin1String("durationMs")).toInt();
-    } else {
-        return std::nullopt;
-    }
-    return rule;
-}
-
-static QVariantMap appRuleToVariantMap(const PhosphorAnimationShaders::AnimationAppRule& rule)
-{
-    return rule.toJson().toVariantMap();
-}
-
-} // namespace animations_controller_detail
-
-QVariantList AnimationsPageController::appRules() const
-{
-    if (!m_settings)
-        return {};
-    const auto rules = m_settings->animationAppRules();
-    QVariantList out;
-    out.reserve(rules.size());
-    const auto entries = rules.entries();
-    for (const auto& rule : entries) {
-        out.append(appRuleToVariantMap(rule));
-    }
-    return out;
-}
-
-bool AnimationsPageController::addAppRule(const QVariantMap& rule)
-{
-    if (!m_settings)
-        return false;
-    const auto parsed = appRuleFromVariantMap(
-        rule,
-        [this](const QString& p) {
-            return isValidAppRuleEventPath(p);
-        },
-        [this](const QString& id) {
-            // Mirror `setShaderOverride`'s readiness gate: when the
-            // registry hasn't scanned its XDG dirs yet (asynchronous on
-            // some setups, unit tests construct an empty registry), we
-            // can't distinguish "id is unknown" from "registry not yet
-            // populated", so accept everything and let the runtime
-            // diagnose silently. Once the registry has any effect the
-            // gate becomes strict.
-            if (!m_shaderRegistry || m_shaderRegistry->effectIds().isEmpty())
-                return true;
-            return m_shaderRegistry->hasEffect(id);
-        });
-    if (!parsed) {
-        qCWarning(lcConfig) << "addAppRule: malformed rule, ignoring" << rule;
-        return false;
-    }
-    auto rules = m_settings->animationAppRules();
-    if (!rules.append(*parsed)) {
-        // The list-side validation rejected the rule even though
-        // `appRuleFromVariantMap` accepted it. Today this is
-        // unreachable (both gates check empty pattern / event), but a
-        // future strengthening of `AnimationAppRuleList::append`
-        // (dedup, normalisation) would surface here as a silent
-        // dirty-bit flip without this guard.
-        qCWarning(lcConfig) << "addAppRule: list rejected validated rule" << rule;
-        return false;
-    }
-    m_settings->setAnimationAppRules(rules);
-    m_appRulesDirty = true;
-    Q_EMIT pendingChangesChanged();
-    return true;
-}
-
-bool AnimationsPageController::setAppRule(int index, const QVariantMap& rule)
-{
-    if (!m_settings)
-        return false;
-    auto rules = m_settings->animationAppRules();
-    if (index < 0 || index >= rules.size()) {
-        qCWarning(lcConfig) << "setAppRule: index" << index << "out of range (size=" << rules.size() << ")";
-        return false;
-    }
-    const auto parsed = appRuleFromVariantMap(
-        rule,
-        [this](const QString& p) {
-            return isValidAppRuleEventPath(p);
-        },
-        [this](const QString& id) {
-            // Mirror `setShaderOverride`'s readiness gate: when the
-            // registry hasn't scanned its XDG dirs yet (asynchronous on
-            // some setups, unit tests construct an empty registry), we
-            // can't distinguish "id is unknown" from "registry not yet
-            // populated", so accept everything and let the runtime
-            // diagnose silently. Once the registry has any effect the
-            // gate becomes strict.
-            if (!m_shaderRegistry || m_shaderRegistry->effectIds().isEmpty())
-                return true;
-            return m_shaderRegistry->hasEffect(id);
-        });
-    if (!parsed) {
-        qCWarning(lcConfig) << "setAppRule: malformed rule, ignoring" << rule;
-        return false;
-    }
-    auto entries = rules.entries();
-    if (entries.at(index) == *parsed) {
-        // Same dirty-check pattern as setShaderOverride — a same-state
-        // QML rebind must not cycle Settings → boomerang and emit a
-        // spurious pendingChangesChanged. Returns true so the caller
-        // sees "stored successfully" semantics for an already-stored
-        // value.
-        return true;
-    }
-    entries[index] = *parsed;
-    const int accepted = rules.setEntries(entries);
-    if (accepted != entries.size()) {
-        // List-side validation dropped one or more entries during
-        // the bulk replace. Today this is unreachable on a single-
-        // slot edit (the only validation drops empty pattern/event,
-        // both already filtered by `appRuleFromVariantMap`), but a
-        // future strengthening of `setEntries` would otherwise
-        // silently shrink the user's list.
-        qCWarning(lcConfig) << "setAppRule: list silently dropped" << (entries.size() - accepted)
-                            << "entries during write — refusing to commit a partial list";
-        return false;
-    }
-    m_settings->setAnimationAppRules(rules);
-    m_appRulesDirty = true;
-    Q_EMIT pendingChangesChanged();
-    return true;
-}
-
-bool AnimationsPageController::removeAppRule(int index)
-{
-    if (!m_settings)
-        return false;
-    auto rules = m_settings->animationAppRules();
-    if (index < 0 || index >= rules.size()) {
-        qCWarning(lcConfig) << "removeAppRule: index" << index << "out of range (size=" << rules.size() << ")";
-        return false;
-    }
-    rules.removeAt(index);
-    m_settings->setAnimationAppRules(rules);
-    m_appRulesDirty = true;
-    Q_EMIT pendingChangesChanged();
-    return true;
-}
-
-bool AnimationsPageController::moveAppRule(int from, int to)
-{
-    if (!m_settings)
-        return false;
-    auto rules = m_settings->animationAppRules();
-    if (from < 0 || from >= rules.size() || to < 0 || to >= rules.size()) {
-        qCWarning(lcConfig) << "moveAppRule: out-of-range from=" << from << "to=" << to << "size=" << rules.size();
-        return false;
-    }
-    if (from == to) {
-        // No-op (matches `setAppRule` semantics: stored successfully,
-        // nothing changed). Returns true rather than false so QML
-        // callers can't distinguish "rejected" from "stored, no
-        // change" — both are equivalent from the caller's perspective.
-        return true;
-    }
-    // Snapshot + compare so two adjacent identical rules (or any
-    // permutation that yields the same sequence) doesn't flip the
-    // dirty bit and enable the Save button on a non-change. Same
-    // dirty-check pattern as `setAppRule` and `setShaderOverride`.
-    const auto previous = rules.entries();
-    rules.move(from, to);
-    if (rules.entries() == previous) {
-        return true;
-    }
-    m_settings->setAnimationAppRules(rules);
-    m_appRulesDirty = true;
-    Q_EMIT pendingChangesChanged();
-    return true;
-}
-
-QVariantList AnimationsPageController::animationAppRuleEvents() const
-{
-    // Rules apply per window-class — popup / osd events have no window
-    // class to match against, so the dropdown only surfaces window.*
-    // event paths. Reuses `eventSections()` so the labels stay aligned
-    // with the rest of the Animations UI.
-    QVariantList out;
-    const auto sections = eventSections();
-    for (const QVariant& sectionVar : sections) {
-        const QVariantMap section = sectionVar.toMap();
-        const QString sectionId = section.value(QLatin1String("section")).toString();
-        if (sectionId != QLatin1String("window")) {
-            continue;
-        }
-        const QVariantList paths = section.value(QLatin1String("paths")).toList();
-        for (const QVariant& pathVar : paths) {
-            const QVariantMap path = pathVar.toMap();
-            // Skip category nodes (they're inheritance anchors, not
-            // concrete events the rule list can target).
-            if (path.value(QLatin1String("isCategory")).toBool()) {
-                continue;
-            }
-            QVariantMap entry;
-            entry.insert(QLatin1String("path"), path.value(QLatin1String("path")));
-            entry.insert(QLatin1String("label"), path.value(QLatin1String("label")));
-            out.append(entry);
-        }
-    }
     return out;
 }
 

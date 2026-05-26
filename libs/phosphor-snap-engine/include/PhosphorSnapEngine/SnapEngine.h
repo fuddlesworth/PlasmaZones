@@ -25,6 +25,11 @@ class IZoneDetector;
 class LayoutRegistry;
 }
 
+namespace PhosphorWindowRule {
+class RuleEvaluator;
+class WindowRuleSet;
+}
+
 namespace PhosphorSnapEngine {
 
 class INavigationStateProvider;
@@ -219,9 +224,16 @@ public:
      * @param windowId Window identifier
      * @param screenId Screen where the window appeared
      * @param sticky Whether the window is on all desktops
+     * @param kind Structural kind of the opening window. Compared against the
+     *             kind recorded on the matching PendingRestore entry; when
+     *             both sides are concrete and disagree, the restore is
+     *             refused and the entry is left intact for the next-opening
+     *             window of the right kind. Default `Unknown` is permissive.
      * @return PhosphorEngine::SnapResult with geometry and zone info, or PhosphorEngine::SnapResult::noSnap()
      */
-    PhosphorEngine::SnapResult resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky);
+    PhosphorEngine::SnapResult
+    resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky,
+                         PhosphorEngine::WindowKind kind = PhosphorEngine::WindowKind::Unknown);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotile engine reference (for isActiveOnScreen routing)
@@ -366,8 +378,9 @@ public:
                                                        bool isSticky) const;
     PhosphorEngine::SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenId,
                                                         bool isSticky) const;
-    PhosphorEngine::SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenId,
-                                                           bool isSticky) const;
+    PhosphorEngine::SnapResult
+    calculateRestoreFromSession(const QString& windowId, const QString& screenId, bool isSticky,
+                                PhosphorEngine::WindowKind kind = PhosphorEngine::WindowKind::Unknown) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Resnap / rotation calculations (moved from WTS)
@@ -570,6 +583,38 @@ private:
     /// Emits navigationFeedback(false, action, "excluded", ...) and returns
     /// true when excluded so callers can early-return. False otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
+
+    /// True if @p appId matches any excluded-applications / excluded-window-
+    /// classes pattern. Resolution runs through the unified RuleEvaluator: the
+    /// two settings lists are converted to a daemon-flavour `Exclude` rule set
+    /// (`AppId AppIdMatches` leaves — the segment-aware reverse-DNS match) and
+    /// the @p appId is resolved against it. Returns false when settings are
+    /// unavailable or no pattern matches.
+    ///
+    /// The derived rule set and its evaluator are memoized: rebuilding the
+    /// WindowRuleSet and constructing a fresh RuleEvaluator on every call
+    /// (per window-open, per navigation keystroke) was wasteful. The cache is
+    /// rebuilt only when the excludedApplications / excludedWindowClasses
+    /// lists actually change — ISnapSettings exposes no change signal, so the
+    /// cache is keyed by the two lists' contents.
+    bool isAppIdExcluded(const QString& appId) const;
+
+    /// Cached exclusion rule set + evaluator. Rebuilt by ensureExclusionCache()
+    /// only when the underlying settings lists differ from the cached keys.
+    /// The RuleEvaluator holds a reference to the WindowRuleSet, so the set is
+    /// heap-allocated (a stable address) and the evaluator is rebuilt in
+    /// lockstep with it. A non-null m_exclusionEvaluator IS the "cache valid"
+    /// signal — the rule set, evaluator and key fields are always set and
+    /// cleared together, so no separate validity flag is needed.
+    void ensureExclusionCache() const;
+    // These mutable members are daemon-main-thread-only — every access path
+    // (window-open, navigation keystrokes) runs on the daemon's main thread,
+    // so the cache is intentionally unsynchronised. Do not access from another
+    // thread without adding locking.
+    mutable std::unique_ptr<PhosphorWindowRule::WindowRuleSet> m_exclusionRuleSet;
+    mutable std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_exclusionEvaluator;
+    mutable QStringList m_exclusionCacheAppsKey;
+    mutable QStringList m_exclusionCacheClassesKey;
 
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;

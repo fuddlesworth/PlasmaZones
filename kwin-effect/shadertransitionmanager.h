@@ -10,6 +10,9 @@
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
+#include <PhosphorWindowRule/RuleEvaluator.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
+
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
 
@@ -89,6 +92,36 @@ public:
     const PhosphorAnimationShaders::AnimationAppRuleList& appRules() const
     {
         return m_animationAppRules;
+    }
+
+    /// Rebuild the animation `WindowRuleSet` from the current `appRules()`
+    /// **plus** any unified-store rules carrying animation actions
+    /// (`m_windowRuleAnimationRules`). Call after every mutation of either
+    /// source. The bridge converts the legacy App Rule list into rule-engine
+    /// form; those rules and the unified-store rules are concatenated into
+    /// one set in priority order. The bound `RuleEvaluator` picks up the new
+    /// revision transparently and its match cache is invalidated.
+    void rebuildAnimationRuleSet();
+
+    /// Replace the set of unified `windowrules.json` rules that carry an
+    /// `overrideAnimation*` action. The effect refreshes this on the
+    /// `org.plasmazones.WindowRules.rulesChanged` D-Bus signal so a new
+    /// animation rule authored in the settings UI fires without a restart.
+    /// Triggers `rebuildAnimationRuleSet()` only when the list actually
+    /// changes — a no-op rewrite keeps the evaluator's match cache warm.
+    void setWindowRuleAnimationRules(QList<PhosphorWindowRule::WindowRule> rules);
+
+    /// The evaluator bound to the animation rule set. Resolution of the
+    /// animation App Rule cascade routes through this.
+    const PhosphorWindowRule::RuleEvaluator& animationRuleEvaluator() const
+    {
+        return m_animationRuleEvaluator;
+    }
+
+    /// The animation rule set itself — for the `!isEmpty()` fast path.
+    const PhosphorWindowRule::WindowRuleSet& animationRuleSet() const
+    {
+        return m_animationRuleSet;
     }
 
     /// Per-event motion-profile tree mirrored from the daemon's
@@ -290,6 +323,23 @@ private:
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     PhosphorAnimationShaders::AnimationAppRuleList m_animationAppRules;
     PhosphorAnimation::ProfileTree m_motionProfileTree;
+    // Rules from windowrules.json that carry an OverrideAnimation* action.
+    // Refreshed from the daemon's org.plasmazones.WindowRules interface on
+    // every `rulesChanged` signal; concatenated with the bridge-converted
+    // legacy AnimationAppRules in `m_animationRuleSet`. Stored separately
+    // so a settings UI write to one source doesn't blow away the other.
+    QList<PhosphorWindowRule::WindowRule> m_windowRuleAnimationRules;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Window-rule view of the animation App Rules
+    //
+    // `m_animationRuleSet` is the bridge-converted form of `m_animationAppRules`,
+    // rebuilt by `rebuildAnimationRuleSet()` on every App Rule D-Bus load.
+    // `m_animationRuleEvaluator` binds a const reference to it — declaration
+    // ORDER MATTERS: the rule set must outlive (and precede) the evaluator.
+    // ═══════════════════════════════════════════════════════════════════════════
+    PhosphorWindowRule::WindowRuleSet m_animationRuleSet;
+    PhosphorWindowRule::RuleEvaluator m_animationRuleEvaluator{m_animationRuleSet};
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Texture Cache

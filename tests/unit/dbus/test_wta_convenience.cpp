@@ -27,6 +27,7 @@
 #include "dbus/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;
@@ -124,8 +125,7 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"));
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsConvenience(nullptr);
         m_zoneDetector = new StubZoneDetectorConvenience(nullptr);
 

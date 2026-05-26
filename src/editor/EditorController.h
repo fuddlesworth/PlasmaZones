@@ -929,6 +929,12 @@ private:
     //   3. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
     // Do not reorder without revisiting every borrower's destructor.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
+    /// Owned WindowRule store backing the in-process LayoutRegistry's
+    /// assignment cascade. Declared before m_localLayoutManager so it
+    /// outlives the registry that borrows it (members destruct in reverse
+    /// declaration order). Points at the shared windowrules.json so the
+    /// editor's local registry sees the same rule set the daemon writes.
+    std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_localRuleStore;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_localLayoutManager;
     PhosphorLayout::LayoutSourceBundle m_localSources;
     /// Owned here (not parented to `this`) so destruction runs via the

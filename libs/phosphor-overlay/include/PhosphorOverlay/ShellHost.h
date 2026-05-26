@@ -118,8 +118,8 @@ public:
     ///     materialized for that screen before.
     ///
     /// When the sticky-failure flag is set and a state object already
-    /// exists (e.g. from a prior @ref stateFor or a previously-live
-    /// shell that was torn down), returns that existing state with
+    /// exists (e.g. from a prior @ref getOrCreateStateFor or a
+    /// previously-live shell that was torn down), returns that existing state with
     /// @c shellSurface() == nullptr. Callers that need to retry must
     /// call @ref clearFailure first.
     ///
@@ -140,12 +140,17 @@ public:
     /// the consumer's view of what's live on this screen.
     ///
     /// @p anyVisible - true when at least one slot wants the surface
-    /// mapped (driven by the consumer's slot-visibility check). Brings
-    /// the surface up on the first transition from never-shown → live;
-    /// subsequent visibility transitions toggle the input flag directly
-    /// without re-entering Surface::show()/hide() (the keep-mapped hide
-    /// path cancels per-surface animator tracking, which would wipe
-    /// in-flight beginShow's on OTHER slots on the same shell).
+    /// mapped (driven by the consumer's slot-visibility check). Drives
+    /// the Surface state machine in both directions: show() on
+    /// false→true, hide() on true→false. The behavior of hide() is
+    /// governed by the SurfaceConfig the consumer registered:
+    /// keepMappedOnHide=true keeps the wl_surface mapped (animator
+    /// drives root opacity to 0); keepMappedOnHide=false unmaps the
+    /// wl_surface synchronously so the shell stops being composited
+    /// when idle. The shell surface's role typically has no animator
+    /// Config registered, so per-surface cancel/beginHide collapse
+    /// to no-ops and do not interfere with per-slot animator state
+    /// (which lives on different keys).
     ///
     /// @p anyInputGrabbing - true when at least one modal slot
     /// (consumer-defined; PZ today: snap-assist + layout picker) wants
@@ -205,8 +210,13 @@ public:
 
     /// Read-write accessor. Returns the existing ShellState for
     /// @p screenId, default-constructing one in place if absent so
-    /// callers can populate fields without an explicit insert.
-    ShellState& stateFor(const QString& screenId);
+    /// callers can populate fields without an explicit insert. Named
+    /// `getOrCreateStateFor` (not `stateFor`) to make the materialisation
+    /// contract explicit — a `stateFor(...)` call that silently inserted
+    /// a fresh entry on miss could surprise readers expecting a pure
+    /// accessor. Pair with @ref hasState if "peek without materialising"
+    /// is the intent.
+    ShellState& getOrCreateStateFor(const QString& screenId);
 
     /// Read-only accessor. Returns nullptr if no state exists for
     /// @p screenId - callers that need to peek without materializing
@@ -242,7 +252,7 @@ public:
 
 private:
     /// State entries are heap-allocated raw owning pointers so the
-    /// @c ShellState* values returned by @ref stateFor / @ref ensureShell
+    /// @c ShellState* values returned by @ref getOrCreateStateFor / @ref ensureShell
     /// stay valid across QHash rehashes (QHash holds @c ShellState* by
     /// value, but the pointed-to objects are stable). Consumers cache
     /// these pointers on parallel per-screen state and need them stable.

@@ -39,6 +39,7 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
 
@@ -55,8 +56,7 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_parent = new QObject(nullptr);
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"), m_parent);
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), m_parent);
         m_virtualDesktopManager = new PhosphorWorkspaces::VirtualDesktopManager(m_parent);
         m_settings = new StubSettings(m_parent);
         m_zoneDetector = new StubZoneDetector(m_parent);
@@ -109,8 +109,8 @@ private Q_SLOTS:
         // tests in this class.
         auto guard = std::make_unique<IsolatedConfigGuard>();
         QObject freshParent;
-        auto* freshLayoutManager = new PhosphorZones::LayoutRegistry(
-            PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts"), &freshParent);
+        auto* freshLayoutManager =
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &freshParent);
         auto* freshVirtualDesktopManager = new PhosphorWorkspaces::VirtualDesktopManager(&freshParent);
         auto* freshZoneDetector = new StubZoneDetector(&freshParent);
 

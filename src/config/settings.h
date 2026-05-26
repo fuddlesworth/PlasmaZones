@@ -16,6 +16,7 @@
 #include "configbackends.h"
 
 #include <PhosphorConfig/Store.h>
+#include <PhosphorWindowRule/WindowRuleStore.h>
 
 #include <memory>
 #include <QFont>
@@ -70,9 +71,26 @@ public:
      *                      through the caller's registry, preserving
      *                      `shared_ptr<const Curve>` identity across the
      *                      Settings ↔ daemon boundary.
+     * @param windowRuleStore Non-owned WindowRuleStore pointer. When non-null,
+     *                        Settings shares this store rather than owning a
+     *                        second instance pointed at the same file — a
+     *                        dual-store setup races on disk (one store's
+     *                        `setAllRules` clobbers the other's unflushed
+     *                        edits because both rebuild `kept` from stale
+     *                        in-memory snapshots). The daemon, which already
+     *                        owns the canonical store for `LayoutRegistry`
+     *                        and `WindowRuleAdaptor`, passes it in here so
+     *                        every in-process consumer mutates the same
+     *                        ruleset. Standalone processes (settings app,
+     *                        editor) pass nullptr and Settings falls back to
+     *                        owning its own store. Must outlive this Settings
+     *                        when non-null. The caller is responsible for
+     *                        having already invoked `load()` on a non-null
+     *                        store; this ctor does not reload it.
      * @param parent Parent QObject
      */
-    Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry, QObject* parent);
+    Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
+             PhosphorWindowRule::WindowRuleStore* windowRuleStore, QObject* parent);
 
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
@@ -1118,22 +1136,22 @@ private:
     /// that flipped so listeners only react to their own axis.
     using DisableModeSignalFn = void (Settings::*)(PhosphorZones::AssignmentEntry::Mode);
 
-    /// Shared comma-list setter used by @ref setDisabledMonitors,
-    /// @ref setDisabledDesktops, and @ref setDisabledActivities. Reads under
-    /// @c displayGroup, writes the joined list, post-write compares against
-    /// the canonicalised form (the @c canonicalCommaList validator
-    /// trims/de-dupes/normalises whitespace), and only fires
-    /// @p signalFn + @c settingsChanged on a real change.
-    void writeDisableList(const QString& key, const QStringList& entries, PhosphorZones::AssignmentEntry::Mode mode,
-                          DisableModeSignalFn signalFn);
+    /// Shared writer for the three per-mode disable lists. Replaces the whole
+    /// `DisableEngine` context-rule family for (@p mode, @p axisInt) in the
+    /// WindowRule store — @p axisInt is a `DisableAxis` value (file-local enum
+    /// in settings.cpp; passed as an int so the header stays decoupled). Drops
+    /// malformed composite entries, fires @p signalFn + @c settingsChanged
+    /// only on a real (canonical-set) change.
+    void writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, int axisInt, const QStringList& entries,
+                             DisableModeSignalFn signalFn);
 
-    /// Shared getter for the three per-mode disable lists. Reads under
-    /// @c displayGroup and parses the comma-joined value into a list. The
-    /// monitor variant additionally resolves connector names to canonical
-    /// screen ids — that step lives in @ref disabledMonitors itself, not
-    /// here, because composite-keyed lists (desktop/activity) embed the
-    /// screen id and would need parsing the composite to canonicalise.
-    QStringList readDisableList(const QString& key) const;
+    /// Shared reader for the three per-mode disable lists. Enumerates the
+    /// `DisableEngine` context rules in the WindowRule store scoped to
+    /// @p mode and @p axisInt (a `DisableAxis` value), projecting each rule's
+    /// pinned context dimensions back to its list-entry string form. The
+    /// monitor variant's connector-name → canonical-id resolution lives in
+    /// @ref disabledMonitors itself, not here.
+    QStringList disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mode, int axisInt) const;
 
     // ─── load() / save() helpers ────────────────────────────────────────
     // Only non-Store groups need dedicated helpers now. Store-backed groups
@@ -1198,6 +1216,27 @@ private:
     // settingsschema.cpp for the current list of migrated groups.
     std::unique_ptr<PhosphorConfig::Store> m_store;
     static QString normalizeUuidString(const QString& uuidStr);
+
+    // Per-mode disable lists are stored as `DisableEngine` context rules in
+    // the unified WindowRule store (windowrules.json), NOT in config.json.
+    //
+    // The store can be either owned (standalone settings app / editor / tests
+    // that have no daemon counterpart) or borrowed (daemon process — the
+    // daemon owns the canonical store for `LayoutRegistry` and
+    // `WindowRuleAdaptor`, and passes that same instance in so every
+    // in-process writer mutates the same in-memory ruleset). Mirroring the
+    // existing `LayoutRegistry`-via-borrowed-pointer pattern eliminates the
+    // dual-store race where two stores pointed at the same file each rebuild
+    // a `kept` list from a stale snapshot and clobber each other's writes.
+    //
+    // The owning ctor calls `load()` on the owned store; the borrowing ctor
+    // does not — the owner is responsible for having loaded already.
+    // load() reloads the active store from disk so cross-process deltas
+    // surface; the disabled*/setDisabled*/is*Disabled accessors read/write
+    // through `m_windowRuleStore` (a raw pointer that always tracks the
+    // active store — owned or borrowed).
+    std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_ownedWindowRuleStore;
+    PhosphorWindowRule::WindowRuleStore* m_windowRuleStore = nullptr;
 
     // Activation
     // Activation is stored in m_store.

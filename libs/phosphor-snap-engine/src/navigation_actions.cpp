@@ -28,13 +28,17 @@
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorZones/Layout.h>
+
+#include <PhosphorWindowRule/ExclusionListBridge.h>
+#include <PhosphorWindowRule/RuleEvaluator.h>
+#include <PhosphorWindowRule/WindowQuery.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "snapenginelogging.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
-#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorSnapEngine {
@@ -116,28 +120,56 @@ QString effectiveScreenId(const NavigationContext& ctx, INavigationStateProvider
 
 } // namespace
 
-bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId)
+void SnapEngine::ensureExclusionCache() const
 {
     auto* s = snapSettings();
-    if (!s || !m_windowTracker) {
+    if (!s) {
+        // No settings — drop any stale cache so a later wiring rebuilds it.
+        // A null m_exclusionEvaluator is itself the "cache invalid" signal.
+        m_exclusionRuleSet.reset();
+        m_exclusionEvaluator.reset();
+        m_exclusionCacheAppsKey.clear();
+        m_exclusionCacheClassesKey.clear();
+        return;
+    }
+    const QStringList apps = s->excludedApplications();
+    const QStringList classes = s->excludedWindowClasses();
+    if (m_exclusionEvaluator && apps == m_exclusionCacheAppsKey && classes == m_exclusionCacheClassesKey) {
+        return; // lists unchanged — cached set/evaluator still valid
+    }
+
+    // Rebuild: the daemon-flavour exclusion rule set (AppId AppIdMatches
+    // Exclude rules) and its evaluator. The RuleEvaluator binds a reference
+    // to the WindowRuleSet, so the set is heap-allocated for a stable address
+    // and both are replaced together.
+    m_exclusionRuleSet = std::make_unique<PhosphorWindowRule::WindowRuleSet>(
+        PhosphorWindowRule::ExclusionListBridge::toDaemonRuleSet(apps, classes));
+    m_exclusionEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(*m_exclusionRuleSet);
+    m_exclusionCacheAppsKey = apps;
+    m_exclusionCacheClassesKey = classes;
+}
+
+bool SnapEngine::isAppIdExcluded(const QString& appId) const
+{
+    ensureExclusionCache();
+    if (!m_exclusionEvaluator || !m_exclusionRuleSet || m_exclusionRuleSet->isEmpty()) {
+        return false; // no settings, or no-exclusions fast path
+    }
+    PhosphorWindowRule::WindowQuery query;
+    query.appId = appId;
+    return m_exclusionEvaluator->resolve(query).isExcluded();
+}
+
+bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId)
+{
+    if (!m_windowTracker) {
         return false;
     }
     const QString appId = m_windowTracker->currentAppIdFor(windowId);
-    for (const QString& excluded : s->excludedApplications()) {
-        if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
-            qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                << action << ":" << windowId << "excluded by app rule:" << excluded;
-            Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(), screenId);
-            return true;
-        }
-    }
-    for (const QString& excluded : s->excludedWindowClasses()) {
-        if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
-            qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                << action << ":" << windowId << "excluded by class rule:" << excluded;
-            Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(), screenId);
-            return true;
-        }
+    if (isAppIdExcluded(appId)) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine) << action << ":" << windowId << "excluded by rule, appId:" << appId;
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(), screenId);
+        return true;
     }
     return false;
 }

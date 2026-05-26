@@ -305,56 +305,6 @@ public:
     /// overrides count, mirroring the existing tree-walk semantics.
     Q_INVOKABLE QVariantList shaderEffectUsages(const QString& effectId) const;
 
-    // ── AnimationAppRule list (Phase 3) ──────────────────────────────
-    //
-    // Per-window-class shader/timing override list — mutators write
-    // through `Settings::setAnimationAppRules` and emit
-    // `appRulesChanged()` (forwarded from
-    // `ISettings::animationAppRulesChanged`). The QML rules page binds
-    // to `appRules()` and calls `add/remove/move/setAppRule` for
-    // mutations, mirroring the shader-tree pattern: there is no
-    // file-snapshot path for rules — they ride the standard
-    // Settings::load() Q_PROPERTY re-emit on Discard.
-
-    /// Snapshot of the rule list as a QVariantList of QVariantMaps,
-    /// each in the same JSON shape `AnimationAppRule::toJson()`
-    /// produces. Empty when no rules are configured.
-    Q_INVOKABLE QVariantList appRules() const;
-
-    /// Append @p rule to the list. The map must carry at least
-    /// `classPattern`, `eventPath`, and `kind` (`"shader"` or
-    /// `"timing"`); empty pattern / event / unknown kind are rejected.
-    /// Shader-kind rules accept `effectId` (may be empty for the
-    /// "block default for matching windows" sentinel) and a
-    /// `shaderParams` map. Timing-kind rules accept `curve` and
-    /// `durationMs`. Returns true on success.
-    Q_INVOKABLE bool addAppRule(const QVariantMap& rule);
-
-    /// Replace the rule at @p index with @p rule. Same validation
-    /// rules as `addAppRule`. Returns false on out-of-range index or
-    /// invalid rule. Returns true and is a no-op when the new rule
-    /// equals the current entry at @p index, so a QML two-way binding
-    /// rebinding the same value doesn't cycle the dirty bit.
-    Q_INVOKABLE bool setAppRule(int index, const QVariantMap& rule);
-
-    /// Remove the rule at @p index. Returns false on out-of-range index.
-    Q_INVOKABLE bool removeAppRule(int index);
-
-    /// Move the rule from @p from to @p to (drag-reorder). Returns
-    /// false only on out-of-range indices. Same-index moves and moves
-    /// that yield an identical sequence (e.g. swapping adjacent
-    /// duplicates) return true and are no-ops — neither flips the
-    /// dirty bit nor emits a change signal, matching the no-op
-    /// semantics of `setAppRule`.
-    Q_INVOKABLE bool moveAppRule(int from, int to);
-
-    /// Window-event paths suitable for the `AnimationAppRule.eventPath`
-    /// dropdown. Returns the `window.*` subset of `eventSections()`
-    /// (rules apply per window-class — popup / osd events have no
-    /// window-class to match against). Each entry:
-    /// `{ path: QString, label: QString }`.
-    Q_INVOKABLE QVariantList animationAppRuleEvents() const;
-
     /// Test hook: redirect file I/O to @p dir instead of the XDG default.
     /// Pass an empty string to restore the default. Not Q_INVOKABLE — QML
     /// callers must not redirect persistence.
@@ -381,12 +331,6 @@ Q_SIGNALS:
 
     /// Emitted on any successful add/removeMotionSet or apply.
     void motionSetsChanged();
-
-    /// Emitted on any successful add/remove/move/setAppRule AND on
-    /// any full settings reload (`ISettings::animationAppRulesChanged`).
-    /// Path-agnostic since the rule list is a single Q_PROPERTY blob —
-    /// QML pages refresh their full rule view on this signal.
-    void appRulesChanged();
 
     /// Emitted whenever `hasPendingChanges()` may have flipped. The
     /// SettingsController's slot calls `setNeedsSave(true)` when there
@@ -430,14 +374,6 @@ private:
     /// profiles directory.
     bool isValidEventPath(const QString& path) const;
 
-    /// Stricter gate for `AnimationAppRule::eventPath`. Returns true
-    /// only for window-leaf paths (`window.open`, `window.close`,
-    /// etc.) — the same set `animationAppRuleEvents()` surfaces in
-    /// the QML dropdown. Rejects non-window events and the bare
-    /// `"window"` parent (the cascade resolver does exact-match, so
-    /// the parent path can never fire).
-    bool isValidAppRuleEventPath(const QString& path) const;
-
     /// Capture @p filePath's current content into the snapshot if not
     /// already snapshotted. Called by every file-mutating method just
     /// before the write/delete so revert can put it back.
@@ -463,12 +399,6 @@ private:
     /// re-emit path like every other settings page.
     QHash<QString, std::optional<QByteArray>> m_pendingFileSnapshots;
     bool m_shaderTreeDirty = false;
-    /// Symmetric with `m_shaderTreeDirty`. Mutators set this true on
-    /// every actual write; `commitPending` and `revertPending` reset
-    /// it. `hasPendingChanges()` ORs this with the other dirty signals
-    /// so the SettingsController save/discard gate flips correctly
-    /// when the only edit was an app-rule mutation.
-    bool m_appRulesDirty = false;
 };
 
 } // namespace PlasmaZones

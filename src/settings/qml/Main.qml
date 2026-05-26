@@ -72,6 +72,12 @@ ApplicationWindow {
         "label": i18n("Animations"),
         "iconName": "media-playback-start",
         "hasChildren": true,
+        "hasDividerAfter": false
+    }, {
+        "name": "window-rules",
+        "label": i18n("Window Rules"),
+        "iconName": "view-list-details",
+        "hasChildren": false,
         "hasDividerAfter": true
     }, {
         "name": "exclusions",
@@ -123,14 +129,6 @@ ApplicationWindow {
             "iconName": "view-choose",
             "hasDividerAfter": true
         }, {
-            "name": "snapping-assignments",
-            "label": i18n("Assignments"),
-            "iconName": "view-list-details"
-        }, {
-            "name": "snapping-apprules",
-            "label": i18n("App Rules"),
-            "iconName": "application-x-executable"
-        }, {
             "name": "snapping-ordering",
             "label": i18n("Priority"),
             "iconName": "view-sort"
@@ -154,10 +152,6 @@ ApplicationWindow {
             "iconName": "view-grid",
             "hasDividerAfter": true
         }, {
-            "name": "tiling-assignments",
-            "label": i18n("Assignments"),
-            "iconName": "view-list-details"
-        }, {
             "name": "tiling-ordering",
             "label": i18n("Priority"),
             "iconName": "view-sort"
@@ -169,11 +163,7 @@ ApplicationWindow {
         "animations": [{
             "name": "animations-general",
             "label": i18n("General"),
-            "iconName": "configure"
-        }, {
-            "name": "animations-app-rules",
-            "label": i18n("App Rules"),
-            "iconName": "application-x-executable",
+            "iconName": "configure",
             "hasDividerAfter": true
         }, {
             "name": "animations-surfaces",
@@ -246,20 +236,17 @@ ApplicationWindow {
         "tiling-appearance": "TilingAppearancePage.qml",
         "tiling-behavior": "TilingBehaviorPage.qml",
         "tiling-algorithm": "TilingAlgorithmPage.qml",
-        "snapping-assignments": "SnappingAssignmentsPage.qml",
-        "snapping-apprules": "AssignmentsAppRulesPage.qml",
         "snapping-shortcuts": "SnappingQuickShortcutsPage.qml",
         "snapping-ordering": "SnappingOrderingPage.qml",
-        "tiling-assignments": "TilingAssignmentsPage.qml",
         "tiling-shortcuts": "TilingQuickShortcutsPage.qml",
         "tiling-ordering": "TilingOrderingPage.qml",
+        "window-rules": "WindowRulesPage.qml",
         "exclusions": "ExclusionsPage.qml",
         "editor": "EditorPage.qml",
         "general": "GeneralPage.qml",
         "about": "AboutPage.qml",
         "animations-general": "AnimationsGeneralPage.qml",
         "animations-windows": "AnimationsWindowsPage.qml",
-        "animations-app-rules": "AnimationsAppRulesPage.qml",
         "animations-editor": "AnimationsEditorPage.qml",
         "animations-osds": "AnimationsOsdsPage.qml",
         "animations-overlays": "AnimationsOverlaysPage.qml",
@@ -342,6 +329,18 @@ ApplicationWindow {
             "clickable": false
         });
         return segments;
+    }
+
+    /// Resolve the page QML source for @p pageName. An unmapped page name is
+    /// a navigation bug — surface it with a console.warn rather than silently
+    /// falling back, mirroring the sidebar's "show the gap visibly" stance.
+    function _resolvePageSource(pageName) {
+        var file = window._pageComponents[pageName];
+        if (file === undefined) {
+            console.warn("Main.qml: no page component mapped for activePage '" + pageName + "' — falling back to LayoutsPage.qml");
+            file = "LayoutsPage.qml";
+        }
+        return Qt.resolvedUrl(file);
     }
 
     // Walk @p parentName's descendants and return every leaf whose label
@@ -796,7 +795,19 @@ ApplicationWindow {
             if (!item)
                 return true;
 
-            return !(item instanceof TextInput) && !(item instanceof TextEdit);
+            // A focused QtQuick.Controls TextField/TextArea reports the
+            // control (not its internal TextInput/TextEdit) as the
+            // activeFocusItem, so the instanceof checks alone miss it.
+            // Also treat any item with an editable-text accessible role as
+            // a text input so typing `?` into a field never toggles help.
+            if (item instanceof TextInput || item instanceof TextEdit)
+                return false;
+
+            var role = item.Accessible.role;
+            if (role === Accessible.EditableText || role === Accessible.PasswordText)
+                return false;
+
+            return true;
         }
         onActivated: window._showShortcuts = !window._showShortcuts
     }
@@ -874,12 +885,15 @@ ApplicationWindow {
                         required property bool isBackButton
                         required property bool hasDividerAfter
                         required property bool isDivider
-                        // Inline search-result rows under their parent
-                        // carry an `isSearchChild` role; rows without
-                        // it (most of the model) get `false` here via
-                        // the truthy coercion. Reading through `model.`
-                        // rather than as a required property avoids
-                        // forcing every append site to set the role.
+                        // `model` is the full row object — explicit
+                        // `required` so strict QML resolution finds it
+                        // (the ListView's implicit `model` context property
+                        // is rejected in strict mode). We still go through
+                        // `model.isSearchChild` rather than declaring the
+                        // role as its own `required property bool` because
+                        // not every append site sets the role — undefined
+                        // coerces to false via the `=== true` check.
+                        required property var model
                         readonly property bool isSearchChild: model.isSearchChild === true
                         readonly property bool isActive: {
                             if (isBackButton)
@@ -1521,7 +1535,7 @@ ApplicationWindow {
 
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.largeSpacing
-                    source: Qt.resolvedUrl(window._pageComponents[settingsController.activePage] || "LayoutsPage.qml")
+                    source: window._resolvePageSource(settingsController.activePage)
                     asynchronous: false
                     // Fade in on page change
                     onLoaded: {

@@ -23,7 +23,12 @@ namespace PlasmaZones {
 /// v2: nested dot-path groups (Snapping.Behavior.ZoneSpan, Tiling.Gaps, etc.)
 /// v3: per-mode disable lists — Snapping.Behavior.Display.{Disabled*} relocates
 ///     to Display.{Snapping,Autotile}Disabled{Monitors,Desktops,Activities}.
-inline constexpr int ConfigSchemaVersion = 3;
+/// v4: window-rule consolidation — zone Assignments (assignments.json) and the
+///     per-mode disable lists become context-only WindowRules in the new
+///     windowrules.json store. config.json loses the Display.*Disabled* keys;
+///     assignments.json is superseded. QuickLayouts slots relocate to the
+///     quicklayouts.json sidecar. See docs/window-rule-refactor-design.md §8.
+inline constexpr int ConfigSchemaVersion = 4;
 
 /// A single schema migration step: transforms root JSON in-place from
 /// fromVersion to fromVersion+1, then stamps the new _version.
@@ -89,6 +94,42 @@ public:
     // Public so the MigrationStep function pointers can reference them.
     static void migrateV1ToV2(QJsonObject& root);
     static void migrateV2ToV3(QJsonObject& root);
+
+    /// v3 → v4 schema step. A MigrationStep is `void(QJsonObject&)` — it can
+    /// only touch config.json. This step removes the Display.*Disabled* keys
+    /// and stashes their values under a temporary `_v4DisableStash` root key
+    /// for @ref finalizeV4Conversion to consume. It stamps `_version = 4`.
+    static void migrateV3ToV4(QJsonObject& root);
+
+    /// Post-chain finalizer for the v4 conversion. The two-file migration
+    /// (config.json + assignments.json → windowrules.json) cannot live in a
+    /// single `void(QJsonObject&)` MigrationStep, so this runs after the
+    /// chain, from @ref ensureJsonConfigImpl.
+    ///
+    /// It reads assignments.json + the `_v4DisableStash` left in config.json,
+    /// builds the WindowRuleSet, writes windowrules.json (atomic), relocates
+    /// the QuickLayouts slots into the quicklayouts.json sidecar, then — as
+    /// the last, irreversible step — deletes assignments.json.
+    ///
+    /// Idempotent: a no-op when windowrules.json already exists at
+    /// `_version >= 4`. Safe to call on every startup.
+    ///
+    /// Rebuild trigger: a missing windowrules.json with a surviving
+    /// assignments.json ALWAYS triggers a rebuild, independent of any
+    /// config.json corruption context. There is no separate "config is
+    /// corrupt" guard — the rebuild keys solely off the two sidecar files.
+    ///
+    /// Degraded path under config corruption: if config.json is corrupt (or
+    /// absent) with no INI fallback, the rebuild proceeds with an empty
+    /// `configRoot`, so the provider-default rule is derived with empty
+    /// `DefaultLayoutId` / tiling-algorithm and degrades to the bare snapping
+    /// placeholder. This is accepted degradation — no regression versus the
+    /// pre-PR behaviour — and is intentionally not treated as a failure.
+    ///
+    /// @param jsonPath Path to config.json (assignments.json / windowrules.json
+    ///                 are derived as siblings via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool finalizeV4Conversion(const QString& jsonPath);
 
 private:
     ConfigMigration() = default;

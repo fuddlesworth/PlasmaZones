@@ -7,8 +7,8 @@
 #include "../dragtracker.h"
 #include "../snapassisthandler.h"
 #include "../windowanimator.h"
+#include "shader_resolve.h"
 
-#include <PhosphorAnimation/AnimationAppRuleResolver.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -464,10 +464,12 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         const auto& baseProfile = m_windowAnimator->profile();
         const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
         PhosphorAnimation::Profile motionProfile;
-        const auto& appRules = m_shaderManager.appRules();
-        if (!appRules.isEmpty()) {
-            motionProfile = PhosphorAnimationShaders::resolveAnimationMotionProfile(appRules, baseProfile, windowClass,
-                                                                                    profilePath, m_curveRegistry);
+        // Empty-rule-set short-circuit: a no-rules user skips both the
+        // resolver call AND the deep `Profile::operator!=`. Resolution routes
+        // through the unified RuleEvaluator via the effect-local shim.
+        if (!m_shaderManager.animationRuleSet().isEmpty()) {
+            motionProfile = PlasmaZones::resolveAnimationMotionProfile(
+                m_shaderManager.animationRuleEvaluator(), baseProfile, windowClass, profilePath, m_curveRegistry);
             if (motionProfile != baseProfile)
                 motionOverridePtr = &motionProfile;
         }
@@ -513,8 +515,8 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             // override is honoured transitively via `motionProfile`
             // above (driving the animator's duration), so the shader
             // still terminates with the rule-overridden snap motion.
-            const auto shaderProfile = PhosphorAnimationShaders::resolveAnimationShaderProfile(
-                appRules, m_shaderManager.profileTree(), windowClass, profilePath);
+            const auto shaderProfile = PlasmaZones::resolveAnimationShaderProfile(
+                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), windowClass, profilePath);
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
                 beginShaderTransition(window, shaderProfile);
             }

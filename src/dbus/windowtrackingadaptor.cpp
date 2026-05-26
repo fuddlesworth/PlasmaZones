@@ -167,6 +167,20 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // Load persisted window tracking state from previous session
     loadState();
 
+    // Prune any pending-restore queues for appIds that are now on the user's
+    // exclusion list. Snap-engine's resolveWindowRestore already refuses to
+    // honor them at runtime, but they live on disk until pruned and spam one
+    // "pending snap:" log line per entry at every startup. One-shot at boot
+    // catches entries authored before the user added the class to exclusions.
+    // The signal hookups cover live additions for the running session. The
+    // autotile-side prune happens again from the daemon's finalizeStartup
+    // after AutotileEngine::loadState populates m_pendingAutotileRestores.
+    pruneExcludedPendingRestoresFromSettings();
+    connect(m_settings, &ISettings::excludedApplicationsChanged, this,
+            &WindowTrackingAdaptor::pruneExcludedPendingRestoresFromSettings);
+    connect(m_settings, &ISettings::excludedWindowClassesChanged, this,
+            &WindowTrackingAdaptor::pruneExcludedPendingRestoresFromSettings);
+
     // If we have pending restores but missed activeLayoutChanged (layout was set before we
     // connected), set the flag so tryEmitPendingRestoresAvailable will emit when panel
     // geometry is ready. Fixes daemon restart: windows that were snapped before stop
@@ -223,6 +237,40 @@ void WindowTrackingAdaptor::setTilingPendingRestoreDelegates(std::function<QJson
 {
     m_serializePendingRestoresFn = std::move(serializeFn);
     m_deserializePendingRestoresFn = std::move(deserializeFn);
+}
+
+void WindowTrackingAdaptor::pruneExcludedPendingRestoresFromSettings()
+{
+    if (!m_settings) {
+        return;
+    }
+    QStringList patterns = m_settings->excludedApplications();
+    patterns += m_settings->excludedWindowClasses();
+    if (patterns.isEmpty()) {
+        return;
+    }
+
+    int snapRemoved = 0;
+    if (m_service) {
+        snapRemoved = m_service->pruneExcludedPendingRestores(patterns);
+    }
+
+    int autotileRemoved = 0;
+    if (auto* autotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.data())) {
+        autotileRemoved = autotile->pruneExcludedPendingRestores(patterns);
+        // The engine is settings-agnostic and does NOT mark dirty itself.
+        // Flip the autotile-pending bit on WTS so the next debounced save
+        // rewrites AutotilePendingRestores. The snap-side
+        // pruneExcludedPendingRestores method does this internally.
+        if (autotileRemoved > 0 && m_service) {
+            m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyAutotilePending);
+        }
+    }
+
+    if (snapRemoved > 0 || autotileRemoved > 0) {
+        qCInfo(lcDbusWindow) << "Pruned pending-restore queues for excluded apps. snap" << snapRemoved << "autotile"
+                             << autotileRemoved;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -380,7 +428,7 @@ void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky
 // Window Lifecycle - Delegate to Service
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingAdaptor::windowClosed(const QString& windowId)
+void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind)
 {
     if (!validateWindowId(windowId, QStringLiteral("clean up closed window"))) {
         return;
@@ -396,7 +444,14 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
     // Drop frame-geometry shadow entry for this window.
     m_frameGeometry.remove(windowId);
 
-    m_service->windowClosed(windowId);
+    // Clamp unknown wire values to WindowKind::Unknown rather than
+    // reinterpret_cast'ing a possibly-corrupt int into the enum.
+    const PhosphorEngine::WindowKind kind = (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Normal))
+        ? PhosphorEngine::WindowKind::Normal
+        : (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Transient))
+        ? PhosphorEngine::WindowKind::Transient
+        : PhosphorEngine::WindowKind::Unknown;
+    m_service->windowClosed(windowId, kind);
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
     // rely on other WTS state still being present during their cleanup. The
@@ -449,7 +504,9 @@ void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* re
 }
 
 void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const QString& appId,
-                                              const QString& desktopFile, const QString& title)
+                                              const QString& desktopFile, const QString& title,
+                                              const QString& windowRole, int pid, int virtualDesktop,
+                                              const QString& activity, int windowType)
 {
     if (!m_windowRegistry) {
         // Registry not wired yet — during daemon startup the kwin-effect may
@@ -466,6 +523,34 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
     meta.appId = appId;
     meta.desktopFile = desktopFile;
     meta.title = title;
+    meta.windowRole = windowRole;
+    // pid / virtualDesktop crossed D-Bus as plain ints. The contract is
+    // "0 = unknown" — negative values are malformed input (version skew,
+    // a buggy caller) that would otherwise propagate into WindowMetadata
+    // and WindowQuery. Clamp them to 0 at the boundary.
+    if (pid < 0) {
+        // Negative pid is now clamped to 0 at the effect-side source
+        // (see window_identity.cpp pushWindowMetadata) so this path is the
+        // defensive belt-and-braces for a malformed external caller — not a
+        // KWin -1 leaking through. Logged at debug so the routine
+        // session-restore "-1" no longer spams the warning log.
+        qCDebug(lcDbusWindow) << "setWindowMetadata: negative pid" << pid << "for instance" << instanceId
+                              << "— treating as 0 (unknown)";
+    }
+    if (virtualDesktop < 0) {
+        qCWarning(lcDbusWindow) << "setWindowMetadata: negative virtualDesktop" << virtualDesktop << "for instance"
+                                << instanceId << "— treating as 0 (unknown)";
+    }
+    meta.pid = pid < 0 ? 0 : pid;
+    meta.virtualDesktop = virtualDesktop < 0 ? 0 : virtualDesktop;
+    meta.activity = activity;
+    // windowType crossed D-Bus as a plain int — clamp out-of-range values
+    // (version skew, a malformed caller) to Unknown rather than casting blind.
+    if (!PhosphorProtocol::isValidWindowType(windowType)) {
+        qCWarning(lcDbusWindow) << "setWindowMetadata: out-of-range windowType" << windowType << "for instance"
+                                << instanceId << "— treating as Unknown";
+    }
+    meta.windowType = PhosphorProtocol::windowTypeFromInt(windowType);
     m_windowRegistry->upsert(instanceId, meta);
 }
 

@@ -35,6 +35,10 @@ Item {
     // ── Public API ──────────────────────────────────────────────────────
     // Simple header: just provide a title string
     property string headerText: ""
+    // Right-aligned hint shown after the heading (rule count, "N items", etc.).
+    // Empty by default — set to opt the trailing label into the default
+    // header. Ignored when a custom `header` Item is provided.
+    property string headerTrailingText: ""
     // Custom header: provide any Item (overrides headerText)
     property Item header: null
     // Content (same as Kirigami.Card)
@@ -152,6 +156,18 @@ Item {
                         padding: Kirigami.Units.smallSpacing
                         leftPadding: Kirigami.Units.smallSpacing
                         Layout.fillWidth: true
+                    }
+
+                    // Trailing hint label — right-aligned next to the heading.
+                    // Used by the Window Rules sections for the per-section
+                    // rule count (and similar passive metadata callers may add).
+                    Label {
+                        visible: root.headerTrailingText.length > 0
+                        text: root.headerTrailingText
+                        opacity: 0.6
+                        font.italic: true
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        Layout.alignment: Qt.AlignVCenter
                     }
 
                     // Header enable toggle

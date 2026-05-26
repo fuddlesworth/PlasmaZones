@@ -223,24 +223,51 @@ private Q_SLOTS:
                                     "SnappingLayout={uuid-here}\n"
                                     "TilingAlgorithm=bsp\n"));
 
+        // ensureJsonConfig runs the full v1→v4 chain. The v1→v2 step extracts
+        // Assignment groups to assignments.json; the v4 conversion folds them
+        // into windowrules.json and retires assignments.json (renames it to
+        // assignments.json.migrated so a downgrade can recover). Assert the
+        // v4 end-state.
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        // Assignment groups must NOT be in config.json (they're extracted to assignments.json)
+        // Assignment groups must NOT be in config.json.
         QJsonObject configRoot = readJsonConfig(ConfigDefaults::configFilePath());
         QVERIFY2(!configRoot.contains(QStringLiteral("PerScreen")), "Assignment groups should not be under PerScreen");
         const QString groupName = QStringLiteral("Assignment:eDP-1:Desktop:1:Activity:abc-123");
         QVERIFY2(!configRoot.contains(groupName), "Assignment group should not remain in config.json");
 
-        // They should be in assignments.json
-        QJsonObject assignRoot = readJsonConfig(ConfigDefaults::assignmentsFilePath());
-        QVERIFY2(assignRoot.contains(groupName), "Assignment group should be in assignments.json");
+        // assignments.json was superseded by windowrules.json and retired from
+        // its original location (renamed to .migrated, or removed in the
+        // fallback path).
+        const QString assignmentsPath =
+            QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
+        QVERIFY2(!QFile::exists(assignmentsPath), "assignments.json must be retired by the v4 conversion");
 
-        QJsonObject assignment = assignRoot.value(groupName).toObject();
-        QCOMPARE(assignment.value(QStringLiteral("Mode")).toInt(), 0);
-        QCOMPARE(assignment.value(QStringLiteral("TilingAlgorithm")).toString(), QStringLiteral("bsp"));
+        // The assignment lives in windowrules.json as a context rule. The
+        // exact (screen+desktop+activity) cascade level → priority 610, with
+        // SetEngineMode (snapping) + SetSnappingLayout + SetTilingAlgorithm.
+        const QJsonObject wr = readJsonConfig(ConfigDefaults::windowRulesFilePath());
+        QCOMPARE(wr.value(QStringLiteral("_version")).toInt(), 4);
+        bool foundExact = false;
+        for (const QJsonValue& v : wr.value(QStringLiteral("rules")).toArray()) {
+            const QJsonObject r = v.toObject();
+            if (r.value(QStringLiteral("priority")).toInt() != 610) {
+                continue;
+            }
+            QStringList types;
+            for (const QJsonValue& av : r.value(QStringLiteral("actions")).toArray()) {
+                types.append(av.toObject().value(QStringLiteral("type")).toString());
+            }
+            types.sort();
+            QCOMPARE(types,
+                     (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout"),
+                                  QStringLiteral("setTilingAlgorithm")}));
+            foundExact = true;
+        }
+        QVERIFY2(foundExact, "exact-cascade assignment rule (priority 610) missing from windowrules.json");
     }
 
-    void testMigrateAssignmentGroups_readableByBackend()
+    void testMigrateAssignmentGroups_readableAsWindowRule()
     {
         IsolatedConfigGuard guard;
         writeIniFile(ConfigDefaults::legacyConfigFilePath(),
@@ -250,15 +277,32 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        // Assignment groups are now in assignments.json, not config.json
-        auto backend = PlasmaZones::createAssignmentsBackend();
-        QStringList groups = backend->groupList();
-        QVERIFY(groups.contains(QStringLiteral("Assignment:eDP-1:Desktop:1")));
-
-        // Reading via group() should work
-        auto g = backend->group(QStringLiteral("Assignment:eDP-1:Desktop:1"));
-        QCOMPARE(g->readInt(QStringLiteral("Mode")), 1);
-        QCOMPARE(g->readString(QStringLiteral("TilingAlgorithm")), QStringLiteral("dwindle"));
+        // The v3→v4 conversion turned the assignment into a screen+desktop
+        // context rule (priority 410, autotile mode + the dwindle algorithm).
+        const QJsonObject wr = readJsonConfig(ConfigDefaults::windowRulesFilePath());
+        bool foundDesktopRule = false;
+        for (const QJsonValue& v : wr.value(QStringLiteral("rules")).toArray()) {
+            const QJsonObject r = v.toObject();
+            if (r.value(QStringLiteral("priority")).toInt() != 410) {
+                continue;
+            }
+            QString mode;
+            QString algorithm;
+            // RuleAction serializes its params inline alongside `type` — there
+            // is no nested "params" object.
+            for (const QJsonValue& av : r.value(QStringLiteral("actions")).toArray()) {
+                const QJsonObject action = av.toObject();
+                if (action.value(QStringLiteral("type")).toString() == QLatin1String("setEngineMode")) {
+                    mode = action.value(QStringLiteral("mode")).toString();
+                } else if (action.value(QStringLiteral("type")).toString() == QLatin1String("setTilingAlgorithm")) {
+                    algorithm = action.value(QStringLiteral("algorithm")).toString();
+                }
+            }
+            QCOMPARE(mode, QStringLiteral("autotile"));
+            QCOMPARE(algorithm, QStringLiteral("dwindle"));
+            foundDesktopRule = true;
+        }
+        QVERIFY2(foundDesktopRule, "screen+desktop assignment rule (priority 410) missing from windowrules.json");
     }
 
     void testMigrateNumericValues()
@@ -1452,10 +1496,12 @@ private Q_SLOTS:
         QVERIFY(!root.contains(QStringLiteral("Snapping")));
     }
 
-    /// End-to-end check that ensureJsonConfig() chains v1→v2→v3 when given a
-    /// v1 file with disabled-monitor data — the data must end up in BOTH the
-    /// snap and autotile v3 lists, not just the snap one.
-    void testMigrateV1ToV3_chainPreservesDisableLists()
+    /// End-to-end check that ensureJsonConfig() chains v1→v4 when given a v1
+    /// file with disabled-monitor data. The v2→v3 step duplicates the single
+    /// legacy list into BOTH the snap and autotile lists; the v3→v4 step then
+    /// converts every entry into a DisableEngine context rule in
+    /// windowrules.json and REMOVES the config.json Display.*Disabled* keys.
+    void testMigrateV1ToV4_chainConvertsDisableListsToRules()
     {
         IsolatedConfigGuard guard;
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
@@ -1470,9 +1516,26 @@ private Q_SLOTS:
 
         const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QCOMPARE(root.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
-        const QJsonObject v3Display = root.value(QStringLiteral("Display")).toObject();
-        QCOMPARE(v3Display.value(QStringLiteral("SnappingDisabledMonitors")).toString(), QStringLiteral("DP-1,HDMI-1"));
-        QCOMPARE(v3Display.value(QStringLiteral("AutotileDisabledMonitors")).toString(), QStringLiteral("DP-1,HDMI-1"));
+
+        // The Display.*Disabled* keys are gone from config.json — windowrules
+        // .json supersedes them.
+        const QJsonObject display = root.value(QStringLiteral("Display")).toObject();
+        QVERIFY(!display.contains(QStringLiteral("SnappingDisabledMonitors")));
+        QVERIFY(!display.contains(QStringLiteral("AutotileDisabledMonitors")));
+
+        // Two monitors × two modes = four DisableEngine monitor rules.
+        const QJsonObject wr = readJsonConfig(ConfigDefaults::windowRulesFilePath());
+        int disableMonitorRules = 0;
+        for (const QJsonValue& v : wr.value(QStringLiteral("rules")).toArray()) {
+            const QJsonObject r = v.toObject();
+            for (const QJsonValue& av : r.value(QStringLiteral("actions")).toArray()) {
+                if (av.toObject().value(QStringLiteral("type")).toString() == QLatin1String("disableEngine")) {
+                    ++disableMonitorRules;
+                    break;
+                }
+            }
+        }
+        QCOMPARE(disableMonitorRules, 4);
     }
 };
 

@@ -131,6 +131,19 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // All D-Bus calls use QDBusMessage::createMethodCall + asyncCall (no QDBusInterface)
     // to avoid synchronous D-Bus introspection that blocks the compositor thread.
 
+    // Re-push metadata for every live window. KWin's class/desktop/caption
+    // change signals fired during session restore are swallowed by
+    // pushWindowMetadata's m_daemonServiceRegistered gate, so the daemon's
+    // WindowRegistry is empty when the bridge first comes up. Walk the
+    // stacking order once and re-emit setWindowMetadata so any consumer
+    // querying the registry from a subsequent windowOpened / settings-load
+    // handler sees a populated record. Safe to send before virtual screens
+    // / pending restores arrive — setWindowMetadata is registry-only and has
+    // no dependency on screen identity.
+    for (KWin::EffectWindow* w : KWin::effects->stackingOrder()) {
+        pushWindowMetadata(w);
+    }
+
     // Drop the snap-assist capture's "we recently posted this handle" set —
     // the daemon's bounded LRU is empty after a fresh registration (whether
     // first-start or restart), so any handle the kwin-effect would otherwise
@@ -227,6 +240,25 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
                 qCDebug(lcEffect) << "Synced" << floatingIds.size() << "floating windows from daemon";
             }
         });
+    }
+
+    // One-shot WindowRules subscription. The daemon emits rulesChanged per
+    // per-rule mutation; slotWindowRulesChanged debounces via a 50ms timer to
+    // collapse batch edits into a single full-ruleset refetch. Subscribed here
+    // (not in loadCachedSettings) because loadCachedSettings re-runs on every
+    // settingsChanged broadcast, and QDBusConnection::connect accepts duplicate
+    // subscriptions silently — re-subscribing on each broadcast would grow the
+    // connection set unbounded across the effect's lifetime.
+    if (!m_windowRulesSubscribed) {
+        const bool ok = QDBusConnection::sessionBus().connect(
+            QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+            QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged"), this,
+            SLOT(slotWindowRulesChanged()));
+        if (ok) {
+            m_windowRulesSubscribed = true;
+        } else {
+            qCWarning(lcEffect) << "Failed to subscribe to WindowRules.rulesChanged — will retry on next bringup";
+        }
     }
 
     // These already use QDBusMessage::createMethodCall (no QDBusInterface)
@@ -475,9 +507,11 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     loadSettingAsync(QStringLiteral("excludedApplications"), [this](const QVariant& v) {
         m_excludedApplications = v.toStringList();
+        rebuildSnappingExclusionRuleSet();
     });
     loadSettingAsync(QStringLiteral("excludedWindowClasses"), [this](const QVariant& v) {
         m_excludedWindowClasses = v.toStringList();
+        rebuildSnappingExclusionRuleSet();
     });
     loadSettingAsync(QStringLiteral("minimumWindowWidth"), [this](const QVariant& v) {
         m_cachedMinWindowWidth = v.toInt();
@@ -550,15 +584,28 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("animationExcludedApplications"), [this](const QVariant& v) {
         m_animationExcludedApplications = v.toStringList();
+        rebuildAnimationExclusionRuleSet();
     });
     loadSettingAsync(QStringLiteral("animationExcludedWindowClasses"), [this](const QVariant& v) {
         m_animationExcludedWindowClasses = v.toStringList();
+        rebuildAnimationExclusionRuleSet();
     });
 
     loadShaderProfileFromDbus();
     loadAnimationAppRulesFromDbus();
     loadMotionProfileTreeFromDbus();
     loadShaderRegistryFromDbus();
+    // Unified WindowRule store — pull in any rules carrying an
+    // OverrideAnimation* action so the new editor's animation rules merge
+    // with the legacy AnimationAppRules cascade. The subscription below
+    // refreshes whenever the daemon broadcasts `rulesChanged`, so an edit
+    // in the settings UI lands without restarting the effect.
+    loadWindowRuleAnimationsFromDbus();
+    // Subscription to the daemon's rulesChanged broadcast is installed once from
+    // continueDaemonReadySetup() — installing it here would re-subscribe on every
+    // slotSettingsChanged callback (QDBusConnection::connect silently accepts
+    // duplicates, so the connection set would grow unbounded over the effect's
+    // lifetime).
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
         m_cachedToggleActivation = v.toBool();
     });

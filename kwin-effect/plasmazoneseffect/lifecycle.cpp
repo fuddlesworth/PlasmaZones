@@ -174,6 +174,16 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     m_frameGeometryFlushTimer->setInterval(50);
     connect(m_frameGeometryFlushTimer, &QTimer::timeout, this, &PlasmaZonesEffect::flushPendingFrameGeometry);
 
+    // WindowRules.rulesChanged debounce. See slotWindowRulesChanged: the
+    // daemon emits one signal per per-rule mutation, so without coalescing a
+    // 50-rule batch edit fires 50 full-ruleset fetches + parses. 50ms matches
+    // the frame-geometry flush above — single edits feel instant, bursts
+    // collapse to a single fetch at the trailing edge.
+    m_animationRulesRefreshDebounce.setSingleShot(true);
+    m_animationRulesRefreshDebounce.setInterval(50);
+    connect(&m_animationRulesRefreshDebounce, &QTimer::timeout, this,
+            &PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus);
+
     // Connect DragTracker signals
     //
     // Performance optimization: keyboard grab and D-Bus dragMoved calls are deferred

@@ -7,6 +7,40 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Window Rules**: a new unified settings page replaces the old Snapping Assignments, Tiling Assignments, Animations App Rules, and per-mode "disabled apps" lists. Rules are browsed, added, edited, drag-reordered, duplicated, and disabled from one place. Matching composes class, title, role, app-id, virtual desktop, activity, and screen predicates with AND/OR/NOT. A rule's actions cover snapping/tiling assignment, animation-curve and shader overrides, and exclusion from snapping, autotile, and effects — the four surfaces that previously each had their own editor.
+- **`org.plasmazones.WindowRules` D-Bus interface** (`dbus/org.plasmazones.WindowRules.xml`): `getAllRules`, `setAllRules`, `addRule`, `removeRule`, and related lifecycle methods for programmatic rule management.
+- **`phosphor-windowrule`** LGPL-2.1+ library housing the rule model, parser, and `RuleEvaluator`, so third parties can link the matcher without inheriting GPL.
+
+### Changed
+
+- **Single rule format**: window assignments, per-mode disable lists, animation App Rules, and effect exclusion lists are unified into one rule list stored in `~/.config/plasmazones/windowrules.json`. The KWin effect now consults the same `RuleEvaluator` as the daemon for animation App-Rule resolution and exclusion checks, so the two cannot drift.
+- **`LayoutRegistry::walkCascade` removed**, replaced by `RuleEvaluator`. The old per-axis cascade (context-keyed assignments vs window-property matching) no longer exists; all matching goes through the evaluator.
+- **`org.plasmazones.WindowTracking.setWindowMetadata`** widened from 4 to 9 arguments to carry the additional fields the evaluator needs (role, app-id, desktop, activity, screen). The KWin effect and daemon must be installed and running as a matched pair — `MinPeerApiVersion` bumped 3 → 4, and either side refuses to register a mismatched peer rather than silently degrading. Packagers must rebuild and ship both binaries together.
+- **`org.plasmazones.Layout.assignmentChangesApplied`** signal dropped its second argument (the per-key field tag). Subscribers that depended on that field must update or they will receive the wrong arity.
+
+### Removed
+
+- Legacy `Display.SnappingDisabled*` and `Display.AutotileDisabled*` config keys (auto-migrated into rules).
+- `setSnappingLayoutEntry`, `setTilingAlgorithmEntry`, and related per-field `Settings`-side `Q_INVOKABLE`s that the legacy KCM Assignments pages used. There is no QML replacement — use the Window Rules page.
+- Legacy Snapping Assignments, Tiling Assignments, and Animations App Rules settings pages (replaced by Window Rules).
+
+### Migration
+
+- **Config schema bumped v3 → v4.** On first launch after upgrade, `~/.config/plasmazones/assignments.json` is automatically converted into `~/.config/plasmazones/windowrules.json`, and the legacy `Display.SnappingDisabled*` / `Display.AutotileDisabled*` keys in `config.json` are folded into the same rule set. The migration is lossless and runs without user interaction.
+- **Backout**: the source file is renamed `assignments.json.migrated` (not deleted), so a downgrade can restore the previous schema by manually renaming it back and starting an older daemon.
+- **Recovery**: if migration aborts because the source is malformed, the original file is renamed to `~/.config/plasmazones/assignments.json.corrupt.bak`, the schema version stays at v3, and `windowrules.json` is not created — the daemon does not silently flush the old assignments to an empty rule set. The user can inspect / repair the quarantined file and rename it back to `assignments.json`; the next launch then retries the v3→v4 conversion.
+
+## [3.0.10] - 2026-05-23
+
+### Fixed
+
+- **Focus-follows-mouse stopped working after any overlay appeared** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#517](https://github.com/fuddlesworth/PlasmaZones/pull/517)): the focus-follows-mouse stacking-order walk treated the daemon's own full-screen overlay layer-shell surface as a blocking occluder, so once any OSD, snap preview, or layout picker had been shown on an autotile monitor FFM gave up and never resumed. The walk now looks through `plasmazonesd` and `plasmazones-editor` surfaces to the real window beneath; real overlays (emoji picker, Spectacle, xdg-desktop-portal) still trip the existing guard.
+- **Popups and dialogs could consume the main window's saved zone on reopen** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#518](https://github.com/fuddlesworth/PlasmaZones/pull/518)): the `PendingRestore` queue was keyed by appId only, so opening any popup or dialog of an app whose main window had previously closed-with-a-zone-assignment consumed the queue's head entry and snapped the popup into that zone. The closing window's structural kind (normal vs transient) is now recorded on each entry, and the consume path refuses to assign an entry to a window of a different kind, leaving it for the next-opening window that does match. Pre-fix on-disk sessions reload with kind=Unknown and the gate stays permissive for them. Steam-class apps whose popups misreport as normal windows still need a separate title-regex follow-up.
+- **Passive overlay shell stayed mapped and prewarmed with effects disabled** ([#515](https://github.com/fuddlesworth/PlasmaZones/discussions/515), [#519](https://github.com/fuddlesworth/PlasmaZones/pull/519)): the passive overlay's `wl_surface` was kept mapped even when no overlay slot was live, and the prewarm path did not respect the effects-enabled toggle, leaking compositor work for users who had turned effects off. The shell now unmaps when idle and prewarm is gated on the effects-enabled setting.
+- **Animation shader pattern features scaled inconsistently across monitor sizes** ([#520](https://github.com/fuddlesworth/PlasmaZones/pull/520)): sparkle, streak, and smoke feature density was tied to an arbitrary 800px reference, so pattern density drifted across screen sizes. Features now scale by `iSurfaceScreenPos.zw` (anchor size) for constant per-pixel pitch.
+
 ## [3.0.9] - 2026-05-22
 
 ### Fixed
@@ -1392,7 +1426,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.9...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.10...HEAD
+[3.0.10]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.9...v3.0.10
 [3.0.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.8...v3.0.9
 [3.0.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.7...v3.0.8
 [3.0.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.6...v3.0.7

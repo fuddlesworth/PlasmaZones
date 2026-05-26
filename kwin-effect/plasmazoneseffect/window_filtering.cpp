@@ -3,8 +3,11 @@
 
 #include "../plasmazoneseffect.h"
 
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorWindowRule/ExclusionListBridge.h>
+#include <PhosphorWindowRule/WindowQuery.h>
 
 #include <effect/effecthandler.h>
 #include <window.h>
@@ -31,6 +34,68 @@ bool rejectedBecause(QString* out, const char* reason)
     }
     return false;
 }
+} // namespace
+
+namespace {
+
+/// Builds a PhosphorWindowRule::WindowQuery from a live KWin window. Confined
+/// to this effect translation unit so the LGPL phosphor-windowrule library
+/// never sees a KWin type. Populates every window-side field declared on
+/// `WindowQuery` so user-authored rules can match on any of them — the
+/// exclusion lists only read `windowClass` / `desktopFile`, but per-window
+/// rules from the unified rule store may match on title / pid / isFullscreen
+/// / etc.
+PhosphorWindowRule::WindowQuery exclusionQueryFor(KWin::EffectWindow* w)
+{
+    PhosphorWindowRule::WindowQuery query;
+    if (!w) {
+        return query;
+    }
+    // `WindowQuery` fields are `std::optional` — leaving a field disengaged
+    // makes a predicate over it inert (returns false). Engaging it with an
+    // empty string instead would silently match `Equals ""` and `Regex "^$"`,
+    // and would also flip `hasWindow()` from "no window context" to "engaged
+    // but empty". Gate each string assignment on a non-empty value to keep
+    // the optional / engaged-empty distinction meaningful.
+    const QString windowClass = w->windowClass();
+    if (!windowClass.isEmpty()) {
+        query.windowClass = windowClass;
+    }
+    const QString title = w->caption();
+    if (!title.isEmpty()) {
+        query.title = title;
+    }
+    KWin::Window* kw = w->window();
+    if (kw) {
+        const QString desktopFile = kw->desktopFileName();
+        if (!desktopFile.isEmpty()) {
+            query.desktopFile = desktopFile;
+        }
+        const QString appId = ::PhosphorIdentity::WindowId::normalizeAppId(desktopFile, windowClass);
+        if (!appId.isEmpty()) {
+            query.appId = appId;
+        }
+        query.pid = static_cast<int>(w->pid());
+    }
+    // Window state flags — read live so a rule like "isFullscreen=true ⇒
+    // Float" matches the moment we evaluate. Bool fields are always engaged
+    // when the window exists; reactive re-evaluation on state-change signals
+    // is a separate concern (callers re-run the query at lifecycle / drag
+    // events, which is when filter-style predicates are consulted).
+    query.isMinimized = w->isMinimized();
+    query.isFullscreen = w->isFullScreen();
+    query.isSticky = w->isOnAllDesktops();
+    // EffectWindow has no direct maximized accessor; the underlying
+    // KWin::Window exposes maximizeMode(). MaximizeFull is what the user
+    // intuits as "maximized" (both axes); horizontal-only / vertical-only
+    // modes are partial states that don't fit a single boolean and would
+    // surprise rules that target "is the window maximized."
+    if (kw) {
+        query.isMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
+    }
+    return query;
+}
+
 } // namespace
 
 void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
@@ -163,10 +228,10 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         return rejectedBecause(rejectReason, "null window");
     }
 
-    // Never snap our own overlay/editor windows (but allow the settings app)
+    // Never snap our own overlay/editor windows (but allow the settings app).
+    // Shared with the FFM stacking-order walk — see isOwnOverlayClass().
     const QString windowClass = w->windowClass();
-    if (windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
-        || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive)) {
+    if (isOwnOverlayClass(windowClass)) {
         return rejectedBecause(rejectReason, "own overlay/editor window class");
     }
 
@@ -181,11 +246,13 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     }
 
     // Check user-configured exclusion lists (needed for drag gating — daemon also enforces
-    // for keyboard nav, but the effect must filter for drag operations and lifecycle reporting)
-    if (!m_excludedApplications.isEmpty() || !m_excludedWindowClasses.isEmpty()) {
-        KWin::Window* kw = w->window();
-        const QString appName = kw ? kw->desktopFileName() : QString();
-        if (matchesExclusionLists(appName, windowClass, m_excludedApplications, m_excludedWindowClasses)) {
+    // for keyboard nav, but the effect must filter for drag operations and lifecycle
+    // reporting). Routed through the unified RuleEvaluator: ExclusionListBridge converts
+    // the lists into terminal Exclude rules, so a window that hits any of them resolves
+    // to `isExcluded()`. The `!isEmpty()` fast path keeps a no-exclusions user at two
+    // pointer reads — the same cost the prior `!isEmpty()` QStringList guards paid.
+    if (!m_snappingExclusionRuleSet.isEmpty()) {
+        if (m_snappingExclusionEvaluator.resolve(exclusionQueryFor(w)).isExcluded()) {
             return rejectedBecause(rejectReason, "user exclusion list match (app/class)");
         }
     }
@@ -207,20 +274,21 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     return true;
 }
 
-bool PlasmaZonesEffect::matchesExclusionLists(const QString& appName, const QString& windowClass,
-                                              const QStringList& apps, const QStringList& classes)
+void PlasmaZonesEffect::rebuildSnappingExclusionRuleSet()
 {
-    for (const QString& excluded : apps) {
-        if (!excluded.isEmpty() && appName.contains(excluded, Qt::CaseInsensitive)) {
-            return true;
-        }
-    }
-    for (const QString& excluded : classes) {
-        if (!excluded.isEmpty() && windowClass.contains(excluded, Qt::CaseInsensitive)) {
-            return true;
-        }
-    }
-    return false;
+    // ExclusionListBridge drops empty patterns and builds one terminal Exclude
+    // rule per surviving pattern. `setRules` bumps the rule set revision so the
+    // bound evaluator discards stale cache entries.
+    const PhosphorWindowRule::WindowRuleSet rebuilt =
+        PhosphorWindowRule::ExclusionListBridge::toRuleSet(m_excludedApplications, m_excludedWindowClasses);
+    m_snappingExclusionRuleSet.setRules(rebuilt.rules());
+}
+
+void PlasmaZonesEffect::rebuildAnimationExclusionRuleSet()
+{
+    const PhosphorWindowRule::WindowRuleSet rebuilt = PhosphorWindowRule::ExclusionListBridge::toRuleSet(
+        m_animationExcludedApplications, m_animationExcludedWindowClasses);
+    m_animationExclusionRuleSet.setRules(rebuilt.rules());
 }
 
 bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
@@ -242,25 +310,23 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
         return false;
     }
 
-    // Rule-override path. ANY AnimationAppRule whose classPattern
-    // substring-matches the window's class signals deliberate user
-    // intent to animate this app — kind (Shader vs Timing) and
-    // eventPath are not narrowed here because the user's act of
-    // creating a class-targeted rule is itself the opt-in signal.
-    // Empty `windowClass` short-circuits (no rule can match an
-    // unidentified window) and an empty rule list short-circuits
-    // (no override possible) so the default-state path pays just
-    // two pointer reads. Same case-insensitive substring rule
-    // `AnimationAppRuleList::firstMatchOfKind` uses, so the override
-    // scope mirrors the per-rule match contract exactly.
-    if (!windowClass.isEmpty()) {
-        const auto& rules = m_shaderManager.appRules();
-        if (!rules.isEmpty()) {
-            for (const auto& rule : rules.entries()) {
-                if (!rule.classPattern.isEmpty() && windowClass.contains(rule.classPattern, Qt::CaseInsensitive)) {
-                    return true;
-                }
-            }
+    // Rule-override path. ANY animation rule whose match expression matches
+    // the window signals deliberate user intent to animate this app — the
+    // event-scoped slot (shader vs timing, which eventPath) is NOT narrowed
+    // here because the user's act of creating a class-targeted rule is
+    // itself the opt-in signal. `hasAnyMatch` is the event-agnostic query
+    // for exactly this — a yes/no over the bound animation rule set without
+    // allocating a ResolvedActions. The `!isEmpty()` fast path keeps the
+    // default-state cost to two pointer reads. The animation rules are
+    // WindowClass-only, so a query carrying just the windowClass is
+    // sufficient (and an empty windowClass naturally matches nothing — a
+    // `Contains` predicate rejects an empty pattern, and the migrated rules
+    // never carry an empty pattern).
+    if (!windowClass.isEmpty() && !m_shaderManager.animationRuleSet().isEmpty()) {
+        PhosphorWindowRule::WindowQuery query;
+        query.windowClass = windowClass;
+        if (m_shaderManager.animationRuleEvaluator().hasAnyMatch(query)) {
+            return true;
         }
     }
 
@@ -304,16 +370,14 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
         return false;
     }
 
-    // User-configured exclusion lists — substring-matched via the
-    // shared `matchesExclusionLists` helper that `shouldHandleWindow`
-    // also uses, so the animation and snapping filter sets stay in
-    // lockstep on match semantics even though their lists are
-    // independent.
-    if (!m_animationExcludedApplications.isEmpty() || !m_animationExcludedWindowClasses.isEmpty()) {
-        KWin::Window* kw = w->window();
-        const QString appName = kw ? kw->desktopFileName() : QString();
-        if (matchesExclusionLists(appName, windowClass, m_animationExcludedApplications,
-                                  m_animationExcludedWindowClasses)) {
+    // User-configured exclusion lists — routed through the unified
+    // RuleEvaluator over the animation exclusion rule set, the same path
+    // `shouldHandleWindow` uses for the snapping exclusions. The animation
+    // and snapping filter sets stay in lockstep on match semantics
+    // (case-insensitive substring `Contains`) even though their lists are
+    // independent. The `!isEmpty()` fast path keeps a no-exclusions user free.
+    if (!m_animationExclusionRuleSet.isEmpty()) {
+        if (m_animationExclusionEvaluator.resolve(exclusionQueryFor(w)).isExcluded()) {
             return false;
         }
     }

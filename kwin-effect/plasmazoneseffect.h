@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <PhosphorCompositor/ICompositorBridge.h>
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
@@ -14,6 +15,9 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
+
+#include <PhosphorWindowRule/RuleEvaluator.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -271,6 +275,9 @@ private:
      */
     bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
 
+    /// Classify a window's structural kind for the snap-restore consume gate.
+    PhosphorEngine::WindowKind classifyWindowKind(KWin::EffectWindow* w) const;
+
     /**
      * @brief Emit a full dump of a window's KWin properties plus the snap and
      *        autotile filter verdicts.
@@ -310,20 +317,6 @@ private:
     bool shouldAnimateWindow(KWin::EffectWindow* w) const;
 
     /**
-     * @brief Substring exclusion-list match helper.
-     *
-     * Returns true when @p appName or @p windowClass matches any
-     * non-empty entry in @p apps or @p classes (case-insensitive
-     * substring). Shared between `shouldHandleWindow` (snapping/
-     * tiling Exclusions) and `shouldAnimateWindow` (animation
-     * filtering) — both filter sets use identical match semantics
-     * but persist their lists independently, so the loops are the
-     * same shape with different inputs.
-     */
-    static bool matchesExclusionLists(const QString& appName, const QString& windowClass, const QStringList& apps,
-                                      const QStringList& classes);
-
-    /**
      * @brief Reject Plasma shell layer-shell surfaces by window class.
      *
      * On Wayland, KDE notification popups, system tray overlays, the emoji
@@ -337,6 +330,20 @@ private:
      * (discussion #271).
      */
     static bool isPlasmaShellSurface(const QString& windowClass);
+
+    /**
+     * @brief Recognise the daemon's own overlay / editor layer-shell surfaces
+     *        by window class.
+     *
+     * The shouldHandleWindow filter rejects these as "own overlay/editor
+     * window class" so the snap/tile pipeline never targets them. Other paths
+     * (focus-follows-mouse stacking-order walks) need to *look through* them
+     * to the real user window beneath, rather than treating them as legitimate
+     * occluders the way they'd treat an emoji picker or xdg-desktop-portal
+     * surface. Sharing one substring match keeps both call sites in lockstep.
+     */
+    static bool isOwnOverlayClass(const QString& windowClass);
+
     bool hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const;
     bool isWindowSticky(KWin::EffectWindow* w) const;
     void updateWindowStickyState(KWin::EffectWindow* w);
@@ -566,6 +573,13 @@ private:
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
 
+    /// Debounce timer for `WindowRules.rulesChanged`. Single-shot, 50ms;
+    /// timeout fires `loadWindowRuleAnimationsFromDbus`. Re-armed on every
+    /// `slotWindowRulesChanged` invocation so a burst of per-rule mutations
+    /// (a 50-rule batch edit emits 50 signals) collapses into a single
+    /// `getAllRules` fetch at the trailing edge.
+    QTimer m_animationRulesRefreshDebounce;
+
     void updateWindowBorder(const QString& windowId, KWin::EffectWindow* w);
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();
@@ -714,6 +728,18 @@ private:
     QStringList m_excludedApplications;
     QStringList m_excludedWindowClasses;
 
+    // Window-rule view of the snapping/tiling exclusion lists. ExclusionListBridge
+    // converts the two QStringLists above into a WindowRuleSet of terminal
+    // Exclude rules; the bound RuleEvaluator drives shouldHandleWindow()'s
+    // exclusion gate. Rebuilt by rebuildSnappingExclusionRuleSet() on every
+    // exclusion-list D-Bus load. Declaration ORDER MATTERS — the rule set
+    // must precede (and outlive) the evaluator that binds a reference to it.
+    PhosphorWindowRule::WindowRuleSet m_snappingExclusionRuleSet;
+    PhosphorWindowRule::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
+
+    /// Rebuild m_snappingExclusionRuleSet from the snapping exclusion lists.
+    void rebuildSnappingExclusionRuleSet();
+
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForAutotileNotify() to prevent small utility
     // windows (emoji picker, color picker, etc.) from entering the tiling tree.
@@ -745,6 +771,17 @@ private:
     int m_animationMinWindowHeight = 0;
     QStringList m_animationExcludedApplications;
     QStringList m_animationExcludedWindowClasses;
+
+    // Window-rule view of the animation exclusion lists — same bridge as the
+    // snapping exclusions, separate rule set because the user can configure
+    // divergent filter lists. Drives shouldAnimateWindow()'s exclusion gate.
+    // Rebuilt by rebuildAnimationExclusionRuleSet() on every animation
+    // exclusion-list D-Bus load. Declaration ORDER MATTERS (see above).
+    PhosphorWindowRule::WindowRuleSet m_animationExclusionRuleSet;
+    PhosphorWindowRule::RuleEvaluator m_animationExclusionEvaluator{m_animationExclusionRuleSet};
+
+    /// Rebuild m_animationExclusionRuleSet from the animation exclusion lists.
+    void rebuildAnimationExclusionRuleSet();
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end
@@ -854,6 +891,12 @@ private:
     /// resolveEffectiveScreenId tagging windows with dead "physId/vs:N" ids.
     QHash<QString, uint64_t> m_vsFetchSeqPerPhysId;
     bool m_daemonReadyWindowStateProcessed = false; ///< re-entrancy guard for processDaemonReadyWindowState
+    /// One-shot guard for the WindowRules rulesChanged D-Bus subscription.
+    /// QDBusConnection::connect silently accepts duplicate subscriptions, so without
+    /// this flag the subscription set would grow unbounded across every
+    /// slotSettingsChanged broadcast (which re-runs loadCachedSettings()). Set true
+    /// after the first successful connect from continueDaemonReadySetup().
+    bool m_windowRulesSubscribed = false;
 
     // Screen ID cache: connector name → EDID screen ID (manufacturer:model:serial).
     // Avoids repeated QScreen iteration and sysfs reads during drag (~30Hz).
@@ -925,6 +968,23 @@ private Q_SLOTS:
     /// logout/login. Dedicated signal (not settingsChanged) so the
     /// Settings app's change detection is unaffected.
     void slotMotionProfileTreeChanged();
+
+    /// Fetch the unified WindowRule store via `org.plasmazones.WindowRules.
+    /// getAllRules`, filter to rules carrying an OverrideAnimation* action,
+    /// and forward them to the shader manager so they merge with the
+    /// bridge-converted legacy AnimationAppRules. Called once at bringup;
+    /// the bringup also subscribes to the interface's `rulesChanged` signal
+    /// (via a debounce timer — see m_animationRulesRefreshDebounce) so a
+    /// settings-UI edit takes effect without restarting the effect.
+    void loadWindowRuleAnimationsFromDbus();
+
+    /// D-Bus signal handler for `WindowRules.rulesChanged`. Re-arms the
+    /// debounce timer rather than refetching the full ruleset on every
+    /// signal — the daemon emits one signal per per-rule mutation, so a
+    /// 50-rule batch edit would otherwise drive 50 full-ruleset fetches
+    /// and parses. A 50ms single-shot debounce coalesces the burst into a
+    /// single fetch at the trailing edge.
+    void slotWindowRulesChanged();
 };
 
 } // namespace PlasmaZones

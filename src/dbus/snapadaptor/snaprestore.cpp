@@ -185,8 +185,8 @@ void SnapAdaptor::restoreToPersistedZone(const QString& windowId, const QString&
     qCInfo(lcDbusWindow) << "Restoring window" << windowId << "to zone(s)" << result.zoneIds;
 }
 
-void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int& snapX,
-                                       int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
+void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
+                                       int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
 {
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
@@ -208,7 +208,13 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         return;
     }
 
-    SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky);
+    // Clamp unknown wire values to WindowKind::Unknown.
+    const PhosphorEngine::WindowKind kind = (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Normal))
+        ? PhosphorEngine::WindowKind::Normal
+        : (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Transient))
+        ? PhosphorEngine::WindowKind::Transient
+        : PhosphorEngine::WindowKind::Unknown;
+    SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);
     if (!result.shouldSnap) {
         return;
     }

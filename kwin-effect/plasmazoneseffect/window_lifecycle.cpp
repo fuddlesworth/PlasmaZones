@@ -327,8 +327,9 @@ void PlasmaZonesEffect::callResolveWindowRestore(KWin::EffectWindow* window, std
     // daemon restart or from KWin session restore), so its current frameGeometry is the
     // zone geometry — NOT the free-floating geometry. Storing it as pre-tile would cause
     // float toggle to restore to the zone geometry instead of the original free-floating position.
+    const int kindInt = static_cast<int>(classifyWindowKind(window));
     tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
-                     {windowId, screenId, sticky}, safeWindow, windowId, false, onMiss, nullptr,
+                     {windowId, screenId, sticky, kindInt}, safeWindow, windowId, false, onMiss, nullptr,
                      /*skipAnimation=*/true, onComplete);
 }
 
@@ -577,6 +578,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);
         connect(kw, &KWin::Window::desktopFileNameChanged, this, pushLatest);
         connect(kw, &KWin::Window::captionChanged, this, pushLatest);
+        // Per-window virtual-desktop / activity / role changes also refresh the
+        // registry so context-aware rule resolution sees current values. Same
+        // record-only contract: no retroactive re-evaluation of committed state.
+        connect(kw, &KWin::Window::desktopsChanged, this, pushLatest);
+        connect(kw, &KWin::Window::activitiesChanged, this, pushLatest);
+        connect(kw, &KWin::Window::windowRoleChanged, this, pushLatest);
 
         // Diagnostic dump on identity change — but ONLY for class / desktop-file,
         // never caption. CEF/Electron apps (Steam included) map with a
@@ -740,9 +747,10 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
         return;
     }
 
-    qCInfo(lcEffect) << "Notifying daemon: windowClosed" << windowId;
+    const int kindInt = static_cast<int>(classifyWindowKind(w));
+    qCInfo(lcEffect) << "Notifying daemon: windowClosed" << windowId << "kind=" << kindInt;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
-                                                   QStringLiteral("windowClosed"), {windowId});
+                                                   QStringLiteral("windowClosed"), {windowId, kindInt});
 }
 
 void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)

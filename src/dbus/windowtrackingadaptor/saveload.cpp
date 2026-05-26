@@ -173,6 +173,13 @@ void WindowTrackingAdaptor::saveState()
                     }
                     entryObj[QLatin1String("zoneNumbers")] = numArray;
                 }
+                // Persist windowKind only when concrete. `Unknown` is the
+                // wire default and re-loads identically from a missing key,
+                // so omitting it keeps pre-fix on-disk sessions byte-stable
+                // for the common case (no kind plumbed yet).
+                if (entry.windowKind != PhosphorEngine::WindowKind::Unknown) {
+                    entryObj[QLatin1String("windowKind")] = static_cast<int>(entry.windowKind);
+                }
                 entryArray.append(entryObj);
             }
             if (!entryArray.isEmpty()) {
@@ -567,6 +574,17 @@ void WindowTrackingAdaptor::loadState()
                             entry.zoneNumbers.append(v.toInt());
                         }
                     }
+                    // windowKind defaults to Unknown when missing (legacy on-disk
+                    // session predates the kind gate). Out-of-range integers
+                    // are clamped to Unknown for the same reason adaptor-side
+                    // wire ints are clamped: never reinterpret a corrupt value
+                    // as a concrete enum.
+                    const int kindInt = entryObj[QLatin1String("windowKind")].toInt(0);
+                    entry.windowKind = (kindInt == static_cast<int>(PhosphorEngine::WindowKind::Normal))
+                        ? PhosphorEngine::WindowKind::Normal
+                        : (kindInt == static_cast<int>(PhosphorEngine::WindowKind::Transient))
+                        ? PhosphorEngine::WindowKind::Transient
+                        : PhosphorEngine::WindowKind::Unknown;
                     // Disabled-context filter (discussion #461 item 2).
                     // Pre-fix sessions may contain restore entries for a
                     // monitor / desktop the user has since disabled snapping

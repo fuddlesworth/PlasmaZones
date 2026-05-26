@@ -15,6 +15,7 @@
 #include "../core/utils.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorWindowRule/ContextRuleBridge.h>
 
 #include <QGuiApplication>
 #include <QMetaMethod>
@@ -47,10 +48,15 @@ std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
 }
 } // namespace
 
-Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry, QObject* parent)
+Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
+                   PhosphorWindowRule::WindowRuleStore* windowRuleStore, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
     , m_store(std::make_unique<PhosphorConfig::Store>(backend, buildSettingsSchema(), this))
+    , m_ownedWindowRuleStore(windowRuleStore ? nullptr
+                                             : std::make_unique<PhosphorWindowRule::WindowRuleStore>(
+                                                   ConfigDefaults::windowRulesFilePath(), this))
+    , m_windowRuleStore(windowRuleStore ? windowRuleStore : m_ownedWindowRuleStore.get())
     , m_curveRegistry(curveRegistry)
 {
     // Contract: @p backend MUST already be pointing at a migrated config
@@ -78,6 +84,9 @@ Settings::Settings(QObject* parent)
     , m_ownedBackend(migrateAndCreateOwnedBackend())
     , m_configBackend(m_ownedBackend.get())
     , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
+    , m_ownedWindowRuleStore(
+          std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), this))
+    , m_windowRuleStore(m_ownedWindowRuleStore.get())
 {
     // m_curveRegistry is left null; `animationProfile()` /
     // `setAnimationEasingCurve()` fall back to `fallbackCurveRegistry()`.
@@ -158,6 +167,23 @@ void Settings::load()
     const QStringList autotileActivitiesBefore = disabledActivities(Mode::Autotile);
 
     m_configBackend->reparseConfiguration();
+
+    // Per-mode disable lists live in windowrules.json, a separate file the
+    // config backend's reparseConfiguration() does not touch. Reload the
+    // rule store explicitly so a cross-process write (daemon shortcut, KCM
+    // D-Bus call) surfaces — the per-mode signal re-emission below compares
+    // against the pre-reload snapshot taken above.
+    //
+    // Only reload when WE own the store. When the daemon shares its store
+    // with us, the daemon (or its WindowRuleAdaptor / LayoutRegistry) is
+    // the writer and load() here would clobber unflushed in-memory edits
+    // — exactly the dual-store race this borrow pattern exists to avoid.
+    // The borrowed-store path relies on the owning daemon to drive reloads
+    // (today: on-startup load; a future QFileSystemWatcher will handle
+    // cross-process reloads — see WindowRuleStore.h TODO).
+    if (m_ownedWindowRuleStore) {
+        m_ownedWindowRuleStore->load();
+    }
 
     // Store-backed groups (Shaders, Appearance, Ordering, Animations,
     // Rendering, Performance, ZoneGeometry, Shortcuts, Editor, Exclusions,
@@ -1209,46 +1235,201 @@ PZ_STORE_GET(bool, showZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnA
 PZ_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey,
                   showZonesOnAllMonitorsChanged)
 
-// Per-mode disable lists. Storage is `Display.{Snapping,Autotile}Disabled*`
-// — pick the right key from `mode`. The connector-name resolution stays
-// PZ-side so consumers always see canonical screen ids.
+// ── Per-mode disable lists — rule-backed (Phase 3b) ─────────────────────────
+//
+// Per-mode disable entries are `DisableEngine` context rules in the unified
+// WindowRule store (windowrules.json), NOT config.json keys. A disable rule
+// pins exactly the context dimensions of its axis:
+//   - monitor  : ScreenId only
+//   - desktop  : ScreenId + VirtualDesktop
+//   - activity : ScreenId + Activity
+// and carries one `DisableEngine` action whose `mode` param ("snapping" /
+// "autotile") scopes which engine it gates. The deterministic shape lets the
+// getters enumerate the store and the setters replace a whole (axis, mode)
+// family without touching the other axes / the other mode.
+
 namespace {
-QString disabledMonitorsKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
+
+// Disable-axis enum mirrors the persisted (axis, mode) family layout. Distinct
+// from `ContextRuleBridge::ContextAxis` only because the bridge enum also
+// carries `CatchAll` and `Combined` — the disable list classifies a tuple as
+// Activity-axis whether or not it also pins a desktop (mirroring the historic
+// per-activity disable family), so we project the bridge axis through here.
+enum class DisableAxis {
+    Monitor,
+    Desktop,
+    Activity
+};
+
+bool isAutotileMode(PhosphorZones::AssignmentEntry::Mode mode)
 {
-    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledMonitorsKey()
-                                                            : ConfigDefaults::snappingDisabledMonitorsKey();
+    return mode == PhosphorZones::AssignmentEntry::Autotile;
 }
-QString disabledDesktopsKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
+
+// Classify a context rule's pinned-dimension shape into a disable axis.
+// Returns nullopt for a catch-all or a shape that pins no screen — those are
+// not valid disable rules. Delegates to the bridge so the cascade-axis
+// formula lives in one place.
+std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, const QString& activity)
 {
-    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledDesktopsKey()
-                                                            : ConfigDefaults::snappingDisabledDesktopsKey();
+    namespace CRB = PhosphorWindowRule::ContextRuleBridge;
+    switch (CRB::contextAxisOf(screenId, virtualDesktop, activity)) {
+    case CRB::ContextAxis::Monitor:
+        return DisableAxis::Monitor;
+    case CRB::ContextAxis::Desktop:
+        return DisableAxis::Desktop;
+    case CRB::ContextAxis::Activity:
+    case CRB::ContextAxis::Combined:
+        // A combined (screen+desktop+activity) tuple is treated as
+        // Activity-axis for disable-list purposes — mirrors the legacy
+        // classifier which only checked the activity dimension.
+        return DisableAxis::Activity;
+    case CRB::ContextAxis::CatchAll:
+        return std::nullopt;
+    }
+    return std::nullopt;
 }
-QString disabledActivitiesKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
-{
-    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledActivitiesKey()
-                                                            : ConfigDefaults::snappingDisabledActivitiesKey();
-}
+
 } // namespace
 
-QStringList Settings::readDisableList(const QString& key) const
+QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mode, int axisInt) const
 {
-    return parseCommaList(m_store->read<QString>(ConfigDefaults::displayGroup(), key));
+    namespace CRB = PhosphorWindowRule::ContextRuleBridge;
+    const auto axis = static_cast<DisableAxis>(axisInt);
+    const bool wantAutotile = isAutotileMode(mode);
+    QStringList out;
+    for (const PhosphorWindowRule::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+        const auto ruleAutotile = CRB::disableRuleAutotileMode(rule);
+        if (!ruleAutotile || *ruleAutotile != wantAutotile) {
+            continue; // not a disable rule, or scoped to the other mode
+        }
+        QString screenId;
+        int desktop = 0;
+        QString activity;
+        CRB::contextDimsOf(rule.match, screenId, desktop, activity);
+        const auto ruleAxis = axisOf(screenId, desktop, activity);
+        if (!ruleAxis || *ruleAxis != axis) {
+            continue;
+        }
+        switch (axis) {
+        case DisableAxis::Monitor:
+            out.append(screenId);
+            break;
+        case DisableAxis::Desktop:
+            out.append(screenId + QLatin1Char('/') + QString::number(desktop));
+            break;
+        case DisableAxis::Activity:
+            out.append(screenId + QLatin1Char('/') + activity);
+            break;
+        }
+    }
+    return out;
 }
 
-void Settings::writeDisableList(const QString& key, const QStringList& entries,
-                                PhosphorZones::AssignmentEntry::Mode mode, DisableModeSignalFn signalFn)
+void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, int axisInt, const QStringList& entries,
+                                   DisableModeSignalFn signalFn)
 {
-    // Post-write compare — the canonicalCommaList validator normalises
-    // whitespace/duplicates on write, so a caller passing e.g. "DP-1, HDMI-1 "
-    // against a stored "DP-1,HDMI-1" would fail the pre-write equality check
-    // and fire a spurious changed signal even though the canonical form is
-    // identical.
-    const QString before = m_store->read<QString>(ConfigDefaults::displayGroup(), key);
-    m_store->write(ConfigDefaults::displayGroup(), key, entries.join(QLatin1Char(',')));
-    const QString after = m_store->read<QString>(ConfigDefaults::displayGroup(), key);
+    namespace CRB = PhosphorWindowRule::ContextRuleBridge;
+    const auto axis = static_cast<DisableAxis>(axisInt);
+    const bool autotile = isAutotileMode(mode);
+
+    // Snapshot the current entries for this (axis, mode) so a no-op write
+    // does not fire a spurious changed signal. Compare canonically — both
+    // sides are de-duplicated, whitespace-trimmed sets. The Monitor axis
+    // additionally resolves connector names → stable screen ids so the
+    // comparison matches the public getter (disabledMonitors), which always
+    // resolves on read: without this, re-saving a list that stores a
+    // connector name where the getter reports the canonical id would look
+    // like a change and misfire the changed signal.
+    const auto canonical = [axis](const QStringList& list) {
+        QStringList c;
+        for (const QString& raw : list) {
+            QString value = raw.trimmed();
+            if (axis == DisableAxis::Monitor && Phosphor::Screens::ScreenIdentity::isConnectorName(value)) {
+                const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(value);
+                if (resolved != value) {
+                    value = resolved;
+                }
+            }
+            if (!value.isEmpty() && !c.contains(value)) {
+                c.append(value);
+            }
+        }
+        c.sort();
+        return c;
+    };
+    const QStringList before = canonical(disableEntriesFor(mode, axisInt));
+    const QStringList after = canonical(entries);
+
+    // No-op guard: when the canonical disable sets are equal there is nothing
+    // to persist. Return AHEAD of the kept-rebuild + setAllRules call — the
+    // rebuild mints fresh QUuids per disable rule (makeDisableRule) and
+    // WindowRule::operator== compares ids, so an unchanged set would still
+    // produce a rule list that fails setAllRules's equality check, needlessly
+    // rewriting windowrules.json and firing rulesChanged().
     if (before == after) {
         return;
     }
+
+    // Rebuild the rule list: keep every rule that is NOT a disable rule of
+    // this exact (axis, mode) family, then append the new entries.
+    QList<PhosphorWindowRule::WindowRule> kept;
+    for (const PhosphorWindowRule::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+        const auto ruleAutotile = CRB::disableRuleAutotileMode(rule);
+        if (ruleAutotile && *ruleAutotile == autotile) {
+            QString screenId;
+            int desktop = 0;
+            QString activity;
+            CRB::contextDimsOf(rule.match, screenId, desktop, activity);
+            const auto ruleAxis = axisOf(screenId, desktop, activity);
+            if (ruleAxis && *ruleAxis == axis) {
+                continue; // drop — replaced below
+            }
+        }
+        kept.append(rule);
+    }
+
+    for (const QString& canonicalEntry : after) {
+        QString screenId;
+        int desktop = 0;
+        QString activity;
+        switch (axis) {
+        case DisableAxis::Monitor:
+            screenId = canonicalEntry;
+            break;
+        case DisableAxis::Desktop: {
+            const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
+            if (slash <= 0 || slash == canonicalEntry.size() - 1) {
+                qCWarning(lcConfig) << "Skipping malformed desktop disable entry:" << canonicalEntry;
+                continue;
+            }
+            bool ok = false;
+            desktop = canonicalEntry.mid(slash + 1).toInt(&ok);
+            if (!ok || desktop <= 0) {
+                qCWarning(lcConfig) << "Skipping malformed desktop disable entry:" << canonicalEntry;
+                continue;
+            }
+            screenId = canonicalEntry.left(slash);
+            break;
+        }
+        case DisableAxis::Activity: {
+            const int slash = canonicalEntry.indexOf(QLatin1Char('/'));
+            if (slash <= 0 || slash == canonicalEntry.size() - 1) {
+                qCWarning(lcConfig) << "Skipping malformed activity disable entry:" << canonicalEntry;
+                continue;
+            }
+            screenId = canonicalEntry.left(slash);
+            activity = canonicalEntry.mid(slash + 1);
+            break;
+        }
+        }
+        const QString name =
+            (autotile ? QStringLiteral("Autotile off · ") : QStringLiteral("Snapping off · ")) + screenId;
+        kept.append(CRB::makeDisableRule(name, screenId, desktop, activity, autotile));
+    }
+
+    m_windowRuleStore->setAllRules(kept);
+
     Q_EMIT(this->*signalFn)(mode);
     Q_EMIT settingsChanged();
 }
@@ -1261,7 +1442,7 @@ QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode
     // their composite keys (`screenId/desktop`, `screenId/activity`) embed
     // the screen id in a non-isolatable way; the connector↔id matching is
     // done at lookup time inside isDesktopDisabled / isActivityDisabled.
-    QStringList entries = readDisableList(disabledMonitorsKeyFor(mode));
+    QStringList entries = disableEntriesFor(mode, static_cast<int>(DisableAxis::Monitor));
     for (auto& name : entries) {
         if (Phosphor::Screens::ScreenIdentity::isConnectorName(name)) {
             const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(name);
@@ -1275,7 +1456,8 @@ QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode
 
 void Settings::setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames)
 {
-    writeDisableList(disabledMonitorsKeyFor(mode), screenIdOrNames, mode, &Settings::disabledMonitorsChanged);
+    writeDisableEntries(mode, static_cast<int>(DisableAxis::Monitor), screenIdOrNames,
+                        &Settings::disabledMonitorsChanged);
 }
 
 bool Settings::isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const
@@ -1294,12 +1476,12 @@ bool Settings::isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, cons
 // composite and match either the connector or the resolved id segment.
 QStringList Settings::disabledDesktops(PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    return readDisableList(disabledDesktopsKeyFor(mode));
+    return disableEntriesFor(mode, static_cast<int>(DisableAxis::Desktop));
 }
 
 void Settings::setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries)
 {
-    writeDisableList(disabledDesktopsKeyFor(mode), entries, mode, &Settings::disabledDesktopsChanged);
+    writeDisableEntries(mode, static_cast<int>(DisableAxis::Desktop), entries, &Settings::disabledDesktopsChanged);
 }
 
 bool Settings::isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
@@ -1324,12 +1506,12 @@ bool Settings::isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, cons
 // to isActivityDisabled rather than applied per-read here.
 QStringList Settings::disabledActivities(PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    return readDisableList(disabledActivitiesKeyFor(mode));
+    return disableEntriesFor(mode, static_cast<int>(DisableAxis::Activity));
 }
 
 void Settings::setDisabledActivities(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries)
 {
-    writeDisableList(disabledActivitiesKeyFor(mode), entries, mode, &Settings::disabledActivitiesChanged);
+    writeDisableEntries(mode, static_cast<int>(DisableAxis::Activity), entries, &Settings::disabledActivitiesChanged);
 }
 
 bool Settings::isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
@@ -2369,7 +2551,60 @@ void Settings::reset()
     }
     deletePerScreenGroups(m_configBackend);
     m_configBackend->sync();
+
+    // Per-mode disable lists live in windowrules.json as DisableEngine
+    // context rules — drop every such rule from the store (assignment /
+    // animation / exclude rules are untouched: reset() only owns the
+    // settings surface). The store persists on setAllRules, so the final
+    // load() below re-reads the now-cleared file.
+    //
+    // load()'s own per-mode change-detection snapshots the six disable lists
+    // from the *live* store; clearing the store before load() runs would
+    // leave that snapshot empty, so the per-mode disabled*Changed signals
+    // would never fire even when reset() actually removed disable rules.
+    // Snapshot the six lists here — before the clear — and re-emit the
+    // per-mode signals ourselves after load(), comparing against this
+    // pre-clear state.
+    using Mode = PhosphorZones::AssignmentEntry::Mode;
+    const QStringList resetSnapMonitorsBefore = disabledMonitors(Mode::Snapping);
+    const QStringList resetAutotileMonitorsBefore = disabledMonitors(Mode::Autotile);
+    const QStringList resetSnapDesktopsBefore = disabledDesktops(Mode::Snapping);
+    const QStringList resetAutotileDesktopsBefore = disabledDesktops(Mode::Autotile);
+    const QStringList resetSnapActivitiesBefore = disabledActivities(Mode::Snapping);
+    const QStringList resetAutotileActivitiesBefore = disabledActivities(Mode::Autotile);
+    {
+        namespace CRB = PhosphorWindowRule::ContextRuleBridge;
+        QList<PhosphorWindowRule::WindowRule> kept;
+        for (const PhosphorWindowRule::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+            if (!CRB::disableRuleAutotileMode(rule)) {
+                kept.append(rule); // not a DisableEngine rule — preserve
+            }
+        }
+        if (kept.size() != m_windowRuleStore->count()) {
+            m_windowRuleStore->setAllRules(kept);
+        }
+    }
+
     load();
+
+    // Re-emit per-mode disable signals against the pre-clear snapshot taken
+    // above. load()'s internal snapshot saw the already-cleared store, so it
+    // could not detect that reset() removed disable rules — this loop covers
+    // the gap. All six lists are empty post-clear, so any non-empty pre-clear
+    // list fires exactly once.
+    if (disabledMonitors(Mode::Snapping) != resetSnapMonitorsBefore)
+        Q_EMIT disabledMonitorsChanged(Mode::Snapping);
+    if (disabledMonitors(Mode::Autotile) != resetAutotileMonitorsBefore)
+        Q_EMIT disabledMonitorsChanged(Mode::Autotile);
+    if (disabledDesktops(Mode::Snapping) != resetSnapDesktopsBefore)
+        Q_EMIT disabledDesktopsChanged(Mode::Snapping);
+    if (disabledDesktops(Mode::Autotile) != resetAutotileDesktopsBefore)
+        Q_EMIT disabledDesktopsChanged(Mode::Autotile);
+    if (disabledActivities(Mode::Snapping) != resetSnapActivitiesBefore)
+        Q_EMIT disabledActivitiesChanged(Mode::Snapping);
+    if (disabledActivities(Mode::Autotile) != resetAutotileActivitiesBefore)
+        Q_EMIT disabledActivitiesChanged(Mode::Autotile);
+
     qCInfo(lcConfig) << "Settings reset to defaults";
 }
 

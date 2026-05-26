@@ -34,9 +34,14 @@ QString ConfigDefaults::sessionFilePath()
     return configDir() + QStringLiteral("/plasmazones/session.json");
 }
 
-QString ConfigDefaults::assignmentsFilePath()
+QString ConfigDefaults::windowRulesFilePath()
 {
-    return configDir() + QStringLiteral("/plasmazones/assignments.json");
+    return configDir() + QStringLiteral("/plasmazones/windowrules.json");
+}
+
+QString ConfigDefaults::quickLayoutsFilePath()
+{
+    return configDir() + QStringLiteral("/plasmazones/quicklayouts.json");
 }
 
 QString ConfigDefaults::legacyConfigFilePath()

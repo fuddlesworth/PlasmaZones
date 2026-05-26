@@ -146,9 +146,11 @@ public Q_SLOTS:
 
     /**
      * @brief Run the full 4-level snap-restore fallback chain in one call
+     * @param windowKind Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient).
+     *                   Forwarded to SnapEngine for the kind-match gate.
      */
-    void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int& snapX, int& snapY,
-                              int& snapWidth, int& snapHeight, bool& shouldSnap);
+    void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind, int& snapX,
+                              int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Resnap / snap-all D-Bus slots

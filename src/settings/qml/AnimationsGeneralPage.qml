@@ -70,7 +70,7 @@ SettingsFlickable {
     function _syncCachedValues() {
         var c = page.appSettings.animationEasingCurve;
         if (typeof c !== "string")
-            return ;
+            return;
 
         if (page._isSpringCurve(c)) {
             var s = page._parseSpring(c);
@@ -87,7 +87,7 @@ SettingsFlickable {
         // already-active mode/values doesn't churn bindings even though
         // the underlying setter would no-op.
         if (page.appSettings.animationEasingCurve === encoded)
-            return ;
+            return;
 
         page._lastSpringOmega = omega;
         page._lastSpringZeta = zeta;
@@ -96,7 +96,7 @@ SettingsFlickable {
 
     function _writeEasing(curveStr) {
         if (page.appSettings.animationEasingCurve === curveStr)
-            return ;
+            return;
 
         page._lastEasingCurve = curveStr;
         page.appSettings.animationEasingCurve = curveStr;
@@ -112,6 +112,26 @@ SettingsFlickable {
         }
 
         target: page.appSettings
+    }
+
+    // Window-filtering picker — relocated here with the Window Filtering
+    // section from the old Animations App Rules page. Each ExclusionListCard
+    // calls openForApps()/openForClasses(), which sets the dialog's own
+    // forApps flag routing the pick to the Excluded Applications list (true)
+    // or the Excluded Window Classes list (false).
+    WindowPickerDialog {
+        id: filterPickerDialog
+
+        controller: settingsController
+        onPicked: function (value) {
+            if (forApps) {
+                settingsController.settings.addAnimationExcludedApplication(value);
+                filterAppsCard.refreshModel();
+            } else {
+                settingsController.settings.addAnimationExcludedWindowClass(value);
+                filterClassesCard.refreshModel();
+            }
+        }
     }
 
     ColumnLayout {
@@ -141,7 +161,7 @@ SettingsFlickable {
             showToggle: true
             toggleChecked: page.appSettings.animationsEnabled
             collapsible: true
-            onToggleClicked: function(checked) {
+            onToggleClicked: function (checked) {
                 page.appSettings.animationsEnabled = checked;
             }
 
@@ -164,7 +184,7 @@ SettingsFlickable {
                     animationDuration: page.appSettings.animationDuration
                     previewEnabled: animationsCard.toggleChecked && page._currentTimingMode === CurvePresets.timingModeEasing
                     opacity: animationsCard.toggleChecked ? 1 : 0.4
-                    onCurveEdited: function(newCurve) {
+                    onCurveEdited: function (newCurve) {
                         page._writeEasing(newCurve);
                     }
                 }
@@ -181,8 +201,7 @@ SettingsFlickable {
                     opacity: animationsCard.toggleChecked ? 1 : 0.4
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 // ── Timing mode ───────────────────────────────────────────
                 // Mirrors AnimationEventCard's combo so both global and
@@ -198,18 +217,16 @@ SettingsFlickable {
                         enabled: animationsCard.toggleChecked
                         model: [i18n("Easing"), i18n("Spring")]
                         currentIndex: page._currentTimingMode
-                        onActivated: function(index) {
+                        onActivated: function (index) {
                             if (index === CurvePresets.timingModeSpring)
                                 page._writeSpring(page._lastSpringOmega, page._lastSpringZeta);
                             else
                                 page._writeEasing(page._lastEasingCurve);
                         }
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 // ── Easing controls (visible only in easing mode) ─────────
                 EasingSettings {
@@ -231,13 +248,12 @@ SettingsFlickable {
                     animationsEnabled: animationsCard.toggleChecked
                     omega: page._lastSpringOmega
                     zeta: page._lastSpringZeta
-                    onSpringChanged: function(omega, zeta) {
+                    onSpringChanged: function (omega, zeta) {
                         page._writeSpring(omega, zeta);
                     }
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Multiple windows")
@@ -248,11 +264,10 @@ SettingsFlickable {
                         enabled: animationsCard.toggleChecked
                         model: [i18n("All at once"), i18n("One by one")]
                         currentIndex: page.appSettings.animationSequenceMode
-                        onActivated: (index) => {
-                            return page.appSettings.animationSequenceMode = index;
+                        onActivated: index => {
+                            page.appSettings.animationSequenceMode = index;
                         }
                     }
-
                 }
 
                 SettingsRow {
@@ -269,15 +284,13 @@ SettingsFlickable {
                         value: page.appSettings.animationStaggerInterval
                         valueSuffix: " ms"
                         labelWidth: Kirigami.Units.gridUnit * 4
-                        onMoved: (value) => {
-                            return page.appSettings.animationStaggerInterval = Math.round(value);
+                        onMoved: value => {
+                            page.appSettings.animationStaggerInterval = Math.round(value);
                         }
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Minimum distance")
@@ -290,17 +303,153 @@ SettingsFlickable {
                         to: settingsController.generalPage.animationMinDistanceMax
                         stepSize: 5
                         value: page.appSettings.animationMinDistance
-                        onValueModified: (value) => {
-                            return page.appSettings.animationMinDistance = value;
+                        onValueModified: value => {
+                            page.appSettings.animationMinDistance = value;
                         }
                     }
-
                 }
-
             }
-
         }
 
-    }
+        // ── Window Filtering ─────────────────────────────────────────
+        // Animation-global gating: which windows are eligible for any
+        // animation at all. Relocated here from the old Animations App
+        // Rules page — these are global config toggles, not per-window
+        // rules, so they belong on the General page. Per-window
+        // overrides now live on the unified Window Rules page.
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Information
+            visible: true
+            text: i18n("Filtered windows are not animated. Use a Window Rule to keep a specific application animated even when a filter would exclude it.")
+        }
 
+        SettingsCard {
+            id: filteringCard
+
+            Layout.fillWidth: true
+            headerText: i18n("Window Filtering")
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Exclude transient windows")
+                    description: i18n("Skip animations for dialogs, popups, tooltips, and dropdown menus")
+
+                    SettingsSwitch {
+                        checked: page.appSettings.animationExcludeTransientWindows
+                        accessibleName: i18n("Exclude transient windows from animations")
+                        onToggled: function (newValue) {
+                            page.appSettings.animationExcludeTransientWindows = newValue;
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Exclude notifications and OSDs")
+                    description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
+
+                    SettingsSwitch {
+                        checked: page.appSettings.animationExcludeNotificationsAndOsd
+                        accessibleName: i18n("Exclude notifications and on-screen displays from animations")
+                        onToggled: function (newValue) {
+                            page.appSettings.animationExcludeNotificationsAndOsd = newValue;
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Minimum window width")
+                    description: page.appSettings.animationMinimumWindowWidth === 0 ? i18n("Disabled. No width threshold.") : i18n("Windows narrower than this will not animate")
+
+                    SettingsSpinBox {
+                        from: 0
+                        to: 1000
+                        stepSize: 10
+                        value: page.appSettings.animationMinimumWindowWidth
+                        Accessible.name: i18n("Minimum window width for animations")
+                        onValueModified: value => {
+                            page.appSettings.animationMinimumWindowWidth = value;
+                        }
+                        textFromValue: function (value) {
+                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Minimum window height")
+                    description: page.appSettings.animationMinimumWindowHeight === 0 ? i18n("Disabled. No height threshold.") : i18n("Windows shorter than this will not animate")
+
+                    SettingsSpinBox {
+                        from: 0
+                        to: 1000
+                        stepSize: 10
+                        value: page.appSettings.animationMinimumWindowHeight
+                        Accessible.name: i18n("Minimum window height for animations")
+                        onValueModified: value => {
+                            page.appSettings.animationMinimumWindowHeight = value;
+                        }
+                        textFromValue: function (value) {
+                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
+                        }
+                    }
+                }
+            }
+        }
+
+        ExclusionListCard {
+            id: filterAppsCard
+
+            Layout.fillWidth: true
+            title: i18n("Excluded Applications (Animations)")
+            placeholderText: i18n("Application name (e.g., firefox, konsole)")
+            emptyTitle: i18n("No excluded applications")
+            emptyExplanation: i18n("Add application names above to exclude them from animations")
+            iconSource: "application-x-executable"
+            model: page.appSettings.animationExcludedApplications
+            useMonospaceFont: false
+            showPickButton: true
+            onAddRequested: text => {
+                return page.appSettings.addAnimationExcludedApplication(text);
+            }
+            onRemoveRequested: index => {
+                return page.appSettings.removeAnimationExcludedApplicationAt(index);
+            }
+            onPickRequested: {
+                filterPickerDialog.openForApps();
+            }
+        }
+
+        ExclusionListCard {
+            id: filterClassesCard
+
+            Layout.fillWidth: true
+            title: i18n("Excluded Window Classes (Animations)")
+            placeholderText: i18n("Window class (e.g., org.kde.dolphin)")
+            emptyTitle: i18n("No excluded window classes")
+            emptyExplanation: i18n("Add window classes above to exclude them from animations")
+            iconSource: "window"
+            model: page.appSettings.animationExcludedWindowClasses
+            useMonospaceFont: true
+            showPickButton: true
+            onAddRequested: text => {
+                return page.appSettings.addAnimationExcludedWindowClass(text);
+            }
+            onRemoveRequested: index => {
+                return page.appSettings.removeAnimationExcludedWindowClassAt(index);
+            }
+            onPickRequested: {
+                filterPickerDialog.openForClasses();
+            }
+        }
+    }
 }

@@ -7,7 +7,7 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
-import org.plasmazones.common as QFZCommon
+import org.plasmazones.common as PZCommon
 
 /**
  * @brief Reusable combo box for selecting layouts with consistent model building
@@ -171,6 +171,13 @@ ComboBox {
             if ((old.layout && old.layout.autoAssign === true) !== (nw.layout && nw.layout.autoAssign === true))
                 return false;
 
+            // Aspect ratio class is rendered as a delegate badge, so a
+            // change must invalidate the model — otherwise the badge
+            // stays stale on the live view even though `appSettings.layouts`
+            // reflects the new class.
+            if ((old.layout && old.layout.aspectRatioClass) !== (nw.layout && nw.layout.aspectRatioClass))
+                return false;
+
             // For "Default" entry, also check which layout it resolves to
             if (old.isDefaultOption && ((old.layout ? old.layout.id : "") !== (nw.layout ? nw.layout.id : "")))
                 return false;
@@ -204,6 +211,16 @@ ComboBox {
     }
 
     function updateSelection() {
+        // Unmatched id → -1 (no selection), not 0. Coercing to row 0
+        // silently rewrites a stale / deleted layout id to whatever
+        // happens to be first in the list — when `showNoneOption: false`
+        // (used by the rule editor's action pickers) that means the
+        // user's saved value gets clobbered the moment they re-open the
+        // rule. The empty-id case (no value set) still maps to row 0
+        // because row 0 is the "Default"/"None" entry when
+        // `showNoneOption: true`; when it's off, leaving currentIndex at
+        // -1 also makes "no selection" visible instead of silently
+        // committing to the first real entry.
         if (currentLayoutId && currentLayoutId !== "") {
             for (let i = 0; i < model.length; i++) {
                 if (model[i].value === currentLayoutId) {
@@ -211,8 +228,10 @@ ComboBox {
                     return ;
                 }
             }
+            currentIndex = -1;
+            return ;
         }
-        currentIndex = 0;
+        currentIndex = showNoneOption ? 0 : -1;
     }
 
     function clearSelection() {
@@ -266,14 +285,85 @@ ComboBox {
         target: root.appSettings ?? null
     }
 
+    // Outside-click closer — mirror of the WideComboBox pattern. While the
+    // popup is open, a transparent MouseArea fills the application overlay,
+    // closes the popup on any outside press, and consumes the event when
+    // the press lands on the ComboBox button itself (so the button can't
+    // immediately re-open the popup).
+    Loader {
+        active: pop.opened
+        sourceComponent: catcherComponent
+    }
+
+    Component {
+        id: catcherComponent
+
+        Item {
+            id: catcher
+
+            z: 999998
+            Component.onCompleted: {
+                const ovr = root.Overlay.overlay;
+                if (ovr) {
+                    parent = ovr;
+                    anchors.fill = ovr;
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                propagateComposedEvents: true
+                onPressed: function(mouse) {
+                    const rootPos = root.mapToItem(catcher, 0, 0);
+                    const onCombo = mouse.x >= rootPos.x && mouse.y >= rootPos.y && mouse.x < rootPos.x + root.width && mouse.y < rootPos.y + root.height;
+                    pop.close();
+                    mouse.accepted = onCombo;
+                }
+            }
+
+        }
+
+    }
+
     // ── Custom popup ────────────────────────────────────────────────────
     // Override the default popup to use a plain ListView instead of the
     // KDE desktop style's Menu-based popup.  The Menu popup has its own
     // internal ListView (bound to contentModel, not delegateModel) which
     // causes positionViewAtIndex to target the wrong view — making the
     // dropdown appear scrolled to the wrong position.
+    // Popup follows the WideComboBox z-stacking pattern so the dropdown
+    // renders correctly when LayoutComboBox is hosted inside a
+    // Kirigami.OverlaySheet (e.g. the unified Window Rule editor's
+    // SetSnappingLayout / SetTilingAlgorithm action editors). Reparenting
+    // to Overlay.overlay with a high `z` escapes the sheet's modal layer;
+    // `popupType: Popup.Item` keeps it in-scene so we don't trigger the
+    // focus-loss regression that closes the host OverlaySheet when a real
+    // OS window grabs focus; outside-click dismissal is handled by the
+    // Loader-gated catcher below (Qt's `CloseOnPressOutside` is unreliable
+    // once the popup is reparented into Overlay.overlay).
     popup: T.Popup {
-        y: root.height
+        id: pop
+
+        popupType: T.Popup.Item
+        parent: Overlay.overlay
+        z: 999999
+        modal: false
+        dim: false
+        closePolicy: T.Popup.CloseOnEscape
+        // Position is set imperatively in `onAboutToShow` — a declarative
+        // `mapToItem` binding doesn't re-evaluate when the ComboBox's
+        // ancestors move (e.g. while a hosting OverlaySheet animates into
+        // place), leaving the popup pinned at overlay-origin (0, 0).
+        x: 0
+        y: 0
+        onAboutToShow: {
+            if (parent) {
+                const pos = root.mapToItem(parent, 0, root.height);
+                x = pos.x;
+                y = pos.y;
+            }
+        }
         width: Math.max(root.width, Kirigami.Units.gridUnit * 18)
         height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (root.Window.window ? root.Window.window.height : 600) - topMargin - bottomMargin)
         topMargin: Kirigami.Units.smallSpacing
@@ -360,7 +450,7 @@ ComboBox {
                 border.width: highlighted ? 2 : 1
                 visible: root.showPreview && hasLayout
 
-                QFZCommon.ZonePreview {
+                PZCommon.ZonePreview {
                     anchors.fill: parent
                     anchors.margins: Math.round(Kirigami.Units.smallSpacing * 0.75)
                     zones: (modelData.layout && modelData.layout.zones) || []
@@ -409,7 +499,7 @@ ComboBox {
                     }
 
                     // Category badge (layout type)
-                    QFZCommon.CategoryBadge {
+                    PZCommon.CategoryBadge {
                         visible: hasLayout && modelData.category >= 0
                         category: modelData.category
                         autoAssign: modelData.layout && modelData.layout.autoAssign === true
@@ -417,7 +507,7 @@ ComboBox {
                     }
 
                     // Aspect ratio badge
-                    QFZCommon.AspectRatioBadge {
+                    PZCommon.AspectRatioBadge {
                         aspectRatioClass: (modelData.layout && modelData.layout.aspectRatioClass) || "any"
                     }
 

@@ -18,6 +18,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -39,8 +40,7 @@ private:
     PhosphorZones::LayoutRegistry* createManager(QObject* parent = nullptr)
     {
         m_guards.emplace_back(std::make_unique<IsolatedConfigGuard>());
-        auto* mgr = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                      QStringLiteral("plasmazones/layouts"), parent);
+        auto* mgr = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), parent);
         QString layoutDir = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts");
         QDir().mkpath(layoutDir);
         mgr->setLayoutDirectory(layoutDir);

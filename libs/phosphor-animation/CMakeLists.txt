@@ -124,6 +124,13 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/ShaderProfileTree.h
     include/PhosphorAnimation/AnimationAppRule.h
     include/PhosphorAnimation/AnimationAppRuleResolver.h
+    # Header-only in-memory bridge: AnimationAppRuleList -> WindowRuleSet.
+    # Lives here (not in phosphor-windowrule) so the windowrule library's
+    # Config.cmake.in stays free of a transitive PhosphorAnimation dep.
+    # Consumers that include the bridge must find_package(PhosphorWindowRule)
+    # AND PhosphorAnimation themselves and link both libraries — see the
+    # header's file-level doxygen for the rationale.
+    include/PhosphorAnimation/AnimationAppRuleBridge.h
 
     # Layer animator (ex phosphor-animation-layer)
     include/PhosphorAnimation/PhosphorAnimationLayer.h
@@ -270,6 +277,8 @@ endif()
 set_target_properties(PhosphorAnimation PROPERTIES
     VERSION ${PHOSPHORANIMATION_VERSION}
     SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
 )
 
 # ===============================================================================

@@ -3,11 +3,11 @@
 
 #include "../plasmazoneseffect.h"
 #include "shader_internal.h"
+#include "shader_resolve.h"
 
 #include "../windowanimator.h"
 
 #include <PhosphorAnimation/AnimationAppRule.h>
-#include <PhosphorAnimation/AnimationAppRuleResolver.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -19,6 +19,16 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
+#include <PhosphorWindowRule/RuleAction.h>
+#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
+
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QJsonDocument>
 
 #include <effect/effecthandler.h>
 #include <opengl/glshader.h>
@@ -1323,10 +1333,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // tree fallthrough (the user's "no animation for this app on this
     // event" sentinel).
     const QString windowClass = window->windowClass();
-    const auto& appRules = m_shaderManager.appRules();
+    const QString windowId = getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
-    const auto profile =
-        PhosphorAnimationShaders::resolveAnimationShaderProfile(appRules, profileTree, windowClass, profilePath);
     // Per-event base duration. The daemon mirrors its motion
     // PhosphorProfileRegistry into `motionProfileTree` over D-Bus —
     // ProfileTree::resolve walks `window.open → window → global` and
@@ -1338,8 +1346,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // when NO node in the path's parent chain carries an override:
     // an empty tree (D-Bus race / fresh user) must not silently
     // collapse every event to the library default (150 ms). The
-    // resolved value is then handed to `resolveAnimationDuration` as
-    // its `defaultDurationMs`, so the per-window-class App Rule timing
+    // resolved value is then handed to the combined resolver as its
+    // `defaultDurationMs`, so the per-window-class App Rule timing
     // cascade still layers on top (rule wins → per-event base →
     // global), matching the resolver's documented contract.
     int baseDurationMs = durationMs;
@@ -1374,22 +1382,29 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
             baseDurationMs = qRound(motionTree.resolve(profilePath).effectiveDuration());
         }
     }
-    // Resolve duration through the rule cascade too — a Timing rule for
-    // the same (class, event) bumps the per-event base. A rule with
-    // durationMs == 0 is the inherit sentinel and falls through to the
-    // per-event base resolved above.
+    // Combined cascade: ONE cached evaluator walk feeds BOTH the shader-slot
+    // and timing-slot reads. The pre-refactor pair of `resolveAnimationShader
+    // Profile` + `resolveAnimationDuration` ran two priority-order walks per
+    // event (same query, both bypassing the per-window match cache); the
+    // combined shim issues a single `resolveCached(windowId, …)` and reads
+    // both slots from the same `ResolvedActions`. Semantics are identical:
+    // rule wins per-slot, with engaged-empty effectId still blocking the tree
+    // fallthrough and durationMs <= 0 still meaning "inherit".
     //
-    // Clamp the resolved value to the upstream `durationMs` floor: if
+    // Clamp the resolved duration to the upstream `durationMs` floor: if
     // the cascade collapses to <= 0 (corrupt persisted rule, missing
-    // tree node), the QTimer::singleShot below would fire on the next
-    // event-loop tick and tear down the just-installed transition before
-    // its first paint. The input `durationMs` was already clamped by
-    // the daemon-bringup loader to [MinAnimationDurationMs,
-    // MaxAnimationDurationMs], and the `durationMs <= 0` guard at the
-    // top of `tryBeginShaderForEvent` rejects non-positive inputs, so
-    // `durationMs` here is a safe positive floor.
-    int effectiveDurationMs =
-        PhosphorAnimationShaders::resolveAnimationDuration(appRules, windowClass, profilePath, baseDurationMs);
+    // motion-tree node feeding baseDurationMs), the QTimer::singleShot
+    // below would fire on the next event-loop tick and tear down the
+    // just-installed transition before its first paint. The input
+    // `durationMs` was already clamped by the daemon-bringup loader to
+    // [MinAnimationDurationMs, MaxAnimationDurationMs], and the
+    // `durationMs <= 0` guard at the top of `tryBeginShaderForEvent`
+    // rejects non-positive inputs, so `durationMs` here is a safe
+    // positive floor.
+    const auto resolved = PlasmaZones::resolveAnimationShaderAndDuration(
+        m_shaderManager.animationRuleEvaluator(), profileTree, windowId, windowClass, profilePath, baseDurationMs);
+    const auto& profile = resolved.profile;
+    int effectiveDurationMs = resolved.durationMs;
     if (effectiveDurationMs <= 0) {
         effectiveDurationMs = durationMs;
     }
@@ -1402,13 +1417,14 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         // overrides (so an empty resolve here is genuinely surprising —
         // the documented prune / D-Bus-race scenarios), otherwise
         // demote to DEBUG.
-        if (profileTree.overriddenPaths().isEmpty() && appRules.isEmpty()) {
+        const int ruleCount = m_shaderManager.animationRuleSet().count();
+        if (profileTree.overriddenPaths().isEmpty() && ruleCount == 0) {
             qCDebug(lcEffect) << "tryBeginShader[" << profilePath
                               << "]: no shader assigned (tree empty — default state)";
         } else {
             qCWarning(lcEffect) << "tryBeginShader[" << profilePath
                                 << "]: no shader assigned (cascade returned empty effectId, tree size="
-                                << profileTree.overriddenPaths().size() << " rules=" << appRules.size() << ")";
+                                << profileTree.overriddenPaths().size() << " rules=" << ruleCount << ")";
         }
         return;
     }
@@ -1478,8 +1494,79 @@ void PlasmaZonesEffect::loadAnimationAppRulesFromDbus()
                             /*objectSink=*/{}, [this](const QJsonArray& arr) {
                                 auto& rules = m_shaderManager.appRules();
                                 rules = PhosphorAnimationShaders::AnimationAppRuleList::fromJson(arr);
+                                // Rebuild the WindowRuleSet view so the RuleEvaluator-backed
+                                // resolvers and shouldAnimateWindow()'s hasAnyMatch query see
+                                // the new rules. setRules() bumps the revision → cache invalid.
+                                m_shaderManager.rebuildAnimationRuleSet();
                                 qCDebug(lcEffect) << "loadAnimationAppRulesFromDbus: loaded" << rules.size() << "rules";
                             });
+    });
+}
+
+void PlasmaZonesEffect::slotWindowRulesChanged()
+{
+    // Coalesce burst signals: the daemon emits one `rulesChanged` per per-rule
+    // mutation, so a 50-rule batch edit would otherwise drive 50 sequential
+    // `getAllRules` round-trips + JSON parses + filter walks. The timer is a
+    // single-shot 50ms debounce (set up in the constructor); each call here
+    // re-arms it, so only the trailing edge of the burst triggers a refresh.
+    m_animationRulesRefreshDebounce.start();
+}
+
+void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
+{
+    // Fetch the unified WindowRule store via getAllRules (returns a JSON
+    // string of a v4 WindowRuleSet), deserialise, filter to rules whose
+    // action list contains any OverrideAnimation* action, and hand them to
+    // the shader manager. Bridge-converted legacy AnimationAppRules and
+    // these new rules end up concatenated in m_animationRuleSet — the same
+    // RuleEvaluator resolves both, so the existing per-event slot lookup
+    // in shader_resolve.cpp picks the winner without further code changes.
+    const QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("getAllRules"));
+    const QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        const QDBusPendingReply<QString> reply = *w;
+        if (reply.isError()) {
+            // Daemon may not be up yet at startup; the rulesChanged
+            // subscription below will deliver the next change. Log at debug
+            // so the noise stays out of normal-startup logs.
+            qCDebug(lcEffect) << "loadWindowRuleAnimationsFromDbus: getAllRules failed:" << reply.error().message();
+            return;
+        }
+        const QByteArray payload = reply.value().toUtf8();
+        const QJsonDocument doc = QJsonDocument::fromJson(payload);
+        if (!doc.isObject()) {
+            qCWarning(lcEffect) << "loadWindowRuleAnimationsFromDbus: getAllRules returned non-object JSON";
+            return;
+        }
+        const auto setOpt = PhosphorWindowRule::WindowRuleSet::fromJson(doc.object());
+        if (!setOpt) {
+            qCWarning(lcEffect) << "loadWindowRuleAnimationsFromDbus: WindowRuleSet::fromJson refused payload";
+            return;
+        }
+        QList<PhosphorWindowRule::WindowRule> animationRules;
+        for (const PhosphorWindowRule::WindowRule& rule : setOpt->rules()) {
+            if (!rule.enabled) {
+                // Skip disabled rules — they exist in the store but must not
+                // contribute to the evaluator. (RuleEvaluator already gates
+                // on enabled for its own walks, but pruning here keeps the
+                // rule-set size minimal and the priority-order index smaller.)
+                continue;
+            }
+            for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
+                if (PhosphorWindowRule::ActionType::isAnimationOverrideAction(action.type)) {
+                    animationRules.append(rule);
+                    break;
+                }
+            }
+        }
+        m_shaderManager.setWindowRuleAnimationRules(std::move(animationRules));
+        qCDebug(lcEffect) << "loadWindowRuleAnimationsFromDbus: forwarded" << m_shaderManager.animationRuleSet().count()
+                          << "total animation rules to the evaluator";
     });
 }
 
