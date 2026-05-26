@@ -180,13 +180,18 @@ void WindowRuleController::fetchAndLoad()
         PhosphorProtocol::ClientHelpers::asyncCall(QString(PhosphorProtocol::Service::Interface::WindowRules),
                                                    QStringLiteral("getAllRules")),
         this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+    // Tag THIS watcher with whether the call originated from revert(). A
+    // counter-only scheme would let an in-flight initial-load watcher A
+    // wrongly claim a revert tag posted by a concurrent watcher B — whichever
+    // reply lands first decrements the counter regardless of which watcher
+    // posted the increment. Capturing the bool by value at watcher
+    // construction time binds the tag to the specific caller path.
+    const bool fromRevert = m_pendingRevertFetches > 0;
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, fromRevert](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         QDBusPendingReply<QString> reply = *w;
-        // Tag this reply as resolving a pending revert (or not). Decremented
-        // *before* emitting so a chained revert→revertFinished→commit handler
-        // sees the counter at the correct value.
-        const bool fromRevert = m_pendingRevertFetches > 0;
+        // Decrement *before* emitting so a chained revert→revertFinished→commit
+        // handler sees the counter at the correct value.
         if (fromRevert) {
             --m_pendingRevertFetches;
         }
@@ -336,9 +341,10 @@ void WindowRuleController::renormalizePriorities()
 
     // Per-band offset counter — base address → next available offset. Each
     // band seeds at `kBandWidth - 1` on first encounter and decrements as
-    // later entries within the same band are stamped. Sentinel `-1` means
-    // "not yet seeded"; this disambiguates from the value-initialised 0
-    // that `operator[]` on QHash would otherwise produce.
+    // later entries within the same band are stamped. Absence in the hash
+    // (`find() == end()`) signals not-yet-seeded; the explicit
+    // find/insert flow disambiguates from the value-initialised 0 that
+    // `operator[]` on QHash would otherwise produce.
     QHash<int, int> nextOffset;
     for (int i = 0; i < n; ++i) {
         const int base = baseFor(rules.at(i));

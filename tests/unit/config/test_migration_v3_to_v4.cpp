@@ -18,11 +18,13 @@
  *   - config.json is stamped `_version == 4`,
  *   - the conversion is idempotent (running twice is a no-op).
  *
- * windowrules.json SUPERSEDES the v3 inputs: the migration deletes
- * assignments.json after windowrules.json is durably written, removes the
- * config.json Display.*Disabled* keys, and relocates the QuickLayouts slots
- * to the quicklayouts.json sidecar. These superseding behaviours are
- * asserted alongside the conversion fidelity.
+ * windowrules.json SUPERSEDES the v3 inputs: the migration renames
+ * assignments.json to assignments.json.migrated after windowrules.json is
+ * durably written (a non-destructive retire that leaves the original data
+ * recoverable from disk), removes the config.json Display.*Disabled* keys,
+ * and relocates the QuickLayouts slots to the quicklayouts.json sidecar.
+ * These superseding behaviours are asserted alongside the conversion
+ * fidelity.
  */
 
 #include <QDir>

@@ -356,14 +356,27 @@ SettingsController::SettingsController(QObject* parent)
     // setNeedsSave(false) those methods emit.
     m_windowRulesPage = new WindowRuleController(this);
     connect(m_windowRulesPage, &WindowRuleController::dirtyChanged, this, [this]() {
-        if (m_loading || m_saving || !m_windowRulesPage->isDirty())
+        if (m_loading || m_saving)
             return;
-        // A window-rule edit can be driven by a background daemon signal, not
-        // just by the user viewing the page — so mark the "window-rules" page
-        // explicitly rather than letting setNeedsSave() target m_activePage.
-        beginExternalEdit(QStringLiteral("window-rules"));
-        setNeedsSave(true);
-        endExternalEdit();
+        if (m_windowRulesPage->isDirty()) {
+            // A window-rule edit can be driven by a background daemon signal, not
+            // just by the user viewing the page — so mark the "window-rules" page
+            // explicitly rather than letting setNeedsSave() target m_activePage.
+            beginExternalEdit(QStringLiteral("window-rules"));
+            setNeedsSave(true);
+            endExternalEdit();
+            return;
+        }
+        // Controller transitioned to clean (e.g. a successful fetchAndLoad
+        // flipped m_dirty false→true→false during initial async load, or a
+        // direct revert from QML). Mirror the dirty-side behaviour: remove
+        // "window-rules" from m_dirtyPages and emit dirtyPagesChanged when
+        // the set actually shrinks. setNeedsSave(false) cannot be used here
+        // — it blanket-clears every page, which would wipe other unrelated
+        // dirty leaves.
+        if (m_dirtyPages.remove(QStringLiteral("window-rules"))) {
+            Q_EMIT dirtyPagesChanged();
+        }
     });
     // A user-driven Discard fires WindowRuleController::revert() inside our
     // load() under m_loading=true, which suppresses the dirtyChanged → dirty
@@ -891,7 +904,18 @@ void SettingsController::defaults()
     // when state already matches the post-defaults set) doesn't fire
     // a spurious `dirtyPagesChanged`, matching the emit-on-change
     // discipline used by `setNeedsSave` everywhere else in this file.
-    const QSet<QString>& fullSet = validPageNames();
+    //
+    // "window-rules" is INTENTIONALLY excluded from the blanket-mark:
+    // its source of truth is the daemon's `windowrules.json` (not the
+    // KConfig store reset() clears), and `WindowRuleController::commit()`
+    // is a no-op when the controller is clean. Marking the page dirty
+    // here would surface a stale "unsaved changes" indicator that a
+    // subsequent Save would never actually clear (commit short-circuits,
+    // leaving the page dirty in perpetuity until the user touches it).
+    // Window-rule defaults are out of scope for this entry point —
+    // resetting them requires a separate daemon-side "reset rules" path.
+    QSet<QString> fullSet = validPageNames();
+    fullSet.remove(QStringLiteral("window-rules"));
     if (m_dirtyPages != fullSet) {
         m_dirtyPages = fullSet;
         Q_EMIT dirtyPagesChanged();

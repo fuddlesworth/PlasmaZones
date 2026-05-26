@@ -121,6 +121,16 @@ public:
     /// edits are left in place (there is nothing authoritative to reload
     /// to), and `daemonReachable` is cleared so the page surfaces the
     /// failure. Called by `SettingsController::load()` (Discard).
+    ///
+    /// @note While the revert fetch is in flight, any in-QML edits to rules
+    /// are discarded when the daemon snapshot lands — the reply handler
+    /// unconditionally replaces the model with the fetched set. Callers
+    /// should avoid surfacing edit UI between `revert()` and
+    /// `revertFinished()`; that window is short (a single D-Bus round-trip)
+    /// and the "Discard" affordance that drives revert is itself a modal
+    /// confirmation, so a user editing during the window is not a realistic
+    /// path. Documenting the discard semantics rather than blocking edits
+    /// keeps the controller stateless from QML's perspective.
     void revert();
 
     /// True iff there are unsaved staged edits. Mirror of `isDirty()` for the

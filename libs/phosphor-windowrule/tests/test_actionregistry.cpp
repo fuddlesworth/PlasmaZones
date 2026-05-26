@@ -46,6 +46,7 @@ private Q_SLOTS:
         QVERIFY(reg.isRegistered(QString(ActionType::Float)));
         QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationShader)));
         QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationTiming)));
+        QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationCurve)));
         QVERIFY(reg.isRegistered(QString(ActionType::SetOpacity)));
     }
 

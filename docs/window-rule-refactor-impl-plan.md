@@ -273,9 +273,11 @@ behaviour byte-identical, on-disk format unchanged. Non-breaking.
 
 ### Tests
 
-New `test_animationapprulebridge.cpp` / `test_exclusionlistbridge.cpp`;
-`test_animationappruleresolver.cpp` becomes an integration test over bridge+evaluator;
-net-new effect-filtering parity test (none exists today).
+New `libs/phosphor-windowrule/tests/test_animationapprulebridge.cpp` /
+`libs/phosphor-windowrule/tests/test_exclusionlistbridge.cpp`;
+`libs/phosphor-animation/tests/test_animationappruleresolver.cpp` becomes an
+integration test over bridge+evaluator; net-new effect-filtering parity test
+(none exists today).
 
 ### Top gotchas
 
@@ -477,8 +479,11 @@ Advanced, summaries), `test_window_rule_controller.cpp` (CRUD by **UUID**, `move
 ## 9. Test strategy summary
 
 - **Phase 1** ships the engine's unit suite *and* the cascade-fidelity oracle test up front.
-- Existing suites (`test_animationapprule*`, `test_layoutmanager_assignment`,
-  `test_settings_disable_per_mode`) are retained and become **integration tests** /
+- Existing suites (`libs/phosphor-animation/tests/test_animationapprule.cpp`,
+  `libs/phosphor-animation/tests/test_animationappruleresolver.cpp`,
+  `tests/unit/core/test_layoutmanager_assignment.cpp`,
+  `tests/unit/config/test_settings_disable_per_mode.cpp`) are retained and
+  become **integration tests** /
   **parity proofs** over the new path — a legacy test still passing is the parity
   guarantee. `test_animations_app_rules` was retired during the refactor and replaced
   by `test_window_rule_controller` + `test_window_rule_model` (the settings page now
