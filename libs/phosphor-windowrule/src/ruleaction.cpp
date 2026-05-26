@@ -237,45 +237,45 @@ void ActionRegistry::registerBuiltins()
     registerAction(ActionDescriptor{
         QString(ActionType::OverrideAnimationShader),
         [](const QJsonObject& p) -> QString {
-            const QString event = p.value(QLatin1StringView("event")).toString();
+            const QString event = p.value(ActionParam::Event).toString();
             if (event.isEmpty()) {
                 return QString();
             }
             return QString(ActionSlot::AnimShaderPrefix) + event;
         },
         [](const QJsonObject& p) {
-            return hasNonEmptyString(p, QLatin1StringView("event"));
+            return hasNonEmptyString(p, ActionParam::Event);
         },
-        false, QStringList{QStringLiteral("event"), QStringLiteral("effectId"), QStringLiteral("params")},
+        false, QStringList{QString(ActionParam::Event), QString(ActionParam::EffectId), QString(ActionParam::Params)},
         ActionDomain::Window});
     registerAction(ActionDescriptor{
         QString(ActionType::OverrideAnimationTiming),
         [](const QJsonObject& p) -> QString {
-            const QString event = p.value(QLatin1StringView("event")).toString();
+            const QString event = p.value(ActionParam::Event).toString();
             if (event.isEmpty()) {
                 return QString();
             }
             return QString(ActionSlot::AnimTimingPrefix) + event;
         },
         [](const QJsonObject& p) {
-            return hasNonEmptyString(p, QLatin1StringView("event"));
+            return hasNonEmptyString(p, ActionParam::Event);
         },
-        false, QStringList{QStringLiteral("event"), QStringLiteral("curve"), QStringLiteral("durationMs")},
+        false, QStringList{QString(ActionParam::Event), QString(ActionParam::Curve), QString(ActionParam::DurationMs)},
         ActionDomain::Window});
     // Curve override — own slot so it can be combined with a Timing-slot
     // duration override on the same event without one shadowing the other.
     registerAction(ActionDescriptor{QString(ActionType::OverrideAnimationCurve),
                                     [](const QJsonObject& p) -> QString {
-                                        const QString event = p.value(QLatin1StringView("event")).toString();
+                                        const QString event = p.value(ActionParam::Event).toString();
                                         if (event.isEmpty()) {
                                             return QString();
                                         }
                                         return QString(ActionSlot::AnimCurvePrefix) + event;
                                     },
                                     [](const QJsonObject& p) {
-                                        return hasNonEmptyString(p, QLatin1StringView("event"));
+                                        return hasNonEmptyString(p, ActionParam::Event);
                                     },
-                                    false, QStringList{QStringLiteral("event"), QStringLiteral("curve")},
+                                    false, QStringList{QString(ActionParam::Event), QString(ActionParam::Curve)},
                                     ActionDomain::Window});
 
     // ── opacity slot ──

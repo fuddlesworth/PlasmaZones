@@ -1512,80 +1512,99 @@ const QUuid& animationAppRuleNamespaceUuid()
     return ns;
 }
 
-/// Build a single WindowRule from a legacy AnimationAppRule JSON object.
-/// Mirrors the legacy rule-level loader's drop-on-malformed contract: empty
-/// classPattern / eventPath and unknown `kind` strings yield nullopt so the
-/// caller silently discards entries the runtime would have rejected anyway.
-///
-/// @param i      zero-based source index — used to derive `priority = count - i`
-///               (first entry → highest priority, mirroring the bridge).
-/// @param count  total source entries (priority floors at 1, reserving 0 for
-///               the provider-default catch-all band).
-std::optional<PhosphorWindowRule::WindowRule> animationAppRuleToWindowRule(const QJsonObject& source, int i, int count)
+// Legacy AnimationAppRule wire keys. The v3 on-disk format is frozen — the
+// runtime accessors are deleted, so these literals are the migration's last
+// reader of the shape. File-scope so the validate/build split below can share
+// them without re-declaring.
+constexpr QLatin1StringView kKeyClassPattern{"classPattern"};
+constexpr QLatin1StringView kKeyEventPath{"eventPath"};
+constexpr QLatin1StringView kKeyKind{"kind"};
+constexpr QLatin1StringView kKeyEffectId{"effectId"};
+constexpr QLatin1StringView kKeyShaderParams{"shaderParams"};
+constexpr QLatin1StringView kKeyCurve{"curve"};
+constexpr QLatin1StringView kKeyDurationMs{"durationMs"};
+constexpr QLatin1StringView kKindShader{"shader"};
+constexpr QLatin1StringView kKindTiming{"timing"};
+
+/// True if @p source carries the minimum fields a non-discarded legacy
+/// AnimationAppRule must have (non-empty classPattern + eventPath, and a
+/// recognised `kind`). Mirrors the legacy rule-level loader's
+/// drop-on-malformed contract: this is the predicate the caller uses to
+/// filter the stash BEFORE assigning priorities, so dropped entries don't
+/// leave gaps in the priority sequence the way they would if we filtered
+/// in-loop with a pre-computed count.
+bool isValidAnimationAppRuleSource(const QJsonObject& source)
 {
-    // Legacy AnimationAppRule wire keys. The v3 on-disk format is frozen —
-    // the runtime accessors are deleted, so these literals are the migration's
-    // last reader of the shape.
-    constexpr QLatin1StringView kKeyClassPattern{"classPattern"};
-    constexpr QLatin1StringView kKeyEventPath{"eventPath"};
-    constexpr QLatin1StringView kKeyKind{"kind"};
-    constexpr QLatin1StringView kKeyEffectId{"effectId"};
-    constexpr QLatin1StringView kKeyShaderParams{"shaderParams"};
-    constexpr QLatin1StringView kKeyCurve{"curve"};
-    constexpr QLatin1StringView kKeyDurationMs{"durationMs"};
-    constexpr QLatin1StringView kKindShader{"shader"};
-    constexpr QLatin1StringView kKindTiming{"timing"};
-
-    // OverrideAnimation* action params — must stay in lockstep with the
-    // action-registry validators in libs/phosphor-windowrule.
-    constexpr QLatin1StringView kParamEvent{"event"};
-    constexpr QLatin1StringView kParamEffectId{"effectId"};
-    constexpr QLatin1StringView kParamParams{"params"};
-    constexpr QLatin1StringView kParamCurve{"curve"};
-    constexpr QLatin1StringView kParamDurationMs{"durationMs"};
-
     const QString classPattern = source.value(kKeyClassPattern).toString();
     const QString eventPath = source.value(kKeyEventPath).toString();
     if (classPattern.isEmpty() || eventPath.isEmpty()) {
-        return std::nullopt;
+        return false;
     }
     const QString kindStr = source.value(kKeyKind).toString();
-    bool isShader;
-    if (kindStr.compare(kKindShader, Qt::CaseInsensitive) == 0) {
-        isShader = true;
-    } else if (kindStr.compare(kKindTiming, Qt::CaseInsensitive) == 0) {
-        isShader = false;
-    } else {
-        return std::nullopt;
-    }
+    return kindStr.compare(kKindShader, Qt::CaseInsensitive) == 0
+        || kindStr.compare(kKindTiming, Qt::CaseInsensitive) == 0;
+}
+
+/// Build a single WindowRule from a legacy AnimationAppRule JSON object
+/// already known to pass @ref isValidAnimationAppRuleSource. The caller is
+/// responsible for validating before calling; this function is total on
+/// valid input.
+///
+/// @param i      zero-based index into the FILTERED (valid-only) source
+///               list — used to derive `priority = count - i`.
+/// @param count  total VALID source entries (priority floors at 1, reserving
+///               0 for the provider-default catch-all band).
+PhosphorWindowRule::WindowRule buildAnimationAppRule(const QJsonObject& source, int i, int count)
+{
+    namespace ActionParam = PhosphorWindowRule::ActionParam;
+
+    const QString classPattern = source.value(kKeyClassPattern).toString();
+    const QString eventPath = source.value(kKeyEventPath).toString();
+    const QString kindStr = source.value(kKeyKind).toString();
+    const bool isShader = kindStr.compare(kKindShader, Qt::CaseInsensitive) == 0;
 
     PhosphorWindowRule::RuleAction action;
     QJsonObject params;
-    params.insert(kParamEvent, eventPath);
+    params.insert(ActionParam::Event, eventPath);
     if (isShader) {
         action.type = QString(PhosphorWindowRule::ActionType::OverrideAnimationShader);
         // effectId is always written — the empty string is the engaged-blocking
         // sentinel ("disable shader for matching windows"), distinct from an
         // unfilled slot ("no rule matched").
-        params.insert(kParamEffectId, source.value(kKeyEffectId).toString());
+        params.insert(ActionParam::EffectId, source.value(kKeyEffectId).toString());
+        // shaderParams round-trip note: the legacy bridge funneled the inner
+        // params through QVariantMap (JSON → AnimationAppRule → QVariantMap →
+        // QJsonObject), which silently lossy-coerces edge-case numeric types.
+        // The migration ports the object verbatim instead — strictly more
+        // type-faithful, and the only observable difference is for inputs the
+        // QVariantMap round-trip would have corrupted anyway. A non-object
+        // shaderParams payload (stray array / scalar) drops the inner block
+        // and logs a warning, matching the legacy loader's diagnostic.
         const QJsonValue rawParams = source.value(kKeyShaderParams);
         if (rawParams.isObject()) {
             const QJsonObject paramsObj = rawParams.toObject();
             if (!paramsObj.isEmpty()) {
-                params.insert(kParamParams, paramsObj);
+                params.insert(ActionParam::Params, paramsObj);
             }
+        } else if (!rawParams.isUndefined() && !rawParams.isNull()) {
+            qWarning(
+                "ConfigMigration: shaderParams for AnimationAppRule[%d] (classPattern=\"%s\") is not a JSON "
+                "object — payload dropped",
+                i, qPrintable(classPattern));
         }
     } else {
         action.type = QString(PhosphorWindowRule::ActionType::OverrideAnimationTiming);
         const QString curve = source.value(kKeyCurve).toString();
         if (!curve.isEmpty()) {
-            params.insert(kParamCurve, curve);
+            params.insert(ActionParam::Curve, curve);
         }
         // `durationMs <= 0` is the "inherit per-event default" sentinel —
-        // omit the key entirely, mirroring AnimationAppRule::toJson.
+        // omit the key entirely, mirroring AnimationAppRule::toJson. An
+        // explicit `0` or negative value on disk falls into the same bucket
+        // as an absent key.
         const int durationMs = source.value(kKeyDurationMs).toInt(0);
         if (durationMs > 0) {
-            params.insert(kParamDurationMs, durationMs);
+            params.insert(ActionParam::DurationMs, durationMs);
         }
     }
     action.params = params;
@@ -1610,19 +1629,29 @@ std::optional<PhosphorWindowRule::WindowRule> animationAppRuleToWindowRule(const
 }
 
 /// Drain the v4 animation-rule stash into @p rules. Malformed entries are
-/// silently discarded — the legacy runtime loader did the same.
+/// silently discarded — the legacy runtime loader did the same. The two-pass
+/// shape (filter, then build) matches the legacy bridge byte-for-byte: the
+/// priority `count - i` is computed against the POST-filter size, so dropped
+/// entries don't leave gaps in the descending-by-list-order priority
+/// sequence (`AnimationAppRuleList::fromJson` filtered first; `toRuleSet`
+/// then used the filtered `entries.size()` as count).
 void appendAnimationRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules, const QJsonArray& stash)
 {
-    const int count = stash.size();
-    rules.reserve(rules.size() + count);
-    for (int i = 0; i < count; ++i) {
-        const QJsonValue entry = stash.at(i);
+    QList<QJsonObject> valid;
+    valid.reserve(stash.size());
+    for (const QJsonValue& entry : stash) {
         if (!entry.isObject()) {
             continue;
         }
-        if (auto rule = animationAppRuleToWindowRule(entry.toObject(), i, count)) {
-            rules.append(*rule);
+        const QJsonObject obj = entry.toObject();
+        if (isValidAnimationAppRuleSource(obj)) {
+            valid.append(obj);
         }
+    }
+    const int count = valid.size();
+    rules.reserve(rules.size() + count);
+    for (int i = 0; i < count; ++i) {
+        rules.append(buildAnimationAppRule(valid.at(i), i, count));
     }
 }
 

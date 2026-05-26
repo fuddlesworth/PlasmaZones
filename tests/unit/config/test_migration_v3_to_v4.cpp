@@ -38,6 +38,7 @@
 #include <algorithm>
 
 #include "../../../src/config/configdefaults.h"
+#include "../../../src/config/configkeys.h"
 #include "../../../src/config/configmigration.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
@@ -209,9 +210,18 @@ private:
     /// if the rule's match carries no such leaf.
     QString matchLeafValue(const QJsonObject& rule, const QString& field)
     {
+        return matchLeafValueByOp(rule, field, QStringLiteral("equals"));
+    }
+
+    /// Locate the first leaf with `field == @p field` AND `op == @p op`, and
+    /// return its `value` as a string. Generalises @ref matchLeafValue (which
+    /// is hard-wired to `equals` for the assignment / disable rules) to the
+    /// animation-rule case where the matcher is `contains`.
+    QString matchLeafValueByOp(const QJsonObject& rule, const QString& field, const QString& op)
+    {
         for (const QJsonObject& leaf : matchLeaves(rule)) {
             if (leaf.value(QStringLiteral("field")).toString() == field
-                && leaf.value(QStringLiteral("op")).toString() == QLatin1String("equals")) {
+                && leaf.value(QStringLiteral("op")).toString() == op) {
                 return leaf.value(QStringLiteral("value")).toVariant().toString();
             }
         }
@@ -873,14 +883,18 @@ private:
     /// Build a v3 config carrying ONLY animation app rules (no Display.* keys,
     /// no Snapping defaults). Keeps animation-specific tests narrow — they
     /// don't have to filter the provider-default + disable-rule noise out.
+    ///
+    /// Routes the v4 group / key names through ConfigKeys::v4* accessors —
+    /// the migration reads from the same accessors, so a future rename of
+    /// the frozen v4 wire shape can't drift between production and tests.
     QJsonObject makeV3ConfigWithAnimationRules(const QJsonArray& animationRules)
     {
         QJsonObject root;
-        root.insert(QStringLiteral("_version"), 3);
+        root.insert(ConfigKeys::versionKey(), 3);
         if (!animationRules.isEmpty()) {
             QJsonObject animations;
-            animations.insert(QStringLiteral("AnimationAppRules"), animationRules);
-            root.insert(QStringLiteral("Animations"), animations);
+            animations.insert(ConfigKeys::v4AnimationAppRulesKey(), animationRules);
+            root.insert(ConfigKeys::v4AnimationsGroup(), animations);
         }
         return root;
     }
@@ -981,11 +995,12 @@ private Q_SLOTS:
         QVERIFY(!shaderRule.isEmpty());
         QVERIFY(!timingRule.isEmpty());
 
-        // Action params are INLINED on the saved action object alongside
-        // `type` — there is no nested `params` key (the shader case has a
-        // confusingly-named inner `params` field that carries the
-        // effect-specific tunables, but the action's wire-level params live
-        // on the action object itself).
+        // Action wire shape: `event`, `effectId`, `curve`, `durationMs`
+        // live FLAT on the action object alongside `type` — there is no
+        // outer wrapper named `params`. The shader case carries an INNER
+        // `params` object that holds the effect-specific tunables
+        // (amplitude, etc.); that nested key is the shader effect's own
+        // payload, distinct from the action's flat wire params.
 
         // Shader rule shape.
         QCOMPARE(matchLeafValueByOp(shaderRule, QStringLiteral("windowClass"), QStringLiteral("contains")),
@@ -1062,27 +1077,54 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         QJsonArray src;
-        // durationMs absent (or <= 0) means "inherit per-event default" — the
-        // output must omit the key entirely so the resolver falls through.
-        // Same for an empty `curve`.
-        QJsonObject inheritTiming;
-        inheritTiming.insert(QStringLiteral("classPattern"), QStringLiteral("vlc"));
-        inheritTiming.insert(QStringLiteral("eventPath"), QStringLiteral("window.close"));
-        inheritTiming.insert(QStringLiteral("kind"), QStringLiteral("timing"));
+        // durationMs <= 0 means "inherit per-event default" — the output
+        // must omit the key entirely so the resolver falls through. Same
+        // for an empty `curve`. Three sentinel shapes must all coalesce:
+        //   - absent key       (the original / most common shape)
+        //   - explicit `0`     (a user toggling between inherit and a
+        //                       concrete value via the editor)
+        //   - explicit negative (a hand-edited file or an editor bug)
+        //
+        // The production check is `durationMs > 0`, so a regression that
+        // flipped it to `>= 0` or to `!= 0` would silently emit the key for
+        // the explicit-zero / negative forms — invisible without a positive
+        // test here.
+        QJsonObject inheritAbsent;
+        inheritAbsent.insert(QStringLiteral("classPattern"), QStringLiteral("vlc"));
+        inheritAbsent.insert(QStringLiteral("eventPath"), QStringLiteral("window.close"));
+        inheritAbsent.insert(QStringLiteral("kind"), QStringLiteral("timing"));
         // No `curve`, no `durationMs` — both inherit.
-        src.append(inheritTiming);
+        src.append(inheritAbsent);
+
+        QJsonObject inheritExplicitZero;
+        inheritExplicitZero.insert(QStringLiteral("classPattern"), QStringLiteral("mpv"));
+        inheritExplicitZero.insert(QStringLiteral("eventPath"), QStringLiteral("window.close"));
+        inheritExplicitZero.insert(QStringLiteral("kind"), QStringLiteral("timing"));
+        inheritExplicitZero.insert(QStringLiteral("durationMs"), 0); // explicit 0 → inherit
+        src.append(inheritExplicitZero);
+
+        QJsonObject inheritExplicitNegative;
+        inheritExplicitNegative.insert(QStringLiteral("classPattern"), QStringLiteral("krita"));
+        inheritExplicitNegative.insert(QStringLiteral("eventPath"), QStringLiteral("window.close"));
+        inheritExplicitNegative.insert(QStringLiteral("kind"), QStringLiteral("timing"));
+        inheritExplicitNegative.insert(QStringLiteral("durationMs"), -50); // explicit negative → inherit
+        src.append(inheritExplicitNegative);
+
         writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithAnimationRules(src));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QList<QJsonObject> animRules = animationRulesFromWindowRules();
-        QCOMPARE(animRules.size(), 1);
-        const QJsonObject action = animationAction(animRules.first());
-        QCOMPARE(action.value(QStringLiteral("event")).toString(), QStringLiteral("window.close"));
-        QVERIFY2(!action.contains(QStringLiteral("durationMs")),
-                 "durationMs <= 0 is the inherit sentinel — must be absent from the migrated params");
-        QVERIFY2(!action.contains(QStringLiteral("curve")),
-                 "empty curve is the inherit sentinel — must be absent from the migrated params");
+        QCOMPARE(animRules.size(), 3);
+        for (const QJsonObject& rule : animRules) {
+            const QJsonObject action = animationAction(rule);
+            QCOMPARE(action.value(QStringLiteral("event")).toString(), QStringLiteral("window.close"));
+            QVERIFY2(!action.contains(QStringLiteral("durationMs")),
+                     "durationMs <= 0 is the inherit sentinel — must be absent from the migrated params "
+                     "(verified for absent-key, explicit 0, and explicit negative shapes)");
+            QVERIFY2(!action.contains(QStringLiteral("curve")),
+                     "empty curve is the inherit sentinel — must be absent from the migrated params");
+        }
     }
 
     void testAnimationAppRules_malformedEntriesDropped()
@@ -1149,23 +1191,64 @@ private Q_SLOTS:
     {
         // The animation rules and the assignment/disable rules target
         // disjoint slot namespaces, so a fixture combining both must produce
-        // BOTH families in windowrules.json.
+        // BOTH families in windowrules.json — and neither family clobbers
+        // the other. This test is the load-bearing assertion for the
+        // strip-after-rebuild path: the fixture populates
+        // `_v4AnimationRulesStash`, so the post-conversion stash-absence
+        // check actually verifies the rebuild branch stripped it (a
+        // never-populated stash is trivially absent and verifies nothing).
         IsolatedConfigGuard guard;
         QJsonObject cfg = makeV3Config();
         QJsonArray animRules;
         animRules.append(
             makeShaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
         QJsonObject animations;
-        animations.insert(QStringLiteral("AnimationAppRules"), animRules);
-        cfg.insert(QStringLiteral("Animations"), animations);
+        animations.insert(ConfigKeys::v4AnimationAppRulesKey(), animRules);
+        cfg.insert(ConfigKeys::v4AnimationsGroup(), animations);
         writeJson(ConfigDefaults::configFilePath(), cfg);
         writeJson(assignmentsPath(), makeAssignments());
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        QCOMPARE(animationRulesFromWindowRules().size(), 1);
-        // Assignment cascade still produces its rules (610/510/410/310).
+        // Animation family — exactly one rule emitted.
+        const QList<QJsonObject> animRulesOut = animationRulesFromWindowRules();
+        QCOMPARE(animRulesOut.size(), 1);
+        const QJsonObject animRule = animRulesOut.first();
+        // Animation rule sits at priority 1 (count == 1 → priority 1) —
+        // strictly above the catch-all band.
+        QCOMPARE(animRule.value(QStringLiteral("priority")).toInt(), 1);
+
+        // Assignment cascade — every fixture-pinned level (610/510/410/310)
+        // must still produce an assignment rule (setEngineMode + NOT
+        // disableEngine), matching testCascadePriorities_exactValues. A
+        // regression where an animation rule collided with an assignment
+        // rule's id would drop the assignment from the rebuilt set; counting
+        // every cascade level guards that.
         const QJsonArray allRules = rulesFromWindowRules();
+        const auto isAssignmentRule = [this](const QJsonObject& rule) {
+            const QStringList types = actionTypes(rule);
+            return types.contains(QLatin1String("setEngineMode")) && !types.contains(QLatin1String("disableEngine"));
+        };
+        const auto hasAssignmentAtPriority = [&](int priority) {
+            for (const QJsonValue& v : allRules) {
+                const QJsonObject r = v.toObject();
+                if (r.value(QStringLiteral("priority")).toInt() == priority && isAssignmentRule(r)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        QVERIFY(hasAssignmentAtPriority(610));
+        QVERIFY(hasAssignmentAtPriority(510));
+        QVERIFY(hasAssignmentAtPriority(410));
+        QVERIFY(hasAssignmentAtPriority(310));
+
+        // Disable family — count must match testDisableListRules exactly
+        // (fixture: 1 + 2 + 1 + 1 = 5). Drift here means an animation rule
+        // clobbered a disable rule.
+        QCOMPARE(disableRules(allRules).size(), 5);
+
+        // Provider-default catch-all at 0.
         const auto hasPriority = [&](int p) {
             for (const QJsonValue& v : allRules) {
                 if (v.toObject().value(QStringLiteral("priority")).toInt() == p) {
@@ -1174,14 +1257,31 @@ private Q_SLOTS:
             }
             return false;
         };
-        QVERIFY(hasPriority(610));
-        QVERIFY(hasPriority(310));
-        // Provider-default catch-all at 0.
         QVERIFY(hasPriority(0));
-        // Animation rule sits at priority 1 (count == 1 → priority 1) —
-        // strictly above the catch-all band.
-        const QJsonObject animRule = animationRulesFromWindowRules().first();
-        QCOMPARE(animRule.value(QStringLiteral("priority")).toInt(), 1);
+
+        // Animation rule id is distinct from every other rule's id — disjoint
+        // slot namespaces are nothing without disjoint identities (a clash on
+        // (id) would overwrite a sibling rule inside WindowRuleSet::addRule).
+        const QString animRuleId = animRule.value(QStringLiteral("id")).toString();
+        QVERIFY(!animRuleId.isEmpty());
+        int collisions = 0;
+        for (const QJsonValue& v : allRules) {
+            const QJsonObject r = v.toObject();
+            if (r.value(QStringLiteral("id")).toString() == animRuleId && r != animRule) {
+                ++collisions;
+            }
+        }
+        QCOMPARE(collisions, 0);
+
+        // The migration's scratch key MUST be stripped from config.json after
+        // the rebuild branch consumed it. This fixture populates the stash
+        // (animRules.size() > 0), so a regression that stopped stripping
+        // would fail here — distinguishing this from the line-270 assertion
+        // in testFullConversion_producesWindowRules where the fixture never
+        // populates the stash to begin with.
+        const QJsonObject cfgAfter = readJson(ConfigDefaults::configFilePath());
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4AnimationRulesStash")),
+                 "the rebuild branch must strip _v4AnimationRulesStash after consuming it");
     }
 
     void testAnimationAppRules_idempotentRuleIds()
@@ -1213,7 +1313,16 @@ private Q_SLOTS:
         // segment-encoding format here means a deliberate change to either
         // forces a deliberate update to this test.
         const QUuid kExpectedNamespace(QStringLiteral("{b3f2c1a0-7d4e-5f6a-8b9c-0d1e2f3a4b5c}"));
-        const QString kExpectedKey = QStringLiteral("5:kitty11:window.open6:shader"); // <len>:<segment> × 3
+        // Length-prefixed concatenation: <segment-size>:<segment-bytes> per
+        // segment, no separator. Spelled out as three explicit segments so a
+        // future input change here doesn't require recomputing digit lengths
+        // by hand.
+        //
+        //   segment 1 → classPattern "kitty"           → "5:kitty"
+        //   segment 2 → eventPath    "window.open"     → "11:window.open"
+        //   segment 3 → kind         "shader"          → "6:shader"
+        const QString kExpectedKey =
+            QStringLiteral("5:kitty") + QStringLiteral("11:window.open") + QStringLiteral("6:shader");
         const QString expectedId = QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString();
         QCOMPARE(firstId, expectedId);
 
@@ -1240,8 +1349,12 @@ private Q_SLOTS:
         //
         // Fixture: a v4-stamped config.json that carries both stash keys,
         // plus an existing v4 windowrules.json (so windowRulesAlreadyConverted
-        // returns true). ensureJsonConfig must take the cleanup-only branch,
-        // strip both stashes, and leave windowrules.json byte-identical.
+        // returns true). ensureJsonConfigImpl's "already at current version"
+        // branch (configmigration.cpp ~line 297) still calls
+        // finalizeV4Conversion on every startup, which takes the cleanup-only
+        // sub-branch when the rule store already parses as v4 — strip both
+        // stashes, leave windowrules.json byte-identical, never recreate
+        // assignments.json or its .migrated quarantine artifact.
         IsolatedConfigGuard guard;
 
         QJsonObject cfg;
@@ -1297,22 +1410,6 @@ private Q_SLOTS:
         QVERIFY2(!QFile::exists(assignmentsPath()), "cleanup-only branch must not recreate assignments.json");
         QVERIFY2(!QFile::exists(assignmentsPath() + QStringLiteral(".migrated")),
                  "cleanup-only branch must not produce an assignments.json.migrated artifact");
-    }
-
-private:
-    /// Locate the first leaf with `field == @p field` AND `op == @p op`, and
-    /// return its `value` as a string. Extends matchLeafValue (which is
-    /// hard-wired to the `equals` operator used by the assignment / disable
-    /// rules) for the animation-rule case where the matcher is `contains`.
-    QString matchLeafValueByOp(const QJsonObject& rule, const QString& field, const QString& op)
-    {
-        for (const QJsonObject& leaf : matchLeaves(rule)) {
-            if (leaf.value(QStringLiteral("field")).toString() == field
-                && leaf.value(QStringLiteral("op")).toString() == op) {
-                return leaf.value(QStringLiteral("value")).toVariant().toString();
-            }
-        }
-        return QString();
     }
 };
 

@@ -69,7 +69,8 @@ set(phosphorwindowrule_public_HDRS
     include/PhosphorWindowRule/WindowRuleLogging.h
     # Header-only in-memory bridges — public API, installed via the
     # install(DIRECTORY) glob below. Listed here so the target carries them
-    # as sources (IDE visibility, install-intent parity with the rest).
+    # as sources (IDE visibility, install-intent parity with the rest of
+    # the public headers above).
     include/PhosphorWindowRule/ContextRuleBridge.h
     include/PhosphorWindowRule/ExclusionListBridge.h
     include/PhosphorWindowRule/IdentityKey.h
