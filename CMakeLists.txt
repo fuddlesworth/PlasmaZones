@@ -419,6 +419,7 @@ endforeach()
 
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
+add_subdirectory(libs/phosphor-settings-ui) # reusable Qt6/QML/Kirigami settings-app framework (page controllers, registry, chrome)
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-services) # DBus + platform-integration primitives (SNI tray, dbusmenu, future: notifications/MPRIS/UPower)
 endif()
